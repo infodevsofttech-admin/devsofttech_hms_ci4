@@ -1,0 +1,54 @@
+<div class="card">
+    <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <h3 class="card-title mb-0">Package Group - Add New</h3>
+        <div class="card-tools ms-auto">
+            <button class="btn btn-light" type="button" onclick="load_form_div('<?= base_url('package/search-itemtype') ?>','maindiv','Package Groups');">
+                <i class="bi bi-arrow-left"></i>
+                Back to List
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="jsError"></div>
+        <form action="<?= base_url('package/create-type') ?>" method="post" role="form" class="form1">
+            <?= csrf_field() ?>
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Package Group Name</label>
+                    <input class="form-control" name="input_Item_type" placeholder="Group Name" type="text" autocomplete="off">
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary" id="btn_update">Add Record</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    $(document).ready(function() {
+        $('form.form1').on('submit', function(form) {
+            form.preventDefault();
+            $.post('<?= base_url('package/create-type') ?>', $('form.form1').serialize(), function(data) {
+                if (data.insertid == 0) {
+                    if (typeof notify === 'function') {
+                        notify('error', 'Please Attention', data.error_text || 'Please Check');
+                    }
+                } else {
+                    load_form_div('<?= base_url('package/itemtype-record') ?>/' + data.insertid, 'maindiv');
+                }
+                updateCsrf(data);
+            }, 'json');
+        });
+    });
+
+    function updateCsrf(data) {
+        if (!data || !data.csrfName || !data.csrfHash) {
+            return;
+        }
+        var input = document.querySelector('input[name="' + data.csrfName + '"]');
+        if (input) {
+            input.value = data.csrfHash;
+        }
+    }
+</script>

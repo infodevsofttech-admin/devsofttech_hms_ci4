@@ -1,0 +1,23 @@
+<style>
+@page {
+    margin-top: 3.2cm;
+    margin-bottom: 1.2cm;
+    margin-left: 0.5cm;
+    margin-right: 0.5cm;
+    margin-header: 0.5cm;
+    margin-footer: 0.5cm;
+    header: html_myHeader;
+    footer: html_myFooter;
+}
+body { font-family: freeserif, dejavusans, sans-serif; font-size: 10pt; color: #111; }
+.part-divider { margin: 6px 0; border-top: 1px solid #666; }
+</style>
+<htmlpageheader name="myHeader">
+{{hospital_section}}
+</htmlpageheader>
+<htmlpagefooter name="myFooter">
+<p style="text-align:right; font-size:9px;">Print Time : {{print_time}}</p>
+</htmlpagefooter>
+{{patient_section}}
+<div class="part-divider"></div>
+{{content_section}}

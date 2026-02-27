@@ -1,0 +1,97 @@
+<style>
+.myfixed_pName {
+    position: absolute;
+    overflow: visible;
+    top: 54mm; 
+    left: 90mm; 
+    width: 70mm;   /* you must specify a width */
+    margin-top: auto;
+    margin-bottom: auto;
+    margin-left: auto;
+    margin-right: auto;
+    
+}
+
+.myfixed_age_sex {
+    position: absolute;
+    overflow: visible;
+    top: 65mm; 
+    left: 182mm; 
+    width: 25mm;   /* you must specify a width */
+    margin-top: auto;
+    margin-bottom: auto;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.myfixed_opd_no {
+    position: absolute;
+    overflow: visible;
+    top: 75mm; 
+    left: 60mm; 
+    width: 150mm;   /* you must specify a width */
+    margin-top: auto;
+    margin-bottom: auto;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+
+.myfixed_date {
+    position: absolute;
+    overflow: visible;
+    top: 55mm; 
+    left: 175mm; 
+    width: 35mm;   /* you must specify a width */
+    margin-top: auto;
+    margin-bottom: auto;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+
+.myfixed_short_info {
+    position: absolute;
+    overflow: visible;
+    top: 32mm; 
+    left: 70mm; 
+    width: 65mm;   /* you must specify a width */
+    margin-top: auto;
+    margin-bottom: auto;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.myfixed_add_info {
+    position: absolute;
+    overflow: visible;
+    top: 65mm; 
+    left: 80mm; 
+    width: 90mm;   /* you must specify a width */
+    margin-top: auto;
+    margin-bottom: auto;
+    margin-left: auto;
+    margin-right: auto;
+}
+</style>
+
+<div class="myfixed_pName">
+    <?=$pName?>
+</div>
+<div class="myfixed_age_sex">
+    <?=$age_sex?>
+</div>
+<div class="myfixed_opd_no">
+    OPD ID : <?=$opd_no?> / UHID : <?=$uhid_no?>  
+</div>
+<div class="myfixed_date">
+    <?=$opd_date?>
+</div>
+<div class="myfixed_short_info">
+    Sr.No. : <?=$opd_sr_no?> <br/> OPD Fee : <?=$opd_fee?> <br /> <?=$exp_date?>
+</div>
+<div class="myfixed_add_info">
+    <?=$p_address?>
+</div>
+
+

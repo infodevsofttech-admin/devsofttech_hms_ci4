@@ -1,0 +1,127 @@
+<section class="content-header">
+    <h1>
+        Report Drug Sale to Patient
+        <small>Panel</small>
+    </h1>
+</section>
+<section class="content">
+<?php echo form_open('Patient/search', array('role'=>'form','class'=>'form2')); ?>
+	<div class="row">
+		<div class="col-md-3">
+			<label>Date Range</label>
+			<div id="reportrange" class="pull-right" style="background: #fff; cursor: pointer; padding: 5px 10px; border: 1px solid #ccc; width: 100%">
+				<i class="glyphicon glyphicon-calendar fa fa-calendar"></i>&nbsp;
+				<span></span> <b class="caret"></b>
+			</div>
+			<input type="hidden" name="inv_date_range" id="inv_date_range"  /> 
+		</div>
+		<div class="col-md-4">
+				<label>Type of medicine</label>
+				<select class="form-control select2" id=schedule_id name="schedule_id[]" multiple="multiple" data-placeholder="Select a Schedule, Blank for All"  >
+					<option value='1'>Schedule H</option>
+					<option value='2'>Schedule H1</option>
+					<option value='3'>Schedule X</option>
+					<option value='4'>Schedule G</option>
+					<option value='5'>Narcotic</option>
+					<option value='6'>High Risk</option>
+				</select>
+			</div>
+		<div class="col-md-3">
+			<label>Drug Name</label>
+			<input class="form-control" type="text" id="txtsearch" name="txtsearch" placeholder="Like Item Name,Supplier Name,Batch_no"   >
+		</div>
+		<div class="col-md-3">
+			<label> </label>
+			<div class="form-group">
+				<button type="button" class="btn btn-primary" id="showreport"  >Show</button>
+				<button type="button" class="btn btn-primary" id="showreportexport"  >Export</button>
+			</div>
+		</div>
+	</div>
+	<div class="row">
+		<div class="col-md-12">
+			<div id="show_report"></div>
+		</div>
+	</div>
+<?php echo form_close(); ?>
+</section>
+<script type="text/javascript" language="javascript" >
+			$(document).ready(function() {
+				var start = moment();
+				var end = moment();
+				
+				function cb(start, end) {
+					$('#reportrange span').html(start.format('D-MM-YYYY') + ' - ' + end.format('D-MM-YYYY'));
+					$('#inv_date_range').val(start.format('YYYY-MM-DD')+'S'+end.format('YYYY-MM-DD'));
+				}
+
+				$('#reportrange').daterangepicker({
+					startDate: start,
+					endDate: end,
+					ranges: {
+					   'Today': [moment(), moment()],
+					   'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+					   'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+					   'Last 30 Days': [moment().subtract(29, 'days'), moment()],
+					   'This Month': [moment().startOf('month'), moment().endOf('month')],
+					   'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+					}
+				}, cb);
+
+				cb(start, end);
+				
+				$('#reportrange').on('apply.daterangepicker', function(ev, picker) {
+				var date_first=picker.startDate.format('YYYY-MM-DD');
+				var date_second=picker.endDate.format('YYYY-MM-DD');
+
+				$('#inv_date_range').val(date_first+'S'+date_second);
+			
+				});
+				
+				$('#showreport').click( function()
+				{
+					var drug_name=$('#txtsearch').val();
+
+					var schedule_id=$('#schedule_id').val();
+					
+					if(schedule_id==null || schedule_id=='')
+					{
+						schedule_id="0";
+					}else{
+						schedule_id=schedule_id.toString().split(",").join("S");
+					}
+
+					if(drug_name=='')
+					{
+						drug_name='-'
+					}
+					
+					var Get_Query="/Medical_backpanel/drug_patient_distribute/"+$('#inv_date_range').val()+
+					"/"+drug_name+"/"+schedule_id+"/0";
+					load_report_div(Get_Query,'show_report');
+				});
+				
+				$('#showreportexport').click( function()
+				{
+					var drug_name=$('#txtsearch').val();
+					
+					var schedule_id=$('#schedule_id').val();
+					
+					if(schedule_id==null || schedule_id=='')
+					{
+						schedule_id="0";
+					}else{
+						schedule_id=schedule_id.toString().split(",").join("S");
+					}
+
+					if(drug_name=='')
+					{
+						drug_name='-'
+					}
+
+					var Get_Query="/Medical_backpanel/drug_patient_distribute/"+$('#inv_date_range').val()+
+					"/"+drug_name+"/"+schedule_id+"/1";
+					window.open(Get_Query, "_blank");
+				});
+		});
+</script>

@@ -1,0 +1,10 @@
+<section class="content-header">
+    <h1>
+        Doctor 
+        <small>Add New</small>
+    </h1>
+    <ol class="breadcrumb">
+        <li><a href="javascript:load_form('/Doctor/search');"><i class="fa fa-dashboard"></i> Doctor List</a></li>
+        <li class="active">Doctor</li>
+    </ol>
+</section>

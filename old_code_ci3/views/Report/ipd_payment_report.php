@@ -1,0 +1,158 @@
+<section class="content-header">
+    <h1>
+        Report  
+        <small>Panel</small>
+    </h1>
+</section>
+<section class="content">
+	<div class="row">
+		<div class="col-md-3">
+			<label>Charges Invoice Date Range</label>
+			<div id="reportrange" class="pull-right" style="background: #fff; cursor: pointer; padding: 5px 10px; border: 1px solid #ccc; width: 100%">
+				<i class="glyphicon glyphicon-calendar fa fa-calendar"></i>&nbsp;
+				<span></span> <b class="caret"></b>
+				</div>
+				<input type="hidden" name="opd_date_range" id="opd_date_range"  /> 
+		</div>
+		<div class="col-md-3">
+			<label>Refer Doctor Name</label>
+			<select class="form-control" id="doc_name_id" name="doc_name_id"  >	
+				<option value='0'  >All Doctors</option>
+				<?php 
+				foreach($doclist as $row)
+				{ 
+					echo '<option value='.$row->id.'  >'.$row->p_fname.'</option>';
+				}
+				?>
+			</select>
+		</div>
+		<div class="col-md-3">
+			<label>Payment Mode</label>
+			<select class="form-control" id="paymode_id" name="paymode_id"  >	
+				<option value='0'>All Type</option>
+				<?php 
+				foreach($paymodelist as $row)
+				{ 
+					echo '<option value='.$row->id.'  >'.$row->mode_desc.'</option>';
+				}
+				?>
+			</select>
+		</div>
+		<div class="col-md-3">
+			<label>Employee Name</label>
+			<select class="form-control" id="emp_name_id" name="emp_name_id"  >	
+				<option value='0' >All Employees</option>
+				<?php 
+				foreach($emplist as $row)
+				{ 
+					echo '<option value='.$row->id.'  >'.$row->first_name.' '.$row->last_name.'</option>';
+				}
+				?>
+			</select>
+		</div>
+	</div>
+	<div class="row">
+		<div class="col-md-3">
+			<label>Order First</label>
+			<select class="form-control" id="order_1" name="order_1"  >	
+				<option value='1'> Doctor</option>
+				<option value='2'> Employees</option>
+				<option value='3'> Paymode</option>
+			</select>
+		</div>
+		<div class="col-md-3">
+			<label>Order Second</label>
+			<select class="form-control" id="order_2" name="order_2"  >	
+				<option value='1'> Doctor</option>
+				<option value='2'> Employees</option>
+				<option value='3'> Paymode</option>
+			</select>
+		</div>
+		<div class="col-md-3">
+			<label>Group By</label>
+			<select class="form-control" id="order_3" name="order_3"  >	
+				<option value='-1' selected> Not Grouping</option>
+				<option value='0'> Date</option>
+				<option value='1'> Doctor</option>
+				<option value='2'> Employees</option>
+				<option value='3'> Paymode</option>
+			</select>
+		</div>
+		<div class="col-md-3">
+			<label> </label>
+			<div class="form-group">
+					<button type="button" class="btn btn-primary" id="showreport"  >Show</button>
+					<button type="button" class="btn btn-primary" id="showreportexcel"  >Export</button>
+			</div>
+		</div>
+	</div>
+	<div class="row">
+		<div class="col-md-12">
+			<div id="show_report"></div>
+		</div>
+	</div>
+</section>
+<script type="text/javascript" language="javascript" >
+			$(document).ready(function() {
+				var start = moment();
+				var end = moment();
+				
+				
+				function cb(start, end) {
+					$('#reportrange span').html(start.format('D-MM-YYYY') + ' - ' + end.format('D-MM-YYYY'));
+					$('#opd_date_range').val(start.format('YYYY-MM-DD')+'S'+end.format('YYYY-MM-DD'));
+				}
+
+				$('#reportrange').daterangepicker({
+					startDate: start,
+					endDate: end,
+					ranges: {
+					   'Today': [moment(), moment()],
+					   'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+					   'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+					   'Last 30 Days': [moment().subtract(29, 'days'), moment()],
+					   'This Month': [moment().startOf('month'), moment().endOf('month')],
+					   'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+					}
+				}, cb);
+
+				cb(start, end);
+
+				$('#reportrange').on('apply.daterangepicker', function(ev, picker) {
+				var date_first=picker.startDate.format('YYYY-MM-DD');
+				var date_second=picker.endDate.format('YYYY-MM-DD');
+
+				$('#opd_date_range').val(date_first+'S'+date_second);
+			
+				});
+				
+				$('#showreport').click( function()
+				{
+					var Get_Query="Report/report_ipdpayment_app_show/"+$('#opd_date_range').val()+
+					"/"+$('#doc_name_id').val()+
+					"/"+$('#emp_name_id').val()+
+					"/"+$('#paymode_id').val()+
+					"/"+$('#order_1').val()+
+					"/"+$('#order_2').val()+
+					"/"+$('#order_3').val();
+					load_report_div(Get_Query,'show_report');
+					
+				});
+
+				$('#showreportexcel').click( function()
+				{
+					var Get_Query="Report/report_ipdpayment_app_show/"+$('#opd_date_range').val()+
+					"/"+$('#doc_name_id').val()+
+					"/"+$('#emp_name_id').val()+
+					"/"+$('#paymode_id').val()+
+					"/"+$('#order_1').val()+
+					"/"+$('#order_2').val()+
+					"/"+$('#order_3').val()+"/1";
+					window.open(Get_Query, "_blank");
+					
+				});
+	
+			
+				
+		});
+</script>
