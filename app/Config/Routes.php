@@ -223,6 +223,10 @@ $routes->post('Payment_Medical/change_user', 'Payment_Medical::change_user');
 
 service('auth')->routes($routes);
 
+$routes->get('setup/db-tools', 'Setup::dbTools');
+$routes->post('setup/db-tools/generate', 'Setup::generateMigrations');
+$routes->post('setup/db-tools/complete', 'Setup::complete');
+
 
 $routes->group('billing', function($routes) {
     $routes->get('ipd', 'Billing\\Ipd::index');
