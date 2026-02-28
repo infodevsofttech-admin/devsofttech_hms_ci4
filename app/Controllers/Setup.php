@@ -192,7 +192,7 @@ class Setup extends BaseController
                 continue;
             }
 
-            $createSql = preg_replace('/^CREATE\s+TABLE\s+/i', 'CREATE TABLE IF NOT EXISTS ', trim($createSql), 1) ?? $createSql;
+            $createSql = $this->ensureCreateTableIfNotExists((string) $createSql);
             if (!str_ends_with(trim($createSql), ';')) {
                 $createSql .= ';';
             }
@@ -327,7 +327,7 @@ class Setup extends BaseController
             if (!isset($clientTables[$table])) {
                 $createSql = (string) ($masterTableDef['create_sql'] ?? '');
                 if ($createSql !== '') {
-                    $createSql = preg_replace('/^CREATE\s+TABLE\s+/i', 'CREATE TABLE IF NOT EXISTS ', trim($createSql), 1) ?? $createSql;
+                    $createSql = $this->ensureCreateTableIfNotExists((string) $createSql);
                     if (!str_ends_with($createSql, ';')) {
                         $createSql .= ';';
                     }
@@ -376,7 +376,7 @@ class Setup extends BaseController
         $errors = [];
 
         foreach ($sqlList as $stmt) {
-            $stmt = trim((string) $stmt);
+            $stmt = $this->normalizeSyncSql((string) $stmt);
             if ($stmt === '') {
                 continue;
             }
@@ -586,7 +586,7 @@ class Setup extends BaseController
             return '';
         }
 
-        $create = preg_replace('/^CREATE\s+TABLE\s+/i', 'CREATE TABLE IF NOT EXISTS ', trim($create), 1) ?? $create;
+        $create = $this->ensureCreateTableIfNotExists((string) $create);
         if (!str_ends_with($create, ';')) {
             $create .= ';';
         }
@@ -655,14 +655,20 @@ class Setup extends BaseController
         $default = $this->columnDefaultSql($col);
         $collation = trim((string) ($col['Collation'] ?? ''));
         $comment = trim((string) ($col['Comment'] ?? ''));
+        $applyCollation = strtolower(trim((string) env('setup.sync.apply_column_collation', 'false')));
+        $canApplyCollation = in_array($applyCollation, ['1', 'true', 'yes', 'on'], true);
 
         $sql = '`' . $name . '` ' . $type;
-        if ($collation !== '') {
-            $sql .= ' COLLATE ' . $collation;
+        if ($collation !== '' && $canApplyCollation) {
+            $sql .= ' COLLATE ' . $this->normalizeCollationName($collation);
         }
         $sql .= $null . $default;
         if ($extra !== '') {
-            $sql .= ' ' . strtoupper($extra);
+            $extra = preg_replace('/\bDEFAULT_GENERATED\b/i', '', $extra) ?? $extra;
+            $extra = trim(preg_replace('/\s+/', ' ', $extra) ?? $extra);
+            if ($extra !== '') {
+                $sql .= ' ' . strtoupper($extra);
+            }
         }
         if ($comment !== '') {
             $sql .= " COMMENT '" . str_replace("'", "''", $comment) . "'";
@@ -699,9 +705,49 @@ class Setup extends BaseController
             strtoupper((string) ($col['Null'] ?? 'YES')),
             (string) ($col['Default'] ?? ''),
             strtolower((string) ($col['Extra'] ?? '')),
-            strtolower((string) ($col['Collation'] ?? '')),
             (string) ($col['Comment'] ?? ''),
         ]) ?: '';
+    }
+
+    private function ensureCreateTableIfNotExists(string $sql): string
+    {
+        $sql = trim($sql);
+        if ($sql === '') {
+            return '';
+        }
+
+        $sql = preg_replace('/^CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?/i', 'CREATE TABLE IF NOT EXISTS ', $sql, 1) ?? $sql;
+        return $this->normalizeSyncSql($sql);
+    }
+
+    private function normalizeCollationName(string $collation): string
+    {
+        $collation = trim($collation);
+        if ($collation === '') {
+            return '';
+        }
+
+        if (preg_match('/^utf8mb4_0900_/i', $collation) === 1) {
+            return (string) env('setup.sync.collation_fallback', 'utf8mb4_general_ci');
+        }
+
+        return $collation;
+    }
+
+    private function normalizeSyncSql(string $sql): string
+    {
+        $sql = trim($sql);
+        if ($sql === '') {
+            return '';
+        }
+
+        $sql = preg_replace('/\bDEFAULT_GENERATED\b/i', '', $sql) ?? $sql;
+        $sql = preg_replace('/\bCOLLATE\s+utf8mb4_0900_[a-z0-9_]+\b/i', 'COLLATE ' . $this->normalizeCollationName('utf8mb4_0900_ai_ci'), $sql) ?? $sql;
+        $sql = preg_replace('/^CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)+/i', 'CREATE TABLE IF NOT EXISTS ', $sql, 1) ?? $sql;
+        $sql = preg_replace('/\s+/', ' ', $sql) ?? $sql;
+        $sql = preg_replace('/\s+;$/', ';', $sql) ?? $sql;
+
+        return trim($sql);
     }
 
     private function indexDefinitionSql(array $idx): string
