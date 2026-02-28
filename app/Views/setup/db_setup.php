@@ -19,6 +19,9 @@
 
             <form method="post" action="<?= base_url('setup/db-tools/generate') ?>">
                 <?= csrf_field() ?>
+                <?php if (!empty($setup_key ?? '')) : ?>
+                    <input type="hidden" name="key" value="<?= esc($setup_key) ?>">
+                <?php endif; ?>
                 <div class="table-responsive" style="max-height:520px; overflow:auto; border:1px solid #eee;">
                     <table class="table table-striped table-bordered">
                         <thead>
@@ -64,6 +67,9 @@
 
             <form method="post" action="<?= base_url('setup/db-tools/complete') ?>" onsubmit="return confirm('This will lock setup page. Continue?');">
                 <?= csrf_field() ?>
+                <?php if (!empty($setup_key ?? '')) : ?>
+                    <input type="hidden" name="key" value="<?= esc($setup_key) ?>">
+                <?php endif; ?>
                 <button type="submit" class="btn btn-danger">Complete Setup and Lock Page</button>
                 <p class="text-muted" style="margin-top:8px;">Lock file: <?= esc($lock_file ?? '') ?></p>
             </form>

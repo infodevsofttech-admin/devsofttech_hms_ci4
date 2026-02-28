@@ -22,6 +22,14 @@ class Setup extends BaseController
             return $this->response->setStatusCode(404)->setBody('Setup is already completed and locked.');
         }
 
+        $keyFromEnv = trim((string) env('setup.dbToolsKey', ''));
+        if ($keyFromEnv !== '') {
+            $keyFromRequest = trim((string) ($this->request->getGet('key') ?? $this->request->getPost('key') ?? ''));
+            if ($keyFromRequest !== '' && hash_equals($keyFromEnv, $keyFromRequest)) {
+                return null;
+            }
+        }
+
         if (!function_exists('auth')) {
             return null;
         }
@@ -77,6 +85,7 @@ class Setup extends BaseController
             'tables' => $tableRows,
             'msg' => $flash,
             'lock_file' => $this->lockFilePath(),
+            'setup_key' => trim((string) env('setup.dbToolsKey', '')),
         ]);
     }
 
