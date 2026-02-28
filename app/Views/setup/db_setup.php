@@ -109,6 +109,17 @@
 
             <hr>
 
+            <form method="post" action="<?= base_url('setup/db-tools/ensure-admin') ?>" onsubmit="return confirm('Create or update admin login for this client database?');" style="margin-bottom:10px;">
+                <?= csrf_field() ?>
+                <?php if (!empty($setup_key ?? '')) : ?>
+                    <input type="hidden" name="key" value="<?= esc($setup_key) ?>">
+                <?php endif; ?>
+                <button type="submit" class="btn btn-primary">Create/Update Admin Login</button>
+                <span class="text-muted" style="margin-left:10px;">Uses .env keys: <code>setup.admin.username</code>, <code>setup.admin.email</code>, <code>setup.admin.password</code>, <code>setup.admin.group</code>.</span>
+            </form>
+
+            <hr>
+
             <form method="post" action="<?= base_url('setup/db-tools/complete') ?>" onsubmit="return confirm('This will lock setup page. Continue?');">
                 <?= csrf_field() ?>
                 <?php if (!empty($setup_key ?? '')) : ?>

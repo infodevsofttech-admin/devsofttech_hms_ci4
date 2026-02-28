@@ -3,6 +3,8 @@
 namespace App\Controllers;
 
 use App\Controllers\BaseController;
+use CodeIgniter\Shield\Entities\User;
+use CodeIgniter\Shield\Models\UserModel;
 
 class Setup extends BaseController
 {
@@ -236,6 +238,83 @@ class Setup extends BaseController
         @file_put_contents($lockFile, $content);
 
         return $this->response->setBody('Setup locked successfully. You can now remove setup routes/page if required.');
+    }
+
+    public function ensureAdminLogin()
+    {
+        if ($deny = $this->ensureSetupAccess()) {
+            return $deny;
+        }
+
+        $username = trim((string) env('setup.admin.username', 'admin'));
+        $email = trim((string) env('setup.admin.email', 'admin@example.com'));
+        $password = (string) env('setup.admin.password', 'Admin@12345');
+        $group = strtolower(trim((string) env('setup.admin.group', 'admin')));
+
+        if ($username === '') {
+            $username = 'admin';
+        }
+        if ($email === '' || filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+            $email = 'admin@example.com';
+        }
+        if (mb_strlen($password) < 8) {
+            $password = 'Admin@12345';
+        }
+
+        try {
+            $userModel = model(UserModel::class);
+            $user = $userModel->where('username', $username)->first();
+
+            if ($user === null) {
+                $tables = config('Auth')->tables;
+                $identitiesTable = (string) ($tables['identities'] ?? 'auth_identities');
+                $idRow = $this->db->table($identitiesTable)
+                    ->select('user_id')
+                    ->where('type', 'email_password')
+                    ->where('secret', $email)
+                    ->get(1)
+                    ->getRowArray();
+
+                if (!empty($idRow['user_id'])) {
+                    $user = $userModel->find((int) $idRow['user_id']);
+                }
+            }
+
+            $action = 'updated';
+            if ($user === null) {
+                $newUser = new User();
+                $newUser->username = $username;
+                $newUser->email = $email;
+                $newUser->password = $password;
+                $newUser->active = 1;
+                $userModel->save($newUser);
+
+                $insertId = (int) $userModel->getInsertID();
+                $user = $insertId > 0 ? $userModel->find($insertId) : null;
+                $action = 'created';
+            } else {
+                $user->username = $username;
+                $user->email = $email;
+                $user->password = $password;
+                $user->active = 1;
+                $userModel->save($user);
+                $user = $userModel->find((int) ($user->id ?? 0));
+            }
+
+            if ($user !== null && method_exists($user, 'addGroup')) {
+                $groupConfig = setting('AuthGroups.groups');
+                if (!is_array($groupConfig) || !isset($groupConfig[$group])) {
+                    $group = 'admin';
+                }
+                $user->addGroup($group);
+            }
+
+            session()->setFlashdata('setup_msg', 'Admin login ' . $action . ': username=' . $username . ', email=' . $email . ', group=' . $group . '.');
+        } catch (\Throwable $e) {
+            session()->setFlashdata('setup_msg', 'Admin login setup failed: ' . $e->getMessage());
+        }
+
+        return redirect()->to($this->dbToolsUrlWithKey());
     }
 
     /**
