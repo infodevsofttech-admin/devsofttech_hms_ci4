@@ -190,10 +190,22 @@
         $('#testentry-bodyc').html('<div class="text-muted">Loading...</div>');
         modalObj.show();
 
-        $.post('<?= base_url('Opd/opd_load_doc') ?>/' + opdid, {}, function(html) {
+        $.post('/Opd/opd_load_doc/' + opdid, {}, function(html) {
             $('#testentry-bodyc').html(html || '<div class="text-danger">Unable to load scan panel.</div>');
         }).fail(function() {
             $('#testentry-bodyc').html('<div class="text-danger">Unable to load scan panel.</div>');
+        });
+    });
+
+    $(document).off('click.opdstatus', '.btn-opd-status').on('click.opdstatus', '.btn-opd-status', function() {
+        var opdId = $(this).data('opd-id');
+        var opdStatus = $(this).data('opd-status');
+        if (!opdId || !opdStatus) {
+            return;
+        }
+
+        $.post('/Opd/opd_status/' + opdId + '/' + opdStatus, {}, function() {
+            load_form('/Opd/get_appointment_list/<?= esc((int) ($doc_id ?? 0)) ?>/<?= esc($opd_date ?? date('Y-m-d')) ?>', 'OPD Appointment List');
         });
     });
 
@@ -212,7 +224,7 @@
         setVitalMessage('normal', 'Loading previous vitals...');
         vitalsModalObj.show();
 
-        $.getJSON('<?= base_url('Opd_prescription/vitals_get') ?>/' + opdid, function(data) {
+        $.getJSON('/Opd_prescription/vitals_get/' + opdid, function(data) {
             updateCsrf(data);
             if (parseInt(data.update || 0, 10) !== 1) {
                 setVitalMessage('err', data.error_text || 'Unable to load vitals');
@@ -253,7 +265,7 @@
 
         var $btn = $(this);
         $btn.prop('disabled', true).text('Saving...');
-        $.post('<?= base_url('Opd_prescription/vitals_save') ?>', payload, function(data) {
+        $.post('/Opd_prescription/vitals_save', payload, function(data) {
             updateCsrf(data);
             $btn.prop('disabled', false).text('Save Vitals');
             if (parseInt(data.update || 0, 10) !== 1) {

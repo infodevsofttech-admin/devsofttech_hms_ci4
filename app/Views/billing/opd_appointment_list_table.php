@@ -31,7 +31,7 @@ if ($authUser) {
                     <td>
                         <?php $hasVitals = isset($row->has_vitals) && (int) $row->has_vitals === 1; ?>
                         <?php if ($canOpenPrescription) : ?>
-                            <a class="btn btn-outline-primary btn-sm" title="Consult" href="javascript:load_form('<?= base_url('Opd_prescription/Prescription') ?>/<?= esc((int) ($row->opd_id ?? 0)) ?>','Consult');">
+                            <a class="btn btn-outline-primary btn-sm" title="Consult" href="javascript:load_form('/Opd_prescription/Prescription/<?= esc((int) ($row->opd_id ?? 0)) ?>','Consult');">
                                 Consult
                             </a>
                         <?php endif; ?>
@@ -44,7 +44,7 @@ if ($authUser) {
                         <button type="button" class="btn btn-outline-secondary btn-sm btn-opd-scan" title="Upload Scan" data-opdid="<?= esc((int) ($row->opd_id ?? 0)) ?>">
                             Upload
                         </button>
-                        <a class="btn btn-outline-dark btn-sm" title="Profile" href="javascript:load_form('<?= base_url('billing/patient/person_record') ?>/<?= esc((int) ($row->id ?? 0)) ?>/0','Patient Profile');">
+                        <a class="btn btn-outline-dark btn-sm" title="Profile" href="javascript:load_form('/billing/patient/person_record/<?= esc((int) ($row->id ?? 0)) ?>/0','Patient Profile');">
                             Profile
                         </a>
                         <?php if (($tabType ?? '') === 'waiting') : ?>
@@ -66,20 +66,4 @@ if ($authUser) {
     </table>
 </div>
 
-<?php if (in_array(($tabType ?? ''), ['waiting', 'visited'], true)) : ?>
-<script>
-(function() {
-    // Update OPD status (for example, Visit Done) and reload the doctor queue view.
-    $(document).off('click', '.btn-opd-status').on('click', '.btn-opd-status', function() {
-        var opdId = $(this).data('opd-id');
-        var opdStatus = $(this).data('opd-status');
-        if (!opdId || !opdStatus) {
-            return;
-        }
-        $.post('<?= base_url('Opd/opd_status') ?>/' + opdId + '/' + opdStatus, {}, function() {
-            load_form('<?= base_url('Opd/get_appointment_list') ?>/<?= esc((int) ($doc_id ?? 0)) ?>/<?= esc($opd_date ?? date('Y-m-d')) ?>', 'OPD Appointment List');
-        });
-    });
-})();
-</script>
-<?php endif; ?>
+
