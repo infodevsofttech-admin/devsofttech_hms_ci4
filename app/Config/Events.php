@@ -43,8 +43,14 @@ Events::on('pre_system', static function (): void {
      * If you delete, they will no longer be collected.
      */
     if (CI_DEBUG && ! is_cli()) {
-        Events::on('DBQuery', 'CodeIgniter\Debug\Toolbar\Collectors\Database::collect');
-        service('toolbar')->respond();
+        $isAjax = isset($_SERVER['HTTP_X_REQUESTED_WITH'])
+            && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+
+        if (! $isAjax) {
+            Events::on('DBQuery', 'CodeIgniter\Debug\Toolbar\Collectors\Database::collect');
+            service('toolbar')->respond();
+        }
+
         // Hot Reload route - for framework use on the hot reloader.
         if (ENVIRONMENT === 'development') {
             service('routes')->get('__hot-reload', static function (): void {
