@@ -384,7 +384,26 @@ class Setup extends BaseController
                 $client->query($stmt);
                 $applied++;
             } catch (\Throwable $e) {
-                $errors[] = $e->getMessage() . ' | SQL: ' . mb_substr($stmt, 0, 180);
+                $message = (string) $e->getMessage();
+
+                if ($this->isSafeToSkipSyncStatement($message, $stmt)) {
+                    continue;
+                }
+
+                if ($this->isCreateTableStatement($stmt) && stripos($message, 'Cannot add foreign key constraint') !== false) {
+                    $retry = $this->stripForeignKeysFromCreateTable($stmt);
+                    if ($retry !== $stmt && $retry !== '') {
+                        try {
+                            $client->query($retry);
+                            $applied++;
+                            continue;
+                        } catch (\Throwable $retryError) {
+                            $message = (string) $retryError->getMessage();
+                        }
+                    }
+                }
+
+                $errors[] = $message . ' | SQL: ' . mb_substr($stmt, 0, 180);
             }
         }
 
@@ -741,13 +760,58 @@ class Setup extends BaseController
             return '';
         }
 
+        $fallbackCollation = $this->normalizeCollationName('utf8mb4_0900_ai_ci');
         $sql = preg_replace('/\bDEFAULT_GENERATED\b/i', '', $sql) ?? $sql;
-        $sql = preg_replace('/\bCOLLATE\s+utf8mb4_0900_[a-z0-9_]+\b/i', 'COLLATE ' . $this->normalizeCollationName('utf8mb4_0900_ai_ci'), $sql) ?? $sql;
+        $sql = preg_replace('/\butf8mb4_0900_[a-z0-9_]+\b/i', $fallbackCollation, $sql) ?? $sql;
         $sql = preg_replace('/^CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)+/i', 'CREATE TABLE IF NOT EXISTS ', $sql, 1) ?? $sql;
         $sql = preg_replace('/\s+/', ' ', $sql) ?? $sql;
         $sql = preg_replace('/\s+;$/', ';', $sql) ?? $sql;
 
         return trim($sql);
+    }
+
+    private function isCreateTableStatement(string $stmt): bool
+    {
+        return preg_match('/^CREATE\s+TABLE\s+/i', ltrim($stmt)) === 1;
+    }
+
+    private function isSafeToSkipSyncStatement(string $message, string $stmt): bool
+    {
+        $messageLower = strtolower($message);
+        $stmtLower = strtolower($stmt);
+
+        if (str_contains($messageLower, 'used in a foreign key constraint') && str_contains($stmtLower, 'alter table')) {
+            return true;
+        }
+
+        if (str_contains($messageLower, 'blob/text column') && str_contains($messageLower, 'key specification without a key length')) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private function stripForeignKeysFromCreateTable(string $stmt): string
+    {
+        $out = $stmt;
+        $patterns = [
+            '/\s*,\s*CONSTRAINT\s+`[^`]+`\s+FOREIGN\s+KEY\s*\([^\)]*\)\s*REFERENCES\s*`[^`]+`\s*\([^\)]*\)(?:\s+ON\s+DELETE\s+[A-Z_ ]+)?(?:\s+ON\s+UPDATE\s+[A-Z_ ]+)?/i',
+            '/\s*,\s*FOREIGN\s+KEY\s*\([^\)]*\)\s*REFERENCES\s*`[^`]+`\s*\([^\)]*\)(?:\s+ON\s+DELETE\s+[A-Z_ ]+)?(?:\s+ON\s+UPDATE\s+[A-Z_ ]+)?/i',
+        ];
+
+        foreach ($patterns as $pattern) {
+            $out = preg_replace($pattern, '', $out) ?? $out;
+        }
+
+        $out = preg_replace('/,\s*\)/', ')', $out) ?? $out;
+        $out = preg_replace('/\s+/', ' ', $out) ?? $out;
+        $out = trim($out);
+
+        if ($out !== '' && !str_ends_with($out, ';')) {
+            $out .= ';';
+        }
+
+        return $this->normalizeSyncSql($out);
     }
 
     private function indexDefinitionSql(array $idx): string
