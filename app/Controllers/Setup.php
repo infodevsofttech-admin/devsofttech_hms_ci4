@@ -86,6 +86,11 @@ class Setup extends BaseController
             return $deny;
         }
 
+        @ini_set('memory_limit', (string) env('setup.sync.memory_limit', '1024M'));
+        @ini_set('max_execution_time', '0');
+        @set_time_limit(0);
+        @ignore_user_abort(true);
+
         $action = strtolower(trim((string) $this->request->getPost('sync_action')));
         if (!in_array($action, ['analyze', 'apply'], true)) {
             $action = 'analyze';
@@ -302,10 +307,22 @@ class Setup extends BaseController
         $masterTables = $masterSchema['tables'] ?? [];
         $clientTables = array_flip($client->listTables());
 
+        $maxTables = (int) env('setup.sync.max_tables_per_run', 150);
+        if ($maxTables <= 0) {
+            $maxTables = 150;
+        }
+        $processedTables = 0;
+        $truncated = false;
+
         $createCount = 0;
         $alterCount = 0;
 
         foreach ($masterTables as $table => $masterTableDef) {
+            if ($processedTables >= $maxTables) {
+                $truncated = true;
+                break;
+            }
+
             $table = (string) $table;
             if (!isset($clientTables[$table])) {
                 $createSql = (string) ($masterTableDef['create_sql'] ?? '');
@@ -329,6 +346,8 @@ class Setup extends BaseController
                 }
                 $alterCount += count($tableAlterSql);
             }
+
+            $processedTables++;
         }
 
         return [
@@ -336,10 +355,13 @@ class Setup extends BaseController
             'sql' => $sql,
             'summary' => [
                 'master_tables' => count((array) $masterTables),
+                'processed_tables' => $processedTables,
+                'max_tables_per_run' => $maxTables,
                 'create_tables' => $createCount,
                 'alter_statements' => $alterCount,
             ],
             'source' => (string) ($masterSchema['source'] ?? 'master-schema-file'),
+            'truncated' => $truncated,
         ];
     }
 

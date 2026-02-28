@@ -135,11 +135,19 @@
                 <?php else : ?>
                     <div class="alert alert-success">
                         Master tables: <?= esc((string) ($sync_result['summary']['master_tables'] ?? 0)) ?>,
+                        processed tables: <?= esc((string) ($sync_result['summary']['processed_tables'] ?? 0)) ?>/<?= esc((string) ($sync_result['summary']['max_tables_per_run'] ?? 0)) ?>,
                         create statements: <?= esc((string) ($sync_result['summary']['create_tables'] ?? 0)) ?>,
                         alter statements: <?= esc((string) ($sync_result['summary']['alter_statements'] ?? 0)) ?>.
                         <?php if (isset($sync_result['applied'])) : ?>
                             Applied: <?= esc((string) ($sync_result['applied'] ?? 0)) ?>.
                         <?php endif; ?>
+                    </div>
+                <?php endif; ?>
+
+                <?php if (!empty($sync_result['truncated'] ?? false)) : ?>
+                    <div class="alert alert-warning">
+                        Schema sync run was truncated to configured max tables per run.
+                        Increase <code>setup.sync.max_tables_per_run</code> in .env if needed.
                     </div>
                 <?php endif; ?>
 
@@ -156,7 +164,10 @@
                     <label>Generated SQL</label>
                     <textarea class="form-control" rows="14" readonly><?php
                         $sqlLines = $sync_result['sql'] ?? [];
-                        echo esc(is_array($sqlLines) ? implode("\n", $sqlLines) : '');
+                        if (is_array($sqlLines)) {
+                            $sqlLines = array_slice($sqlLines, 0, 300);
+                            echo esc(implode("\n", $sqlLines));
+                        }
                     ?></textarea>
                 </div>
             <?php endif; ?>
