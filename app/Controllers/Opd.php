@@ -368,10 +368,7 @@ class Opd extends BaseController
             $opdDate = date('Y-m-d');
         }
 
-        $fromDate = $opdDate . ' 00:00:00';
-        $toDate = date('Y-m-d', strtotime($opdDate . ' +1 day')) . ' 00:00:00';
-        $fromDateSql = $this->db->escape($fromDate);
-        $toDateSql = $this->db->escape($toDate);
+        $opdDateSql = $this->db->escape($opdDate);
 
         $sql = "select d.id as doc_id,
                 d.p_fname,
@@ -398,8 +395,7 @@ class Opd extends BaseController
                     sum(case when o.opd_status = 3 then 1 else 0 end) as count_cancel
                 from opd_master o
                 left join opd_prescription pr on pr.opd_id = o.opd_id
-                where o.apointment_date >= " . $fromDateSql . "
-                  and o.apointment_date < " . $toDateSql . "
+                                where o.apointment_date = " . $opdDateSql . "
                 group by o.doc_id
             ) oa on oa.doc_id = d.id
             where d.active = 1
@@ -439,10 +435,7 @@ class Opd extends BaseController
         }
 
         $docId = (int) $docId;
-        $fromDate = $opdDate . ' 00:00:00';
-        $toDate = date('Y-m-d', strtotime($opdDate . ' +1 day')) . ' 00:00:00';
-        $fromDateSql = $this->db->escape($fromDate);
-        $toDateSql = $this->db->escape($toDate);
+        $opdDateSql = $this->db->escape($opdDate);
 
         $sql = "select d.id as doc_id, d.p_fname,
                 group_concat(DISTINCT m.SpecName) as Spec,
@@ -454,7 +447,7 @@ class Opd extends BaseController
             from (doctor_master d
                 join doc_spec s on d.id=s.doc_id
                 join med_spec m on m.id=s.med_spec_id)
-            left join opd_master o on d.id=o.doc_id and o.apointment_date >= " . $fromDateSql . " and o.apointment_date < " . $toDateSql . "
+            left join opd_master o on d.id=o.doc_id and o.apointment_date=" . $opdDateSql . "
             left join opd_prescription p on o.opd_id=p.opd_id
             where d.id=" . $docId . "
             group by d.id";
@@ -473,7 +466,7 @@ class Opd extends BaseController
             from opd_master o
             join patient_master p on o.p_id=p.id
             left join opd_prescription pr on o.opd_id=pr.opd_id
-            where o.apointment_date >= " . $fromDateSql . " and o.apointment_date < " . $toDateSql . " and o.doc_id=" . $docId . " and o.opd_status=1 and pr.id is null
+            where o.apointment_date=" . $opdDateSql . " and o.doc_id=" . $docId . " and o.opd_status=1 and pr.id is null
             order by o.opd_code desc";
         $query = $this->db->query($sql);
         $opdList0 = $query->getResult();
@@ -498,7 +491,7 @@ class Opd extends BaseController
             from opd_master o
             join patient_master p on o.p_id=p.id
             join opd_prescription pr on o.opd_id=pr.opd_id
-            where o.apointment_date >= " . $fromDateSql . " and o.apointment_date < " . $toDateSql . " and o.doc_id=" . $docId . " and o.opd_status=1
+            where o.apointment_date=" . $opdDateSql . " and o.doc_id=" . $docId . " and o.opd_status=1
             order by has_vitals asc, coalesce(nullif(pr.queue_no,0),999999) asc, o.opd_id asc";
         $query = $this->db->query($sql);
         $opdList1 = $query->getResult();
@@ -523,7 +516,7 @@ class Opd extends BaseController
             from opd_master o
             join patient_master p on o.p_id=p.id
             left join opd_prescription pr on o.opd_id=pr.opd_id
-            where o.apointment_date >= " . $fromDateSql . " and o.apointment_date < " . $toDateSql . " and o.doc_id=" . $docId . " and o.opd_status=2
+            where o.apointment_date=" . $opdDateSql . " and o.doc_id=" . $docId . " and o.opd_status=2
             order by o.opd_id";
         $query = $this->db->query($sql);
         $opdList2 = $query->getResult();
@@ -548,7 +541,7 @@ class Opd extends BaseController
             from opd_master o
             join patient_master p on o.p_id=p.id
             left join opd_prescription pr on o.opd_id=pr.opd_id
-            where o.apointment_date >= " . $fromDateSql . " and o.apointment_date < " . $toDateSql . " and o.doc_id=" . $docId . " and o.opd_status=3
+            where o.apointment_date=" . $opdDateSql . " and o.doc_id=" . $docId . " and o.opd_status=3
             order by o.opd_id";
         $query = $this->db->query($sql);
         $opdList3 = $query->getResult();
