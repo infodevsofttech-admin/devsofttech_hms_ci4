@@ -105,6 +105,8 @@
 
     <script>
         (function() {
+            const REQUEST_TIMEOUT_MS = 60000;
+
             function requireJquery() {
                 if (!window.jQuery) {
                     console.error('jQuery is not loaded.');
@@ -134,7 +136,7 @@
                 $.ajax({
                         url: ourl,
                         dataType: "html",
-                        timeout: 15000,
+                            timeout: REQUEST_TIMEOUT_MS,
                         beforeSend: function() {
                             $('#main').html('loading...');
                             $("#wait").css("display", "block");
@@ -174,7 +176,7 @@
                 $.ajax({
                         url: ourl,
                         dataType: "html",
-                        timeout: 15000
+                            timeout: REQUEST_TIMEOUT_MS
                     })
                     .done(function(html) {
                         $("#" + xdiv).html(html);

@@ -368,24 +368,42 @@ class Opd extends BaseController
             $opdDate = date('Y-m-d');
         }
 
-        $opdDateSql = $this->db->escape($opdDate);
+        $fromDate = $opdDate . ' 00:00:00';
+        $toDate = date('Y-m-d', strtotime($opdDate . ' +1 day')) . ' 00:00:00';
+        $fromDateSql = $this->db->escape($fromDate);
+        $toDateSql = $this->db->escape($toDate);
 
-        $sql = "select d.id as doc_id, d.p_fname,
-                group_concat(DISTINCT m.SpecName) as Spec,
-                count(DISTINCT o.opd_id) as No_opd,
-                count(DISTINCT case when o.opd_status=1 and p.id is null then o.opd_id end) as count_booking,
-                count(DISTINCT case when o.opd_status=1 and p.id is not null then o.opd_id end) as count_wait,
-                count(DISTINCT case when o.opd_status=2 then o.opd_id end) as count_visit,
-                count(DISTINCT case when o.opd_status=3 then o.opd_id end) as count_cancel,
+        $sql = "select d.id as doc_id,
+                d.p_fname,
+                ds.Spec,
+                coalesce(oa.No_opd, 0) as No_opd,
+                coalesce(oa.count_booking, 0) as count_booking,
+                coalesce(oa.count_wait, 0) as count_wait,
+                coalesce(oa.count_visit, 0) as count_visit,
+                coalesce(oa.count_cancel, 0) as count_cancel,
                 MOD(d.id,5) as color_code
-            from (doctor_master d
-                join doc_spec s on d.id=s.doc_id
-                join med_spec m on m.id=s.med_spec_id)
-            left join opd_master o on d.id=o.doc_id and date(o.apointment_date)=" . $opdDateSql . "
-            left join opd_prescription p on o.opd_id=p.opd_id
-            where d.active=1
-            group by d.id
-            having count(DISTINCT o.opd_id)>0
+            from doctor_master d
+            join (
+                select s.doc_id, group_concat(DISTINCT m.SpecName) as Spec
+                from doc_spec s
+                join med_spec m on m.id = s.med_spec_id
+                group by s.doc_id
+            ) ds on ds.doc_id = d.id
+            left join (
+                select o.doc_id,
+                    count(*) as No_opd,
+                    sum(case when o.opd_status = 1 and pr.id is null then 1 else 0 end) as count_booking,
+                    sum(case when o.opd_status = 1 and pr.id is not null then 1 else 0 end) as count_wait,
+                    sum(case when o.opd_status = 2 then 1 else 0 end) as count_visit,
+                    sum(case when o.opd_status = 3 then 1 else 0 end) as count_cancel
+                from opd_master o
+                left join opd_prescription pr on pr.opd_id = o.opd_id
+                where o.apointment_date >= " . $fromDateSql . "
+                  and o.apointment_date < " . $toDateSql . "
+                group by o.doc_id
+            ) oa on oa.doc_id = d.id
+            where d.active = 1
+              and coalesce(oa.No_opd, 0) > 0
             order by d.p_fname";
 
         $query = $this->db->query($sql);
@@ -421,7 +439,10 @@ class Opd extends BaseController
         }
 
         $docId = (int) $docId;
-        $opdDateSql = $this->db->escape($opdDate);
+        $fromDate = $opdDate . ' 00:00:00';
+        $toDate = date('Y-m-d', strtotime($opdDate . ' +1 day')) . ' 00:00:00';
+        $fromDateSql = $this->db->escape($fromDate);
+        $toDateSql = $this->db->escape($toDate);
 
         $sql = "select d.id as doc_id, d.p_fname,
                 group_concat(DISTINCT m.SpecName) as Spec,
@@ -433,7 +454,7 @@ class Opd extends BaseController
             from (doctor_master d
                 join doc_spec s on d.id=s.doc_id
                 join med_spec m on m.id=s.med_spec_id)
-            left join opd_master o on d.id=o.doc_id and date(o.apointment_date)=" . $opdDateSql . "
+            left join opd_master o on d.id=o.doc_id and o.apointment_date >= " . $fromDateSql . " and o.apointment_date < " . $toDateSql . "
             left join opd_prescription p on o.opd_id=p.opd_id
             where d.id=" . $docId . "
             group by d.id";
@@ -448,25 +469,11 @@ class Opd extends BaseController
         $sql = "select o.opd_id,o.opd_code,o.opd_no,p.id,p.p_code,p.p_fname as P_name,p.p_rname,
                 o.opd_fee_desc,o.opd_fee_amount,o.payment_status,
                                 if(o.payment_mode=4,'Credit to ECHS',if(o.payment_mode=1,'Cash','Pending')) as opd_type,
-                                if(exists(
-                                        select 1 from opd_prescription pv
-                                        where pv.opd_id=o.opd_id
-                                            and (
-                                                coalesce(trim(pv.pulse),'')<>''
-                                                or coalesce(trim(pv.spo2),'')<>''
-                                                or coalesce(trim(pv.bp),'')<>''
-                                                or coalesce(trim(pv.diastolic),'')<>''
-                                                or coalesce(trim(pv.temp),'')<>''
-                                                or coalesce(trim(pv.rr_min),'')<>''
-                                                or coalesce(trim(pv.height),'')<>''
-                                                or coalesce(trim(pv.weight),'')<>''
-                                                or coalesce(trim(pv.waist),'')<>''
-                                            )
-                                ),1,0) as has_vitals
+                                0 as has_vitals
             from opd_master o
             join patient_master p on o.p_id=p.id
             left join opd_prescription pr on o.opd_id=pr.opd_id
-            where date(o.apointment_date)=" . $opdDateSql . " and o.doc_id=" . $docId . " and o.opd_status=1 and pr.id is null
+            where o.apointment_date >= " . $fromDateSql . " and o.apointment_date < " . $toDateSql . " and o.doc_id=" . $docId . " and o.opd_status=1 and pr.id is null
             order by o.opd_code desc";
         $query = $this->db->query($sql);
         $opdList0 = $query->getResult();
@@ -475,26 +482,23 @@ class Opd extends BaseController
         $sql = "select o.opd_id,o.opd_code,o.opd_no,p.id,p.p_code,p.p_fname as P_name,p.p_rname,
                 o.opd_fee_desc,o.opd_fee_amount,o.payment_status,
                 if(o.payment_mode=4,'Credit to ECHS',if(o.payment_mode=1,'Cash','Pending')) as opd_type,
-                                if(exists(
-                                        select 1 from opd_prescription pv
-                                        where pv.opd_id=o.opd_id
-                                            and (
-                                                coalesce(trim(pv.pulse),'')<>''
-                                                or coalesce(trim(pv.spo2),'')<>''
-                                                or coalesce(trim(pv.bp),'')<>''
-                                                or coalesce(trim(pv.diastolic),'')<>''
-                                                or coalesce(trim(pv.temp),'')<>''
-                                                or coalesce(trim(pv.rr_min),'')<>''
-                                                or coalesce(trim(pv.height),'')<>''
-                                                or coalesce(trim(pv.weight),'')<>''
-                                                or coalesce(trim(pv.waist),'')<>''
-                                            )
-                                ),1,0) as has_vitals,
+                if(
+                    coalesce(trim(pr.pulse),'')<>''
+                    or coalesce(trim(pr.spo2),'')<>''
+                    or coalesce(trim(pr.bp),'')<>''
+                    or coalesce(trim(pr.diastolic),'')<>''
+                    or coalesce(trim(pr.temp),'')<>''
+                    or coalesce(trim(pr.rr_min),'')<>''
+                    or coalesce(trim(pr.height),'')<>''
+                    or coalesce(trim(pr.weight),'')<>''
+                    or coalesce(trim(pr.waist),'')<>'',
+                    1,0
+                ) as has_vitals,
                 coalesce(pr.queue_no,0) as queue_no
             from opd_master o
             join patient_master p on o.p_id=p.id
             join opd_prescription pr on o.opd_id=pr.opd_id
-            where date(o.apointment_date)=" . $opdDateSql . " and o.doc_id=" . $docId . " and o.opd_status=1
+            where o.apointment_date >= " . $fromDateSql . " and o.apointment_date < " . $toDateSql . " and o.doc_id=" . $docId . " and o.opd_status=1
             order by has_vitals asc, coalesce(nullif(pr.queue_no,0),999999) asc, o.opd_id asc";
         $query = $this->db->query($sql);
         $opdList1 = $query->getResult();
@@ -503,26 +507,23 @@ class Opd extends BaseController
         $sql = "select o.opd_id,o.opd_code,o.opd_no,p.id,p.p_code,p.p_fname as P_name,p.p_rname,
                 o.opd_fee_desc,o.opd_fee_amount,o.payment_status,
                 if(o.payment_mode=4,'Credit to ECHS',if(o.payment_mode=1,'Cash','Pending')) as opd_type,
-                                if(exists(
-                                        select 1 from opd_prescription pv
-                                        where pv.opd_id=o.opd_id
-                                            and (
-                                                coalesce(trim(pv.pulse),'')<>''
-                                                or coalesce(trim(pv.spo2),'')<>''
-                                                or coalesce(trim(pv.bp),'')<>''
-                                                or coalesce(trim(pv.diastolic),'')<>''
-                                                or coalesce(trim(pv.temp),'')<>''
-                                                or coalesce(trim(pv.rr_min),'')<>''
-                                                or coalesce(trim(pv.height),'')<>''
-                                                or coalesce(trim(pv.weight),'')<>''
-                                                or coalesce(trim(pv.waist),'')<>''
-                                            )
-                                ),1,0) as has_vitals,
+                if(
+                    coalesce(trim(pr.pulse),'')<>''
+                    or coalesce(trim(pr.spo2),'')<>''
+                    or coalesce(trim(pr.bp),'')<>''
+                    or coalesce(trim(pr.diastolic),'')<>''
+                    or coalesce(trim(pr.temp),'')<>''
+                    or coalesce(trim(pr.rr_min),'')<>''
+                    or coalesce(trim(pr.height),'')<>''
+                    or coalesce(trim(pr.weight),'')<>''
+                    or coalesce(trim(pr.waist),'')<>'',
+                    1,0
+                ) as has_vitals,
                 coalesce(pr.queue_no,0) as queue_no
             from opd_master o
             join patient_master p on o.p_id=p.id
             left join opd_prescription pr on o.opd_id=pr.opd_id
-            where date(o.apointment_date)=" . $opdDateSql . " and o.doc_id=" . $docId . " and o.opd_status=2
+            where o.apointment_date >= " . $fromDateSql . " and o.apointment_date < " . $toDateSql . " and o.doc_id=" . $docId . " and o.opd_status=2
             order by o.opd_id";
         $query = $this->db->query($sql);
         $opdList2 = $query->getResult();
@@ -531,26 +532,23 @@ class Opd extends BaseController
         $sql = "select o.opd_id,o.opd_code,o.opd_no,p.id,p.p_code,p.p_fname as P_name,p.p_rname,
                 o.opd_fee_desc,o.opd_fee_amount,o.payment_status,
                 if(o.payment_mode=4,'Credit to ECHS',if(o.payment_mode=1,'Cash','Pending')) as opd_type,
-                                if(exists(
-                                        select 1 from opd_prescription pv
-                                        where pv.opd_id=o.opd_id
-                                            and (
-                                                coalesce(trim(pv.pulse),'')<>''
-                                                or coalesce(trim(pv.spo2),'')<>''
-                                                or coalesce(trim(pv.bp),'')<>''
-                                                or coalesce(trim(pv.diastolic),'')<>''
-                                                or coalesce(trim(pv.temp),'')<>''
-                                                or coalesce(trim(pv.rr_min),'')<>''
-                                                or coalesce(trim(pv.height),'')<>''
-                                                or coalesce(trim(pv.weight),'')<>''
-                                                or coalesce(trim(pv.waist),'')<>''
-                                            )
-                                ),1,0) as has_vitals,
+                if(
+                    coalesce(trim(pr.pulse),'')<>''
+                    or coalesce(trim(pr.spo2),'')<>''
+                    or coalesce(trim(pr.bp),'')<>''
+                    or coalesce(trim(pr.diastolic),'')<>''
+                    or coalesce(trim(pr.temp),'')<>''
+                    or coalesce(trim(pr.rr_min),'')<>''
+                    or coalesce(trim(pr.height),'')<>''
+                    or coalesce(trim(pr.weight),'')<>''
+                    or coalesce(trim(pr.waist),'')<>'',
+                    1,0
+                ) as has_vitals,
                 coalesce(pr.queue_no,0) as queue_no
             from opd_master o
             join patient_master p on o.p_id=p.id
             left join opd_prescription pr on o.opd_id=pr.opd_id
-            where date(o.apointment_date)=" . $opdDateSql . " and o.doc_id=" . $docId . " and o.opd_status=3
+            where o.apointment_date >= " . $fromDateSql . " and o.apointment_date < " . $toDateSql . " and o.doc_id=" . $docId . " and o.opd_status=3
             order by o.opd_id";
         $query = $this->db->query($sql);
         $opdList3 = $query->getResult();
