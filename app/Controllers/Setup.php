@@ -79,7 +79,24 @@ class Setup extends BaseController
             return $deny;
         }
 
-        return view('setup/db_setup', $this->buildDbToolsViewData());
+        try {
+            return view('setup/db_setup', $this->buildDbToolsViewData());
+        } catch (\Throwable $e) {
+            log_message('error', 'Setup dbTools load failed: {message}', ['message' => $e->getMessage()]);
+
+            return view('setup/db_setup', [
+                'tables' => [],
+                'msg' => 'Setup tools could not load completely: ' . $e->getMessage(),
+                'lock_file' => $this->lockFilePath(),
+                'setup_key' => trim((string) env('setup.dbToolsKey', '')),
+                'sync_result' => null,
+                'sync_master_database' => (string) env('setup.sync.master.database', ''),
+                'sync_client_database' => (string) env('setup.sync.client.database', ''),
+                'master_schema_file' => $this->masterSchemaFilePath(),
+                'master_schema_exists' => is_file($this->masterSchemaFilePath()),
+                'diagnostics' => $this->collectSetupDiagnostics($e->getMessage()),
+            ]);
+        }
     }
 
     public function schemaSync()
@@ -93,19 +110,29 @@ class Setup extends BaseController
         @set_time_limit(0);
         @ignore_user_abort(true);
 
-        $action = strtolower(trim((string) $this->request->getPost('sync_action')));
-        if (!in_array($action, ['analyze', 'apply'], true)) {
-            $action = 'analyze';
-        }
+        try {
+            $action = strtolower(trim((string) $this->request->getPost('sync_action')));
+            if (!in_array($action, ['analyze', 'apply'], true)) {
+                $action = 'analyze';
+            }
 
-        $syncResult = $this->buildSchemaSyncPlan();
-        if ($action === 'apply' && empty($syncResult['errors']) && !empty($syncResult['sql'])) {
-            $applyResult = $this->applySchemaSyncSql($syncResult['sql']);
-            $syncResult['applied'] = $applyResult['applied'];
-            $syncResult['apply_errors'] = $applyResult['errors'];
-        }
+            $syncResult = $this->buildSchemaSyncPlan();
+            if ($action === 'apply' && empty($syncResult['errors']) && !empty($syncResult['sql'])) {
+                $applyResult = $this->applySchemaSyncSql($syncResult['sql']);
+                $syncResult['applied'] = $applyResult['applied'];
+                $syncResult['apply_errors'] = $applyResult['errors'];
+            }
 
-        $this->lastSyncResult = $syncResult;
+            $this->lastSyncResult = $syncResult;
+        } catch (\Throwable $e) {
+            log_message('error', 'Setup schemaSync failed: {message}', ['message' => $e->getMessage()]);
+            $this->lastSyncResult = [
+                'errors' => ['Schema sync failed: ' . $e->getMessage()],
+                'sql' => [],
+                'summary' => [],
+                'source' => 'runtime-exception',
+            ];
+        }
 
         return view('setup/db_setup', $this->buildDbToolsViewData());
     }
@@ -322,8 +349,18 @@ class Setup extends BaseController
      */
     private function buildDbToolsViewData(): array
     {
-        $allTables = $this->db->listTables();
-        $scripted = $this->detectScriptedTables();
+        $allTables = [];
+        $scripted = [];
+        $dbError = null;
+
+        try {
+            $allTables = $this->db->listTables();
+            $scripted = $this->detectScriptedTables();
+        } catch (\Throwable $e) {
+            $dbError = $e->getMessage();
+            log_message('error', 'Setup buildDbToolsViewData DB failure: {message}', ['message' => $dbError]);
+            session()->setFlashdata('setup_msg', 'Database connection/setup error: ' . $dbError);
+        }
 
         $tableRows = [];
         foreach ($allTables as $tableName) {
@@ -351,6 +388,58 @@ class Setup extends BaseController
             'sync_client_database' => (string) env('setup.sync.client.database', ''),
             'master_schema_file' => $this->masterSchemaFilePath(),
             'master_schema_exists' => is_file($this->masterSchemaFilePath()),
+            'diagnostics' => $this->collectSetupDiagnostics($dbError),
+        ];
+    }
+
+    /**
+     * @return array<string, array<int, string>>
+     */
+    private function collectSetupDiagnostics(?string $dbError = null): array
+    {
+        $errors = [];
+        $warnings = [];
+        $info = [];
+
+        $env = (string) env('CI_ENVIRONMENT', 'production');
+        $info[] = 'CI_ENVIRONMENT: ' . $env;
+
+        $setupKey = trim((string) env('setup.dbToolsKey', ''));
+        if ($setupKey === '') {
+            $warnings[] = 'setup.dbToolsKey is empty. Setup endpoint can only be accessed by authenticated privileged users.';
+        } else {
+            $info[] = 'setup.dbToolsKey is configured.';
+        }
+
+        $dbHost = trim((string) env('database.default.hostname', ''));
+        $dbName = trim((string) env('database.default.database', ''));
+        $dbUser = trim((string) env('database.default.username', ''));
+
+        if ($dbHost === '' || $dbName === '' || $dbUser === '') {
+            $errors[] = 'Missing database.default.* values in .env (hostname/database/username).';
+        } else {
+            $info[] = 'DB target: ' . $dbHost . ' / ' . $dbName . ' / user=' . $dbUser;
+        }
+
+        if ($dbError !== null && $dbError !== '') {
+            $errors[] = 'Database error: ' . $dbError;
+        }
+
+        $logPath = WRITEPATH . 'logs';
+        if (!is_dir($logPath) || !is_writable($logPath)) {
+            $warnings[] = 'writable/logs is not writable. Error diagnostics may be incomplete.';
+        } else {
+            $info[] = 'Logs path: ' . $logPath;
+        }
+
+        if ($this->isSetupLocked()) {
+            $warnings[] = 'Setup lock file exists. Remove lock file if this is a fresh installation attempt.';
+        }
+
+        return [
+            'errors' => $errors,
+            'warnings' => $warnings,
+            'info' => $info,
         ];
     }
 

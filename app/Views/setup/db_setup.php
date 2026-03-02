@@ -12,6 +12,35 @@
                 <div class="alert alert-info"><?= esc($msg) ?></div>
             <?php endif; ?>
 
+            <?php if (!empty($diagnostics ?? null)) : ?>
+                <?php if (!empty($diagnostics['errors'] ?? [])) : ?>
+                    <div class="alert alert-danger">
+                        <strong>Installation Diagnostics (Errors)</strong>
+                        <?php foreach (($diagnostics['errors'] ?? []) as $diagErr) : ?>
+                            <div><?= esc($diagErr) ?></div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+
+                <?php if (!empty($diagnostics['warnings'] ?? [])) : ?>
+                    <div class="alert alert-warning">
+                        <strong>Installation Diagnostics (Warnings)</strong>
+                        <?php foreach (($diagnostics['warnings'] ?? []) as $diagWarn) : ?>
+                            <div><?= esc($diagWarn) ?></div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+
+                <?php if (!empty($diagnostics['info'] ?? [])) : ?>
+                    <div class="alert alert-success">
+                        <strong>Installation Diagnostics (Info)</strong>
+                        <?php foreach (($diagnostics['info'] ?? []) as $diagInfo) : ?>
+                            <div><?= esc($diagInfo) ?></div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+            <?php endif; ?>
+
             <p class="text-muted">
                 Compares <strong>master schema file</strong> (or optional master DB) with <strong>client DB schema</strong> and generates
                 <code>CREATE TABLE IF NOT EXISTS</code> / <code>ALTER TABLE</code> statements.

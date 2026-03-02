@@ -113,8 +113,6 @@ class Opd_prescription extends BaseController
             'co_morbidities_prefilled_from_history' => $this->hasHistoricalCoMorbiditySelection($patientId),
             'history_alerts' => $this->buildPatientHistoryAlerts((int) ($opdRow->p_id ?? 0), $opdId),
             'left_remarks' => $this->fetchPatientRemarks((int) ($opdRow->p_id ?? 0), 8),
-            'old_rx_fast' => $this->buildOldPrescriptionFastView((int) ($opdRow->p_id ?? 0), $opdId),
-            'current_opd_scans' => $this->getCurrentOpdScansForConsult($opdId),
         ]);
     }
 
