@@ -835,12 +835,28 @@ class Setup extends BaseController
         $clientCols = $this->readColumns($client, $table);
         $clientIdx = $this->readIndexes($client, $table);
         $tableCollation = $this->readTableCollation($client, $table);
+        $fkProtectedCols = $this->readForeignKeyProtectedColumns($client, $table);
+        $hasAutoIncrement = $this->tableHasAutoIncrementColumn($clientCols);
 
         $prevCol = '';
         foreach ($masterCols as $colName => $masterCol) {
             if (!isset($clientCols[$colName])) {
+                if ($this->isAutoIncrementColumn((array) $masterCol) && $hasAutoIncrement) {
+                    $prevCol = $colName;
+                    continue;
+                }
+
                 $position = $prevCol === '' ? ' FIRST' : (' AFTER `' . $prevCol . '`');
                 $columnAlterClauses[] = 'ADD COLUMN ' . $this->columnDefinition($masterCol) . $position;
+                $clientCols[$colName] = (array) $masterCol;
+                if ($this->isAutoIncrementColumn((array) $masterCol)) {
+                    $hasAutoIncrement = true;
+                }
+                $prevCol = $colName;
+                continue;
+            }
+
+            if (isset($fkProtectedCols[strtolower((string) $colName)])) {
                 $prevCol = $colName;
                 continue;
             }
@@ -858,6 +874,10 @@ class Setup extends BaseController
         $masterIdx = is_array($masterTableDef['indexes'] ?? null) ? $masterTableDef['indexes'] : [];
 
         foreach ($masterIdx as $keyName => $masterDef) {
+            if (!$this->areIndexColumnsAvailable((array) $masterDef, $clientCols)) {
+                continue;
+            }
+
             if (!isset($clientIdx[$keyName])) {
                 if ($this->hasEquivalentIndexDefinition($clientIdx, (array) $masterDef)) {
                     continue;
@@ -898,6 +918,96 @@ class Setup extends BaseController
         }
 
         return $sql;
+    }
+
+    /**
+     * @param array<string, mixed> $idxDef
+     * @param array<string, array<string, mixed>> $clientCols
+     */
+    private function areIndexColumnsAvailable(array $idxDef, array $clientCols): bool
+    {
+        $columns = array_values(array_filter(array_map(static fn ($col) => (string) $col, (array) ($idxDef['columns'] ?? []))));
+        if (empty($columns)) {
+            return false;
+        }
+
+        foreach ($columns as $column) {
+            if (!isset($clientCols[$column])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @param array<string, array<string, mixed>> $clientCols
+     */
+    private function tableHasAutoIncrementColumn(array $clientCols): bool
+    {
+        foreach ($clientCols as $colMeta) {
+            if ($this->isAutoIncrementColumn((array) $colMeta)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param array<string, mixed> $colMeta
+     */
+    private function isAutoIncrementColumn(array $colMeta): bool
+    {
+        $extra = strtolower(trim((string) ($colMeta['Extra'] ?? '')));
+        return str_contains($extra, 'auto_increment');
+    }
+
+    /**
+     * @return array<string, bool>
+     */
+    private function readForeignKeyProtectedColumns($db, string $table): array
+    {
+        $safeTable = preg_replace('/[^a-zA-Z0-9_]/', '', $table) ?? '';
+        if ($safeTable === '') {
+            return [];
+        }
+
+        try {
+            $dbNameRow = $db->query('SELECT DATABASE() AS db_name')->getRowArray();
+            $dbName = (string) ($dbNameRow['db_name'] ?? '');
+            if ($dbName === '') {
+                return [];
+            }
+
+            $safeDb = str_replace("'", "''", $dbName);
+
+            $out = [];
+
+            $outbound = $db->query(
+                "SELECT COLUMN_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA='{$safeDb}' AND TABLE_NAME='{$safeTable}' AND REFERENCED_TABLE_NAME IS NOT NULL"
+            )->getResultArray();
+            foreach ($outbound as $row) {
+                $name = strtolower((string) ($row['COLUMN_NAME'] ?? ''));
+                if ($name !== '') {
+                    $out[$name] = true;
+                }
+            }
+
+            $inbound = $db->query(
+                "SELECT REFERENCED_COLUMN_NAME AS COLUMN_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA='{$safeDb}' AND REFERENCED_TABLE_NAME='{$safeTable}' AND REFERENCED_COLUMN_NAME IS NOT NULL"
+            )->getResultArray();
+            foreach ($inbound as $row) {
+                $name = strtolower((string) ($row['COLUMN_NAME'] ?? ''));
+                if ($name !== '') {
+                    $out[$name] = true;
+                }
+            }
+
+            return $out;
+        } catch (\Throwable $e) {
+            return [];
+        }
     }
 
     /**
