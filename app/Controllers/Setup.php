@@ -833,6 +833,8 @@ class Setup extends BaseController
 
         $masterCols = is_array($masterTableDef['columns'] ?? null) ? $masterTableDef['columns'] : [];
         $clientCols = $this->readColumns($client, $table);
+        $clientIdx = $this->readIndexes($client, $table);
+        $tableCollation = $this->readTableCollation($client, $table);
 
         $prevCol = '';
         foreach ($masterCols as $colName => $masterCol) {
@@ -843,7 +845,7 @@ class Setup extends BaseController
                 continue;
             }
 
-            if ($this->shouldModifyExistingColumn((array) $masterCol, (array) $clientCols[$colName])) {
+            if ($this->shouldModifyExistingColumn((string) $colName, (array) $masterCol, (array) $clientCols[$colName], $clientCols, $clientIdx, $tableCollation)) {
                 $columnAlterClauses[] = 'MODIFY COLUMN ' . $this->columnDefinition($masterCol);
             }
             $prevCol = $colName;
@@ -854,8 +856,6 @@ class Setup extends BaseController
         }
 
         $masterIdx = is_array($masterTableDef['indexes'] ?? null) ? $masterTableDef['indexes'] : [];
-        $clientIdx = $this->readIndexes($client, $table);
-        $tableCollation = $this->readTableCollation($client, $table);
 
         foreach ($masterIdx as $keyName => $masterDef) {
             if (!isset($clientIdx[$keyName])) {
@@ -1151,8 +1151,10 @@ class Setup extends BaseController
     /**
      * @param array<string, mixed> $masterCol
      * @param array<string, mixed> $clientCol
+     * @param array<string, array<string, mixed>> $clientCols
+     * @param array<string, array<string, mixed>> $clientIdx
      */
-    private function shouldModifyExistingColumn(array $masterCol, array $clientCol): bool
+    private function shouldModifyExistingColumn(string $columnName, array $masterCol, array $clientCol, array $clientCols, array $clientIdx, string $tableCollation): bool
     {
         $masterType = $this->normalizeColumnTypeForCompare((string) ($masterCol['Type'] ?? ''));
         $clientType = $this->normalizeColumnTypeForCompare((string) ($clientCol['Type'] ?? ''));
@@ -1162,6 +1164,10 @@ class Setup extends BaseController
             || $isCompatibleWider;
 
         if (!$typeMatches) {
+            if ($this->isUnsafeIndexedWidening($columnName, $masterType, $clientType, $masterCol, $clientCol, $clientCols, $clientIdx, $tableCollation)) {
+                return false;
+            }
+
             return true;
         }
 
@@ -1177,6 +1183,70 @@ class Setup extends BaseController
 
         if ($this->normalizeColumnDefaultFromMetadata($masterCol) !== $this->normalizeColumnDefaultFromMetadata($clientCol)) {
             return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * @param array<string, mixed> $masterCol
+     * @param array<string, mixed> $clientCol
+     * @param array<string, array<string, mixed>> $clientCols
+     * @param array<string, array<string, mixed>> $clientIdx
+     */
+    private function isUnsafeIndexedWidening(string $columnName, string $masterType, string $clientType, array $masterCol, array $clientCol, array $clientCols, array $clientIdx, string $tableCollation): bool
+    {
+        $masterSpec = $this->parseColumnTypeSpec($masterType);
+        $clientSpec = $this->parseColumnTypeSpec($clientType);
+        if ($masterSpec === null || $clientSpec === null) {
+            return false;
+        }
+
+        if ($masterSpec['base'] !== $clientSpec['base'] || $masterSpec['unsigned'] !== $clientSpec['unsigned']) {
+            return false;
+        }
+
+        if (!in_array($masterSpec['base'], ['varchar', 'char', 'varbinary', 'binary'], true)) {
+            return false;
+        }
+
+        if ($masterSpec['length'] === null || $clientSpec['length'] === null || $masterSpec['length'] <= $clientSpec['length']) {
+            return false;
+        }
+
+        $effectiveCollation = trim((string) ($clientCol['Collation'] ?? ''));
+        if ($effectiveCollation === '') {
+            $effectiveCollation = trim($tableCollation);
+        }
+
+        $overrideMeta = $clientCol;
+        $overrideMeta['Type'] = (string) ($masterCol['Type'] ?? $clientCol['Type'] ?? '');
+        if ($effectiveCollation !== '') {
+            $overrideMeta['Collation'] = $effectiveCollation;
+        }
+
+        foreach ($clientIdx as $idxDef) {
+            $columns = array_values(array_map(static fn ($c) => (string) $c, (array) ($idxDef['columns'] ?? [])));
+            if (!in_array($columnName, $columns, true)) {
+                continue;
+            }
+
+            $totalBytes = 0;
+            foreach ($columns as $idxColumn) {
+                if ($idxColumn === $columnName) {
+                    $totalBytes += $this->estimateIndexedColumnBytes($overrideMeta, $tableCollation);
+                } else {
+                    $otherMeta = $clientCols[$idxColumn] ?? null;
+                    if (!is_array($otherMeta)) {
+                        continue 2;
+                    }
+                    $totalBytes += $this->estimateIndexedColumnBytes($otherMeta, $tableCollation);
+                }
+            }
+
+            if ($totalBytes > 3072) {
+                return true;
+            }
         }
 
         return false;
