@@ -1147,9 +1147,10 @@ class Setup extends BaseController
     {
         $masterType = $this->normalizeColumnTypeForCompare((string) ($masterCol['Type'] ?? ''));
         $clientType = $this->normalizeColumnTypeForCompare((string) ($clientCol['Type'] ?? ''));
+        $isCompatibleWider = $this->isCompatibleWiderType($clientType, $masterType);
 
         $typeMatches = $masterType === $clientType
-            || $this->isCompatibleWiderType($clientType, $masterType);
+            || $isCompatibleWider;
 
         if (!$typeMatches) {
             return true;
@@ -1157,6 +1158,12 @@ class Setup extends BaseController
 
         if ($this->normalizeColumnNullabilityForCompare($masterCol) !== $this->normalizeColumnNullabilityForCompare($clientCol)) {
             return true;
+        }
+
+        // For text/blob families, default metadata differs across MySQL/MariaDB and can cause noisy unsafe narrowing alters.
+        // If client type is already equivalent/wider, skip default-based modifications.
+        if ($isCompatibleWider && ($this->isTextFamilyType($masterType) || $this->isBlobFamilyType($masterType))) {
+            return false;
         }
 
         if ($this->normalizeColumnDefaultFromMetadata($masterCol) !== $this->normalizeColumnDefaultFromMetadata($clientCol)) {
@@ -1274,6 +1281,10 @@ class Setup extends BaseController
             return '';
         }
 
+        if (strcasecmp($defaultStr, 'NULL') === 0) {
+            return '__NULL__';
+        }
+
         $upper = strtoupper($defaultStr);
 
         // Treat CURRENT_TIMESTAMP, CURRENT_TIMESTAMP(), and CURRENT_TIMESTAMP(0) as equivalent.
@@ -1282,6 +1293,18 @@ class Setup extends BaseController
         }
 
         return $defaultStr;
+    }
+
+    private function isTextFamilyType(string $type): bool
+    {
+        $base = strtolower(trim((string) preg_replace('/\s*\(.*/', '', $type)));
+        return in_array($base, ['tinytext', 'text', 'mediumtext', 'longtext'], true);
+    }
+
+    private function isBlobFamilyType(string $type): bool
+    {
+        $base = strtolower(trim((string) preg_replace('/\s*\(.*/', '', $type)));
+        return in_array($base, ['tinyblob', 'blob', 'mediumblob', 'longblob'], true);
     }
 
     private function ensureCreateTableIfNotExists(string $sql): string
