@@ -159,6 +159,15 @@
 
             <hr>
 
+            <form method="post" action="<?= base_url('setup/db-tools/repair-auth-schema') ?>" onsubmit="return confirm('Check and repair auth schema now? This will add missing columns like users.deleted_at if needed.');" style="margin-bottom:10px;">
+                <?= csrf_field() ?>
+                <?php if (!empty($setup_key ?? '')) : ?>
+                    <input type="hidden" name="key" value="<?= esc($setup_key) ?>">
+                <?php endif; ?>
+                <button type="submit" class="btn btn-default">Repair Auth Schema (Login Fix)</button>
+                <span class="text-muted" style="margin-left:10px;">Fixes Shield auth schema mismatches such as missing <code>users.deleted_at</code>.</span>
+            </form>
+
             <form method="post" action="<?= base_url('setup/db-tools/ensure-admin') ?>" onsubmit="return confirm('Create or update admin login for this client database?');" style="margin-bottom:10px;">
                 <?= csrf_field() ?>
                 <?php if (!empty($setup_key ?? '')) : ?>

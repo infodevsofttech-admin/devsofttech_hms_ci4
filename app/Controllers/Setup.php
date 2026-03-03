@@ -329,6 +329,12 @@ class Setup extends BaseController
             return $deny;
         }
 
+        $repair = $this->repairAuthSchemaInternal();
+        if (!empty($repair['errors'])) {
+            session()->setFlashdata('setup_msg', 'Auth schema repair failed before admin setup: ' . implode(' | ', (array) $repair['errors']));
+            return redirect()->to($this->dbToolsUrlWithKey());
+        }
+
         $username = trim((string) env('setup.admin.username', 'admin'));
         $email = trim((string) env('setup.admin.email', 'admin@example.com'));
         $password = (string) env('setup.admin.password', 'Admin@12345');
@@ -392,11 +398,41 @@ class Setup extends BaseController
                 $user->addGroup($group);
             }
 
-            session()->setFlashdata('setup_msg', 'Admin login ' . $action . ': username=' . $username . ', email=' . $email . ', group=' . $group . '.');
+            $repairMsg = '';
+            if (!empty($repair['applied'])) {
+                $repairMsg = ' Auth schema repaired: ' . implode(', ', (array) $repair['applied']) . '.';
+            }
+
+            session()->setFlashdata('setup_msg', 'Admin login ' . $action . ': username=' . $username . ', email=' . $email . ', group=' . $group . '.' . $repairMsg);
         } catch (\Throwable $e) {
             session()->setFlashdata('setup_msg', 'Admin login setup failed: ' . $e->getMessage());
         }
 
+        return redirect()->to($this->dbToolsUrlWithKey());
+    }
+
+    public function repairAuthSchema()
+    {
+        if ($deny = $this->ensureSetupAccess()) {
+            return $deny;
+        }
+
+        $result = $this->repairAuthSchemaInternal();
+        $parts = [];
+        $parts[] = 'Auth schema check finished.';
+        $parts[] = 'Applied: ' . count((array) ($result['applied'] ?? [])) . '.';
+
+        if (!empty($result['applied'])) {
+            $parts[] = 'Changes: ' . implode(', ', (array) $result['applied']) . '.';
+        }
+        if (!empty($result['warnings'])) {
+            $parts[] = 'Warnings: ' . implode(' | ', (array) $result['warnings']) . '.';
+        }
+        if (!empty($result['errors'])) {
+            $parts[] = 'Errors: ' . implode(' | ', (array) $result['errors']) . '.';
+        }
+
+        session()->setFlashdata('setup_msg', implode(' ', $parts));
         return redirect()->to($this->dbToolsUrlWithKey());
     }
 
@@ -506,6 +542,18 @@ class Setup extends BaseController
 
         if ($dbError !== null && $dbError !== '') {
             $errors[] = 'Database error: ' . $dbError;
+        }
+
+        $authSchema = $this->checkAuthSchemaHealth();
+        if (!empty($authSchema['errors'])) {
+            foreach ((array) $authSchema['errors'] as $authErr) {
+                $errors[] = (string) $authErr;
+            }
+        }
+        if (!empty($authSchema['warnings'])) {
+            foreach ((array) $authSchema['warnings'] as $authWarn) {
+                $warnings[] = (string) $authWarn;
+            }
         }
 
         foreach ($this->requiredWritablePaths() as $path) {
@@ -1246,5 +1294,121 @@ class Setup extends BaseController
         }
 
         return $absolutePath;
+    }
+
+    /**
+     * @return array{applied:array<int,string>,warnings:array<int,string>,errors:array<int,string>}
+     */
+    private function repairAuthSchemaInternal(): array
+    {
+        $applied = [];
+        $warnings = [];
+        $errors = [];
+
+        try {
+            $tables = config('Auth')->tables;
+            $usersTable = (string) ($tables['users'] ?? 'users');
+
+            if (!$this->tableExists($usersTable)) {
+                $errors[] = 'Auth users table not found: ' . $usersTable . '. Run schema sync first.';
+                return ['applied' => $applied, 'warnings' => $warnings, 'errors' => $errors];
+            }
+
+            $requiredColumns = [
+                'deleted_at' => 'ALTER TABLE `' . $usersTable . '` ADD COLUMN `deleted_at` DATETIME NULL DEFAULT NULL AFTER `updated_at`',
+                'updated_at' => 'ALTER TABLE `' . $usersTable . '` ADD COLUMN `updated_at` DATETIME NULL DEFAULT NULL AFTER `created_at`',
+                'created_at' => 'ALTER TABLE `' . $usersTable . '` ADD COLUMN `created_at` DATETIME NULL DEFAULT NULL AFTER `last_active`',
+                'last_active' => 'ALTER TABLE `' . $usersTable . '` ADD COLUMN `last_active` DATETIME NULL DEFAULT NULL AFTER `active`',
+                'active' => 'ALTER TABLE `' . $usersTable . '` ADD COLUMN `active` TINYINT(1) NOT NULL DEFAULT 0 AFTER `status_message`',
+                'status_message' => 'ALTER TABLE `' . $usersTable . '` ADD COLUMN `status_message` VARCHAR(255) NULL DEFAULT NULL AFTER `status`',
+                'status' => 'ALTER TABLE `' . $usersTable . '` ADD COLUMN `status` VARCHAR(255) NULL DEFAULT NULL AFTER `username`',
+                'username' => 'ALTER TABLE `' . $usersTable . '` ADD COLUMN `username` VARCHAR(30) NULL DEFAULT NULL AFTER `id`',
+            ];
+
+            foreach ($requiredColumns as $column => $sql) {
+                if ($this->columnExists($usersTable, $column)) {
+                    continue;
+                }
+
+                try {
+                    $this->db->query($sql);
+                    $applied[] = $usersTable . '.' . $column;
+                } catch (\Throwable $e) {
+                    $errors[] = 'Failed to add ' . $usersTable . '.' . $column . ': ' . $e->getMessage();
+                }
+            }
+
+            if (!$this->columnExists($usersTable, 'deleted_at')) {
+                $errors[] = 'Column still missing after repair: ' . $usersTable . '.deleted_at';
+            }
+        } catch (\Throwable $e) {
+            $errors[] = 'Auth schema repair exception: ' . $e->getMessage();
+        }
+
+        return ['applied' => $applied, 'warnings' => $warnings, 'errors' => $errors];
+    }
+
+    /**
+     * @return array{warnings:array<int,string>,errors:array<int,string>}
+     */
+    private function checkAuthSchemaHealth(): array
+    {
+        $warnings = [];
+        $errors = [];
+
+        try {
+            $tables = config('Auth')->tables;
+            $usersTable = (string) ($tables['users'] ?? 'users');
+
+            if (!$this->tableExists($usersTable)) {
+                $errors[] = 'Auth users table missing: ' . $usersTable . '.';
+                return ['warnings' => $warnings, 'errors' => $errors];
+            }
+
+            if (!$this->columnExists($usersTable, 'deleted_at')) {
+                $errors[] = 'Missing required auth column: ' . $usersTable . '.deleted_at (causes login failure).';
+            }
+        } catch (\Throwable $e) {
+            $warnings[] = 'Auth schema diagnostics skipped: ' . $e->getMessage();
+        }
+
+        return ['warnings' => $warnings, 'errors' => $errors];
+    }
+
+    private function tableExists(string $tableName): bool
+    {
+        $tableName = trim($tableName);
+        if ($tableName === '') {
+            return false;
+        }
+
+        try {
+            $tables = $this->db->listTables();
+            return in_array($tableName, $tables, true);
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    private function columnExists(string $tableName, string $columnName): bool
+    {
+        $tableName = trim($tableName);
+        $columnName = trim($columnName);
+        if ($tableName === '' || $columnName === '') {
+            return false;
+        }
+
+        try {
+            $safeTable = preg_replace('/[^a-zA-Z0-9_]/', '', $tableName) ?? '';
+            $safeColumn = preg_replace('/[^a-zA-Z0-9_]/', '', $columnName) ?? '';
+            if ($safeTable === '' || $safeColumn === '') {
+                return false;
+            }
+
+            $row = $this->db->query("SHOW COLUMNS FROM `{$safeTable}` LIKE '{$safeColumn}'")->getRowArray();
+            return !empty($row);
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 }
