@@ -829,6 +829,7 @@ class Setup extends BaseController
     private function buildAlterSqlForTableFromSchema(array $masterTableDef, $client, string $table): array
     {
         $sql = [];
+        $columnAlterClauses = [];
 
         $masterCols = is_array($masterTableDef['columns'] ?? null) ? $masterTableDef['columns'] : [];
         $clientCols = $this->readColumns($client, $table);
@@ -837,15 +838,19 @@ class Setup extends BaseController
         foreach ($masterCols as $colName => $masterCol) {
             if (!isset($clientCols[$colName])) {
                 $position = $prevCol === '' ? ' FIRST' : (' AFTER `' . $prevCol . '`');
-                $sql[] = 'ALTER TABLE `' . $table . '` ADD COLUMN ' . $this->columnDefinition($masterCol) . $position . ';';
+                $columnAlterClauses[] = 'ADD COLUMN ' . $this->columnDefinition($masterCol) . $position;
                 $prevCol = $colName;
                 continue;
             }
 
             if ($this->columnSignature($masterCol) !== $this->columnSignature($clientCols[$colName])) {
-                $sql[] = 'ALTER TABLE `' . $table . '` MODIFY COLUMN ' . $this->columnDefinition($masterCol) . ';';
+                $columnAlterClauses[] = 'MODIFY COLUMN ' . $this->columnDefinition($masterCol);
             }
             $prevCol = $colName;
+        }
+
+        if (!empty($columnAlterClauses)) {
+            $sql[] = 'ALTER TABLE `' . $table . '` ' . implode(', ', $columnAlterClauses) . ';';
         }
 
         $masterIdx = is_array($masterTableDef['indexes'] ?? null) ? $masterTableDef['indexes'] : [];
@@ -1114,13 +1119,7 @@ class Setup extends BaseController
         if ($default === null) {
             $defaultNormalized = '__NULL__';
         } else {
-            $defaultStr = trim((string) $default);
-            $upper = strtoupper($defaultStr);
-            if ($upper === 'CURRENT_TIMESTAMP' || str_starts_with($upper, 'CURRENT_TIMESTAMP(')) {
-                $defaultNormalized = $upper;
-            } else {
-                $defaultNormalized = $defaultStr;
-            }
+            $defaultNormalized = $this->normalizeColumnDefaultForCompare((string) $default);
         }
 
         return json_encode([
@@ -1145,6 +1144,23 @@ class Setup extends BaseController
         $type = preg_replace('/\s+/', ' ', $type) ?? $type;
 
         return trim($type);
+    }
+
+    private function normalizeColumnDefaultForCompare(string $default): string
+    {
+        $defaultStr = trim($default);
+        if ($defaultStr === '') {
+            return '';
+        }
+
+        $upper = strtoupper($defaultStr);
+
+        // Treat CURRENT_TIMESTAMP, CURRENT_TIMESTAMP(), and CURRENT_TIMESTAMP(0) as equivalent.
+        if (preg_match('/^CURRENT_TIMESTAMP\s*(?:\(\s*0?\s*\))?$/i', $upper) === 1) {
+            return 'CURRENT_TIMESTAMP';
+        }
+
+        return $defaultStr;
     }
 
     private function ensureCreateTableIfNotExists(string $sql): string
