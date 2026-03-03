@@ -1105,12 +1105,29 @@ class Setup extends BaseController
 
     private function columnSignature(array $col): string
     {
+        $type = strtolower(trim((string) ($col['Type'] ?? '')));
+        $type = preg_replace('/\s+/', ' ', $type) ?? $type;
+
+        $nullability = strtoupper(trim((string) ($col['Null'] ?? 'YES')));
+        $nullability = $nullability === 'NO' ? 'NO' : 'YES';
+
+        $default = $col['Default'] ?? null;
+        if ($default === null) {
+            $defaultNormalized = '__NULL__';
+        } else {
+            $defaultStr = trim((string) $default);
+            $upper = strtoupper($defaultStr);
+            if ($upper === 'CURRENT_TIMESTAMP' || str_starts_with($upper, 'CURRENT_TIMESTAMP(')) {
+                $defaultNormalized = $upper;
+            } else {
+                $defaultNormalized = $defaultStr;
+            }
+        }
+
         return json_encode([
-            strtolower((string) ($col['Type'] ?? '')),
-            strtoupper((string) ($col['Null'] ?? 'YES')),
-            (string) ($col['Default'] ?? ''),
-            strtolower((string) ($col['Extra'] ?? '')),
-            (string) ($col['Comment'] ?? ''),
+            $type,
+            $nullability,
+            $defaultNormalized,
         ]) ?: '';
     }
 
