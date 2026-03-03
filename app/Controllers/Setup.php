@@ -1197,23 +1197,43 @@ class Setup extends BaseController
             return false;
         }
 
-        if ($client['base'] !== $master['base']) {
+        if ($client['base'] === $master['base']) {
+            if ($client['unsigned'] !== $master['unsigned']) {
+                return false;
+            }
+
+            if (in_array($client['base'], ['varchar', 'char', 'varbinary', 'binary'], true)) {
+                if ($client['length'] === null || $master['length'] === null) {
+                    return false;
+                }
+
+                return $client['length'] >= $master['length'];
+            }
+
             return false;
         }
 
-        if ($client['unsigned'] !== $master['unsigned']) {
-            return false;
+        $textOrder = [
+            'tinytext' => 1,
+            'text' => 2,
+            'mediumtext' => 3,
+            'longtext' => 4,
+        ];
+        if (isset($textOrder[$client['base']], $textOrder[$master['base']])) {
+            return $textOrder[$client['base']] >= $textOrder[$master['base']];
         }
 
-        if (!in_array($client['base'], ['varchar', 'char', 'varbinary', 'binary'], true)) {
-            return false;
+        $blobOrder = [
+            'tinyblob' => 1,
+            'blob' => 2,
+            'mediumblob' => 3,
+            'longblob' => 4,
+        ];
+        if (isset($blobOrder[$client['base']], $blobOrder[$master['base']])) {
+            return $blobOrder[$client['base']] >= $blobOrder[$master['base']];
         }
 
-        if ($client['length'] === null || $master['length'] === null) {
-            return false;
-        }
-
-        return $client['length'] >= $master['length'];
+        return false;
     }
 
     /**
