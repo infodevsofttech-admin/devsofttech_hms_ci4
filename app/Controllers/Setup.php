@@ -855,6 +855,7 @@ class Setup extends BaseController
 
         $masterIdx = is_array($masterTableDef['indexes'] ?? null) ? $masterTableDef['indexes'] : [];
         $clientIdx = $this->readIndexes($client, $table);
+        $tableCollation = $this->readTableCollation($client, $table);
 
         foreach ($masterIdx as $keyName => $masterDef) {
             if (!isset($clientIdx[$keyName])) {
@@ -862,7 +863,7 @@ class Setup extends BaseController
                     continue;
                 }
 
-                if ($this->isIndexTooWideForInnoDb((array) $masterDef, $clientCols)) {
+                if ($this->isIndexTooWideForInnoDb((array) $masterDef, $clientCols, $tableCollation)) {
                     continue;
                 }
 
@@ -879,7 +880,7 @@ class Setup extends BaseController
                     continue;
                 }
 
-                if ($this->isIndexTooWideForInnoDb((array) $masterDef, $clientCols)) {
+                if ($this->isIndexTooWideForInnoDb((array) $masterDef, $clientCols, $tableCollation)) {
                     continue;
                 }
 
@@ -1379,7 +1380,7 @@ class Setup extends BaseController
             return true;
         }
 
-        if (str_contains($messageLower, 'specified key was too long') && str_contains($messageLower, 'max key length is 3072') && str_contains($stmtLower, 'alter table')) {
+        if (str_contains($messageLower, 'specified key was too long') && str_contains($messageLower, 'max key length is') && str_contains($stmtLower, 'alter table')) {
             return true;
         }
 
@@ -1390,7 +1391,7 @@ class Setup extends BaseController
      * @param array<string, mixed> $idxDef
      * @param array<string, array<string, mixed>> $clientCols
      */
-    private function isIndexTooWideForInnoDb(array $idxDef, array $clientCols): bool
+    private function isIndexTooWideForInnoDb(array $idxDef, array $clientCols, string $tableCollation = ''): bool
     {
         $columns = array_values(array_filter(array_map(static fn ($col) => (string) $col, (array) ($idxDef['columns'] ?? []))));
         if (empty($columns)) {
@@ -1404,7 +1405,7 @@ class Setup extends BaseController
                 return false;
             }
 
-            $totalBytes += $this->estimateIndexedColumnBytes($colMeta);
+            $totalBytes += $this->estimateIndexedColumnBytes($colMeta, $tableCollation);
             if ($totalBytes > 3072) {
                 return true;
             }
@@ -1416,10 +1417,13 @@ class Setup extends BaseController
     /**
      * @param array<string, mixed> $colMeta
      */
-    private function estimateIndexedColumnBytes(array $colMeta): int
+    private function estimateIndexedColumnBytes(array $colMeta, string $tableCollation = ''): int
     {
         $type = strtolower(trim((string) ($colMeta['Type'] ?? '')));
         $collation = strtolower(trim((string) ($colMeta['Collation'] ?? '')));
+        if ($collation === '') {
+            $collation = strtolower(trim($tableCollation));
+        }
 
         $bytesPerChar = 1;
         if ($collation !== '') {
@@ -1463,6 +1467,25 @@ class Setup extends BaseController
         }
 
         return 64;
+    }
+
+    private function readTableCollation($db, string $table): string
+    {
+        $safeTable = preg_replace('/[^a-zA-Z0-9_]/', '', $table) ?? '';
+        if ($safeTable === '') {
+            return '';
+        }
+
+        try {
+            $row = $db->query("SHOW TABLE STATUS LIKE '{$safeTable}'")->getRowArray();
+            if (!is_array($row)) {
+                return '';
+            }
+
+            return (string) ($row['Collation'] ?? '');
+        } catch (\Throwable $e) {
+            return '';
+        }
     }
 
     /**
