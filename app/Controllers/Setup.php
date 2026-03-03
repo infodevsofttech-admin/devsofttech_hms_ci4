@@ -1105,8 +1105,7 @@ class Setup extends BaseController
 
     private function columnSignature(array $col): string
     {
-        $type = strtolower(trim((string) ($col['Type'] ?? '')));
-        $type = preg_replace('/\s+/', ' ', $type) ?? $type;
+        $type = $this->normalizeColumnTypeForCompare((string) ($col['Type'] ?? ''));
 
         $nullability = strtoupper(trim((string) ($col['Null'] ?? 'YES')));
         $nullability = $nullability === 'NO' ? 'NO' : 'YES';
@@ -1129,6 +1128,23 @@ class Setup extends BaseController
             $nullability,
             $defaultNormalized,
         ]) ?: '';
+    }
+
+    private function normalizeColumnTypeForCompare(string $type): string
+    {
+        $type = strtolower(trim($type));
+        $type = preg_replace('/\s+/', ' ', $type) ?? $type;
+
+        if ($type === '') {
+            return '';
+        }
+
+        // MySQL/MariaDB may report integer display width differently: int vs int(11), int unsigned vs int(10) unsigned.
+        // Ignore only integer display width for comparison to avoid false-positive MODIFY statements.
+        $type = preg_replace('/\b(tinyint|smallint|mediumint|int|integer|bigint)\s*\(\s*\d+\s*\)/i', '$1', $type) ?? $type;
+        $type = preg_replace('/\s+/', ' ', $type) ?? $type;
+
+        return trim($type);
     }
 
     private function ensureCreateTableIfNotExists(string $sql): string
