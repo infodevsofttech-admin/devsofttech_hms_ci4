@@ -853,11 +853,27 @@ class Setup extends BaseController
 
         foreach ($masterIdx as $keyName => $masterDef) {
             if (!isset($clientIdx[$keyName])) {
+                if ($this->hasEquivalentIndexDefinition($clientIdx, (array) $masterDef)) {
+                    continue;
+                }
+
+                if ($this->shouldSkipUniqueIndexSync($client, $table, (array) $masterDef, $clientCols)) {
+                    continue;
+                }
+
                 $sql[] = 'ALTER TABLE `' . $table . '` ADD ' . $this->indexDefinitionSql($masterDef) . ';';
                 continue;
             }
 
             if ($this->indexSignature($masterDef) !== $this->indexSignature($clientIdx[$keyName])) {
+                if ($this->hasEquivalentIndexDefinition($clientIdx, (array) $masterDef, $keyName)) {
+                    continue;
+                }
+
+                if ($this->shouldSkipUniqueIndexSync($client, $table, (array) $masterDef, $clientCols)) {
+                    continue;
+                }
+
                 if ($keyName === 'PRIMARY') {
                     $sql[] = 'ALTER TABLE `' . $table . '` DROP PRIMARY KEY;';
                 } else {
@@ -868,6 +884,49 @@ class Setup extends BaseController
         }
 
         return $sql;
+    }
+
+    /**
+     * @param array<string, array<string, mixed>> $clientIdx
+     * @param array<string, mixed> $masterDef
+     */
+    private function hasEquivalentIndexDefinition(array $clientIdx, array $masterDef, ?string $ignoreKeyName = null): bool
+    {
+        $masterCols = array_values((array) ($masterDef['columns'] ?? []));
+        $masterType = strtoupper((string) ($masterDef['type'] ?? 'BTREE'));
+        $masterUnique = (bool) ($masterDef['unique'] ?? false);
+        $masterName = (string) ($masterDef['name'] ?? '');
+        $masterIsPrimary = strtoupper($masterName) === 'PRIMARY';
+
+        if ($masterIsPrimary) {
+            $masterUnique = true;
+        }
+
+        if (empty($masterCols)) {
+            return false;
+        }
+
+        foreach ($clientIdx as $clientKeyName => $clientDef) {
+            if ($ignoreKeyName !== null && strcasecmp((string) $clientKeyName, $ignoreKeyName) === 0) {
+                continue;
+            }
+
+            $clientCols = array_values((array) ($clientDef['columns'] ?? []));
+            $clientType = strtoupper((string) ($clientDef['type'] ?? 'BTREE'));
+            $clientUnique = (bool) ($clientDef['unique'] ?? false);
+            $clientName = (string) ($clientDef['name'] ?? '');
+            $clientIsPrimary = strtoupper($clientName) === 'PRIMARY';
+
+            if ($clientIsPrimary) {
+                $clientUnique = true;
+            }
+
+            if ($masterCols === $clientCols && $masterType === $clientType && $masterUnique === $clientUnique) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function connectSyncDb(string $role)
@@ -1115,7 +1174,64 @@ class Setup extends BaseController
             return true;
         }
 
+        if (str_contains($messageLower, 'duplicate entry') && str_contains($stmtLower, 'alter table') && (str_contains($stmtLower, 'add unique key') || str_contains($stmtLower, 'add primary key'))) {
+            return true;
+        }
+
         return false;
+    }
+
+    /**
+     * @param array<string, mixed> $idxDef
+     * @param array<string, array<string, mixed>> $clientCols
+     */
+    private function shouldSkipUniqueIndexSync($db, string $table, array $idxDef, array $clientCols): bool
+    {
+        $isPrimary = strtoupper((string) ($idxDef['name'] ?? '')) === 'PRIMARY';
+        $isUnique = $isPrimary || (bool) ($idxDef['unique'] ?? false);
+        if (!$isUnique) {
+            return false;
+        }
+
+        $columns = array_values(array_filter(array_map(static fn ($col) => (string) $col, (array) ($idxDef['columns'] ?? []))));
+        if (empty($columns)) {
+            return false;
+        }
+
+        $safeTable = preg_replace('/[^a-zA-Z0-9_]/', '', $table) ?? '';
+        if ($safeTable === '') {
+            return false;
+        }
+
+        $safeColumns = [];
+        $notNullConditions = [];
+        foreach ($columns as $column) {
+            $safeColumn = preg_replace('/[^a-zA-Z0-9_]/', '', $column) ?? '';
+            if ($safeColumn === '') {
+                return false;
+            }
+            $safeColumns[] = '`' . $safeColumn . '`';
+
+            $colMeta = $clientCols[$safeColumn] ?? null;
+            $isNullable = strtoupper((string) ($colMeta['Null'] ?? 'YES')) !== 'NO';
+            if ($isNullable) {
+                $notNullConditions[] = '`' . $safeColumn . '` IS NOT NULL';
+            }
+        }
+
+        $groupBy = implode(', ', $safeColumns);
+        $sql = 'SELECT 1 FROM `' . $safeTable . '`';
+        if (!empty($notNullConditions)) {
+            $sql .= ' WHERE ' . implode(' AND ', $notNullConditions);
+        }
+        $sql .= ' GROUP BY ' . $groupBy . ' HAVING COUNT(*) > 1 LIMIT 1';
+
+        try {
+            $row = $db->query($sql)->getRowArray();
+            return !empty($row);
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 
     private function stripForeignKeysFromCreateTable(string $stmt): string
