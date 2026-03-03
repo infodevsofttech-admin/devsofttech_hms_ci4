@@ -1159,11 +1159,16 @@ class Setup extends BaseController
         $masterType = $this->normalizeColumnTypeForCompare((string) ($masterCol['Type'] ?? ''));
         $clientType = $this->normalizeColumnTypeForCompare((string) ($clientCol['Type'] ?? ''));
         $isCompatibleWider = $this->isCompatibleWiderType($clientType, $masterType);
+        $isNarrowing = $this->isNarrowingTypeChange($clientType, $masterType);
 
         $typeMatches = $masterType === $clientType
             || $isCompatibleWider;
 
         if (!$typeMatches) {
+            if ($isNarrowing) {
+                return false;
+            }
+
             if ($this->isUnsafeIndexedWidening($columnName, $masterType, $clientType, $masterCol, $clientCol, $clientCols, $clientIdx, $tableCollation)) {
                 return false;
             }
@@ -1171,7 +1176,16 @@ class Setup extends BaseController
             return true;
         }
 
-        if ($this->normalizeColumnNullabilityForCompare($masterCol) !== $this->normalizeColumnNullabilityForCompare($clientCol)) {
+        $masterNullability = $this->normalizeColumnNullabilityForCompare($masterCol);
+        $clientNullability = $this->normalizeColumnNullabilityForCompare($clientCol);
+        if ($masterNullability !== $clientNullability) {
+            $tightenNotNull = $masterNullability === 'NO' && $clientNullability === 'YES';
+            $enforceNotNull = in_array(strtolower(trim((string) env('setup.sync.enforce_not_null', 'false'))), ['1', 'true', 'yes', 'on'], true);
+
+            if ($tightenNotNull && !$enforceNotNull) {
+                return false;
+            }
+
             return true;
         }
 
@@ -1183,6 +1197,49 @@ class Setup extends BaseController
 
         if ($this->normalizeColumnDefaultFromMetadata($masterCol) !== $this->normalizeColumnDefaultFromMetadata($clientCol)) {
             return true;
+        }
+
+        return false;
+    }
+
+    private function isNarrowingTypeChange(string $clientType, string $masterType): bool
+    {
+        $client = $this->parseColumnTypeSpec($clientType);
+        $master = $this->parseColumnTypeSpec($masterType);
+
+        if ($client === null || $master === null) {
+            return false;
+        }
+
+        if ($client['base'] === $master['base'] && $client['unsigned'] === $master['unsigned']) {
+            if (in_array($client['base'], ['varchar', 'char', 'varbinary', 'binary'], true)
+                && $client['length'] !== null
+                && $master['length'] !== null
+            ) {
+                return $master['length'] < $client['length'];
+            }
+
+            return false;
+        }
+
+        $textOrder = [
+            'tinytext' => 1,
+            'text' => 2,
+            'mediumtext' => 3,
+            'longtext' => 4,
+        ];
+        if (isset($textOrder[$client['base']], $textOrder[$master['base']])) {
+            return $textOrder[$master['base']] < $textOrder[$client['base']];
+        }
+
+        $blobOrder = [
+            'tinyblob' => 1,
+            'blob' => 2,
+            'mediumblob' => 3,
+            'longblob' => 4,
+        ];
+        if (isset($blobOrder[$client['base']], $blobOrder[$master['base']])) {
+            return $blobOrder[$master['base']] < $blobOrder[$client['base']];
         }
 
         return false;
