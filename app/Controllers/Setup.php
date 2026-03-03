@@ -862,6 +862,10 @@ class Setup extends BaseController
                     continue;
                 }
 
+                if ($this->isIndexTooWideForInnoDb((array) $masterDef, $clientCols)) {
+                    continue;
+                }
+
                 if ($this->shouldSkipUniqueIndexSync($client, $table, (array) $masterDef, $clientCols)) {
                     continue;
                 }
@@ -872,6 +876,10 @@ class Setup extends BaseController
 
             if ($this->indexSignature($masterDef) !== $this->indexSignature($clientIdx[$keyName])) {
                 if ($this->hasEquivalentIndexDefinition($clientIdx, (array) $masterDef, $keyName)) {
+                    continue;
+                }
+
+                if ($this->isIndexTooWideForInnoDb((array) $masterDef, $clientCols)) {
                     continue;
                 }
 
@@ -1371,7 +1379,90 @@ class Setup extends BaseController
             return true;
         }
 
+        if (str_contains($messageLower, 'specified key was too long') && str_contains($messageLower, 'max key length is 3072') && str_contains($stmtLower, 'alter table')) {
+            return true;
+        }
+
         return false;
+    }
+
+    /**
+     * @param array<string, mixed> $idxDef
+     * @param array<string, array<string, mixed>> $clientCols
+     */
+    private function isIndexTooWideForInnoDb(array $idxDef, array $clientCols): bool
+    {
+        $columns = array_values(array_filter(array_map(static fn ($col) => (string) $col, (array) ($idxDef['columns'] ?? []))));
+        if (empty($columns)) {
+            return false;
+        }
+
+        $totalBytes = 0;
+        foreach ($columns as $column) {
+            $colMeta = $clientCols[$column] ?? null;
+            if (!is_array($colMeta)) {
+                return false;
+            }
+
+            $totalBytes += $this->estimateIndexedColumnBytes($colMeta);
+            if ($totalBytes > 3072) {
+                return true;
+            }
+        }
+
+        return $totalBytes > 3072;
+    }
+
+    /**
+     * @param array<string, mixed> $colMeta
+     */
+    private function estimateIndexedColumnBytes(array $colMeta): int
+    {
+        $type = strtolower(trim((string) ($colMeta['Type'] ?? '')));
+        $collation = strtolower(trim((string) ($colMeta['Collation'] ?? '')));
+
+        $bytesPerChar = 1;
+        if ($collation !== '') {
+            if (str_starts_with($collation, 'utf32_')) {
+                $bytesPerChar = 4;
+            } elseif (str_starts_with($collation, 'utf8mb4_')) {
+                $bytesPerChar = 4;
+            } elseif (str_starts_with($collation, 'utf8mb3_') || str_starts_with($collation, 'utf8_')) {
+                $bytesPerChar = 3;
+            } elseif (str_starts_with($collation, 'ucs2_')) {
+                $bytesPerChar = 2;
+            }
+        }
+
+        if (preg_match('/^(char|varchar)\((\d+)\)/i', $type, $m) === 1) {
+            return (int) $m[2] * $bytesPerChar;
+        }
+
+        if (preg_match('/^(binary|varbinary)\((\d+)\)/i', $type, $m) === 1) {
+            return (int) $m[2];
+        }
+
+        if (preg_match('/^tinytext|^text|^mediumtext|^longtext|^tinyblob|^blob|^mediumblob|^longblob/i', $type) === 1) {
+            return 4096;
+        }
+
+        if (preg_match('/^tinyint/i', $type) === 1) {
+            return 1;
+        }
+        if (preg_match('/^smallint/i', $type) === 1) {
+            return 2;
+        }
+        if (preg_match('/^mediumint/i', $type) === 1) {
+            return 3;
+        }
+        if (preg_match('/^(int|integer)/i', $type) === 1) {
+            return 4;
+        }
+        if (preg_match('/^bigint/i', $type) === 1) {
+            return 8;
+        }
+
+        return 64;
     }
 
     /**
