@@ -843,7 +843,7 @@ class Setup extends BaseController
                 continue;
             }
 
-            if ($this->columnSignature($masterCol) !== $this->columnSignature($clientCols[$colName])) {
+            if ($this->shouldModifyExistingColumn((array) $masterCol, (array) $clientCols[$colName])) {
                 $columnAlterClauses[] = 'MODIFY COLUMN ' . $this->columnDefinition($masterCol);
             }
             $prevCol = $colName;
@@ -1112,15 +1112,8 @@ class Setup extends BaseController
     {
         $type = $this->normalizeColumnTypeForCompare((string) ($col['Type'] ?? ''));
 
-        $nullability = strtoupper(trim((string) ($col['Null'] ?? 'YES')));
-        $nullability = $nullability === 'NO' ? 'NO' : 'YES';
-
-        $default = $col['Default'] ?? null;
-        if ($default === null) {
-            $defaultNormalized = '__NULL__';
-        } else {
-            $defaultNormalized = $this->normalizeColumnDefaultForCompare((string) $default);
-        }
+        $nullability = $this->normalizeColumnNullabilityForCompare($col);
+        $defaultNormalized = $this->normalizeColumnDefaultFromMetadata($col);
 
         return json_encode([
             $type,
@@ -1144,6 +1137,114 @@ class Setup extends BaseController
         $type = preg_replace('/\s+/', ' ', $type) ?? $type;
 
         return trim($type);
+    }
+
+    /**
+     * @param array<string, mixed> $masterCol
+     * @param array<string, mixed> $clientCol
+     */
+    private function shouldModifyExistingColumn(array $masterCol, array $clientCol): bool
+    {
+        $masterType = $this->normalizeColumnTypeForCompare((string) ($masterCol['Type'] ?? ''));
+        $clientType = $this->normalizeColumnTypeForCompare((string) ($clientCol['Type'] ?? ''));
+
+        $typeMatches = $masterType === $clientType
+            || $this->isCompatibleWiderType($clientType, $masterType);
+
+        if (!$typeMatches) {
+            return true;
+        }
+
+        if ($this->normalizeColumnNullabilityForCompare($masterCol) !== $this->normalizeColumnNullabilityForCompare($clientCol)) {
+            return true;
+        }
+
+        if ($this->normalizeColumnDefaultFromMetadata($masterCol) !== $this->normalizeColumnDefaultFromMetadata($clientCol)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * @param array<string, mixed> $col
+     */
+    private function normalizeColumnNullabilityForCompare(array $col): string
+    {
+        $nullability = strtoupper(trim((string) ($col['Null'] ?? 'YES')));
+        return $nullability === 'NO' ? 'NO' : 'YES';
+    }
+
+    /**
+     * @param array<string, mixed> $col
+     */
+    private function normalizeColumnDefaultFromMetadata(array $col): string
+    {
+        $default = $col['Default'] ?? null;
+        if ($default === null) {
+            return '__NULL__';
+        }
+
+        return $this->normalizeColumnDefaultForCompare((string) $default);
+    }
+
+    private function isCompatibleWiderType(string $clientType, string $masterType): bool
+    {
+        $client = $this->parseColumnTypeSpec($clientType);
+        $master = $this->parseColumnTypeSpec($masterType);
+
+        if ($client === null || $master === null) {
+            return false;
+        }
+
+        if ($client['base'] !== $master['base']) {
+            return false;
+        }
+
+        if ($client['unsigned'] !== $master['unsigned']) {
+            return false;
+        }
+
+        if (!in_array($client['base'], ['varchar', 'char', 'varbinary', 'binary'], true)) {
+            return false;
+        }
+
+        if ($client['length'] === null || $master['length'] === null) {
+            return false;
+        }
+
+        return $client['length'] >= $master['length'];
+    }
+
+    /**
+     * @return array{base:string,unsigned:bool,length:int|null}|null
+     */
+    private function parseColumnTypeSpec(string $type): ?array
+    {
+        $type = trim(strtolower($type));
+        if ($type === '') {
+            return null;
+        }
+
+        $type = preg_replace('/\s+/', ' ', $type) ?? $type;
+
+        if (preg_match('/^([a-z]+)\s*\(\s*(\d+)\s*\)\s*(unsigned)?$/i', $type, $m) === 1) {
+            return [
+                'base' => strtolower((string) $m[1]),
+                'length' => (int) $m[2],
+                'unsigned' => !empty($m[3]),
+            ];
+        }
+
+        if (preg_match('/^([a-z]+)\s*(unsigned)?$/i', $type, $m) === 1) {
+            return [
+                'base' => strtolower((string) $m[1]),
+                'length' => null,
+                'unsigned' => !empty($m[2]),
+            ];
+        }
+
+        return null;
     }
 
     private function normalizeColumnDefaultForCompare(string $default): string
