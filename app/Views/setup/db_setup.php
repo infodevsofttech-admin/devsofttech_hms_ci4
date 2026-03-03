@@ -86,7 +86,20 @@
                 <div class="form-group">
                     <button type="submit" name="sync_action" value="analyze" class="btn btn-info">Analyze Schema Diff</button>
                     <button type="submit" name="sync_action" value="apply" class="btn btn-warning" onclick="return confirm('Apply generated SQL to client DB?');">Apply Sync to Client DB</button>
+                    <button type="button" id="auto-sync-btn" class="btn btn-primary">Auto Apply Until Done</button>
+                    <button type="button" id="auto-sync-stop-btn" class="btn btn-default" disabled>Stop Auto Apply</button>
                 </div>
+            </form>
+
+            <div id="auto-sync-status" class="alert alert-info" style="display:none;"></div>
+
+            <form method="post" action="<?= base_url('setup/db-tools/prepare-filesystem') ?>" style="margin-top:10px; margin-bottom:10px;">
+                <?= csrf_field() ?>
+                <?php if (!empty($setup_key ?? '')) : ?>
+                    <input type="hidden" name="key" value="<?= esc($setup_key) ?>">
+                <?php endif; ?>
+                <button type="submit" class="btn btn-default" onclick="return confirm('Create/fix required writable folders now?');">Prepare Writable Folders</button>
+                <span class="text-muted" style="margin-left:10px;">Ensures writable/cache, logs, session, uploads, debugbar, tmp, public/uploads.</span>
             </form>
 
             <?php if (!empty($sync_result ?? null)) : ?>
@@ -121,6 +134,14 @@
                         <?php foreach (($sync_result['apply_errors'] ?? []) as $err) : ?>
                             <div><?= esc($err) ?></div>
                         <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+
+                <?php if (!empty($sync_result['apply_truncated'] ?? false)) : ?>
+                    <div class="alert alert-warning">
+                        Apply phase was truncated to prevent request timeout.
+                        Re-run <strong>Apply Sync to Client DB</strong> to continue remaining statements,
+                        or increase <code>setup.sync.max_apply_statements_per_run</code> / <code>setup.sync.max_runtime_seconds</code> in .env.
                     </div>
                 <?php endif; ?>
 
@@ -160,3 +181,140 @@
         </div>
     </div>
 </section>
+
+<script>
+    (function () {
+        var autoBtn = document.getElementById('auto-sync-btn');
+        var stopBtn = document.getElementById('auto-sync-stop-btn');
+        var statusBox = document.getElementById('auto-sync-status');
+        if (!autoBtn || !stopBtn || !statusBox) {
+            return;
+        }
+
+        var running = false;
+        var cancelRequested = false;
+        var maxRounds = 30;
+
+        function setStatus(html, klass) {
+            statusBox.style.display = 'block';
+            statusBox.className = 'alert ' + (klass || 'alert-info');
+            statusBox.innerHTML = html;
+        }
+
+        function readCsrf() {
+            var tokenInput = document.querySelector('input[name="<?= esc(csrf_token()) ?>"]');
+            return tokenInput ? tokenInput.value : '';
+        }
+
+        function buildFormBody() {
+            var csrfName = '<?= esc(csrf_token()) ?>';
+            var csrfValue = readCsrf();
+            var parts = [];
+            if (csrfValue) {
+                parts.push(encodeURIComponent(csrfName) + '=' + encodeURIComponent(csrfValue));
+            }
+            <?php if (!empty($setup_key ?? '')) : ?>
+            parts.push('key=' + encodeURIComponent('<?= esc($setup_key) ?>'));
+            <?php endif; ?>
+            return parts.join('&');
+        }
+
+        async function runRound(round) {
+            var res = await fetch('<?= base_url('setup/db-tools/schema-sync-step') ?>', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: buildFormBody(),
+                credentials: 'same-origin'
+            });
+
+            if (!res.ok) {
+                throw new Error('HTTP ' + res.status);
+            }
+
+            return await res.json();
+        }
+
+        autoBtn.addEventListener('click', async function () {
+            if (running) {
+                return;
+            }
+
+            if (!confirm('Auto-apply schema sync in multiple safe chunks?')) {
+                return;
+            }
+
+            running = true;
+            cancelRequested = false;
+            autoBtn.disabled = true;
+            stopBtn.disabled = false;
+            setStatus('Starting auto apply...', 'alert-info');
+
+            try {
+                var rounds = 0;
+                var totalApplied = 0;
+
+                while (rounds < maxRounds) {
+                    if (cancelRequested) {
+                        setStatus('Auto apply stopped by user after ' + rounds + ' rounds. You can resume anytime.', 'alert-warning');
+                        break;
+                    }
+
+                    rounds++;
+                    setStatus('Running round ' + rounds + ' of ' + maxRounds + '...', 'alert-info');
+
+                    var data = await runRound(rounds);
+                    var result = data.result || {};
+                    var appliedNow = parseInt(data.applied || 0, 10);
+                    var sqlCount = parseInt(data.sql_count || 0, 10);
+                    var applyErrCount = parseInt(data.apply_error_count || 0, 10);
+                    totalApplied += appliedNow;
+
+                    if (!data.ok) {
+                        var errList = (result.errors || []).join('<br>');
+                        setStatus('Stopped: ' + (errList || 'Schema sync step failed.'), 'alert-danger');
+                        break;
+                    }
+
+                    if (applyErrCount > 0) {
+                        var applyErrors = (result.apply_errors || []).slice(0, 5).join('<br>');
+                        setStatus('Stopped due to apply errors after ' + rounds + ' rounds.<br>' + applyErrors, 'alert-danger');
+                        break;
+                    }
+
+                    if (!data.should_continue) {
+                        var msg = 'Completed after ' + rounds + ' rounds. Total applied: ' + totalApplied + '. Last round SQL: ' + sqlCount + '.';
+                        setStatus(msg + ' Reloading page...', 'alert-success');
+                        setTimeout(function () {
+                            window.location.reload();
+                        }, 900);
+                        break;
+                    }
+
+                    setStatus('Round ' + rounds + ' done. Applied this round: ' + appliedNow + '. Total applied: ' + totalApplied + '. Continuing...', 'alert-info');
+                }
+
+                if (rounds >= maxRounds) {
+                    setStatus('Stopped after max rounds (' + maxRounds + '). Click again to continue from current state.', 'alert-warning');
+                }
+            } catch (error) {
+                setStatus('Auto apply failed: ' + (error && error.message ? error.message : 'Unknown error'), 'alert-danger');
+            } finally {
+                running = false;
+                autoBtn.disabled = false;
+                stopBtn.disabled = true;
+            }
+        });
+
+        stopBtn.addEventListener('click', function () {
+            if (!running) {
+                return;
+            }
+            cancelRequested = true;
+            stopBtn.disabled = true;
+            setStatus('Stop requested. Finishing current request...', 'alert-warning');
+        });
+    })();
+</script>

@@ -110,31 +110,87 @@ class Setup extends BaseController
         @set_time_limit(0);
         @ignore_user_abort(true);
 
+        $action = strtolower(trim((string) $this->request->getPost('sync_action')));
+        if (!in_array($action, ['analyze', 'apply'], true)) {
+            $action = 'analyze';
+        }
+
+        $this->lastSyncResult = $this->executeSchemaSyncAction($action);
+
+        return view('setup/db_setup', $this->buildDbToolsViewData());
+    }
+
+    public function schemaSyncStep()
+    {
+        if ($deny = $this->ensureSetupAccess()) {
+            return $deny;
+        }
+
+        @ini_set('memory_limit', (string) env('setup.sync.memory_limit', '1024M'));
+        @ini_set('max_execution_time', '0');
+        @set_time_limit(0);
+        @ignore_user_abort(true);
+
+        $result = $this->executeSchemaSyncAction('apply');
+        $this->lastSyncResult = $result;
+
+        $sqlCount = is_array($result['sql'] ?? null) ? count($result['sql']) : 0;
+        $applyErrors = is_array($result['apply_errors'] ?? null) ? count($result['apply_errors']) : 0;
+        $applied = (int) ($result['applied'] ?? 0);
+        $truncated = !empty($result['truncated']) || !empty($result['apply_truncated']);
+
+        $shouldContinue = $applyErrors === 0
+            && ($truncated || ($sqlCount > 0 && $applied > 0));
+
+        return $this->response->setJSON([
+            'ok' => empty($result['errors'] ?? []),
+            'result' => $result,
+            'sql_count' => $sqlCount,
+            'applied' => $applied,
+            'apply_error_count' => $applyErrors,
+            'should_continue' => $shouldContinue,
+            'message' => $shouldContinue
+                ? 'Applied chunk, continuing...'
+                : 'Schema sync auto-apply reached a stop condition.',
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function executeSchemaSyncAction(string $action): array
+    {
         try {
-            $action = strtolower(trim((string) $this->request->getPost('sync_action')));
-            if (!in_array($action, ['analyze', 'apply'], true)) {
-                $action = 'analyze';
+            $maxRuntimeSeconds = (int) env('setup.sync.max_runtime_seconds', 40);
+            if ($maxRuntimeSeconds < 5) {
+                $maxRuntimeSeconds = 5;
             }
 
-            $syncResult = $this->buildSchemaSyncPlan();
+            $startedAt = microtime(true);
+
+            $syncResult = $this->buildSchemaSyncPlan($startedAt, $maxRuntimeSeconds);
             if ($action === 'apply' && empty($syncResult['errors']) && !empty($syncResult['sql'])) {
-                $applyResult = $this->applySchemaSyncSql($syncResult['sql']);
+                $maxApplyStatements = (int) env('setup.sync.max_apply_statements_per_run', 75);
+                if ($maxApplyStatements <= 0) {
+                    $maxApplyStatements = 75;
+                }
+
+                $applyResult = $this->applySchemaSyncSql($syncResult['sql'], $startedAt, $maxRuntimeSeconds, $maxApplyStatements);
                 $syncResult['applied'] = $applyResult['applied'];
                 $syncResult['apply_errors'] = $applyResult['errors'];
+                $syncResult['apply_truncated'] = $applyResult['truncated'];
             }
 
-            $this->lastSyncResult = $syncResult;
+            return $syncResult;
         } catch (\Throwable $e) {
             log_message('error', 'Setup schemaSync failed: {message}', ['message' => $e->getMessage()]);
-            $this->lastSyncResult = [
+            return [
                 'errors' => ['Schema sync failed: ' . $e->getMessage()],
                 'sql' => [],
                 'summary' => [],
                 'source' => 'runtime-exception',
             ];
         }
-
-        return view('setup/db_setup', $this->buildDbToolsViewData());
     }
 
     public function exportMasterSchema()
@@ -344,6 +400,33 @@ class Setup extends BaseController
         return redirect()->to($this->dbToolsUrlWithKey());
     }
 
+    public function prepareFilesystem()
+    {
+        if ($deny = $this->ensureSetupAccess()) {
+            return $deny;
+        }
+
+        $result = $this->prepareWritablePaths();
+
+        $parts = [];
+        $parts[] = 'Filesystem prep done.';
+        $parts[] = 'Created: ' . count($result['created']) . '.';
+        $parts[] = 'Permission-updated: ' . count($result['permission_updated']) . '.';
+        $parts[] = 'Writable: ' . count($result['writable']) . '/' . count($result['checked']) . '.';
+
+        if (!empty($result['failed'])) {
+            $parts[] = 'Failed: ' . implode(', ', $result['failed']) . '.';
+        }
+
+        if (!empty($result['commands'])) {
+            $parts[] = 'Run on server shell if needed: ' . implode(' | ', $result['commands']);
+        }
+
+        session()->setFlashdata('setup_msg', implode(' ', $parts));
+
+        return redirect()->to($this->dbToolsUrlWithKey());
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -425,12 +508,22 @@ class Setup extends BaseController
             $errors[] = 'Database error: ' . $dbError;
         }
 
-        $logPath = WRITEPATH . 'logs';
-        if (!is_dir($logPath) || !is_writable($logPath)) {
-            $warnings[] = 'writable/logs is not writable. Error diagnostics may be incomplete.';
-        } else {
-            $info[] = 'Logs path: ' . $logPath;
+        foreach ($this->requiredWritablePaths() as $path) {
+            $relative = $this->relativeProjectPath($path);
+            if (!is_dir($path)) {
+                $warnings[] = $relative . ' does not exist.';
+                continue;
+            }
+
+            if (!is_writable($path)) {
+                $warnings[] = $relative . ' is not writable.';
+            } else {
+                $info[] = $relative . ' is writable.';
+            }
         }
+
+        $info[] = 'Web SAPI/PHP: ' . PHP_SAPI . ' / ' . PHP_VERSION;
+        $info[] = 'If spark fails but web works, your CLI PHP version likely differs from web PHP version.';
 
         if ($this->isSetupLocked()) {
             $warnings[] = 'Setup lock file exists. Remove lock file if this is a fresh installation attempt.';
@@ -446,7 +539,7 @@ class Setup extends BaseController
     /**
      * @return array<string, mixed>
      */
-    private function buildSchemaSyncPlan(): array
+    private function buildSchemaSyncPlan(float $startedAt, int $maxRuntimeSeconds): array
     {
         $errors = [];
         $sql = [];
@@ -491,7 +584,13 @@ class Setup extends BaseController
                 break;
             }
 
+            if ((microtime(true) - $startedAt) >= $maxRuntimeSeconds) {
+                $truncated = true;
+                break;
+            }
+
             $table = (string) $table;
+            $processedTables++;
             if (!isset($clientTables[$table])) {
                 $createSql = (string) ($masterTableDef['create_sql'] ?? '');
                 if ($createSql !== '') {
@@ -515,7 +614,6 @@ class Setup extends BaseController
                 $alterCount += count($tableAlterSql);
             }
 
-            $processedTables++;
         }
 
         return [
@@ -535,19 +633,32 @@ class Setup extends BaseController
 
     /**
      * @param array<int, string> $sqlList
-     * @return array{applied:int,errors:array<int,string>}
+     * @return array{applied:int,errors:array<int,string>,truncated:bool}
      */
-    private function applySchemaSyncSql(array $sqlList): array
+    private function applySchemaSyncSql(array $sqlList, float $startedAt, int $maxRuntimeSeconds, int $maxStatements): array
     {
         $client = $this->resolveClientConnection();
         $applied = 0;
         $errors = [];
+        $truncated = false;
+        $attempted = 0;
 
         foreach ($sqlList as $stmt) {
+            if ($attempted >= $maxStatements) {
+                $truncated = true;
+                break;
+            }
+
+            if ((microtime(true) - $startedAt) >= $maxRuntimeSeconds) {
+                $truncated = true;
+                break;
+            }
+
             $stmt = $this->normalizeSyncSql((string) $stmt);
             if ($stmt === '') {
                 continue;
             }
+            $attempted++;
             try {
                 $client->query($stmt);
                 $applied++;
@@ -575,7 +686,7 @@ class Setup extends BaseController
             }
         }
 
-        return ['applied' => $applied, 'errors' => $errors];
+        return ['applied' => $applied, 'errors' => $errors, 'truncated' => $truncated];
     }
 
     /**
@@ -1053,5 +1164,87 @@ class Setup extends BaseController
         $value = preg_replace('/[^a-zA-Z0-9]+/', ' ', $value) ?? $value;
         $value = ucwords(strtolower(trim($value)));
         return str_replace(' ', '', $value);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function requiredWritablePaths(): array
+    {
+        return [
+            WRITEPATH,
+            WRITEPATH . 'cache',
+            WRITEPATH . 'logs',
+            WRITEPATH . 'session',
+            WRITEPATH . 'uploads',
+            WRITEPATH . 'debugbar',
+            WRITEPATH . 'tmp',
+            FCPATH . 'uploads',
+        ];
+    }
+
+    /**
+     * @return array<string, array<int, string>>
+     */
+    private function prepareWritablePaths(): array
+    {
+        $checked = [];
+        $created = [];
+        $permissionUpdated = [];
+        $writable = [];
+        $failed = [];
+
+        $paths = $this->requiredWritablePaths();
+        foreach ($paths as $path) {
+            $checked[] = $this->relativeProjectPath($path);
+
+            if (!is_dir($path)) {
+                if (@mkdir($path, 0775, true)) {
+                    $created[] = $this->relativeProjectPath($path);
+                }
+            }
+
+            if (is_dir($path) && !is_writable($path)) {
+                if (@chmod($path, 0775)) {
+                    $permissionUpdated[] = $this->relativeProjectPath($path);
+                }
+            }
+
+            if (is_dir($path) && is_writable($path)) {
+                $writable[] = $this->relativeProjectPath($path);
+            } else {
+                $failed[] = $this->relativeProjectPath($path);
+            }
+        }
+
+        $commands = [];
+        if (!empty($failed)) {
+            $projectPath = rtrim(str_replace('\\', '/', ROOTPATH), '/');
+            $commands[] = 'sudo chown -R www-data:www-data "' . $projectPath . '/writable" "' . $projectPath . '/public/uploads"';
+            $commands[] = 'sudo find "' . $projectPath . '/writable" -type d -exec chmod 775 {} \;';
+            $commands[] = 'sudo find "' . $projectPath . '/writable" -type f -exec chmod 664 {} \;';
+            $commands[] = 'sudo chmod -R 775 "' . $projectPath . '/public/uploads"';
+        }
+
+        return [
+            'checked' => $checked,
+            'created' => $created,
+            'permission_updated' => $permissionUpdated,
+            'writable' => $writable,
+            'failed' => array_values(array_unique($failed)),
+            'commands' => $commands,
+        ];
+    }
+
+    private function relativeProjectPath(string $absolutePath): string
+    {
+        $normalizedPath = str_replace('\\', '/', $absolutePath);
+        $normalizedRoot = str_replace('\\', '/', ROOTPATH);
+
+        if (str_starts_with($normalizedPath, $normalizedRoot)) {
+            return ltrim(substr($normalizedPath, strlen($normalizedRoot)), '/');
+        }
+
+        return $absolutePath;
     }
 }

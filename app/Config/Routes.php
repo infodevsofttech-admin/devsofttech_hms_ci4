@@ -227,6 +227,8 @@ $routes->get('setup/db-tools', 'Setup::dbTools');
 $routes->post('setup/db-tools/generate', 'Setup::generateMigrations');
 $routes->post('setup/db-tools/export-master-schema', 'Setup::exportMasterSchema');
 $routes->post('setup/db-tools/schema-sync', 'Setup::schemaSync');
+$routes->post('setup/db-tools/schema-sync-step', 'Setup::schemaSyncStep');
+$routes->post('setup/db-tools/prepare-filesystem', 'Setup::prepareFilesystem');
 $routes->post('setup/db-tools/ensure-admin', 'Setup::ensureAdminLogin');
 $routes->post('setup/db-tools/complete', 'Setup::complete');
 
