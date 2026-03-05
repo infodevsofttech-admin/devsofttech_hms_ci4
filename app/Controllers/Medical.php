@@ -8914,8 +8914,12 @@ class Medical extends BaseController
                 JOIN purchase_invoice_item s ON p.id=s.item_code
                 WHERE " . implode(' AND ', $ratioConds) . "
                 GROUP BY p.id, p.item_name
-                HAVING current_unit_qty > 0
-                ORDER BY (current_unit_qty / GREATEST(sale_qty_30,1)) DESC, current_unit_qty DESC
+                HAVING SUM(s.total_unit-s.total_sale_unit-s.total_lost_unit-s.total_return_unit) > 0
+                ORDER BY (
+                    SUM(s.total_unit-s.total_sale_unit-s.total_lost_unit-s.total_return_unit)
+                    / GREATEST(SUM(CASE WHEN s.stock_date >= DATE_ADD(CURDATE(), INTERVAL -30 DAY) THEN IFNULL(s.total_sale_unit,0) ELSE 0 END),1)
+                ) DESC,
+                SUM(s.total_unit-s.total_sale_unit-s.total_lost_unit-s.total_return_unit) DESC
                 LIMIT 10";
 
             $ratioRows = $this->db->query($ratioSql, $ratioParams)->getResultArray();
