@@ -348,6 +348,14 @@ $ratioValues = $ratio_values ?? [];
             return null;
         }
 
+        const tableEl = document.getElementById('medical-store-stock-table');
+        if (tableEl) {
+            const firstBodyCell = tableEl.querySelector('tbody tr td');
+            if (firstBodyCell && Number(firstBodyCell.getAttribute('colspan') || '0') > 1) {
+                return null;
+            }
+        }
+
         if (jQuery.fn.dataTable.isDataTable(tableId)) {
             jQuery(tableId).DataTable().destroy();
         }
