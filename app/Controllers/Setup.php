@@ -398,12 +398,20 @@ class Setup extends BaseController
                 $user->addGroup($group);
             }
 
+            if ($user !== null) {
+                $identityResult = $this->upsertEmailPasswordIdentity((int) ($user->id ?? 0), $email, $password);
+                if (!empty($identityResult['errors'])) {
+                    session()->setFlashdata('setup_msg', 'Admin login setup failed: ' . implode(' | ', (array) $identityResult['errors']));
+                    return redirect()->to($this->dbToolsUrlWithKey());
+                }
+            }
+
             $repairMsg = '';
             if (!empty($repair['applied'])) {
                 $repairMsg = ' Auth schema repaired: ' . implode(', ', (array) $repair['applied']) . '.';
             }
 
-            session()->setFlashdata('setup_msg', 'Admin login ' . $action . ': username=' . $username . ', email=' . $email . ', group=' . $group . '.' . $repairMsg);
+            session()->setFlashdata('setup_msg', 'Admin login ' . $action . ': username=' . $username . ', email=' . $email . ', group=' . $group . '.' . $repairMsg . ' Password is set from .env key setup.admin.password.');
         } catch (\Throwable $e) {
             session()->setFlashdata('setup_msg', 'Admin login setup failed: ' . $e->getMessage());
         }
@@ -2070,5 +2078,81 @@ class Setup extends BaseController
         } catch (\Throwable $e) {
             return false;
         }
+    }
+
+    /**
+     * @return array{errors:array<int,string>}
+     */
+    private function upsertEmailPasswordIdentity(int $userId, string $email, string $plainPassword): array
+    {
+        $errors = [];
+
+        if ($userId <= 0) {
+            return ['errors' => ['Invalid user id for auth identity update.']];
+        }
+
+        try {
+            $tables = config('Auth')->tables;
+            $identitiesTable = (string) ($tables['identities'] ?? 'auth_identities');
+            $passwordHash = service('passwords')->hash($plainPassword);
+
+            $rows = $this->db->table($identitiesTable)
+                ->select('id,user_id,type,secret')
+                ->where('user_id', $userId)
+                ->where('type', 'email_password')
+                ->orderBy('id', 'ASC')
+                ->get()
+                ->getResultArray();
+
+            if (empty($rows)) {
+                $insert = [
+                    'user_id' => $userId,
+                    'type' => 'email_password',
+                    'secret' => $email,
+                    'secret2' => $passwordHash,
+                    'expires' => null,
+                    'extra' => null,
+                    'force_reset' => 0,
+                    'last_used_at' => null,
+                    'created_at' => date('Y-m-d H:i:s'),
+                    'updated_at' => date('Y-m-d H:i:s'),
+                ];
+                $this->db->table($identitiesTable)->insert($insert);
+
+                return ['errors' => []];
+            }
+
+            $keepId = (int) ($rows[0]['id'] ?? 0);
+            if ($keepId <= 0) {
+                return ['errors' => ['Unable to determine auth identity id for update.']];
+            }
+
+            $this->db->table($identitiesTable)
+                ->where('id', $keepId)
+                ->update([
+                    'secret' => $email,
+                    'secret2' => $passwordHash,
+                    'force_reset' => 0,
+                    'updated_at' => date('Y-m-d H:i:s'),
+                ]);
+
+            $duplicateIds = [];
+            foreach ($rows as $row) {
+                $id = (int) ($row['id'] ?? 0);
+                if ($id > 0 && $id !== $keepId) {
+                    $duplicateIds[] = $id;
+                }
+            }
+
+            if (!empty($duplicateIds)) {
+                $this->db->table($identitiesTable)
+                    ->whereIn('id', $duplicateIds)
+                    ->delete();
+            }
+        } catch (\Throwable $e) {
+            $errors[] = 'Auth identity update failed: ' . $e->getMessage();
+        }
+
+        return ['errors' => $errors];
     }
 }
