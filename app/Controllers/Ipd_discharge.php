@@ -55,6 +55,203 @@ class Ipd_discharge extends BaseController
         return (string) ($row['content'] ?? '');
     }
 
+    private function ensureDischargeTemplateTable(): void
+    {
+        if ($this->db->tableExists('ipd_discharge_templates')) {
+            return;
+        }
+
+        $sql = "CREATE TABLE IF NOT EXISTS ipd_discharge_templates (
+            id INT NOT NULL AUTO_INCREMENT,
+            template_name VARCHAR(120) NOT NULL,
+            template_html LONGTEXT NOT NULL,
+            is_default TINYINT(1) NOT NULL DEFAULT 0,
+            status TINYINT(1) NOT NULL DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+        $this->db->query($sql);
+    }
+
+    private function defaultDischargeTemplateHtml(): string
+    {
+        return '<h3 style="margin:0 0 8px 0;">Discharge Summary</h3>'
+            . '<table style="width:100%;border-collapse:collapse;margin-bottom:10px;" border="1" cellpadding="6">'
+            . '<tr>'
+            . '<td><b>Patient</b>: {{PATIENT_NAME}}</td>'
+            . '<td><b>UHID</b>: {{UHID}}</td>'
+            . '<td><b>IPD</b>: {{IPD_CODE}}</td>'
+            . '</tr>'
+            . '<tr>'
+            . '<td><b>Age/Gender</b>: {{AGE_GENDER}}</td>'
+            . '<td><b>Admit Date</b>: {{ADMIT_DATE}}</td>'
+            . '<td><b>Discharge Date</b>: {{DISCHARGE_DATE}}</td>'
+            . '</tr>'
+            . '</table>'
+            . '<div>{{CONTENT}}</div>';
+    }
+
+    private function nabhDischargeTemplateHtml(): string
+    {
+        return '<h2 style="margin:0 0 10px 0;text-align:center;">DISCHARGE SUMMARY</h2>'
+            . '<table style="width:100%;border-collapse:collapse;margin-bottom:10px;" border="1" cellpadding="6">'
+            . '<tr>'
+            . '<td><b>Patient Name</b>: {{PATIENT_NAME}}</td>'
+            . '<td><b>UHID</b>: {{UHID}}</td>'
+            . '<td><b>IPD No.</b>: {{IPD_CODE}}</td>'
+            . '</tr>'
+            . '<tr>'
+            . '<td><b>Age/Gender</b>: {{AGE_GENDER}}</td>'
+            . '<td><b>Date of Admission</b>: {{ADMIT_DATE}}</td>'
+            . '<td><b>Date of Discharge</b>: {{DISCHARGE_DATE}}</td>'
+            . '</tr>'
+            . '<tr>'
+            . '<td colspan="3"><b>Prepared On</b>: {{CURRENT_DATE}}</td>'
+            . '</tr>'
+            . '</table>'
+            . '<div style="font-size:11px;color:#334155;margin-bottom:10px;">'
+            . 'NABH guidance note: Ensure diagnosis, procedures, clinical course, condition at discharge, medication with dose/duration, follow-up advice, red-flag signs, and emergency contact are documented.'
+            . '</div>'
+            . '<div style="margin-bottom:10px;">{{CONTENT}}</div>'
+            . '<h4 style="margin:12px 0 6px 0;">Counselling & Handover Confirmation</h4>'
+            . '<table style="width:100%;border-collapse:collapse;margin-bottom:10px;" border="1" cellpadding="6">'
+            . '<tr><td style="width:32%;">Medication explained to patient/attendant</td><td style="width:8%;"></td><td style="width:60%;">Remarks:</td></tr>'
+            . '<tr><td>Follow-up date and department explained</td><td></td><td>Next Visit: __________________</td></tr>'
+            . '<tr><td>Red-flag symptoms explained</td><td></td><td>Emergency Contact: __________________</td></tr>'
+            . '<tr><td>Diet and activity instructions explained</td><td></td><td></td></tr>'
+            . '</table>'
+            . '<table style="width:100%;border-collapse:collapse;margin-top:20px;" border="1" cellpadding="10">'
+            . '<tr>'
+            . '<td style="width:33%;vertical-align:bottom;">____________________<br>Consultant Name/Signature</td>'
+            . '<td style="width:33%;vertical-align:bottom;">____________________<br>Medical Officer Signature</td>'
+            . '<td style="width:34%;vertical-align:bottom;">____________________<br>Patient/Attendant Signature & Date</td>'
+            . '</tr>'
+            . '</table>';
+    }
+
+    private function ensureDefaultDischargeTemplateSeeded(): void
+    {
+        $this->ensureDischargeTemplateTable();
+        if (! $this->db->tableExists('ipd_discharge_templates')) {
+            return;
+        }
+
+        $table = $this->db->table('ipd_discharge_templates');
+        $count = (int) ($table->countAllResults() ?? 0);
+        if ($count === 0) {
+            $table->insert([
+                'template_name' => 'Default Discharge Template',
+                'template_html' => $this->defaultDischargeTemplateHtml(),
+                'is_default' => 1,
+                'status' => 1,
+            ]);
+        }
+
+        $nabhExists = $this->db->table('ipd_discharge_templates')
+            ->where('template_name', 'NABH Compliant Discharge Summary')
+            ->get(1)
+            ->getRowArray();
+
+        if (empty($nabhExists)) {
+            $table->insert([
+                'template_name' => 'NABH Compliant Discharge Summary',
+                'template_html' => $this->nabhDischargeTemplateHtml(),
+                'is_default' => 0,
+                'status' => 1,
+            ]);
+        }
+    }
+
+    private function getDischargeTemplateRows(): array
+    {
+        $this->ensureDefaultDischargeTemplateSeeded();
+        if (! $this->db->tableExists('ipd_discharge_templates')) {
+            return [];
+        }
+
+        return $this->db->table('ipd_discharge_templates')
+            ->select('id,template_name,template_html,is_default,status')
+            ->where('status', 1)
+            ->orderBy('is_default', 'DESC')
+            ->orderBy('id', 'ASC')
+            ->get()
+            ->getResultArray();
+    }
+
+    private function applyDischargeTemplate(string $content, array $panelData, ?int $requestedTemplateId = null): array
+    {
+        $templates = $this->getDischargeTemplateRows();
+
+        $selectedTemplate = null;
+        if ($requestedTemplateId !== null && $requestedTemplateId > 0) {
+            foreach ($templates as $row) {
+                if ((int) ($row['id'] ?? 0) === $requestedTemplateId) {
+                    $selectedTemplate = $row;
+                    break;
+                }
+            }
+        }
+
+        if ($selectedTemplate === null) {
+            foreach ($templates as $row) {
+                if ((int) ($row['is_default'] ?? 0) === 1) {
+                    $selectedTemplate = $row;
+                    break;
+                }
+            }
+        }
+
+        if ($selectedTemplate === null && ! empty($templates)) {
+            $selectedTemplate = $templates[0];
+        }
+
+        $templateHtml = (string) ($selectedTemplate['template_html'] ?? '{{CONTENT}}');
+        if (trim($templateHtml) === '') {
+            $templateHtml = '{{CONTENT}}';
+        }
+
+        if (strpos($templateHtml, '{{CONTENT}}') === false) {
+            $templateHtml .= "\n{{CONTENT}}";
+        }
+
+        $ipd = $panelData['ipd_info'] ?? null;
+        $person = $panelData['person_info'] ?? null;
+        $patientName = trim((string) ($person->p_fname ?? ''));
+        $patientCode = trim((string) (
+            $person->uhid
+            ?? $person->UHID
+            ?? $person->patient_code
+            ?? $person->p_code
+            ?? $person->reg_no
+            ?? ''
+        ));
+
+        $age = get_age_1($person->dob ?? null, $person->age ?? '', $person->age_in_month ?? '', $person->estimate_dob ?? '');
+        $ageGender = trim($age . ' / ' . ((string) ($person->xgender ?? '')));
+
+        $replacements = [
+            '{{CONTENT}}' => $content,
+            '{{PATIENT_NAME}}' => esc($patientName),
+            '{{UHID}}' => esc($patientCode),
+            '{{IPD_CODE}}' => esc((string) ($ipd->ipd_code ?? '')),
+            '{{AGE_GENDER}}' => esc($ageGender),
+            '{{ADMIT_DATE}}' => esc((string) ($ipd->str_register_date ?? '')),
+            '{{DISCHARGE_DATE}}' => esc((string) ($ipd->str_discharge_date ?? '')),
+            '{{CURRENT_DATE}}' => esc(date('d-m-Y')),
+        ];
+
+        $rendered = strtr($templateHtml, $replacements);
+
+        return [
+            'rendered_html' => $rendered,
+            'templates' => $templates,
+            'selected_template_id' => (int) ($selectedTemplate['id'] ?? 0),
+            'selected_template_name' => (string) ($selectedTemplate['template_name'] ?? ''),
+        ];
+    }
+
     private function currentUserLabel(): string
     {
         if (! function_exists('auth')) {
@@ -146,6 +343,209 @@ class Ipd_discharge extends BaseController
         return true;
     }
 
+    private function getCurrentUserId(): int
+    {
+        if (! function_exists('auth')) {
+            return 0;
+        }
+
+        $user = auth()->user();
+        if (! $user) {
+            return 0;
+        }
+
+        return max(0, (int) ($user->id ?? 0));
+    }
+
+    private function isNarrativeTemplateSectionAllowed(string $section): bool
+    {
+        return in_array($section, ['diagnosis_remark', 'course_remark'], true);
+    }
+
+    private function narrativeSectionTable(string $section): ?string
+    {
+        $map = [
+            'diagnosis_remark' => 'ipd_discharge_diagnosis_remark',
+            'course_remark' => 'ipd_discharge_course_remark',
+        ];
+
+        return $map[$section] ?? null;
+    }
+
+    private function ensureDischargeNarrativeTemplateTable(): bool
+    {
+        if ($this->db->tableExists('ipd_discharge_narrative_templates')) {
+            return true;
+        }
+
+        try {
+            $sql = "CREATE TABLE IF NOT EXISTS ipd_discharge_narrative_templates (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                doc_id INT NOT NULL DEFAULT 0,
+                section_key VARCHAR(80) NOT NULL,
+                template_name VARCHAR(120) NOT NULL,
+                template_text LONGTEXT NOT NULL,
+                is_active TINYINT(1) NOT NULL DEFAULT 1,
+                created_at DATETIME NULL,
+                updated_at DATETIME NULL,
+                UNIQUE KEY uniq_doc_section_name (doc_id, section_key, template_name),
+                INDEX idx_section_doc (section_key, doc_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+            $this->db->query($sql);
+        } catch (\Throwable $e) {
+            return false;
+        }
+
+        return $this->db->tableExists('ipd_discharge_narrative_templates');
+    }
+
+    private function getPatientIdFromIpd(int $ipdId): int
+    {
+        if ($ipdId <= 0 || ! $this->tableHasColumns('ipd_master', ['id', 'p_id'])) {
+            return 0;
+        }
+
+        $row = $this->db->table('ipd_master')
+            ->select('p_id')
+            ->where('id', $ipdId)
+            ->get(1)
+            ->getRowArray();
+
+        return max(0, (int) ($row['p_id'] ?? 0));
+    }
+
+    public function section_past_data()
+    {
+        $section = trim((string) $this->request->getGet('section'));
+        $ipdId = (int) $this->request->getGet('ipd_id');
+
+        if ($ipdId <= 0 || ! $this->isNarrativeTemplateSectionAllowed($section)) {
+            return $this->response->setJSON(['update' => 0, 'past_text' => '', 'error_text' => 'Past data not found']);
+        }
+
+        $table = $this->narrativeSectionTable($section);
+        if ($table === null || ! $this->tableHasColumns($table, ['ipd_id', 'comp_remark'])) {
+            return $this->response->setJSON(['update' => 0, 'past_text' => '', 'error_text' => 'Past data column missing']);
+        }
+
+        $patientId = $this->getPatientIdFromIpd($ipdId);
+        if ($patientId <= 0) {
+            return $this->response->setJSON(['update' => 0, 'past_text' => '', 'error_text' => 'Patient not found']);
+        }
+
+        $row = $this->db->table($table . ' r')
+            ->select('r.comp_remark as section_text,r.ipd_id')
+            ->join('ipd_master m', 'm.id = r.ipd_id', 'inner')
+            ->where('m.p_id', $patientId)
+            ->where('r.ipd_id !=', $ipdId)
+            ->where('r.comp_remark IS NOT NULL', null, false)
+            ->where('r.comp_remark !=', '')
+            ->orderBy('r.id', 'DESC')
+            ->get(1)
+            ->getRowArray();
+
+        if (empty($row)) {
+            return $this->response->setJSON(['update' => 0, 'past_text' => '', 'error_text' => 'No past data found']);
+        }
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'past_text' => (string) ($row['section_text'] ?? ''),
+            'past_ipd_id' => (int) ($row['ipd_id'] ?? 0),
+            'error_text' => 'Past data loaded',
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
+    public function section_template_save()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $section = trim((string) $this->request->getPost('section'));
+        $templateName = trim((string) $this->request->getPost('template_name'));
+        $templateText = trim((string) $this->request->getPost('template_text'));
+        $templateScope = strtolower(trim((string) $this->request->getPost('template_scope')));
+
+        if ($templateName === '' || $templateText === '') {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Template name and text are required']);
+        }
+
+        if (! $this->isNarrativeTemplateSectionAllowed($section)) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Unsupported section']);
+        }
+
+        if (! $this->ensureDischargeNarrativeTemplateTable()) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Unable to access template storage']);
+        }
+
+        $docId = $templateScope === 'master' ? 0 : $this->getCurrentUserId();
+        $table = $this->db->table('ipd_discharge_narrative_templates');
+        $existing = $table
+            ->where('doc_id', $docId)
+            ->where('section_key', $section)
+            ->where('template_name', $templateName)
+            ->where('is_active', 1)
+            ->get(1)
+            ->getRowArray();
+
+        $now = date('Y-m-d H:i:s');
+        if (! empty($existing)) {
+            $table->where('id', (int) ($existing['id'] ?? 0))->update([
+                'template_text' => $templateText,
+                'updated_at' => $now,
+            ]);
+        } else {
+            $table->insert([
+                'doc_id' => $docId,
+                'section_key' => $section,
+                'template_name' => $templateName,
+                'template_text' => $templateText,
+                'is_active' => 1,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'error_text' => $docId === 0 ? 'Master template saved' : 'My template saved',
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
+    public function section_template_list()
+    {
+        $section = trim((string) $this->request->getGet('section'));
+        if (! $this->isNarrativeTemplateSectionAllowed($section)) {
+            return $this->response->setJSON(['rows' => []]);
+        }
+
+        if (! $this->ensureDischargeNarrativeTemplateTable()) {
+            return $this->response->setJSON(['rows' => []]);
+        }
+
+        $docId = $this->getCurrentUserId();
+        $rows = $this->db->table('ipd_discharge_narrative_templates')
+            ->select('id,template_name,template_text,doc_id,section_key')
+            ->where('section_key', $section)
+            ->where('is_active', 1)
+            ->groupStart()
+            ->where('doc_id', $docId)
+            ->orWhere('doc_id', 0)
+            ->groupEnd()
+            ->orderBy('doc_id', 'DESC')
+            ->orderBy('template_name', 'ASC')
+            ->limit(100)
+            ->get()
+            ->getResultArray();
+
+        return $this->response->setJSON(['rows' => $rows]);
+    }
+
     private function byIpdRows(string $table, array $columns = ['*'], string $orderBy = 'id ASC', int $ipdId = 0): array
     {
         if ($ipdId <= 0 || ! $this->tableHasColumns($table, ['ipd_id'])) {
@@ -223,22 +623,9 @@ class Ipd_discharge extends BaseController
             ?? ''
         ));
         $patientId = (int) ($person->id ?? 0);
+        $opdHistory = $this->getLatestOpdHistorySnapshot($patientId);
 
         $sections = [];
-
-        $sections[] = '<h3 style="margin:0 0 10px 0;">IPD Discharge Summary</h3>';
-        $sections[] = '<table style="width:100%;border-collapse:collapse;margin-bottom:10px;" border="1" cellpadding="6">'
-            . '<tr>'
-            . '<td><b>IPD</b>: ' . esc((string) ($ipd->ipd_code ?? $ipdId)) . '</td>'
-            . '<td><b>UHID</b>: ' . esc($patientCode) . '</td>'
-            . '<td><b>Date</b>: ' . esc(date('d-m-Y')) . '</td>'
-            . '</tr>'
-            . '<tr>'
-            . '<td><b>Patient</b>: ' . esc($patientName) . '</td>'
-            . '<td><b>Admit Date</b>: ' . esc((string) ($ipd->str_register_date ?? '')) . '</td>'
-            . '<td><b>Discharge Date</b>: ' . esc((string) ($ipd->str_discharge_date ?? '')) . '</td>'
-            . '</tr>'
-            . '</table>';
 
         $complaints = $this->byIpdRows('ipd_discharge_complaint', ['comp_report', 'comp_remark'], 'id ASC', $ipdId);
         $this->addListSection($sections, 'Presenting Complaints and Reason for Admission', $complaints);
@@ -248,11 +635,30 @@ class Ipd_discharge extends BaseController
             $sections[] = '<div>' . nl2br(esc($complaintRemarkText)) . '</div>';
         }
 
+        $complaintMeta = $this->parseComplaintMetaPayload((string) ($complaintRemark['comp_report'] ?? ''));
+        $painValue = (string) ($complaintMeta['pain_value'] ?? '');
+        $painLabel = $this->painScaleLabel($painValue);
+        if ($painLabel !== '') {
+            $sections[] = '<div><b>Pain Measurement Scale:</b> ' . esc($painLabel) . ' (' . esc($painValue) . ')</div>';
+        } elseif ((string) ($opdHistory['pain_label'] ?? '') !== '') {
+            $opdPainLabel = (string) ($opdHistory['pain_label'] ?? '');
+            $opdPainValue = (string) ($opdHistory['pain_value'] ?? '');
+            $sections[] = '<div><b>Pain Measurement Scale:</b> ' . esc($opdPainLabel)
+                . ($opdPainValue !== '' ? ' (' . esc($opdPainValue) . ')' : '')
+                . '</div>';
+        }
+
         $physicalExamRows = $this->getPhysicalExamRows($ipdId);
-        $generalRows = array_merge(
-            $physicalExamRows['general_group_1'] ?? [],
-            $physicalExamRows['general_group_2'] ?? []
-        );
+        $generalRowsRaw = $physicalExamRows['general_all'] ?? [];
+        $generalRows = [];
+        foreach ($generalRowsRaw as $row) {
+            $value = trim((string) ($row['value'] ?? ''));
+            if ($value === '') {
+                continue;
+            }
+            $generalRows[] = $row;
+        }
+
         if (! empty($generalRows)) {
             $html = '<h4 style="margin:16px 0 8px 0;">General Examination on Admission</h4>'
                 . '<table style="width:100%;border-collapse:collapse;margin-bottom:10px;" border="1" cellpadding="6">';
@@ -266,7 +672,12 @@ class Ipd_discharge extends BaseController
 
                 $label = (string) ($row['label'] ?? '');
                 $value = trim((string) ($row['value'] ?? ''));
-                $html .= '<td><b>' . esc($label) . ':</b> ' . esc($value) . '</td>';
+                $unit = trim((string) ($row['unit'] ?? ''));
+                $html .= '<td><b>' . esc($label) . ':</b> ' . esc($value);
+                if ($unit !== '') {
+                    $html .= ' ' . esc($unit);
+                }
+                $html .= '</td>';
 
                 if ($col % $perRow === $perRow - 1) {
                     $html .= '</tr>';
@@ -326,6 +737,28 @@ class Ipd_discharge extends BaseController
 
         if (! empty($personalHistory)) {
             $sections[] = '<h4 style="margin:16px 0 8px 0;">Personal History</h4><div>' . esc(implode(', ', $personalHistory)) . '</div>';
+        }
+
+        $allergyLines = [];
+        if ((string) ($opdHistory['drug_allergy_status'] ?? '') !== '') {
+            $allergyLines[] = '<div><b>Drug Allergy Status:</b> ' . esc((string) ($opdHistory['drug_allergy_status'] ?? '')) . '</div>';
+        }
+        if ((string) ($opdHistory['drug_allergy_details'] ?? '') !== '') {
+            $allergyLines[] = '<div><b>Drug Allergy Details:</b> ' . esc((string) ($opdHistory['drug_allergy_details'] ?? '')) . '</div>';
+        }
+        if ((string) ($opdHistory['adr_history'] ?? '') !== '') {
+            $allergyLines[] = '<div><b>ADR History:</b> ' . esc((string) ($opdHistory['adr_history'] ?? '')) . '</div>';
+        }
+        if ((string) ($opdHistory['current_medications'] ?? '') !== '') {
+            $allergyLines[] = '<div><b>Current Medications:</b> ' . esc((string) ($opdHistory['current_medications'] ?? '')) . '</div>';
+        }
+        if (! empty($allergyLines)) {
+            $sections[] = '<h4 style="margin:16px 0 8px 0;">Drug Allergy / ADR</h4>' . implode('', $allergyLines);
+        }
+
+        $coMorbText = trim((string) ($opdHistory['co_morbidities'] ?? ''));
+        if ($coMorbText !== '') {
+            $sections[] = '<h4 style="margin:16px 0 8px 0;">Co-Morbidities</h4><div>' . esc($coMorbText) . '</div>';
         }
 
         $admitDate = $this->normalizeDateValue((string) ($ipd->register_date ?? '')) ?? '';
@@ -463,7 +896,21 @@ class Ipd_discharge extends BaseController
             $sections[] = '<div>' . nl2br(esc($courseRemarkText)) . '</div>';
         }
 
-        $dischargeExamRows = $this->getMappedColRows('ipd_discharge_general_exam_col', 'ipd_discharge_1_b_final', $ipdId, 'Discharge Condition', null);
+        $nursingTrendSection = $this->buildNursingTrendSection($ipdId);
+        if ($nursingTrendSection !== '') {
+            $sections[] = $nursingTrendSection;
+        }
+
+        $dischargeExamRowsRaw = $this->getMappedColRows('ipd_discharge_general_exam_col', 'ipd_discharge_1_b_final', $ipdId, 'Discharge Condition', null);
+        $dischargeExamRows = [];
+        foreach ($dischargeExamRowsRaw as $row) {
+            $value = trim((string) ($row['value'] ?? ''));
+            if ($value === '') {
+                continue;
+            }
+            $dischargeExamRows[] = $row;
+        }
+
         if (! empty($dischargeExamRows)) {
             $html = '<h4 style="margin:16px 0 8px 0;">Examination on Discharge</h4>'
                 . '<table style="width:100%;border-collapse:collapse;margin-bottom:10px;" border="1" cellpadding="6">';
@@ -477,7 +924,12 @@ class Ipd_discharge extends BaseController
 
                 $label = (string) ($row['label'] ?? '');
                 $value = trim((string) ($row['value'] ?? ''));
-                $html .= '<td><b>' . esc($label) . ':</b> ' . esc($value) . '</td>';
+                $unit = trim((string) ($row['unit'] ?? ''));
+                $html .= '<td><b>' . esc($label) . ':</b> ' . esc($value);
+                if ($unit !== '') {
+                    $html .= ' ' . esc($unit);
+                }
+                $html .= '</td>';
 
                 if ($col % $perRow === $perRow - 1) {
                     $html .= '</tr>';
@@ -621,6 +1073,267 @@ class Ipd_discharge extends BaseController
         return trim(implode("\n", $sections));
     }
 
+    private function buildNursingTrendSection(int $ipdId): string
+    {
+        if ($ipdId <= 0 || ! $this->db->tableExists('ipd_nursing_entries')) {
+            return '';
+        }
+
+        foreach (['ipd_id', 'entry_type', 'recorded_at'] as $field) {
+            if (! $this->db->fieldExists($field, 'ipd_nursing_entries')) {
+                return '';
+            }
+        }
+
+        $rows = $this->db->table('ipd_nursing_entries')
+            ->select('entry_type,recorded_at,temperature_c,pulse_rate,resp_rate,bp_systolic,bp_diastolic,spo2,weight_kg,fluid_direction,fluid_amount_ml,treatment_text,general_note')
+            ->where('ipd_id', $ipdId)
+            ->orderBy('recorded_at', 'ASC')
+            ->orderBy('id', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        if (empty($rows)) {
+            return '';
+        }
+
+        $sinceTs = strtotime('-24 hours');
+        $since = $sinceTs === false ? date('Y-m-d H:i:s') : date('Y-m-d H:i:s', $sinceTs);
+
+        $vitalsCount = 0;
+        $fluidIn = 0;
+        $fluidOut = 0;
+        $treatments = [];
+        $scannedCount = 0;
+        $latestVitalsLine = '';
+
+        foreach ($rows as $row) {
+            $recordedAt = trim((string) ($row['recorded_at'] ?? ''));
+            if ($recordedAt === '' || $recordedAt < $since) {
+                continue;
+            }
+
+            $entryType = strtolower(trim((string) ($row['entry_type'] ?? '')));
+            $note = trim((string) ($row['general_note'] ?? ''));
+            if (stripos($note, 'Source: Scanned Paper') !== false) {
+                $scannedCount++;
+            }
+
+            if ($entryType === 'vitals' || $entryType === 'admission') {
+                $vitalsCount++;
+                $parts = [];
+                if ($row['temperature_c'] !== null && $row['temperature_c'] !== '') {
+                    $tempF = (((float) $row['temperature_c']) * 9 / 5) + 32;
+                    $parts[] = 'Temp ' . rtrim(rtrim(number_format($tempF, 1, '.', ''), '0'), '.') . ' F';
+                }
+                if ($row['pulse_rate'] !== null && $row['pulse_rate'] !== '') {
+                    $parts[] = 'Pulse ' . (string) $row['pulse_rate'];
+                }
+                if ($row['resp_rate'] !== null && $row['resp_rate'] !== '') {
+                    $parts[] = 'Resp ' . (string) $row['resp_rate'];
+                }
+                if ($row['bp_systolic'] !== null && $row['bp_systolic'] !== '') {
+                    $parts[] = 'BP ' . (string) $row['bp_systolic'] . '/' . (string) ($row['bp_diastolic'] ?? '');
+                }
+                if ($row['spo2'] !== null && $row['spo2'] !== '') {
+                    $parts[] = 'SpO2 ' . (string) $row['spo2'] . '%';
+                }
+                if ($row['weight_kg'] !== null && $row['weight_kg'] !== '') {
+                    $parts[] = 'Wt ' . (string) $row['weight_kg'] . ' kg';
+                }
+                if (! empty($parts)) {
+                    $latestVitalsLine = '[' . $recordedAt . '] ' . implode(', ', $parts);
+                }
+            }
+
+            if ($entryType === 'fluid') {
+                $amount = (int) ($row['fluid_amount_ml'] ?? 0);
+                $dir = strtolower(trim((string) ($row['fluid_direction'] ?? '')));
+                if ($dir === 'output') {
+                    $fluidOut += max(0, $amount);
+                } else {
+                    $fluidIn += max(0, $amount);
+                }
+            }
+
+            if ($entryType === 'treatment') {
+                $text = trim((string) ($row['treatment_text'] ?? ''));
+                if ($text !== '') {
+                    $treatments[] = '[' . $recordedAt . '] ' . $text;
+                }
+            }
+        }
+
+        if ($vitalsCount === 0 && $fluidIn === 0 && $fluidOut === 0 && empty($treatments) && $scannedCount === 0) {
+            return '';
+        }
+
+        $html = '<h4 style="margin:16px 0 8px 0;">Nursing Trend Summary (Last 24 Hours)</h4>';
+        $html .= '<ul style="margin:0 0 10px 20px;">';
+        if ($vitalsCount > 0) {
+            $html .= '<li>Vitals charted entries: ' . esc((string) $vitalsCount) . '</li>';
+            if ($latestVitalsLine !== '') {
+                $html .= '<li>Latest vitals: ' . esc($latestVitalsLine) . '</li>';
+            }
+        }
+        if ($fluidIn > 0 || $fluidOut > 0) {
+            $html .= '<li>Fluid balance (approx): Intake ' . esc((string) $fluidIn) . ' ml, Output ' . esc((string) $fluidOut) . ' ml, Net ' . esc((string) ($fluidIn - $fluidOut)) . ' ml</li>';
+        }
+        if (! empty($treatments)) {
+            $html .= '<li>Key nursing treatments:</li><li style="list-style:none;">';
+            $html .= '<ul style="margin:4px 0 0 18px;">';
+            foreach (array_slice($treatments, -5) as $line) {
+                $html .= '<li>' . esc($line) . '</li>';
+            }
+            $html .= '</ul></li>';
+        }
+        if ($scannedCount > 0) {
+            $html .= '<li>Scanned paper-derived entries reviewed and saved: ' . esc((string) $scannedCount) . '</li>';
+        }
+        $html .= '</ul>';
+
+        return $html;
+    }
+
+    private function hasAnyNonEmptyValue(array $rows, array $fields): bool
+    {
+        foreach ($rows as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            foreach ($fields as $field) {
+                $value = trim((string) ($row[$field] ?? ''));
+                if ($value !== '') {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private function buildNabhAuditChecklist(int $ipdId, array $panelData): array
+    {
+        $person = $panelData['person_info'] ?? null;
+        $patientId = (int) ($person->id ?? 0);
+
+        $complaintRows = $this->byIpdRows('ipd_discharge_complaint', ['comp_report', 'comp_remark'], 'id ASC', $ipdId);
+        $complaintRemark = $this->firstRowByIpd('ipd_discharge_complaint_remark', $ipdId);
+        $diagnosisRows = $this->byIpdRows('ipd_discharge_diagnosis', ['comp_report', 'comp_remark'], 'id ASC', $ipdId);
+        $diagnosisRemark = $this->firstRowByIpd('ipd_discharge_diagnosis_remark', $ipdId);
+        $courseRows = $this->byIpdRows('ipd_discharge_course', ['comp_report', 'comp_remark'], 'id ASC', $ipdId);
+        $courseRemark = $this->firstRowByIpd('ipd_discharge_course_remark', $ipdId);
+        $surgeryRows = $this->byIpdRows('ipd_discharge_surgery', ['surgery_name', 'surgery_remark'], 'id ASC', $ipdId);
+        $procedureRows = $this->byIpdRows('ipd_discharge_procedure', ['procedure_name', 'procedure_remark'], 'id ASC', $ipdId);
+        $conditionRows = $this->getMappedColRows('ipd_discharge_general_exam_col', 'ipd_discharge_1_b_final', $ipdId, 'Discharge Condition', null);
+        $drugRows = $this->byIpdRows('ipd_discharge_drug', ['drug_name', 'drug_dose', 'drug_day'], 'id ASC', $ipdId);
+        $legacyMedRows = $this->byIpdRows('ipd_discharge_prescrption_prescribed', ['med_name', 'med_type', 'qty', 'no_of_days', 'remark'], 'id ASC', $ipdId);
+        $instructionRow = $this->firstRowByIpd('ipd_discharge_instructions', $ipdId);
+        $opdSnapshot = $this->getLatestOpdHistorySnapshot($patientId);
+
+        $instructionText = trim((string) ($instructionRow['comp_remark'] ?? ''));
+        $reviewAfter = trim((string) ($instructionRow['review_after'] ?? ''));
+        $instructionLower = strtolower($instructionText);
+
+        $hasAdmissionReason = $this->hasAnyNonEmptyValue($complaintRows, ['comp_report', 'comp_remark'])
+            || trim((string) ($complaintRemark['comp_remark'] ?? '')) !== '';
+        $hasDiagnosis = $this->hasAnyNonEmptyValue($diagnosisRows, ['comp_report', 'comp_remark'])
+            || trim((string) ($diagnosisRemark['comp_remark'] ?? '')) !== '';
+        $hasCourse = $this->hasAnyNonEmptyValue($courseRows, ['comp_report', 'comp_remark'])
+            || trim((string) ($courseRemark['comp_remark'] ?? '')) !== '';
+        $hasProcedure = $this->hasAnyNonEmptyValue($surgeryRows, ['surgery_name', 'surgery_remark'])
+            || $this->hasAnyNonEmptyValue($procedureRows, ['procedure_name', 'procedure_remark']);
+        $hasCondition = $this->hasAnyNonEmptyValue($conditionRows, ['value']);
+        $hasMedication = $this->hasAnyNonEmptyValue($drugRows, ['drug_name'])
+            || $this->hasAnyNonEmptyValue($legacyMedRows, ['med_name']);
+        $hasFollowUp = $reviewAfter !== '' || $instructionText !== '';
+        $hasAllergyAdr = trim((string) ($opdSnapshot['drug_allergy_status'] ?? '')) !== ''
+            || trim((string) ($opdSnapshot['drug_allergy_details'] ?? '')) !== ''
+            || trim((string) ($opdSnapshot['adr_history'] ?? '')) !== '';
+        $hasRedFlags = strpos($instructionLower, 'emergency') !== false
+            || strpos($instructionLower, 'warning') !== false
+            || strpos($instructionLower, 'red flag') !== false
+            || strpos($instructionLower, 'immediately') !== false
+            || strpos($instructionLower, 'return if') !== false;
+
+        $items = [
+            [
+                'key' => 'admission_reason',
+                'label' => 'Reason for admission / presenting complaints',
+                'ok' => $hasAdmissionReason,
+                'critical' => true,
+            ],
+            [
+                'key' => 'final_diagnosis',
+                'label' => 'Final diagnosis documented',
+                'ok' => $hasDiagnosis,
+                'critical' => true,
+            ],
+            [
+                'key' => 'hospital_course',
+                'label' => 'Course / treatment in hospital documented',
+                'ok' => $hasCourse,
+                'critical' => true,
+            ],
+            [
+                'key' => 'procedure_documentation',
+                'label' => 'Surgery/procedure documented (if applicable)',
+                'ok' => $hasProcedure,
+                'critical' => false,
+            ],
+            [
+                'key' => 'condition_at_discharge',
+                'label' => 'Condition at discharge documented',
+                'ok' => $hasCondition,
+                'critical' => true,
+            ],
+            [
+                'key' => 'discharge_medication',
+                'label' => 'Discharge medication documented',
+                'ok' => $hasMedication,
+                'critical' => true,
+            ],
+            [
+                'key' => 'follow_up_plan',
+                'label' => 'Follow-up instructions / review plan documented',
+                'ok' => $hasFollowUp,
+                'critical' => true,
+            ],
+            [
+                'key' => 'allergy_adr',
+                'label' => 'Drug allergy / ADR history documented',
+                'ok' => $hasAllergyAdr,
+                'critical' => false,
+            ],
+            [
+                'key' => 'red_flags',
+                'label' => 'Red-flag / emergency return advice documented',
+                'ok' => $hasRedFlags,
+                'critical' => false,
+            ],
+        ];
+
+        $criticalMissing = [];
+        $okCount = 0;
+        foreach ($items as $item) {
+            if (! empty($item['ok'])) {
+                $okCount++;
+                continue;
+            }
+            if (! empty($item['critical'])) {
+                $criticalMissing[] = (string) ($item['label'] ?? '');
+            }
+        }
+
+        return [
+            'items' => $items,
+            'ok_count' => $okCount,
+            'total_count' => count($items),
+            'critical_missing' => $criticalMissing,
+            'critical_missing_count' => count($criticalMissing),
+        ];
+    }
+
     private function firstRowByIpd(string $table, int $ipdId): array
     {
         if ($ipdId <= 0 || ! $this->tableHasColumns($table, ['ipd_id'])) {
@@ -755,14 +1468,19 @@ class Ipd_discharge extends BaseController
     {
         $group1 = [];
         $group2 = [];
+        $generalAll = [];
         $sysRows = [];
 
         if ($this->tableHasColumns('ipd_discharge_general_exam_col', ['id', 'col_description'])) {
-            $generalCols = $this->db->table('ipd_discharge_general_exam_col')
+            $generalBuilder = $this->db->table('ipd_discharge_general_exam_col')
                 ->select('id,col_description,col_name,col_pre_value,cat_group')
-                ->orderBy('id', 'ASC')
-                ->get()
-                ->getResultArray();
+                ->orderBy('id', 'ASC');
+
+            if ($this->db->fieldExists('col_unit', 'ipd_discharge_general_exam_col')) {
+                $generalBuilder->select('col_unit');
+            }
+
+            $generalCols = $generalBuilder->get()->getResultArray();
 
             $rdataMap = [];
             if ($this->tableHasColumns('ipd_discharge_1_b', ['ipd_d_id', 'col_id', 'rdata'])) {
@@ -785,7 +1503,10 @@ class Ipd_discharge extends BaseController
                     'id' => $colId,
                     'label' => (string) ($row['col_description'] ?? $row['col_name'] ?? ('Exam ' . $colId)),
                     'value' => (string) ($rdataMap[$colId] ?? (string) ($row['col_pre_value'] ?? '')),
+                    'unit' => trim((string) ($row['col_unit'] ?? '')),
                 ];
+
+                $generalAll[] = $item;
 
                 if ((int) ($row['cat_group'] ?? 1) === 2) {
                     $group2[] = $item;
@@ -827,11 +1548,119 @@ class Ipd_discharge extends BaseController
             }
         }
 
+        $nursingAdmission = $this->getNursingAdmissionSnapshot($ipdId);
+        if (! empty($nursingAdmission)) {
+            $group1 = $this->applyAdmissionVitalsToGeneralRows($group1, $nursingAdmission);
+            $group2 = $this->applyAdmissionVitalsToGeneralRows($group2, $nursingAdmission);
+            $generalAll = $this->applyAdmissionVitalsToGeneralRows($generalAll, $nursingAdmission);
+        }
+
         return [
             'general_group_1' => $group1,
             'general_group_2' => $group2,
+            'general_all' => $generalAll,
             'systemic' => $sysRows,
         ];
+    }
+
+    private function getNursingAdmissionSnapshot(int $ipdId): array
+    {
+        if ($ipdId <= 0 || ! $this->db->tableExists('ipd_nursing_entries')) {
+            return [];
+        }
+
+        $required = ['ipd_id', 'entry_type', 'recorded_at'];
+        foreach ($required as $field) {
+            if (! $this->db->fieldExists($field, 'ipd_nursing_entries')) {
+                return [];
+            }
+        }
+
+        $builder = $this->db->table('ipd_nursing_entries')
+            ->where('ipd_id', $ipdId)
+            ->whereIn('entry_type', ['admission', 'vitals'])
+            ->orderBy('entry_type', 'DESC')
+            ->orderBy('recorded_at', 'ASC')
+            ->orderBy('id', 'ASC');
+
+        $row = $builder->get(1)->getRowArray();
+        return is_array($row) ? $row : [];
+    }
+
+    private function celsiusToFahrenheit(?float $value): string
+    {
+        if ($value === null) {
+            return '';
+        }
+
+        $f = ($value * 9 / 5) + 32;
+        return rtrim(rtrim(number_format($f, 1, '.', ''), '0'), '.');
+    }
+
+    private function applyAdmissionVitalsToGeneralRows(array $rows, array $snapshot): array
+    {
+        if (empty($rows) || empty($snapshot)) {
+            return $rows;
+        }
+
+        $pulse = trim((string) ($snapshot['pulse_rate'] ?? ''));
+        $resp = trim((string) ($snapshot['resp_rate'] ?? ''));
+        $spo2 = trim((string) ($snapshot['spo2'] ?? ''));
+        $weight = trim((string) ($snapshot['weight_kg'] ?? ''));
+        $sbp = trim((string) ($snapshot['bp_systolic'] ?? ''));
+        $dbp = trim((string) ($snapshot['bp_diastolic'] ?? ''));
+        $bp = $sbp !== '' || $dbp !== '' ? trim($sbp . ($dbp !== '' ? '/' . $dbp : '')) : '';
+
+        $tempC = $snapshot['temperature_c'] ?? null;
+        $temp = '';
+        if ($tempC !== null && $tempC !== '') {
+            $temp = $this->celsiusToFahrenheit((float) $tempC);
+        }
+
+        foreach ($rows as &$row) {
+            $current = trim((string) ($row['value'] ?? ''));
+            if ($current !== '') {
+                continue;
+            }
+
+            $label = strtolower(trim((string) ($row['label'] ?? '')));
+            if ($label === '') {
+                continue;
+            }
+
+            if (strpos($label, 'pulse') !== false && $pulse !== '') {
+                $row['value'] = $pulse;
+                continue;
+            }
+            if ((strpos($label, 'resp') !== false || strpos($label, 'rr') !== false) && $resp !== '') {
+                $row['value'] = $resp;
+                continue;
+            }
+            if ((strpos($label, 'spo2') !== false || strpos($label, 'spo 2') !== false) && $spo2 !== '') {
+                $row['value'] = $spo2;
+                continue;
+            }
+            if ((strpos($label, 'temp') !== false || strpos($label, 'temperature') !== false) && $temp !== '') {
+                $row['value'] = $temp;
+                continue;
+            }
+            if (strpos($label, 'weight') !== false && $weight !== '') {
+                $row['value'] = $weight;
+                continue;
+            }
+            if ((strpos($label, 'bp') !== false || strpos($label, 'blood pressure') !== false) && $bp !== '') {
+                if (strpos($label, 'diastolic') !== false && $dbp !== '') {
+                    $row['value'] = $dbp;
+                } elseif ((strpos($label, 'systolic') !== false || strpos($label, 'sys') !== false) && $sbp !== '') {
+                    $row['value'] = $sbp;
+                } else {
+                    $row['value'] = $bp;
+                }
+            }
+        }
+        unset($row);
+
+        return $rows;
     }
 
     private function getMappedColRows(
@@ -847,6 +1676,10 @@ class Ipd_discharge extends BaseController
 
         $builder = $this->db->table($masterTable)
             ->select('id,col_name,col_description,col_pre_value');
+
+        if ($this->db->fieldExists('col_unit', $masterTable)) {
+            $builder->select('col_unit');
+        }
 
         if ($catGroup !== null && $this->db->fieldExists('cat_group', $masterTable)) {
             $builder->where('cat_group', $catGroup);
@@ -879,6 +1712,7 @@ class Ipd_discharge extends BaseController
                 'name' => (string) ($row['col_name'] ?? ''),
                 'label' => (string) ($row['col_description'] ?? $row['col_name'] ?? ($prefix . ' ' . $colId)),
                 'value' => (string) ($valueMap[$colId] ?? (string) ($row['col_pre_value'] ?? '')),
+                'unit' => trim((string) ($row['col_unit'] ?? '')),
             ];
         }
 
@@ -1363,6 +2197,238 @@ class Ipd_discharge extends BaseController
         return $ts === false ? null : date('Y-m-d', $ts);
     }
 
+    private function painScaleLabel(string $value): string
+    {
+        $map = [
+            '0' => 'No Pain',
+            '1' => 'Mild Pain',
+            '2' => 'Moderate',
+            '3' => 'Intense',
+            '4' => 'Worst Pain Possible',
+        ];
+
+        return $map[$value] ?? '';
+    }
+
+    private function buildComplaintMetaPayload(array $meta): string
+    {
+        $painValue = trim((string) ($meta['pain_value'] ?? ''));
+        if (! in_array($painValue, ['0', '1', '2', '3', '4'], true)) {
+            return '';
+        }
+
+        return json_encode(['pain_value' => $painValue], JSON_UNESCAPED_UNICODE) ?: '';
+    }
+
+    private function parseComplaintMetaPayload(string $raw): array
+    {
+        $raw = trim($raw);
+        if ($raw === '') {
+            return [];
+        }
+
+        $decoded = json_decode($raw, true);
+        if (! is_array($decoded)) {
+            return [];
+        }
+
+        $painValue = trim((string) ($decoded['pain_value'] ?? ''));
+        if (! in_array($painValue, ['0', '1', '2', '3', '4'], true)) {
+            $painValue = '';
+        }
+
+        return ['pain_value' => $painValue];
+    }
+
+    private function extractNabhFieldsFromRemarks(string $remarks): array
+    {
+        $extract = static function (string $pattern, string $source): string {
+            if (preg_match($pattern, $source, $m) !== 1) {
+                return '';
+            }
+
+            return trim((string) ($m[1] ?? ''));
+        };
+
+        return [
+            'drug_allergy_status' => $extract('/^\s*Drug\s*Allergy\s*Status\s*:\s*(.+)$/im', $remarks),
+            'drug_allergy_details' => $extract('/^\s*Drug\s*Allergy\s*Details\s*:\s*(.+)$/im', $remarks),
+            'adr_history' => $extract('/^\s*ADR\s*History\s*:\s*(.+)$/im', $remarks),
+            'current_medications' => $extract('/^\s*Current\s*Medications\s*:\s*(.+)$/im', $remarks),
+            'co_morbidities' => $extract('/^\s*Co-Morbidities\s*:\s*(.+)$/im', $remarks),
+            'women_lmp' => $extract('/^\s*Women\s*Related\s*LMP\s*:\s*(.+)$/im', $remarks),
+            'women_last_baby' => $extract('/^\s*Women\s*Related\s*Last\s*Baby\s*:\s*(.+)$/im', $remarks),
+            'women_pregnancy_related' => $extract('/^\s*Women\s*Related\s*Pregnancy\s*Related\s*:\s*(.+)$/im', $remarks),
+            'women_related_problems' => $extract('/^\s*Women\s*Related\s*Problems\s*:\s*(.+)$/im', $remarks),
+            'hpi_note' => $extract('/^\s*HPI\s*Note\s*:\s*(.+)$/im', $remarks),
+        ];
+    }
+
+    private function hydrateNabhFieldsFromOpdRow(array $row): array
+    {
+        $pick = static function (array $candidates) use ($row): string {
+            foreach ($candidates as $field) {
+                $value = trim((string) ($row[$field] ?? ''));
+                if ($value !== '') {
+                    return $value;
+                }
+            }
+
+            return '';
+        };
+
+        $remarks = trim((string) ($row['Prescriber_Remarks'] ?? ''));
+        $parsed = $this->extractNabhFieldsFromRemarks($remarks);
+
+        $result = [
+            'drug_allergy_status' => $pick(['drug_allergy_status', 'allergy_status', 'drug_allergy']),
+            'drug_allergy_details' => $pick(['drug_allergy_details', 'allergy_details', 'drug_allergy_note', 'allergy_note']),
+            'adr_history' => $pick(['adr_history', 'adverse_drug_reaction', 'adr_details', 'adverse_reaction_history']),
+            'current_medications' => $pick(['current_medications', 'current_medication', 'current_medication_history', 'ongoing_medications']),
+            'co_morbidities' => (string) ($parsed['co_morbidities'] ?? ''),
+            'women_lmp' => $pick(['women_lmp']),
+            'women_last_baby' => $pick(['women_last_baby']),
+            'women_pregnancy_related' => $pick(['women_pregnancy_related']),
+            'women_related_problems' => $pick(['women_related_problems']),
+            'hpi_note' => (string) ($parsed['hpi_note'] ?? ''),
+            'pain_value' => trim((string) ($row['pain_value'] ?? '')),
+        ];
+
+        foreach (['drug_allergy_status', 'drug_allergy_details', 'adr_history', 'current_medications', 'women_lmp', 'women_last_baby', 'women_pregnancy_related', 'women_related_problems'] as $key) {
+            if ($result[$key] === '' && ! empty($parsed[$key])) {
+                $result[$key] = (string) $parsed[$key];
+            }
+        }
+
+        if (! in_array($result['pain_value'], ['0', '1', '2', '3', '4'], true)) {
+            $result['pain_value'] = '';
+        }
+
+        return $result;
+    }
+
+    private function getLatestOpdHistorySnapshot(int $patientId): array
+    {
+        $empty = [
+            'drug_allergy_status' => '',
+            'drug_allergy_details' => '',
+            'adr_history' => '',
+            'current_medications' => '',
+            'co_morbidities' => '',
+            'women_lmp' => '',
+            'women_last_baby' => '',
+            'women_pregnancy_related' => '',
+            'women_related_problems' => '',
+            'hpi_note' => '',
+            'pain_value' => '',
+            'pain_label' => '',
+        ];
+
+        if ($patientId <= 0 || ! $this->db->tableExists('opd_prescription')) {
+            return $empty;
+        }
+
+        $row = $this->db->table('opd_prescription')
+            ->where('p_id', $patientId)
+            ->orderBy('id', 'DESC')
+            ->get(1)
+            ->getRowArray() ?? [];
+
+        if (empty($row)) {
+            return $empty;
+        }
+
+        $hydrated = $this->hydrateNabhFieldsFromOpdRow($row);
+
+        return [
+            'drug_allergy_status' => (string) ($hydrated['drug_allergy_status'] ?? ''),
+            'drug_allergy_details' => (string) ($hydrated['drug_allergy_details'] ?? ''),
+            'adr_history' => (string) ($hydrated['adr_history'] ?? ''),
+            'current_medications' => (string) ($hydrated['current_medications'] ?? ''),
+            'co_morbidities' => (string) ($hydrated['co_morbidities'] ?? ''),
+            'women_lmp' => (string) ($hydrated['women_lmp'] ?? ''),
+            'women_last_baby' => (string) ($hydrated['women_last_baby'] ?? ''),
+            'women_pregnancy_related' => (string) ($hydrated['women_pregnancy_related'] ?? ''),
+            'women_related_problems' => (string) ($hydrated['women_related_problems'] ?? ''),
+            'hpi_note' => (string) ($hydrated['hpi_note'] ?? ''),
+            'pain_value' => (string) ($hydrated['pain_value'] ?? ''),
+            'pain_label' => $this->painScaleLabel((string) ($hydrated['pain_value'] ?? '')),
+        ];
+    }
+
+    private function upsertLabeledLineInRemarks(string $remarks, string $label, string $value): string
+    {
+        $remarks = trim($remarks);
+        $pattern = '/^\s*' . preg_quote($label, '/') . '\s*:\s*.*$/im';
+        $remarks = preg_replace($pattern, '', $remarks) ?? $remarks;
+
+        $lines = array_filter(array_map(static function (string $line): string {
+            return trim($line);
+        }, preg_split('/\R/', $remarks) ?: []), static function (string $line): bool {
+            return $line !== '';
+        });
+
+        $value = trim($value);
+        if ($value !== '') {
+            $lines[] = $label . ': ' . $value;
+        }
+
+        return trim(implode(PHP_EOL, $lines));
+    }
+
+    private function saveNabhHistoryFromDischarge(int $patientId, array $payload): bool
+    {
+        if ($patientId <= 0 || ! $this->db->tableExists('opd_prescription')) {
+            return false;
+        }
+
+        $fields = $this->db->getFieldNames('opd_prescription') ?? [];
+        if (! in_array('p_id', $fields, true) || ! in_array('id', $fields, true)) {
+            return false;
+        }
+
+        $latest = $this->db->table('opd_prescription')
+            ->select('id,Prescriber_Remarks')
+            ->where('p_id', $patientId)
+            ->orderBy('id', 'DESC')
+            ->get(1)
+            ->getRowArray();
+
+        if (! is_array($latest) || empty($latest['id'])) {
+            return false;
+        }
+
+        $update = [];
+        foreach (['drug_allergy_status', 'drug_allergy_details', 'adr_history', 'current_medications', 'women_lmp', 'women_last_baby', 'women_pregnancy_related', 'women_related_problems'] as $field) {
+            if (in_array($field, $fields, true)) {
+                $update[$field] = trim((string) ($payload[$field] ?? ''));
+            }
+        }
+
+        if (in_array('Prescriber_Remarks', $fields, true)) {
+            $remarks = (string) ($latest['Prescriber_Remarks'] ?? '');
+            $remarks = $this->upsertLabeledLineInRemarks($remarks, 'Drug Allergy Status', (string) ($payload['drug_allergy_status'] ?? ''));
+            $remarks = $this->upsertLabeledLineInRemarks($remarks, 'Drug Allergy Details', (string) ($payload['drug_allergy_details'] ?? ''));
+            $remarks = $this->upsertLabeledLineInRemarks($remarks, 'ADR History', (string) ($payload['adr_history'] ?? ''));
+            $remarks = $this->upsertLabeledLineInRemarks($remarks, 'Current Medications', (string) ($payload['current_medications'] ?? ''));
+            $remarks = $this->upsertLabeledLineInRemarks($remarks, 'Co-Morbidities', (string) ($payload['co_morbidities'] ?? ''));
+            $remarks = $this->upsertLabeledLineInRemarks($remarks, 'Women Related LMP', (string) ($payload['women_lmp'] ?? ''));
+            $remarks = $this->upsertLabeledLineInRemarks($remarks, 'Women Related Last Baby', (string) ($payload['women_last_baby'] ?? ''));
+            $remarks = $this->upsertLabeledLineInRemarks($remarks, 'Women Related Pregnancy Related', (string) ($payload['women_pregnancy_related'] ?? ''));
+            $remarks = $this->upsertLabeledLineInRemarks($remarks, 'Women Related Problems', (string) ($payload['women_related_problems'] ?? ''));
+            $remarks = $this->upsertLabeledLineInRemarks($remarks, 'HPI Note', (string) ($payload['hpi_note'] ?? ''));
+            $update['Prescriber_Remarks'] = $remarks;
+        }
+
+        if ($update === []) {
+            return false;
+        }
+
+        return (bool) $this->db->table('opd_prescription')
+            ->where('id', (int) $latest['id'])
+            ->update($update);
+    }
+
     public function ipd_select(int $ipdId, int $reCreate = 0)
     {
         $permission = $this->requireAnyPermission([
@@ -1397,6 +2463,11 @@ class Ipd_discharge extends BaseController
             if ($action === 'add_complaint') {
                 $complaintName = trim((string) ($this->request->getPost('new_complaint_name') ?? ''));
                 $complaintRemarkRow = trim((string) ($this->request->getPost('new_complaint_remark') ?? ''));
+                $complaintRemarkText = trim((string) ($this->request->getPost('complaint_remark') ?? ''));
+                $painValue = trim((string) ($this->request->getPost('pain_value') ?? ''));
+                if (! in_array($painValue, ['0', '1', '2', '3', '4'], true)) {
+                    $painValue = '';
+                }
 
                 if ($complaintName !== '' && $this->tableHasColumns('ipd_discharge_complaint', ['ipd_id'])) {
                     $insert = [
@@ -1414,12 +2485,25 @@ class Ipd_discharge extends BaseController
                     $savedAny = (bool) $this->db->table('ipd_discharge_complaint')->insert($insert);
                     $notice = $savedAny ? 'Complaint row added.' : 'Unable to add complaint row.';
                     $noticeType = $savedAny ? 'success' : 'warning';
+
+                    if ($this->tableHasColumns('ipd_discharge_complaint_remark', ['ipd_id'])) {
+                        $savedAny = $this->upsertByIpd('ipd_discharge_complaint_remark', $ipdId, [
+                            'comp_report' => $this->buildComplaintMetaPayload(['pain_value' => $painValue]),
+                            'comp_remark' => $complaintRemarkText,
+                            'update_by' => $userLabel,
+                        ]) || $savedAny;
+                    }
                 } else {
                     $notice = 'Enter complaint name before adding.';
                     $noticeType = 'warning';
                 }
             } elseif ($action === 'remove_complaint') {
                 $removeId = (int) ($this->request->getPost('complaint_remove_id') ?? 0);
+                $complaintRemarkText = trim((string) ($this->request->getPost('complaint_remark') ?? ''));
+                $painValue = trim((string) ($this->request->getPost('pain_value') ?? ''));
+                if (! in_array($painValue, ['0', '1', '2', '3', '4'], true)) {
+                    $painValue = '';
+                }
                 if ($removeId > 0 && $this->tableHasColumns('ipd_discharge_complaint', ['id', 'ipd_id'])) {
                     $savedAny = (bool) $this->db->table('ipd_discharge_complaint')
                         ->where('id', $removeId)
@@ -1427,6 +2511,14 @@ class Ipd_discharge extends BaseController
                         ->delete();
                     $notice = $savedAny ? 'Complaint row removed.' : 'Unable to remove complaint row.';
                     $noticeType = $savedAny ? 'success' : 'warning';
+
+                    if ($this->tableHasColumns('ipd_discharge_complaint_remark', ['ipd_id'])) {
+                        $savedAny = $this->upsertByIpd('ipd_discharge_complaint_remark', $ipdId, [
+                            'comp_report' => $this->buildComplaintMetaPayload(['pain_value' => $painValue]),
+                            'comp_remark' => $complaintRemarkText,
+                            'update_by' => $userLabel,
+                        ]) || $savedAny;
+                    }
                 }
             } elseif ($action === 'add_surgery') {
                 $name = trim((string) ($this->request->getPost('new_surgery_name') ?? ''));
@@ -1515,6 +2607,7 @@ class Ipd_discharge extends BaseController
             } elseif ($action === 'add_diagnosis') {
                 $name = trim((string) ($this->request->getPost('new_diagnosis_name') ?? ''));
                 $remark = trim((string) ($this->request->getPost('new_diagnosis_remark') ?? ''));
+                $diagnosisRemarkText = trim((string) ($this->request->getPost('diagnosis_remark') ?? ''));
                 if ($name !== '' && $this->tableHasColumns('ipd_discharge_diagnosis', ['ipd_id', 'comp_report'])) {
                     $insert = [
                         'ipd_id' => $ipdId,
@@ -1529,6 +2622,14 @@ class Ipd_discharge extends BaseController
                     $savedAny = (bool) $this->db->table('ipd_discharge_diagnosis')->insert($insert);
                     $notice = $savedAny ? 'Diagnosis row added.' : 'Unable to add diagnosis row.';
                     $noticeType = $savedAny ? 'success' : 'warning';
+
+                    if ($this->tableHasColumns('ipd_discharge_diagnosis_remark', ['ipd_id'])) {
+                        $savedAny = $this->upsertByIpd('ipd_discharge_diagnosis_remark', $ipdId, [
+                            'comp_report' => '',
+                            'comp_remark' => $diagnosisRemarkText,
+                            'update_by' => $userLabel,
+                        ]) || $savedAny;
+                    }
                 } else {
                     $notice = $name === ''
                         ? 'Enter diagnosis before adding.'
@@ -1537,6 +2638,7 @@ class Ipd_discharge extends BaseController
                 }
             } elseif ($action === 'remove_diagnosis') {
                 $removeId = (int) ($this->request->getPost('diagnosis_remove_id') ?? 0);
+                $diagnosisRemarkText = trim((string) ($this->request->getPost('diagnosis_remark') ?? ''));
                 if ($removeId > 0 && $this->tableHasColumns('ipd_discharge_diagnosis', ['id', 'ipd_id'])) {
                     $savedAny = (bool) $this->db->table('ipd_discharge_diagnosis')
                         ->where('id', $removeId)
@@ -1544,6 +2646,14 @@ class Ipd_discharge extends BaseController
                         ->delete();
                     $notice = $savedAny ? 'Diagnosis row removed.' : 'Unable to remove diagnosis row.';
                     $noticeType = $savedAny ? 'success' : 'warning';
+
+                    if ($this->tableHasColumns('ipd_discharge_diagnosis_remark', ['ipd_id'])) {
+                        $savedAny = $this->upsertByIpd('ipd_discharge_diagnosis_remark', $ipdId, [
+                            'comp_report' => '',
+                            'comp_remark' => $diagnosisRemarkText,
+                            'update_by' => $userLabel,
+                        ]) || $savedAny;
+                    }
                 } else {
                     $notice = 'Select a valid diagnosis row to remove.';
                     $noticeType = 'warning';
@@ -1551,6 +2661,7 @@ class Ipd_discharge extends BaseController
             } elseif ($action === 'add_course') {
                 $name = trim((string) ($this->request->getPost('new_course_name') ?? ''));
                 $remark = trim((string) ($this->request->getPost('new_course_remark') ?? ''));
+                $courseRemarkText = trim((string) ($this->request->getPost('course_remark') ?? ''));
                 if ($name !== '' && $this->tableHasColumns('ipd_discharge_course', ['ipd_id', 'comp_report'])) {
                     $insert = [
                         'ipd_id' => $ipdId,
@@ -1565,6 +2676,14 @@ class Ipd_discharge extends BaseController
                     $savedAny = (bool) $this->db->table('ipd_discharge_course')->insert($insert);
                     $notice = $savedAny ? 'Course row added.' : 'Unable to add course row.';
                     $noticeType = $savedAny ? 'success' : 'warning';
+
+                    if ($this->tableHasColumns('ipd_discharge_course_remark', ['ipd_id'])) {
+                        $savedAny = $this->upsertByIpd('ipd_discharge_course_remark', $ipdId, [
+                            'comp_report' => '',
+                            'comp_remark' => $courseRemarkText,
+                            'update_by' => $userLabel,
+                        ]) || $savedAny;
+                    }
                 } else {
                     $notice = $name === ''
                         ? 'Enter course/treatment text before adding.'
@@ -1573,6 +2692,7 @@ class Ipd_discharge extends BaseController
                 }
             } elseif ($action === 'remove_course') {
                 $removeId = (int) ($this->request->getPost('course_remove_id') ?? 0);
+                $courseRemarkText = trim((string) ($this->request->getPost('course_remark') ?? ''));
                 if ($removeId > 0 && $this->tableHasColumns('ipd_discharge_course', ['id', 'ipd_id'])) {
                     $savedAny = (bool) $this->db->table('ipd_discharge_course')
                         ->where('id', $removeId)
@@ -1580,6 +2700,14 @@ class Ipd_discharge extends BaseController
                         ->delete();
                     $notice = $savedAny ? 'Course row removed.' : 'Unable to remove course row.';
                     $noticeType = $savedAny ? 'success' : 'warning';
+
+                    if ($this->tableHasColumns('ipd_discharge_course_remark', ['ipd_id'])) {
+                        $savedAny = $this->upsertByIpd('ipd_discharge_course_remark', $ipdId, [
+                            'comp_report' => '',
+                            'comp_remark' => $courseRemarkText,
+                            'update_by' => $userLabel,
+                        ]) || $savedAny;
+                    }
                 } else {
                     $notice = 'Select a valid course row to remove.';
                     $noticeType = 'warning';
@@ -1646,6 +2774,10 @@ class Ipd_discharge extends BaseController
                 }
 
                 $complaintRemark = trim((string) ($this->request->getPost('complaint_remark') ?? ''));
+                $painValue = trim((string) ($this->request->getPost('pain_value') ?? ''));
+                if (! in_array($painValue, ['0', '1', '2', '3', '4'], true)) {
+                    $painValue = '';
+                }
                 $diagnosisRemark = trim((string) ($this->request->getPost('diagnosis_remark') ?? ''));
                 $courseRemark = trim((string) ($this->request->getPost('course_remark') ?? ''));
                 $instructionRemark = trim((string) ($this->request->getPost('instruction_remark') ?? ''));
@@ -1653,7 +2785,7 @@ class Ipd_discharge extends BaseController
 
                 if ($complaintRemark !== '' || $this->tableHasColumns('ipd_discharge_complaint_remark', ['ipd_id'])) {
                     $savedAny = $this->upsertByIpd('ipd_discharge_complaint_remark', $ipdId, [
-                        'comp_report' => '',
+                        'comp_report' => $this->buildComplaintMetaPayload(['pain_value' => $painValue]),
                         'comp_remark' => $complaintRemark,
                         'update_by' => $userLabel,
                     ]) || $savedAny;
@@ -1727,26 +2859,53 @@ class Ipd_discharge extends BaseController
                         ->get()
                         ->getResultArray();
 
-                    foreach ($sysMaster as $sys) {
-                        $sid = (int) ($sys['id'] ?? 0);
-                        if ($sid <= 0) {
-                            continue;
+                    $singleSystemicTextRaw = $this->request->getPost('systemic_exam_text');
+                    if ($singleSystemicTextRaw !== null) {
+                        $singleSystemicText = trim((string) $singleSystemicTextRaw);
+                        $primarySysId = (int) ($sysMaster[0]['id'] ?? 0);
+
+                        foreach ($sysMaster as $sys) {
+                            $sid = (int) ($sys['id'] ?? 0);
+                            if ($sid <= 0) {
+                                continue;
+                            }
+
+                            $rowText = $sid === $primarySysId ? $singleSystemicText : '';
+                            $savedAny = $this->upsertByComposite(
+                                'ipd_discharge_1_a',
+                                'ipd_d_id',
+                                $ipdId,
+                                'head_id',
+                                $sid,
+                                [
+                                    'short_head' => (string) ($sys['sys_exam_name'] ?? ('Systemic Exam ' . $sid)),
+                                    'rdata' => $rowText,
+                                ]
+                            ) || $savedAny;
                         }
-                        $posted = $this->request->getPost('sys_exam_' . $sid);
-                        if ($posted === null) {
-                            continue;
+
+                    } else {
+                        foreach ($sysMaster as $sys) {
+                            $sid = (int) ($sys['id'] ?? 0);
+                            if ($sid <= 0) {
+                                continue;
+                            }
+                            $posted = $this->request->getPost('sys_exam_' . $sid);
+                            if ($posted === null) {
+                                continue;
+                            }
+                            $savedAny = $this->upsertByComposite(
+                                'ipd_discharge_1_a',
+                                'ipd_d_id',
+                                $ipdId,
+                                'head_id',
+                                $sid,
+                                [
+                                    'short_head' => (string) ($sys['sys_exam_name'] ?? ('Systemic Exam ' . $sid)),
+                                    'rdata' => trim((string) $posted),
+                                ]
+                            ) || $savedAny;
                         }
-                        $savedAny = $this->upsertByComposite(
-                            'ipd_discharge_1_a',
-                            'ipd_d_id',
-                            $ipdId,
-                            'head_id',
-                            $sid,
-                            [
-                                'short_head' => (string) ($sys['sys_exam_name'] ?? ('Systemic Exam ' . $sid)),
-                                'rdata' => trim((string) $posted),
-                            ]
-                        ) || $savedAny;
                     }
                 }
 
@@ -1933,6 +3092,21 @@ class Ipd_discharge extends BaseController
                     }
                 }
 
+                // Save editable NABH history fields back to latest OPD history row for this patient.
+                $nabhHistoryPayload = [
+                    'drug_allergy_status' => trim((string) ($this->request->getPost('drug_allergy_status') ?? '')),
+                    'drug_allergy_details' => trim((string) ($this->request->getPost('drug_allergy_details') ?? '')),
+                    'adr_history' => trim((string) ($this->request->getPost('adr_history') ?? '')),
+                    'current_medications' => trim((string) ($this->request->getPost('current_medications') ?? '')),
+                    'co_morbidities' => trim((string) ($this->request->getPost('co_morbidities') ?? '')),
+                    'women_lmp' => trim((string) ($this->request->getPost('women_lmp') ?? '')),
+                    'women_last_baby' => trim((string) ($this->request->getPost('women_last_baby') ?? '')),
+                    'women_pregnancy_related' => trim((string) ($this->request->getPost('women_pregnancy_related') ?? '')),
+                    'women_related_problems' => trim((string) ($this->request->getPost('women_related_problems') ?? '')),
+                    'hpi_note' => trim((string) ($this->request->getPost('hpi_note') ?? '')),
+                ];
+                $savedAny = $this->saveNabhHistoryFromDischarge($patientId, $nabhHistoryPayload) || $savedAny;
+
                 if ($savedAny) {
                     $notice = 'Discharge form data saved. You can now preview or regenerate summary.';
                 } else {
@@ -1960,6 +3134,7 @@ class Ipd_discharge extends BaseController
             : [];
 
         $complaintRemarkRow = $this->firstRowByIpd('ipd_discharge_complaint_remark', $ipdId);
+        $complaintMeta = $this->parseComplaintMetaPayload((string) ($complaintRemarkRow['comp_report'] ?? ''));
         $complaintRows = $this->byIpdRows('ipd_discharge_complaint', ['id', 'comp_report', 'comp_remark'], 'id ASC', $ipdId);
         $surgeryRows = $this->byIpdRows('ipd_discharge_surgery', ['id', 'surgery_name', 'surgery_date', 'surgery_remark'], 'id ASC', $ipdId);
         $procedureRows = $this->byIpdRows('ipd_discharge_procedure', ['id', 'procedure_name', 'procedure_date', 'procedure_remark'], 'id ASC', $ipdId);
@@ -1983,6 +3158,8 @@ class Ipd_discharge extends BaseController
         $patientHistoryRow = $patientId > 0 && $this->db->tableExists('patient_master')
             ? ($this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray() ?? [])
             : [];
+        $opdHistorySnapshot = $this->getLatestOpdHistorySnapshot($patientId);
+        $nursingAdmissionSnapshot = $this->getNursingAdmissionSnapshot($ipdId);
         $physicalExamRows = $this->getPhysicalExamRows($ipdId);
         $manualInvestRows = $this->getMappedColRows('ipd_discharge_investigation_during_admit', 'ipd_discharge_1_d', $ipdId, 'Manual Exam', 1);
         $specialInvestRows = $this->getMappedColRows('ipd_discharge_special_investigation', 'ipd_discharge_1_e', $ipdId, 'Special Exam', 1);
@@ -1998,6 +3175,28 @@ class Ipd_discharge extends BaseController
         $clinicalNonPathRows = $this->getClinicalNonPathReportRows($patientId, $admitDate, $dischargeDate, $savedNonPathIds);
         $labInvestigationList = implode(',', $savedClinicalDates);
         $nonPathInvestigationList = implode(',', $savedNonPathIds);
+
+        $complaintRemarkText = (string) ($complaintRemarkRow['comp_remark'] ?? '');
+        if (trim($complaintRemarkText) === '' && ! empty($nursingAdmissionSnapshot)) {
+            $parts = [];
+            $nursingComplaint = trim((string) ($nursingAdmissionSnapshot['treatment_text'] ?? ''));
+            $nursingNote = trim((string) ($nursingAdmissionSnapshot['general_note'] ?? ''));
+            if ($nursingComplaint !== '') {
+                $parts[] = $nursingComplaint;
+            }
+            if ($nursingNote !== '') {
+                $parts[] = $nursingNote;
+            }
+            if (! empty($parts)) {
+                $complaintRemarkText = implode(PHP_EOL, $parts);
+            }
+        }
+        if (trim($complaintRemarkText) === '') {
+            $hpiFallback = trim((string) ($opdHistorySnapshot['hpi_note'] ?? ''));
+            if ($hpiFallback !== '') {
+                $complaintRemarkText = $hpiFallback;
+            }
+        }
 
         return view('billing/ipd/discharge_create', [
             'ipd_id' => $ipdId,
@@ -2023,7 +3222,10 @@ class Ipd_discharge extends BaseController
             'lab_investigation_list' => $labInvestigationList,
             'non_path_investigation_list' => $nonPathInvestigationList,
             'discharge_condition_rows' => $dischargeConditionRows,
-            'complaint_remark' => (string) ($complaintRemarkRow['comp_remark'] ?? ''),
+            'complaint_remark' => $complaintRemarkText,
+            'pain_value' => (string) ($complaintMeta['pain_value'] ?? ''),
+            'opd_history_snapshot' => $opdHistorySnapshot,
+            'nursing_admission_snapshot' => $nursingAdmissionSnapshot,
             'diagnosis_remark' => (string) ($diagnosisRemarkRow['comp_remark'] ?? ''),
             'course_remark' => (string) ($courseRemarkRow['comp_remark'] ?? ''),
             'instruction_remark' => (string) ($instructionRow['comp_remark'] ?? ''),
@@ -2057,17 +3259,9 @@ class Ipd_discharge extends BaseController
         $noticeType = 'success';
         $content = $this->getDischargeContent($ipdId);
         $shouldRegenerate = (int) ($this->request->getGet('regen') ?? 0) === 1;
+        $requestedTemplateId = (int) ($this->request->getGet('tpl') ?? 0);
 
-        if (strtolower($this->request->getMethod()) === 'post') {
-            $content = (string) ($this->request->getPost('editor_Discharge_Preview') ?? '');
-            if ($this->saveDischargeContent($ipdId, $content)) {
-                $notice = 'Discharge summary saved.';
-                $noticeType = 'success';
-            } else {
-                $notice = 'Unable to save discharge summary in ipd_discharge table. Please check schema/permissions.';
-                $noticeType = 'danger';
-            }
-        } elseif ($shouldRegenerate || trim(strip_tags($content)) === '') {
+        if ($shouldRegenerate || trim(strip_tags($content)) === '') {
             $generated = $this->buildAutoDischargeContent($ipdId, $panelData);
             if (trim(strip_tags($generated)) !== '') {
                 $content = $generated;
@@ -2081,11 +3275,19 @@ class Ipd_discharge extends BaseController
             }
         }
 
+        $templatePack = $this->applyDischargeTemplate($content, $panelData, $requestedTemplateId > 0 ? $requestedTemplateId : null);
+        $nabhAudit = $this->buildNabhAuditChecklist($ipdId, $panelData);
+
         return view('billing/ipd/discharge_preview', [
             'ipd_id' => $ipdId,
             'ipd_info' => $panelData['ipd_info'] ?? null,
             'person_info' => $panelData['person_info'] ?? null,
             'content' => $content,
+            'rendered_content' => (string) ($templatePack['rendered_html'] ?? $content),
+            'template_rows' => $templatePack['templates'] ?? [],
+            'selected_template_id' => (int) ($templatePack['selected_template_id'] ?? 0),
+            'selected_template_name' => (string) ($templatePack['selected_template_name'] ?? ''),
+            'nabh_audit' => $nabhAudit,
             'notice' => $notice,
             'notice_type' => $noticeType,
         ]);
@@ -2119,11 +3321,16 @@ class Ipd_discharge extends BaseController
             }
         }
 
+        $requestedTemplateId = (int) ($this->request->getGet('tpl') ?? 0);
+        $templatePack = $this->applyDischargeTemplate($content, $panelData, $requestedTemplateId > 0 ? $requestedTemplateId : null);
+
         return view('billing/ipd/discharge_print', [
             'ipd_id' => $ipdId,
             'ipd_info' => $panelData['ipd_info'] ?? null,
             'person_info' => $panelData['person_info'] ?? null,
-            'content' => $content,
+            'content' => (string) ($templatePack['rendered_html'] ?? $content),
+            'selected_template_name' => (string) ($templatePack['selected_template_name'] ?? ''),
+            'selected_template_id' => (int) ($templatePack['selected_template_id'] ?? 0),
             'print_type' => $printType,
             'print_mode' => 'standard',
         ]);

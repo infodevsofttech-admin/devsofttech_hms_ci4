@@ -223,6 +223,21 @@ $routes->post('Payment_Medical/change_user', 'Payment_Medical::change_user');
 
 service('auth')->routes($routes);
 
+// Legacy compatibility: some IPD charge screens still refresh via old IpdNew URL.
+$routes->get('IpdNew/show_ipd_items/(:num)', 'Billing\\Ipd::panelTab/$1/ipd-charges');
+$routes->get('IpdNew/show_ipd_items/(:num)/(:num)', 'Billing\\Ipd::panelTab/$1/ipd-charges');
+
+// Legacy compatibility: old discharge summary links should open current discharge tab.
+$routes->match(['get', 'post'], 'Ipd_discharge/ipd_select/(:num)', 'Ipd_discharge::ipd_select/$1');
+$routes->match(['get', 'post'], 'Ipd_discharge/ipd_select/(:num)/(:num)', 'Ipd_discharge::ipd_select/$1/$2');
+$routes->get('Ipd_discharge/section_past_data', 'Ipd_discharge::section_past_data');
+$routes->get('Ipd_discharge/section_template_list', 'Ipd_discharge::section_template_list');
+$routes->post('Ipd_discharge/section_template_save', 'Ipd_discharge::section_template_save');
+$routes->match(['get', 'post'], 'Ipd_discharge/preview_discharge_report/(:num)', 'Ipd_discharge::preview_discharge_report/$1');
+$routes->get('Ipd_discharge/show_discharge/(:num)', 'Ipd_discharge::show_discharge/$1');
+$routes->get('Ipd_discharge/show_discharge/(:num)/(:num)', 'Ipd_discharge::show_discharge/$1/$2');
+$routes->get('Ipd_discharge/show_file3/(:num)', 'Ipd_discharge::show_file3/$1');
+
 $routes->get('setup/db-tools', 'Setup::dbTools');
 $routes->post('setup/db-tools/generate', 'Setup::generateMigrations');
 $routes->post('setup/db-tools/export-master-schema', 'Setup::exportMasterSchema');
@@ -244,6 +259,10 @@ $routes->group('billing', function($routes) {
     $routes->post('ipd/charge/add/(:num)', 'Billing\\Ipd::addIpdCharge/$1');
     $routes->post('ipd/charge/update/(:num)', 'Billing\\Ipd::updateIpdCharge/$1');
     $routes->post('ipd/charge/delete/(:num)', 'Billing\\Ipd::deleteIpdCharge/$1');
+    $routes->post('ipd/bedside-charge/add/(:num)', 'Billing\\Ipd::addBedsideCharge/$1');
+    $routes->post('ipd/doctor-visit/add/(:num)', 'Billing\\Ipd::addDoctorVisitCharge/$1');
+    $routes->post('ipd/nursing-charge/update/(:num)/(:num)', 'Billing\\Ipd::updateNursingCharge/$1/$2');
+    $routes->post('ipd/nursing-charge/delete/(:num)/(:num)', 'Billing\\Ipd::deleteNursingCharge/$1/$2');
     $routes->post('ipd/charge/package/(:num)', 'Billing\\Ipd::updateIpdChargePackage/$1');
     $routes->post('ipd/package/add/(:num)', 'Billing\\Ipd::addIpdPackage/$1');
     $routes->post('ipd/package/update/(:num)', 'Billing\\Ipd::updateIpdPackage/$1');
@@ -318,6 +337,21 @@ $routes->group('billing', function($routes) {
     $routes->post('charges/delete', 'Billing\\Charges::delete');
     $routes->post('charges/update-discount', 'Billing\\Charges::updateDiscount');
 });
+
+$routes->get('ipd/patient', 'IpdPatient::index');
+$routes->get('ipd/patient/workspace/(:num)', 'IpdPatient::workspace/$1');
+$routes->post('ipd/patient/nursing/save/(:num)', 'IpdPatient::saveNursingEntry/$1');
+$routes->post('ipd/patient/history/save/(:num)', 'IpdPatient::saveAdmissionHistory/$1');
+$routes->post('ipd/patient/nursing/scan/(:num)', 'IpdPatient::scanNursingPaper/$1');
+$routes->post('ipd/patient/nursing/scan-save/(:num)', 'IpdPatient::saveScannedNursingEntries/$1');
+$routes->get('ipd/patient/nursing/print/(:num)', 'IpdPatient::nursingChartPrint/$1');
+
+$routes->get('nursing-bedside-items', 'Setting\\NursingBedsideItems::index');
+$routes->get('nursing-bedside-items/(:num)', 'Setting\\NursingBedsideItems::get/$1');
+$routes->post('nursing-bedside-items/save', 'Setting\\NursingBedsideItems::save');
+$routes->get('nursing-bedside-items/insurance/(:num)', 'Setting\\NursingBedsideItems::insuranceList/$1');
+$routes->post('nursing-bedside-items/insurance/add', 'Setting\\NursingBedsideItems::insuranceAdd');
+$routes->post('nursing-bedside-items/insurance/remove', 'Setting\\NursingBedsideItems::insuranceRemove');
 
 $routes->get('Opd/addopd/(:num)', 'Opd::addopd/$1');
 $routes->get('Opd/addopd/(:num)/(:num)', 'Opd::addopd/$1/$2');
@@ -479,6 +513,9 @@ $routes->post('Lab_Admin/add_test_repo/(:num)/(:num)', 'Setting\Template::add_te
 $routes->post('Lab_Admin/remove_test_item/(:num)/(:num)', 'Setting\Template::remove_test_item/$1/$2');
 $routes->post('Lab_Admin/test_item_search', 'Setting\Template::test_item_search');
 
+$routes->match(['get', 'post'], 'setting/template/discharge_templates', 'Setting\Template::discharge_templates');
+$routes->get('setting/template/discharge_templates/delete/(:num)', 'Setting\Template::discharge_template_delete/$1');
+
 $routes->get('Opdcase/addopd/(:num)', 'Opdcase::addopd/$1');
 $routes->post('Opdcase/showfee', 'Opdcase::showfee');
 $routes->post('Opdcase/confirm_opd', 'Opdcase::confirm_opd');
@@ -495,6 +532,10 @@ $routes->get('Report/diagnosis_report_data/(:segment)', 'Report::diagnosis_repor
 $routes->get('Report/diagnosis_report_data/(:segment)/(:segment)', 'Report::diagnosis_report_data/$1/$2');
 $routes->get('Report/diagnosis_report_data/(:segment)/(:segment)/(:segment)', 'Report::diagnosis_report_data/$1/$2/$3');
 $routes->get('Report/diagnosis_report_data/(:segment)/(:segment)/(:segment)/(:num)', 'Report::diagnosis_report_data/$1/$2/$3/$4');
+
+$routes->get('Report/nabh_audit_report', 'Report::nabh_audit_report');
+$routes->get('Report/nabh_audit_report_data/(:segment)/(:segment)/(:segment)', 'Report::nabh_audit_report_data/$1/$2/$3');
+$routes->get('Report/nabh_audit_report_data/(:segment)/(:segment)/(:segment)/(:num)', 'Report::nabh_audit_report_data/$1/$2/$3/$4');
 
 // Insurance Credit Reports
 $routes->get('Report/insurance_credit_main', 'Report::insurance_credit_main');
