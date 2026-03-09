@@ -80,6 +80,12 @@ if (! $canPharmacy && $user && method_exists($user, 'inGroup')) {
             <span>IPD Patient List</span>
         </a>
     </li>
+    <li class="nav-item">
+        <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Report/index') ?>','Report Panel')">
+            <i class="bi bi-grid-1x2"></i>
+            <span>Report Panel</span>
+        </a>
+    </li>
     <li class="nav-heading">Doctor's Work</li>
     <li class="nav-item">
         <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('/opd/appointment') ?>','OPD Appointment List')">
@@ -123,6 +129,7 @@ if (! $canPharmacy && $user && method_exists($user, 'inGroup')) {
     <?php } ?>
 
     <li class="nav-heading">Reports</li>
+    
     <li class="nav-item">
         <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Report/collection_report') ?>','Collection Report')">
             <i class="bi bi-graph-up"></i>
@@ -139,6 +146,12 @@ if (! $canPharmacy && $user && method_exists($user, 'inGroup')) {
         <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Report/insurance_credit_main') ?>','Insurance Credit')">
             <i class="bi bi-file-medical"></i>
             <span>Insurance Credit </span>
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Report/nabh_audit_report') ?>','NABH Audit Report')">
+            <i class="bi bi-clipboard2-check"></i>
+            <span>NABH Audit Report</span>
         </a>
     </li>
     <li class="nav-item">

@@ -15,6 +15,7 @@ class Template extends BaseController
         'template.ct',
         'template.mri',
         'template.echo',
+        'template.discharge',
     ];
 
     public function __construct()
@@ -648,5 +649,198 @@ class Template extends BaseController
             'lab_test_option' => $options,
             'mstTestKey' => $mstTestKey,
         ]);
+    }
+
+    private function ensureDischargeTemplateTable(): void
+    {
+        if ($this->db->tableExists('ipd_discharge_templates')) {
+            return;
+        }
+
+        $sql = "CREATE TABLE IF NOT EXISTS ipd_discharge_templates (
+            id INT NOT NULL AUTO_INCREMENT,
+            template_name VARCHAR(120) NOT NULL,
+            template_html LONGTEXT NOT NULL,
+            is_default TINYINT(1) NOT NULL DEFAULT 0,
+            status TINYINT(1) NOT NULL DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+        $this->db->query($sql);
+    }
+
+    private function defaultDischargeTemplateHtml(): string
+    {
+        return '<h3 style="margin:0 0 8px 0;">Discharge Summary</h3>'
+            . '<table style="width:100%;border-collapse:collapse;margin-bottom:10px;" border="1" cellpadding="6">'
+            . '<tr>'
+            . '<td><b>Patient</b>: {{PATIENT_NAME}}</td>'
+            . '<td><b>UHID</b>: {{UHID}}</td>'
+            . '<td><b>IPD</b>: {{IPD_CODE}}</td>'
+            . '</tr>'
+            . '<tr>'
+            . '<td><b>Age/Gender</b>: {{AGE_GENDER}}</td>'
+            . '<td><b>Admit Date</b>: {{ADMIT_DATE}}</td>'
+            . '<td><b>Discharge Date</b>: {{DISCHARGE_DATE}}</td>'
+            . '</tr>'
+            . '</table>'
+            . '<div>{{CONTENT}}</div>';
+    }
+
+    private function nabhDischargeTemplateHtml(): string
+    {
+        return '<h2 style="margin:0 0 10px 0;text-align:center;">DISCHARGE SUMMARY</h2>'
+            . '<table style="width:100%;border-collapse:collapse;margin-bottom:10px;" border="1" cellpadding="6">'
+            . '<tr>'
+            . '<td><b>Patient Name</b>: {{PATIENT_NAME}}</td>'
+            . '<td><b>UHID</b>: {{UHID}}</td>'
+            . '<td><b>IPD No.</b>: {{IPD_CODE}}</td>'
+            . '</tr>'
+            . '<tr>'
+            . '<td><b>Age/Gender</b>: {{AGE_GENDER}}</td>'
+            . '<td><b>Date of Admission</b>: {{ADMIT_DATE}}</td>'
+            . '<td><b>Date of Discharge</b>: {{DISCHARGE_DATE}}</td>'
+            . '</tr>'
+            . '<tr>'
+            . '<td colspan="3"><b>Prepared On</b>: {{CURRENT_DATE}}</td>'
+            . '</tr>'
+            . '</table>'
+            . '<div style="font-size:11px;color:#334155;margin-bottom:10px;">'
+            . 'NABH guidance note: Ensure diagnosis, procedures, clinical course, condition at discharge, medication with dose/duration, follow-up advice, red-flag signs, and emergency contact are documented.'
+            . '</div>'
+            . '<div style="margin-bottom:10px;">{{CONTENT}}</div>'
+            . '<h4 style="margin:12px 0 6px 0;">Counselling & Handover Confirmation</h4>'
+            . '<table style="width:100%;border-collapse:collapse;margin-bottom:10px;" border="1" cellpadding="6">'
+            . '<tr><td style="width:32%;">Medication explained to patient/attendant</td><td style="width:8%;"></td><td style="width:60%;">Remarks:</td></tr>'
+            . '<tr><td>Follow-up date and department explained</td><td></td><td>Next Visit: __________________</td></tr>'
+            . '<tr><td>Red-flag symptoms explained</td><td></td><td>Emergency Contact: __________________</td></tr>'
+            . '<tr><td>Diet and activity instructions explained</td><td></td><td></td></tr>'
+            . '</table>'
+            . '<table style="width:100%;border-collapse:collapse;margin-top:20px;" border="1" cellpadding="10">'
+            . '<tr>'
+            . '<td style="width:33%;vertical-align:bottom;">____________________<br>Consultant Name/Signature</td>'
+            . '<td style="width:33%;vertical-align:bottom;">____________________<br>Medical Officer Signature</td>'
+            . '<td style="width:34%;vertical-align:bottom;">____________________<br>Patient/Attendant Signature & Date</td>'
+            . '</tr>'
+            . '</table>';
+    }
+
+    private function ensureDefaultDischargeTemplateSeeded(): void
+    {
+        $this->ensureDischargeTemplateTable();
+        if (! $this->db->tableExists('ipd_discharge_templates')) {
+            return;
+        }
+
+        $table = $this->db->table('ipd_discharge_templates');
+        $count = (int) ($table->countAllResults() ?? 0);
+        if ($count === 0) {
+            $table->insert([
+                'template_name' => 'Default Discharge Template',
+                'template_html' => $this->defaultDischargeTemplateHtml(),
+                'is_default' => 1,
+                'status' => 1,
+            ]);
+        }
+
+        $nabhExists = $this->db->table('ipd_discharge_templates')
+            ->where('template_name', 'NABH Compliant Discharge Summary')
+            ->get(1)
+            ->getRowArray();
+
+        if (empty($nabhExists)) {
+            $table->insert([
+                'template_name' => 'NABH Compliant Discharge Summary',
+                'template_html' => $this->nabhDischargeTemplateHtml(),
+                'is_default' => 0,
+                'status' => 1,
+            ]);
+        }
+    }
+
+    public function discharge_templates()
+    {
+        if ($resp = $this->requireAnyPermission(['template.discharge'])) {
+            return $resp;
+        }
+
+        $this->ensureDefaultDischargeTemplateSeeded();
+
+        $notice = '';
+        $noticeType = 'success';
+
+        if (strtolower($this->request->getMethod()) === 'post') {
+            $id = (int) ($this->request->getPost('id') ?? 0);
+            $templateName = trim((string) ($this->request->getPost('template_name') ?? ''));
+            $templateHtml = (string) ($this->request->getPost('template_html') ?? '');
+            $isDefault = (int) ($this->request->getPost('is_default') ?? 0) === 1 ? 1 : 0;
+            $status = (int) ($this->request->getPost('status') ?? 1) === 1 ? 1 : 0;
+
+            if ($templateName === '' || trim($templateHtml) === '') {
+                $notice = 'Template name and template HTML are required.';
+                $noticeType = 'danger';
+            } else {
+                $table = $this->db->table('ipd_discharge_templates');
+                $data = [
+                    'template_name' => $templateName,
+                    'template_html' => $templateHtml,
+                    'is_default' => $isDefault,
+                    'status' => $status,
+                ];
+
+                if ($id > 0) {
+                    $table->where('id', $id)->update($data);
+                    $notice = 'Template updated.';
+                } else {
+                    $table->insert($data);
+                    $id = (int) $this->db->insertID();
+                    $notice = 'Template created.';
+                }
+
+                if ($isDefault === 1 && $id > 0) {
+                    $this->db->table('ipd_discharge_templates')
+                        ->where('id <>', $id)
+                        ->update(['is_default' => 0]);
+                }
+            }
+        }
+
+        $editId = (int) ($this->request->getGet('edit') ?? 0);
+        $editRow = [];
+        if ($editId > 0) {
+            $editRow = $this->db->table('ipd_discharge_templates')
+                ->where('id', $editId)
+                ->get(1)
+                ->getRowArray() ?? [];
+        }
+
+        $rows = $this->db->table('ipd_discharge_templates')
+            ->orderBy('is_default', 'DESC')
+            ->orderBy('id', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        return view('Setting/Template/discharge_templates', [
+            'rows' => $rows,
+            'edit_row' => $editRow,
+            'notice' => $notice,
+            'notice_type' => $noticeType,
+        ]);
+    }
+
+    public function discharge_template_delete(int $id)
+    {
+        if ($resp = $this->requireAnyPermission(['template.discharge'])) {
+            return $resp;
+        }
+
+        $id = (int) $id;
+        if ($id > 0 && $this->db->tableExists('ipd_discharge_templates')) {
+            $this->db->table('ipd_discharge_templates')->where('id', $id)->delete();
+        }
+
+        return redirect()->to(base_url('setting/template/discharge_templates'));
     }
 }

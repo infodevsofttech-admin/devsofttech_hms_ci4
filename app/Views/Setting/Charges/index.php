@@ -63,6 +63,12 @@
             </a>
         </div>
         <div class="col-6 col-md-4 col-lg-3">
+            <a class="admin-tile" href="javascript:load_form_div('<?= base_url('nursing-bedside-items') ?>','maindiv','Clinical Procedure / Test Master');">
+                <i class="bi bi-heart-pulse"></i>
+                <span>Clinical Procedure/Test</span>
+            </a>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3">
             <a class="admin-tile" href="javascript:load_form_div('<?= base_url('package/search') ?>','maindiv','Package IPD');">
                 <i class="bi bi-collection"></i>
                 <span>Package</span>

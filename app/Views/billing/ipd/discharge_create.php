@@ -54,12 +54,8 @@ if (! empty($systemicExamRows)) {
             continue;
         }
 
-        $name = trim((string) ($row['name'] ?? ''));
-        if ($name !== '' && stripos($value, $name . ':') !== 0) {
-            $systemicParts[] = $name . ': ' . $value;
-        } else {
-            $systemicParts[] = $value;
-        }
+        // Keep saved systemic text as-is; do not auto-prefix master labels.
+        $systemicParts[] = $value;
     }
 
     if (! empty($systemicParts)) {
@@ -78,11 +74,56 @@ $procedureRows = $procedure_rows ?? [];
 $diagnosisRows = $diagnosis_rows ?? [];
 $courseRows = $course_rows ?? [];
 $drugRows = $drug_rows ?? [];
+$legacyDrugRows = $legacy_drug_rows ?? [];
+$medicineRows = [];
+if (! empty($legacyDrugRows)) {
+    foreach ($legacyDrugRows as $row) {
+        $medicineRows[] = [
+            'id' => (int) ($row['id'] ?? 0),
+            'source' => 'legacy',
+            'med_name' => (string) ($row['med_name'] ?? ''),
+            'med_type' => (string) ($row['med_type'] ?? ''),
+            'dosage' => (string) ($row['dosage'] ?? ''),
+            'dosage_when' => (string) ($row['dosage_when'] ?? ''),
+            'dosage_freq' => (string) ($row['dosage_freq'] ?? ''),
+            'no_of_days' => (string) ($row['no_of_days'] ?? ''),
+            'qty' => (string) ($row['qty'] ?? ''),
+            'remark' => (string) ($row['remark'] ?? ''),
+        ];
+    }
+} else {
+    foreach ($drugRows as $row) {
+        $medicineRows[] = [
+            'id' => (int) ($row['id'] ?? 0),
+            'source' => 'classic',
+            'med_name' => (string) ($row['drug_name'] ?? ''),
+            'med_type' => '',
+            'dosage' => (string) ($row['drug_dose'] ?? ''),
+            'dosage_when' => '',
+            'dosage_freq' => '',
+            'no_of_days' => (string) ($row['drug_day'] ?? ''),
+            'qty' => '',
+            'remark' => '',
+        ];
+    }
+}
 $inhosRemark = (string) ($inhos_remark ?? '');
 $otherExamText = (string) ($other_exam_text ?? '');
 $painValue = (string) ($pain_value ?? '');
 $opdHistorySnapshot = $opd_history_snapshot ?? [];
 $nursingAdmissionSnapshot = $nursing_admission_snapshot ?? [];
+$instructionFoodRows = $instruction_food_rows ?? [];
+$instructionFoodIdsRaw = $instruction_food_ids ?? [];
+$instructionFoodIds = [];
+if (is_array($instructionFoodIdsRaw)) {
+    foreach ($instructionFoodIdsRaw as $fid) {
+        $fidInt = (int) $fid;
+        if ($fidInt > 0) {
+            $instructionFoodIds[$fidInt] = true;
+        }
+    }
+}
+$instructionOther = (string) ($instruction_other ?? '');
 $drugAllergyStatus = trim((string) ($opdHistorySnapshot['drug_allergy_status'] ?? ''));
 $drugAllergyDetails = trim((string) ($opdHistorySnapshot['drug_allergy_details'] ?? ''));
 $adrHistory = trim((string) ($opdHistorySnapshot['adr_history'] ?? ''));
@@ -201,21 +242,99 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
         padding: 1rem 1rem 1.15rem;
     }
 
+    @media (min-width: 992px) {
+        .discharge-page {
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 64px);
+            overflow: hidden;
+        }
+
+        .discharge-page-title {
+            flex: 0 0 auto;
+            margin-bottom: 10px;
+            padding-bottom: 2px;
+            background: #f0f2f7;
+        }
+
+        .discharge-main-card {
+            flex: 1 1 auto;
+            min-height: 0;
+            margin-bottom: 0;
+        }
+
+        .discharge-main-card > .card-body {
+            /* Let notices consume natural height; keep form row as flexible remainder */
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            max-height: none;
+            overflow: hidden;
+        }
+
+        .discharge-main-card > .card-body > .row {
+            flex: 1 1 auto;
+            min-height: 0;
+        }
+
+        .discharge-side-panel {
+            height: 100%;
+            margin-bottom: 0;
+            overflow: hidden;
+        }
+
+        .discharge-form-area {
+            height: 100%;
+            max-height: none;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding-right: 6px;
+        }
+
+        #discharge_section_nav {
+            top: 0;
+            max-height: none;
+        }
+    }
+
     .discharge-side-panel {
         border: 1px solid var(--dc-border);
         background: var(--dc-muted-bg);
         border-radius: 10px;
         padding: 10px;
         margin-bottom: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-height: 0;
+    }
+
+    .discharge-side-actions {
+        border-top: 1px solid #d8e2ef;
+        margin-top: 0;
+        margin-bottom: 2px;
+        padding-top: 12px;
+        display: grid;
+        gap: 6px;
+        flex: 0 0 auto;
+        position: relative;
+        z-index: 2;
+    }
+
+    .discharge-side-actions .btn {
+        width: 100%;
     }
 
     #discharge_section_nav {
-        position: sticky;
-        top: 72px;
-        max-height: calc(100vh - 88px);
+        position: static;
+        top: auto;
+        max-height: none;
         overflow-y: auto;
         padding-right: 4px;
         margin-bottom: 0;
+        flex: 1 1 auto;
+        min-height: 0;
+        padding-bottom: 6px;
     }
 
     .discharge-nav-link {
@@ -411,7 +530,34 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
         min-height: 18px;
     }
 
+    .rx-quick-btn {
+        border: 1px solid #b8c5d6;
+        background: #fff;
+        color: #486485;
+        border-radius: 0.35rem;
+        padding: 0.2rem 0.6rem;
+        font-size: 0.88rem;
+        margin-right: 0.35rem;
+        margin-bottom: 0.35rem;
+    }
+
     @media (max-width: 991.98px) {
+        .discharge-page {
+            height: auto;
+            overflow: visible;
+        }
+
+        .discharge-main-card > .card-body {
+            max-height: none;
+            overflow: visible;
+        }
+
+        .discharge-form-area {
+            max-height: none;
+            overflow: visible;
+            padding-right: 0;
+        }
+
         #discharge_section_nav {
             position: static;
             max-height: none;
@@ -465,14 +611,18 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                         <li class="nav-item"><a href="#section-medicine" class="nav-link discharge-nav-link" data-target="section-medicine">Discharge Medicine Prescribed</a></li>
                         <li class="nav-item"><a href="#section-instructions" class="nav-link discharge-nav-link" data-target="section-instructions">Discharge Instructions/Advise</a></li>
                     </ul>
+
+                    <div class="discharge-side-actions">
+                        <button type="button" class="btn btn-primary btn-sm" id="btn_preview_side" onclick="openDischargePreview('<?= site_url('Ipd_discharge/preview_discharge_report/' . $ipdId . '?regen=1') ?>', 'Discharge Preview');">Preview</button>
+                    </div>
                     </div>
                 </div>
 
                 <div class="col-md-9 discharge-form-area">
-                    <form method="post" action="<?= site_url('Ipd_discharge/ipd_select/' . $ipdId) ?>" class="row g-3">
+                    <form id="discharge_main_form" method="post" action="<?= site_url('Ipd_discharge/ipd_select/' . $ipdId) ?>" class="row g-3">
                         <?= csrf_field() ?>
 
-                        <div class="card border-primary">
+                        <div class="card border-primary" id="section-personal-history">
                             <div class="card-header py-2"><strong>Personal History</strong></div>
                             <div class="card-body">
                                 <div class="row">
@@ -485,10 +635,13 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                         </div>
                                     <?php endforeach; ?>
                                 </div>
+                                <div class="mt-3 d-flex justify-content-end">
+                                    <button type="submit" class="btn btn-outline-success btn-sm" name="action" value="save_main" data-reload-section="section-personal-history">Save Personal History</button>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="card border-info mt-3">
+                        <div class="card border-info mt-3" id="section-nursing-history">
                             <div class="card-header py-2 d-flex justify-content-between align-items-center">
                                 <strong>From Nursing History &amp; Physical Assessment</strong>
                                 <?php if ($hasNursingHistoryPrefill): ?>
@@ -528,6 +681,9 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                             <input type="text" class="form-control form-control-sm" name="women_related_problems" value="<?= esc($womenRelatedProblems) ?>">
                                         </div>
                                     <?php endif; ?>
+                                </div>
+                                <div class="mt-3 d-flex justify-content-end">
+                                    <button type="submit" class="btn btn-outline-success btn-sm" name="action" value="save_main" data-reload-section="section-nursing-history">Save Nursing H&amp;P Section</button>
                                 </div>
                             </div>
                         </div>
@@ -690,11 +846,15 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                             </div>
                         </div>
 
-                        <div class="card border-info mt-3">
+                        <div class="card border-info mt-3" id="section-systemic">
                             <div class="card-header py-2"><strong>Other / Systemic Examinations</strong></div>
                             <div class="card-body">
                                 <label class="form-label"><strong>Other / Systemic Examinations (Single Editor)</strong></label>
                                 <textarea class="form-control" id="systemic_exam_editor" name="systemic_exam_text" rows="8"><?= esc($systemicExamText) ?></textarea>
+                                <div id="systemic_save_status" class="complaint-status text-muted mt-2"></div>
+                                <div class="mt-3 d-flex justify-content-end">
+                                    <button type="submit" class="btn btn-outline-success btn-sm" name="action" value="save_main" data-reload-section="section-systemic" data-save-mode="json" data-status-id="systemic_save_status">Save Systemic Examination</button>
+                                </div>
                             </div>
                         </div>
 
@@ -827,11 +987,17 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                     <label class="form-label">Discharge Time</label>
                                     <input type="time" class="form-control" name="discharge_time" value="<?= esc($dischargeTimeValue) ?>">
                                 </div>
+                                <div class="col-md-12 d-flex justify-content-end">
+                                    <button type="submit" class="btn btn-outline-success btn-sm" name="action" value="save_main" data-reload-section="section-admission">Save Admission/Discharge</button>
+                                </div>
                             </div>
                         </div>
 
                         <div class="card border-secondary mt-3" id="section-surgery">
-                            <div class="card-header py-2"><strong>Surgery / Procedure / delivery if any</strong></div>
+                            <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                                <strong>Surgery / Procedure / delivery if any</strong>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_discharge_manage_surgery_master">Master CRUD</button>
+                            </div>
                             <div class="card-body">
                                 <h6>Surgery</h6>
                                 <table class="table table-sm table-bordered">
@@ -850,12 +1016,14 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                     </tbody>
                                 </table>
                                 <input type="hidden" name="surgery_remove_id" id="surgery_remove_id" value="0">
+                                <input type="hidden" name="new_surgery_master_id" id="new_surgery_master_id" value="0">
                                 <div class="row g-2 mb-3">
-                                    <div class="col-md-5"><input type="text" class="form-control" name="new_surgery_name" placeholder="Surgery name"></div>
+                                    <div class="col-md-5"><input type="text" class="form-control" name="new_surgery_name" id="new_surgery_name" list="discharge_surgery_suggest" autocomplete="off" placeholder="Surgery name"></div>
                                     <div class="col-md-3"><input type="date" class="form-control" name="new_surgery_date"></div>
                                     <div class="col-md-3"><input type="text" class="form-control" name="new_surgery_remark" placeholder="Remark"></div>
                                     <div class="col-md-1"><button type="submit" class="btn btn-primary btn-sm" name="action" value="add_surgery">+ADD</button></div>
                                 </div>
+                                <datalist id="discharge_surgery_suggest"></datalist>
 
                                 <h6>Procedure</h6>
                                 <table class="table table-sm table-bordered">
@@ -874,28 +1042,24 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                     </tbody>
                                 </table>
                                 <input type="hidden" name="procedure_remove_id" id="procedure_remove_id" value="0">
+                                <input type="hidden" name="new_procedure_master_id" id="new_procedure_master_id" value="0">
                                 <div class="row g-2">
-                                    <div class="col-md-5"><input type="text" class="form-control" name="new_procedure_name" placeholder="Procedure name"></div>
+                                    <div class="col-md-5"><input type="text" class="form-control" name="new_procedure_name" id="new_procedure_name" list="discharge_procedure_suggest" autocomplete="off" placeholder="Procedure name"></div>
                                     <div class="col-md-3"><input type="date" class="form-control" name="new_procedure_date"></div>
                                     <div class="col-md-3"><input type="text" class="form-control" name="new_procedure_remark" placeholder="Remark"></div>
                                     <div class="col-md-1"><button type="submit" class="btn btn-primary btn-sm" name="action" value="add_procedure">+ADD</button></div>
                                 </div>
+                                <datalist id="discharge_procedure_suggest"></datalist>
+                                <div id="discharge_surgery_status" class="complaint-status text-muted"></div>
                             </div>
                         </div>
 
                         <div class="card border-secondary mt-3" id="section-diagnosis">
-                            <div class="card-header py-2"><strong>Final Diagnosis</strong></div>
+                            <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                                <strong>Final Diagnosis</strong>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_discharge_seed_icd">Load ICD Starter</button>
+                            </div>
                             <div class="card-body">
-                                <div class="mb-3">
-                                    <label class="form-label">Smart Diagnosis Picker (English + Hinglish)</label>
-                                    <div class="input-group">
-                                        <input type="text" class="form-control" id="discharge_diagnosis_lookup" list="discharge_diagnosis_suggest" placeholder="Type diagnosis term...">
-                                        <button type="button" class="btn btn-outline-primary" id="btn_discharge_add_diagnosis">Add</button>
-                                    </div>
-                                    <datalist id="discharge_diagnosis_suggest"></datalist>
-                                    <div id="discharge_diagnosis_status" class="complaint-status text-muted"></div>
-                                </div>
-
                                 <table class="table table-sm table-bordered">
                                     <thead><tr><th>Diagnosis</th><th>Remark</th><th style="width:90px;">Action</th></tr></thead>
                                     <tbody>
@@ -912,10 +1076,13 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                 </table>
                                 <input type="hidden" name="diagnosis_remove_id" id="diagnosis_remove_id" value="0">
                                 <div class="row g-2">
-                                    <div class="col-md-6"><input type="text" class="form-control" name="new_diagnosis_name" id="new_diagnosis_name" placeholder="Diagnosis"></div>
+                                    <div class="col-md-6"><input type="text" class="form-control" name="new_diagnosis_name" id="new_diagnosis_name" list="discharge_diagnosis_suggest" autocomplete="off" placeholder="Diagnosis"></div>
                                     <div class="col-md-5"><input type="text" class="form-control" name="new_diagnosis_remark" placeholder="Remark"></div>
                                     <div class="col-md-1"><button type="submit" class="btn btn-primary btn-sm" name="action" value="add_diagnosis">+ADD</button></div>
                                 </div>
+                                <datalist id="discharge_diagnosis_suggest"></datalist>
+                                <small class="text-muted">Tip: if ICD match exists, selected value appends code in diagnosis text.</small>
+                                <div id="discharge_diagnosis_status" class="complaint-status text-muted"></div>
 
                                 <div class="mt-3">
                                     <label class="form-label">Final Diagnosis (Narrative)
@@ -938,22 +1105,15 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                             <div class="card-header py-2"><strong>Summary of key investigation during Hospitalization</strong></div>
                             <div class="card-body">
                                 <textarea class="form-control" name="inhos_remark" rows="4"><?= esc($inhosRemark) ?></textarea>
+                                <div class="mt-3 d-flex justify-content-end">
+                                    <button type="submit" class="btn btn-outline-success btn-sm" name="action" value="save_main" data-reload-section="section-summary-invest">Save Summary Investigation</button>
+                                </div>
                             </div>
                         </div>
 
                         <div class="card border-secondary mt-3" id="section-course">
                             <div class="card-header py-2"><strong>Course / Treatment in the hospital</strong></div>
                             <div class="card-body">
-                                <div class="mb-3">
-                                    <label class="form-label">Smart Course/Treatment Picker (English + Hinglish)</label>
-                                    <div class="input-group">
-                                        <input type="text" class="form-control" id="discharge_course_lookup" list="discharge_course_suggest" placeholder="Type treatment/course term...">
-                                        <button type="button" class="btn btn-outline-primary" id="btn_discharge_add_course">Add</button>
-                                    </div>
-                                    <datalist id="discharge_course_suggest"></datalist>
-                                    <div id="discharge_course_status" class="complaint-status text-muted"></div>
-                                </div>
-
                                 <table class="table table-sm table-bordered">
                                     <thead><tr><th>Course</th><th>Remark</th><th style="width:90px;">Action</th></tr></thead>
                                     <tbody>
@@ -970,10 +1130,12 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                 </table>
                                 <input type="hidden" name="course_remove_id" id="course_remove_id" value="0">
                                 <div class="row g-2">
-                                    <div class="col-md-6"><input type="text" class="form-control" name="new_course_name" id="new_course_name" placeholder="Course / treatment"></div>
+                                    <div class="col-md-6"><input type="text" class="form-control" name="new_course_name" id="new_course_name" list="discharge_course_suggest" autocomplete="off" placeholder="Course / treatment"></div>
                                     <div class="col-md-5"><input type="text" class="form-control" name="new_course_remark" placeholder="Remark"></div>
                                     <div class="col-md-1"><button type="submit" class="btn btn-primary btn-sm" name="action" value="add_course">+ADD</button></div>
                                 </div>
+                                <datalist id="discharge_course_suggest"></datalist>
+                                <div id="discharge_course_status" class="complaint-status text-muted"></div>
 
                                 <div class="mt-3">
                                     <label class="form-label">Course / Treatment in Hospital (Narrative)
@@ -1003,59 +1165,242 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                         <input type="text" class="form-control form-control-sm" name="dis_exam_<?= (int) ($row['id'] ?? 0) ?>" value="<?= esc((string) ($row['value'] ?? '')) ?>">
                                     </div>
                                 <?php endforeach; endif; ?>
+                                <div class="col-md-12 d-flex justify-content-end">
+                                    <button type="submit" class="btn btn-outline-success btn-sm" name="action" value="save_main" data-reload-section="section-condition">Save Discharge Condition</button>
+                                </div>
                             </div>
                         </div>
 
                         <div class="card border-secondary mt-3" id="section-medicine">
                             <div class="card-header py-2"><strong>Discharge Medicine Prescribed</strong></div>
                             <div class="card-body">
+                                <input type="hidden" name="selected_rx_group_id" id="selected_rx_group_id" value="0">
+                                <input type="hidden" name="drug_remove_source" id="drug_remove_source" value="legacy">
+                                <button type="submit" class="d-none" id="btn_apply_rx_group" name="action" value="apply_rx_group" data-reload-section="section-medicine">Apply Rx Group</button>
+
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_open_rx_group_modal">Rx Group</button>
+                                        <span id="rx_group_selected_name" class="text-muted">No Rx-Group selected</span>
+                                    </div>
+                                    <div class="small text-muted">Select group and preview medicines before add.</div>
+                                </div>
+
                                 <table class="table table-sm table-bordered">
-                                    <thead><tr><th>Drug</th><th>Dose</th><th>Day</th><th style="width:90px;">Action</th></tr></thead>
+                                    <thead><tr><th>Medicine</th><th>Type</th><th>Dose</th><th>When</th><th>Freq</th><th>Days</th><th>Qty</th><th>Remark</th><th style="width:90px;">Action</th></tr></thead>
                                     <tbody>
-                                        <?php if (empty($drugRows)): ?>
-                                            <tr><td colspan="4" class="text-muted text-center">No discharge drug rows.</td></tr>
-                                        <?php else: foreach ($drugRows as $row): ?>
+                                        <?php if (empty($medicineRows)): ?>
+                                            <tr><td colspan="9" class="text-muted text-center">No medicine added</td></tr>
+                                        <?php else: foreach ($medicineRows as $row): ?>
                                             <tr>
-                                                <td><?= esc((string) ($row['drug_name'] ?? '')) ?></td>
-                                                <td><?= esc((string) ($row['drug_dose'] ?? '')) ?></td>
-                                                <td><?= esc((string) ($row['drug_day'] ?? '')) ?></td>
-                                                <td><button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_drug" onclick="document.getElementById('drug_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';">Remove</button></td>
+                                                <td><?= esc((string) ($row['med_name'] ?? '')) ?></td>
+                                                <td><?= esc((string) ($row['med_type'] ?? '')) ?></td>
+                                                <td><?= esc((string) ($row['dosage'] ?? '')) ?></td>
+                                                <td><?= esc((string) ($row['dosage_when'] ?? '')) ?></td>
+                                                <td><?= esc((string) ($row['dosage_freq'] ?? '')) ?></td>
+                                                <td><?= esc((string) ($row['no_of_days'] ?? '')) ?></td>
+                                                <td><?= esc((string) ($row['qty'] ?? '')) ?></td>
+                                                <td><?= esc((string) ($row['remark'] ?? '')) ?></td>
+                                                <td><button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_drug" data-reload-section="section-medicine" onclick="document.getElementById('drug_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';document.getElementById('drug_remove_source').value='<?= esc((string) ($row['source'] ?? 'legacy')) ?>';">Remove</button></td>
                                             </tr>
                                         <?php endforeach; endif; ?>
                                     </tbody>
                                 </table>
                                 <input type="hidden" name="drug_remove_id" id="drug_remove_id" value="0">
-                                <div class="row g-2">
-                                    <div class="col-md-4"><input type="text" class="form-control" name="new_drug_name" placeholder="Drug name"></div>
-                                    <div class="col-md-4"><input type="text" class="form-control" name="new_drug_dose" placeholder="Dose"></div>
-                                    <div class="col-md-3"><input type="text" class="form-control" name="new_drug_day" placeholder="Day / duration"></div>
-                                    <div class="col-md-1"><button type="submit" class="btn btn-primary btn-sm" name="action" value="add_drug">+ADD</button></div>
+
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-4"><input type="text" class="form-control" name="new_drug_name" id="new_drug_name" list="discharge_med_suggest" autocomplete="off" placeholder="Medicine name"></div>
+                                    <div class="col-md-2"><input type="text" class="form-control" name="new_drug_type" id="new_drug_type" placeholder="Type"></div>
+                                    <div class="col-md-2"><input type="text" class="form-control" name="new_drug_dose" id="new_drug_dose" placeholder="Dose"></div>
+                                    <div class="col-md-2"><input type="text" class="form-control" name="new_drug_when" id="new_drug_when" list="discharge_med_when_suggest" autocomplete="off" placeholder="When (BF/AF/WF)"></div>
+                                    <div class="col-md-2"><input type="text" class="form-control" name="new_drug_freq" id="new_drug_freq" list="discharge_med_freq_suggest" autocomplete="off" placeholder="Freq (OD/BD/TDS/HS)"></div>
                                 </div>
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-2"><input type="text" class="form-control" name="new_drug_day" id="new_drug_day" placeholder="Days"></div>
+                                    <div class="col-md-2"><input type="text" class="form-control" name="new_drug_qty" id="new_drug_qty" placeholder="Qty"></div>
+                                    <div class="col-md-6"><input type="text" class="form-control" name="new_drug_remark" id="new_drug_remark" placeholder="Remark"></div>
+                                    <div class="col-md-2"><button type="submit" class="btn btn-primary" name="action" value="add_drug" data-reload-section="section-medicine" style="width:100%;">Add</button></div>
+                                </div>
+
+                                <div class="mb-2">
+                                    <button type="button" class="rx-quick-btn" data-fill-target="new_drug_when" data-fill-value="BF">Before Food</button>
+                                    <button type="button" class="rx-quick-btn" data-fill-target="new_drug_when" data-fill-value="AF">After Food</button>
+                                    <button type="button" class="rx-quick-btn" data-fill-target="new_drug_when" data-fill-value="WF">With Food</button>
+                                    <button type="button" class="rx-quick-btn" data-fill-target="new_drug_freq" data-fill-value="OD">OD</button>
+                                    <button type="button" class="rx-quick-btn" data-fill-target="new_drug_freq" data-fill-value="BD">BD</button>
+                                    <button type="button" class="rx-quick-btn" data-fill-target="new_drug_freq" data-fill-value="TDS">TDS</button>
+                                    <button type="button" class="rx-quick-btn" data-fill-target="new_drug_freq" data-fill-value="HS">HS</button>
+                                    <button type="button" class="rx-quick-btn" data-fill-target="new_drug_day" data-fill-value="3 Days">3 Days</button>
+                                    <button type="button" class="rx-quick-btn" data-fill-target="new_drug_day" data-fill-value="5 Days">5 Days</button>
+                                    <button type="button" class="rx-quick-btn" data-fill-target="new_drug_day" data-fill-value="7 Days">7 Days</button>
+                                </div>
+
+                                <datalist id="discharge_med_suggest"></datalist>
+                                <datalist id="discharge_med_when_suggest">
+                                    <option value="BF" label="Before Food"></option>
+                                    <option value="AF" label="After Food"></option>
+                                    <option value="WF" label="With Food"></option>
+                                </datalist>
+                                <datalist id="discharge_med_freq_suggest">
+                                    <option value="OD" label="Once Daily"></option>
+                                    <option value="BD" label="Twice Daily"></option>
+                                    <option value="TDS" label="Thrice Daily"></option>
+                                    <option value="HS" label="At Bedtime"></option>
+                                    <option value="QID" label="Four Times Daily"></option>
+                                    <option value="SOS" label="As Needed"></option>
+                                </datalist>
+                                <div id="discharge_medicine_status" class="complaint-status text-muted"></div>
                             </div>
                         </div>
 
                         
 
                         <div class="card border-secondary mt-3" id="section-instructions">
-                            <div class="card-header py-2"><strong>Discharge Instructions / Advice</strong></div>
+                            <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                                <strong>Discharge Instructions / Advice</strong>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_discharge_manage_food_master">Dietary Master CRUD</button>
+                            </div>
                             <div class="card-body row g-2">
                                 <div class="col-md-12">
+                                    <label class="form-label mb-1">Dietary Advice</label>
+                                    <div class="border rounded p-2" style="max-height: 220px; overflow-y: auto;">
+                                        <?php if (empty($instructionFoodRows)): ?>
+                                            <div class="text-muted small">No dietary advice master found.</div>
+                                        <?php else: ?>
+                                            <?php foreach ($instructionFoodRows as $food): ?>
+                                                <?php
+                                                    $foodId = (int) ($food['id'] ?? 0);
+                                                    $foodShort = trim((string) ($food['food_short'] ?? ''));
+                                                    $foodDesc = trim((string) ($food['food_desc'] ?? ''));
+                                                    $foodLang = trim((string) ($food['food_desc_lang'] ?? ''));
+                                                    $labelText = $foodShort !== '' ? $foodShort : $foodDesc;
+                                                ?>
+                                                <div class="form-check mb-1">
+                                                    <input
+                                                        class="form-check-input instruction-food-item"
+                                                        type="checkbox"
+                                                        name="instruction_food_ids[]"
+                                                        id="instruction_food_<?= $foodId ?>"
+                                                        value="<?= $foodId ?>"
+                                                        data-food-short="<?= esc($foodShort !== '' ? $foodShort : $foodDesc) ?>"
+                                                        data-food-desc="<?= esc($foodDesc !== '' ? $foodDesc : $foodShort) ?>"
+                                                            data-food-lang="<?= esc($foodLang) ?>"
+                                                        <?= ! empty($instructionFoodIds[$foodId]) ? 'checked' : '' ?>>
+                                                    <label class="form-check-label" for="instruction_food_<?= $foodId ?>">
+                                                        <?= esc($labelText) ?>
+                                                    </label>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        <?php endif; ?>
+                                    </div>
+                                    <div class="mt-2 d-flex flex-wrap gap-2">
+                                        <button type="button" class="btn btn-outline-primary btn-sm" id="btn_instruction_add_selected_food">Add Selected To Advice</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_instruction_clear_food">Clear Selection</button>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-12">
+                                    <div class="border rounded p-2 bg-light">
+                                        <div class="small fw-bold mb-1">Selected Dietary Advice (Hindi print preview)</div>
+                                        <div id="instruction_selected_preview" class="small text-muted">No dietary advice selected.</div>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-12">
+                                    <label class="form-label">Other Advice</label>
+                                    <textarea class="form-control" name="instruction_other" id="instruction_other" rows="2" placeholder="Additional custom advice..."><?= esc($instructionOther) ?></textarea>
+                                </div>
+
+                                <div class="col-md-12">
                                     <label class="form-label">Discharge Instructions / Advice</label>
-                                    <textarea class="form-control" name="instruction_remark" rows="3"><?= esc((string) ($instruction_remark ?? '')) ?></textarea>
+                                    <textarea class="form-control" name="instruction_remark" id="instruction_remark" rows="3"><?= esc((string) ($instruction_remark ?? '')) ?></textarea>
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label">Review After (days/text)</label>
                                     <input type="text" class="form-control" name="review_after" value="<?= esc((string) ($review_after ?? '')) ?>">
                                 </div>
+                                <div class="col-md-12 d-flex justify-content-end">
+                                    <button type="submit" class="btn btn-outline-success btn-sm" name="action" value="save_main" data-reload-section="section-instructions">Save Discharge Advice</button>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="col-12 d-flex flex-wrap gap-2 mt-2">
-                            <button type="submit" class="btn btn-success" name="action" value="save_main">Save Draft</button>
-                            <button type="button" class="btn btn-primary" onclick="openDischargePreview('<?= site_url('Ipd_discharge/preview_discharge_report/' . $ipdId . '?regen=1') ?>', 'Discharge Preview');">Create IPD Discharge</button>
-                            <button type="button" class="btn btn-outline-primary" onclick="openDischargePreview('<?= site_url('Ipd_discharge/preview_discharge_report/' . $ipdId) ?>', 'Discharge Preview');">Preview</button>
-                        </div>
                     </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="dischargeRxGroupModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Select Rx Group</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="text" class="form-control form-control-sm mb-2" id="discharge_rx_group_search" placeholder="Search Rx Group...">
+                    <div id="discharge_rx_group_list" class="d-flex flex-wrap gap-2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="ipdDietaryMasterModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Dietary Advice Master</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-2 align-items-end mb-2">
+                        <div class="col-md-9">
+                            <label class="form-label">Search</label>
+                            <input type="text" class="form-control form-control-sm" id="food_master_search" placeholder="Search short/English/Hindi text...">
+                        </div>
+                        <div class="col-md-3 d-grid">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_food_master_refresh">Refresh List</button>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive" style="max-height:220px;overflow:auto;">
+                        <table class="table table-sm table-bordered align-middle mb-2">
+                            <thead>
+                                <tr>
+                                    <th style="width:24%;">Short</th>
+                                    <th>English</th>
+                                    <th>Hindi</th>
+                                    <th style="width:110px;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="food_master_rows">
+                                <tr><td colspan="4" class="text-center text-muted">No records.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <hr>
+                    <input type="hidden" id="food_master_id" value="0">
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <label class="form-label">Short Heading</label>
+                            <input type="text" class="form-control form-control-sm" id="food_master_short" maxlength="255">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">English Text</label>
+                            <textarea class="form-control form-control-sm" id="food_master_desc" rows="2"></textarea>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Hindi Text</label>
+                            <textarea class="form-control form-control-sm" id="food_master_lang" rows="2"></textarea>
+                        </div>
+                    </div>
+                    <div class="mt-2 d-flex gap-2">
+                        <button type="button" class="btn btn-primary btn-sm" id="btn_food_master_save">Save</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_food_master_clear">New</button>
+                    </div>
+                    <div id="food_master_status" class="complaint-status text-muted mt-2"></div>
                 </div>
             </div>
         </div>
@@ -1113,11 +1458,88 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
         </div>
     </div>
 
+    <div class="modal fade" id="ipdSurgeryMasterModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Surgery / Procedure Master</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-2 align-items-end mb-2">
+                        <div class="col-md-3">
+                            <label class="form-label">Type</label>
+                            <select class="form-select form-select-sm" id="surgery_master_type">
+                                <option value="surgery">Surgery</option>
+                                <option value="procedure">Procedure</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Search</label>
+                            <input type="text" class="form-control form-control-sm" id="surgery_master_search" placeholder="Search name/code/icd...">
+                        </div>
+                        <div class="col-md-3 d-grid">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_surgery_master_refresh">Refresh List</button>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive" style="max-height:220px;overflow:auto;">
+                        <table class="table table-sm table-bordered align-middle mb-2">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th style="width:120px;">Code</th>
+                                    <th style="width:120px;">ICD</th>
+                                    <th style="width:70px;">Status</th>
+                                    <th style="width:110px;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="surgery_master_rows">
+                                <tr><td colspan="5" class="text-center text-muted">No records.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <hr>
+                    <input type="hidden" id="surgery_master_id" value="0">
+                    <div class="row g-2">
+                        <div class="col-md-5">
+                            <label class="form-label">Name</label>
+                            <input type="text" class="form-control form-control-sm" id="surgery_master_name" maxlength="255">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Code</label>
+                            <input type="text" class="form-control form-control-sm" id="surgery_master_code" maxlength="60">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">ICD</label>
+                            <input type="text" class="form-control form-control-sm" id="surgery_master_icd" maxlength="60">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Status</label>
+                            <select class="form-select form-select-sm" id="surgery_master_active">
+                                <option value="1">Active</option>
+                                <option value="0">Inactive</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mt-2 d-flex gap-2">
+                        <button type="button" class="btn btn-primary btn-sm" id="btn_surgery_master_save">Save</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_surgery_master_clear">New</button>
+                    </div>
+                    <div id="surgery_master_status" class="complaint-status text-muted mt-2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
     (function() {
         var narrativeTemplateLoadState = { section: '', target: '', rows: [] };
         var narrativeTemplateSaveState = { section: '', text: '', target: '' };
         var narrativeTemplateToolsBound = false;
+        var surgeryMasterState = { surgery: [], procedure: [] };
+        var foodMasterState = [];
 
         window.openDischargePreview = function(url, title) {
             if (typeof window.load_form === 'function') {
@@ -1169,6 +1591,17 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                 name: '<?= csrf_token() ?>',
                 value: '<?= csrf_hash() ?>'
             };
+        }
+
+        function updateFormCsrf(form, data) {
+            if (!form || !data || !data.csrfName || !data.csrfHash) {
+                return;
+            }
+
+            var csrfInput = form.querySelector('input[name="' + data.csrfName + '"]');
+            if (csrfInput) {
+                csrfInput.value = data.csrfHash;
+            }
         }
 
         function getComplaintEditorText() {
@@ -1775,12 +2208,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                 payload[csrf.name] = csrf.value;
 
                 $.post('<?= base_url('Opd_prescription/complaints_parse') ?>', payload, function(data) {
-                    if (data && data.csrfName && data.csrfHash) {
-                        var csrfInput = form.querySelector('input[name="' + data.csrfName + '"]');
-                        if (csrfInput) {
-                            csrfInput.value = data.csrfHash;
-                        }
-                    }
+                    updateFormCsrf(form, data);
 
                     var rows = (data && data.rows) ? data.rows : [];
                     targetInput.value = rows.length ? String(rows[0] || inputVal) : inputVal;
@@ -1790,6 +2218,440 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                     setSectionStatus(statusId, 'Lookup failed right now.', 'error');
                 });
             });
+        }
+
+        function bindSmartTermInputLookup(form, lookupId, suggestId, statusId, emptyText) {
+            var lookup = document.getElementById(lookupId);
+            var suggest = document.getElementById(suggestId);
+            if (!lookup) {
+                return;
+            }
+
+            if (lookup.dataset.lookupBound === '1') {
+                return;
+            }
+            lookup.dataset.lookupBound = '1';
+
+            var suggestions = [];
+
+            function optionLabel(row) {
+                var label = row.name || '';
+                if (row.name_hinglish) {
+                    label += ' (' + row.name_hinglish + ')';
+                }
+                return label;
+            }
+
+            function applySelection() {
+                var inputVal = (lookup.value || '').trim();
+                if (inputVal === '') {
+                    setSectionStatus(statusId, '', 'muted');
+                    return;
+                }
+
+                var chosen = '';
+                suggestions.forEach(function(row) {
+                    var label = optionLabel(row);
+                    if (label.toUpperCase() === inputVal.toUpperCase() || (row.name || '').toUpperCase() === inputVal.toUpperCase()) {
+                        chosen = row.name || inputVal;
+                    }
+                });
+
+                if (chosen !== '') {
+                    lookup.value = chosen;
+                    setSectionStatus(statusId, 'Term selected. Click +ADD to save row.', 'success');
+                    return;
+                }
+
+                if (!window.jQuery) {
+                    setSectionStatus(statusId, emptyText || 'Custom term ready. Click +ADD to save row.', 'success');
+                    return;
+                }
+
+                var csrf = getCsrfPair(form);
+                var payload = { text: inputVal };
+                payload[csrf.name] = csrf.value;
+
+                $.post('<?= base_url('Opd_prescription/complaints_parse') ?>', payload, function(data) {
+                    updateFormCsrf(form, data);
+
+                    var rows = (data && data.rows) ? data.rows : [];
+                    lookup.value = rows.length ? String(rows[0] || inputVal) : inputVal;
+                    setSectionStatus(statusId, rows.length ? 'Matched predefined term. Click +ADD to save row.' : 'Custom term ready. Click +ADD to save row.', 'success');
+                }, 'json').fail(function() {
+                    setSectionStatus(statusId, 'Lookup failed right now.', 'error');
+                });
+            }
+
+            lookup.addEventListener('input', function() {
+                var q = (lookup.value || '').trim();
+                if (q.length < 2 || !window.jQuery) {
+                    return;
+                }
+
+                $.get('<?= base_url('Opd_prescription/complaints_search') ?>?q=' + encodeURIComponent(q), function(data) {
+                    suggestions = (data && data.rows) ? data.rows : [];
+                    if (!suggest) {
+                        return;
+                    }
+
+                    var html = '';
+                    suggestions.forEach(function(row) {
+                        html += '<option value="' + $('<div>').text(optionLabel(row)).html() + '"></option>';
+                    });
+                    suggest.innerHTML = html;
+                }, 'json');
+            });
+
+            lookup.addEventListener('change', applySelection);
+            lookup.addEventListener('blur', applySelection);
+        }
+
+        function bindSurgeryTermLookup(form, type, lookupId, suggestId, targetMasterId, statusId) {
+            var lookup = document.getElementById(lookupId);
+            var suggest = document.getElementById(suggestId);
+            var targetMaster = document.getElementById(targetMasterId);
+            if (!lookup || !targetMaster || !window.jQuery) {
+                return;
+            }
+
+            if (lookup.dataset.lookupBound === '1') {
+                return;
+            }
+            lookup.dataset.lookupBound = '1';
+
+            function optionLabel(row) {
+                var label = (row.term_name || '').toString();
+                var code = (row.term_code || '').toString().trim();
+                var icd = (row.icd_code || '').toString().trim();
+                if (code !== '') {
+                    label += ' [' + code + ']';
+                }
+                if (icd !== '') {
+                    label += ' (ICD ' + icd + ')';
+                }
+                return label.trim();
+            }
+
+            function applySelectionFromInput() {
+                var inputVal = (lookup.value || '').trim();
+                if (inputVal === '') {
+                    targetMaster.value = '0';
+                    return;
+                }
+
+                var chosen = null;
+                (surgeryMasterState[type] || []).forEach(function(row) {
+                    var label = optionLabel(row);
+                    var name = (row.term_name || '').toString();
+                    if (label.toUpperCase() === inputVal.toUpperCase() || name.toUpperCase() === inputVal.toUpperCase()) {
+                        chosen = row;
+                    }
+                });
+
+                if (chosen) {
+                    lookup.value = (chosen.term_name || '').toString();
+                    targetMaster.value = String(chosen.id || 0);
+                    setSectionStatus(statusId, 'Master term selected. Click +ADD to save row.', 'success');
+                    return;
+                }
+
+                targetMaster.value = '0';
+            }
+
+            lookup.addEventListener('input', function() {
+                targetMaster.value = '0';
+                var q = (lookup.value || '').trim();
+                if (q.length < 2) {
+                    return;
+                }
+
+                $.get('<?= base_url('Ipd_discharge/surgery_master_lookup') ?>?type=' + encodeURIComponent(type) + '&q=' + encodeURIComponent(q), function(data) {
+                    var rows = (data && data.rows) ? data.rows : [];
+                    surgeryMasterState[type] = rows;
+
+                    if (!suggest) {
+                        return;
+                    }
+
+                    var html = '';
+                    rows.forEach(function(row) {
+                        html += '<option value="' + $('<div>').text(optionLabel(row)).html() + '"></option>';
+                    });
+                    suggest.innerHTML = html;
+                }, 'json');
+            });
+
+            lookup.addEventListener('change', applySelectionFromInput);
+            lookup.addEventListener('blur', applySelectionFromInput);
+        }
+
+        function initSurgeryMasterCrud(form) {
+            if (!window.jQuery) {
+                return;
+            }
+
+            if (window.__ipdSurgeryCrudBound === true) {
+                return;
+            }
+            window.__ipdSurgeryCrudBound = true;
+
+            var $type = $('#surgery_master_type');
+            var $search = $('#surgery_master_search');
+            var $rows = $('#surgery_master_rows');
+
+            function setMasterStatus(text, level) {
+                setSectionStatus('surgery_master_status', text, level || 'muted');
+            }
+
+            function rowHtml(row) {
+                var status = parseInt(row.is_active || '0', 10) === 1 ? 'Active' : 'Inactive';
+                var safeName = $('<div>').text(row.term_name || '').html();
+                var safeCode = $('<div>').text(row.term_code || '').html();
+                var safeIcd = $('<div>').text(row.icd_code || '').html();
+                return '<tr>'
+                    + '<td>' + safeName + '</td>'
+                    + '<td>' + safeCode + '</td>'
+                    + '<td>' + safeIcd + '</td>'
+                    + '<td>' + status + '</td>'
+                    + '<td>'
+                    + '<button type="button" class="btn btn-outline-primary btn-sm btn-master-edit" data-id="' + (row.id || 0) + '">Edit</button> '
+                    + '<button type="button" class="btn btn-outline-danger btn-sm btn-master-delete" data-id="' + (row.id || 0) + '">Del</button>'
+                    + '</td>'
+                    + '</tr>';
+            }
+
+            function clearMasterForm() {
+                $('#surgery_master_id').val('0');
+                $('#surgery_master_name').val('');
+                $('#surgery_master_code').val('');
+                $('#surgery_master_icd').val('');
+                $('#surgery_master_active').val('1');
+            }
+
+            function fetchMasterRows() {
+                var type = ($type.val() || 'surgery').toString();
+                var q = ($search.val() || '').toString().trim();
+                $.get('<?= base_url('Ipd_discharge/surgery_master_list') ?>?type=' + encodeURIComponent(type) + '&q=' + encodeURIComponent(q), function(data) {
+                    var rows = (data && data.rows) ? data.rows : [];
+                    surgeryMasterState[type] = rows;
+                    if (!rows.length) {
+                        $rows.html('<tr><td colspan="5" class="text-center text-muted">No records.</td></tr>');
+                        return;
+                    }
+
+                    var html = '';
+                    rows.forEach(function(row) {
+                        html += rowHtml(row);
+                    });
+                    $rows.html(html);
+                }, 'json').fail(function() {
+                    setMasterStatus('Unable to load master list.', 'error');
+                });
+            }
+
+            $(document).on('click', '#btn_discharge_manage_surgery_master', function() {
+                clearMasterForm();
+                setMasterStatus('', 'muted');
+                fetchMasterRows();
+                showModalById('ipdSurgeryMasterModal');
+            });
+
+            $('#btn_surgery_master_refresh').on('click', fetchMasterRows);
+            $type.on('change', function() {
+                clearMasterForm();
+                fetchMasterRows();
+            });
+            $search.on('input', function() {
+                fetchMasterRows();
+            });
+
+            $('#btn_surgery_master_clear').on('click', function() {
+                clearMasterForm();
+            });
+
+            $(document).on('click', '.btn-master-edit', function() {
+                var id = parseInt($(this).data('id') || '0', 10);
+                var type = ($type.val() || 'surgery').toString();
+                var row = (surgeryMasterState[type] || []).find(function(item) {
+                    return parseInt(item.id || '0', 10) === id;
+                }) || null;
+                if (!row) {
+                    return;
+                }
+
+                $('#surgery_master_id').val(String(row.id || 0));
+                $('#surgery_master_name').val((row.term_name || '').toString());
+                $('#surgery_master_code').val((row.term_code || '').toString());
+                $('#surgery_master_icd').val((row.icd_code || '').toString());
+                $('#surgery_master_active').val(parseInt(row.is_active || '0', 10) === 1 ? '1' : '0');
+            });
+
+            $(document).on('click', '.btn-master-delete', function() {
+                var id = parseInt($(this).data('id') || '0', 10);
+                if (id <= 0) {
+                    return;
+                }
+
+                if (!window.confirm('Delete this master row?')) {
+                    return;
+                }
+
+                var csrf = getCsrfPair(form);
+                var payload = { id: id };
+                payload[csrf.name] = csrf.value;
+
+                $.post('<?= base_url('Ipd_discharge/surgery_master_delete') ?>', payload, function(data) {
+                    updateFormCsrf(form, data);
+                    if (!data || parseInt(data.update || '0', 10) !== 1) {
+                        setMasterStatus((data && data.error_text) ? data.error_text : 'Unable to delete record.', 'error');
+                        return;
+                    }
+
+                    setMasterStatus('Record deleted.', 'success');
+                    fetchMasterRows();
+                }, 'json').fail(function() {
+                    setMasterStatus('Delete failed.', 'error');
+                });
+            });
+
+            $('#btn_surgery_master_save').on('click', function() {
+                var name = ($('#surgery_master_name').val() || '').toString().trim();
+                if (name === '') {
+                    setMasterStatus('Name is required.', 'error');
+                    return;
+                }
+
+                var csrf = getCsrfPair(form);
+                var payload = {
+                    id: parseInt($('#surgery_master_id').val() || '0', 10),
+                    type: ($type.val() || 'surgery').toString(),
+                    name: name,
+                    code: ($('#surgery_master_code').val() || '').toString().trim(),
+                    icd_code: ($('#surgery_master_icd').val() || '').toString().trim(),
+                    is_active: parseInt($('#surgery_master_active').val() || '1', 10)
+                };
+                payload[csrf.name] = csrf.value;
+
+                $.post('<?= base_url('Ipd_discharge/surgery_master_save') ?>', payload, function(data) {
+                    updateFormCsrf(form, data);
+                    if (!data || parseInt(data.update || '0', 10) !== 1) {
+                        setMasterStatus((data && data.error_text) ? data.error_text : 'Unable to save record.', 'error');
+                        return;
+                    }
+
+                    setMasterStatus('Record saved.', 'success');
+                    clearMasterForm();
+                    fetchMasterRows();
+                }, 'json').fail(function() {
+                    setMasterStatus('Save failed.', 'error');
+                });
+            });
+        }
+
+        function initSurgeryTools(form) {
+            bindSurgeryTermLookup(form, 'surgery', 'new_surgery_name', 'discharge_surgery_suggest', 'new_surgery_master_id', 'discharge_surgery_status');
+            bindSurgeryTermLookup(form, 'procedure', 'new_procedure_name', 'discharge_procedure_suggest', 'new_procedure_master_id', 'discharge_surgery_status');
+            initSurgeryMasterCrud(form);
+        }
+
+        function bindDiagnosisIcdLookup(form) {
+            var lookup = document.getElementById('new_diagnosis_name');
+            var suggest = document.getElementById('discharge_diagnosis_suggest');
+            var seedBtn = document.getElementById('btn_discharge_seed_icd');
+            if (!lookup || !suggest || !window.jQuery) {
+                return;
+            }
+
+            if (lookup.dataset.lookupBound === '1') {
+                return;
+            }
+            lookup.dataset.lookupBound = '1';
+
+            var suggestions = [];
+
+            function diagnosisLabel(row) {
+                var name = (row.name || '').toString();
+                var code = (row.icd_code || '').toString().trim();
+                if (code !== '') {
+                    return name + ' (ICD ' + code + ')';
+                }
+                return name;
+            }
+
+            lookup.addEventListener('input', function() {
+                var q = (lookup.value || '').trim();
+                if (q.length < 2) {
+                    return;
+                }
+
+                $.get('<?= base_url('Ipd_discharge/diagnosis_icd_lookup') ?>?q=' + encodeURIComponent(q), function(data) {
+                    suggestions = (data && data.rows) ? data.rows : [];
+                    var html = '';
+                    suggestions.forEach(function(row) {
+                        html += '<option value="' + $('<div>').text(diagnosisLabel(row)).html() + '"></option>';
+                    });
+                    suggest.innerHTML = html;
+                }, 'json');
+            });
+
+            function applyDiagnosisSelection() {
+                var inputVal = (lookup.value || '').trim();
+                if (inputVal === '') {
+                    setSectionStatus('discharge_diagnosis_status', '', 'muted');
+                    return;
+                }
+
+                var chosen = null;
+                suggestions.forEach(function(row) {
+                    var label = diagnosisLabel(row);
+                    var name = (row.name || '').toString();
+                    if (label.toUpperCase() === inputVal.toUpperCase() || name.toUpperCase() === inputVal.toUpperCase()) {
+                        chosen = row;
+                    }
+                });
+
+                if (chosen) {
+                    var diagnosisText = (chosen.name || '').toString().trim();
+                    var code = (chosen.icd_code || '').toString().trim();
+                    if (code !== '') {
+                        diagnosisText += ' [ICD: ' + code + ']';
+                    }
+                    lookup.value = diagnosisText;
+                    setSectionStatus('discharge_diagnosis_status', code !== '' ? 'Diagnosis with ICD selected. Click +ADD to save row.' : 'Diagnosis selected. Click +ADD to save row.', 'success');
+                    return;
+                }
+
+                setSectionStatus('discharge_diagnosis_status', 'Custom diagnosis ready. Click +ADD to save row.', 'success');
+            }
+
+            lookup.addEventListener('change', applyDiagnosisSelection);
+            lookup.addEventListener('blur', applyDiagnosisSelection);
+
+            if (seedBtn) {
+                if (seedBtn.dataset.seedBound === '1') {
+                    return;
+                }
+                seedBtn.dataset.seedBound = '1';
+
+                seedBtn.addEventListener('click', function() {
+                    var csrf = getCsrfPair(form);
+                    var payload = {};
+                    payload[csrf.name] = csrf.value;
+
+                    $.post('<?= base_url('Ipd_discharge/diagnosis_icd_seed_starter') ?>', payload, function(data) {
+                        updateFormCsrf(form, data);
+                        if (!data || parseInt(data.update || '0', 10) !== 1) {
+                            setSectionStatus('discharge_diagnosis_status', (data && data.error_text) ? data.error_text : 'Unable to load ICD starter.', 'error');
+                            return;
+                        }
+
+                        setSectionStatus('discharge_diagnosis_status', data.error_text || 'ICD starter loaded.', 'success');
+                    }, 'json').fail(function() {
+                        setSectionStatus('discharge_diagnosis_status', 'ICD starter request failed.', 'error');
+                    });
+                });
+            }
         }
 
         function bindAiRewrite(form, btnId, sourceId, mode, statusId, emptyMsg) {
@@ -1850,15 +2712,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                 return;
             }
 
-            bindSmartTermLookup(
-                form,
-                'discharge_diagnosis_lookup',
-                'discharge_diagnosis_suggest',
-                'btn_discharge_add_diagnosis',
-                'new_diagnosis_name',
-                'discharge_diagnosis_status',
-                'Type diagnosis text first.'
-            );
+            bindDiagnosisIcdLookup(form);
 
             bindAiRewrite(form, 'btn_discharge_ai_diagnosis', 'diagnosis_remark', 'diagnosis', 'discharge_diagnosis_status', 'Type diagnosis narrative first.');
             bindAiRewrite(form, 'btn_discharge_hinglish_diagnosis', 'diagnosis_remark', 'hinglish_to_english', 'discharge_diagnosis_status', 'Type diagnosis narrative first.');
@@ -1876,18 +2730,562 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                 return;
             }
 
-            bindSmartTermLookup(
+            bindSmartTermInputLookup(
                 form,
-                'discharge_course_lookup',
-                'discharge_course_suggest',
-                'btn_discharge_add_course',
                 'new_course_name',
+                'discharge_course_suggest',
                 'discharge_course_status',
-                'Type course/treatment text first.'
+                'Custom term ready. Click +ADD to save row.'
             );
 
             bindAiRewrite(form, 'btn_discharge_ai_course', 'course_remark', 'autotype', 'discharge_course_status', 'Type course narrative first.');
             bindAiRewrite(form, 'btn_discharge_hinglish_course', 'course_remark', 'hinglish_to_english', 'discharge_course_status', 'Type course narrative first.');
+        }
+
+        function initInstructionTools() {
+            var section = document.getElementById('section-instructions');
+            if (!section || section.dataset.toolsBound === '1') {
+                return;
+            }
+            section.dataset.toolsBound = '1';
+
+            var addSelectedBtn = section.querySelector('#btn_instruction_add_selected_food');
+            var clearBtn = section.querySelector('#btn_instruction_clear_food');
+            var remark = section.querySelector('#instruction_remark');
+            var other = section.querySelector('#instruction_other');
+            var preview = section.querySelector('#instruction_selected_preview');
+            var autoSaveTimer = null;
+            var autoSaveBusy = false;
+
+            function saveInstructionSectionImmediate() {
+                var activeForm = section.closest('form') || getDischargeForm();
+                if (!activeForm || autoSaveBusy) {
+                    return;
+                }
+
+                if (!window.jQuery) {
+                    return;
+                }
+
+                autoSaveBusy = true;
+                var csrf = getCsrfPair(activeForm);
+                var payload = {
+                    action: 'save_main',
+                    dietary_autosave: '1',
+                    instruction_other: other ? String(other.value || '').trim() : ''
+                };
+                payload[csrf.name] = csrf.value;
+
+                section.querySelectorAll('.instruction-food-item:checked').forEach(function(item) {
+                    var id = parseInt(item.value || '0', 10);
+                    if (id > 0) {
+                        if (!Array.isArray(payload.instruction_food_ids)) {
+                            payload.instruction_food_ids = [];
+                        }
+                        payload.instruction_food_ids.push(String(id));
+                    }
+                });
+
+                window.jQuery.ajax({
+                    url: activeForm.getAttribute('action') || window.location.href,
+                    type: 'POST',
+                    data: payload,
+                    dataType: 'json',
+                    timeout: 120000
+                }).done(function(data) {
+                    updateFormCsrf(activeForm, data || {});
+                    if (data && parseInt(data.update || '0', 10) === 1) {
+                        setSectionStatus('discharge_instruction_status', 'Dietary advice saved.', 'success');
+                    } else {
+                        setSectionStatus('discharge_instruction_status', (data && data.error_text) ? data.error_text : 'Unable to save dietary advice.', 'error');
+                    }
+                }).always(function() {
+                    autoSaveBusy = false;
+                });
+            }
+
+            function saveInstructionSection() {
+                if (autoSaveTimer) {
+                    window.clearTimeout(autoSaveTimer);
+                }
+                autoSaveTimer = window.setTimeout(function() {
+                    saveInstructionSectionImmediate();
+                }, 180);
+            }
+
+            function refreshInstructionPreview() {
+                if (!preview) {
+                    return;
+                }
+
+                var lines = [];
+                section.querySelectorAll('.instruction-food-item:checked').forEach(function(item) {
+                    var heading = String(item.getAttribute('data-food-short') || '').trim();
+                    var lang = String(item.getAttribute('data-food-lang') || '').trim();
+                    var desc = String(item.getAttribute('data-food-desc') || '').trim();
+                    var body = lang !== '' ? lang : desc;
+                    if (heading === '' && body === '') {
+                        return;
+                    }
+
+                    var line = heading !== '' ? ('<strong>' + heading + ':</strong> ') : '';
+                    line += body !== '' ? body : heading;
+                    lines.push('<div>' + line + '</div>');
+                });
+
+                var otherText = other ? String(other.value || '').trim() : '';
+                if (otherText !== '') {
+                    lines.push('<div><strong>Other:</strong> ' + otherText + '</div>');
+                }
+
+                preview.innerHTML = lines.length ? lines.join('') : '<span class="text-muted">No dietary advice selected.</span>';
+            }
+
+            function appendLinesToAdvice(lines) {
+                if (!remark || !Array.isArray(lines) || !lines.length) {
+                    return;
+                }
+
+                var existing = String(remark.value || '').trim();
+                var bucket = existing === '' ? [] : existing.split(/\r?\n/).map(function(line) {
+                    return String(line || '').trim();
+                }).filter(function(line) {
+                    return line !== '';
+                });
+
+                lines.forEach(function(line) {
+                    var normalized = String(line || '').trim();
+                    if (normalized === '') {
+                        return;
+                    }
+                    if (bucket.some(function(prev) { return prev.toUpperCase() === normalized.toUpperCase(); })) {
+                        return;
+                    }
+                    bucket.push(normalized);
+                });
+
+                remark.value = bucket.join('\n');
+            }
+
+            if (addSelectedBtn && addSelectedBtn.dataset.bound !== '1') {
+                addSelectedBtn.dataset.bound = '1';
+                addSelectedBtn.addEventListener('click', function() {
+                    var lines = [];
+                    section.querySelectorAll('.instruction-food-item:checked').forEach(function(item) {
+                        var desc = String(item.getAttribute('data-food-desc') || '').trim();
+                        var shortText = String(item.getAttribute('data-food-short') || '').trim();
+                        var text = desc !== '' ? desc : shortText;
+                        if (text !== '') {
+                            lines.push(text);
+                        }
+                    });
+
+                    var otherText = other ? String(other.value || '').trim() : '';
+                    if (otherText !== '') {
+                        lines.push(otherText);
+                    }
+
+                    appendLinesToAdvice(lines);
+                });
+            }
+
+            if (clearBtn && clearBtn.dataset.bound !== '1') {
+                clearBtn.dataset.bound = '1';
+                clearBtn.addEventListener('click', function() {
+                    section.querySelectorAll('.instruction-food-item:checked').forEach(function(item) {
+                        item.checked = false;
+                    });
+                    refreshInstructionPreview();
+                    saveInstructionSection();
+                });
+            }
+
+            section.querySelectorAll('.instruction-food-item').forEach(function(item) {
+                if (item.dataset.bound === '1') {
+                    return;
+                }
+                item.dataset.bound = '1';
+                item.addEventListener('change', function() {
+                    refreshInstructionPreview();
+                    saveInstructionSection();
+                });
+            });
+
+            if (other && other.dataset.bound !== '1') {
+                other.dataset.bound = '1';
+                other.addEventListener('input', refreshInstructionPreview);
+            }
+
+            refreshInstructionPreview();
+            initDietaryMasterCrud(getDischargeForm());
+        }
+
+        function initDietaryMasterCrud(form) {
+            if (!window.jQuery) {
+                return;
+            }
+            if (window.__ipdFoodCrudBound === true) {
+                return;
+            }
+            window.__ipdFoodCrudBound = true;
+
+            var $search = $('#food_master_search');
+            var $rows = $('#food_master_rows');
+
+            function setFoodStatus(text, level) {
+                setSectionStatus('food_master_status', text, level || 'muted');
+            }
+
+            function clearFoodForm() {
+                $('#food_master_id').val('0');
+                $('#food_master_short').val('');
+                $('#food_master_desc').val('');
+                $('#food_master_lang').val('');
+            }
+
+            function rowHtml(row) {
+                var safeShort = $('<div>').text(row.food_short || '').html();
+                var safeDesc = $('<div>').text(row.food_desc || '').html();
+                var safeLang = $('<div>').text(row.food_desc_lang || '').html();
+                return '<tr>'
+                    + '<td>' + safeShort + '</td>'
+                    + '<td>' + safeDesc + '</td>'
+                    + '<td>' + safeLang + '</td>'
+                    + '<td>'
+                    + '<button type="button" class="btn btn-outline-primary btn-sm btn-food-edit" data-id="' + (row.id || 0) + '">Edit</button> '
+                    + '<button type="button" class="btn btn-outline-danger btn-sm btn-food-delete" data-id="' + (row.id || 0) + '">Del</button>'
+                    + '</td>'
+                    + '</tr>';
+            }
+
+            function fetchFoodRows() {
+                var q = ($search.val() || '').toString().trim();
+                $.get('<?= base_url('Ipd_discharge/dietary_master_list') ?>?q=' + encodeURIComponent(q), function(data) {
+                    var rows = (data && data.rows) ? data.rows : [];
+                    foodMasterState = rows;
+                    if (!rows.length) {
+                        $rows.html('<tr><td colspan="4" class="text-center text-muted">No records.</td></tr>');
+                        return;
+                    }
+
+                    var html = '';
+                    rows.forEach(function(row) {
+                        html += rowHtml(row);
+                    });
+                    $rows.html(html);
+                }, 'json').fail(function() {
+                    setFoodStatus('Unable to load dietary master list.', 'error');
+                });
+            }
+
+            $(document).on('click', '#btn_discharge_manage_food_master', function() {
+                clearFoodForm();
+                setFoodStatus('', 'muted');
+                fetchFoodRows();
+                showModalById('ipdDietaryMasterModal');
+            });
+
+            $('#btn_food_master_refresh').on('click', fetchFoodRows);
+            $search.on('input', fetchFoodRows);
+            $('#btn_food_master_clear').on('click', clearFoodForm);
+
+            $(document).on('click', '.btn-food-edit', function() {
+                var id = parseInt($(this).data('id') || '0', 10);
+                var row = (foodMasterState || []).find(function(item) {
+                    return parseInt(item.id || '0', 10) === id;
+                }) || null;
+                if (!row) {
+                    return;
+                }
+
+                $('#food_master_id').val(String(row.id || 0));
+                $('#food_master_short').val((row.food_short || '').toString());
+                $('#food_master_desc').val((row.food_desc || '').toString());
+                $('#food_master_lang').val((row.food_desc_lang || '').toString());
+            });
+
+            $(document).on('click', '.btn-food-delete', function() {
+                var id = parseInt($(this).data('id') || '0', 10);
+                if (id <= 0) {
+                    return;
+                }
+                if (!window.confirm('Delete this dietary master row?')) {
+                    return;
+                }
+
+                var csrf = getCsrfPair(form);
+                var payload = { id: id };
+                payload[csrf.name] = csrf.value;
+
+                $.post('<?= base_url('Ipd_discharge/dietary_master_delete') ?>', payload, function(data) {
+                    updateFormCsrf(form, data);
+                    if (!data || parseInt(data.update || '0', 10) !== 1) {
+                        setFoodStatus((data && data.error_text) ? data.error_text : 'Unable to delete record.', 'error');
+                        return;
+                    }
+                    setFoodStatus('Record deleted.', 'success');
+                    fetchFoodRows();
+                }, 'json').fail(function() {
+                    setFoodStatus('Delete failed.', 'error');
+                });
+            });
+
+            $('#btn_food_master_save').on('click', function() {
+                var shortText = ($('#food_master_short').val() || '').toString().trim();
+                if (shortText === '') {
+                    setFoodStatus('Short heading is required.', 'error');
+                    return;
+                }
+
+                var csrf = getCsrfPair(form);
+                var payload = {
+                    id: parseInt($('#food_master_id').val() || '0', 10),
+                    food_short: shortText,
+                    food_desc: ($('#food_master_desc').val() || '').toString().trim(),
+                    food_desc_lang: ($('#food_master_lang').val() || '').toString().trim()
+                };
+                payload[csrf.name] = csrf.value;
+
+                $.post('<?= base_url('Ipd_discharge/dietary_master_save') ?>', payload, function(data) {
+                    updateFormCsrf(form, data);
+                    if (!data || parseInt(data.update || '0', 10) !== 1) {
+                        setFoodStatus((data && data.error_text) ? data.error_text : 'Unable to save record.', 'error');
+                        return;
+                    }
+
+                    setFoodStatus('Record saved.', 'success');
+                    clearFoodForm();
+                    fetchFoodRows();
+                }, 'json').fail(function() {
+                    setFoodStatus('Save failed.', 'error');
+                });
+            });
+        }
+
+        function initMedicineTools() {
+            var section = document.getElementById('section-medicine');
+            if (!section || section.dataset.toolsBound === '1') {
+                return;
+            }
+            section.dataset.toolsBound = '1';
+
+            if (!window.jQuery) {
+                return;
+            }
+
+            var suggestRows = [];
+            var rxGroupCache = [];
+            var medInput = section.querySelector('#new_drug_name');
+            var medSuggest = section.querySelector('#discharge_med_suggest');
+            var medType = section.querySelector('#new_drug_type');
+            var medWhen = section.querySelector('#new_drug_when');
+            var medFreq = section.querySelector('#new_drug_freq');
+            var rxGroupInput = section.querySelector('#selected_rx_group_id');
+            var rxGroupName = section.querySelector('#rx_group_selected_name');
+            var rxGroupList = document.getElementById('discharge_rx_group_list');
+            var rxGroupSearch = document.getElementById('discharge_rx_group_search');
+            var applyBtn = section.querySelector('#btn_apply_rx_group');
+
+            function normalizeRxShortCode(raw, kind) {
+                var v = String(raw || '').trim();
+                if (v === '') {
+                    return '';
+                }
+
+                var key = v.replace(/\./g, '').replace(/\s+/g, '').toUpperCase();
+                if (kind === 'when') {
+                    var whenMap = {
+                        'BEFOREFOOD': 'BF',
+                        'BFOOD': 'BF',
+                        'BF': 'BF',
+                        'AF': 'AF',
+                        'AFOOD': 'AF',
+                        'AFTERFOOD': 'AF',
+                        'WF': 'WF',
+                        'WFOOD': 'WF',
+                        'WITHFOOD': 'WF'
+                    };
+                    return whenMap[key] || key;
+                }
+
+                var freqMap = {
+                    'OD': 'OD',
+                    'QD': 'OD',
+                    'ONCEDAILY': 'OD',
+                    'BD': 'BD',
+                    'BID': 'BD',
+                    'TWICEDAILY': 'BD',
+                    'TDS': 'TDS',
+                    'TID': 'TDS',
+                    'THRICEDAILY': 'TDS',
+                    'HS': 'HS',
+                    'QHS': 'HS',
+                    'QID': 'QID',
+                    'SOS': 'SOS'
+                };
+                return freqMap[key] || key;
+            }
+
+            function setMedicineStatus(text, level) {
+                setSectionStatus('discharge_medicine_status', text, level || 'muted');
+            }
+
+            function renderRxGroups() {
+                if (!rxGroupList) {
+                    return;
+                }
+
+                var q = rxGroupSearch ? String(rxGroupSearch.value || '').trim().toLowerCase() : '';
+                var html = '';
+                rxGroupCache.forEach(function(row) {
+                    var id = parseInt(row.id || '0', 10);
+                    var name = String(row.rx_group_name || '').trim();
+                    if (id <= 0 || name === '') {
+                        return;
+                    }
+                    if (q !== '' && name.toLowerCase().indexOf(q) === -1) {
+                        return;
+                    }
+
+                    var medCount = parseInt(row.med_count || '0', 10);
+                    var label = name + (medCount > 0 ? (' (' + medCount + ')') : '');
+                    html += '<button type="button" class="btn btn-outline-secondary btn-sm js-discharge-rx-group" data-id="' + id + '" data-name="' + $('<div>').text(name).html() + '">' + $('<div>').text(label).html() + '</button>';
+                });
+
+                rxGroupList.innerHTML = html || '<div class="text-muted small">No Rx Group found.</div>';
+            }
+
+            function loadRxGroups() {
+                $.get('<?= base_url('Opd_prescription/save_rx_group_list') ?>/0', function(data) {
+                    rxGroupCache = (data && data.rows) ? data.rows : [];
+                    renderRxGroups();
+                }, 'json').fail(function() {
+                    setMedicineStatus('Unable to load Rx Groups.', 'error');
+                });
+            }
+
+            medInput.addEventListener('input', function() {
+                var q = String(medInput.value || '').trim();
+                if (q.length < 2) {
+                    return;
+                }
+
+                $.get('<?= base_url('Opd_prescription/medicine_search') ?>?q=' + encodeURIComponent(q) + '&scope=active', function(data) {
+                    suggestRows = (data && data.rows) ? data.rows : [];
+                    var html = '';
+                    suggestRows.forEach(function(row) {
+                        var name = String(row.med_name || '').trim();
+                        if (name === '') {
+                            return;
+                        }
+                        html += '<option value="' + $('<div>').text(name).html() + '"></option>';
+                    });
+                    if (medSuggest) {
+                        medSuggest.innerHTML = html;
+                    }
+                }, 'json');
+            });
+
+            medInput.addEventListener('change', function() {
+                var value = String(medInput.value || '').trim().toUpperCase();
+                if (value === '') {
+                    return;
+                }
+
+                var matched = null;
+                suggestRows.forEach(function(row) {
+                    if (String(row.med_name || '').trim().toUpperCase() === value) {
+                        matched = row;
+                    }
+                });
+
+                if (matched && medType && String(medType.value || '').trim() === '') {
+                    medType.value = String(matched.med_type || '').trim();
+                }
+            });
+
+            section.querySelectorAll('.rx-quick-btn').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var targetId = String(btn.getAttribute('data-fill-target') || '').trim();
+                    var value = String(btn.getAttribute('data-fill-value') || '').trim();
+                    var target = targetId ? section.querySelector('#' + targetId) : null;
+                    if (target) {
+                        if (targetId === 'new_drug_when') {
+                            target.value = normalizeRxShortCode(value, 'when');
+                        } else if (targetId === 'new_drug_freq') {
+                            target.value = normalizeRxShortCode(value, 'freq');
+                        } else {
+                            target.value = value;
+                        }
+                    }
+                });
+            });
+
+            if (medWhen && medWhen.dataset.shortBound !== '1') {
+                medWhen.dataset.shortBound = '1';
+                medWhen.addEventListener('blur', function() {
+                    medWhen.value = normalizeRxShortCode(medWhen.value, 'when');
+                });
+                medWhen.addEventListener('change', function() {
+                    medWhen.value = normalizeRxShortCode(medWhen.value, 'when');
+                });
+            }
+
+            if (medFreq && medFreq.dataset.shortBound !== '1') {
+                medFreq.dataset.shortBound = '1';
+                medFreq.addEventListener('blur', function() {
+                    medFreq.value = normalizeRxShortCode(medFreq.value, 'freq');
+                });
+                medFreq.addEventListener('change', function() {
+                    medFreq.value = normalizeRxShortCode(medFreq.value, 'freq');
+                });
+            }
+
+            var openRxBtn = section.querySelector('#btn_open_rx_group_modal');
+            if (openRxBtn) {
+                openRxBtn.addEventListener('click', function() {
+                    loadRxGroups();
+                    showModalById('dischargeRxGroupModal');
+                });
+            }
+
+            if (rxGroupSearch) {
+                if (rxGroupSearch.dataset.bound !== '1') {
+                    rxGroupSearch.dataset.bound = '1';
+                    rxGroupSearch.addEventListener('input', function() {
+                        renderRxGroups();
+                    });
+                }
+            }
+
+            if (window.__dischargeRxGroupSelectBound !== true) {
+                window.__dischargeRxGroupSelectBound = true;
+                $(document).on('click', '.js-discharge-rx-group', function() {
+                    var id = parseInt($(this).data('id') || '0', 10);
+                    var name = String($(this).data('name') || '').trim();
+                    var activeSection = document.getElementById('section-medicine');
+                    if (!activeSection || id <= 0) {
+                        return;
+                    }
+
+                    var activeRxInput = activeSection.querySelector('#selected_rx_group_id');
+                    var activeRxLabel = activeSection.querySelector('#rx_group_selected_name');
+                    var activeApplyBtn = activeSection.querySelector('#btn_apply_rx_group');
+                    if (!activeRxInput) {
+                        return;
+                    }
+
+                    activeRxInput.value = String(id);
+                    if (activeRxLabel) {
+                        activeRxLabel.textContent = name ? ('Selected: ' + name) : ('Selected Rx Group #' + id);
+                    }
+                    hideModalById('dischargeRxGroupModal');
+
+                    if (activeApplyBtn) {
+                        activeApplyBtn.click();
+                    }
+                });
+            }
         }
 
         function syncEditorValues() {
@@ -1904,8 +3302,11 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
 
         initComplaintEditor();
         initComplaintTools();
+        initSurgeryTools(getDischargeForm());
         initDiagnosisTools();
         initCourseTools();
+        initMedicineTools();
+        initInstructionTools();
         bindNarrativeTemplateTools();
 
         function patchNoticeFromHtml(holder) {
@@ -2256,8 +3657,19 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
 
                 var payload = window.jQuery.param(payloadArray);
                 var actionValue = submitter && submitter.name === 'action' ? String(submitter.value || '') : '';
+                var saveMode = submitter && submitter.dataset ? String(submitter.dataset.saveMode || '').toLowerCase() : '';
+                var statusTargetId = submitter && submitter.dataset ? String(submitter.dataset.statusId || '').trim() : '';
                 var isComplaintAction = actionValue === 'add_complaint' || actionValue === 'remove_complaint';
+                var isMedicineAction = actionValue === 'add_drug' || actionValue === 'remove_drug' || actionValue === 'apply_rx_group';
                 var targetSectionId = '';
+
+                if (saveMode === 'json') {
+                    payloadArray.push({
+                        name: 'ajax_mode',
+                        value: 'json'
+                    });
+                    payload = window.jQuery.param(payloadArray);
+                }
 
                 if (submitter && submitter.dataset && submitter.dataset.reloadSection) {
                     targetSectionId = String(submitter.dataset.reloadSection);
@@ -2270,13 +3682,30 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                     }
                 }
 
+                if (isMedicineAction) {
+                    targetSectionId = 'section-medicine';
+                }
+
                 window.jQuery.ajax({
                     url: form.getAttribute('action') || window.location.href,
                     type: 'POST',
                     data: payload,
-                    dataType: 'html',
+                    dataType: saveMode === 'json' ? 'json' : 'html',
                     timeout: 120000
-                }).done(function(html) {
+                }).done(function(result) {
+                    if (saveMode === 'json') {
+                        updateFormCsrf(form, result || {});
+                        if (statusTargetId !== '') {
+                            var level = result && String(result.notice_type || '').toLowerCase() === 'warning' ? 'error' : 'success';
+                            if (!result || parseInt(result.update || '0', 10) !== 1) {
+                                level = 'error';
+                            }
+                            setSectionStatus(statusTargetId, (result && result.error_text) ? String(result.error_text) : 'Save completed.', level);
+                        }
+                        return;
+                    }
+
+                    var html = String(result || '');
                     var holder = document.createElement('div');
                     holder.innerHTML = html;
                     updateCsrfFromHtml(holder, form);
@@ -2287,8 +3716,11 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                         patchComplaintSectionFromHtml(holder, form);
                         initComplaintEditor();
                         initComplaintTools();
+                        initSurgeryTools(document.querySelector('form[action*="Ipd_discharge/ipd_select/"]'));
                         initDiagnosisTools();
                         initCourseTools();
+                        initMedicineTools();
+                        initInstructionTools();
                         bindDischargeAjaxSubmit();
                         initNabhHistorySection(document.querySelector('form[action*="Ipd_discharge/ipd_select/"]'));
                         syncNavOnScroll();
@@ -2300,10 +3732,21 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                             initComplaintEditor();
                             initComplaintTools();
                             initNabhHistorySection(document.querySelector('form[action*="Ipd_discharge/ipd_select/"]'));
+                        } else if (targetSectionId === 'section-systemic') {
+                            initComplaintEditor();
+                            initNabhHistorySection(document.querySelector('form[action*="Ipd_discharge/ipd_select/"]'));
+                        } else if (targetSectionId === 'section-nursing-history') {
+                            initNabhHistorySection(document.querySelector('form[action*="Ipd_discharge/ipd_select/"]'));
+                        } else if (targetSectionId === 'section-surgery') {
+                            initSurgeryTools(document.querySelector('form[action*="Ipd_discharge/ipd_select/"]'));
                         } else if (targetSectionId === 'section-diagnosis') {
                             initDiagnosisTools();
                         } else if (targetSectionId === 'section-course') {
                             initCourseTools();
+                        } else if (targetSectionId === 'section-medicine') {
+                            initMedicineTools();
+                        } else if (targetSectionId === 'section-instructions') {
+                            initInstructionTools();
                         }
                         bindDischargeAjaxSubmit();
                         syncNavOnScroll();
@@ -2313,8 +3756,11 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                     patchFormAreaFromHtml(holder);
                     initComplaintEditor();
                     initComplaintTools();
+                    initSurgeryTools(document.querySelector('form[action*="Ipd_discharge/ipd_select/"]'));
                     initDiagnosisTools();
                     initCourseTools();
+                    initMedicineTools();
+                    initInstructionTools();
                     bindDischargeAjaxSubmit();
                     syncNavOnScroll();
                 }).fail(function() {
@@ -2346,6 +3792,18 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
             });
         }
 
+        function getFormScrollContainer() {
+            var container = document.querySelector('.discharge-form-area');
+            if (!container) {
+                return null;
+            }
+
+            var style = window.getComputedStyle(container);
+            var isScrollable = (style.overflowY === 'auto' || style.overflowY === 'scroll')
+                && container.scrollHeight > container.clientHeight;
+            return isScrollable ? container : null;
+        }
+
         navLinks.forEach(function(link) {
             link.addEventListener('click', function(e) {
                 e.preventDefault();
@@ -2355,12 +3813,26 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                     return;
                 }
 
-                section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                var container = getFormScrollContainer();
+                if (container) {
+                    var cRect = container.getBoundingClientRect();
+                    var sRect = section.getBoundingClientRect();
+                    var nextTop = container.scrollTop + (sRect.top - cRect.top) - 8;
+                    container.scrollTo({ top: Math.max(nextTop, 0), behavior: 'smooth' });
+                } else {
+                    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
                 setActiveNavBySection(sectionId);
             });
         });
 
         function syncNavOnScroll() {
+            var container = getFormScrollContainer();
+            var referenceTop = 120;
+            if (container) {
+                referenceTop = container.getBoundingClientRect().top + 12;
+            }
+
             var bestSection = sectionIds[0];
             var bestDelta = Number.POSITIVE_INFINITY;
 
@@ -2370,7 +3842,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                     return;
                 }
                 var rect = section.getBoundingClientRect();
-                var delta = Math.abs(rect.top - 120);
+                var delta = Math.abs(rect.top - referenceTop);
                 if (delta < bestDelta) {
                     bestDelta = delta;
                     bestSection = id;
@@ -2381,6 +3853,12 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
         }
 
         window.addEventListener('scroll', syncNavOnScroll, { passive: true });
+        document.addEventListener('scroll', function(evt) {
+            var target = evt.target;
+            if (target && target.classList && target.classList.contains('discharge-form-area')) {
+                syncNavOnScroll();
+            }
+        }, { passive: true, capture: true });
         syncNavOnScroll();
     })();
     </script>

@@ -259,7 +259,7 @@
                     notify('error', 'Please Attention', data.error_text);
                     $("#RegisterPatient").prop("disabled", false);
                 } else {
-                    load_form('<?= base_url('billing/patient/person_record') ?>/' + data.insertid);
+                    load_form('<?= base_url('billing/patient/person_record') ?>/' + data.insertid, 'Patient Record');
                 }
             }, 'json');
         });
@@ -273,7 +273,7 @@
         });
 
         $("#input_city").autocomplete({
-            source: "<?= base_url('Patient/city') ?>",
+            source: "<?= base_url('billing/patient/city') ?>",
             minLength: 3,
             autofocus: true,
             select: function(event, ui) {
@@ -325,7 +325,7 @@
             })
             .autocomplete({
                 source: function(request, response) {
-                    $.getJSON("<?= base_url('Patient/get_name') ?>", {
+                    $.getJSON("<?= base_url('billing/patient/get_name') ?>", {
                         term: extractLast(request.term)
                     }, response);
                 },
@@ -363,7 +363,7 @@
             })
             .autocomplete({
                 source: function(request, response) {
-                    $.getJSON("<?= base_url('Patient/get_name') ?>", {
+                    $.getJSON("<?= base_url('billing/patient/get_name') ?>", {
                         term: extractLast(request.term)
                     }, response);
                 },

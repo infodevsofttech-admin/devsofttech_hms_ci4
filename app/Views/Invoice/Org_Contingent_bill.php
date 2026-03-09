@@ -63,12 +63,9 @@ $('#updatereport').click(function(){
 			{
 				var csrf_name = '<?= csrf_token() ?>';
 				var csrf_value = $('input[name="<?= csrf_token() ?>"]').first().val() || '<?= csrf_hash() ?>';
-				$.post('<?= base_url('billing/case/create_contingent_bill') ?>/'+caseid,{ 
-					"case_id": caseid,
-						[csrf_name]: csrf_value
-					}, function(data){
-						notify('success','Please Attention',data);
-							load_form_div('<?= base_url('billing/case/contingent_bill') ?>/'+caseid,'org_CONTINGENT');
+				$.get('<?= base_url('Orgcase/create_contingent_bill') ?>/'+caseid, function(data){
+					notify('success','Please Attention',data);
+					load_form_div('<?= base_url('Orgcase/contingent_bill') ?>/'+caseid,'org_CONTINGENT');
 				});
 			}
 			
@@ -76,12 +73,13 @@ $('#updatereport').click(function(){
 
 		$('#showreport').click(function(){
 			var caseid = $('#caseid').val();
-           	load_report_div('<?= base_url('billing/case/contingent_bill') ?>/'+caseid+'/1','org_CONTINGENT');
+			var finalUrl = '<?= base_url('Orgcase/contingent_bill') ?>/' + caseid + '/1';
+			window.open(finalUrl, '_blank');
 		});
 		
 		$('#editreport').click(function(){
 			var caseid = $('#caseid').val();
-           	load_form_div('<?= base_url('billing/case/contingent_bill') ?>/'+caseid+'/0','org_CONTINGENT');
+	           	load_form_div('<?= base_url('Orgcase/contingent_bill') ?>/'+caseid+'/0','org_CONTINGENT');
 		});
 		
 </script>

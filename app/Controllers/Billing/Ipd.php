@@ -7,6 +7,7 @@ use App\Models\BedAssignmentHistoryModel;
 use App\Models\ItemIpdModel;
 use App\Models\IpdBillingModel;
 use App\Models\IpdModel;
+use App\Models\NursingBedsideItemModel;
 use App\Models\PaymentModel;
 
 class Ipd extends BaseController
@@ -15,6 +16,7 @@ class Ipd extends BaseController
     protected BedAssignmentHistoryModel $bedAssignmentModel;
     protected ItemIpdModel $itemIpdModel;
     protected IpdModel $ipdEditModel;
+    protected NursingBedsideItemModel $nursingBedsideItemModel;
 
     public function __construct()
     {
@@ -22,6 +24,7 @@ class Ipd extends BaseController
         $this->bedAssignmentModel = new BedAssignmentHistoryModel();
         $this->itemIpdModel = new ItemIpdModel();
         $this->ipdEditModel = new IpdModel();
+        $this->nursingBedsideItemModel = new NursingBedsideItemModel();
         helper(['common', 'form', 'age']);
     }
 
@@ -193,6 +196,7 @@ class Ipd extends BaseController
         }
 
         if ($tab === 'ipd-charges') {
+            $this->syncNursingChargesToInvoice($ipdId);
             $panelData['ipd_charges_grouped'] = $this->ipdModel->getIpdChargesGrouped($ipdId);
             $panelData['ipd_charges_total'] = $this->ipdModel->getIpdChargesTotal($ipdId);
             $panelData['ipd_packages'] = $this->ipdModel->getIpdPackages($ipdId);
@@ -203,8 +207,14 @@ class Ipd extends BaseController
                 $insCompId = 1;
             }
 
+            $panelData['bedside_items_by_category'] = $this->nursingBedsideItemModel->getBillableGroupedByCategory($insCompId);
+
             $panelData['ipd_insurance_id'] = $insCompId;
             $panelData['doc_list'] = $this->ipdModel->getIpdDoctorList();
+            $doctorIds = array_map(static fn ($doc) => (int) ($doc->id ?? 0), $panelData['doc_list']);
+            $doctorIds = array_values(array_filter($doctorIds, static fn ($id) => $id > 0));
+            $panelData['doctor_visit_fee_types'] = $this->ipdModel->getDoctorVisitFeeTypes();
+            $panelData['doctor_visit_fee_map'] = $this->ipdModel->getDoctorVisitFeeMap($doctorIds);
             $panelData['item_types'] = $this->itemIpdModel->getItemTypes();
 
             $itemLists = [];
@@ -419,6 +429,238 @@ class Ipd extends BaseController
         return $this->response->setJSON(['ok' => true]);
     }
 
+    public function addBedsideCharge(int $ipdId)
+    {
+        $permission = $this->requireAnyPermission([
+            'billing.access',
+            'billing.ipd.invoice',
+            'billing.ipd.current-admission',
+        ]);
+        if ($permission) {
+            return $permission;
+        }
+
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['error' => 'Invalid request']);
+        }
+
+        $bedsideItemId = (int) ($this->request->getPost('bedside_item_id') ?? 0);
+        $qty = (float) ($this->request->getPost('item_qty') ?? 1);
+        $itemDate = (string) ($this->request->getPost('item_date') ?? date('Y-m-d'));
+        $visitTime = (string) ($this->request->getPost('visit_time') ?? '');
+        $comment = (string) ($this->request->getPost('comment') ?? '');
+        $docId = (int) ($this->request->getPost('doc_id') ?? 0);
+        $referName = (string) ($this->request->getPost('refer_name') ?? '');
+
+        if ($bedsideItemId <= 0) {
+            return $this->response->setStatusCode(400)->setJSON(['error' => 'Select a bedside item']);
+        }
+
+        $caseMeta = $this->ipdModel->getIpdCaseMeta($ipdId);
+        $insId = (int) ($caseMeta['insurance_id'] ?? 0);
+
+        $item = $this->nursingBedsideItemModel->getBillableItemForInsurance($bedsideItemId, $insId);
+        if (! is_array($item) || empty($item)) {
+            return $this->response->setStatusCode(404)->setJSON(['error' => 'Bedside item not found or not billable']);
+        }
+
+        if ($qty <= 0) {
+            $qty = 1;
+        }
+
+        $rateInput = $this->request->getPost('item_rate');
+        $insuranceRate = $item['insurance_rate'] ?? null;
+        $rate = ($rateInput !== null && $rateInput !== '')
+            ? (float) $rateInput
+            : ($insuranceRate !== null ? (float) $insuranceRate : (float) ($item['default_rate'] ?? 0));
+        if ($rate < 0) {
+            $rate = 0;
+        }
+
+        $orgCode = trim((string) ($item['insurance_code'] ?? ''));
+
+        $docName = '';
+        if ($docId > 0) {
+            $docName = $this->ipdModel->getDoctorNameById($docId);
+        } else {
+            $docName = $referName;
+        }
+
+        $typeId = $this->resolveBedsideItemTypeId((string) ($item['category'] ?? 'Bedside'));
+        $amount = $rate * $qty;
+
+        $nursingChargeId = $this->insertNursingIpdChargeRow([
+            'ipd_id' => $ipdId,
+            'item_id' => $bedsideItemId,
+            'item_name' => (string) ($item['item_name'] ?? ''),
+            'item_type' => (string) ($item['item_type'] ?? 'Bedside'),
+            'doctor_id' => $docId > 0 ? $docId : null,
+            'doctor_name' => $docName !== '' ? $docName : null,
+            'visit_date' => $itemDate,
+            'visit_time' => $visitTime !== '' ? $visitTime : null,
+            'consultation_type' => null,
+            'duration' => null,
+            'specialization' => null,
+            'hospital_clinic' => null,
+            'is_outside_doctor' => 0,
+            'rate' => $rate,
+            'qty' => (int) $qty,
+            'amount' => $amount,
+            'performed_by' => null,
+            'performed_date' => $itemDate,
+            'performed_time' => $visitTime !== '' ? $visitTime : null,
+            'remarks' => $comment,
+            'include_in_bill' => 1,
+            'updated_by' => null,
+        ]);
+
+        $invoiceComment = $comment;
+        if ($nursingChargeId > 0) {
+            $marker = '[NURSING_CHARGE_ID:' . $nursingChargeId . ']';
+            $invoiceComment = trim($invoiceComment . ' ' . $marker);
+        }
+
+        $insertData = [
+            'ipd_id' => $ipdId,
+            'item_type' => $typeId,
+            'item_id' => $bedsideItemId,
+            'item_name' => (string) ($item['item_name'] ?? ''),
+            'item_rate' => $rate,
+            'item_added_date' => date('Y-m-d H:i:s'),
+            'item_qty' => $qty,
+            'item_amount' => $amount,
+            'doc_id' => $docId,
+            'doc_name' => $docName,
+            'date_item' => $itemDate,
+            'comment' => $invoiceComment,
+            'ins_id' => $insId,
+            'org_code' => $orgCode,
+        ];
+
+        $insertId = $this->ipdEditModel->insertIpdItem($insertData);
+
+        return $this->response->setJSON([
+            'ok' => $insertId > 0,
+            'id' => $insertId,
+        ]);
+    }
+
+    public function addDoctorVisitCharge(int $ipdId)
+    {
+        $permission = $this->requireAnyPermission([
+            'billing.access',
+            'billing.ipd.invoice',
+            'billing.ipd.current-admission',
+        ]);
+        if ($permission) {
+            return $permission;
+        }
+
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['error' => 'Invalid request']);
+        }
+
+        $docId = (int) ($this->request->getPost('doc_id') ?? 0);
+        $feeTypeId = (int) ($this->request->getPost('fee_type_id') ?? 0);
+        $qty = (float) ($this->request->getPost('item_qty') ?? 1);
+        $itemDate = (string) ($this->request->getPost('item_date') ?? date('Y-m-d'));
+        $visitTime = (string) ($this->request->getPost('visit_time') ?? '');
+        $duration = (int) ($this->request->getPost('duration') ?? 0);
+        $hospitalClinic = trim((string) ($this->request->getPost('hospital_clinic') ?? ''));
+        $isOutsideDoctor = (int) ($this->request->getPost('is_outside_doctor') ?? 0) === 1 ? 1 : 0;
+        $comment = trim((string) ($this->request->getPost('comment') ?? ''));
+
+        if ($docId <= 0) {
+            return $this->response->setStatusCode(400)->setJSON(['error' => 'Select doctor']);
+        }
+
+        if ($qty <= 0) {
+            $qty = 1;
+        }
+
+        $feeDetail = $this->ipdModel->getDoctorVisitFeeDetail($docId, $feeTypeId);
+
+        $rateInput = $this->request->getPost('item_rate');
+        $rate = ($rateInput !== null && $rateInput !== '')
+            ? (float) $rateInput
+            : (float) ($feeDetail['amount'] ?? 0);
+        if ($rate < 0) {
+            $rate = 0;
+        }
+
+        $docName = $this->ipdModel->getDoctorNameById($docId);
+        if ($docName === '') {
+            return $this->response->setStatusCode(404)->setJSON(['error' => 'Doctor not found']);
+        }
+
+        $visitLabel = trim((string) ($feeDetail['fee_desc'] ?? 'Doctor Visit'));
+        if ($visitLabel === '') {
+            $visitLabel = 'Doctor Visit';
+        }
+
+        $itemName = 'Doctor Visit - ' . $visitLabel;
+        $typeId = $this->resolveDoctorVisitItemTypeId();
+        $amount = $rate * $qty;
+
+        $caseMeta = $this->ipdModel->getIpdCaseMeta($ipdId);
+        $insId = (int) ($caseMeta['insurance_id'] ?? 0);
+
+        $nursingChargeId = $this->insertNursingIpdChargeRow([
+            'ipd_id' => $ipdId,
+            'item_id' => (int) ($feeDetail['id'] ?? $docId),
+            'item_name' => $itemName,
+            'item_type' => 'Doctor Visit',
+            'doctor_id' => $docId,
+            'doctor_name' => $docName,
+            'visit_date' => $itemDate,
+            'visit_time' => $visitTime !== '' ? $visitTime : null,
+            'consultation_type' => (string) ($feeDetail['fee_type'] ?? ''),
+            'duration' => $duration > 0 ? $duration : null,
+            'specialization' => null,
+            'hospital_clinic' => $hospitalClinic !== '' ? $hospitalClinic : null,
+            'is_outside_doctor' => $isOutsideDoctor,
+            'rate' => $rate,
+            'qty' => (int) $qty,
+            'amount' => $amount,
+            'performed_by' => null,
+            'performed_date' => $itemDate,
+            'performed_time' => $visitTime !== '' ? $visitTime : null,
+            'remarks' => $comment,
+            'include_in_bill' => 1,
+            'updated_by' => null,
+        ]);
+
+        $invoiceComment = $comment;
+        if ($nursingChargeId > 0) {
+            $marker = '[NURSING_CHARGE_ID:' . $nursingChargeId . ']';
+            $invoiceComment = trim($invoiceComment . ' ' . $marker);
+        }
+
+        $insertData = [
+            'ipd_id' => $ipdId,
+            'item_type' => $typeId,
+            'item_id' => (int) ($feeDetail['id'] ?? $docId),
+            'item_name' => $itemName,
+            'item_rate' => $rate,
+            'item_added_date' => date('Y-m-d H:i:s'),
+            'item_qty' => $qty,
+            'item_amount' => $amount,
+            'doc_id' => $docId,
+            'doc_name' => $docName,
+            'date_item' => $itemDate,
+            'comment' => $invoiceComment,
+            'ins_id' => $insId,
+            'org_code' => '',
+        ];
+
+        $insertId = $this->ipdEditModel->insertIpdItem($insertData);
+
+        return $this->response->setJSON([
+            'ok' => $insertId > 0,
+            'id' => $insertId,
+        ]);
+    }
+
     public function deleteIpdCharge(int $itemId)
     {
         $permission = $this->requireAnyPermission([
@@ -434,8 +676,165 @@ class Ipd extends BaseController
         }
 
         $result = $this->ipdEditModel->deleteIpdInvoiceItem($itemId);
+        if ($result !== 1) {
+            return $this->response->setJSON([
+                'ok' => false,
+                'error' => 'Unable to remove charge item. Please refresh and try again.',
+            ]);
+        }
 
-        return $this->response->setJSON(['ok' => $result === 1]);
+        return $this->response->setJSON([
+            'ok' => true,
+            'deleted_id' => $itemId,
+        ]);
+    }
+
+    public function updateNursingCharge(int $ipdId, int $chargeId)
+    {
+        $permission = $this->requireAnyPermission([
+            'billing.access',
+            'billing.ipd.invoice',
+            'billing.ipd.current-admission',
+        ]);
+        if ($permission) {
+            return $permission;
+        }
+
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['error' => 'Invalid request']);
+        }
+
+        if ($chargeId <= 0 || $ipdId <= 0 || ! $this->db->tableExists('nursing_ipd_charges')) {
+            return $this->response->setStatusCode(400)->setJSON(['error' => 'Invalid charge reference']);
+        }
+
+        $row = $this->db->table('nursing_ipd_charges')
+            ->where('charge_id', $chargeId)
+            ->where('ipd_id', $ipdId)
+            ->get()
+            ->getRowArray();
+
+        if (! is_array($row) || empty($row)) {
+            return $this->response->setStatusCode(404)->setJSON(['error' => 'Charge history row not found']);
+        }
+
+        $rate = (float) ($this->request->getPost('rate') ?? ($row['rate'] ?? 0));
+        $qty = (float) ($this->request->getPost('qty') ?? ($row['qty'] ?? 1));
+        $comment = trim((string) ($this->request->getPost('comment') ?? ($row['remarks'] ?? '')));
+        $visitDate = (string) ($this->request->getPost('visit_date') ?? ($row['visit_date'] ?? date('Y-m-d')));
+        $visitTime = (string) ($this->request->getPost('visit_time') ?? ($row['visit_time'] ?? ''));
+
+        if ($qty <= 0) {
+            $qty = 1;
+        }
+        if ($rate < 0) {
+            $rate = 0;
+        }
+
+        $amount = $rate * $qty;
+        $user = auth()->user();
+        $updatedBy = ($user && isset($user->username))
+            ? (string) $user->username
+            : (($user && isset($user->email)) ? (string) $user->email : 'system');
+
+        $this->db->table('nursing_ipd_charges')
+            ->where('charge_id', $chargeId)
+            ->where('ipd_id', $ipdId)
+            ->update([
+                'rate' => $rate,
+                'qty' => $qty,
+                'amount' => $amount,
+                'remarks' => $comment,
+                'visit_date' => $visitDate,
+                'visit_time' => $visitTime,
+                'updated_by' => $updatedBy . ' [' . date('Y-m-d H:i:s') . ']',
+            ]);
+
+        $marker = '[NURSING_CHARGE_ID:' . $chargeId . ']';
+        $invoiceRows = $this->db->table('ipd_invoice_item')
+            ->select('id')
+            ->where('ipd_id', $ipdId)
+            ->like('comment', $marker)
+            ->get()
+            ->getResultArray();
+
+        $invoiceComment = trim($comment . ' ' . $marker);
+        foreach ($invoiceRows as $invoiceRow) {
+            $invoiceId = (int) ($invoiceRow['id'] ?? 0);
+            if ($invoiceId <= 0) {
+                continue;
+            }
+            $this->ipdEditModel->updateIpdItem([
+                'item_rate' => $rate,
+                'item_qty' => $qty,
+                'item_amount' => $amount,
+                'date_item' => $visitDate,
+                'comment' => $invoiceComment,
+            ], $invoiceId);
+        }
+
+        return $this->response->setJSON(['ok' => true]);
+    }
+
+    public function deleteNursingCharge(int $ipdId, int $chargeId)
+    {
+        $permission = $this->requireAnyPermission([
+            'billing.access',
+            'billing.ipd.invoice',
+            'billing.ipd.current-admission',
+        ]);
+        if ($permission) {
+            return $permission;
+        }
+
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['error' => 'Invalid request']);
+        }
+
+        if ($chargeId <= 0 || $ipdId <= 0 || ! $this->db->tableExists('nursing_ipd_charges')) {
+            return $this->response->setStatusCode(400)->setJSON(['error' => 'Invalid charge reference']);
+        }
+
+        $row = $this->db->table('nursing_ipd_charges')
+            ->where('charge_id', $chargeId)
+            ->where('ipd_id', $ipdId)
+            ->get()
+            ->getRowArray();
+
+        if (! is_array($row) || empty($row)) {
+            return $this->response->setStatusCode(404)->setJSON(['error' => 'Charge history row not found']);
+        }
+
+        $user = auth()->user();
+        $updatedBy = ($user && isset($user->username))
+            ? (string) $user->username
+            : (($user && isset($user->email)) ? (string) $user->email : 'system');
+
+        $this->db->table('nursing_ipd_charges')
+            ->where('charge_id', $chargeId)
+            ->where('ipd_id', $ipdId)
+            ->update([
+                'include_in_bill' => 0,
+                'updated_by' => $updatedBy . ' [' . date('Y-m-d H:i:s') . ']',
+            ]);
+
+        $marker = '[NURSING_CHARGE_ID:' . $chargeId . ']';
+        $invoiceRows = $this->db->table('ipd_invoice_item')
+            ->select('id')
+            ->where('ipd_id', $ipdId)
+            ->like('comment', $marker)
+            ->get()
+            ->getResultArray();
+
+        foreach ($invoiceRows as $invoiceRow) {
+            $invoiceId = (int) ($invoiceRow['id'] ?? 0);
+            if ($invoiceId <= 0) {
+                continue;
+            }
+            $this->ipdEditModel->deleteIpdInvoiceItem($invoiceId);
+        }
+
+        return $this->response->setJSON(['ok' => true]);
     }
 
     public function updateIpdChargePackage(int $itemId)
@@ -938,5 +1337,142 @@ class Ipd extends BaseController
         }
 
         return $this->response->setStatusCode(403)->setBody('Access denied');
+    }
+
+    private function resolveBedsideItemTypeId(string $category): int
+    {
+        $groupDesc = 'Bedside - ' . trim($category);
+        if ($groupDesc === 'Bedside -') {
+            $groupDesc = 'Bedside - General';
+        }
+
+        $row = $this->db->table('ipd_item_type')
+            ->select('itype_id')
+            ->where('group_desc', $groupDesc)
+            ->get()
+            ->getRow();
+
+        if ($row) {
+            return (int) ($row->itype_id ?? 0);
+        }
+
+        $this->db->table('ipd_item_type')->insert([
+            'group_desc' => $groupDesc,
+        ]);
+
+        return (int) $this->db->insertID();
+    }
+
+    private function resolveDoctorVisitItemTypeId(): int
+    {
+        $groupDesc = 'Doctor Visit';
+
+        $row = $this->db->table('ipd_item_type')
+            ->select('itype_id')
+            ->where('group_desc', $groupDesc)
+            ->get()
+            ->getRow();
+
+        if ($row) {
+            return (int) ($row->itype_id ?? 0);
+        }
+
+        $this->db->table('ipd_item_type')->insert([
+            'group_desc' => $groupDesc,
+        ]);
+
+        return (int) $this->db->insertID();
+    }
+
+    private function insertNursingIpdChargeRow(array $data): int
+    {
+        if (! $this->db->tableExists('nursing_ipd_charges')) {
+            return 0;
+        }
+
+        $this->db->table('nursing_ipd_charges')->insert($data);
+
+        return (int) $this->db->insertID();
+    }
+
+    private function syncNursingChargesToInvoice(int $ipdId): void
+    {
+        if (! $this->db->tableExists('nursing_ipd_charges')) {
+            return;
+        }
+
+        $rows = $this->db->table('nursing_ipd_charges')
+            ->where('ipd_id', $ipdId)
+            ->where('include_in_bill', 1)
+            ->orderBy('charge_id', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        if (empty($rows)) {
+            return;
+        }
+
+        $caseMeta = $this->ipdModel->getIpdCaseMeta($ipdId);
+        $insId = (int) ($caseMeta['insurance_id'] ?? 0);
+
+        foreach ($rows as $row) {
+            $chargeId = (int) ($row['charge_id'] ?? 0);
+            if ($chargeId <= 0) {
+                continue;
+            }
+
+            $marker = '[NURSING_CHARGE_ID:' . $chargeId . ']';
+            $existsByMarker = $this->db->table('ipd_invoice_item')
+                ->where('ipd_id', $ipdId)
+                ->like('comment', $marker)
+                ->countAllResults();
+            if ($existsByMarker > 0) {
+                continue;
+            }
+
+            $itemName = trim((string) ($row['item_name'] ?? ''));
+            $dateItem = (string) ($row['visit_date'] ?? date('Y-m-d'));
+            $qty = (float) ($row['qty'] ?? 1);
+            $rate = (float) ($row['rate'] ?? 0);
+            $amount = (float) ($row['amount'] ?? ($rate * $qty));
+            $docId = (int) ($row['doctor_id'] ?? 0);
+
+            $existsByValue = $this->db->table('ipd_invoice_item')
+                ->where('ipd_id', $ipdId)
+                ->where('item_name', $itemName)
+                ->where('date_item', $dateItem)
+                ->where('item_qty', $qty)
+                ->where('item_amount', $amount)
+                ->where('doc_id', $docId)
+                ->countAllResults();
+            if ($existsByValue > 0) {
+                continue;
+            }
+
+            $rawType = trim((string) ($row['item_type'] ?? ''));
+            $typeId = stripos($rawType, 'doctor') !== false
+                ? $this->resolveDoctorVisitItemTypeId()
+                : $this->resolveBedsideItemTypeId($rawType !== '' ? $rawType : 'General');
+
+            $remarks = trim((string) ($row['remarks'] ?? ''));
+            $comment = trim($remarks . ' ' . $marker);
+
+            $this->ipdEditModel->insertIpdItem([
+                'ipd_id' => $ipdId,
+                'item_type' => $typeId,
+                'item_id' => (int) ($row['item_id'] ?? $chargeId),
+                'item_name' => $itemName,
+                'item_rate' => $rate,
+                'item_added_date' => date('Y-m-d H:i:s'),
+                'item_qty' => $qty,
+                'item_amount' => $amount,
+                'doc_id' => $docId,
+                'doc_name' => (string) ($row['doctor_name'] ?? ''),
+                'date_item' => $dateItem,
+                'comment' => $comment,
+                'ins_id' => $insId,
+                'org_code' => '',
+            ]);
+        }
     }
 }

@@ -102,6 +102,7 @@ class AuthGroups extends ShieldAuthGroups
         'template.ct'         => 'Can access CT templates',
         'template.mri'        => 'Can access MRI templates',
         'template.echo'       => 'Can access ECHO templates',
+        'template.discharge'  => 'Can access IPD discharge templates',
     ];
 
     /**

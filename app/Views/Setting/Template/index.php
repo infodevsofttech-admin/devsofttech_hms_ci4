@@ -6,13 +6,14 @@ $canXray = $user && method_exists($user, 'can') ? $user->can('template.xray') : 
 $canCt = $user && method_exists($user, 'can') ? $user->can('template.ct') : false;
 $canMri = $user && method_exists($user, 'can') ? $user->can('template.mri') : false;
 $canEcho = $user && method_exists($user, 'can') ? $user->can('template.echo') : false;
+$canDischarge = $user && method_exists($user, 'can') ? $user->can('template.discharge') : false;
 $canOpdPrintTemplate = $user && method_exists($user, 'can') ? $user->can('billing.opd.edit') : false;
 
 if (! $canOpdPrintTemplate && $user && method_exists($user, 'inGroup')) {
     $canOpdPrintTemplate = $user->inGroup('OPDEdit', 'admin', 'superadmin', 'developer');
 }
 
-$hasTemplateAccess = $canPathology || $canUltrasound || $canXray || $canCt || $canMri || $canEcho;
+$hasTemplateAccess = $canPathology || $canUltrasound || $canXray || $canCt || $canMri || $canEcho || $canDischarge;
 ?>
 <section class="content">
     <div class="pagetitle">
@@ -190,6 +191,15 @@ $hasTemplateAccess = $canPathology || $canUltrasound || $canXray || $canCt || $c
                 <a class="admin-tile" href="javascript:load_form_div('<?= base_url('Opd/print_template_builder') ?>','maindiv','OPD Print Template');">
                     <span class="tile-icon"><i class="bi bi-printer"></i></span>
                     <span>OPD Print Template</span>
+                </a>
+            </div>
+        <?php } ?>
+
+        <?php if ($canDischarge) { ?>
+            <div class="col-6 col-md-2 col-lg-2">
+                <a class="admin-tile" href="javascript:load_form_div('<?= base_url('setting/template/discharge_templates') ?>','maindiv','IPD Discharge Template');">
+                    <span class="tile-icon"><i class="bi bi-file-earmark-medical"></i></span>
+                    <span>IPD Discharge Template</span>
                 </a>
             </div>
         <?php } ?>

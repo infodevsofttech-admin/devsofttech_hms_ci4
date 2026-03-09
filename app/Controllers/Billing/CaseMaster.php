@@ -4,8 +4,9 @@ namespace App\Controllers\Billing;
 
 use App\Controllers\BaseController;
 use App\Models\InvoiceModel;
-use App\Models\ItemModel;
+use App\Models\OrganizationCaseBillDetailModel;
 use App\Models\OrganizationCaseModel;
+use Mpdf\Mpdf;
 
 class CaseMaster extends BaseController
 {
@@ -118,8 +119,6 @@ class CaseMaster extends BaseController
             'input_insurance_id' => 'required|min_length[2]|max_length[30]',
             'input_card_holder_name' => 'required|min_length[2]|max_length[50]',
         ];
-
-        $validation = service('validation');
         $validation->setRules($rules);
         if (! $validation->withRequest($this->request)->run()) {
             $errorText = implode("\n", $validation->getErrors());
@@ -157,7 +156,6 @@ class CaseMaster extends BaseController
         ];
 
         $existing = $this->db->table('organization_case_master')
-            ->where('status', 0)
             ->where('case_type', $caseType)
             ->where('p_id', $pId)
             ->get()
@@ -484,7 +482,11 @@ class CaseMaster extends BaseController
         $data['payment_history'] = $this->db->query($sql)->getResult();
 
         if ($print > 0) {
-            return view('Invoice/caseinvoice_print_V', $data);
+            $html = view('Invoice/caseinvoice_print_V', $data);
+            $caseCode = (string) ($data['orgcase'][0]->case_id_code ?? $casecode);
+            $fileName = 'Org_Invoice_' . preg_replace('/[^A-Za-z0-9\-_]/', '_', $caseCode) . '_' . date('YmdHis') . '.pdf';
+
+            return $this->renderInlinePdf($html, $fileName, 'Organization Invoice ' . $caseCode);
         }
 
         return view('Invoice/caseinvoice_V', $data);
@@ -794,8 +796,10 @@ class CaseMaster extends BaseController
             ->get()
             ->getResult();
 
-        $data['showinvoice'] = $this->db->query('select * from v_case_invoice v where v.id=' . $caseid . ' order by s_Date')->getResult();
-        $data['invoiceGtotal'] = $this->db->query('select sum(amount) as GTotal from v_case_invoice v where v.id=' . $caseid)->getResult();
+        $organizationCaseModel = new OrganizationCaseModel();
+        $invoiceData = $organizationCaseModel->getInvoiceRowsAndTotal($caseid);
+        $data['showinvoice'] = $invoiceData['rows'];
+        $data['invoiceGtotal'] = [(object) ['GTotal' => $invoiceData['total']]];
 
         return view('Invoice/caseinvoice_V', $data);
     }
@@ -922,7 +926,13 @@ class CaseMaster extends BaseController
             ->getResult();
 
         if ($print === 1) {
-            return $this->response->setBody((string) ($data['orgcase'][0]->contingent_bill ?? ''));
+            $content = (string) ($data['orgcase'][0]->contingent_bill ?? '');
+            $pageHead = '<style>@page {margin-top: 0.5cm;margin-bottom: 0.5cm;margin-left: 0.5cm;margin-right: 0.5cm;}</style>';
+            $html = $pageHead . $content;
+            $caseCode = (string) ($data['orgcase'][0]->case_id_code ?? $caseid);
+            $fileName = 'Contingent_Bill_' . preg_replace('/[^A-Za-z0-9\-_]/', '_', $caseCode) . '_' . date('YmdHis') . '.pdf';
+
+            return $this->renderInlinePdf($html, $fileName, 'Contingent Bill ' . $caseCode);
         }
 
         return view('Invoice/Org_Contingent_bill', $data);
@@ -958,10 +968,10 @@ class CaseMaster extends BaseController
             ->get()
             ->getResult();
 
-        $sql = 'select * from v_case_invoice v where v.id=' . $caseid . ' order by Charge_type,Adate';
-        $data['showinvoice'] = $this->db->query($sql)->getResult();
-
-        $data['invoiceGtotal'] = $this->db->query('select sum(amount) as GTotal from v_case_invoice v where v.id=' . $caseid)->getResult();
+        $organizationCaseModel = new OrganizationCaseModel();
+        $invoiceData = $organizationCaseModel->getInvoiceRowsAndTotal($caseid);
+        $data['showinvoice'] = $invoiceData['rows'];
+        $data['invoiceGtotal'] = [(object) ['GTotal' => $invoiceData['total']]];
 
         $claimId = (string) ($data['orgcase'][0]->insurance_no_1 ?? '');
 
@@ -1360,4 +1370,28 @@ class CaseMaster extends BaseController
             );
         }
     }
-}
+
+    private function renderInlinePdf(string $html, string $fileName, string $title)
+    {
+        $mpdf = new Mpdf([
+            'mode' => 'utf-8',
+            'format' => 'A4',
+            'orientation' => 'P',
+            'margin_left' => 8,
+            'margin_right' => 8,
+            'margin_top' => 8,
+            'margin_bottom' => 8,
+            'default_font' => 'dejavusans',
+            'tempDir' => WRITEPATH . 'cache',
+        ]);
+
+        $mpdf->SetTitle($title);
+        $mpdf->WriteHTML($html);
+
+        return $this->response
+            ->setHeader('Content-Type', 'application/pdf')
+            ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
+            ->setBody($mpdf->Output($fileName, 'S'));
+    }
+
+        }

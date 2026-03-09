@@ -5,10 +5,15 @@ $ipdId = (int) ($ipd_id ?? 0);
 $printType = (int) ($print_type ?? 1);
 $previewHtml = (string) ($content ?? '');
 
-$patientName = trim((string) (($person->p_fname ?? '') . ' ' . ($person->p_lname ?? '')));
-if ($patientName === '') {
-    $patientName = (string) ($person->p_fname ?? '');
-}
+$patientName = trim((string) ($person->p_fname ?? ''));
+$patientCode = trim((string) (
+    $person->uhid
+    ?? $person->UHID
+    ?? $person->patient_code
+    ?? $person->p_code
+    ?? $person->reg_no
+    ?? ''
+));
 
 $title = 'IPD Discharge Preview';
 if ($printType === 0) {
@@ -72,7 +77,7 @@ if ($printType === 0) {
         <div class="meta">
             <div><strong>IPD:</strong> <?= esc($ipd->ipd_code ?? $ipdId) ?></div>
             <div><strong>Patient:</strong> <?= esc($patientName) ?></div>
-            <div><strong>UHID:</strong> <?= esc($person->p_code ?? '') ?></div>
+            <div><strong>UHID:</strong> <?= esc($patientCode) ?></div>
             <div><strong>Date:</strong> <?= esc(date('d-m-Y h:i A')) ?></div>
         </div>
 

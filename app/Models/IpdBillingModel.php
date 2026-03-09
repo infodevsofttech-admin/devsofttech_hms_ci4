@@ -215,6 +215,101 @@ class IpdBillingModel extends Model
             ->getResult();
     }
 
+    public function getDoctorVisitFeeTypes(): array
+    {
+        if (! $this->db->tableExists('doc_ipd_fee_type')) {
+            return [];
+        }
+
+        return $this->db->table('doc_ipd_fee_type')
+            ->select('id, fee_type')
+            ->orderBy('fee_type', 'ASC')
+            ->get()
+            ->getResultArray();
+    }
+
+    public function getDoctorVisitFeeMap(array $doctorIds): array
+    {
+        if (empty($doctorIds) || ! $this->db->tableExists('doc_ipd_fee') || ! $this->db->tableExists('doc_ipd_fee_type')) {
+            return [];
+        }
+
+        $builder = $this->db->table('doc_ipd_fee d')
+            ->select('d.doc_id, d.doc_fee_type as fee_type_id, d.doc_fee_desc, d.amount, t.fee_type')
+            ->join('doc_ipd_fee_type t', 't.id = d.doc_fee_type', 'left')
+            ->whereIn('d.doc_id', array_map('intval', $doctorIds));
+
+        if ($this->db->fieldExists('isdelete', 'doc_ipd_fee')) {
+            $builder->where('d.isdelete', 0);
+        }
+
+        $rows = $builder->orderBy('d.id', 'ASC')->get()->getResultArray();
+
+        $map = [];
+        foreach ($rows as $row) {
+            $docId = (int) ($row['doc_id'] ?? 0);
+            $feeTypeId = (int) ($row['fee_type_id'] ?? 0);
+            if ($docId <= 0 || $feeTypeId <= 0) {
+                continue;
+            }
+
+            $feeType = (string) ($row['fee_type'] ?? '');
+            $feeDesc = trim((string) ($row['doc_fee_desc'] ?? ''));
+            if ($feeDesc === '') {
+                $feeDesc = $feeType;
+            }
+
+            $map[$docId][$feeTypeId] = [
+                'fee_type_id' => $feeTypeId,
+                'fee_type' => $feeType,
+                'fee_desc' => $feeDesc,
+                'amount' => (float) ($row['amount'] ?? 0),
+            ];
+        }
+
+        return $map;
+    }
+
+    public function getDoctorVisitFeeDetail(int $docId, int $feeTypeId = 0): ?array
+    {
+        if ($docId <= 0 || ! $this->db->tableExists('doc_ipd_fee') || ! $this->db->tableExists('doc_ipd_fee_type')) {
+            return null;
+        }
+
+        $builder = $this->db->table('doc_ipd_fee d')
+            ->select('d.id, d.doc_id, d.doc_fee_type as fee_type_id, d.doc_fee_desc, d.amount, t.fee_type')
+            ->join('doc_ipd_fee_type t', 't.id = d.doc_fee_type', 'left')
+            ->where('d.doc_id', $docId);
+
+        if ($this->db->fieldExists('isdelete', 'doc_ipd_fee')) {
+            $builder->where('d.isdelete', 0);
+        }
+
+        if ($feeTypeId > 0) {
+            $builder->where('d.doc_fee_type', $feeTypeId);
+        }
+
+        $row = $builder->orderBy('d.id', 'ASC')->get()->getRowArray();
+        if (! is_array($row) || empty($row)) {
+            return null;
+        }
+
+        $feeType = (string) ($row['fee_type'] ?? '');
+        $feeDesc = trim((string) ($row['doc_fee_desc'] ?? ''));
+        if ($feeDesc === '') {
+            $feeDesc = $feeType;
+        }
+
+        return [
+            'id' => (int) ($row['id'] ?? 0),
+            'doc_id' => (int) ($row['doc_id'] ?? 0),
+            'fee_type_id' => (int) ($row['fee_type_id'] ?? 0),
+            'fee_type' => $feeType,
+            'fee_desc' => $feeDesc,
+            'amount' => (float) ($row['amount'] ?? 0),
+        ];
+    }
+
     public function getBankPaymentSources(): array
     {
         return $this->db->table('hospital_bank m')
@@ -385,6 +480,26 @@ class IpdBillingModel extends Model
             ->where('i.id', $ipdId)
             ->get()
             ->getResult();
+    }
+
+    public function getNursingChargeHistory(int $ipdId): array
+    {
+        if (! $this->db->tableExists('nursing_ipd_charges')) {
+            return [];
+        }
+
+        $builder = $this->db->table('nursing_ipd_charges')
+            ->select('charge_id, item_name, item_type, doctor_name, visit_date, visit_time, qty, rate, amount, remarks, include_in_bill')
+            ->where('ipd_id', $ipdId);
+
+        if ($this->db->fieldExists('include_in_bill', 'nursing_ipd_charges')) {
+            $builder->where('include_in_bill', 1);
+        }
+
+        return $builder
+            ->orderBy('charge_id', 'DESC')
+            ->get()
+            ->getResultArray();
     }
 
     private function baseIpdListQuery()

@@ -4,6 +4,11 @@ namespace App\Controllers;
 
 class Report extends BaseController
 {
+    public function index()
+    {
+        return view('report/index');
+    }
+
     public function collection_report()
     {
         $employees = $this->db->table('users')
@@ -142,6 +147,189 @@ class Report extends BaseController
         return array_values(array_unique($ids));
     }
 
+    public function billing_operations_report()
+    {
+        $doctors = $this->db->table('opd_master')
+            ->select('doc_name')
+            ->where('doc_name IS NOT NULL', null, false)
+            ->where("doc_name != ''", null, false)
+            ->groupBy('doc_name')
+            ->orderBy('doc_name', 'ASC')
+            ->get()
+            ->getResult();
+
+        return view('report/billing_operations_report', [
+            'doctors' => $doctors,
+        ]);
+    }
+
+    public function billing_operations_report_data(string $dateRange, string $doctor = '0', int $output = 0)
+    {
+        [$minRange, $maxRange] = $this->parseDateRange($dateRange);
+
+        $doctorFilter = trim(urldecode($doctor));
+
+        $opdBuilder = $this->db->table('opd_master o')
+            ->select('o.doc_name')
+            ->select('COUNT(o.opd_id) as total_opd', false)
+            ->where('o.apointment_date >=', $minRange)
+            ->where('o.apointment_date <=', $maxRange)
+            ->where('o.doc_name IS NOT NULL', null, false)
+            ->where("o.doc_name != ''", null, false);
+
+        if ($doctorFilter !== '' && $doctorFilter !== '0') {
+            $opdBuilder->where('o.doc_name', $doctorFilter);
+        }
+
+        $opdRows = $opdBuilder
+            ->groupBy('o.doc_name')
+            ->orderBy('total_opd', 'DESC')
+            ->get()
+            ->getResult();
+
+        $invoiceRows = $this->db->table('invoice_master m')
+            ->select('m.id, m.inv_name, m.inv_date, m.total_amount, m.discount_amount')
+            ->where('m.inv_date >=', $minRange)
+            ->where('m.inv_date <=', $maxRange)
+            ->where('m.invoice_status', 1)
+            ->orderBy('m.id', 'DESC')
+            ->get()
+            ->getResultArray();
+
+        $invoiceIds = array_values(array_filter(array_map(static function (array $row): int {
+            return (int) ($row['id'] ?? 0);
+        }, $invoiceRows)));
+
+        $testAgg = [];
+        $paymentAgg = [];
+        if (! empty($invoiceIds)) {
+            $testRows = $this->db->table('invoice_item')
+                ->select('inv_master_id')
+                ->select('COUNT(id) as test_count', false)
+                ->select('SUM(item_qty) as test_qty', false)
+                ->select('SUM(item_amount) as test_amount', false)
+                ->whereIn('inv_master_id', $invoiceIds)
+                ->groupBy('inv_master_id')
+                ->get()
+                ->getResultArray();
+
+            foreach ($testRows as $row) {
+                $testAgg[(int) ($row['inv_master_id'] ?? 0)] = $row;
+            }
+
+            $payRows = $this->db->table('payment_history')
+                ->select('payof_id')
+                ->select("SUM(IF(credit_debit=0, amount, 0)) as total_received", false)
+                ->select("SUM(IF(credit_debit=1, amount, 0)) as total_refund", false)
+                ->where('payof_type', 2)
+                ->whereIn('payof_id', $invoiceIds)
+                ->groupBy('payof_id')
+                ->get()
+                ->getResultArray();
+
+            foreach ($payRows as $row) {
+                $paymentAgg[(int) ($row['payof_id'] ?? 0)] = $row;
+            }
+        }
+
+        $invoiceDetailRows = [];
+        $invoiceSummary = [
+            'invoice_count' => 0,
+            'total_invoice_amount' => 0.0,
+            'total_discount' => 0.0,
+            'total_test_count' => 0,
+            'total_test_qty' => 0.0,
+            'total_test_amount' => 0.0,
+            'total_received' => 0.0,
+            'total_refund' => 0.0,
+        ];
+
+        foreach ($invoiceRows as $row) {
+            $invId = (int) ($row['id'] ?? 0);
+            $test = $testAgg[$invId] ?? ['test_count' => 0, 'test_qty' => 0, 'test_amount' => 0];
+            $pay = $paymentAgg[$invId] ?? ['total_received' => 0, 'total_refund' => 0];
+
+            $invoiceAmount = (float) ($row['total_amount'] ?? 0);
+            $discountAmount = (float) ($row['discount_amount'] ?? 0);
+            $received = (float) ($pay['total_received'] ?? 0);
+            $refund = (float) ($pay['total_refund'] ?? 0);
+            $netReceived = $received - $refund;
+
+            $invoiceSummary['invoice_count']++;
+            $invoiceSummary['total_invoice_amount'] += $invoiceAmount;
+            $invoiceSummary['total_discount'] += $discountAmount;
+            $invoiceSummary['total_test_count'] += (int) ($test['test_count'] ?? 0);
+            $invoiceSummary['total_test_qty'] += (float) ($test['test_qty'] ?? 0);
+            $invoiceSummary['total_test_amount'] += (float) ($test['test_amount'] ?? 0);
+            $invoiceSummary['total_received'] += $received;
+            $invoiceSummary['total_refund'] += $refund;
+
+            $invoiceDetailRows[] = (object) [
+                'id' => $invId,
+                'inv_name' => (string) ($row['inv_name'] ?? ''),
+                'inv_date' => (string) ($row['inv_date'] ?? ''),
+                'invoice_amount' => $invoiceAmount,
+                'discount_amount' => $discountAmount,
+                'test_count' => (int) ($test['test_count'] ?? 0),
+                'test_qty' => (float) ($test['test_qty'] ?? 0),
+                'test_amount' => (float) ($test['test_amount'] ?? 0),
+                'received_amount' => $received,
+                'refund_amount' => $refund,
+                'net_received' => $netReceived,
+                'pending_amount' => $invoiceAmount - $netReceived,
+            ];
+        }
+
+        $ipdPaymentRows = $this->db->table('payment_history p')
+            ->select('p.payof_id as ipd_id, i.ipd_code, pat.p_fname as patient_name')
+            ->select("SUM(IF(p.credit_debit=0, p.amount, 0)) as total_received", false)
+            ->select("SUM(IF(p.credit_debit=1, p.amount, 0)) as total_refund", false)
+            ->join('ipd_master i', 'i.id = p.payof_id', 'left')
+            ->join('patient_master pat', 'pat.id = i.p_id', 'left')
+            ->where('p.payof_type', 4)
+            ->where('p.payment_date >=', $minRange)
+            ->where('p.payment_date <=', $maxRange)
+            ->groupBy('p.payof_id')
+            ->orderBy('total_received', 'DESC')
+            ->get()
+            ->getResult();
+
+        $ipdSummary = [
+            'total_received' => 0.0,
+            'total_refund' => 0.0,
+            'net_received' => 0.0,
+            'ipd_count' => 0,
+        ];
+
+        foreach ($ipdPaymentRows as $row) {
+            $received = (float) ($row->total_received ?? 0);
+            $refund = (float) ($row->total_refund ?? 0);
+            $ipdSummary['total_received'] += $received;
+            $ipdSummary['total_refund'] += $refund;
+            $ipdSummary['ipd_count']++;
+        }
+        $ipdSummary['net_received'] = $ipdSummary['total_received'] - $ipdSummary['total_refund'];
+
+        $data = [
+            'min_range' => $minRange,
+            'max_range' => $maxRange,
+            'doctor_filter' => $doctorFilter,
+            'opd_rows' => $opdRows,
+            'invoice_summary' => $invoiceSummary,
+            'invoice_rows' => $invoiceDetailRows,
+            'ipd_summary' => $ipdSummary,
+            'ipd_payment_rows' => $ipdPaymentRows,
+        ];
+
+        $content = view('report/billing_operations_report_table', $data);
+        if ($output === 1) {
+            ExportExcel($content, 'Billing_Operations_Report');
+            return $this->response->setBody('');
+        }
+
+        return $this->response->setBody($content);
+    }
+
     public function diagnosis_report()
     {
         $itemTypes = $this->db->table('hc_item_type')
@@ -226,6 +414,48 @@ class Report extends BaseController
     public function insurance_credit_main()
     {
         return view('report/insurance_credit_main');
+    }
+
+    public function echs_ipd_list_main()
+    {
+        return $this->insurance_ipd_report();
+    }
+
+    public function echs_opd_list_main()
+    {
+        return $this->insurance_opd_report();
+    }
+
+    public function echs_ipd_list_data(
+        string $dateRange,
+        string $orgStatus = '-1',
+        string $ipdType = '0',
+        int $output = 0
+    ) {
+        $insuranceId = $this->mapLegacyInsuranceFilter($ipdType);
+        return $this->insurance_ipd_report_data($dateRange, $insuranceId, $orgStatus, $output);
+    }
+
+    public function echs_opd_list_data(
+        string $dateRange,
+        string $orgStatus = '-1',
+        string $ipdType = '0',
+        int $output = 0
+    ) {
+        $insuranceId = $this->mapLegacyInsuranceFilter($ipdType);
+        return $this->insurance_opd_report_data($dateRange, $insuranceId, $orgStatus, $output);
+    }
+
+    private function mapLegacyInsuranceFilter(string $legacyType): string
+    {
+        $legacyValue = (int) trim($legacyType);
+        if ($legacyValue > 0) {
+            return 'G' . $legacyValue;
+        }
+        if ($legacyValue < 0) {
+            return (string) abs($legacyValue);
+        }
+        return '0';
     }
 
     public function insurance_opd_report()
@@ -493,5 +723,669 @@ class Report extends BaseController
         }
 
         return $this->response->setBody($content);
+    }
+
+    public function nabh_audit_report()
+    {
+        return view('report/nabh_audit_report');
+    }
+
+    public function nabh_audit_report_data(
+        string $dateRange,
+        string $module = 'all',
+        string $status = 'all',
+        int $output = 0
+    ) {
+        [$minRange, $maxRange] = $this->parseDateRange($dateRange);
+
+        $module = strtolower(trim($module));
+        if (! in_array($module, ['all', 'ipd', 'opd'], true)) {
+            $module = 'all';
+        }
+
+        $status = strtolower(trim($status));
+        if (! in_array($status, ['all', 'critical-missing', 'compliant'], true)) {
+            $status = 'all';
+        }
+
+        $ipdRows = [];
+        $opdRows = [];
+
+        if ($module === 'all' || $module === 'ipd') {
+            $ipdRows = $this->getIpdNabhAuditRows($minRange, $maxRange);
+        }
+
+        if ($module === 'all' || $module === 'opd') {
+            $opdRows = $this->getOpdNabhAuditRows($minRange, $maxRange);
+        }
+
+        $rows = array_merge($ipdRows, $opdRows);
+
+        if ($status === 'critical-missing') {
+            $rows = array_values(array_filter($rows, static function (array $row): bool {
+                return (int) ($row['critical_missing_count'] ?? 0) > 0;
+            }));
+        } elseif ($status === 'compliant') {
+            $rows = array_values(array_filter($rows, static function (array $row): bool {
+                return (int) ($row['critical_missing_count'] ?? 0) === 0;
+            }));
+        }
+
+        usort($rows, static function (array $a, array $b): int {
+            return strcmp((string) ($b['encounter_datetime'] ?? ''), (string) ($a['encounter_datetime'] ?? ''));
+        });
+
+        $summary = $this->buildNabhSummary($rows);
+
+        $data = [
+            'rows' => $rows,
+            'summary' => $summary,
+            'min_range' => $minRange,
+            'max_range' => $maxRange,
+            'module_filter' => $module,
+            'status_filter' => $status,
+        ];
+
+        $content = view('report/nabh_audit_report_table', $data);
+        if ($output === 1) {
+            ExportExcel($content, 'NABH_Audit_Report');
+            return $this->response->setBody('');
+        }
+
+        return $this->response->setBody($content);
+    }
+
+    private function buildNabhSummary(array $rows): array
+    {
+        $summary = [
+            'all' => ['label' => 'Overall', 'total' => 0, 'compliant' => 0, 'critical_missing' => 0, 'avg_completion' => 0.0],
+            'ipd' => ['label' => 'IPD Discharge', 'total' => 0, 'compliant' => 0, 'critical_missing' => 0, 'avg_completion' => 0.0],
+            'opd' => ['label' => 'OPD Consult', 'total' => 0, 'compliant' => 0, 'critical_missing' => 0, 'avg_completion' => 0.0],
+        ];
+
+        $completionAccumulator = [
+            'all' => 0.0,
+            'ipd' => 0.0,
+            'opd' => 0.0,
+        ];
+
+        foreach ($rows as $row) {
+            $module = strtolower((string) ($row['module_key'] ?? 'all'));
+            if (! isset($summary[$module])) {
+                $module = 'all';
+            }
+
+            $isCompliant = (int) ($row['critical_missing_count'] ?? 0) === 0;
+            $completion = (float) ($row['completion_percent'] ?? 0);
+
+            $summary['all']['total']++;
+            $completionAccumulator['all'] += $completion;
+            if ($isCompliant) {
+                $summary['all']['compliant']++;
+            } else {
+                $summary['all']['critical_missing']++;
+            }
+
+            if ($module !== 'all') {
+                $summary[$module]['total']++;
+                $completionAccumulator[$module] += $completion;
+                if ($isCompliant) {
+                    $summary[$module]['compliant']++;
+                } else {
+                    $summary[$module]['critical_missing']++;
+                }
+            }
+        }
+
+        foreach ($summary as $key => $item) {
+            $total = (int) ($item['total'] ?? 0);
+            $summary[$key]['avg_completion'] = $total > 0
+                ? round($completionAccumulator[$key] / $total, 1)
+                : 0.0;
+        }
+
+        return $summary;
+    }
+
+    private function getIpdNabhAuditRows(string $minRange, string $maxRange): array
+    {
+        if (! $this->db->tableExists('ipd_master')) {
+            return [];
+        }
+
+        $ipdFields = $this->db->getFieldNames('ipd_master') ?? [];
+        if (! in_array('id', $ipdFields, true)) {
+            return [];
+        }
+
+        $dateCol = $this->resolveExistingColumn($ipdFields, [
+            'discharge_date',
+            'discharged_at',
+            'discharge_datetime',
+            'register_date',
+            'admit_date',
+            'created_at',
+        ]);
+        if ($dateCol === null) {
+            return [];
+        }
+
+        $ipdCodeCol = $this->resolveExistingColumn($ipdFields, ['ipd_code', 'ipd_no', 'ipd_number']);
+        $patientFkCol = $this->resolveExistingColumn($ipdFields, ['p_id', 'patient_id']);
+        $statusCol = $this->resolveExistingColumn($ipdFields, ['ipd_status', 'discharge_status', 'discharg_status', 'is_discharged']);
+
+        $builder = $this->db->table('ipd_master i')
+            ->select('i.id as encounter_id')
+            ->select('i.' . $dateCol . ' as encounter_datetime', false);
+
+        if ($ipdCodeCol !== null) {
+            $builder->select('i.' . $ipdCodeCol . ' as encounter_code', false);
+        } else {
+            $builder->select("'' as encounter_code", false);
+        }
+
+        if ($patientFkCol !== null) {
+            $builder->select('i.' . $patientFkCol . ' as patient_id', false);
+        } else {
+            $builder->select('0 as patient_id', false);
+        }
+
+        $patientNameExpr = "''";
+        $patientCodeExpr = "''";
+        if ($patientFkCol !== null && $this->db->tableExists('patient_master')) {
+            $patientFields = $this->db->getFieldNames('patient_master') ?? [];
+            $nameCol = $this->resolveExistingColumn($patientFields, ['p_fname', 'patient_name', 'name']);
+            $codeCol = $this->resolveExistingColumn($patientFields, ['p_code', 'patient_code', 'uhid_no']);
+            $pkCol = $this->resolveExistingColumn($patientFields, ['id']);
+
+            if ($pkCol !== null) {
+                $builder->join('patient_master p', 'p.' . $pkCol . ' = i.' . $patientFkCol, 'left');
+                if ($nameCol !== null) {
+                    $patientNameExpr = 'p.' . $nameCol;
+                }
+                if ($codeCol !== null) {
+                    $patientCodeExpr = 'p.' . $codeCol;
+                }
+            }
+        }
+
+        $builder->select($patientNameExpr . ' as patient_name', false)
+            ->select($patientCodeExpr . ' as patient_code', false)
+            ->where('i.' . $dateCol . ' >=', $minRange)
+            ->where('i.' . $dateCol . ' <=', $maxRange)
+            ->orderBy('i.' . $dateCol, 'DESC');
+
+        if ($statusCol !== null) {
+            $builder->where('i.' . $statusCol, 1);
+        }
+
+        $resultRows = $builder->get()->getResultArray();
+        $finalRows = [];
+
+        foreach ($resultRows as $row) {
+            $ipdId = (int) ($row['encounter_id'] ?? 0);
+            if ($ipdId <= 0) {
+                continue;
+            }
+
+            $checklist = $this->buildIpdChecklistForAudit($ipdId, (int) ($row['patient_id'] ?? 0));
+            $total = (int) ($checklist['total_count'] ?? 0);
+            $okCount = (int) ($checklist['ok_count'] ?? 0);
+
+            $finalRows[] = [
+                'module_key' => 'ipd',
+                'module_label' => 'IPD Discharge',
+                'encounter_id' => $ipdId,
+                'encounter_code' => (string) ($row['encounter_code'] ?? ''),
+                'patient_code' => (string) ($row['patient_code'] ?? ''),
+                'patient_name' => (string) ($row['patient_name'] ?? ''),
+                'encounter_datetime' => (string) ($row['encounter_datetime'] ?? ''),
+                'ok_count' => $okCount,
+                'total_count' => $total,
+                'completion_percent' => $total > 0 ? round(($okCount * 100) / $total, 1) : 0.0,
+                'critical_missing_count' => (int) ($checklist['critical_missing_count'] ?? 0),
+                'critical_missing_labels' => implode(', ', $checklist['critical_missing'] ?? []),
+            ];
+        }
+
+        return $finalRows;
+    }
+
+    private function buildIpdChecklistForAudit(int $ipdId, int $patientId): array
+    {
+        $hasAdmissionReason = $this->tableHasAnyNonEmptyValueByIpd(
+            'ipd_discharge_complaint',
+            $ipdId,
+            ['comp_report', 'comp_remark']
+        ) || $this->tableHasAnyNonEmptyValueByIpd('ipd_discharge_complaint_remark', $ipdId, ['comp_remark']);
+
+        $hasDiagnosis = $this->tableHasAnyNonEmptyValueByIpd(
+            'ipd_discharge_diagnosis',
+            $ipdId,
+            ['comp_report', 'comp_remark']
+        ) || $this->tableHasAnyNonEmptyValueByIpd('ipd_discharge_diagnosis_remark', $ipdId, ['comp_remark']);
+
+        $hasCourse = $this->tableHasAnyNonEmptyValueByIpd(
+            'ipd_discharge_course',
+            $ipdId,
+            ['comp_report', 'comp_remark']
+        ) || $this->tableHasAnyNonEmptyValueByIpd('ipd_discharge_course_remark', $ipdId, ['comp_remark']);
+
+        $hasProcedure = $this->tableHasAnyNonEmptyValueByIpd(
+            'ipd_discharge_surgery',
+            $ipdId,
+            ['surgery_name', 'surgery_remark']
+        ) || $this->tableHasAnyNonEmptyValueByIpd(
+            'ipd_discharge_procedure',
+            $ipdId,
+            ['procedure_name', 'procedure_remark']
+        );
+
+        $hasCondition = $this->tableHasAnyNonEmptyValueByIpd(
+            'ipd_discharge_1_b_final',
+            $ipdId,
+            ['discharge_condition', 'condition_at_discharge', 'condition_remark', 'remark']
+        ) || $this->tableHasAnyNonEmptyValueByIpd(
+            'ipd_discharge_general_exam_col',
+            $ipdId,
+            ['value']
+        );
+
+        $hasMedication = $this->tableHasAnyNonEmptyValueByIpd(
+            'ipd_discharge_drug',
+            $ipdId,
+            ['drug_name', 'drug_dose', 'drug_day']
+        ) || $this->tableHasAnyNonEmptyValueByIpd(
+            'ipd_discharge_prescrption_prescribed',
+            $ipdId,
+            ['med_name', 'med_type', 'qty', 'no_of_days', 'remark']
+        );
+
+        $instructionText = $this->firstNonEmptyValueByIpd(
+            'ipd_discharge_instructions',
+            $ipdId,
+            ['comp_remark', 'footer_text']
+        );
+        $reviewAfter = $this->firstNonEmptyValueByIpd('ipd_discharge_instructions', $ipdId, ['review_after']);
+        $hasFollowUp = trim($instructionText) !== '' || trim($reviewAfter) !== '';
+
+        $allergySnapshot = $this->getLatestOpdAllergySnapshotByPatient($patientId);
+        $hasAllergyAdr = trim((string) ($allergySnapshot['drug_allergy_status'] ?? '')) !== ''
+            || trim((string) ($allergySnapshot['drug_allergy_details'] ?? '')) !== ''
+            || trim((string) ($allergySnapshot['adr_history'] ?? '')) !== '';
+
+        $instructionLower = strtolower((string) $instructionText);
+        $hasRedFlags = strpos($instructionLower, 'emergency') !== false
+            || strpos($instructionLower, 'warning') !== false
+            || strpos($instructionLower, 'red flag') !== false
+            || strpos($instructionLower, 'immediately') !== false
+            || strpos($instructionLower, 'return if') !== false;
+
+        $items = [
+            ['label' => 'Reason for admission / presenting complaints', 'ok' => $hasAdmissionReason, 'critical' => true],
+            ['label' => 'Final diagnosis documented', 'ok' => $hasDiagnosis, 'critical' => true],
+            ['label' => 'Course / treatment in hospital documented', 'ok' => $hasCourse, 'critical' => true],
+            ['label' => 'Surgery/procedure documented (if applicable)', 'ok' => $hasProcedure, 'critical' => false],
+            ['label' => 'Condition at discharge documented', 'ok' => $hasCondition, 'critical' => true],
+            ['label' => 'Discharge medication documented', 'ok' => $hasMedication, 'critical' => true],
+            ['label' => 'Follow-up instructions / review plan documented', 'ok' => $hasFollowUp, 'critical' => true],
+            ['label' => 'Drug allergy / ADR history documented', 'ok' => $hasAllergyAdr, 'critical' => false],
+            ['label' => 'Red-flag / emergency return advice documented', 'ok' => $hasRedFlags, 'critical' => false],
+        ];
+
+        $criticalMissing = [];
+        $okCount = 0;
+        foreach ($items as $item) {
+            if (! empty($item['ok'])) {
+                $okCount++;
+                continue;
+            }
+            if (! empty($item['critical'])) {
+                $criticalMissing[] = (string) ($item['label'] ?? '');
+            }
+        }
+
+        return [
+            'ok_count' => $okCount,
+            'total_count' => count($items),
+            'critical_missing' => $criticalMissing,
+            'critical_missing_count' => count($criticalMissing),
+        ];
+    }
+
+    private function getOpdNabhAuditRows(string $minRange, string $maxRange): array
+    {
+        if (! $this->db->tableExists('opd_master')) {
+            return [];
+        }
+
+        $opdFields = $this->db->getFieldNames('opd_master') ?? [];
+        if (! in_array('opd_id', $opdFields, true)) {
+            return [];
+        }
+
+        $dateCol = $this->resolveExistingColumn($opdFields, [
+            'apointment_date',
+            'appointment_date',
+            'created_at',
+            'entry_date',
+        ]);
+        if ($dateCol === null) {
+            return [];
+        }
+
+        $opdCodeCol = $this->resolveExistingColumn($opdFields, ['opd_code', 'opd_no']);
+        $patientFkCol = $this->resolveExistingColumn($opdFields, ['p_id', 'patient_id']);
+
+        $builder = $this->db->table('opd_master o')
+            ->select('o.opd_id as encounter_id')
+            ->select('o.' . $dateCol . ' as encounter_datetime', false);
+
+        if ($opdCodeCol !== null) {
+            $builder->select('o.' . $opdCodeCol . ' as encounter_code', false);
+        } else {
+            $builder->select("'' as encounter_code", false);
+        }
+
+        if ($patientFkCol !== null) {
+            $builder->select('o.' . $patientFkCol . ' as patient_id', false);
+        } else {
+            $builder->select('0 as patient_id', false);
+        }
+
+        $patientNameExpr = "''";
+        $patientCodeExpr = "''";
+        if ($patientFkCol !== null && $this->db->tableExists('patient_master')) {
+            $patientFields = $this->db->getFieldNames('patient_master') ?? [];
+            $nameCol = $this->resolveExistingColumn($patientFields, ['p_fname', 'patient_name', 'name']);
+            $codeCol = $this->resolveExistingColumn($patientFields, ['p_code', 'patient_code', 'uhid_no']);
+            $pkCol = $this->resolveExistingColumn($patientFields, ['id']);
+
+            if ($pkCol !== null) {
+                $builder->join('patient_master p', 'p.' . $pkCol . ' = o.' . $patientFkCol, 'left');
+                if ($nameCol !== null) {
+                    $patientNameExpr = 'p.' . $nameCol;
+                }
+                if ($codeCol !== null) {
+                    $patientCodeExpr = 'p.' . $codeCol;
+                }
+            }
+        }
+
+        $prescriptionCols = [];
+        if ($this->db->tableExists('opd_prescription')) {
+            $prescriptionFields = $this->db->getFieldNames('opd_prescription') ?? [];
+            if (in_array('id', $prescriptionFields, true) && in_array('opd_id', $prescriptionFields, true)) {
+                $builder->join(
+                    'opd_prescription pr',
+                    'pr.id = (SELECT MAX(px.id) FROM opd_prescription px WHERE px.opd_id = o.opd_id)',
+                    'left',
+                    false
+                );
+
+                foreach ([
+                    'complaints',
+                    'diagnosis',
+                    'Provisional_diagnosis',
+                    'Finding_Examinations',
+                    'Prescriber_Remarks',
+                    'investigation',
+                    'advice',
+                    'next_visit',
+                    'refer_to',
+                    'bp',
+                    'diastolic',
+                    'pulse',
+                    'temp',
+                    'spo2',
+                    'rr_min',
+                    'height',
+                    'weight',
+                    'drug_allergy_status',
+                    'drug_allergy_details',
+                    'adr_history',
+                    'current_medications',
+                ] as $column) {
+                    if (in_array($column, $prescriptionFields, true)) {
+                        $builder->select('pr.' . $column, false);
+                        $prescriptionCols[] = $column;
+                    }
+                }
+            }
+        }
+
+        $builder->select($patientNameExpr . ' as patient_name', false)
+            ->select($patientCodeExpr . ' as patient_code', false)
+            ->where('o.' . $dateCol . ' >=', $minRange)
+            ->where('o.' . $dateCol . ' <=', $maxRange)
+            ->orderBy('o.' . $dateCol, 'DESC');
+
+        $resultRows = $builder->get()->getResultArray();
+        $finalRows = [];
+
+        foreach ($resultRows as $row) {
+            $checklist = $this->buildOpdChecklistForAudit($row, $prescriptionCols);
+            $total = (int) ($checklist['total_count'] ?? 0);
+            $okCount = (int) ($checklist['ok_count'] ?? 0);
+
+            $finalRows[] = [
+                'module_key' => 'opd',
+                'module_label' => 'OPD Consult',
+                'encounter_id' => (int) ($row['encounter_id'] ?? 0),
+                'encounter_code' => (string) ($row['encounter_code'] ?? ''),
+                'patient_code' => (string) ($row['patient_code'] ?? ''),
+                'patient_name' => (string) ($row['patient_name'] ?? ''),
+                'encounter_datetime' => (string) ($row['encounter_datetime'] ?? ''),
+                'ok_count' => $okCount,
+                'total_count' => $total,
+                'completion_percent' => $total > 0 ? round(($okCount * 100) / $total, 1) : 0.0,
+                'critical_missing_count' => (int) ($checklist['critical_missing_count'] ?? 0),
+                'critical_missing_labels' => implode(', ', $checklist['critical_missing'] ?? []),
+            ];
+        }
+
+        return $finalRows;
+    }
+
+    private function buildOpdChecklistForAudit(array $row, array $availableCols): array
+    {
+        $hasComplaints = $this->rowHasAnyNonEmptyValue($row, ['complaints']);
+        $hasDiagnosis = $this->rowHasAnyNonEmptyValue($row, ['diagnosis', 'Provisional_diagnosis']);
+        $hasClinicalCourse = $this->rowHasAnyNonEmptyValue($row, ['Finding_Examinations', 'Prescriber_Remarks']);
+        $hasProcedure = $this->rowHasAnyNonEmptyValue($row, ['investigation']);
+        $hasCondition = $this->rowHasAnyNonEmptyValue($row, ['bp', 'diastolic', 'pulse', 'temp', 'spo2', 'rr_min', 'height', 'weight']);
+        $hasMedicationPlan = $this->rowHasAnyNonEmptyValue($row, ['advice', 'current_medications']);
+        $hasFollowUp = $this->rowHasAnyNonEmptyValue($row, ['next_visit', 'refer_to']);
+
+        $hasAllergyAdr = $this->rowHasAnyNonEmptyValue($row, ['drug_allergy_status', 'drug_allergy_details', 'adr_history']);
+
+        $adviceText = strtolower(trim((string) ($row['advice'] ?? '')) . ' ' . trim((string) ($row['Prescriber_Remarks'] ?? '')));
+        $hasRedFlags = strpos($adviceText, 'emergency') !== false
+            || strpos($adviceText, 'warning') !== false
+            || strpos($adviceText, 'red flag') !== false
+            || strpos($adviceText, 'immediately') !== false
+            || strpos($adviceText, 'return if') !== false;
+
+        // If OPD prescription table is unavailable for the row, mark item as not applicable by treating as empty.
+        if ($availableCols === []) {
+            $hasComplaints = false;
+            $hasDiagnosis = false;
+            $hasClinicalCourse = false;
+            $hasProcedure = false;
+            $hasCondition = false;
+            $hasMedicationPlan = false;
+            $hasFollowUp = false;
+            $hasAllergyAdr = false;
+            $hasRedFlags = false;
+        }
+
+        $items = [
+            ['label' => 'Reason for consultation / presenting complaints', 'ok' => $hasComplaints, 'critical' => true],
+            ['label' => 'Diagnosis documented', 'ok' => $hasDiagnosis, 'critical' => true],
+            ['label' => 'Clinical findings / assessment documented', 'ok' => $hasClinicalCourse, 'critical' => true],
+            ['label' => 'Investigations/procedures documented (if applicable)', 'ok' => $hasProcedure, 'critical' => false],
+            ['label' => 'Clinical condition / vitals documented', 'ok' => $hasCondition, 'critical' => true],
+            ['label' => 'Treatment/medication plan documented', 'ok' => $hasMedicationPlan, 'critical' => true],
+            ['label' => 'Follow-up or referral plan documented', 'ok' => $hasFollowUp, 'critical' => true],
+            ['label' => 'Drug allergy / ADR history documented', 'ok' => $hasAllergyAdr, 'critical' => false],
+            ['label' => 'Red-flag / emergency return advice documented', 'ok' => $hasRedFlags, 'critical' => false],
+        ];
+
+        $criticalMissing = [];
+        $okCount = 0;
+        foreach ($items as $item) {
+            if (! empty($item['ok'])) {
+                $okCount++;
+                continue;
+            }
+            if (! empty($item['critical'])) {
+                $criticalMissing[] = (string) ($item['label'] ?? '');
+            }
+        }
+
+        return [
+            'ok_count' => $okCount,
+            'total_count' => count($items),
+            'critical_missing' => $criticalMissing,
+            'critical_missing_count' => count($criticalMissing),
+        ];
+    }
+
+    private function resolveExistingColumn(array $fields, array $candidates): ?string
+    {
+        foreach ($candidates as $candidate) {
+            if (in_array($candidate, $fields, true)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private function rowHasAnyNonEmptyValue(array $row, array $fields): bool
+    {
+        foreach ($fields as $field) {
+            $value = trim((string) ($row[$field] ?? ''));
+            if ($value !== '') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function tableHasAnyNonEmptyValueByIpd(string $table, int $ipdId, array $preferredFields): bool
+    {
+        if ($ipdId <= 0 || ! $this->db->tableExists($table)) {
+            return false;
+        }
+
+        $fields = $this->db->getFieldNames($table) ?? [];
+        if (! in_array('ipd_id', $fields, true)) {
+            return false;
+        }
+
+        $selected = [];
+        foreach ($preferredFields as $field) {
+            if (in_array($field, $fields, true)) {
+                $selected[] = $field;
+            }
+        }
+
+        if ($selected === []) {
+            return false;
+        }
+
+        $rows = $this->db->table($table)
+            ->select(implode(',', $selected))
+            ->where('ipd_id', $ipdId)
+            ->get()
+            ->getResultArray();
+
+        foreach ($rows as $row) {
+            if ($this->rowHasAnyNonEmptyValue($row, $selected)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function firstNonEmptyValueByIpd(string $table, int $ipdId, array $preferredFields): string
+    {
+        if ($ipdId <= 0 || ! $this->db->tableExists($table)) {
+            return '';
+        }
+
+        $fields = $this->db->getFieldNames($table) ?? [];
+        if (! in_array('ipd_id', $fields, true)) {
+            return '';
+        }
+
+        $selected = [];
+        foreach ($preferredFields as $field) {
+            if (in_array($field, $fields, true)) {
+                $selected[] = $field;
+            }
+        }
+
+        if ($selected === []) {
+            return '';
+        }
+
+        $builder = $this->db->table($table)->where('ipd_id', $ipdId);
+        if (in_array('id', $fields, true)) {
+            $builder->orderBy('id', 'DESC');
+        }
+
+        $row = $builder->get(1)->getRowArray() ?? [];
+        foreach ($selected as $field) {
+            $value = trim((string) ($row[$field] ?? ''));
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return '';
+    }
+
+    private function getLatestOpdAllergySnapshotByPatient(int $patientId): array
+    {
+        if ($patientId <= 0 || ! $this->db->tableExists('opd_master') || ! $this->db->tableExists('opd_prescription')) {
+            return [];
+        }
+
+        $opdFields = $this->db->getFieldNames('opd_master') ?? [];
+        $rxFields = $this->db->getFieldNames('opd_prescription') ?? [];
+
+        if (! in_array('opd_id', $opdFields, true) || ! in_array('p_id', $opdFields, true) || ! in_array('opd_id', $rxFields, true)) {
+            return [];
+        }
+
+        $selects = [];
+        foreach (['drug_allergy_status', 'drug_allergy_details', 'adr_history'] as $field) {
+            if (in_array($field, $rxFields, true)) {
+                $selects[] = 'r.' . $field;
+            }
+        }
+
+        if ($selects === []) {
+            return [];
+        }
+
+        $builder = $this->db->table('opd_master o')
+            ->select(implode(',', $selects), false)
+            ->join('opd_prescription r', 'r.opd_id = o.opd_id', 'inner')
+            ->where('o.p_id', $patientId);
+
+        if (in_array('apointment_date', $opdFields, true)) {
+            $builder->orderBy('o.apointment_date', 'DESC');
+        }
+        if (in_array('id', $rxFields, true)) {
+            $builder->orderBy('r.id', 'DESC');
+        }
+
+        $row = $builder->get(1)->getRowArray();
+        return is_array($row) ? $row : [];
     }
 }

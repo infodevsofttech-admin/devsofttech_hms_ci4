@@ -4,6 +4,8 @@ namespace App\Controllers;
 
 use App\Controllers\BaseController;
 use App\Models\IpdBillingModel;
+use Mpdf\Mpdf;
+use Mpdf\Output\Destination;
 
 class Ipd_discharge extends BaseController
 {
@@ -582,6 +584,23 @@ class Ipd_discharge extends BaseController
         return date('d-m-Y', $ts);
     }
 
+    private function normalizeRichText(string $raw): string
+    {
+        $value = trim($raw);
+        if ($value === '') {
+            return '';
+        }
+
+        $value = preg_replace('/<\s*br\s*\/?\s*>/i', "\n", $value) ?? $value;
+        $value = preg_replace('/<\s*\/\s*p\s*>/i', "\n", $value) ?? $value;
+        $value = preg_replace('/<\s*p\b[^>]*>/i', '', $value) ?? $value;
+        $value = html_entity_decode(strip_tags($value), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $value = preg_replace('/\r\n?|\n/', "\n", $value) ?? $value;
+        $value = preg_replace('/\n{3,}/', "\n\n", $value) ?? $value;
+
+        return trim($value);
+    }
+
     private function addListSection(array &$sections, string $title, array $rows): void
     {
         if (empty($rows)) {
@@ -624,13 +643,26 @@ class Ipd_discharge extends BaseController
         ));
         $patientId = (int) ($person->id ?? 0);
         $opdHistory = $this->getLatestOpdHistorySnapshot($patientId);
+        $instructionRowForMeta = $this->firstRowByIpd('ipd_discharge_instructions', $ipdId);
+        $instructionMetaForPreview = $this->parseInstructionMetaPayload((string) ($instructionRowForMeta['comp_report'] ?? ''));
+        if (empty($instructionMetaForPreview['food_ids'])
+            && $this->tableHasColumns('ipd_discharge_drug_food_interaction', ['ipd_id', 'food_id_list'])) {
+            $legacyFoodRow = $this->firstRowByIpd('ipd_discharge_drug_food_interaction', $ipdId);
+            $instructionMetaForPreview['food_ids'] = $this->parseFoodIdCsv((string) ($legacyFoodRow['food_id_list'] ?? ''));
+        }
+        $instructionNabh = is_array($instructionMetaForPreview['nabh'] ?? null) ? ($instructionMetaForPreview['nabh'] ?? []) : [];
+        foreach (['drug_allergy_status', 'drug_allergy_details', 'adr_history', 'current_medications', 'co_morbidities', 'hpi_note', 'women_lmp', 'women_last_baby', 'women_pregnancy_related', 'women_related_problems'] as $field) {
+            if (trim((string) ($opdHistory[$field] ?? '')) === '' && trim((string) ($instructionNabh[$field] ?? '')) !== '') {
+                $opdHistory[$field] = trim((string) ($instructionNabh[$field] ?? ''));
+            }
+        }
 
         $sections = [];
 
         $complaints = $this->byIpdRows('ipd_discharge_complaint', ['comp_report', 'comp_remark'], 'id ASC', $ipdId);
         $this->addListSection($sections, 'Presenting Complaints and Reason for Admission', $complaints);
         $complaintRemark = $this->firstRowByIpd('ipd_discharge_complaint_remark', $ipdId);
-        $complaintRemarkText = trim((string) ($complaintRemark['comp_remark'] ?? ''));
+        $complaintRemarkText = $this->normalizeRichText((string) ($complaintRemark['comp_remark'] ?? ''));
         if ($complaintRemarkText !== '') {
             $sections[] = '<div>' . nl2br(esc($complaintRemarkText)) . '</div>';
         }
@@ -700,13 +732,12 @@ class Ipd_discharge extends BaseController
         $sysRows = $physicalExamRows['systemic'] ?? [];
         $sysHtml = '';
         foreach ($sysRows as $row) {
-            $value = trim((string) ($row['value'] ?? ''));
+            $value = $this->normalizeRichText((string) ($row['value'] ?? ''));
             if ($value === '') {
                 continue;
             }
 
-            $name = trim((string) ($row['name'] ?? 'Systemic Examination'));
-            $sysHtml .= '<div style="margin-bottom:6px;"><b>' . esc($name) . ':</b> ' . nl2br(esc($value)) . '</div>';
+            $sysHtml .= '<div style="margin-bottom:6px;">' . nl2br(esc($value)) . '</div>';
         }
         if ($sysHtml !== '') {
             $sections[] = '<h4 style="margin:16px 0 8px 0;">Other / Systemic Examinations</h4>' . $sysHtml;
@@ -864,7 +895,7 @@ class Ipd_discharge extends BaseController
                 $html .= '</ul>';
             }
 
-            $otherExamText = trim((string) ($otherExamParsed['text'] ?? ''));
+            $otherExamText = $this->normalizeRichText((string) ($otherExamParsed['text'] ?? ''));
             if ($otherExamText !== '') {
                 $html .= '<div><b>Other Examinations / Provisional Diagnosis:</b><br>' . nl2br(esc($otherExamText)) . '</div>';
             }
@@ -875,13 +906,13 @@ class Ipd_discharge extends BaseController
         $diagnosis = $this->byIpdRows('ipd_discharge_diagnosis', ['comp_report', 'comp_remark'], 'id ASC', $ipdId);
         $this->addListSection($sections, 'Final Diagnosis', $diagnosis);
         $diagnosisRemark = $this->firstRowByIpd('ipd_discharge_diagnosis_remark', $ipdId);
-        $diagnosisRemarkText = trim((string) ($diagnosisRemark['comp_remark'] ?? ''));
+        $diagnosisRemarkText = $this->normalizeRichText((string) ($diagnosisRemark['comp_remark'] ?? ''));
         if ($diagnosisRemarkText !== '') {
             $sections[] = '<div>' . nl2br(esc($diagnosisRemarkText)) . '</div>';
         }
 
         $inhosRow = $this->firstRowByIpd('ipd_discharge_investigtions_inhos', $ipdId);
-        $inhosRemark = trim((string) ($inhosRow['comp_remark'] ?? ''));
+        $inhosRemark = $this->normalizeRichText((string) ($inhosRow['comp_remark'] ?? ''));
         if ($inhosRemark !== '') {
             $sections[] = '<h4 style="margin:16px 0 8px 0;">Summary of key investigations during Hospitalization</h4><div>'
                 . nl2br(esc($inhosRemark))
@@ -891,7 +922,7 @@ class Ipd_discharge extends BaseController
         $course = $this->byIpdRows('ipd_discharge_course', ['comp_report', 'comp_remark'], 'id ASC', $ipdId);
         $this->addListSection($sections, 'Course in the Hospital', $course);
         $courseRemark = $this->firstRowByIpd('ipd_discharge_course_remark', $ipdId);
-        $courseRemarkText = trim((string) ($courseRemark['comp_remark'] ?? ''));
+        $courseRemarkText = $this->normalizeRichText((string) ($courseRemark['comp_remark'] ?? ''));
         if ($courseRemarkText !== '') {
             $sections[] = '<div>' . nl2br(esc($courseRemarkText)) . '</div>';
         }
@@ -1039,10 +1070,63 @@ class Ipd_discharge extends BaseController
             }
         }
 
-        $instructions = $this->byIpdRows('ipd_discharge_instructions', ['comp_remark', 'review_after', 'footer_text'], 'id DESC', $ipdId);
+        $instructions = $this->byIpdRows('ipd_discharge_instructions', ['comp_report', 'comp_remark', 'review_after', 'footer_text'], 'id DESC', $ipdId);
         if (! empty($instructions)) {
             $first = $instructions[0];
             $html = '<h4 style="margin:16px 0 8px 0;">Discharge Advice/Instructions/Summary</h4>';
+
+            $instructionMeta = $this->parseInstructionMetaPayload((string) ($first['comp_report'] ?? ''));
+            $foodIds = is_array($instructionMeta['food_ids'] ?? null) ? ($instructionMeta['food_ids'] ?? []) : [];
+            if (empty($foodIds)
+                && $this->tableHasColumns('ipd_discharge_drug_food_interaction', ['ipd_id', 'food_id_list'])) {
+                $legacyFoodRow = $this->firstRowByIpd('ipd_discharge_drug_food_interaction', $ipdId);
+                $foodIds = $this->parseFoodIdCsv((string) ($legacyFoodRow['food_id_list'] ?? ''));
+            }
+            $foodMap = [];
+            if (! empty($foodIds) && $this->tableHasColumns('ipd_discharge_master_food', ['id', 'food_short', 'food_desc'])) {
+                $rows = $this->db->table('ipd_discharge_master_food')
+                    ->select('id,food_short,food_desc,food_desc_lang')
+                    ->whereIn('id', array_map('intval', $foodIds))
+                    ->get()
+                    ->getResultArray();
+                foreach ($rows as $row) {
+                    $foodMap[(int) ($row['id'] ?? 0)] = $row;
+                }
+            }
+
+            if (! empty($foodIds)) {
+                $html .= '<div style="margin-bottom:8px;"><strong>Dietary Advice:</strong></div>';
+                $html .= '<ol style="margin:0 0 10px 20px;">';
+                foreach ($foodIds as $foodId) {
+                    $id = (int) $foodId;
+                    $row = $foodMap[$id] ?? null;
+                    if (! is_array($row)) {
+                        continue;
+                    }
+
+                    $heading = trim((string) ($row['food_short'] ?? ''));
+                    $line = trim((string) ($row['food_desc_lang'] ?? ''));
+                    if ($line === '') {
+                        $line = trim((string) ($row['food_desc'] ?? ''));
+                    }
+                    if ($line === '' && $heading === '') {
+                        continue;
+                    }
+
+                    $entry = '';
+                    if ($heading !== '') {
+                        $entry .= '<strong>' . esc($heading) . ':</strong> ';
+                    }
+                    $entry .= esc($line !== '' ? $line : $heading);
+                    $html .= '<li>' . $entry . '</li>';
+                }
+                $html .= '</ol>';
+            }
+
+            $otherText = trim((string) ($instructionMeta['other_text'] ?? ''));
+            if ($otherText !== '') {
+                $html .= '<div style="margin-bottom:8px;"><strong>Other Advice:</strong> ' . nl2br(esc($otherText)) . '</div>';
+            }
 
             $remark = trim((string) ($first['comp_remark'] ?? ''));
             if ($remark !== '') {
@@ -1210,6 +1294,17 @@ class Ipd_discharge extends BaseController
         }
 
         return false;
+    }
+
+    private function findFirstExistingTable(array $candidates): ?string
+    {
+        foreach ($candidates as $table) {
+            if ($this->db->tableExists($table)) {
+                return $table;
+            }
+        }
+
+        return null;
     }
 
     private function buildNabhAuditChecklist(int $ipdId, array $panelData): array
@@ -1421,6 +1516,568 @@ class Ipd_discharge extends BaseController
         }
 
         return date('Y-m-d', $ts);
+    }
+
+    private function ensureDischargeSurgeryMasterTable(): bool
+    {
+        if ($this->db->tableExists('ipd_discharge_surgery_master')) {
+            return true;
+        }
+
+        try {
+            $sql = "CREATE TABLE IF NOT EXISTS ipd_discharge_surgery_master (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                term_type VARCHAR(20) NOT NULL DEFAULT 'surgery',
+                term_name VARCHAR(255) NOT NULL,
+                term_code VARCHAR(60) DEFAULT NULL,
+                icd_code VARCHAR(60) DEFAULT NULL,
+                is_active TINYINT(1) NOT NULL DEFAULT 1,
+                created_at DATETIME NULL,
+                updated_at DATETIME NULL,
+                UNIQUE KEY uniq_term_type_name (term_type, term_name),
+                INDEX idx_type_active_name (term_type, is_active, term_name)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+            $this->db->query($sql);
+        } catch (\Throwable $e) {
+            return false;
+        }
+
+        return $this->db->tableExists('ipd_discharge_surgery_master');
+    }
+
+    private function ensureDischargeIcdMasterTable(): bool
+    {
+        if ($this->db->tableExists('ipd_discharge_icd_master')) {
+            return true;
+        }
+
+        try {
+            $sql = "CREATE TABLE IF NOT EXISTS ipd_discharge_icd_master (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                icd_code VARCHAR(30) NOT NULL,
+                diagnosis_text VARCHAR(255) NOT NULL,
+                is_active TINYINT(1) NOT NULL DEFAULT 1,
+                created_at DATETIME NULL,
+                updated_at DATETIME NULL,
+                UNIQUE KEY uniq_icd_code_text (icd_code, diagnosis_text),
+                INDEX idx_icd_active_code (is_active, icd_code),
+                INDEX idx_icd_active_text (is_active, diagnosis_text)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+            $this->db->query($sql);
+        } catch (\Throwable $e) {
+            return false;
+        }
+
+        return $this->db->tableExists('ipd_discharge_icd_master');
+    }
+
+    private function ensureDischargeFoodMasterTable(): bool
+    {
+        if ($this->db->tableExists('ipd_discharge_master_food')) {
+            return true;
+        }
+
+        try {
+            $sql = "CREATE TABLE IF NOT EXISTS ipd_discharge_master_food (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                food_short VARCHAR(255) NOT NULL,
+                food_desc TEXT NULL,
+                food_desc_lang TEXT NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+            $this->db->query($sql);
+        } catch (\Throwable $e) {
+            return false;
+        }
+
+        return $this->db->tableExists('ipd_discharge_master_food');
+    }
+
+    public function dietary_master_list()
+    {
+        $q = trim((string) $this->request->getGet('q'));
+        if (! $this->ensureDischargeFoodMasterTable()) {
+            return $this->response->setJSON(['rows' => []]);
+        }
+
+        $builder = $this->db->table('ipd_discharge_master_food')
+            ->select('id,food_short,food_desc,food_desc_lang');
+
+        if ($q !== '') {
+            $builder->groupStart()
+                ->like('food_short', $q)
+                ->orLike('food_desc', $q)
+                ->orLike('food_desc_lang', $q)
+                ->groupEnd();
+        }
+
+        $rows = $builder
+            ->orderBy('id', 'ASC')
+            ->limit(500)
+            ->get()
+            ->getResultArray();
+
+        return $this->response->setJSON(['rows' => $rows]);
+    }
+
+    public function dietary_master_save()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        if (! $this->ensureDischargeFoodMasterTable()) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Unable to access dietary master table',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $id = (int) $this->request->getPost('id');
+        $short = trim((string) $this->request->getPost('food_short'));
+        $desc = trim((string) $this->request->getPost('food_desc'));
+        $lang = trim((string) $this->request->getPost('food_desc_lang'));
+
+        if ($short === '') {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Short text is required',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $payload = [
+            'food_short' => $short,
+            'food_desc' => $desc !== '' ? $desc : $short,
+            'food_desc_lang' => $lang !== '' ? $lang : null,
+        ];
+
+        try {
+            $table = $this->db->table('ipd_discharge_master_food');
+            if ($id > 0) {
+                $ok = (bool) $table->where('id', $id)->update($payload);
+            } else {
+                $ok = (bool) $table->insert($payload);
+                $id = (int) ($this->db->insertID() ?: 0);
+            }
+
+            return $this->response->setJSON([
+                'update' => $ok ? 1 : 0,
+                'id' => $id,
+                'error_text' => $ok ? 'Dietary master saved' : 'Unable to save dietary master',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        } catch (\Throwable $e) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Save failed: ' . $e->getMessage(),
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+    }
+
+    public function dietary_master_delete()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        if (! $this->ensureDischargeFoodMasterTable()) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Unable to access dietary master table',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $id = (int) $this->request->getPost('id');
+        if ($id <= 0) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Invalid record id',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $ok = (bool) $this->db->table('ipd_discharge_master_food')->where('id', $id)->delete();
+        return $this->response->setJSON([
+            'update' => $ok ? 1 : 0,
+            'error_text' => $ok ? 'Record deleted' : 'Unable to delete record',
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
+    private function normalizeSurgeryTermType(string $type): string
+    {
+        $clean = strtolower(trim($type));
+        return in_array($clean, ['procedure', 'surgery'], true) ? $clean : 'surgery';
+    }
+
+    public function surgery_master_lookup()
+    {
+        $type = $this->normalizeSurgeryTermType((string) $this->request->getGet('type'));
+        $q = trim((string) $this->request->getGet('q'));
+
+        if (! $this->ensureDischargeSurgeryMasterTable()) {
+            return $this->response->setJSON(['rows' => []]);
+        }
+
+        $builder = $this->db->table('ipd_discharge_surgery_master')
+            ->select('id,term_type,term_name,term_code,icd_code')
+            ->where('is_active', 1)
+            ->where('term_type', $type);
+
+        if ($q !== '') {
+            $builder->groupStart()
+                ->like('term_name', $q)
+                ->orLike('term_code', $q)
+                ->orLike('icd_code', $q)
+                ->groupEnd();
+        }
+
+        $rows = $builder
+            ->orderBy('term_name', 'ASC')
+            ->limit(25)
+            ->get()
+            ->getResultArray();
+
+        return $this->response->setJSON(['rows' => $rows]);
+    }
+
+    public function surgery_master_list()
+    {
+        $type = $this->normalizeSurgeryTermType((string) $this->request->getGet('type'));
+        $q = trim((string) $this->request->getGet('q'));
+
+        if (! $this->ensureDischargeSurgeryMasterTable()) {
+            return $this->response->setJSON(['rows' => []]);
+        }
+
+        $builder = $this->db->table('ipd_discharge_surgery_master')
+            ->select('id,term_type,term_name,term_code,icd_code,is_active,updated_at')
+            ->where('term_type', $type);
+
+        if ($q !== '') {
+            $builder->groupStart()
+                ->like('term_name', $q)
+                ->orLike('term_code', $q)
+                ->orLike('icd_code', $q)
+                ->groupEnd();
+        }
+
+        $rows = $builder
+            ->orderBy('is_active', 'DESC')
+            ->orderBy('term_name', 'ASC')
+            ->limit(250)
+            ->get()
+            ->getResultArray();
+
+        return $this->response->setJSON(['rows' => $rows]);
+    }
+
+    public function surgery_master_save()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        if (! $this->ensureDischargeSurgeryMasterTable()) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Unable to access surgery master table',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $id = (int) $this->request->getPost('id');
+        $type = $this->normalizeSurgeryTermType((string) $this->request->getPost('type'));
+        $name = trim((string) $this->request->getPost('name'));
+        $code = trim((string) $this->request->getPost('code'));
+        $icdCode = trim((string) $this->request->getPost('icd_code'));
+        $isActive = (int) $this->request->getPost('is_active') === 0 ? 0 : 1;
+
+        if ($name === '') {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Name is required',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $payload = [
+            'term_type' => $type,
+            'term_name' => $name,
+            'term_code' => $code !== '' ? $code : null,
+            'icd_code' => $icdCode !== '' ? $icdCode : null,
+            'is_active' => $isActive,
+            'updated_at' => $now,
+        ];
+
+        try {
+            $table = $this->db->table('ipd_discharge_surgery_master');
+
+            if ($id > 0) {
+                $ok = (bool) $table->where('id', $id)->update($payload);
+            } else {
+                $payload['created_at'] = $now;
+                $ok = (bool) $table->insert($payload);
+                $id = (int) ($this->db->insertID() ?: 0);
+            }
+
+            if (! $ok) {
+                return $this->response->setJSON([
+                    'update' => 0,
+                    'error_text' => 'Unable to save record',
+                    'csrfName' => csrf_token(),
+                    'csrfHash' => csrf_hash(),
+                ]);
+            }
+
+            return $this->response->setJSON([
+                'update' => 1,
+                'id' => $id,
+                'error_text' => 'Master record saved',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        } catch (\Throwable $e) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Save failed: ' . $e->getMessage(),
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+    }
+
+    public function surgery_master_delete()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        if (! $this->ensureDischargeSurgeryMasterTable()) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Unable to access surgery master table',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $id = (int) $this->request->getPost('id');
+        if ($id <= 0) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Invalid record id',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $ok = (bool) $this->db->table('ipd_discharge_surgery_master')
+            ->where('id', $id)
+            ->delete();
+
+        return $this->response->setJSON([
+            'update' => $ok ? 1 : 0,
+            'error_text' => $ok ? 'Record deleted' : 'Unable to delete record',
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
+    public function diagnosis_icd_lookup()
+    {
+        $q = trim((string) $this->request->getGet('q'));
+        $rows = [];
+
+        if ($q !== '') {
+            if ($this->ensureDischargeIcdMasterTable()) {
+                $icdRows = $this->db->table('ipd_discharge_icd_master')
+                    ->select('id,icd_code,diagnosis_text')
+                    ->where('is_active', 1)
+                    ->groupStart()
+                    ->like('icd_code', $q)
+                    ->orLike('diagnosis_text', $q)
+                    ->groupEnd()
+                    ->orderBy('icd_code', 'ASC')
+                    ->limit(20)
+                    ->get()
+                    ->getResultArray();
+
+                foreach ($icdRows as $row) {
+                    $rows[] = [
+                        'id' => (int) ($row['id'] ?? 0),
+                        'name' => (string) ($row['diagnosis_text'] ?? ''),
+                        'icd_code' => (string) ($row['icd_code'] ?? ''),
+                        'source' => 'icd_master',
+                    ];
+                }
+            }
+
+            if (count($rows) < 25 && $this->db->tableExists('complaints_master')) {
+                $fallbackRows = $this->db->table('complaints_master')
+                    ->select('Code as id, Name as name, name_hinglish')
+                    ->groupStart()
+                    ->like('Name', $q)
+                    ->orLike('name_hinglish', $q)
+                    ->groupEnd()
+                    ->orderBy('Name', 'ASC')
+                    ->limit(25 - count($rows))
+                    ->get()
+                    ->getResultArray();
+
+                foreach ($fallbackRows as $row) {
+                    $rows[] = [
+                        'id' => (int) ($row['id'] ?? 0),
+                        'name' => (string) ($row['name'] ?? ''),
+                        'icd_code' => '',
+                        'source' => 'complaints_master',
+                        'name_hinglish' => (string) ($row['name_hinglish'] ?? ''),
+                    ];
+                }
+            }
+        }
+
+        return $this->response->setJSON(['rows' => $rows]);
+    }
+
+    public function diagnosis_icd_seed_starter()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        if (! $this->ensureDischargeIcdMasterTable()) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Unable to access ICD master table',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $seedRows = [
+            ['icd_code' => 'I10', 'diagnosis_text' => 'Primary hypertension'],
+            ['icd_code' => 'E11.9', 'diagnosis_text' => 'Type 2 diabetes mellitus without complications'],
+            ['icd_code' => 'J45.909', 'diagnosis_text' => 'Asthma, unspecified, uncomplicated'],
+            ['icd_code' => 'K21.9', 'diagnosis_text' => 'Gastro-esophageal reflux disease without esophagitis'],
+            ['icd_code' => 'N39.0', 'diagnosis_text' => 'Urinary tract infection, site not specified'],
+            ['icd_code' => 'J18.9', 'diagnosis_text' => 'Pneumonia, unspecified organism'],
+            ['icd_code' => 'A09', 'diagnosis_text' => 'Infectious gastroenteritis and colitis, unspecified'],
+            ['icd_code' => 'D64.9', 'diagnosis_text' => 'Anemia, unspecified'],
+            ['icd_code' => 'M54.5', 'diagnosis_text' => 'Low back pain'],
+            ['icd_code' => 'R50.9', 'diagnosis_text' => 'Fever, unspecified'],
+            ['icd_code' => 'R07.9', 'diagnosis_text' => 'Chest pain, unspecified'],
+            ['icd_code' => 'R51.9', 'diagnosis_text' => 'Headache, unspecified'],
+            ['icd_code' => 'K59.0', 'diagnosis_text' => 'Constipation'],
+            ['icd_code' => 'K52.9', 'diagnosis_text' => 'Noninfective gastroenteritis and colitis, unspecified'],
+            ['icd_code' => 'J06.9', 'diagnosis_text' => 'Acute upper respiratory infection, unspecified'],
+        ];
+
+        // Add historical ICD-tagged diagnoses already used in this installation.
+        if ($this->tableHasColumns('ipd_discharge_diagnosis', ['comp_report'])) {
+            $historic = $this->db->table('ipd_discharge_diagnosis')
+                ->select('comp_report')
+                ->where('comp_report IS NOT NULL', null, false)
+                ->where('comp_report !=', '')
+                ->orderBy('id', 'DESC')
+                ->limit(1000)
+                ->get()
+                ->getResultArray();
+
+            foreach ($historic as $row) {
+                $report = trim((string) ($row['comp_report'] ?? ''));
+                if ($report === '') {
+                    continue;
+                }
+
+                if (preg_match('/\[\s*ICD\s*:\s*([^\]]+)\]/i', $report, $matches) !== 1) {
+                    continue;
+                }
+
+                $icdCode = strtoupper(trim((string) ($matches[1] ?? '')));
+                $diagnosis = trim((string) preg_replace('/\[\s*ICD\s*:[^\]]+\]/i', '', $report));
+                if ($icdCode === '' || $diagnosis === '') {
+                    continue;
+                }
+
+                $seedRows[] = [
+                    'icd_code' => $icdCode,
+                    'diagnosis_text' => $diagnosis,
+                ];
+            }
+        }
+
+        $seen = [];
+        $inserted = 0;
+        $skipped = 0;
+        $table = $this->db->table('ipd_discharge_icd_master');
+        $now = date('Y-m-d H:i:s');
+
+        foreach ($seedRows as $row) {
+            $icdCode = strtoupper(trim((string) ($row['icd_code'] ?? '')));
+            $diagnosis = trim((string) ($row['diagnosis_text'] ?? ''));
+            if ($icdCode === '' || $diagnosis === '') {
+                $skipped++;
+                continue;
+            }
+
+            $key = $icdCode . '|' . strtoupper($diagnosis);
+            if (isset($seen[$key])) {
+                $skipped++;
+                continue;
+            }
+            $seen[$key] = true;
+
+            $exists = $table
+                ->select('id')
+                ->where('icd_code', $icdCode)
+                ->where('diagnosis_text', $diagnosis)
+                ->get(1)
+                ->getRowArray();
+
+            if (! empty($exists['id'])) {
+                $skipped++;
+                continue;
+            }
+
+            $ok = (bool) $table->insert([
+                'icd_code' => $icdCode,
+                'diagnosis_text' => $diagnosis,
+                'is_active' => 1,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+            if ($ok) {
+                $inserted++;
+            } else {
+                $skipped++;
+            }
+        }
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'inserted' => $inserted,
+            'skipped' => $skipped,
+            'error_text' => $inserted > 0
+                ? ('ICD starter loaded. Added ' . $inserted . ' rows.')
+                : 'ICD starter already present. No new rows added.',
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
     }
 
     private function upsertByComposite(
@@ -2240,6 +2897,139 @@ class Ipd_discharge extends BaseController
         return ['pain_value' => $painValue];
     }
 
+    private function buildInstructionMetaPayload(array $meta): string
+    {
+        $ids = $meta['food_ids'] ?? [];
+        if (! is_array($ids)) {
+            $ids = [];
+        }
+
+        $cleanIds = [];
+        foreach ($ids as $id) {
+            $intId = (int) $id;
+            if ($intId > 0) {
+                $cleanIds[$intId] = $intId;
+            }
+        }
+
+        $otherText = trim((string) ($meta['other_text'] ?? ''));
+        if (empty($cleanIds) && $otherText === '') {
+            return '';
+        }
+
+        $nabh = $meta['nabh'] ?? [];
+        if (! is_array($nabh)) {
+            $nabh = [];
+        }
+        $nabhPayload = [
+            'drug_allergy_status' => trim((string) ($nabh['drug_allergy_status'] ?? '')),
+            'drug_allergy_details' => trim((string) ($nabh['drug_allergy_details'] ?? '')),
+            'adr_history' => trim((string) ($nabh['adr_history'] ?? '')),
+            'current_medications' => trim((string) ($nabh['current_medications'] ?? '')),
+            'co_morbidities' => trim((string) ($nabh['co_morbidities'] ?? '')),
+            'hpi_note' => trim((string) ($nabh['hpi_note'] ?? '')),
+            'women_lmp' => trim((string) ($nabh['women_lmp'] ?? '')),
+            'women_last_baby' => trim((string) ($nabh['women_last_baby'] ?? '')),
+            'women_pregnancy_related' => trim((string) ($nabh['women_pregnancy_related'] ?? '')),
+            'women_related_problems' => trim((string) ($nabh['women_related_problems'] ?? '')),
+        ];
+
+        $payload = [
+            'food_ids' => array_values($cleanIds),
+            'other_text' => $otherText,
+            'nabh' => $nabhPayload,
+        ];
+
+        return json_encode($payload, JSON_UNESCAPED_UNICODE) ?: '';
+    }
+
+    private function parseInstructionMetaPayload(string $raw): array
+    {
+        $raw = trim($raw);
+        if ($raw === '') {
+            return ['food_ids' => [], 'other_text' => '', 'nabh' => []];
+        }
+
+        $decoded = json_decode($raw, true);
+        if (! is_array($decoded)) {
+            return ['food_ids' => [], 'other_text' => '', 'nabh' => []];
+        }
+
+        $ids = $decoded['food_ids'] ?? [];
+        if (! is_array($ids)) {
+            $ids = [];
+        }
+
+        $cleanIds = [];
+        foreach ($ids as $id) {
+            $intId = (int) $id;
+            if ($intId > 0) {
+                $cleanIds[$intId] = $intId;
+            }
+        }
+
+        $nabh = $decoded['nabh'] ?? [];
+        if (! is_array($nabh)) {
+            $nabh = [];
+        }
+
+        return [
+            'food_ids' => array_values($cleanIds),
+            'other_text' => trim((string) ($decoded['other_text'] ?? '')),
+            'nabh' => [
+                'drug_allergy_status' => trim((string) ($nabh['drug_allergy_status'] ?? '')),
+                'drug_allergy_details' => trim((string) ($nabh['drug_allergy_details'] ?? '')),
+                'adr_history' => trim((string) ($nabh['adr_history'] ?? '')),
+                'current_medications' => trim((string) ($nabh['current_medications'] ?? '')),
+                'co_morbidities' => trim((string) ($nabh['co_morbidities'] ?? '')),
+                'hpi_note' => trim((string) ($nabh['hpi_note'] ?? '')),
+                'women_lmp' => trim((string) ($nabh['women_lmp'] ?? '')),
+                'women_last_baby' => trim((string) ($nabh['women_last_baby'] ?? '')),
+                'women_pregnancy_related' => trim((string) ($nabh['women_pregnancy_related'] ?? '')),
+                'women_related_problems' => trim((string) ($nabh['women_related_problems'] ?? '')),
+            ],
+        ];
+    }
+
+    private function parseFoodIdCsv(string $raw): array
+    {
+        $raw = trim($raw);
+        if ($raw === '') {
+            return [];
+        }
+
+        $ids = [];
+        foreach (explode(',', $raw) as $part) {
+            $id = (int) trim((string) $part);
+            if ($id > 0) {
+                $ids[$id] = $id;
+            }
+        }
+
+        return array_values($ids);
+    }
+
+    private function readInstructionFoodIdsFromRequest(): array
+    {
+        $posted = $this->request->getPost('instruction_food_ids');
+        if (! is_array($posted)) {
+            $posted = $this->request->getPost('instruction_food_ids[]');
+        }
+        if (! is_array($posted)) {
+            $posted = [];
+        }
+
+        $clean = [];
+        foreach ($posted as $id) {
+            $intId = (int) $id;
+            if ($intId > 0) {
+                $clean[$intId] = $intId;
+            }
+        }
+
+        return array_values($clean);
+    }
+
     private function extractNabhFieldsFromRemarks(string $remarks): array
     {
         $extract = static function (string $pattern, string $source): string {
@@ -2460,6 +3250,60 @@ class Ipd_discharge extends BaseController
             $action = (string) ($this->request->getPost('action') ?? 'save_main');
             $savedAny = false;
 
+            if ((int) ($this->request->getPost('dietary_autosave') ?? 0) === 1) {
+                $instructionFoodIds = $this->readInstructionFoodIdsFromRequest();
+
+                $instructionRow = $this->firstRowByIpd('ipd_discharge_instructions', $ipdId);
+                $existingMeta = $this->parseInstructionMetaPayload((string) ($instructionRow['comp_report'] ?? ''));
+                $instructionOtherPosted = $this->request->getPost('instruction_other');
+                $instructionOther = is_string($instructionOtherPosted)
+                    ? trim($instructionOtherPosted)
+                    : trim((string) ($existingMeta['other_text'] ?? ''));
+
+                $instructionMeta = $this->buildInstructionMetaPayload([
+                    'food_ids' => $instructionFoodIds,
+                    'other_text' => $instructionOther,
+                    'nabh' => is_array($existingMeta['nabh'] ?? null) ? ($existingMeta['nabh'] ?? []) : [],
+                ]);
+
+                if ($this->tableHasColumns('ipd_discharge_instructions', ['ipd_id'])) {
+                    $savedAny = $this->upsertByIpd('ipd_discharge_instructions', $ipdId, [
+                        'comp_report' => $instructionMeta,
+                        'comp_remark' => (string) ($instructionRow['comp_remark'] ?? ''),
+                        'review_after' => (string) ($instructionRow['review_after'] ?? ''),
+                        'footer_text' => (string) ($instructionRow['footer_text'] ?? ''),
+                        'footer_banner' => (string) ($instructionRow['footer_banner'] ?? '0'),
+                        'update_by' => $userLabel,
+                    ]) || $savedAny;
+                }
+
+                if ($this->tableHasColumns('ipd_discharge_drug_food_interaction', ['ipd_id', 'food_id_list'])) {
+                    $foodIds = [];
+                    foreach ($instructionFoodIds as $foodId) {
+                        $id = (int) $foodId;
+                        if ($id > 0) {
+                            $foodIds[$id] = $id;
+                        }
+                    }
+
+                    $legacyData = [
+                        'food_id_list' => implode(',', array_values($foodIds)),
+                    ];
+                    if ($this->db->fieldExists('food_text', 'ipd_discharge_drug_food_interaction')) {
+                        $legacyData['food_text'] = (string) ($instructionRow['comp_remark'] ?? '');
+                    }
+
+                    $savedAny = $this->upsertByIpd('ipd_discharge_drug_food_interaction', $ipdId, $legacyData) || $savedAny;
+                }
+
+                return $this->response->setJSON([
+                    'update' => $savedAny ? 1 : 0,
+                    'error_text' => $savedAny ? 'Dietary advice saved.' : 'Unable to save dietary advice.',
+                    'csrfName' => csrf_token(),
+                    'csrfHash' => csrf_hash(),
+                ]);
+            }
+
             if ($action === 'add_complaint') {
                 $complaintName = trim((string) ($this->request->getPost('new_complaint_name') ?? ''));
                 $complaintRemarkRow = trim((string) ($this->request->getPost('new_complaint_remark') ?? ''));
@@ -2524,6 +3368,7 @@ class Ipd_discharge extends BaseController
                 $name = trim((string) ($this->request->getPost('new_surgery_name') ?? ''));
                 $date = $this->parseInputDateToDb((string) ($this->request->getPost('new_surgery_date') ?? ''));
                 $remark = trim((string) ($this->request->getPost('new_surgery_remark') ?? ''));
+                $masterId = max(0, (int) ($this->request->getPost('new_surgery_master_id') ?? 0));
                 if ($name !== '' && $this->tableHasColumns('ipd_discharge_surgery', ['ipd_id', 'surgery_name'])) {
                     $insert = [
                         'ipd_id' => $ipdId,
@@ -2535,7 +3380,7 @@ class Ipd_discharge extends BaseController
                         $insert['surgery_date'] = $date;
                     }
                     if ($this->db->fieldExists('surgery_id', 'ipd_discharge_surgery')) {
-                        $insert['surgery_id'] = 0;
+                        $insert['surgery_id'] = $masterId;
                     }
                     if ($this->db->fieldExists('surgery_by_doc_id', 'ipd_discharge_surgery')) {
                         $insert['surgery_by_doc_id'] = 0;
@@ -2566,6 +3411,7 @@ class Ipd_discharge extends BaseController
                 $name = trim((string) ($this->request->getPost('new_procedure_name') ?? ''));
                 $date = $this->parseInputDateToDb((string) ($this->request->getPost('new_procedure_date') ?? ''));
                 $remark = trim((string) ($this->request->getPost('new_procedure_remark') ?? ''));
+                $masterId = max(0, (int) ($this->request->getPost('new_procedure_master_id') ?? 0));
                 if ($name !== '' && $this->tableHasColumns('ipd_discharge_procedure', ['ipd_id', 'procedure_name'])) {
                     $insert = [
                         'ipd_id' => $ipdId,
@@ -2577,7 +3423,7 @@ class Ipd_discharge extends BaseController
                         $insert['procedure_date'] = $date;
                     }
                     if ($this->db->fieldExists('procedure_id', 'ipd_discharge_procedure')) {
-                        $insert['procedure_id'] = 0;
+                        $insert['procedure_id'] = $masterId;
                     }
                     if ($this->db->fieldExists('procedure_by_doc_id', 'ipd_discharge_procedure')) {
                         $insert['procedure_by_doc_id'] = 0;
@@ -2714,15 +3560,55 @@ class Ipd_discharge extends BaseController
                 }
             } elseif ($action === 'add_drug') {
                 $name = trim((string) ($this->request->getPost('new_drug_name') ?? ''));
+                $type = trim((string) ($this->request->getPost('new_drug_type') ?? ''));
                 $dose = trim((string) ($this->request->getPost('new_drug_dose') ?? ''));
+                $when = trim((string) ($this->request->getPost('new_drug_when') ?? ''));
+                $freq = trim((string) ($this->request->getPost('new_drug_freq') ?? ''));
                 $day = trim((string) ($this->request->getPost('new_drug_day') ?? ''));
-                if ($name !== '' && $this->tableHasColumns('ipd_discharge_drug', ['ipd_id', 'drug_name'])) {
+                $qty = trim((string) ($this->request->getPost('new_drug_qty') ?? ''));
+                $remark = trim((string) ($this->request->getPost('new_drug_remark') ?? ''));
+
+                $legacyDrugTable = $this->findFirstExistingTable(['ipd_discharge_prescrption_prescribed', 'ipd_discharge_prescription_prescribed']);
+                if ($name !== '' && $legacyDrugTable !== null && $this->tableHasColumns($legacyDrugTable, ['ipd_id', 'med_name'])) {
+                    $insert = [
+                        'ipd_id' => $ipdId,
+                        'med_id' => 0,
+                        'med_name' => $name,
+                        'med_type' => $type,
+                        'dosage' => $dose,
+                        'dosage_when' => $when,
+                        'dosage_freq' => $freq,
+                        'no_of_days' => $day,
+                        'qty' => $qty,
+                        'remark' => $remark,
+                        'update_by' => $userLabel,
+                    ];
+                    if ($this->db->fieldExists('order_id', $legacyDrugTable)) {
+                        $insert['order_id'] = 0;
+                    }
+
+                    $allowed = [];
+                    foreach ($insert as $field => $value) {
+                        if ($this->db->fieldExists($field, $legacyDrugTable)) {
+                            $allowed[$field] = $value;
+                        }
+                    }
+
+                    $savedAny = ! empty($allowed)
+                        ? (bool) $this->db->table($legacyDrugTable)->insert($allowed)
+                        : false;
+                    $notice = $savedAny ? 'Medicine row added.' : 'Unable to add medicine row.';
+                    $noticeType = $savedAny ? 'success' : 'warning';
+                } elseif ($name !== '' && $this->tableHasColumns('ipd_discharge_drug', ['ipd_id', 'drug_name'])) {
+                    $doseText = trim(implode(' ', array_filter([$type, $dose, $when, $freq], static fn ($v) => trim((string) $v) !== '')));
+                    $dayText = trim(implode(' ', array_filter([$day, $qty !== '' ? ('Qty:' . $qty) : '', $remark], static fn ($v) => trim((string) $v) !== '')));
+
                     $insert = [
                         'ipd_id' => $ipdId,
                         'drug_code' => 0,
                         'drug_name' => $name,
-                        'drug_dose' => $dose,
-                        'drug_day' => $day,
+                        'drug_dose' => $doseText,
+                        'drug_day' => $dayText,
                         'update_by' => $userLabel,
                     ];
                     if ($this->db->fieldExists('order_id', 'ipd_discharge_drug')) {
@@ -2737,13 +3623,135 @@ class Ipd_discharge extends BaseController
                         : 'Drug table/columns are missing in database.';
                     $noticeType = 'warning';
                 }
+            } elseif ($action === 'apply_rx_group') {
+                $rxGroupId = (int) ($this->request->getPost('selected_rx_group_id') ?? 0);
+                $templateTable = $this->findFirstExistingTable(['opd_prescrption_prescribed_template', 'opd_prescription_prescribed_template']);
+                $legacyDrugTable = $this->findFirstExistingTable(['ipd_discharge_prescrption_prescribed', 'ipd_discharge_prescription_prescribed']);
+                $fallbackDrugTable = $this->tableHasColumns('ipd_discharge_drug', ['ipd_id', 'drug_name']) ? 'ipd_discharge_drug' : null;
+
+                if ($rxGroupId <= 0) {
+                    $notice = 'Select an Rx Group first.';
+                    $noticeType = 'warning';
+                } elseif ($templateTable === null) {
+                    $notice = 'Rx Group medicine template table not found.';
+                    $noticeType = 'warning';
+                } elseif ($legacyDrugTable === null && $fallbackDrugTable === null) {
+                    $notice = 'No discharge medicine table found.';
+                    $noticeType = 'warning';
+                } else {
+                    $templateRows = $this->db->table($templateTable)
+                        ->where('rx_group_id', $rxGroupId)
+                        ->orderBy('id', 'ASC')
+                        ->get()
+                        ->getResultArray();
+
+                    if (empty($templateRows)) {
+                        $notice = 'No medicines found in selected Rx Group.';
+                        $noticeType = 'warning';
+                    } else {
+                        $inserted = 0;
+
+                        foreach ($templateRows as $row) {
+                            $medName = trim((string) ($row['med_name'] ?? ''));
+                            if ($medName === '') {
+                                continue;
+                            }
+
+                            if ($legacyDrugTable !== null && $this->tableHasColumns($legacyDrugTable, ['ipd_id', 'med_name'])) {
+                                $insert = [
+                                    'ipd_id' => $ipdId,
+                                    'med_id' => (int) ($row['med_id'] ?? 0),
+                                    'med_name' => $medName,
+                                    'med_type' => trim((string) ($row['med_type'] ?? '')),
+                                    'dosage' => trim((string) ($row['dosage'] ?? '')),
+                                    'dosage_when' => trim((string) ($row['dosage_when'] ?? '')),
+                                    'dosage_freq' => trim((string) ($row['dosage_freq'] ?? '')),
+                                    'dosage_where' => trim((string) ($row['dosage_where'] ?? '')),
+                                    'no_of_days' => trim((string) ($row['no_of_days'] ?? '')),
+                                    'qty' => trim((string) ($row['qty'] ?? '')),
+                                    'remark' => trim((string) ($row['remark'] ?? '')),
+                                    'genericname' => trim((string) ($row['genericname'] ?? '')),
+                                    'update_by' => $userLabel,
+                                ];
+                                if ($this->db->fieldExists('order_id', $legacyDrugTable)) {
+                                    $insert['order_id'] = 0;
+                                }
+
+                                $allowed = [];
+                                foreach ($insert as $field => $value) {
+                                    if ($this->db->fieldExists($field, $legacyDrugTable)) {
+                                        $allowed[$field] = $value;
+                                    }
+                                }
+
+                                if (! empty($allowed) && $this->db->table($legacyDrugTable)->insert($allowed)) {
+                                    $inserted++;
+                                }
+                                continue;
+                            }
+
+                            if ($fallbackDrugTable !== null) {
+                                $doseText = trim(implode(' ', array_filter([
+                                    trim((string) ($row['med_type'] ?? '')),
+                                    trim((string) ($row['dosage'] ?? '')),
+                                    trim((string) ($row['dosage_when'] ?? '')),
+                                    trim((string) ($row['dosage_freq'] ?? '')),
+                                ], static fn ($v) => trim((string) $v) !== '')));
+                                $dayText = trim(implode(' ', array_filter([
+                                    trim((string) ($row['no_of_days'] ?? '')),
+                                    trim((string) ($row['qty'] ?? '')) !== '' ? ('Qty:' . trim((string) ($row['qty'] ?? ''))) : '',
+                                    trim((string) ($row['remark'] ?? '')),
+                                ], static fn ($v) => trim((string) $v) !== '')));
+
+                                $insert = [
+                                    'ipd_id' => $ipdId,
+                                    'drug_code' => (int) ($row['med_id'] ?? 0),
+                                    'drug_name' => $medName,
+                                    'drug_dose' => $doseText,
+                                    'drug_day' => $dayText,
+                                    'update_by' => $userLabel,
+                                ];
+                                if ($this->db->fieldExists('order_id', $fallbackDrugTable)) {
+                                    $insert['order_id'] = 0;
+                                }
+
+                                if ($this->db->table($fallbackDrugTable)->insert($insert)) {
+                                    $inserted++;
+                                }
+                            }
+                        }
+
+                        $savedAny = $inserted > 0;
+                        $notice = $savedAny
+                            ? ($inserted . ' medicine(s) added from Rx Group.')
+                            : 'No medicines could be added from selected Rx Group.';
+                        $noticeType = $savedAny ? 'success' : 'warning';
+                    }
+                }
             } elseif ($action === 'remove_drug') {
                 $removeId = (int) ($this->request->getPost('drug_remove_id') ?? 0);
-                if ($removeId > 0 && $this->tableHasColumns('ipd_discharge_drug', ['id', 'ipd_id'])) {
-                    $savedAny = (bool) $this->db->table('ipd_discharge_drug')
-                        ->where('id', $removeId)
-                        ->where('ipd_id', $ipdId)
-                        ->delete();
+                $removeSource = strtolower(trim((string) ($this->request->getPost('drug_remove_source') ?? 'legacy')));
+                if ($removeId > 0) {
+                    $deleted = false;
+
+                    if ($removeSource === 'legacy') {
+                        $legacyDrugTable = $this->findFirstExistingTable(['ipd_discharge_prescrption_prescribed', 'ipd_discharge_prescription_prescribed']);
+                        if ($legacyDrugTable !== null && $this->tableHasColumns($legacyDrugTable, ['id', 'ipd_id'])) {
+                            $deleted = (bool) $this->db->table($legacyDrugTable)
+                                ->where('id', $removeId)
+                                ->where('ipd_id', $ipdId)
+                                ->delete();
+                        }
+                    }
+
+                    if (! $deleted && $this->tableHasColumns('ipd_discharge_drug', ['id', 'ipd_id'])) {
+                        $deleted = (bool) $this->db->table('ipd_discharge_drug')
+                            ->where('id', $removeId)
+                            ->where('ipd_id', $ipdId)
+                            ->delete();
+                    }
+
+                    $savedAny = $deleted;
                     $notice = $savedAny ? 'Drug row removed.' : 'Unable to remove drug row.';
                     $noticeType = $savedAny ? 'success' : 'warning';
                 } else {
@@ -2782,6 +3790,24 @@ class Ipd_discharge extends BaseController
                 $courseRemark = trim((string) ($this->request->getPost('course_remark') ?? ''));
                 $instructionRemark = trim((string) ($this->request->getPost('instruction_remark') ?? ''));
                 $reviewAfter = trim((string) ($this->request->getPost('review_after') ?? ''));
+                $instructionOther = trim((string) ($this->request->getPost('instruction_other') ?? ''));
+                $instructionFoodIds = $this->readInstructionFoodIdsFromRequest();
+                $instructionMeta = $this->buildInstructionMetaPayload([
+                    'food_ids' => $instructionFoodIds,
+                    'other_text' => $instructionOther,
+                    'nabh' => [
+                        'drug_allergy_status' => trim((string) ($this->request->getPost('drug_allergy_status') ?? '')),
+                        'drug_allergy_details' => trim((string) ($this->request->getPost('drug_allergy_details') ?? '')),
+                        'adr_history' => trim((string) ($this->request->getPost('adr_history') ?? '')),
+                        'current_medications' => trim((string) ($this->request->getPost('current_medications') ?? '')),
+                        'co_morbidities' => trim((string) ($this->request->getPost('co_morbidities') ?? '')),
+                        'hpi_note' => trim((string) ($this->request->getPost('hpi_note') ?? '')),
+                        'women_lmp' => trim((string) ($this->request->getPost('women_lmp') ?? '')),
+                        'women_last_baby' => trim((string) ($this->request->getPost('women_last_baby') ?? '')),
+                        'women_pregnancy_related' => trim((string) ($this->request->getPost('women_pregnancy_related') ?? '')),
+                        'women_related_problems' => trim((string) ($this->request->getPost('women_related_problems') ?? '')),
+                    ],
+                ]);
 
                 if ($complaintRemark !== '' || $this->tableHasColumns('ipd_discharge_complaint_remark', ['ipd_id'])) {
                     $savedAny = $this->upsertByIpd('ipd_discharge_complaint_remark', $ipdId, [
@@ -2807,15 +3833,34 @@ class Ipd_discharge extends BaseController
                     ]) || $savedAny;
                 }
 
-                if ($instructionRemark !== '' || $reviewAfter !== '' || $this->tableHasColumns('ipd_discharge_instructions', ['ipd_id'])) {
+                if ($instructionRemark !== '' || $reviewAfter !== '' || $instructionMeta !== '' || $this->tableHasColumns('ipd_discharge_instructions', ['ipd_id'])) {
                     $savedAny = $this->upsertByIpd('ipd_discharge_instructions', $ipdId, [
-                        'comp_report' => '',
+                        'comp_report' => $instructionMeta,
                         'comp_remark' => $instructionRemark,
                         'review_after' => $reviewAfter,
                         'footer_text' => '',
                         'footer_banner' => '0',
                         'update_by' => $userLabel,
                     ]) || $savedAny;
+                }
+
+                if ($this->tableHasColumns('ipd_discharge_drug_food_interaction', ['ipd_id', 'food_id_list'])) {
+                    $foodIds = [];
+                    foreach ($instructionFoodIds as $foodId) {
+                        $id = (int) $foodId;
+                        if ($id > 0) {
+                            $foodIds[$id] = $id;
+                        }
+                    }
+
+                    $legacyData = [
+                        'food_id_list' => implode(',', array_values($foodIds)),
+                    ];
+                    if ($this->db->fieldExists('food_text', 'ipd_discharge_drug_food_interaction')) {
+                        $legacyData['food_text'] = $instructionRemark;
+                    }
+
+                    $savedAny = $this->upsertByIpd('ipd_discharge_drug_food_interaction', $ipdId, $legacyData) || $savedAny;
                 }
 
                 // Examination on Admission (General Examination values).
@@ -3119,6 +4164,17 @@ class Ipd_discharge extends BaseController
                 $notice = 'Requested action could not be completed. Please verify database table/columns for this section.';
                 $noticeType = 'warning';
             }
+
+            $ajaxMode = strtolower(trim((string) ($this->request->getPost('ajax_mode') ?? '')));
+            if ($ajaxMode === 'json') {
+                return $this->response->setJSON([
+                    'update' => $savedAny ? 1 : 0,
+                    'error_text' => $notice,
+                    'notice_type' => $noticeType,
+                    'csrfName' => csrf_token(),
+                    'csrfHash' => csrf_hash(),
+                ]);
+            }
         }
 
         if ($reCreate > 0) {
@@ -3141,9 +4197,36 @@ class Ipd_discharge extends BaseController
         $diagnosisRows = $this->byIpdRows('ipd_discharge_diagnosis', ['id', 'comp_report', 'comp_remark'], 'id ASC', $ipdId);
         $courseRows = $this->byIpdRows('ipd_discharge_course', ['id', 'comp_report', 'comp_remark'], 'id ASC', $ipdId);
         $drugRows = $this->byIpdRows('ipd_discharge_drug', ['id', 'drug_name', 'drug_dose', 'drug_day'], 'id ASC', $ipdId);
+        $legacyDrugRows = $this->byIpdRows('ipd_discharge_prescrption_prescribed', ['id', 'med_name', 'med_type', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days', 'qty', 'remark'], 'id ASC', $ipdId);
+        if (empty($legacyDrugRows)) {
+            $legacyDrugRows = $this->byIpdRows('ipd_discharge_prescription_prescribed', ['id', 'med_name', 'med_type', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days', 'qty', 'remark'], 'id ASC', $ipdId);
+        }
         $diagnosisRemarkRow = $this->firstRowByIpd('ipd_discharge_diagnosis_remark', $ipdId);
         $courseRemarkRow = $this->firstRowByIpd('ipd_discharge_course_remark', $ipdId);
         $instructionRow = $this->firstRowByIpd('ipd_discharge_instructions', $ipdId);
+        $instructionMeta = $this->parseInstructionMetaPayload((string) ($instructionRow['comp_report'] ?? ''));
+        if (empty($instructionMeta['food_ids'])
+            && $this->tableHasColumns('ipd_discharge_drug_food_interaction', ['ipd_id', 'food_id_list'])) {
+            $legacyFoodRow = $this->firstRowByIpd('ipd_discharge_drug_food_interaction', $ipdId);
+            $instructionMeta['food_ids'] = $this->parseFoodIdCsv((string) ($legacyFoodRow['food_id_list'] ?? ''));
+            if (trim((string) ($instructionMeta['other_text'] ?? '')) === '' && $this->db->fieldExists('food_text', 'ipd_discharge_drug_food_interaction')) {
+                $instructionMeta['other_text'] = trim((string) ($legacyFoodRow['food_text'] ?? ''));
+            }
+        }
+        $instructionNabh = is_array($instructionMeta['nabh'] ?? null) ? ($instructionMeta['nabh'] ?? []) : [];
+
+        foreach (['drug_allergy_status', 'drug_allergy_details', 'adr_history', 'current_medications', 'co_morbidities', 'hpi_note', 'women_lmp', 'women_last_baby', 'women_pregnancy_related', 'women_related_problems'] as $field) {
+            if (trim((string) ($opdHistorySnapshot[$field] ?? '')) === '' && trim((string) ($instructionNabh[$field] ?? '')) !== '') {
+                $opdHistorySnapshot[$field] = trim((string) ($instructionNabh[$field] ?? ''));
+            }
+        }
+        $instructionFoodRows = [];
+        if ($this->tableHasColumns('ipd_discharge_master_food', ['id', 'food_short', 'food_desc'])) {
+            $builder = $this->db->table('ipd_discharge_master_food')
+                ->select('id,food_short,food_desc,food_desc_lang')
+                ->orderBy('id', 'ASC');
+            $instructionFoodRows = $builder->get()->getResultArray();
+        }
         $inhosRow = $this->firstRowByIpd('ipd_discharge_investigtions_inhos', $ipdId);
         $otherExamRow = [];
         if ($this->tableHasColumns('ipd_discharge_2', ['ipd_d_id'])) {
@@ -3213,6 +4296,7 @@ class Ipd_discharge extends BaseController
             'diagnosis_rows' => $diagnosisRows,
             'course_rows' => $courseRows,
             'drug_rows' => $drugRows,
+            'legacy_drug_rows' => $legacyDrugRows,
             'patient_history_row' => $patientHistoryRow,
             'physical_exam_rows' => $physicalExamRows,
             'manual_invest_rows' => $manualInvestRows,
@@ -3230,6 +4314,9 @@ class Ipd_discharge extends BaseController
             'course_remark' => (string) ($courseRemarkRow['comp_remark'] ?? ''),
             'instruction_remark' => (string) ($instructionRow['comp_remark'] ?? ''),
             'review_after' => (string) ($instructionRow['review_after'] ?? ''),
+            'instruction_food_rows' => $instructionFoodRows,
+            'instruction_food_ids' => $instructionMeta['food_ids'] ?? [],
+            'instruction_other' => (string) ($instructionMeta['other_text'] ?? ''),
             'inhos_remark' => (string) ($inhosRow['comp_remark'] ?? ''),
             'other_exam_text' => (string) ($otherExamParsed['text'] ?? ''),
         ]);
@@ -3324,16 +4411,130 @@ class Ipd_discharge extends BaseController
         $requestedTemplateId = (int) ($this->request->getGet('tpl') ?? 0);
         $templatePack = $this->applyDischargeTemplate($content, $panelData, $requestedTemplateId > 0 ? $requestedTemplateId : null);
 
+        $withHeader = $printType !== 0;
+        $renderedHtml = (string) ($templatePack['rendered_html'] ?? $content);
+        $templateName = (string) ($templatePack['selected_template_name'] ?? 'Discharge Template');
+
+        try {
+            $patient = $panelData['person_info'] ?? null;
+            $ipd = $panelData['ipd_info'] ?? null;
+
+            $patientName = trim((string) ($patient->p_fname ?? 'Patient'));
+            $ipdCode = trim((string) ($ipd->ipd_code ?? $ipdId));
+            $fileName = 'discharge_' . preg_replace('/[^A-Za-z0-9_-]+/', '_', $ipdCode !== '' ? $ipdCode : (string) $ipdId) . '.pdf';
+
+            $pdfHtml = $this->buildDischargePdfHtml($panelData, $renderedHtml, $withHeader, $templateName);
+
+            $mpdf = new Mpdf([
+                'mode' => 'utf-8',
+                'format' => 'A4',
+                'margin_left' => 10,
+                'margin_right' => 10,
+                'margin_top' => $withHeader ? 28 : 12,
+                'margin_bottom' => 12,
+                'margin_header' => 8,
+                'margin_footer' => 8,
+                'default_font' => 'freeserif',
+                'tempDir' => WRITEPATH . 'cache',
+            ]);
+
+            $mpdf->autoScriptToLang = true;
+            $mpdf->autoLangToFont = true;
+            $mpdf->SetTitle('Discharge Summary - ' . ($patientName !== '' ? $patientName : ('IPD ' . $ipdId)));
+            $mpdf->SetAuthor('Atria HMS');
+
+            if ($withHeader) {
+                $headerHtml = '<div style="font-family:freeserif,serif;font-size:11pt;border-bottom:1px solid #d1d5db;padding-bottom:6px;">'
+                    . '<div style="font-size:14pt;font-weight:700;">Discharge Summary</div>'
+                    . '<div style="font-size:9pt;color:#374151;">IPD: ' . esc($ipdCode) . ' | Template: ' . esc($templateName) . '</div>'
+                    . '</div>';
+                $mpdf->SetHTMLHeader($headerHtml);
+            }
+
+            $mpdf->SetHTMLFooter('<div style="font-family:freeserif,serif;font-size:9pt;color:#6b7280;text-align:right;">Page {PAGENO}/{nbpg}</div>');
+            $mpdf->WriteHTML($pdfHtml);
+
+            $pdfBinary = $mpdf->Output($fileName, Destination::STRING_RETURN);
+            return $this->response
+                ->setHeader('Content-Type', 'application/pdf')
+                ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
+                ->setBody($pdfBinary);
+        } catch (\Throwable $e) {
+            log_message('error', 'PDF generation failed for IPD {ipd}: {msg}', [
+                'ipd' => $ipdId,
+                'msg' => $e->getMessage(),
+            ]);
+        }
+
         return view('billing/ipd/discharge_print', [
             'ipd_id' => $ipdId,
             'ipd_info' => $panelData['ipd_info'] ?? null,
             'person_info' => $panelData['person_info'] ?? null,
-            'content' => (string) ($templatePack['rendered_html'] ?? $content),
+            'content' => $renderedHtml,
             'selected_template_name' => (string) ($templatePack['selected_template_name'] ?? ''),
             'selected_template_id' => (int) ($templatePack['selected_template_id'] ?? 0),
             'print_type' => $printType,
             'print_mode' => 'standard',
         ]);
+    }
+
+    private function buildDischargePdfHtml(array $panelData, string $renderedContent, bool $withHeader, string $templateName): string
+    {
+        $ipd = $panelData['ipd_info'] ?? null;
+        $person = $panelData['person_info'] ?? null;
+
+        $patientName = trim((string) ($person->p_fname ?? ''));
+        $patientCode = trim((string) (
+            $person->uhid
+            ?? $person->UHID
+            ?? $person->patient_code
+            ?? $person->p_code
+            ?? $person->reg_no
+            ?? ''
+        ));
+        $ipdCode = trim((string) ($ipd->ipd_code ?? ''));
+        $gender = trim((string) ($person->xgender ?? ''));
+        $age = get_age_1($person->dob ?? null, $person->age ?? '', $person->age_in_month ?? '', $person->estimate_dob ?? '');
+        $admitDate = trim((string) ($ipd->str_register_date ?? ''));
+        $dischargeDate = trim((string) ($ipd->str_discharge_date ?? ''));
+
+        $headerBlock = '';
+        if ($withHeader) {
+            $headerBlock = '<div class="pdf-header">'
+                . '<div class="pdf-header-title">Discharge Summary</div>'
+                . '<div class="pdf-header-sub">Template: ' . esc($templateName) . '</div>'
+                . '</div>';
+        }
+
+        return '<!doctype html>'
+            . '<html><head><meta charset="utf-8">'
+            . '<style>'
+            . 'body{font-family:freeserif,serif;font-size:11pt;color:#111827;line-height:1.4;}'
+            . '.pdf-header{margin-bottom:10px;border-bottom:1px solid #d1d5db;padding-bottom:6px;}'
+            . '.pdf-header-title{font-size:18pt;font-weight:700;}'
+            . '.pdf-header-sub{font-size:9pt;color:#4b5563;}'
+            . '.meta{border:1px solid #cbd5e1;padding:8px;margin-bottom:10px;}'
+            . '.meta-table{width:100%;border-collapse:collapse;font-size:10pt;}'
+            . '.meta-table td{padding:2px 6px;border-right:1px solid #e5e7eb;vertical-align:top;}'
+            . '.meta-table td:last-child{border-right:none;}'
+            . '.content{border:1px solid #d1d5db;padding:10px;}'
+            . '.content h2,.content h3,.content h4{margin:12px 0 6px 0;color:#0f172a;}'
+            . '.content table{width:100%;border-collapse:collapse;margin:6px 0 10px 0;font-size:10pt;}'
+            . '.content th,.content td{border:1px solid #d1d5db;padding:5px;vertical-align:top;}'
+            . '.content ul,.content ol{margin:4px 0 10px 18px;padding:0;}'
+            . '</style></head><body>'
+            . $headerBlock
+            . '<div class="meta"><table class="meta-table"><tr>'
+            . '<td><strong>Patient:</strong> ' . esc($patientName) . '</td>'
+            . '<td><strong>UHID:</strong> ' . esc($patientCode) . '</td>'
+            . '<td><strong>IPD:</strong> ' . esc($ipdCode) . '</td>'
+            . '</tr><tr>'
+            . '<td><strong>Age/Gender:</strong> ' . esc(trim($age . ' / ' . $gender)) . '</td>'
+            . '<td><strong>Admit Date:</strong> ' . esc($admitDate) . '</td>'
+            . '<td><strong>Discharge Date:</strong> ' . esc($dischargeDate) . '</td>'
+            . '</tr></table></div>'
+            . '<div class="content">' . $renderedContent . '</div>'
+            . '</body></html>';
     }
 
     public function show_file3(int $ipdId)

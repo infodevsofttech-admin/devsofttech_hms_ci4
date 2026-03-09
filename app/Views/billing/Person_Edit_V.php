@@ -104,7 +104,11 @@
 								$checkbox_checked="";
 								$age_input_1='style="display: none;"';
 								$age_input_2='';
-								$DateofBirth=MysqlDate_to_str($data[0]->dob);
+                                $DateofBirth='';
+                                if (!empty($data[0]->dob)) {
+                                    $ts = strtotime((string) $data[0]->dob);
+                                    $DateofBirth = $ts ? date('Y-m-d', $ts) : '';
+                                }
 							}
 						?>
                         <div class="col-md-3">
@@ -138,14 +142,8 @@
                         <div id="age_input_2" <?=$age_input_2?>>
                             <div class="col-md-4">
                                 <label> Date of Birth</label>
-                                <div class="input-group date input-sm">
-                                    <div class="input-group-addon">
-                                        <i class="fa fa-calendar"></i>
-                                    </div>
-                                    <input class="form-control pull-right datepicker input-sm" name="datepicker_dob"
-                                        id="datepicker_dob" type="text" data-inputmask="'alias': 'dd/mm/yyyy'" data-mask
-                                        value="<?=$DateofBirth ?>" />
-                                </div>
+                                <input class="form-control input-sm" name="datepicker_dob"
+                                    id="datepicker_dob" type="date" value="<?=$DateofBirth ?>" />
                             </div>
                         </div>
                     </div>

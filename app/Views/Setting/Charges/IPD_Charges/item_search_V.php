@@ -6,6 +6,10 @@
                 <i class="bi bi-list"></i>
                 Charge Groups
             </button>
+            <button class="btn btn-outline-primary" type="button" onclick="load_form_div('<?= base_url('nursing-bedside-items') ?>','maindiv','Clinical Procedure / Test Master');">
+                <i class="bi bi-heart-pulse"></i>
+                Clinical Procedure/Test Master
+            </button>
             <button onclick="load_form_div('<?= base_url('item-ipd/add') ?>','maindiv','New Charge');" type="button" class="btn btn-primary">Add New Charge</button>
         </div>
     </div>

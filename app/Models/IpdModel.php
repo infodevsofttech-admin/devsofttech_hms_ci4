@@ -296,10 +296,34 @@ class IpdModel extends Model
             return 0;
         }
 
+        $nursingChargeId = $this->extractNursingChargeIdFromComment((string) ($row['comment'] ?? ''));
+        if ($nursingChargeId > 0 && $this->db->tableExists('nursing_ipd_charges')) {
+            $nursingFields = $this->db->getFieldNames('nursing_ipd_charges');
+            $nursingUpdate = [];
+            if (in_array('include_in_bill', $nursingFields, true)) {
+                $nursingUpdate['include_in_bill'] = 0;
+            }
+            if (in_array('updated_by', $nursingFields, true)) {
+                $user = $this->getUserIdentity();
+                $nursingUpdate['updated_by'] = $user['name'] . ' [' . $user['id'] . '] D:' . date('Y-m-d H:i:s');
+            }
+            if (! empty($nursingUpdate)) {
+                $this->db->table('nursing_ipd_charges')
+                    ->where('charge_id', $nursingChargeId)
+                    ->update($nursingUpdate);
+            }
+        }
+
         $user = $this->getUserIdentity();
         $row['update_by_id'] = $user['id'];
         $row['update_by'] = $user['name'];
         $row['update_action'] = '1';
+
+        // Keep only columns that exist in the audit table to avoid schema drift failures.
+        $auditTableFields = $this->db->getFieldNames('ipd_invoice_item_update');
+        if (! empty($auditTableFields)) {
+            $row = array_intersect_key($row, array_flip($auditTableFields));
+        }
 
         $inserted = $this->db->table('ipd_invoice_item_update')->insert($row);
         if (! $inserted) {
@@ -309,6 +333,10 @@ class IpdModel extends Model
         $this->db->table('ipd_invoice_item')
             ->where('id', $id)
             ->delete();
+
+        if ($this->db->affectedRows() < 1) {
+            return 0;
+        }
 
         return 1;
     }
@@ -407,6 +435,19 @@ class IpdModel extends Model
             'id' => $userId,
             'name' => $userName,
         ];
+    }
+
+    private function extractNursingChargeIdFromComment(string $comment): int
+    {
+        if ($comment === '') {
+            return 0;
+        }
+
+        if (preg_match('/\[NURSING_CHARGE_ID:(\d+)\]/', $comment, $matches) !== 1) {
+            return 0;
+        }
+
+        return (int) ($matches[1] ?? 0);
     }
 
     private function getUserSignature(): string

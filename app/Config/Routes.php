@@ -233,6 +233,15 @@ $routes->match(['get', 'post'], 'Ipd_discharge/ipd_select/(:num)/(:num)', 'Ipd_d
 $routes->get('Ipd_discharge/section_past_data', 'Ipd_discharge::section_past_data');
 $routes->get('Ipd_discharge/section_template_list', 'Ipd_discharge::section_template_list');
 $routes->post('Ipd_discharge/section_template_save', 'Ipd_discharge::section_template_save');
+$routes->get('Ipd_discharge/surgery_master_lookup', 'Ipd_discharge::surgery_master_lookup');
+$routes->get('Ipd_discharge/surgery_master_list', 'Ipd_discharge::surgery_master_list');
+$routes->post('Ipd_discharge/surgery_master_save', 'Ipd_discharge::surgery_master_save');
+$routes->post('Ipd_discharge/surgery_master_delete', 'Ipd_discharge::surgery_master_delete');
+$routes->get('Ipd_discharge/diagnosis_icd_lookup', 'Ipd_discharge::diagnosis_icd_lookup');
+$routes->post('Ipd_discharge/diagnosis_icd_seed_starter', 'Ipd_discharge::diagnosis_icd_seed_starter');
+$routes->get('Ipd_discharge/dietary_master_list', 'Ipd_discharge::dietary_master_list');
+$routes->post('Ipd_discharge/dietary_master_save', 'Ipd_discharge::dietary_master_save');
+$routes->post('Ipd_discharge/dietary_master_delete', 'Ipd_discharge::dietary_master_delete');
 $routes->match(['get', 'post'], 'Ipd_discharge/preview_discharge_report/(:num)', 'Ipd_discharge::preview_discharge_report/$1');
 $routes->get('Ipd_discharge/show_discharge/(:num)', 'Ipd_discharge::show_discharge/$1');
 $routes->get('Ipd_discharge/show_discharge/(:num)/(:num)', 'Ipd_discharge::show_discharge/$1/$2');
@@ -521,11 +530,20 @@ $routes->post('Opdcase/showfee', 'Opdcase::showfee');
 $routes->post('Opdcase/confirm_opd', 'Opdcase::confirm_opd');
 $routes->get('Opdcase/invoice/(:num)', 'Opd::invoice/$1');
 
+$routes->get('Report', 'Report::index');
+$routes->get('Report/index', 'Report::index');
+$routes->get('report', 'Report::index');
+$routes->get('report/index', 'Report::index');
+
 $routes->get('Report/collection_report', 'Report::collection_report');
 $routes->get('Report/report_total_payment_app_show/(:segment)/(:segment)/(:segment)', 'Report::report_total_payment_app_show/$1/$2/$3');
 $routes->get('Report/report_total_payment_app_show/(:segment)/(:segment)/(:segment)/(:num)', 'Report::report_total_payment_app_show/$1/$2/$3/$4');
 $routes->get('Report/report_total_payment_app_show/(:segment)/(:segment)/(:segment)/(:segment)', 'Report::report_total_payment_app_show/$1/$2/$3/$4');
 $routes->get('Report/report_total_payment_app_show/(:segment)/(:segment)/(:segment)/(:segment)/(:num)', 'Report::report_total_payment_app_show/$1/$2/$3/$4/$5');
+
+$routes->get('Report/billing_operations_report', 'Report::billing_operations_report');
+$routes->get('Report/billing_operations_report_data/(:segment)/(:segment)', 'Report::billing_operations_report_data/$1/$2');
+$routes->get('Report/billing_operations_report_data/(:segment)/(:segment)/(:num)', 'Report::billing_operations_report_data/$1/$2/$3');
 
 $routes->get('Report/diagnosis_report', 'Report::diagnosis_report');
 $routes->get('Report/diagnosis_report_data/(:segment)', 'Report::diagnosis_report_data/$1');
@@ -548,6 +566,14 @@ $routes->get('Report/insurance_ipd_report_data/(:segment)/(:segment)/(:segment)/
 $routes->get('Report/insurance_combined_report', 'Report::insurance_combined_report');
 $routes->get('Report/insurance_combined_report_data/(:segment)/(:segment)/(:segment)', 'Report::insurance_combined_report_data/$1/$2/$3');
 $routes->get('Report/insurance_combined_report_data/(:segment)/(:segment)/(:segment)/(:num)', 'Report::insurance_combined_report_data/$1/$2/$3/$4');
+
+// Legacy Report4 compatibility for Insurance Case reports
+$routes->get('Report4/echs_ipd_list_main', 'Report::echs_ipd_list_main');
+$routes->get('Report4/echs_opd_list_main', 'Report::echs_opd_list_main');
+$routes->get('Report4/echs_ipd_list_data/(:segment)/(:segment)/(:segment)', 'Report::echs_ipd_list_data/$1/$2/$3');
+$routes->get('Report4/echs_ipd_list_data/(:segment)/(:segment)/(:segment)/(:num)', 'Report::echs_ipd_list_data/$1/$2/$3/$4');
+$routes->get('Report4/echs_opd_list_data/(:segment)/(:segment)/(:segment)', 'Report::echs_opd_list_data/$1/$2/$3');
+$routes->get('Report4/echs_opd_list_data/(:segment)/(:segment)/(:segment)/(:num)', 'Report::echs_opd_list_data/$1/$2/$3/$4');
 
 // Organization Packing Routes
 $routes->get('org-packing', 'OrgPacking::index');

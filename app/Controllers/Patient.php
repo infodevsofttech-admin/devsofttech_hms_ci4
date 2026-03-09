@@ -37,11 +37,7 @@ class Patient extends BaseController
 
     public function create()
 	{
-		if (!$this->request->isAJAX()) {
-			return $this->response
-				->setStatusCode(400)
-				->setJSON(['insertid' => 0, 'error_text' => 'Invalid request']);
-		}
+		$isAjax = $this->request->isAJAX();
 
 		$chk_age = $this->request->getPost('chk_age');
 		$age_month = (string) $this->request->getPost('input_age_month');
@@ -67,10 +63,16 @@ class Patient extends BaseController
 		$validation->setRules($rules);
 		if (!$validation->withRequest($this->request)->run()) {
 			$errorText = implode("\n", $validation->getErrors());
-			return $this->response->setJSON([
-				'insertid' => 0,
-				'error_text' => $errorText,
-			]);
+			if ($isAjax) {
+				return $this->response->setJSON([
+					'insertid' => 0,
+					'error_text' => $errorText,
+				]);
+			}
+
+			return redirect()->to(base_url('billing/patient'))
+				->withInput()
+				->with('error', $errorText);
 		}
 
 		$data = [
@@ -100,11 +102,22 @@ class Patient extends BaseController
 		$patientModel = new PatientModel();
 		$insertId = $patientModel->insertPatient($data);
 		if ($insertId <= 0) {
-			return $this->response->setJSON([
-				'insertid' => 0,
-				'error_text' => 'Unable to save patient.',
-			]);
+			if ($isAjax) {
+				return $this->response->setJSON([
+					'insertid' => 0,
+					'error_text' => 'Unable to save patient.',
+				]);
+			}
+
+			return redirect()->to(base_url('billing/patient'))
+				->withInput()
+				->with('error', 'Unable to save patient.');
 		}
+
+		$this->saveNamesToNameList([
+			(string) $this->request->getPost('input_name'),
+			(string) $this->request->getPost('input_relative_name'),
+		]);
 
 		// Check Multiple UHID
 		$relativeName = trim(strtoupper((string) $this->request->getPost('input_relative_name')));
@@ -143,7 +156,11 @@ class Patient extends BaseController
 			$patientModel->insertDuplicateLog($dupData);
 		}
 
-		return $this->response->setJSON(['insertid' => $insertId]);
+		if ($isAjax) {
+			return $this->response->setJSON(['insertid' => $insertId]);
+		}
+
+		return redirect()->to(base_url('billing/patient/person_record/' . $insertId));
 	}
 
 	public function search_adv()
@@ -416,6 +433,10 @@ class Patient extends BaseController
 		$pid = (int) $this->request->getPost('p_id');
 		$patientModel = new PatientModel();
 		$patientModel->updatePatient($data, $pid);
+		$this->saveNamesToNameList([
+			(string) $this->request->getPost('input_name'),
+			(string) $this->request->getPost('input_relative_name'),
+		]);
 
 		return $this->response->setJSON([
 			'update' => 1,
@@ -778,19 +799,8 @@ class Patient extends BaseController
 			return $this->response->setJSON([]);
 		}
 
-		$sql = "select * from name_list where name like '" . $this->db->escapeLikeString($q) . "%' order by name limit 20";
-		$query = $this->db->query($sql);
-		$rows = $query->getResultArray();
-
-		$rowSet = [];
-		foreach ($rows as $row) {
-			$rowSet[] = [
-				'label' => trim($row['name']),
-				'value' => trim($row['name']),
-			];
-		}
-
-		return $this->response->setJSON($rowSet);
+		$patientModel = new PatientModel();
+		return $this->response->setJSON($patientModel->getNameSuggestions($q));
 	}
 
 	private function getProfileFilePath(int $fileId): string
@@ -922,10 +932,38 @@ class Patient extends BaseController
             return null;
         }
 
-        $dt = \DateTime::createFromFormat('d/m/Y', $date);
+		$date = trim($date);
+
+		$dt = \DateTime::createFromFormat('Y-m-d', $date);
+		if (!$dt) {
+			$dt = \DateTime::createFromFormat('d/m/Y', $date);
+		}
 
         return $dt ? $dt->format('Y-m-d') : null;
     }
+
+	private function saveNamesToNameList(array $names): void
+	{
+		if (! $this->db->tableExists('name_list')) {
+			return;
+		}
+
+		$builder = $this->db->table('name_list');
+		foreach ($names as $rawName) {
+			$name = preg_replace('/\s+/', ' ', trim((string) $rawName));
+			if ($name === '' || strlen($name) < 2) {
+				continue;
+			}
+
+			$name = ucwords(strtolower($name));
+			$exists = $builder->select('id')->where('name', $name)->limit(1)->get()->getRowArray();
+			if ($exists) {
+				continue;
+			}
+
+			$builder->insert(['name' => $name]);
+		}
+	}
 
 
 }
