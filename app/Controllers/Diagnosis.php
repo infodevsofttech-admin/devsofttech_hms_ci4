@@ -1043,6 +1043,77 @@ class Diagnosis extends BaseController
         ]);
     }
 
+    public function openReportEditorPage($labReqId)
+    {
+        $labReqId = (int) $labReqId;
+
+        $reportRow = $this->db->table('lab_request')->where('id', $labReqId)->get()->getRow();
+        if (! $reportRow) {
+            return '<div class="alert alert-danger">Report not found</div>';
+        }
+
+        $patientRow = $this->db->table('patient_master')
+            ->select('gender, age, age_in, age_in_month, dob')
+            ->where('id', (int) ($reportRow->patient_id ?? 0))
+            ->get()
+            ->getRow();
+
+        $genderRaw = (int) ($patientRow->gender ?? 0);
+        $reportRow->gender_text = $genderRaw === 1 ? 'Male' : ($genderRaw === 2 ? 'Female' : '-');
+
+        $ageVal = (int) ($patientRow->age ?? 0);
+        $ageIn = trim((string) ($patientRow->age_in ?? ''));
+        $ageInMonth = (int) ($patientRow->age_in_month ?? 0);
+
+        if ($ageVal > 0) {
+            $ageUnit = $ageIn !== '' ? $ageIn : 'Years';
+            $reportRow->age_text = $ageVal . ' ' . $ageUnit;
+        } elseif ($ageInMonth > 0) {
+            $reportRow->age_text = $ageInMonth . ' Months';
+        } else {
+            $dob = (string) ($patientRow->dob ?? '');
+            if ($dob !== '' && $dob !== '0000-00-00') {
+                try {
+                    $dobDate = new \DateTime($dob);
+                    $today = new \DateTime('today');
+                    $diff = $dobDate->diff($today);
+                    $reportRow->age_text = $diff->y > 0 ? ($diff->y . ' Years') : ($diff->m . ' Months');
+                } catch (\Throwable $e) {
+                    $reportRow->age_text = '-';
+                }
+            } else {
+                $reportRow->age_text = '-';
+            }
+        }
+
+        $invoiceItem = $this->db->table('invoice_item')
+            ->select('item_id')
+            ->where('id', (int) ($reportRow->charge_item_id ?? 0))
+            ->get()
+            ->getRow();
+
+        $templateBuilder = $this->db->table('radiology_ultrasound_template')
+            ->select('id, template_name')
+            ->where('Modality', (int) ($reportRow->lab_type ?? 0));
+
+        if (! empty($invoiceItem->item_id)) {
+            $templateBuilder->groupStart()
+                ->where('charge_id', (int) $invoiceItem->item_id)
+                ->orWhere('charge_id', 0)
+                ->groupEnd();
+        }
+
+        $templates = $templateBuilder
+            ->orderBy('template_name', 'ASC')
+            ->get()
+            ->getResult();
+
+        return view('diagnosis/lab_final_report_editor', [
+            'report_format' => [$reportRow],
+            'radiology_ultrasound_template' => $templates,
+        ]);
+    }
+
     public function getTemplateXray($templateId)
     {
         $templateId = (int) $templateId;
@@ -1435,6 +1506,177 @@ class Diagnosis extends BaseController
         ]);
     }
 
+    public function imagingUploadGallery($invoiceId, $labType, $labReqId = 0)
+    {
+        $invoiceId = (int) $invoiceId;
+        $labType = (int) $labType;
+        $labReqId = (int) $labReqId;
+
+        if ($invoiceId <= 0 || $labType <= 0 || ! $this->db->tableExists('file_upload_data')) {
+            return view('diagnosis/imaging_upload_gallery', [
+                'files' => [],
+                'study_name' => '',
+            ]);
+        }
+
+        $studyName = '';
+        if ($labReqId > 0) {
+            $requestRow = $this->db->table('lab_request')
+                ->select('id, report_name')
+                ->where('id', $labReqId)
+                ->get(1)
+                ->getRowArray();
+            $studyName = trim((string) ($requestRow['report_name'] ?? ''));
+        }
+
+        $builder = $this->db->table('file_upload_data')
+            ->where('isdelete', 0)
+            ->where('charge_id', $invoiceId)
+            ->where('charge_type', $labType);
+
+        $fields = $this->db->getFieldNames('file_upload_data');
+        if ($labReqId > 0 && in_array('repo_id', $fields, true)) {
+            $builder->where('repo_id', $labReqId);
+        }
+
+        $rows = $builder->orderBy('id', 'DESC')->get()->getResultArray();
+        $files = [];
+        foreach ($rows as $row) {
+            $fullPath = trim((string) ($row['full_path'] ?? ''));
+            $url = $this->buildUploadPublicUrl($fullPath);
+            $mime = trim((string) ($row['file_type'] ?? ''));
+            $ext = strtolower(pathinfo((string) ($row['file_name'] ?? ''), PATHINFO_EXTENSION));
+            $isImage = (int) ($row['is_image'] ?? 0) === 1 || str_starts_with($mime, 'image/');
+            $isPdf = $ext === 'pdf' || $mime === 'application/pdf';
+
+            $files[] = [
+                'id' => (int) ($row['id'] ?? 0),
+                'name' => (string) ($row['orig_name'] ?? $row['file_name'] ?? 'Uploaded file'),
+                'desc' => (string) ($row['file_desc'] ?? ''),
+                'url' => $url,
+                'is_image' => $isImage,
+                'is_pdf' => $isPdf,
+                'insert_time' => (string) ($row['insert_time'] ?? $row['insert_date'] ?? ''),
+                'ai_status' => (string) ($row['ai_status'] ?? ''),
+                'ai_alert_text' => (string) ($row['ai_alert_text'] ?? ''),
+                'scan_type' => (string) ($row['scan_type'] ?? ''),
+            ];
+        }
+
+        return view('diagnosis/imaging_upload_gallery', [
+            'files' => $files,
+            'study_name' => $studyName,
+        ]);
+    }
+
+    public function uploadReportFile()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        if (! $this->db->tableExists('file_upload_data')) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'file_upload_data table not found']);
+        }
+
+        $invoiceId = (int) $this->request->getPost('invoice_id');
+        $labType = (int) $this->request->getPost('lab_type');
+        $reqId = (int) $this->request->getPost('req_id');
+        $fileDesc = trim((string) $this->request->getPost('file_desc'));
+        $scanType = trim((string) $this->request->getPost('scan_type'));
+
+        if ($invoiceId <= 0 || $labType <= 0) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Missing invoice/lab context']);
+        }
+
+        $upload = $this->request->getFile('report_file');
+        if (! $upload || ! $upload->isValid()) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'No valid file uploaded']);
+        }
+
+        $ext = strtolower((string) $upload->getExtension());
+        $allowed = ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif', 'pdf'];
+        if (! in_array($ext, $allowed, true)) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Unsupported file type']);
+        }
+
+        $targetDir = ROOTPATH . 'public' . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'diagnosis' . DIRECTORY_SEPARATOR . date('Y') . DIRECTORY_SEPARATOR . date('m');
+        if (! is_dir($targetDir) && ! @mkdir($targetDir, 0775, true) && ! is_dir($targetDir)) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Unable to create upload directory']);
+        }
+
+        $storedName = 'diag_' . date('Ymd_His') . '_' . substr(md5((string) mt_rand()), 0, 8) . '.' . $ext;
+
+        try {
+            $upload->move($targetDir, $storedName, true);
+        } catch (\Throwable $e) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Upload failed: ' . $e->getMessage()]);
+        }
+
+        $absolutePath = $targetDir . DIRECTORY_SEPARATOR . $storedName;
+        $relativePath = 'uploads/diagnosis/' . date('Y') . '/' . date('m') . '/' . $storedName;
+        $publicUrl = base_url($relativePath);
+
+        $user = function_exists('auth') ? auth()->user() : null;
+        $uploadBy = trim((string) ($user->username ?? $user->email ?? 'system'));
+        $uploadById = (int) ($user->id ?? 0);
+
+        $fields = $this->db->getFieldNames('file_upload_data');
+        $insert = [];
+        $fieldMap = [
+            'name' => $storedName,
+            'file_name' => $storedName,
+            'orig_name' => (string) $upload->getClientName(),
+            'client_name' => (string) $upload->getClientName(),
+            'file_ext' => '.' . $ext,
+            'file_type' => (string) $upload->getClientMimeType(),
+            'full_path' => str_replace('\\', '/', $absolutePath),
+            'file_path' => str_replace('\\', '/', $targetDir) . '/',
+            'raw_name' => pathinfo($storedName, PATHINFO_FILENAME),
+            'store_file_name' => $storedName,
+            'file_size' => round(((float) $upload->getSize()) / 1024, 2),
+            'is_image' => in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif'], true) ? 1 : 0,
+            'image_type' => $ext,
+            'insert_date' => Time::now('Asia/Kolkata')->toDateTimeString(),
+            'insert_time' => Time::now('Asia/Kolkata')->toDateTimeString(),
+            'file_desc' => $fileDesc !== '' ? $fileDesc : 'Diagnosis Report Upload',
+            'repo_id' => $reqId,
+            'charge_id' => $invoiceId,
+            'charge_type' => $labType,
+            'upload_by' => $uploadBy,
+            'upload_by_id' => $uploadById,
+            'scan_type' => $scanType !== '' ? $scanType : 'upload',
+            'show_type' => 0,
+            'isdelete' => 0,
+            'document_type' => 'diagnosis-report',
+            'content_description' => 'Uploaded from diagnosis editor',
+            'ai_status' => 'pending',
+            'ai_alert_flag' => 0,
+            'ai_alert_text' => null,
+        ];
+
+        foreach ($fieldMap as $key => $value) {
+            if (in_array($key, $fields, true)) {
+                $insert[$key] = $value;
+            }
+        }
+
+        $ok = $this->db->table('file_upload_data')->insert($insert);
+        if (! $ok) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Unable to save upload metadata']);
+        }
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'error_text' => 'File uploaded successfully',
+            'file_id' => (int) $this->db->insertID(),
+            'file_name' => $storedName,
+            'file_url' => $publicUrl,
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
     public function aiExtractLabReportValues()
     {
         if (! $this->request->isAJAX()) {
@@ -1480,9 +1722,14 @@ class Diagnosis extends BaseController
             return $this->response->setJSON(['update' => 0, 'error_text' => 'OCR failed. Configure AZURE_DOCINTEL_ENDPOINT/KEY or use readable image.']);
         }
 
-        $parsed = $this->parseLabValuesWithAzureOpenAi($ocrText, $panelName);
+        $parsed = $this->parseLabValuesWithAi($ocrText, $panelName);
         if (empty($parsed['values']) || ! is_array($parsed['values'])) {
-            return $this->response->setJSON(['update' => 0, 'error_text' => 'AI parsing failed. Check Azure OpenAI settings and deployment.']);
+            $errorText = trim((string) ($parsed['error'] ?? ''));
+            if ($errorText === '') {
+                $errorText = 'AI parsing failed. Check AI endpoint/settings and try retry.';
+            }
+
+            return $this->response->setJSON(['update' => 0, 'error_text' => $errorText]);
         }
 
         $modelName = trim((string) ($parsed['model'] ?? ''));
@@ -1539,6 +1786,8 @@ class Diagnosis extends BaseController
         return $this->response->setJSON([
             'update' => 1,
             'error_text' => 'AI extracted ' . $storedCount . ' values. Doctor verification pending.',
+            'ai_provider' => (string) ($parsed['provider'] ?? 'azure-openai'),
+            'ai_model' => $modelName,
             'batch_id' => $batchId,
             'stored_values' => $storedCount,
             'csrfName' => csrf_token(),
@@ -1617,6 +1866,156 @@ class Diagnosis extends BaseController
         ]);
     }
 
+    public function imagingAiDiagnosis($labReqId)
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $labReqId = (int) $labReqId;
+        if ($labReqId <= 0) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid request id']);
+        }
+
+        $labRequest = $this->db->table('lab_request')
+            ->where('id', $labReqId)
+            ->get(1)
+            ->getRowArray();
+
+        if (empty($labRequest)) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Imaging request not found']);
+        }
+
+        $labType = (int) ($labRequest['lab_type'] ?? 0);
+        if (! $this->isRadiologyType($labType)) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'AI diagnosis is available for imaging only']);
+        }
+
+        if (! $this->db->tableExists('file_upload_data')) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'file_upload_data table not found']);
+        }
+
+        if (! $this->db->tableExists('lab_ai_extraction_batches')) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'AI batch table not found. Run migrations first.']);
+        }
+
+        $invoiceId = (int) ($labRequest['charge_id'] ?? 0);
+        $studyName = trim((string) ($labRequest['report_name'] ?? 'Imaging Study'));
+        $files = $this->findImagingFilesForRequest($invoiceId, $labType, $labReqId);
+
+        if (empty($files)) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'No uploaded image/PDF found for this study']);
+        }
+
+        $fileIds = array_values(array_filter(array_map(static fn($row) => (int) ($row['id'] ?? 0), $files)));
+        $this->updateImagingFileAiState($fileIds, 'processing', 'AI diagnosis is running');
+
+        $ocrChunks = [];
+        $visionImages = [];
+        $sourceFiles = [];
+
+        foreach ($files as $fileRow) {
+            $absolutePath = $this->resolveUploadAbsolutePath((string) ($fileRow['full_path'] ?? ''));
+            if ($absolutePath === '' || ! is_file($absolutePath)) {
+                continue;
+            }
+
+            $fileName = (string) ($fileRow['orig_name'] ?? $fileRow['file_name'] ?? basename($absolutePath));
+            $mime = $this->detectMimeType($absolutePath);
+            $sourceFiles[] = [
+                'id' => (int) ($fileRow['id'] ?? 0),
+                'name' => $fileName,
+                'scan_type' => (string) ($fileRow['scan_type'] ?? ''),
+            ];
+
+            $ocrText = trim($this->extractTextFromLabFile($absolutePath));
+            if ($ocrText !== '') {
+                $ocrChunks[] = 'FILE: ' . $fileName . "\n" . $ocrText;
+            }
+
+            if (str_starts_with($mime, 'image/') && count($visionImages) < 4) {
+                $imagePayload = $this->buildVisionImagePayload($absolutePath, $mime);
+                if ($imagePayload !== '') {
+                    $visionImages[] = [
+                        'type' => 'image_url',
+                        'image_url' => ['url' => $imagePayload],
+                    ];
+                }
+            }
+        }
+
+        $analysis = $this->generateImagingDiagnosisDraft($studyName, $ocrChunks, $visionImages);
+        if (($analysis['error'] ?? '') !== '') {
+            $this->updateImagingFileAiState($fileIds, 'failed', (string) $analysis['error'], 1);
+            return $this->response->setJSON(['update' => 0, 'error_text' => (string) $analysis['error']]);
+        }
+
+        $rawPayload = [
+            'type' => 'imaging-ai-diagnosis',
+            'request_id' => $labReqId,
+            'invoice_id' => $invoiceId,
+            'lab_type' => $labType,
+            'study_name' => $studyName,
+            'title' => (string) ($analysis['title'] ?? $studyName),
+            'findings_html' => (string) ($analysis['findings_html'] ?? ''),
+            'impression_html' => (string) ($analysis['impression_html'] ?? ''),
+            'summary_text' => (string) ($analysis['summary_text'] ?? ''),
+            'provider' => (string) ($analysis['provider'] ?? 'azure-openai'),
+            'model' => (string) ($analysis['model'] ?? ''),
+            'source_files' => $sourceFiles,
+            'raw' => $analysis['raw'] ?? [],
+        ];
+
+        $ocrText = trim(implode("\n\n", $ocrChunks));
+        $batchId = $this->insertLabAiBatch(
+            $invoiceId,
+            $labType,
+            (int) ($fileIds[0] ?? 0),
+            $studyName,
+            (string) ($analysis['model'] ?? ''),
+            $ocrText,
+            (string) json_encode($rawPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+        );
+
+        if ($batchId <= 0) {
+            $this->updateImagingFileAiState($fileIds, 'failed', 'Unable to store AI diagnosis result', 1);
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Unable to store AI diagnosis result']);
+        }
+
+        $this->updateImagingFileAiState($fileIds, 'completed', (string) ($analysis['summary_text'] ?? 'AI draft ready'));
+
+        $this->auditClinicalUpdate('lab_ai_extraction_batches', 'created', $batchId, null, [
+            'invoice_id' => $invoiceId,
+            'lab_type' => $labType,
+            'request_id' => $labReqId,
+            'source_file_ids' => $fileIds,
+            'mode' => 'imaging-ai-diagnosis',
+        ]);
+
+        $html = view('diagnosis/imaging_ai_result_modal', [
+            'batch_id' => $batchId,
+            'title' => (string) ($analysis['title'] ?? $studyName),
+            'study_name' => $studyName,
+            'findings_html' => (string) ($analysis['findings_html'] ?? ''),
+            'impression_html' => (string) ($analysis['impression_html'] ?? ''),
+            'summary_text' => (string) ($analysis['summary_text'] ?? ''),
+            'provider' => (string) ($analysis['provider'] ?? 'azure-openai'),
+            'model' => (string) ($analysis['model'] ?? ''),
+        ]);
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'error_text' => 'AI diagnosis draft is ready and stored.',
+            'batch_id' => $batchId,
+            'html' => $html,
+            'findings_html' => (string) ($analysis['findings_html'] ?? ''),
+            'impression_html' => (string) ($analysis['impression_html'] ?? ''),
+            'summary_text' => (string) ($analysis['summary_text'] ?? ''),
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
     private function insertLabAiBatch(
         int $invoiceId,
         int $labType,
@@ -1677,6 +2076,199 @@ class Diagnosis extends BaseController
         }
 
         return '';
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function findImagingFilesForRequest(int $invoiceId, int $labType, int $labReqId): array
+    {
+        if ($invoiceId <= 0 || $labType <= 0 || ! $this->db->tableExists('file_upload_data')) {
+            return [];
+        }
+
+        $builder = $this->db->table('file_upload_data')
+            ->where('isdelete', 0)
+            ->where('charge_id', $invoiceId)
+            ->where('charge_type', $labType);
+
+        $fields = $this->db->getFieldNames('file_upload_data');
+        if ($labReqId > 0 && in_array('repo_id', $fields, true)) {
+            $builder->where('repo_id', $labReqId);
+        }
+
+        return $builder->orderBy('id', 'DESC')->get()->getResultArray();
+    }
+
+    private function updateImagingFileAiState(array $fileIds, string $status, string $message = '', int $alertFlag = 0): void
+    {
+        $fileIds = array_values(array_filter(array_map('intval', $fileIds)));
+        if (empty($fileIds) || ! $this->db->tableExists('file_upload_data')) {
+            return;
+        }
+
+        $fields = $this->db->getFieldNames('file_upload_data');
+        $update = [];
+        if (in_array('ai_status', $fields, true)) {
+            $update['ai_status'] = $status;
+        }
+        if (in_array('ai_alert_text', $fields, true)) {
+            $update['ai_alert_text'] = $message !== '' ? mb_substr($message, 0, 255) : null;
+        }
+        if (in_array('ai_alert_flag', $fields, true)) {
+            $update['ai_alert_flag'] = $alertFlag > 0 ? 1 : 0;
+        }
+
+        if ($update === []) {
+            return;
+        }
+
+        $this->db->table('file_upload_data')->whereIn('id', $fileIds)->update($update);
+    }
+
+    private function buildUploadPublicUrl(string $fullPath): string
+    {
+        $normalized = str_replace('\\', '/', trim($fullPath));
+        if ($normalized === '') {
+            return '';
+        }
+
+        $publicPos = stripos($normalized, '/public/');
+        if ($publicPos !== false) {
+            return base_url(substr($normalized, $publicPos + 8));
+        }
+
+        $uploadsPos = stripos($normalized, 'uploads/');
+        if ($uploadsPos !== false) {
+            return base_url(substr($normalized, $uploadsPos));
+        }
+
+        return '';
+    }
+
+    private function buildVisionImagePayload(string $absolutePath, string $mime): string
+    {
+        $bytes = @file_get_contents($absolutePath);
+        if ($bytes === false || $bytes === '') {
+            return '';
+        }
+
+        return 'data:' . $mime . ';base64,' . base64_encode($bytes);
+    }
+
+    /**
+     * @param array<int, string> $ocrChunks
+     * @param array<int, array<string, mixed>> $visionImages
+     * @return array<string, mixed>
+     */
+    private function generateImagingDiagnosisDraft(string $studyName, array $ocrChunks, array $visionImages): array
+    {
+        $endpoint = rtrim($this->readSetting('AZURE_OPENAI_ENDPOINT'), '/');
+        $apiKey = trim($this->readSetting('AZURE_OPENAI_API_KEY'));
+        $deployment = trim($this->readSetting('AZURE_OPENAI_DEPLOYMENT'));
+        $apiVersion = trim($this->readSetting('AZURE_OPENAI_API_VERSION'));
+
+        if ($endpoint === '' || $apiKey === '' || $deployment === '') {
+            return [
+                'error' => 'Azure OpenAI settings are missing for imaging AI diagnosis.',
+            ];
+        }
+
+        if ($apiVersion === '') {
+            $apiVersion = '2024-10-21';
+        }
+
+        if ($visionImages === [] && $ocrChunks === []) {
+            return [
+                'error' => 'No image or OCR context available for AI diagnosis.',
+            ];
+        }
+
+        $content = [[
+            'type' => 'text',
+            'text' => "You are assisting a radiologist in drafting an imaging report for an Indian hospital.\n" .
+                "Study name: {$studyName}\n" .
+                "Review the uploaded imaging files and any OCR text.\n" .
+                "Return strict JSON only with keys: title, findings_html, impression_html, summary_text.\n" .
+                "Rules:\n" .
+                "1. findings_html must be concise HTML paragraphs or bullet list suitable for the report editor.\n" .
+                "2. impression_html must be concise HTML suitable for the Impression field.\n" .
+                "3. summary_text must be plain text under 220 characters.\n" .
+                "4. Do not include markdown fences.\n" .
+                "5. If image quality is poor, say that clearly in findings_html/impression_html.\n\n" .
+                ($ocrChunks !== [] ? ("OCR_CONTEXT:\n" . mb_substr(implode("\n\n", $ocrChunks), 0, 14000)) : 'OCR_CONTEXT: none'),
+        ]];
+
+        foreach ($visionImages as $imagePart) {
+            $content[] = $imagePart;
+        }
+
+        $url = $endpoint . '/openai/deployments/' . rawurlencode($deployment) . '/chat/completions?api-version=' . rawurlencode($apiVersion);
+        $attempts = $this->aiMaxRetries();
+        $lastError = 'AI diagnosis generation failed.';
+
+        for ($attempt = 1; $attempt <= $attempts; $attempt++) {
+            try {
+                $client = service('curlrequest', $this->httpOptions());
+                $response = $client->post($url, [
+                    'headers' => [
+                        'api-key' => $apiKey,
+                        'Content-Type' => 'application/json',
+                    ],
+                    'json' => [
+                        'messages' => [[
+                            'role' => 'user',
+                            'content' => $content,
+                        ]],
+                        'temperature' => 0.2,
+                        'response_format' => ['type' => 'json_object'],
+                        'max_tokens' => 2200,
+                    ],
+                ]);
+
+                if ($response->getStatusCode() < 200 || $response->getStatusCode() >= 300) {
+                    $lastError = 'Azure OpenAI HTTP ' . $response->getStatusCode();
+                    continue;
+                }
+
+                $decoded = json_decode((string) $response->getBody(), true);
+                $contentText = trim((string) ($decoded['choices'][0]['message']['content'] ?? ''));
+                if ($contentText === '') {
+                    $lastError = 'Azure OpenAI returned empty content.';
+                    continue;
+                }
+
+                $json = json_decode($contentText, true);
+                if (! is_array($json)) {
+                    $lastError = 'Azure OpenAI returned invalid JSON content.';
+                    continue;
+                }
+
+                $findingsHtml = trim((string) ($json['findings_html'] ?? ''));
+                $impressionHtml = trim((string) ($json['impression_html'] ?? ''));
+                if ($findingsHtml === '' && $impressionHtml === '') {
+                    $lastError = 'AI returned empty report sections.';
+                    continue;
+                }
+
+                return [
+                    'provider' => 'azure-openai',
+                    'model' => (string) ($decoded['model'] ?? $deployment),
+                    'title' => trim((string) ($json['title'] ?? $studyName)),
+                    'findings_html' => $findingsHtml,
+                    'impression_html' => $impressionHtml,
+                    'summary_text' => trim((string) ($json['summary_text'] ?? 'AI diagnosis draft prepared.')),
+                    'raw' => $decoded,
+                    'error' => '',
+                ];
+            } catch (\Throwable $e) {
+                $lastError = $e->getMessage() !== '' ? $e->getMessage() : 'Azure OpenAI request timeout/error.';
+            }
+        }
+
+        return [
+            'error' => $lastError,
+        ];
     }
 
     private function extractTextFromLabFile(string $absolutePath): string
@@ -1827,6 +2419,108 @@ class Diagnosis extends BaseController
     /**
      * @return array<string, mixed>
      */
+    private function parseLabValuesWithAi(string $ocrText, string $panelName): array
+    {
+        $external = $this->parseLabValuesWithExternalService($ocrText, $panelName);
+        if (! empty($external['values']) && is_array($external['values'])) {
+            return $external;
+        }
+
+        $azure = $this->parseLabValuesWithAzureOpenAi($ocrText, $panelName);
+        if (! empty($azure['values']) && is_array($azure['values'])) {
+            return $azure;
+        }
+
+        $externalError = trim((string) ($external['error'] ?? ''));
+        $azureError = trim((string) ($azure['error'] ?? ''));
+        return [
+            'provider' => 'none',
+            'model' => '',
+            'values' => [],
+            'raw' => [],
+            'error' => $externalError !== '' ? $externalError : $azureError,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function parseLabValuesWithExternalService(string $ocrText, string $panelName): array
+    {
+        $endpoint = rtrim($this->readSetting('DIAGNOSIS_AI_PARSE_ENDPOINT'), '/');
+        if ($endpoint === '') {
+            return [
+                'provider' => 'external',
+                'model' => '',
+                'values' => [],
+                'raw' => [],
+                'error' => '',
+            ];
+        }
+
+        $token = trim($this->readSetting('DIAGNOSIS_AI_PARSE_TOKEN'));
+        $headers = [
+            'Content-Type' => 'application/json',
+            'Accept' => 'application/json',
+        ];
+        if ($token !== '') {
+            $headers['Authorization'] = 'Bearer ' . $token;
+        }
+
+        $attempts = $this->aiMaxRetries();
+        $lastError = 'External AI service request failed.';
+
+        for ($attempt = 1; $attempt <= $attempts; $attempt++) {
+            try {
+                $client = service('curlrequest', $this->httpOptions());
+                $response = $client->post($endpoint, [
+                    'headers' => $headers,
+                    'json' => [
+                        'ocr_text' => mb_substr($ocrText, 0, 20000),
+                        'panel_name' => $panelName,
+                    ],
+                ]);
+
+                if ($response->getStatusCode() >= 200 && $response->getStatusCode() < 300) {
+                    $decoded = json_decode((string) $response->getBody(), true);
+                    if (! is_array($decoded)) {
+                        $lastError = 'External AI response is not valid JSON.';
+                        continue;
+                    }
+
+                    $values = $decoded['values'] ?? null;
+                    if (! is_array($values)) {
+                        $lastError = trim((string) ($decoded['error'] ?? 'External AI response missing values array.'));
+                        continue;
+                    }
+
+                    return [
+                        'provider' => (string) ($decoded['provider'] ?? 'external'),
+                        'model' => (string) ($decoded['model'] ?? 'external-ai'),
+                        'values' => $values,
+                        'raw' => $decoded,
+                        'error' => '',
+                    ];
+                }
+
+                $lastError = 'External AI HTTP ' . $response->getStatusCode();
+            } catch (\Throwable $e) {
+                $lastError = $e->getMessage() !== '' ? $e->getMessage() : 'External AI request timeout/error.';
+            }
+        }
+
+        return [
+            'provider' => 'external',
+            'model' => '',
+            'values' => [],
+            'raw' => [],
+            'error' => $lastError,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
     private function parseLabValuesWithAzureOpenAi(string $ocrText, string $panelName): array
     {
         $endpoint = rtrim($this->readSetting('AZURE_OPENAI_ENDPOINT'), '/');
@@ -1835,7 +2529,13 @@ class Diagnosis extends BaseController
         $apiVersion = trim($this->readSetting('AZURE_OPENAI_API_VERSION'));
 
         if ($endpoint === '' || $apiKey === '' || $deployment === '') {
-            return [];
+            return [
+                'provider' => 'azure-openai',
+                'model' => '',
+                'values' => [],
+                'raw' => [],
+                'error' => 'Azure OpenAI settings are missing.',
+            ];
         }
         if ($apiVersion === '') {
             $apiVersion = '2024-10-21';
@@ -1850,47 +2550,65 @@ class Diagnosis extends BaseController
 
         $url = $endpoint . '/openai/deployments/' . rawurlencode($deployment) . '/chat/completions?api-version=' . rawurlencode($apiVersion);
 
-        try {
-            $client = service('curlrequest', $this->httpOptions());
-            $response = $client->post($url, [
-                'headers' => [
-                    'api-key' => $apiKey,
-                    'Content-Type' => 'application/json',
-                ],
-                'json' => [
-                    'messages' => [[
-                        'role' => 'user',
-                        'content' => $prompt,
-                    ]],
-                    'temperature' => 0,
-                    'response_format' => ['type' => 'json_object'],
-                    'max_tokens' => 2200,
-                ],
-            ]);
+        $attempts = $this->aiMaxRetries();
+        $lastError = 'Azure AI parsing failed.';
 
-            if ($response->getStatusCode() < 200 || $response->getStatusCode() >= 300) {
-                return [];
+        for ($attempt = 1; $attempt <= $attempts; $attempt++) {
+            try {
+                $client = service('curlrequest', $this->httpOptions());
+                $response = $client->post($url, [
+                    'headers' => [
+                        'api-key' => $apiKey,
+                        'Content-Type' => 'application/json',
+                    ],
+                    'json' => [
+                        'messages' => [[
+                            'role' => 'user',
+                            'content' => $prompt,
+                        ]],
+                        'temperature' => 0,
+                        'response_format' => ['type' => 'json_object'],
+                        'max_tokens' => 2200,
+                    ],
+                ]);
+
+                if ($response->getStatusCode() < 200 || $response->getStatusCode() >= 300) {
+                    $lastError = 'Azure OpenAI HTTP ' . $response->getStatusCode();
+                    continue;
+                }
+
+                $decoded = json_decode((string) $response->getBody(), true);
+                $content = trim((string) ($decoded['choices'][0]['message']['content'] ?? ''));
+                if ($content === '') {
+                    $lastError = 'Azure OpenAI returned empty content.';
+                    continue;
+                }
+
+                $json = json_decode($content, true);
+                if (! is_array($json)) {
+                    $lastError = 'Azure OpenAI returned invalid JSON content.';
+                    continue;
+                }
+
+                return [
+                    'provider' => 'azure-openai',
+                    'model' => (string) ($decoded['model'] ?? $deployment),
+                    'values' => is_array($json['values'] ?? null) ? $json['values'] : [],
+                    'raw' => $decoded,
+                    'error' => '',
+                ];
+            } catch (\Throwable $e) {
+                $lastError = $e->getMessage() !== '' ? $e->getMessage() : 'Azure OpenAI request timeout/error.';
             }
-
-            $decoded = json_decode((string) $response->getBody(), true);
-            $content = trim((string) ($decoded['choices'][0]['message']['content'] ?? ''));
-            if ($content === '') {
-                return [];
-            }
-
-            $json = json_decode($content, true);
-            if (! is_array($json)) {
-                return [];
-            }
-
-            return [
-                'model' => (string) ($decoded['model'] ?? $deployment),
-                'values' => is_array($json['values'] ?? null) ? $json['values'] : [],
-                'raw' => $decoded,
-            ];
-        } catch (\Throwable $e) {
-            return [];
         }
+
+        return [
+            'provider' => 'azure-openai',
+            'model' => '',
+            'values' => [],
+            'raw' => [],
+            'error' => $lastError,
+        ];
     }
 
     /**
@@ -1898,8 +2616,9 @@ class Diagnosis extends BaseController
      */
     private function httpOptions(): array
     {
+        $timeout = $this->aiTimeoutSeconds();
         $options = [
-            'timeout' => 45,
+            'timeout' => $timeout,
             'http_errors' => false,
         ];
 
@@ -1908,6 +2627,34 @@ class Diagnosis extends BaseController
         }
 
         return $options;
+    }
+
+    private function aiTimeoutSeconds(): int
+    {
+        $timeout = (int) $this->readSetting('DIAGNOSIS_AI_TIMEOUT_SECONDS');
+        if ($timeout <= 0) {
+            $timeout = 45;
+        }
+
+        if ($timeout > 180) {
+            $timeout = 180;
+        }
+
+        return $timeout;
+    }
+
+    private function aiMaxRetries(): int
+    {
+        $retries = (int) $this->readSetting('DIAGNOSIS_AI_RETRY_ATTEMPTS');
+        if ($retries <= 0) {
+            $retries = 2;
+        }
+
+        if ($retries > 5) {
+            $retries = 5;
+        }
+
+        return $retries;
     }
 
     private function readSetting(string $name): string

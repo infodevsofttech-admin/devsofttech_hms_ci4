@@ -7,7 +7,50 @@ $flowTypeLabel = $isPathologyFlow ? 'Lab' : 'Imaging';
 $timingTitle = $isPathologyFlow ? 'Lab Timing Information' : 'Imaging Workflow Timing';
 $testListTitle = $isPathologyFlow ? 'Test List' : 'Imaging Study List';
 $collectedTimeLabel = $isPathologyFlow ? 'Sample Collection Time' : 'Request Collection Time';
+$isImagingFlow = !$isPathologyFlow;
 ?>
+
+<?php if ($isImagingFlow): ?>
+<style>
+.diagnosis-ui {
+    background: linear-gradient(180deg, #f7f9fd 0%, #eef3f9 100%);
+    border: 1px solid #dbe4f0;
+    border-radius: 14px;
+    padding: 14px;
+}
+.diagnosis-ui .card {
+    border: 1px solid #dfe7f3;
+    border-radius: 12px;
+    box-shadow: 0 6px 18px rgba(18, 38, 63, 0.06);
+}
+.diagnosis-ui .card-header {
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+}
+.diagnosis-ui .card-title {
+    letter-spacing: 0.2px;
+    font-weight: 700;
+}
+.diagnosis-ui .table > tbody > tr > th {
+    white-space: nowrap;
+    width: 32%;
+}
+.diagnosis-ui .btn {
+    border-radius: 8px;
+}
+#testDataEntryModal .modal-content {
+    border-radius: 14px;
+    border: 1px solid #dfe7f3;
+}
+#testDataEntryModal .modal-header {
+    background: linear-gradient(90deg, #0a3c8f 0%, #165cb8 100%);
+    color: #fff;
+}
+#testDataEntryModal .btn-close {
+    filter: invert(1);
+}
+</style>
+<?php endif; ?>
 
 <div class="pagetitle">
     <h1><?= esc($currentLabTypeName) ?> - <?= esc($flowTypeLabel) ?> Invoice Details</h1>
@@ -20,11 +63,11 @@ $collectedTimeLabel = $isPathologyFlow ? 'Sample Collection Time' : 'Request Col
     </nav>
 </div>
 
-<section class="section">
+<section class="section<?= $isImagingFlow ? ' diagnosis-ui' : '' ?>">
     <div class="row">
         <!-- Person Profile Card -->
         <div class="col-lg-4">
-            <div class="card">
+            <div class="card profile-card">
                 <div class="card-header bg-primary text-white">
                     <h5 class="card-title mb-0">Person Profile</h5>
                 </div>
@@ -100,7 +143,7 @@ $collectedTimeLabel = $isPathologyFlow ? 'Sample Collection Time' : 'Request Col
         <!-- Lab Timing & Tests Section -->
         <div class="col-lg-8">
             <!-- Lab Timing Card -->
-            <div class="card mb-3" id="labTimingCard">
+            <div class="card mb-3 diag-panel" id="labTimingCard">
                 <div class="card-header bg-info text-white">
                     <h5 class="card-title mb-0"><?= esc($timingTitle) ?></h5>
                 </div>
@@ -139,7 +182,7 @@ $collectedTimeLabel = $isPathologyFlow ? 'Sample Collection Time' : 'Request Col
             </div>
 
             <!-- Test List Card -->
-            <div class="card" id="testListCard">
+            <div class="card diag-panel" id="testListCard">
                 <div class="card-header bg-success text-white">
                     <h5 class="card-title mb-0"><?= esc($testListTitle) ?></h5>
                 </div>
@@ -231,7 +274,7 @@ $collectedTimeLabel = $isPathologyFlow ? 'Sample Collection Time' : 'Request Col
 
 <!-- Test Data Entry Modal -->
 <div class="modal fade" id="testDataEntryModal" tabindex="-1" role="dialog" aria-labelledby="testDataEntryLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-dialog modal-xl" role="document">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="testDataEntryLabel">Test Data Entry</h5>
@@ -240,6 +283,24 @@ $collectedTimeLabel = $isPathologyFlow ? 'Sample Collection Time' : 'Request Col
             <div class="modal-body" id="testDataEntryBody">
                 <!-- Form will be loaded here via AJAX -->
                 <div class="text-center">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="imagingSupportModal" tabindex="-1" aria-labelledby="imagingSupportLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title" id="imagingSupportLabel">Imaging Support</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="imagingSupportBody">
+                <div class="text-center py-4">
                     <div class="spinner-border" role="status">
                         <span class="visually-hidden">Loading...</span>
                     </div>
@@ -589,43 +650,34 @@ function report_create() {
 }
 
 function createReportXray(reqId, testName) {
+    // Create report, then load full-page editor
     const modalBody = document.getElementById('testDataEntryBody');
     const csrfField = modalBody ? modalBody.querySelector('input[name]') : null;
-    const formData = new FormData();
+    const data = new FormData();
 
     if (csrfField) {
-        formData.append(csrfField.name, csrfField.value);
+        data.append(csrfField.name, csrfField.value);
     }
 
+    // Create/initialize report first
     fetch(baseUrl + 'diagnosis/create-report-xray/' + reqId, {
         method: 'POST',
-        body: formData,
+        body: data,
         headers: {
             'X-Requested-With': 'XMLHttpRequest'
         }
     })
     .then(response => response.text())
     .then(html => {
-        destroyReportEditor();
-        document.getElementById('testDataEntryBody').innerHTML = html;
-
-        const label = document.getElementById('testDataEntryLabel');
-        if (label) {
-            label.textContent = testName || 'Final Report';
-        }
-
-        const modal = new bootstrap.Modal(document.getElementById('testDataEntryModal'));
-        modal.show();
-
-        initializeReportEditor();
-        refreshTestList();
-        refreshLabDateShow();
+        // Load full-page editor using load_form
+        load_form(baseUrl + 'diagnosis/open-report-editor/' + reqId, testName + ' - Report Editor');
     })
     .catch(error => {
         console.error('createReportXray error:', error);
-        alert('Error loading report editor: ' + error);
+        alert('Error preparing report editor: ' + error.message);
     });
 }
+
 
 function set_template(templateId) {
     const modalBody = document.getElementById('testDataEntryBody');
@@ -828,16 +880,241 @@ if (testDataEntryModalEl) {
 }
 
 function uploadFiles(reqId, testName) {
-    alert('Upload files not yet implemented for req ID: ' + reqId);
+    diagnosisUploadForReq(reqId, testName, 'file');
 }
 
-function scanReport(reqId, testName) {
-    alert('Scan report not yet implemented for req ID: ' + reqId);
+function scanReportFile(reqId, testName) {
+    diagnosisUploadForReq(reqId, testName, 'camera');
+}
+
+function diagnosisUploadFromEditor(mode) {
+    const reqInput = document.getElementById('hid_value_req_id');
+    const title = (document.getElementById('testDataEntryLabel') || {}).textContent || 'Radiology';
+    const reqId = reqInput ? parseInt(reqInput.value || '0', 10) : 0;
+    diagnosisUploadForReq(reqId, title, mode || 'file');
+}
+
+function diagnosisUploadForReq(reqId, testName, mode) {
+    if (!invoiceId || !labType) {
+        alert('Invoice context missing');
+        return;
+    }
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*,application/pdf';
+    if ((mode || '').toLowerCase() === 'camera') {
+        input.accept = 'image/*';
+        input.setAttribute('capture', 'environment');
+    }
+
+    input.onchange = function () {
+        const file = input.files && input.files[0] ? input.files[0] : null;
+        if (!file) {
+            return;
+        }
+
+        const modalBody = document.getElementById('testDataEntryBody');
+        const csrfField = modalBody ? modalBody.querySelector('input[name]') : null;
+
+        const formData = new FormData();
+        formData.append('report_file', file);
+        formData.append('invoice_id', String(invoiceId));
+        formData.append('lab_type', String(labType));
+        formData.append('req_id', String(reqId || 0));
+        formData.append('file_desc', (testName || 'Imaging Report') + ((mode === 'camera') ? ' (Camera)' : ' (Upload)'));
+        formData.append('scan_type', (mode === 'camera') ? 'camera' : 'upload');
+        if (csrfField) {
+            formData.append(csrfField.name, csrfField.value);
+        }
+
+        fetch(baseUrl + 'diagnosis/upload-report-file', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(result => {
+            if ((result.update || 0) !== 1) {
+                alert(result.error_text || 'Upload failed');
+                return;
+            }
+
+            alert((mode === 'camera' ? 'Webcam image saved successfully.' : 'File uploaded successfully.') + ' Use Show Upload Images or AI Diagnosis in the report editor.');
+        })
+        .catch(error => {
+            console.error('Upload error:', error);
+            alert('Upload request failed');
+        });
+    };
+
+    input.click();
 }
 
 function showFiles(reqId, testName) {
-    const url = baseUrl + 'Lab_Report/report_file_list/' + invoiceId + '/' + labType;
-    window.open(url, '_blank');
+    if (parseInt(labType || '0', 10) === 5 || parseInt(labType || '0', 10) === 30) {
+        const url = baseUrl + 'Lab_Report/report_file_list/' + invoiceId + '/' + labType;
+        window.open(url, '_blank');
+        return;
+    }
+
+    showImagingUploads(reqId, testName);
+}
+
+function getEditorImagingContext() {
+    const reqInput = document.getElementById('hid_value_req_id');
+    const reportNameInput = document.getElementById('hid_value_report_name');
+    const modalLabel = document.getElementById('testDataEntryLabel');
+
+    return {
+        reqId: reqInput ? parseInt(reqInput.value || '0', 10) : 0,
+        testName: (reportNameInput && reportNameInput.value)
+            ? reportNameInput.value
+            : ((modalLabel && modalLabel.textContent) ? modalLabel.textContent.trim() : 'Imaging Study')
+    };
+}
+
+function openImagingSupportModal(title, html) {
+    const titleEl = document.getElementById('imagingSupportLabel');
+    const bodyEl = document.getElementById('imagingSupportBody');
+    if (titleEl) {
+        titleEl.textContent = title || 'Imaging Support';
+    }
+    if (bodyEl) {
+        bodyEl.innerHTML = html || '<div class="alert alert-warning mb-0">No content found.</div>';
+    }
+
+    const modal = new bootstrap.Modal(document.getElementById('imagingSupportModal'));
+    modal.show();
+}
+
+function showImagingUploads(reqId, testName) {
+    const studyReqId = parseInt(reqId || '0', 10);
+    if (!studyReqId) {
+        alert('Study context missing');
+        return;
+    }
+
+    openImagingSupportModal((testName || 'Imaging Study') + ' Uploads', '<div class="text-center py-4"><div class="spinner-border" role="status"></div></div>');
+
+    fetch(baseUrl + 'diagnosis/imaging-upload-gallery/' + invoiceId + '/' + labType + '/' + studyReqId, {
+        method: 'GET',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.text())
+    .then(html => {
+        openImagingSupportModal((testName || 'Imaging Study') + ' Uploads', html);
+    })
+    .catch(error => {
+        console.error('showImagingUploads error:', error);
+        openImagingSupportModal((testName || 'Imaging Study') + ' Uploads', '<div class="alert alert-danger mb-0">Unable to load uploaded images.</div>');
+    });
+}
+
+function showImagingUploadsFromEditor() {
+    const context = getEditorImagingContext();
+    showImagingUploads(context.reqId, context.testName);
+}
+
+function runImagingAiDiagnosis(reqId, testName) {
+    const studyReqId = parseInt(reqId || '0', 10);
+    if (!studyReqId) {
+        alert('Study context missing');
+        return;
+    }
+
+    const modalBody = document.getElementById('testDataEntryBody');
+    const csrfField = modalBody ? modalBody.querySelector('input[name]') : null;
+    const formData = new FormData();
+    if (csrfField) {
+        formData.append(csrfField.name, csrfField.value);
+    }
+
+    openImagingSupportModal((testName || 'Imaging Study') + ' AI Diagnosis', '<div class="text-center py-4"><div class="spinner-border" role="status"></div><div class="mt-2 text-muted">AI is reviewing uploaded images...</div></div>');
+
+    fetch(baseUrl + 'diagnosis/imaging-ai-diagnosis/' + studyReqId, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(result => {
+        if ((result.update || 0) !== 1) {
+            openImagingSupportModal((testName || 'Imaging Study') + ' AI Diagnosis', '<div class="alert alert-danger mb-0">' + (result.error_text || 'AI diagnosis failed') + '</div>');
+            return;
+        }
+
+        openImagingSupportModal((testName || 'Imaging Study') + ' AI Diagnosis', result.html || '<div class="alert alert-warning mb-0">AI result not available.</div>');
+    })
+    .catch(error => {
+        console.error('runImagingAiDiagnosis error:', error);
+        openImagingSupportModal((testName || 'Imaging Study') + ' AI Diagnosis', '<div class="alert alert-danger mb-0">AI diagnosis request failed.</div>');
+    });
+}
+
+function runImagingAiDiagnosisFromEditor() {
+    const context = getEditorImagingContext();
+    runImagingAiDiagnosis(context.reqId, context.testName);
+}
+
+function applyAiDiagnosisDraftToEditor(button, autoSave) {
+    if (!button) {
+        return;
+    }
+
+    const findingsTarget = button.getAttribute('data-findings-target');
+    const impressionTarget = button.getAttribute('data-impression-target');
+    const findingsInput = findingsTarget ? document.querySelector(findingsTarget) : null;
+    const impressionInput = impressionTarget ? document.querySelector(impressionTarget) : null;
+    const findingsHtml = findingsInput ? findingsInput.value : '';
+    const impressionHtml = impressionInput ? impressionInput.value : '';
+
+    if (typeof CKEDITOR !== 'undefined' && CKEDITOR.instances.HTMLShow) {
+        CKEDITOR.instances.HTMLShow.setData(findingsHtml || '');
+    } else {
+        const htmlField = document.getElementById('HTMLShow');
+        if (htmlField) {
+            htmlField.value = findingsHtml || '';
+        }
+    }
+
+    if (typeof CKEDITOR !== 'undefined' && CKEDITOR.instances.report_data_Impression) {
+        CKEDITOR.instances.report_data_Impression.setData(impressionHtml || '');
+    } else {
+        const impressionField = document.getElementById('report_data_Impression');
+        if (impressionField) {
+            impressionField.value = impressionHtml || '';
+        }
+    }
+
+    const modalEl = document.getElementById('imagingSupportModal');
+    const modal = modalEl ? bootstrap.Modal.getInstance(modalEl) : null;
+    if (modal) {
+        modal.hide();
+    }
+
+    if (autoSave === true) {
+        setTimeout(function () {
+            update_report();
+        }, 180);
+        return;
+    }
+
+    alert('AI draft pasted into the report editor. Review before saving.');
+}
+
+function pasteAiDiagnosisDraft(button) {
+    applyAiDiagnosisDraftToEditor(button, false);
+}
+
+function pasteAiDiagnosisDraftAndSave(button) {
+    applyAiDiagnosisDraftToEditor(button, true);
 }
 
 function openForEdit(reqId, testName) {

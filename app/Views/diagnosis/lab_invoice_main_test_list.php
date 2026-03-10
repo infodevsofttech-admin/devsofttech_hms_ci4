@@ -14,8 +14,29 @@ if (!empty($lab_invoice_request) && count($lab_invoice_request) > 0) {
 }
 ?>
 
+<?php if ($isRadiologyFlow): ?>
+<style>
+.diag-worklist-title {
+    font-weight: 700;
+    color: #0f2e62;
+}
+.diag-test-card {
+    border: 1px solid #d8e3f2;
+    border-left: 4px solid #188a58;
+    border-radius: 10px;
+    box-shadow: 0 4px 14px rgba(16, 24, 40, 0.06);
+}
+.diag-test-card .card-body {
+    padding: 12px 14px;
+}
+.diag-more-box {
+    background: #f7fafd;
+}
+</style>
+<?php endif; ?>
+
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h6 class="mb-0"><?php echo htmlspecialchars($flowTitle); ?></h6>
+    <h6 class="mb-0 diag-worklist-title"><?php echo htmlspecialchars($flowTitle); ?></h6>
 </div>
 
 <?php if (!empty($lab_invoice_request) && count($lab_invoice_request) > 0): ?>
@@ -38,7 +59,7 @@ if (!empty($lab_invoice_request) && count($lab_invoice_request) > 0) {
 <?php if (!empty($testlist) && count($testlist) > 0): ?>
     <?php foreach ($testlist as $test): ?>
     <?php $status = (int) ($test->status ?? 0); ?>
-    <div class="card mb-3">
+    <div class="card mb-3 diag-test-card">
         <div class="card-body">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
                 <div class="fw-semibold"><?php echo htmlspecialchars($test->item_name ?? ''); ?></div>
@@ -103,36 +124,52 @@ if (!empty($lab_invoice_request) && count($lab_invoice_request) > 0) {
                             onclick="removeTest(<?php echo htmlspecialchars($test->req_id ?? '0'); ?>)">
                             <i class="bi bi-trash"></i> Remove
                         </button>
+                        <?php if ($isRadiologyFlow): ?>
+                            <button type="button" class="btn btn-outline-primary btn-sm"
+                                onclick="uploadFiles(<?php echo htmlspecialchars($test->req_id ?? '0'); ?>, '<?php echo htmlspecialchars($test->item_name ?? ''); ?>')">
+                                <i class="bi bi-upload"></i> Upload Files
+                            </button>
+                            <button type="button" class="btn btn-outline-primary btn-sm"
+                                onclick="scanReportFile(<?php echo htmlspecialchars($test->req_id ?? '0'); ?>, '<?php echo htmlspecialchars($test->item_name ?? ''); ?>')">
+                                <i class="bi bi-camera"></i> Webcam Scan
+                            </button>
+                            <button type="button" class="btn btn-outline-primary btn-sm"
+                                onclick="showFiles(<?php echo htmlspecialchars($test->req_id ?? '0'); ?>, '<?php echo htmlspecialchars($test->item_name ?? ''); ?>')">
+                                <i class="bi bi-images"></i> Show Upload Images
+                            </button>
+                        <?php endif; ?>
                     <?php endif; ?>
                 </div>
 
-                <button type="button" class="btn btn-light btn-sm"
-                    onclick="toggleTestDetails(<?php echo htmlspecialchars($test->req_id ?? '0'); ?>)">
-                    <i class="bi bi-three-dots"></i> More
-                </button>
+                <?php if (! $isRadiologyFlow): ?>
+                    <button type="button" class="btn btn-light btn-sm"
+                        onclick="toggleTestDetails(<?php echo htmlspecialchars($test->req_id ?? '0'); ?>)">
+                        <i class="bi bi-three-dots"></i> More
+                    </button>
 
-                <div id="details_<?php echo htmlspecialchars($test->req_id ?? '0'); ?>" class="mt-2 p-2 border rounded" style="display:none;">
-                    <div class="d-flex flex-wrap gap-2">
-                        <button type="button" class="btn btn-outline-primary btn-sm"
-                            onclick="uploadFiles(<?php echo htmlspecialchars($test->req_id ?? '0'); ?>, '<?php echo htmlspecialchars($test->item_name ?? ''); ?>')">
-                            <i class="bi bi-upload"></i> Upload Files
-                        </button>
-                        <button type="button" class="btn btn-outline-primary btn-sm"
-                            onclick="scanReport(<?php echo htmlspecialchars($test->req_id ?? '0'); ?>, '<?php echo htmlspecialchars($test->item_name ?? ''); ?>')">
-                            <i class="bi bi-scanner"></i> Scan
-                        </button>
-                        <button type="button" class="btn btn-outline-primary btn-sm"
-                            onclick="showFiles(<?php echo htmlspecialchars($test->req_id ?? '0'); ?>, '<?php echo htmlspecialchars($test->item_name ?? ''); ?>')">
-                            <i class="bi bi-files"></i> Show Files
-                        </button>
-                        <?php if ($status == 2): ?>
-                            <button type="button" class="btn btn-outline-success btn-sm"
-                                onclick="openForEdit(<?php echo htmlspecialchars($test->req_id ?? '0'); ?>, '<?php echo htmlspecialchars($test->item_name ?? ''); ?>')">
-                                <i class="bi bi-pencil"></i> Open for Edit
+                    <div id="details_<?php echo htmlspecialchars($test->req_id ?? '0'); ?>" class="mt-2 p-2 border rounded diag-more-box" style="display:none;">
+                        <div class="d-flex flex-wrap gap-2">
+                            <button type="button" class="btn btn-outline-primary btn-sm"
+                                onclick="uploadFiles(<?php echo htmlspecialchars($test->req_id ?? '0'); ?>, '<?php echo htmlspecialchars($test->item_name ?? ''); ?>')">
+                                <i class="bi bi-upload"></i> Upload Files
                             </button>
-                        <?php endif; ?>
+                            <button type="button" class="btn btn-outline-primary btn-sm"
+                                onclick="scanReportFile(<?php echo htmlspecialchars($test->req_id ?? '0'); ?>, '<?php echo htmlspecialchars($test->item_name ?? ''); ?>')">
+                                <i class="bi bi-camera"></i> Webcam Scan
+                            </button>
+                            <button type="button" class="btn btn-outline-primary btn-sm"
+                                onclick="showFiles(<?php echo htmlspecialchars($test->req_id ?? '0'); ?>, '<?php echo htmlspecialchars($test->item_name ?? ''); ?>')">
+                                <i class="bi bi-files"></i> Show Files
+                            </button>
+                            <?php if ($status == 2): ?>
+                                <button type="button" class="btn btn-outline-success btn-sm"
+                                    onclick="openForEdit(<?php echo htmlspecialchars($test->req_id ?? '0'); ?>, '<?php echo htmlspecialchars($test->item_name ?? ''); ?>')">
+                                    <i class="bi bi-pencil"></i> Open for Edit
+                                </button>
+                            <?php endif; ?>
+                        </div>
                     </div>
-                </div>
+                <?php endif; ?>
             </div>
             <?php endif; ?>
         </div>
