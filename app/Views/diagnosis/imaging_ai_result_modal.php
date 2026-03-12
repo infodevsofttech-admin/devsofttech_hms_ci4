@@ -9,6 +9,23 @@ $provider = trim((string) ($provider ?? 'azure-openai'));
 $model = trim((string) ($model ?? ''));
 $findingsInputId = 'ai_findings_' . $batchId;
 $impressionInputId = 'ai_impression_' . $batchId;
+$providerKey = strtolower($provider);
+$providerLabel = $provider !== '' ? $provider : 'ai-server';
+$providerBadgeClass = 'bg-secondary';
+if ($providerKey === 'gemini') {
+    $providerLabel = 'Gemini';
+    $providerBadgeClass = 'bg-primary';
+} elseif ($providerKey === 'local-xray-fallback') {
+    $providerLabel = 'Local X-ray Fallback';
+    $providerBadgeClass = 'bg-warning text-dark';
+} elseif ($providerKey === 'regex-fallback') {
+    $providerLabel = 'Regex Fallback';
+    $providerBadgeClass = 'bg-warning text-dark';
+} elseif ($providerKey === 'azure-openai') {
+    $providerLabel = 'Azure OpenAI';
+    $providerBadgeClass = 'bg-info text-dark';
+}
+$isFallback = in_array($providerKey, ['local-xray-fallback', 'regex-fallback'], true);
 ?>
 
 <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
@@ -17,7 +34,13 @@ $impressionInputId = 'ai_impression_' . $batchId;
         <?php if ($studyName !== ''): ?>
             <div class="small text-muted">Study: <?= esc($studyName) ?></div>
         <?php endif; ?>
-        <div class="small text-muted">Stored batch #<?= esc((string) $batchId) ?> | <?= esc($provider) ?><?= $model !== '' ? ' / ' . esc($model) : '' ?></div>
+        <div class="small text-muted d-flex align-items-center gap-2 flex-wrap">
+            <span>Stored batch #<?= esc((string) $batchId) ?></span>
+            <span class="badge <?= esc($providerBadgeClass) ?>"><?= esc($providerLabel) ?></span>
+            <?php if ($model !== ''): ?>
+                <span class="badge bg-light text-dark border"><?= esc($model) ?></span>
+            <?php endif; ?>
+        </div>
     </div>
     <div class="d-flex gap-2">
         <button
@@ -41,6 +64,12 @@ $impressionInputId = 'ai_impression_' . $batchId;
 
 <?php if ($summaryText !== ''): ?>
     <div class="alert alert-info py-2"><?= esc($summaryText) ?></div>
+<?php endif; ?>
+
+<?php if ($isFallback): ?>
+    <div class="alert alert-warning py-2">
+        Fallback mode used for this draft. Review carefully before sign-off.
+    </div>
 <?php endif; ?>
 
 <div class="row g-3">

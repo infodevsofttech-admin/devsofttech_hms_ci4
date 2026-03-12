@@ -5,84 +5,88 @@
     <div class="card-body">
         <?= csrf_field() ?>
 
-        <h6 class="mb-2">Gemini (optional fallback)</h6>
-
+        <h6 class="mb-2">AI Server (Primary - Python FastAPI)</h6>
         <div class="mb-3">
-            <label class="form-label">Gemini API Key</label>
-            <input type="password" class="form-control" id="gemini_api_key" placeholder="Paste Gemini API key">
-            <div class="form-text">
-                <?php if (!empty($gemini_key_exists)) : ?>
-                    Current key: <?= esc($gemini_key_masked ?? '') ?>
-                <?php else : ?>
-                    No API key configured yet.
-                <?php endif; ?>
-            </div>
+            <label class="form-label">AI Server Base URL</label>
+            <input type="text" class="form-control" id="diagnosis_ai_server_url" placeholder="http://127.0.0.1:8000" value="<?= esc($diagnosis_ai_server_url ?? '') ?>">
+            <div class="form-text">Used for imaging diagnosis endpoint: /diagnosis</div>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">AI OCR Endpoint (optional, for pathology file OCR)</label>
+            <input type="text" class="form-control" id="diagnosis_ai_ocr_endpoint" placeholder="http://127.0.0.1:8000/ocr" value="<?= esc($diagnosis_ai_ocr_endpoint ?? '') ?>">
+            <div class="form-text">If not configured, pathology AI extraction OCR will be unavailable.</div>
         </div>
 
-        <div class="alert alert-info">
-            <h6 class="mb-2">How to get Gemini API key</h6>
-            <ol class="mb-2 ps-3">
-                <li>
-                    Open <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Google AI Studio API Keys</a>
-                    <button type="button" class="btn btn-sm btn-outline-secondary ms-2" id="btn_copy_gemini_link" data-url="https://aistudio.google.com/app/apikey">Copy Link</button>.
-                </li>
-                <li>Sign in and click <strong>Create API key</strong>.</li>
-                <li>Copy the key and paste it in this field.</li>
-                <li>Click <strong>Save Key</strong>, then <strong>Test Connection</strong>.</li>
-            </ol>
-            <div class="small mb-0">If test fails, check internet access from server, remove extra spaces/newline in key, or regenerate key.</div>
+        <div class="mb-3">
+            <label class="form-label">Imaging Report Prompt Template <span class="badge bg-secondary">Optional Override</span></label>
+            <textarea class="form-control" id="diagnosis_ai_imaging_prompt" rows="6" placeholder="Leave empty to use auto-detected prompts per study type. Use {study_name} as placeholder."><?= esc($diagnosis_ai_imaging_prompt ?? '') ?></textarea>
+            <div class="form-text">
+                <strong>Auto-detection is active:</strong> the server automatically selects the correct prompt structure for each study type —
+                Chest X-ray, Abdomen, Spine, PNS/Sinuses, Skull, Pelvis, Extremities/Joints, Contrast studies, Mammography, MRI, CT, Ultrasound.<br>
+                Fill this field only to override with a custom global prompt for all studies. Use <code>{study_name}</code> as placeholder for current study name. Leave blank to keep auto-detection.
+            </div>
         </div>
 
         <hr>
-        <h6 class="mb-2">Azure OpenAI (Primary)</h6>
+        <h6 class="mb-2">Diagnosis AI Parse Endpoint</h6>
         <div class="mb-3">
-            <label class="form-label">Azure OpenAI Endpoint</label>
-            <input type="text" class="form-control" id="azure_openai_endpoint" placeholder="https://your-resource.openai.azure.com" value="<?= esc($azure_openai_endpoint ?? '') ?>">
+            <label class="form-label">Diagnosis Parse Endpoint</label>
+            <input type="text" class="form-control" id="diagnosis_ai_parse_endpoint" placeholder="http://127.0.0.1:8000/parse-lab-values" value="<?= esc($diagnosis_ai_parse_endpoint ?? '') ?>">
+            <div class="form-text">Used by pathology value extraction flow.</div>
         </div>
+
         <div class="mb-3">
-            <label class="form-label">Azure OpenAI API Key</label>
-            <input type="password" class="form-control" id="azure_openai_api_key" placeholder="Paste Azure OpenAI key">
+            <label class="form-label">Diagnosis Parse Token (optional)</label>
+            <input type="password" class="form-control" id="diagnosis_ai_parse_token" placeholder="Bearer token">
             <div class="form-text">
-                <?php if (!empty($azure_openai_key_exists)) : ?>
-                    Current key: <?= esc($azure_openai_key_masked ?? '') ?>
+                <?php if (!empty($diagnosis_ai_token_exists)) : ?>
+                    Current token: <?= esc($diagnosis_ai_token_masked ?? '') ?>
                 <?php else : ?>
-                    No Azure OpenAI key configured yet.
+                    No token configured yet.
                 <?php endif; ?>
             </div>
         </div>
+
         <div class="row">
             <div class="col-md-6 mb-3">
-                <label class="form-label">Deployment Name</label>
-                <input type="text" class="form-control" id="azure_openai_deployment" placeholder="hms-opd-draft" value="<?= esc($azure_openai_deployment ?? '') ?>">
+                <label class="form-label">Diagnosis AI Timeout (seconds)</label>
+                <input type="number" min="5" max="180" class="form-control" id="diagnosis_ai_timeout_seconds" value="<?= esc($diagnosis_ai_timeout_seconds ?? '45') ?>">
             </div>
             <div class="col-md-6 mb-3">
-                <label class="form-label">API Version</label>
-                <input type="text" class="form-control" id="azure_openai_api_version" placeholder="2024-10-21" value="<?= esc($azure_openai_api_version ?? '2024-10-21') ?>">
+                <label class="form-label">Diagnosis AI Retry Attempts</label>
+                <input type="number" min="1" max="5" class="form-control" id="diagnosis_ai_retry_attempts" value="<?= esc($diagnosis_ai_retry_attempts ?? '2') ?>">
             </div>
         </div>
 
-        <hr>
-        <h6 class="mb-2">OCR (Azure Document Intelligence)</h6>
-        <div class="mb-3">
-            <label class="form-label">Document Intelligence Endpoint</label>
-            <input type="text" class="form-control" id="azure_docintel_endpoint" placeholder="https://your-docintel.cognitiveservices.azure.com" value="<?= esc($azure_docintel_endpoint ?? '') ?>">
-        </div>
-        <div class="mb-3">
-            <label class="form-label">Document Intelligence Key</label>
-            <input type="password" class="form-control" id="azure_docintel_key" placeholder="Paste Document Intelligence key">
-            <div class="form-text">
-                <?php if (!empty($azure_docintel_key_exists)) : ?>
-                    Current key: <?= esc($azure_docintel_key_masked ?? '') ?>
-                <?php else : ?>
-                    No Document Intelligence key configured yet.
-                <?php endif; ?>
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Gemini Daily Limit (guardrail)</label>
+                <input type="number" min="1" max="10000" class="form-control" id="diagnosis_ai_daily_limit" value="<?= esc($diagnosis_ai_daily_limit ?? '20') ?>">
+                <div class="form-text">Used for warning levels at 70% and 90%.</div>
             </div>
+            <div class="col-md-6 mb-3 d-flex align-items-end">
+                <button type="button" class="btn btn-outline-primary" id="btn_refresh_ai_usage">Refresh Usage</button>
+            </div>
+        </div>
+
+        <div class="border rounded p-3 mb-3 bg-light" id="ai_usage_card">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <strong>AI Usage Guardrail (Today)</strong>
+                <span class="badge bg-secondary" id="ai_usage_level">Unknown</span>
+            </div>
+            <div class="row g-2">
+                <div class="col-md-3"><div class="small text-muted">Gemini Calls</div><div id="ai_usage_gemini" class="fw-bold">-</div></div>
+                <div class="col-md-3"><div class="small text-muted">Fallback Calls</div><div id="ai_usage_fallback" class="fw-bold">-</div></div>
+                <div class="col-md-3"><div class="small text-muted">Total Calls</div><div id="ai_usage_total" class="fw-bold">-</div></div>
+                <div class="col-md-3"><div class="small text-muted">Last Hour</div><div id="ai_usage_hour" class="fw-bold">-</div></div>
+            </div>
+            <div class="small mt-2 text-muted" id="ai_usage_hint">Press Refresh Usage to load latest usage.</div>
         </div>
 
         <div class="d-flex gap-2 flex-wrap">
             <button type="button" class="btn btn-primary" id="btn_save_ai_key">Save Settings</button>
-            <button type="button" class="btn btn-outline-success" id="btn_test_ai_key">Test Gemini</button>
-            <button type="button" class="btn btn-outline-primary" id="btn_test_azure_key">Test Azure OpenAI</button>
+            <button type="button" class="btn btn-outline-dark" id="btn_test_ai_server">Test AI Server</button>
+            <button type="button" class="btn btn-outline-secondary" id="btn_test_diagnosis_ai">Test Parse Endpoint</button>
         </div>
 
         <div id="ai_settings_msg" class="mt-3"></div>
@@ -129,99 +133,105 @@
     }
 
     $('#btn_save_ai_key').on('click', function() {
-        var key = ($('#gemini_api_key').val() || '').trim();
-        var azureEndpoint = ($('#azure_openai_endpoint').val() || '').trim();
-        var azureKey = ($('#azure_openai_api_key').val() || '').trim();
-        var azureDeployment = ($('#azure_openai_deployment').val() || '').trim();
-        var azureApiVersion = ($('#azure_openai_api_version').val() || '').trim();
-        var docintelEndpoint = ($('#azure_docintel_endpoint').val() || '').trim();
-        var docintelKey = ($('#azure_docintel_key').val() || '').trim();
+        var aiServerUrl = ($('#diagnosis_ai_server_url').val() || '').trim();
+        var aiOcrEndpoint = ($('#diagnosis_ai_ocr_endpoint').val() || '').trim();
+        var diagnosisEndpoint = ($('#diagnosis_ai_parse_endpoint').val() || '').trim();
+        var diagnosisImagingPrompt = ($('#diagnosis_ai_imaging_prompt').val() || '').trim();
+        var diagnosisToken = ($('#diagnosis_ai_parse_token').val() || '').trim();
+        var diagnosisTimeout = ($('#diagnosis_ai_timeout_seconds').val() || '').trim();
+        var diagnosisRetry = ($('#diagnosis_ai_retry_attempts').val() || '').trim();
 
         postJson('<?= base_url('setting/admin/ai-settings/save') ?>', {
-            gemini_api_key: key,
-            azure_openai_endpoint: azureEndpoint,
-            azure_openai_api_key: azureKey,
-            azure_openai_deployment: azureDeployment,
-            azure_openai_api_version: azureApiVersion,
-            azure_docintel_endpoint: docintelEndpoint,
-            azure_docintel_key: docintelKey
+            diagnosis_ai_server_url: aiServerUrl,
+            diagnosis_ai_ocr_endpoint: aiOcrEndpoint,
+            diagnosis_ai_parse_endpoint: diagnosisEndpoint,
+            diagnosis_ai_imaging_prompt: diagnosisImagingPrompt,
+            diagnosis_ai_parse_token: diagnosisToken,
+            diagnosis_ai_timeout_seconds: diagnosisTimeout,
+            diagnosis_ai_retry_attempts: diagnosisRetry,
+            diagnosis_ai_daily_limit: ($('#diagnosis_ai_daily_limit').val() || '').trim()
         }, function(data) {
             if ((data.update || 0) !== 1) {
-                showMessage('error', data.error_text || 'Unable to save API key');
+                showMessage('error', data.error_text || 'Unable to save settings');
                 return;
             }
 
             showMessage('success', data.error_text || 'Settings saved');
-            $('#gemini_api_key').val('');
-            $('#azure_openai_api_key').val('');
-            $('#azure_docintel_key').val('');
+            $('#diagnosis_ai_parse_token').val('');
+            refreshUsage();
         });
     });
 
-    $('#btn_test_ai_key').on('click', function() {
-        var key = ($('#gemini_api_key').val() || '').trim();
-        postJson('<?= base_url('setting/admin/ai-settings/test') ?>', {
-            provider: 'gemini',
-            gemini_api_key: key
-        }, function(data) {
-            if ((data.update || 0) !== 1) {
-                showMessage('error', data.error_text || 'Test failed');
-                return;
-            }
-            showMessage('success', data.error_text || 'Connection successful');
-        });
-    });
-
-    $('#btn_test_azure_key').on('click', function() {
-        var azureEndpoint = ($('#azure_openai_endpoint').val() || '').trim();
-        var azureKey = ($('#azure_openai_api_key').val() || '').trim();
-        var azureDeployment = ($('#azure_openai_deployment').val() || '').trim();
-        var azureApiVersion = ($('#azure_openai_api_version').val() || '').trim();
+    $('#btn_test_ai_server').on('click', function() {
+        var aiServerUrl = ($('#diagnosis_ai_server_url').val() || '').trim();
+        var diagnosisToken = ($('#diagnosis_ai_parse_token').val() || '').trim();
 
         postJson('<?= base_url('setting/admin/ai-settings/test') ?>', {
-            provider: 'azure',
-            azure_openai_endpoint: azureEndpoint,
-            azure_openai_api_key: azureKey,
-            azure_openai_deployment: azureDeployment,
-            azure_openai_api_version: azureApiVersion
+            provider: 'ai-server',
+            diagnosis_ai_server_url: aiServerUrl,
+            diagnosis_ai_parse_token: diagnosisToken
         }, function(data) {
             if ((data.update || 0) !== 1) {
-                showMessage('error', data.error_text || 'Azure test failed');
+                showMessage('error', data.error_text || 'AI Server test failed');
                 return;
             }
-            showMessage('success', data.error_text || 'Azure connection successful');
+            showMessage('success', data.error_text || 'AI Server connection successful');
         });
     });
 
-    $('#btn_copy_gemini_link').on('click', function() {
-        var url = $(this).data('url') || '';
-        if (!url) {
-            showMessage('error', 'Unable to copy link');
-            return;
-        }
+    $('#btn_test_diagnosis_ai').on('click', function() {
+        var diagnosisEndpoint = ($('#diagnosis_ai_parse_endpoint').val() || '').trim();
+        var diagnosisToken = ($('#diagnosis_ai_parse_token').val() || '').trim();
 
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(url).then(function() {
-                showMessage('success', 'Gemini link copied');
-            }).catch(function() {
-                showMessage('error', 'Copy failed. Please copy manually');
-            });
-            return;
-        }
-
-        var temp = document.createElement('input');
-        temp.value = url;
-        document.body.appendChild(temp);
-        temp.select();
-
-        try {
-            document.execCommand('copy');
-            showMessage('success', 'Gemini link copied');
-        } catch (e) {
-            showMessage('error', 'Copy failed. Please copy manually');
-        }
-
-        document.body.removeChild(temp);
+        postJson('<?= base_url('setting/admin/ai-settings/test') ?>', {
+            provider: 'diagnosis-external',
+            diagnosis_ai_parse_endpoint: diagnosisEndpoint,
+            diagnosis_ai_parse_token: diagnosisToken
+        }, function(data) {
+            if ((data.update || 0) !== 1) {
+                showMessage('error', data.error_text || 'Parse endpoint test failed');
+                return;
+            }
+            showMessage('success', data.error_text || 'Parse endpoint connection successful');
+        });
     });
+
+    function refreshUsage() {
+        postJson('<?= base_url('setting/admin/ai-settings/usage') ?>', {}, function(data) {
+            var usage = data && data.usage ? data.usage : null;
+            if (!usage) {
+                $('#ai_usage_hint').text((data && data.error_text) ? data.error_text : 'Unable to load usage');
+                return;
+            }
+
+            $('#ai_usage_gemini').text((usage.gemini_today || 0) + ' / ' + (usage.daily_limit || 0));
+            $('#ai_usage_fallback').text(usage.fallback_today || 0);
+            $('#ai_usage_total').text(usage.total_today || 0);
+            $('#ai_usage_hour').text(usage.last_hour || 0);
+
+            var level = (usage.level || 'ok').toString();
+            var levelText = 'OK';
+            var levelClass = 'bg-success';
+            if (level === 'warn') {
+                levelText = 'Warning';
+                levelClass = 'bg-warning text-dark';
+            } else if (level === 'danger') {
+                levelText = 'High';
+                levelClass = 'bg-danger';
+            } else if (level === 'critical') {
+                levelText = 'Exceeded';
+                levelClass = 'bg-dark';
+            }
+
+            $('#ai_usage_level').removeClass().addClass('badge ' + levelClass).text(levelText);
+            $('#ai_usage_hint').text('Gemini utilization: ' + (usage.ratio || 0) + '%. Thresholds: 70% warning, 90% high.');
+        });
+    }
+
+    $('#btn_refresh_ai_usage').on('click', function() {
+        refreshUsage();
+    });
+
+    refreshUsage();
 })();
 </script>

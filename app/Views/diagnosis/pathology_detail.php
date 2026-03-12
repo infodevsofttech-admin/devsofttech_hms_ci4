@@ -537,6 +537,9 @@ function initializeReportEditor() {
         return;
     }
 
+    // Re-enable notification plugins (may be disabled globally in welcome_message.php)
+    CKEDITOR.config.removePlugins = '';
+
     if (CKEDITOR.instances.HTMLShow) {
         CKEDITOR.instances.HTMLShow.destroy(true);
     }
@@ -902,7 +905,7 @@ function diagnosisUploadForReq(reqId, testName, mode) {
 
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'image/*,application/pdf';
+    input.accept = 'image/*,application/pdf,.dcm,application/dicom,application/dicom+json';
     if ((mode || '').toLowerCase() === 'camera') {
         input.accept = 'image/*';
         input.setAttribute('capture', 'environment');
@@ -976,6 +979,8 @@ function getEditorImagingContext() {
     };
 }
 
+window._imagingSupportModalInstance = window._imagingSupportModalInstance || null;
+
 function openImagingSupportModal(title, html) {
     const titleEl = document.getElementById('imagingSupportLabel');
     const bodyEl = document.getElementById('imagingSupportBody');
@@ -986,8 +991,11 @@ function openImagingSupportModal(title, html) {
         bodyEl.innerHTML = html || '<div class="alert alert-warning mb-0">No content found.</div>';
     }
 
-    const modal = new bootstrap.Modal(document.getElementById('imagingSupportModal'));
-    modal.show();
+    const el = document.getElementById('imagingSupportModal');
+    if (el) {
+        window._imagingSupportModalInstance = bootstrap.Modal.getOrCreateInstance(el);
+        window._imagingSupportModalInstance.show();
+    }
 }
 
 function showImagingUploads(reqId, testName) {
@@ -1094,9 +1102,8 @@ function applyAiDiagnosisDraftToEditor(button, autoSave) {
     }
 
     const modalEl = document.getElementById('imagingSupportModal');
-    const modal = modalEl ? bootstrap.Modal.getInstance(modalEl) : null;
-    if (modal) {
-        modal.hide();
+    if (window._imagingSupportModalInstance) {
+        window._imagingSupportModalInstance.hide();
     }
 
     if (autoSave === true) {

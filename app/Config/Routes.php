@@ -645,6 +645,9 @@ $routes->post('diagnosis/final-update/(:num)', 'Diagnosis::finalUpdate/$1');
 $routes->post('diagnosis/final-update-xray/(:num)', 'Diagnosis::finalUpdateXray/$1');
 $routes->post('diagnosis/confirm-report/(:num)', 'Diagnosis::confirmReport/$1');
 $routes->post('diagnosis/confirm-report-xray/(:num)', 'Diagnosis::confirmReportXray/$1');
+// Editor JS compatibility aliases
+$routes->post('diagnosis/update-report/(:num)', 'Diagnosis::finalUpdateXray/$1');
+$routes->post('diagnosis/report-verify/(:num)', 'Diagnosis::confirmReportXray/$1');
 $routes->match(['get', 'post'], 'diagnosis/get-template-xray/(:num)', 'Diagnosis::getTemplateXray/$1');
 $routes->post('diagnosis/remove-test/(:num)', 'Diagnosis::removeTest/$1');
 $routes->post('diagnosis/update-combine-report', 'Diagnosis::updateCombineReport');
@@ -653,6 +656,7 @@ $routes->post('diagnosis/upload-report-file', 'Diagnosis::uploadReportFile');
 $routes->get('diagnosis/report-file-list/(:num)/(:num)', 'Diagnosis::reportFileList/$1/$2');
 $routes->get('diagnosis/report-file-list/(:num)/(:num)/(:num)', 'Diagnosis::reportFileList/$1/$2/$3');
 $routes->get('diagnosis/imaging-upload-gallery/(:num)/(:num)/(:num)', 'Diagnosis::imagingUploadGallery/$1/$2/$3');
+$routes->get('diagnosis/imaging-dicom-preview/(:num)', 'Diagnosis::imagingDicomPreview/$1');
 $routes->post('diagnosis/imaging-ai-diagnosis/(:num)', 'Diagnosis::imagingAiDiagnosis/$1');
 $routes->get('diagnosis/select-lab-radiology/(:num)/(:num)', 'Diagnosis::selectLabRadiology/$1/$2');
 $routes->get('diagnosis/print-pdf-create/(:num)/(:num)/(:num)', 'Diagnosis::printPdfCreate/$1/$2/$3');
@@ -746,6 +750,7 @@ $routes->group('setting', static function($routes) {
     $routes->get('admin/ai-settings', 'Setting\\AiSettings::index');
     $routes->post('admin/ai-settings/save', 'Setting\\AiSettings::save');
     $routes->post('admin/ai-settings/test', 'Setting\\AiSettings::test');
+    $routes->post('admin/ai-settings/usage', 'Setting\\AiSettings::usage');
     $routes->get('admin/doctor', 'Setting\\Doctor::index');
     $routes->get('admin/doctor/new', 'Setting\\Doctor::create');
     $routes->post('admin/doctor/new', 'Setting\\Doctor::store');

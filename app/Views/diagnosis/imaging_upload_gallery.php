@@ -6,7 +6,7 @@ $studyName = trim((string) ($study_name ?? ''));
 <div class="mb-3">
     <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
         <div>
-            <h6 class="mb-1">Uploaded Images</h6>
+            <h6 class="mb-1">Uploaded Imaging Files</h6>
             <?php if ($studyName !== ''): ?>
                 <div class="small text-muted">Study: <?= esc($studyName) ?></div>
             <?php endif; ?>
@@ -16,7 +16,7 @@ $studyName = trim((string) ($study_name ?? ''));
 </div>
 
 <?php if ($fileRows === []): ?>
-    <div class="alert alert-warning mb-0">No uploaded images or PDFs found for this study.</div>
+    <div class="alert alert-warning mb-0">No uploaded imaging files found for this study.</div>
 <?php else: ?>
     <div class="row g-3">
         <?php foreach ($fileRows as $row): ?>
@@ -41,10 +41,25 @@ $studyName = trim((string) ($study_name ?? ''));
                             <a href="<?= esc((string) $row['url']) ?>" target="_blank" rel="noopener">
                                 <img src="<?= esc((string) $row['url']) ?>" alt="Uploaded image" class="img-fluid rounded border" style="width:100%; max-height:220px; object-fit:cover;">
                             </a>
+                        <?php elseif (!empty($row['is_dicom']) && !empty($row['dicom_preview_url'])): ?>
+                            <div class="border rounded p-2 bg-light">
+                                <img src="<?= esc((string) $row['dicom_preview_url']) ?>" alt="DICOM preview" class="img-fluid rounded border" style="width:100%; max-height:220px; object-fit:cover;">
+                                <div class="d-flex justify-content-between align-items-center mt-2">
+                                    <span class="badge bg-primary-subtle text-primary-emphasis border">DICOM Preview</span>
+                                    <?php if (!empty($row['url'])): ?>
+                                        <a href="<?= esc((string) $row['url']) ?>" target="_blank" rel="noopener">Open DICOM</a>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
                         <?php elseif (!empty($row['url']) && !empty($row['is_pdf'])): ?>
                             <div class="border rounded p-3 text-center bg-light">
                                 <div class="display-6 text-danger"><i class="bi bi-file-earmark-pdf"></i></div>
                                 <a href="<?= esc((string) $row['url']) ?>" target="_blank" rel="noopener">Open PDF</a>
+                            </div>
+                        <?php elseif (!empty($row['url'])): ?>
+                            <div class="border rounded p-3 text-center bg-light">
+                                <div class="display-6 text-primary"><i class="bi bi-file-earmark-medical"></i></div>
+                                <a href="<?= esc((string) $row['url']) ?>" target="_blank" rel="noopener">Open File</a>
                             </div>
                         <?php else: ?>
                             <div class="border rounded p-3 text-muted bg-light">Preview unavailable</div>

@@ -1548,6 +1548,7 @@ class Diagnosis extends BaseController
             $ext = strtolower(pathinfo((string) ($row['file_name'] ?? ''), PATHINFO_EXTENSION));
             $isImage = (int) ($row['is_image'] ?? 0) === 1 || str_starts_with($mime, 'image/');
             $isPdf = $ext === 'pdf' || $mime === 'application/pdf';
+            $isDicom = $this->isDicomMimeOrExtension($mime, $ext);
 
             $files[] = [
                 'id' => (int) ($row['id'] ?? 0),
@@ -1556,6 +1557,8 @@ class Diagnosis extends BaseController
                 'url' => $url,
                 'is_image' => $isImage,
                 'is_pdf' => $isPdf,
+                'is_dicom' => $isDicom,
+                'dicom_preview_url' => $isDicom ? base_url('diagnosis/imaging-dicom-preview/' . (int) ($row['id'] ?? 0)) : '',
                 'insert_time' => (string) ($row['insert_time'] ?? $row['insert_date'] ?? ''),
                 'ai_status' => (string) ($row['ai_status'] ?? ''),
                 'ai_alert_text' => (string) ($row['ai_alert_text'] ?? ''),
@@ -1567,6 +1570,50 @@ class Diagnosis extends BaseController
             'files' => $files,
             'study_name' => $studyName,
         ]);
+    }
+
+    public function imagingDicomPreview($fileId)
+    {
+        $fileId = (int) $fileId;
+        if ($fileId <= 0 || ! $this->db->tableExists('file_upload_data')) {
+            return $this->response->setStatusCode(404)->setBody('DICOM file not found');
+        }
+
+        $fileRow = $this->db->table('file_upload_data')
+            ->where('id', $fileId)
+            ->where('isdelete', 0)
+            ->get(1)
+            ->getRowArray();
+
+        if (empty($fileRow)) {
+            return $this->response->setStatusCode(404)->setBody('DICOM file not found');
+        }
+
+        $absolutePath = $this->resolveUploadAbsolutePath((string) ($fileRow['full_path'] ?? ''));
+        if ($absolutePath === '' || ! is_file($absolutePath)) {
+            return $this->response->setStatusCode(404)->setBody('DICOM file missing on server');
+        }
+
+        $mime = $this->detectMimeType($absolutePath);
+        $ext = strtolower(pathinfo($absolutePath, PATHINFO_EXTENSION));
+        if (! $this->isDicomMimeOrExtension($mime, $ext)) {
+            return $this->response->setStatusCode(415)->setBody('File is not a DICOM');
+        }
+
+        $preview = $this->callAiServerDicomPreview($absolutePath, $mime);
+        if (($preview['error'] ?? '') !== '') {
+            return $this->response->setStatusCode(422)->setBody((string) $preview['error']);
+        }
+
+        $bytes = (string) ($preview['bytes'] ?? '');
+        if ($bytes === '') {
+            return $this->response->setStatusCode(422)->setBody('Unable to render DICOM preview');
+        }
+
+        return $this->response
+            ->setHeader('Content-Type', (string) ($preview['mime'] ?? 'image/jpeg'))
+            ->setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+            ->setBody($bytes);
     }
 
     public function uploadReportFile()
@@ -1595,9 +1642,9 @@ class Diagnosis extends BaseController
         }
 
         $ext = strtolower((string) $upload->getExtension());
-        $allowed = ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif', 'pdf'];
+        $allowed = ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif', 'pdf', 'dcm', 'dicom'];
         if (! in_array($ext, $allowed, true)) {
-            return $this->response->setJSON(['update' => 0, 'error_text' => 'Unsupported file type']);
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Unsupported file type. Allowed: image, PDF, DICOM (.dcm)']);
         }
 
         $targetDir = ROOTPATH . 'public' . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'diagnosis' . DIRECTORY_SEPARATOR . date('Y') . DIRECTORY_SEPARATOR . date('m');
@@ -1719,7 +1766,7 @@ class Diagnosis extends BaseController
 
         $ocrText = $this->extractTextFromLabFile($absolutePath);
         if ($ocrText === '') {
-            return $this->response->setJSON(['update' => 0, 'error_text' => 'OCR failed. Configure AZURE_DOCINTEL_ENDPOINT/KEY or use readable image.']);
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'OCR failed. Configure DIAGNOSIS_AI_OCR_ENDPOINT on your AI server.']);
         }
 
         $parsed = $this->parseLabValuesWithAi($ocrText, $panelName);
@@ -1741,7 +1788,8 @@ class Diagnosis extends BaseController
             $panelName,
             $modelName,
             $ocrText,
-            $rawResponse
+            $rawResponse,
+            (string) ($parsed['provider'] ?? 'ai-server')
         );
 
         if ($batchId <= 0) {
@@ -1786,7 +1834,7 @@ class Diagnosis extends BaseController
         return $this->response->setJSON([
             'update' => 1,
             'error_text' => 'AI extracted ' . $storedCount . ' values. Doctor verification pending.',
-            'ai_provider' => (string) ($parsed['provider'] ?? 'azure-openai'),
+            'ai_provider' => (string) ($parsed['provider'] ?? 'ai-server'),
             'ai_model' => $modelName,
             'batch_id' => $batchId,
             'stored_values' => $storedCount,
@@ -1933,22 +1981,55 @@ class Diagnosis extends BaseController
                 $ocrChunks[] = 'FILE: ' . $fileName . "\n" . $ocrText;
             }
 
-            if (str_starts_with($mime, 'image/') && count($visionImages) < 4) {
-                $imagePayload = $this->buildVisionImagePayload($absolutePath, $mime);
-                if ($imagePayload !== '') {
-                    $visionImages[] = [
-                        'type' => 'image_url',
-                        'image_url' => ['url' => $imagePayload],
-                    ];
+            $ext = strtolower(pathinfo($absolutePath, PATHINFO_EXTENSION));
+            if ((str_starts_with($mime, 'image/') || $this->isDicomMimeOrExtension($mime, $ext)) && count($visionImages) < 4) {
+                $visionImages[] = [
+                    'abs_path' => $absolutePath,
+                    'mime' => $mime,
+                ];
+            }
+        }
+
+        $patientName = trim((string) ($labRequest['patient_name'] ?? 'Unknown'));
+        $patientAge = 0;
+        $patientGender = 'Unknown';
+        $patientId = (int) ($labRequest['patient_id'] ?? 0);
+        if ($patientId > 0 && $this->db->tableExists('patient_master')) {
+            $patient = $this->db->table('patient_master')
+                ->select('gender, age, age_in_month, dob')
+                ->where('id', $patientId)
+                ->get(1)
+                ->getRowArray();
+
+            $genderRaw = (int) ($patient['gender'] ?? 0);
+            $patientGender = $genderRaw === 1 ? 'Male' : ($genderRaw === 2 ? 'Female' : 'Unknown');
+
+            $patientAge = (int) ($patient['age'] ?? 0);
+            if ($patientAge <= 0) {
+                $months = (int) ($patient['age_in_month'] ?? 0);
+                if ($months > 0) {
+                    $patientAge = max(1, (int) floor($months / 12));
+                }
+            }
+            if ($patientAge <= 0) {
+                $dob = trim((string) ($patient['dob'] ?? ''));
+                if ($dob !== '' && $dob !== '0000-00-00') {
+                    try {
+                        $patientAge = (int) ((new \DateTime($dob))->diff(new \DateTime('today'))->y ?? 0);
+                    } catch (\Throwable $e) {
+                        $patientAge = 0;
+                    }
                 }
             }
         }
 
-        $analysis = $this->generateImagingDiagnosisDraft($studyName, $ocrChunks, $visionImages);
+        $analysis = $this->generateImagingDiagnosisDraft($studyName, $ocrChunks, $visionImages, $patientName, $patientAge, $patientGender);
         if (($analysis['error'] ?? '') !== '') {
             $this->updateImagingFileAiState($fileIds, 'failed', (string) $analysis['error'], 1);
             return $this->response->setJSON(['update' => 0, 'error_text' => (string) $analysis['error']]);
         }
+
+        $promptUsed = $this->buildImagingDiagnosisPrompt($studyName);
 
         $rawPayload = [
             'type' => 'imaging-ai-diagnosis',
@@ -1960,8 +2041,9 @@ class Diagnosis extends BaseController
             'findings_html' => (string) ($analysis['findings_html'] ?? ''),
             'impression_html' => (string) ($analysis['impression_html'] ?? ''),
             'summary_text' => (string) ($analysis['summary_text'] ?? ''),
-            'provider' => (string) ($analysis['provider'] ?? 'azure-openai'),
+            'provider' => (string) ($analysis['provider'] ?? 'ai-server'),
             'model' => (string) ($analysis['model'] ?? ''),
+            'prompt_used' => $promptUsed,
             'source_files' => $sourceFiles,
             'raw' => $analysis['raw'] ?? [],
         ];
@@ -1974,7 +2056,8 @@ class Diagnosis extends BaseController
             $studyName,
             (string) ($analysis['model'] ?? ''),
             $ocrText,
-            (string) json_encode($rawPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+            (string) json_encode($rawPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            (string) ($analysis['provider'] ?? 'ai-server')
         );
 
         if ($batchId <= 0) {
@@ -1999,7 +2082,7 @@ class Diagnosis extends BaseController
             'findings_html' => (string) ($analysis['findings_html'] ?? ''),
             'impression_html' => (string) ($analysis['impression_html'] ?? ''),
             'summary_text' => (string) ($analysis['summary_text'] ?? ''),
-            'provider' => (string) ($analysis['provider'] ?? 'azure-openai'),
+            'provider' => (string) ($analysis['provider'] ?? 'ai-server'),
             'model' => (string) ($analysis['model'] ?? ''),
         ]);
 
@@ -2023,14 +2106,15 @@ class Diagnosis extends BaseController
         string $panelName,
         string $modelName,
         string $ocrText,
-        string $rawResponse
+        string $rawResponse,
+        string $provider = 'ai-server'
     ): int {
         $ok = $this->db->table('lab_ai_extraction_batches')->insert([
             'invoice_id' => $invoiceId,
             'lab_type' => $labType,
             'file_upload_id' => $fileId,
             'panel_name' => $panelName,
-            'ai_provider' => 'azure-openai',
+            'ai_provider' => $provider,
             'model_name' => $modelName,
             'ocr_text' => $ocrText,
             'raw_response_json' => $rawResponse,
@@ -2161,129 +2245,210 @@ class Diagnosis extends BaseController
      * @param array<int, array<string, mixed>> $visionImages
      * @return array<string, mixed>
      */
-    private function generateImagingDiagnosisDraft(string $studyName, array $ocrChunks, array $visionImages): array
+    private function generateImagingDiagnosisDraft(string $studyName, array $ocrChunks, array $visionImages, string $patientName = 'Unknown', int $patientAge = 0, string $patientGender = 'Unknown'): array
     {
-        $endpoint = rtrim($this->readSetting('AZURE_OPENAI_ENDPOINT'), '/');
-        $apiKey = trim($this->readSetting('AZURE_OPENAI_API_KEY'));
-        $deployment = trim($this->readSetting('AZURE_OPENAI_DEPLOYMENT'));
-        $apiVersion = trim($this->readSetting('AZURE_OPENAI_API_VERSION'));
-
-        if ($endpoint === '' || $apiKey === '' || $deployment === '') {
+        if ($visionImages === []) {
             return [
-                'error' => 'Azure OpenAI settings are missing for imaging AI diagnosis.',
+                'error' => 'No image available for AI diagnosis.',
             ];
         }
 
-        if ($apiVersion === '') {
-            $apiVersion = '2024-10-21';
-        }
-
-        if ($visionImages === [] && $ocrChunks === []) {
+        $firstImagePath = (string) ($visionImages[0]['abs_path'] ?? '');
+        $firstImageMime = (string) ($visionImages[0]['mime'] ?? 'image/jpeg');
+        if ($firstImagePath === '' || ! is_file($firstImagePath)) {
             return [
-                'error' => 'No image or OCR context available for AI diagnosis.',
+                'error' => 'Image file not found on server for AI diagnosis.',
             ];
         }
 
-        $content = [[
-            'type' => 'text',
-            'text' => "You are assisting a radiologist in drafting an imaging report for an Indian hospital.\n" .
-                "Study name: {$studyName}\n" .
-                "Review the uploaded imaging files and any OCR text.\n" .
-                "Return strict JSON only with keys: title, findings_html, impression_html, summary_text.\n" .
-                "Rules:\n" .
-                "1. findings_html must be concise HTML paragraphs or bullet list suitable for the report editor.\n" .
-                "2. impression_html must be concise HTML suitable for the Impression field.\n" .
-                "3. summary_text must be plain text under 220 characters.\n" .
-                "4. Do not include markdown fences.\n" .
-                "5. If image quality is poor, say that clearly in findings_html/impression_html.\n\n" .
-                ($ocrChunks !== [] ? ("OCR_CONTEXT:\n" . mb_substr(implode("\n\n", $ocrChunks), 0, 14000)) : 'OCR_CONTEXT: none'),
-        ]];
-
-        foreach ($visionImages as $imagePart) {
-            $content[] = $imagePart;
+        $response = $this->callAiServerDiagnosis($studyName, $firstImagePath, $firstImageMime, $patientName, $patientAge, $patientGender);
+        if (($response['error'] ?? '') !== '') {
+            return $response;
         }
 
-        $url = $endpoint . '/openai/deployments/' . rawurlencode($deployment) . '/chat/completions?api-version=' . rawurlencode($apiVersion);
-        $attempts = $this->aiMaxRetries();
-        $lastError = 'AI diagnosis generation failed.';
+        $report = $response['report'] ?? [];
+        $technique = $this->normalizeAiTextValue($report['Technique'] ?? $studyName, $studyName);
+        $impression = $this->normalizeAiTextValue($report['Impression'] ?? 'AI diagnosis draft prepared.', 'AI diagnosis draft prepared.');
 
-        for ($attempt = 1; $attempt <= $attempts; $attempt++) {
-            try {
-                $client = service('curlrequest', $this->httpOptions());
-                $response = $client->post($url, [
-                    'headers' => [
-                        'api-key' => $apiKey,
-                        'Content-Type' => 'application/json',
-                    ],
-                    'json' => [
-                        'messages' => [[
-                            'role' => 'user',
-                            'content' => $content,
-                        ]],
-                        'temperature' => 0.2,
-                        'response_format' => ['type' => 'json_object'],
-                        'max_tokens' => 2200,
-                    ],
-                ]);
+        $findings = $report['Findings'] ?? [];
+        $narrative = '';
+        $labels = [];
+        $ocrText = [];
+        if (is_array($findings)) {
+            $narrative = $this->normalizeAiTextValue($findings['Narrative'] ?? '', '');
+            $labels = $this->normalizeAiListValue($findings['Labels'] ?? []);
+            $ocrText = $this->normalizeAiListValue($findings['OCR Text'] ?? []);
+        } else {
+            $narrative = $this->normalizeAiTextValue($findings, '');
+        }
 
-                if ($response->getStatusCode() < 200 || $response->getStatusCode() >= 300) {
-                    $lastError = 'Azure OpenAI HTTP ' . $response->getStatusCode();
-                    continue;
-                }
-
-                $decoded = json_decode((string) $response->getBody(), true);
-                $contentText = trim((string) ($decoded['choices'][0]['message']['content'] ?? ''));
-                if ($contentText === '') {
-                    $lastError = 'Azure OpenAI returned empty content.';
-                    continue;
-                }
-
-                $json = json_decode($contentText, true);
-                if (! is_array($json)) {
-                    $lastError = 'Azure OpenAI returned invalid JSON content.';
-                    continue;
-                }
-
-                $findingsHtml = trim((string) ($json['findings_html'] ?? ''));
-                $impressionHtml = trim((string) ($json['impression_html'] ?? ''));
-                if ($findingsHtml === '' && $impressionHtml === '') {
-                    $lastError = 'AI returned empty report sections.';
-                    continue;
-                }
-
-                return [
-                    'provider' => 'azure-openai',
-                    'model' => (string) ($decoded['model'] ?? $deployment),
-                    'title' => trim((string) ($json['title'] ?? $studyName)),
-                    'findings_html' => $findingsHtml,
-                    'impression_html' => $impressionHtml,
-                    'summary_text' => trim((string) ($json['summary_text'] ?? 'AI diagnosis draft prepared.')),
-                    'raw' => $decoded,
-                    'error' => '',
-                ];
-            } catch (\Throwable $e) {
-                $lastError = $e->getMessage() !== '' ? $e->getMessage() : 'Azure OpenAI request timeout/error.';
+        $labelHtml = '';
+        if ($labels !== []) {
+            $safeLabels = array_slice(array_map(static fn($x) => trim((string) $x), $labels), 0, 8);
+            $safeLabels = array_values(array_filter($safeLabels, static fn($x) => $x !== ''));
+            if ($safeLabels !== []) {
+                $labelHtml = '<p><strong>Detected labels:</strong> ' . esc(implode(', ', $safeLabels)) . '</p>';
             }
         }
 
+        $ocrHtml = '';
+        if ($ocrText !== []) {
+            $ocrFirst = trim((string) ($ocrText[0] ?? ''));
+            if ($ocrFirst !== '') {
+                $ocrHtml = '<p><strong>OCR notes:</strong> ' . nl2br(esc(mb_substr($ocrFirst, 0, 1500))) . '</p>';
+            }
+        }
+
+        $findingsHtml = '<p><strong>Technique:</strong> ' . esc($technique) . '</p>';
+        if ($narrative !== '') {
+            $paragraphs = preg_split('/\R{2,}|\n/u', $narrative) ?: [];
+            $paragraphs = array_values(array_filter(array_map(static fn($item) => trim((string) $item), $paragraphs), static fn($item) => $item !== ''));
+            if ($paragraphs === []) {
+                $findingsHtml .= '<p>' . nl2br(esc($narrative)) . '</p>';
+            } else {
+                foreach ($paragraphs as $paragraph) {
+                    $findingsHtml .= '<p>' . esc($paragraph) . '</p>';
+                }
+            }
+        } else {
+            $findingsHtml .= $labelHtml . $ocrHtml;
+        }
+
         return [
-            'error' => $lastError,
+            'provider' => (string) ($response['provider'] ?? 'ai-server'),
+            'model' => (string) ($response['model'] ?? 'ai-server-diagnosis'),
+            'title' => trim((string) ($studyName !== '' ? $studyName : ($technique !== '' ? $technique : 'Imaging Study'))),
+            'findings_html' => $findingsHtml,
+            'impression_html' => '<p>' . esc($impression) . '</p>',
+            'summary_text' => mb_substr($impression !== '' ? $impression : 'AI diagnosis draft prepared.', 0, 220),
+            'raw' => $response['raw'] ?? [],
+            'error' => '',
         ];
+    }
+
+    /**
+     * @param mixed $value
+     */
+    private function normalizeAiTextValue($value, string $fallback = ''): string
+    {
+        if (is_string($value)) {
+            $text = trim($value);
+            return $text !== '' ? $text : trim($fallback);
+        }
+
+        if (is_scalar($value)) {
+            $text = trim((string) $value);
+            return $text !== '' ? $text : trim($fallback);
+        }
+
+        if (is_array($value)) {
+            $chunks = [];
+            array_walk_recursive($value, static function ($item) use (&$chunks): void {
+                if (is_scalar($item)) {
+                    $text = trim((string) $item);
+                    if ($text !== '') {
+                        $chunks[] = $text;
+                    }
+                }
+            });
+
+            if ($chunks !== []) {
+                return trim(implode(' ', array_slice($chunks, 0, 8)));
+            }
+        }
+
+        return trim($fallback);
+    }
+
+    /**
+     * @param mixed $value
+     * @return array<int, string>
+     */
+    private function normalizeAiListValue($value): array
+    {
+        if (is_string($value)) {
+            $text = trim($value);
+            return $text !== '' ? [$text] : [];
+        }
+
+        if (is_scalar($value)) {
+            $text = trim((string) $value);
+            return $text !== '' ? [$text] : [];
+        }
+
+        if (! is_array($value)) {
+            return [];
+        }
+
+        $items = [];
+        array_walk_recursive($value, static function ($item) use (&$items): void {
+            if (is_scalar($item)) {
+                $text = trim((string) $item);
+                if ($text !== '') {
+                    $items[] = $text;
+                }
+            }
+        });
+
+        return array_slice($items, 0, 20);
     }
 
     private function extractTextFromLabFile(string $absolutePath): string
     {
-        $docEndpoint = rtrim($this->readSetting('AZURE_DOCINTEL_ENDPOINT'), '/');
-        $docKey = trim($this->readSetting('AZURE_DOCINTEL_KEY'));
+        return $this->extractTextWithAiServerOcr($absolutePath);
+    }
 
-        if ($docEndpoint !== '' && $docKey !== '') {
-            $text = $this->extractTextWithDocumentIntelligence($absolutePath, $docEndpoint, $docKey);
-            if ($text !== '') {
-                return $text;
-            }
+    private function extractTextWithAiServerOcr(string $absolutePath): string
+    {
+        $endpoint = rtrim($this->readSetting('DIAGNOSIS_AI_OCR_ENDPOINT'), '/');
+        if ($endpoint === '') {
+            return '';
         }
 
-        return $this->extractTextWithAzureVisionLlm($absolutePath);
+        $mime = $this->detectMimeType($absolutePath);
+        if (! str_starts_with($mime, 'image/')) {
+            return '';
+        }
+
+        try {
+            $client = service('curlrequest', $this->httpOptions());
+            $headers = [
+                'Accept' => 'application/json',
+            ];
+
+            $token = trim($this->readSetting('DIAGNOSIS_AI_PARSE_TOKEN'));
+            if ($token !== '') {
+                $headers['Authorization'] = 'Bearer ' . $token;
+            }
+
+            $curlFile = new \CURLFile($absolutePath, $mime, basename($absolutePath));
+            $response = $client->post($endpoint, [
+                'headers' => $headers,
+                'multipart' => [
+                    'file' => $curlFile,
+                ],
+            ]);
+
+            if ($response->getStatusCode() < 200 || $response->getStatusCode() >= 300) {
+                return '';
+            }
+
+            $decoded = json_decode((string) $response->getBody(), true);
+            if (! is_array($decoded)) {
+                return '';
+            }
+
+            foreach (['ocr_text', 'text', 'extracted_text'] as $key) {
+                $value = trim((string) ($decoded[$key] ?? ''));
+                if ($value !== '') {
+                    return $value;
+                }
+            }
+        } catch (\Throwable $e) {
+            return '';
+        }
+
+        return '';
     }
 
     private function extractTextWithDocumentIntelligence(string $absolutePath, string $endpoint, string $key): string
@@ -2425,21 +2590,156 @@ class Diagnosis extends BaseController
         if (! empty($external['values']) && is_array($external['values'])) {
             return $external;
         }
-
-        $azure = $this->parseLabValuesWithAzureOpenAi($ocrText, $panelName);
-        if (! empty($azure['values']) && is_array($azure['values'])) {
-            return $azure;
-        }
-
         $externalError = trim((string) ($external['error'] ?? ''));
-        $azureError = trim((string) ($azure['error'] ?? ''));
         return [
             'provider' => 'none',
             'model' => '',
             'values' => [],
             'raw' => [],
-            'error' => $externalError !== '' ? $externalError : $azureError,
+            'error' => $externalError !== '' ? $externalError : 'AI parse failed. Configure DIAGNOSIS_AI_PARSE_ENDPOINT on your AI server.',
         ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function callAiServerDiagnosis(string $studyName, string $filePath, string $mime = 'image/jpeg', string $patientName = 'Unknown', int $patientAge = 0, string $patientGender = 'Unknown'): array
+    {
+        $base = $this->resolveAiServerBaseUrl();
+        if ($base === '') {
+            return [
+                'error' => 'AI server URL is missing. Configure DIAGNOSIS_AI_SERVER_URL or set parse/OCR endpoint in AI Settings.',
+            ];
+        }
+
+        if (! is_file($filePath)) {
+            return [
+                'error' => 'Image file not found: ' . basename($filePath),
+            ];
+        }
+
+        $isDicom = $this->isDicomMimeOrExtension($mime, strtolower(pathinfo($filePath, PATHINFO_EXTENSION)));
+        if ($isDicom) {
+            $ext = 'dcm';
+        } else {
+            $ext = str_contains($mime, 'png') ? 'png' : (str_contains($mime, 'webp') ? 'webp' : 'jpg');
+        }
+        $token = trim($this->readSetting('DIAGNOSIS_AI_PARSE_TOKEN'));
+        $headers = ['Accept' => 'application/json'];
+        if ($token !== '') {
+            $headers['Authorization'] = 'Bearer ' . $token;
+        }
+
+        $url = $base . '/diagnosis';
+        $prompt = $this->buildImagingDiagnosisPrompt($studyName);
+        $attempts = $this->aiMaxRetries();
+        $lastError = 'AI server diagnosis request failed.';
+
+        for ($attempt = 1; $attempt <= $attempts; $attempt++) {
+            try {
+                $client = service('curlrequest', $this->httpOptions());
+                $uploadMime = $isDicom ? 'application/dicom' : $mime;
+                $curlFile = new \CURLFile($filePath, $uploadMime, 'study.' . $ext);
+                $response = $client->post($url, [
+                    'headers' => $headers,
+                    'multipart' => [
+                        'file'               => $curlFile,
+                        'patient_name'       => $patientName !== '' ? $patientName : 'Unknown',
+                        'patient_age'        => (string) max(0, $patientAge),
+                        'patient_gender'     => $patientGender !== '' ? $patientGender : 'Unknown',
+                        'clinical_indication' => $studyName !== '' ? $studyName : 'Imaging study',
+                        'report_prompt'      => $prompt,
+                    ],
+                ]);
+
+                $status = $response->getStatusCode();
+                $body = (string) $response->getBody();
+                if ($status < 200 || $status >= 300) {
+                    $lastError = 'AI server HTTP ' . $status . ': ' . mb_substr($body, 0, 180);
+                    continue;
+                }
+
+                $decoded = json_decode($body, true);
+                if (! is_array($decoded)) {
+                    $lastError = 'AI server returned non-JSON response.';
+                    continue;
+                }
+
+                $report = $decoded['diagnosis_report'] ?? null;
+                if (! is_array($report)) {
+                    $lastError = trim((string) ($decoded['detail'] ?? 'AI server response missing diagnosis_report.'));
+                    continue;
+                }
+
+                return [
+                    'provider' => 'ai-server',
+                    'model' => 'python-fastapi',
+                    'report' => $report,
+                    'raw' => $decoded,
+                    'error' => '',
+                ];
+            } catch (\Throwable $e) {
+                $lastError = $e->getMessage() !== '' ? $e->getMessage() : 'AI server request timeout/error.';
+            }
+        }
+
+        return [
+            'error' => $lastError,
+        ];
+    }
+
+    private function buildImagingDiagnosisPrompt(string $studyName): string
+    {
+        $template = trim($this->readSetting('DIAGNOSIS_AI_IMAGING_PROMPT'));
+        if ($template === '') {
+            $template = "Generate a radiology report in concise clinical style.\n"
+                . "Use this structure exactly:\n"
+                . "1) Findings Draft\n"
+                . "2) Technique\n"
+                . "3) Impression Draft\n\n"
+                . "Include checks for lungs/pleura, mediastinum/heart size, diaphragm/costophrenic angles, bones/soft tissue, and lines/tubes/devices if present.\n"
+                . "If a structure is normal, explicitly state it as normal.\n"
+                . "Do not mention AI. Keep output clinically readable for doctors.\n"
+                . "Study Name: {study_name}";
+        }
+
+        $name = trim($studyName) !== '' ? trim($studyName) : 'Imaging study';
+        $prompt = str_replace(['{study_name}', '{{study_name}}'], $name, $template);
+
+        return trim($prompt);
+    }
+
+    private function resolveAiServerBaseUrl(): string
+    {
+        $base = rtrim($this->readSetting('DIAGNOSIS_AI_SERVER_URL'), '/');
+        if ($base !== '') {
+            return $base;
+        }
+
+        $candidateUrls = [
+            trim((string) $this->readSetting('DIAGNOSIS_AI_PARSE_ENDPOINT')),
+            trim((string) $this->readSetting('DIAGNOSIS_AI_OCR_ENDPOINT')),
+        ];
+
+        foreach ($candidateUrls as $url) {
+            if ($url === '') {
+                continue;
+            }
+
+            $parts = @parse_url($url);
+            if (! is_array($parts) || empty($parts['scheme']) || empty($parts['host'])) {
+                continue;
+            }
+
+            $base = (string) $parts['scheme'] . '://' . (string) $parts['host'];
+            if (! empty($parts['port'])) {
+                $base .= ':' . (int) $parts['port'];
+            }
+
+            return rtrim($base, '/');
+        }
+
+        return '';
     }
 
     /**
@@ -2696,11 +2996,99 @@ class Diagnosis extends BaseController
                 'bmp' => 'image/bmp',
                 'gif' => 'image/gif',
                 'pdf' => 'application/pdf',
+                'dcm' => 'application/dicom',
+                'dicom' => 'application/dicom',
             ];
             $mime = $map[$ext] ?? 'application/octet-stream';
         }
 
+        if ($mime === 'application/octet-stream') {
+            $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+            if (in_array($ext, ['dcm', 'dicom'], true)) {
+                return 'application/dicom';
+            }
+        }
+
         return $mime;
+    }
+
+    private function isDicomMimeOrExtension(string $mime, string $ext): bool
+    {
+        $mime = strtolower(trim($mime));
+        $ext = strtolower(trim($ext));
+
+        if (in_array($ext, ['dcm', 'dicom'], true)) {
+            return true;
+        }
+
+        return str_contains($mime, 'dicom');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function callAiServerDicomPreview(string $filePath, string $mime = 'application/dicom'): array
+    {
+        $base = $this->resolveAiServerBaseUrl();
+        if ($base === '') {
+            return [
+                'error' => 'AI server URL is missing for DICOM preview.',
+            ];
+        }
+
+        if (! is_file($filePath)) {
+            return [
+                'error' => 'DICOM file not found on server.',
+            ];
+        }
+
+        $token = trim($this->readSetting('DIAGNOSIS_AI_PARSE_TOKEN'));
+        $headers = ['Accept' => 'image/*'];
+        if ($token !== '') {
+            $headers['Authorization'] = 'Bearer ' . $token;
+        }
+
+        $url = $base . '/dicom-preview';
+        $attempts = $this->aiMaxRetries();
+        $lastError = 'DICOM preview request failed.';
+
+        for ($attempt = 1; $attempt <= $attempts; $attempt++) {
+            try {
+                $client = service('curlrequest', $this->httpOptions());
+                $curlFile = new \CURLFile($filePath, 'application/dicom', basename($filePath));
+                $response = $client->post($url, [
+                    'headers' => $headers,
+                    'multipart' => [
+                        'file' => $curlFile,
+                    ],
+                ]);
+
+                $status = $response->getStatusCode();
+                $body = (string) $response->getBody();
+                if ($status < 200 || $status >= 300) {
+                    $lastError = 'AI server HTTP ' . $status . ': ' . mb_substr($body, 0, 180);
+                    continue;
+                }
+
+                $contentType = strtolower(trim((string) $response->getHeaderLine('Content-Type')));
+                if (! str_starts_with($contentType, 'image/')) {
+                    $lastError = 'AI server did not return image data for DICOM preview.';
+                    continue;
+                }
+
+                return [
+                    'bytes' => $body,
+                    'mime' => $contentType,
+                    'error' => '',
+                ];
+            } catch (\Throwable $e) {
+                $lastError = $e->getMessage() !== '' ? $e->getMessage() : 'DICOM preview service timeout/error.';
+            }
+        }
+
+        return [
+            'error' => $lastError,
+        ];
     }
 
     public function selectLabRadiology($invoiceId, $labType)
