@@ -5,6 +5,8 @@ namespace App\Controllers;
 use App\Controllers\BaseController;
 use CodeIgniter\I18n\Time;
 use Exception;
+use Mpdf\HTMLParserMode;
+use Mpdf\Mpdf;
 
 class Diagnosis extends BaseController
 {
@@ -341,6 +343,7 @@ class Diagnosis extends BaseController
             'lab_type' => $labType,
             'lab_type_name' => $this->getLabTypeName($labType),
             'lab_type_route' => $this->getLabTypeRoute($labType),
+            'print_templates' => $this->getDiagnosisPrintTemplates($labType),
         ];
 
         return view('diagnosis/pathology_detail', $data);
@@ -421,6 +424,7 @@ class Diagnosis extends BaseController
                 'invoiceId' => $invoiceId,
                 'labType' => $labType,
                 'lab_type' => $labType,
+                'print_templates' => $this->getDiagnosisPrintTemplates($labType),
             ];
 
             $view = view('diagnosis/lab_invoice_main_test_list', $data);
@@ -1046,6 +1050,7 @@ class Diagnosis extends BaseController
     public function openReportEditorPage($labReqId)
     {
         $labReqId = (int) $labReqId;
+        $editReason = trim((string) ($this->request->getGet('edit_reason') ?? ''));
 
         $reportRow = $this->db->table('lab_request')->where('id', $labReqId)->get()->getRow();
         if (! $reportRow) {
@@ -1111,6 +1116,7 @@ class Diagnosis extends BaseController
         return view('diagnosis/lab_final_report_editor', [
             'report_format' => [$reportRow],
             'radiology_ultrasound_template' => $templates,
+            'edit_reason' => $editReason,
         ]);
     }
 
@@ -1139,20 +1145,63 @@ class Diagnosis extends BaseController
     public function finalUpdateXray($labReqId)
     {
         $labReqId = (int) $labReqId;
-        $htmlData = (string) $this->request->getPost('HTMLData');
-        $impression = (string) $this->request->getPost('report_data_Impression');
+        $htmlData = (string) ($this->request->getPost('HTMLData') ?? $this->request->getPost('report_data') ?? '');
+        $impression = (string) ($this->request->getPost('report_data_Impression') ?? $this->request->getPost('report_data_impression') ?? '');
+        $editReason = trim((string) ($this->request->getPost('edit_reason') ?? ''));
 
         if ($labReqId <= 0) {
             return $this->response->setJSON(['status' => 'error', 'message' => 'Invalid request id']);
         }
 
         try {
+            $before = $this->db->table('lab_request')
+                ->select('id, status, report_edit_req_no, Report_Data, report_data_Impression')
+                ->where('id', $labReqId)
+                ->get(1)
+                ->getRowArray() ?? [];
+
+            if ((int) ($before['status'] ?? 0) === 2 && $editReason === '') {
+                return $this->response->setJSON([
+                    'status' => 'error',
+                    'message' => 'Edit reason is required for verified report changes (NABH audit).',
+                ]);
+            }
+
             $this->db->table('lab_request')
                 ->where('id', $labReqId)
                 ->update([
                     'Report_Data' => $htmlData,
                     'report_data_Impression' => $impression,
                 ]);
+
+            $fields = $this->db->getFieldNames('lab_request');
+            if (in_array('report_edit_req_no', $fields, true) && (int) ($before['status'] ?? 0) === 2) {
+                $nextEditNo = (int) ($before['report_edit_req_no'] ?? 0) + 1;
+                $this->db->table('lab_request')
+                    ->where('id', $labReqId)
+                    ->update(['report_edit_req_no' => $nextEditNo]);
+            }
+
+            if ($this->db->tableExists('lab_log')) {
+                $user = service('auth')->user();
+                $userId = (int) ($user->id ?? 0);
+                $userName = $user ? trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) : 'System';
+
+                $beforeHash = md5((string) ($before['Report_Data'] ?? '') . '|' . (string) ($before['report_data_Impression'] ?? ''));
+                $afterHash = md5($htmlData . '|' . $impression);
+                $reasonLog = $editReason !== '' ? $editReason : 'NA';
+
+                $this->db->table('lab_log')->insert([
+                    'lab_repo_id' => $labReqId,
+                    'log_by_id' => $userId,
+                    'log_by' => $userName,
+                    'log_type_id' => 0,
+                    'log_type' => 'Report Edit',
+                    'log_Faults_id' => 0,
+                    'log_Faults' => 'Radiology',
+                    'comments' => 'Editor save [reason:' . substr($reasonLog, 0, 350) . '] [before:' . substr($beforeHash, 0, 8) . ' after:' . substr($afterHash, 0, 8) . ']',
+                ]);
+            }
 
             return $this->response->setJSON(['status' => 'success', 'message' => 'Saved']);
         } catch (\Throwable $e) {
@@ -1212,23 +1261,624 @@ class Diagnosis extends BaseController
     public function printSingleReport($labReqId)
     {
         $labReqId = (int) $labReqId;
+        $templateId = (int) ($this->request->getGet('template_id') ?? 0);
+
+           set_time_limit(300);
 
         if ($labReqId <= 0) {
             return '<h3>Invalid request id</h3>';
         }
 
-        $row = $this->db->table('lab_request')
-            ->where('id', $labReqId)
-            ->get()
-            ->getRow();
+        $sql = "SELECT l.*, m.invoice_code, m.attach_id,
+                    p.p_fname, p.p_rname, p.p_relative, p.p_code, p.gender, p.dob, p.age, p.age_in, p.age_in_month, p.estimate_dob,
+                    r.Title as repo_title, g.RepoGrp
+                FROM lab_request l
+                LEFT JOIN invoice_master m ON m.id = l.charge_id
+                LEFT JOIN patient_master p ON p.id = m.attach_id
+                LEFT JOIN lab_repo r ON r.mstRepoKey = l.lab_repo_id
+                LEFT JOIN lab_rgroups g ON g.mstRGrpKey = r.GrpKey
+                WHERE l.id = ?";
+
+        $row = $this->db->query($sql, [$labReqId])->getRow();
 
         if (! $row) {
             return '<h3>Report not found</h3>';
         }
 
-        return view('diagnosis/print_single_report', [
-            'report' => $row,
+        $reportData = trim((string) ($row->Report_Data ?? ''));
+        $impression = trim((string) ($row->report_data_Impression ?? ''));
+
+        $reportHtml = '';
+        if ($reportData !== '') {
+            $reportHtml .= $reportData;
+        }
+
+        if ($impression !== '') {
+            $reportHtml .= '<div style="margin-top:10px;"><b>Impression :</b><br/>' . nl2br($impression) . '</div>';
+        }
+
+        if ($reportHtml === '') {
+            $reportHtml = $this->resolveFallbackReportHtml((int) ($row->lab_repo_id ?? 0), (int) ($row->charge_item_id ?? 0), (int) ($row->lab_type ?? 0));
+        }
+
+        if ($reportHtml === '') {
+            $reportHtml = '<p>No report data available for this request. Please use Edit and save report content.</p>';
+        }
+
+        $genderValue = (int) ($row->gender ?? 0);
+        $genderText = $genderValue === 1 ? 'Male' : ($genderValue === 2 ? 'Female' : '-');
+
+        $ageText = '-';
+        if (function_exists('get_age_1')) {
+            $ageText = (string) get_age_1(
+                $row->dob ?? null,
+                $row->age ?? '',
+                $row->age_in_month ?? '',
+                $row->estimate_dob ?? ''
+            );
+        } elseif (! empty($row->age)) {
+            $ageText = (string) $row->age;
+        }
+
+        $printSetting = $this->getDiagnosisTemplateSetting((int) ($row->lab_type ?? 0), $templateId);
+        $isPlainPaper = false;
+
+        // Compute display values here so they are available for token substitution.
+        $patientName   = trim((string) ($row->p_fname ?? ''));
+        $relativeName  = trim((string) ($row->p_relative ?? ''));
+        $relativeText  = trim((string) ($row->p_rname ?? ''));
+        $repoTitle     = trim((string) ($row->report_name ?? $row->repo_title ?? $row->RepoGrp ?? 'Report'));
+        $headRow       = $this->db->table('diagnosis_head_name')
+            ->where('d_type', (int) ($row->lab_type ?? 0))
+            ->get(1)
+            ->getRow();
+
+        $tokens = $this->buildPdfTokens([
+            'invoice_code'   => $row->invoice_code ?? '',
+            'patient_name'   => $patientName,
+            'relative_type'  => $relativeName,
+            'relative_name'  => $relativeText,
+            'age'            => $ageText,
+            'gender'         => $genderText,
+            'uhid'           => $row->p_code ?? '',
+            'collected_time' => $row->collected_time ?? '',
+            'reported_time'  => $row->reported_time ?? '',
+            'report_title'   => $repoTitle,
+            'doctor_name'    => $headRow->doc_name ?? '',
+            'doctor_education' => $headRow->doc_edu ?? '',
+            'technician_name' => $headRow->tech_name ?? '',
+            'signature_image_url' => (string) ($printSetting['signature_image'] ?? ''),
         ]);
+
+        // Render the optional patient info template (tokens resolved).
+        $rawPatientInfoHtml = trim((string) ($printSetting['patient_info_html'] ?? ''));
+           if ($rawPatientInfoHtml !== '') {
+               $patientInfoHtml = $this->applyPdfTokens($rawPatientInfoHtml, $tokens);
+           } elseif (($printSetting['id'] ?? 0) <= 0) {
+               $patientInfoHtml = $this->buildDefaultPatientInfoHtml([
+                   'invoice_code'   => $row->invoice_code ?? '',
+                   'patient_name'   => $patientName,
+                   'relative_name'  => $relativeName,
+                   'relative_text'  => $relativeText,
+                   'age_text'       => $ageText,
+                   'gender_text'    => $genderText,
+                   'uhid'           => $row->p_code ?? '',
+                   'collected_time' => $row->collected_time ?? '',
+                   'reported_time'  => $row->reported_time ?? '',
+               ]);
+           } else {
+               $patientInfoHtml = '';
+           }
+
+        $reportHtml = trim((string) ($printSetting['content_prefix_html'] ?? '')) . $reportHtml . trim((string) ($printSetting['content_suffix_html'] ?? ''));
+
+        $pdfHtml = view('diagnosis/pdf_single_report', [
+            'report'         => $row,
+            'reportHtml'     => $reportHtml,
+            'isPlainPaper'   => $isPlainPaper,
+            'ageText'        => $ageText,
+            'genderText'     => $genderText,
+            'printSetting'   => $printSetting,
+            'patientName'    => $patientName,
+            'relativeName'   => $relativeName,
+            'relativeText'   => $relativeText,
+            'repoTitle'      => $repoTitle,
+            'patientInfoHtml' => $patientInfoHtml,
+        ]);
+
+        $rawHeaderHtml = trim((string) ($printSetting['header_html'] ?? ''));
+        $rawFirstPageHeaderHtml = trim((string) ($printSetting['first_page_header_html'] ?? ''));
+        $rawFooterHtml = trim((string) ($printSetting['footer_html'] ?? ''));
+        $rawLastPageFooterHtml = trim((string) ($printSetting['last_page_footer_html'] ?? ''));
+
+        $autoHeaderHtml = $this->buildAutoMpdfHeaderBlock(
+            $rawHeaderHtml,
+            $rawFirstPageHeaderHtml,
+            'diag_auto_header_single'
+        );
+        $autoFooterHtml = $this->buildAutoMpdfFooterBlock(
+            $rawFooterHtml,
+            $rawLastPageFooterHtml,
+            'diag_auto_footer_single'
+        );
+
+        $prefixHtml = $this->applyPdfTokens(trim((string) ($printSetting['mpdf_prefix_html'] ?? ''))
+            . $autoHeaderHtml
+            . $autoFooterHtml, $tokens);
+        $suffixHtml = $this->applyPdfTokens(trim((string) ($printSetting['mpdf_suffix_html'] ?? '')), $tokens);
+
+        $marginTop = $this->cmToMm($printSetting['page_margin_top_cm'] ?? 1.2, 1.2);
+        $marginBottom = $this->cmToMm($printSetting['page_margin_bottom_cm'] ?? 1.2, 1.2);
+        $marginLeft = $this->cmToMm($printSetting['page_margin_left_cm'] ?? 1.0, 1.0);
+        $marginRight = $this->cmToMm($printSetting['page_margin_right_cm'] ?? 1.0, 1.0);
+        $marginHeader = $this->cmToMm($printSetting['margin_header_cm'] ?? 0.5, 0.5);
+        $marginFooter = $this->cmToMm($printSetting['margin_footer_cm'] ?? 1.5, 1.5);
+
+        $mpdfTempDir = WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'mpdf';
+        if (! is_dir($mpdfTempDir)) {
+            mkdir($mpdfTempDir, 0755, true);
+        }
+
+        $mpdf = new Mpdf([
+            'format'                => (string) ($printSetting['page_size'] ?? 'A4'),
+            'margin_top'            => $marginTop,
+            'margin_bottom'         => $marginBottom,
+            'margin_left'           => $marginLeft,
+            'margin_right'          => $marginRight,
+            'margin_header'         => $marginHeader,
+            'margin_footer'         => $marginFooter,
+            'tempDir'               => $mpdfTempDir,
+            'autoScriptToLang'      => false,
+            'autoLanguageDetection' => false,
+            'autoArabic'            => false,
+            'autoVietnamese'        => false,
+        ]);
+
+        // For plain HTML (without explicit mPDF tags), set header/footer via API.
+        $headerHasTags = preg_match('/<\s*(htmlpageheader|sethtmlpageheader)\b/i', $rawHeaderHtml . $rawFirstPageHeaderHtml) === 1;
+        $footerHasTags = preg_match('/<\s*(htmlpagefooter|sethtmlpagefooter)\b/i', $rawFooterHtml . $rawLastPageFooterHtml) === 1;
+
+        if (! $headerHasTags) {
+            $plainHeader = $this->applyPdfTokens($rawHeaderHtml . $rawFirstPageHeaderHtml, $tokens);
+            if ($plainHeader !== '') {
+                $mpdf->SetHTMLHeader($plainHeader, 'O');
+                $mpdf->SetHTMLHeader($plainHeader, 'E');
+            }
+        }
+
+        if (! $footerHasTags) {
+            $plainFooter = $this->applyPdfTokens($rawFooterHtml, $tokens);
+            if ($plainFooter === '') {
+                $plainFooter = $this->applyPdfTokens($rawLastPageFooterHtml, $tokens);
+            }
+
+            if ($plainFooter !== '') {
+                $mpdf->SetHTMLFooter($plainFooter, 'O');
+                $mpdf->SetHTMLFooter($plainFooter, 'E');
+            }
+        }
+
+        $backgroundImage = trim((string) ($printSetting['page_background_image'] ?? ''));
+        if ($backgroundImage !== '') {
+            $absolutePath = FCPATH . ltrim(str_replace('\\', '/', $backgroundImage), '/');
+            if (is_file($absolutePath)) {
+                $mpdf->SetWatermarkImage($absolutePath, 1, [210, 297], 'F');
+                $mpdf->showWatermarkImage = true;
+            }
+        }
+
+        $watermarkType = (string) ($printSetting['watermark_type'] ?? 'none');
+        $watermarkAlpha = (float) ($printSetting['watermark_alpha'] ?? 0.12);
+        if ($watermarkType === 'text') {
+            $text = trim((string) ($printSetting['watermark_text'] ?? ''));
+            if ($text !== '') {
+                $mpdf->SetWatermarkText($text, $watermarkAlpha);
+                $mpdf->showWatermarkText = true;
+            }
+        } elseif ($watermarkType === 'image') {
+            $wmImage = trim((string) ($printSetting['watermark_image'] ?? ''));
+            if ($wmImage !== '') {
+                $absolutePath = FCPATH . ltrim(str_replace('\\', '/', $wmImage), '/');
+                if (is_file($absolutePath)) {
+                    $mpdf->SetWatermarkImage($absolutePath, $watermarkAlpha);
+                    $mpdf->showWatermarkImage = true;
+                }
+            }
+        }
+
+        if ($prefixHtml !== '') {
+            $mpdf->WriteHTML($prefixHtml, HTMLParserMode::HTML_HEADER_BUFFER);
+        }
+
+        $mpdf->WriteHTML($pdfHtml);
+
+        if ($suffixHtml !== '') {
+            $mpdf->WriteHTML($suffixHtml, HTMLParserMode::HTML_HEADER_BUFFER, false, false);
+        }
+
+        $invoiceCode = preg_replace('/[^A-Za-z0-9\-_]/', '_', (string) ($row->invoice_code ?? 'invoice'));
+        $fileName = 'Report_' . $invoiceCode . '_' . $labReqId . '.pdf';
+
+        return $this->response
+            ->setHeader('Content-Type', 'application/pdf')
+            ->setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+            ->setHeader('Pragma', 'no-cache')
+            ->setHeader('Expires', '0')
+            ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
+            ->setBody($mpdf->Output($fileName, 'S'));
+    }
+
+    private function getDiagnosisPrintTemplates(int $labType): array
+    {
+        if ($labType <= 0 || ! $this->db->tableExists('diagnosis_print_templates')) {
+            return [];
+        }
+
+        return $this->db->table('diagnosis_print_templates')
+            ->select('id, template_name, is_default')
+            ->where('modality', $labType)
+            ->where('status', 1)
+            ->orderBy('is_default', 'DESC')
+            ->orderBy('template_name', 'ASC')
+            ->get()
+            ->getResultArray();
+    }
+
+    private function getDiagnosisTemplateSetting(int $labType, int $templateId = 0): array
+    {
+        $legacy = $this->getDiagnosisPrintSetting($labType);
+
+        $defaults = array_merge($legacy, [
+            'page_size' => 'A4',
+            'page_margin_top_cm' => 1.2,
+               'id' => 0,
+            'page_margin_bottom_cm' => 1.2,
+            'page_margin_left_cm' => 1.0,
+            'page_margin_right_cm' => 1.0,
+            'margin_header_cm' => 0.5,
+            'margin_footer_cm' => 1.5,
+            'page_background_image' => '',
+            'watermark_type' => 'none',
+            'watermark_text' => '',
+            'watermark_image' => '',
+            'signature_image' => '',
+            'watermark_alpha' => 0.12,
+            'header_html' => '',
+            'first_page_header_html' => '',
+            'content_prefix_html' => '',
+            'content_suffix_html' => '',
+            'footer_html' => '',
+            'last_page_footer_html' => '',
+        ]);
+
+        if ($labType <= 0 || ! $this->db->tableExists('diagnosis_print_templates')) {
+            return $defaults;
+        }
+
+        $builder = $this->db->table('diagnosis_print_templates')
+            ->where('modality', $labType)
+            ->where('status', 1);
+
+        if ($templateId > 0) {
+            $builder->where('id', $templateId);
+        } else {
+            $builder->orderBy('is_default', 'DESC')->orderBy('id', 'ASC');
+        }
+
+        $row = $builder->get(1)->getRowArray();
+        if (! is_array($row)) {
+            return $defaults;
+        }
+
+        foreach ($defaults as $key => $value) {
+            if (array_key_exists($key, $row) && $row[$key] !== null && $row[$key] !== '') {
+                if (is_float($value)) {
+                    $defaults[$key] = (float) $row[$key];
+                } else {
+                    $defaults[$key] = (string) $row[$key];
+                }
+            }
+        }
+
+        $pageSize = strtoupper(trim((string) ($defaults['page_size'] ?? 'A4')));
+
+           $defaults['id'] = (int) ($row['id'] ?? 0);
+        if (! in_array($pageSize, ['A4', 'A4-L', 'LETTER', 'LEGAL'], true)) {
+            $pageSize = 'A4';
+        }
+        $defaults['page_size'] = $pageSize;
+
+        return $defaults;
+    }
+
+    private function getDiagnosisPrintSetting(int $labType): array
+    {
+        $defaults = [
+            'letter_margin_top' => 12.0,
+            'letter_margin_left' => 10.0,
+            'letter_margin_right' => 10.0,
+            'letter_margin_bottom' => 12.0,
+            'plain_header_html' => '',
+            'plain_background_image' => '',
+            'mpdf_prefix_html' => '',
+            'mpdf_suffix_html' => '',
+            'patient_info_html' => '',
+        ];
+
+        if ($labType <= 0 || ! $this->db->tableExists('diagnosis_head_name')) {
+            return $defaults;
+        }
+
+        $fields = $this->db->getFieldNames('diagnosis_head_name');
+        $select = ['d_type'];
+        foreach (array_keys($defaults) as $field) {
+            if (in_array($field, $fields, true)) {
+                $select[] = $field;
+            }
+        }
+
+        $row = $this->db->table('diagnosis_head_name')
+            ->select(implode(',', $select))
+            ->where('d_type', $labType)
+            ->get(1)
+            ->getRowArray();
+
+        if (! is_array($row)) {
+            return $defaults;
+        }
+
+        foreach ($defaults as $key => $defaultValue) {
+            if (array_key_exists($key, $row) && $row[$key] !== null && $row[$key] !== '') {
+                $defaults[$key] = is_float($defaultValue) ? (float) $row[$key] : (string) $row[$key];
+            }
+        }
+
+        return $defaults;
+    }
+
+    /**
+     * Build an associative array of {{token}} => value pairs for PDF template substitution.
+     * All string values are HTML-escaped so they are safe to embed inside HTML attributes and text.
+     */
+    private function buildPdfTokens(array $data): array
+    {
+        $e = static function (string $v): string {
+            return htmlspecialchars($v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        };
+
+        $age    = (string) ($data['age'] ?? '-');
+        $gender = (string) ($data['gender'] ?? '-');
+        $hospitalName = defined('H_Name') ? (string) constant('H_Name') : 'Hospital';
+        $hospitalAddress1 = defined('H_address_1') ? (string) constant('H_address_1') : '';
+        $hospitalPhone = defined('H_phone_No') ? (string) constant('H_phone_No') : '';
+        $hospitalLogoName = defined('H_logo') ? trim((string) constant('H_logo')) : '';
+        $hospitalLogoUrl = $this->resolvePdfAssetPath([
+            $hospitalLogoName !== '' ? 'assets/images/' . ltrim($hospitalLogoName, '/\\') : '',
+            'assets/img/logo.png',
+            'assets/images/no_image.svg',
+        ]);
+        $signatureImageUrl = $this->resolvePdfAssetPath([
+            (string) ($data['signature_image_url'] ?? ''),
+            'assets/images/drPreetiSingh.jpg',
+        ]);
+
+        return [
+            '{{invoice_code}}'   => $e((string) ($data['invoice_code'] ?? '')),
+            '{{patient_name}}'   => $e((string) ($data['patient_name'] ?? '')),
+            '{{relative_type}}'  => $e((string) ($data['relative_type'] ?? '')),
+            '{{relative_name}}'  => $e((string) ($data['relative_name'] ?? '')),
+            '{{relative}}'       => $e(trim((string) ($data['relative_type'] ?? '') . ' ' . (string) ($data['relative_name'] ?? ''))),
+            '{{age}}'            => $e($age),
+            '{{gender}}'         => $e($gender),
+            '{{age_sex}}'        => $e($age . ' / ' . $gender),
+            '{{uhid}}'           => $e((string) ($data['uhid'] ?? '')),
+            '{{collected_time}}' => $e((string) ($data['collected_time'] ?? '')),
+            '{{reported_time}}'  => $e((string) ($data['reported_time'] ?? '')),
+            '{{printed_time}}'   => date('d-m-Y h:i A'),
+            '{{report_title}}'   => $e((string) ($data['report_title'] ?? '')),
+            '{{doctor_name}}'    => $e((string) ($data['doctor_name'] ?? '')),
+            '{{doctor_education}}' => $e((string) ($data['doctor_education'] ?? '')),
+            '{{technician_name}}' => $e((string) ($data['technician_name'] ?? '')),
+            '{{hospital_name}}'  => $e($hospitalName),
+            '{{hospital_address_1}}' => $e($hospitalAddress1),
+            '{{hospital_phone}}' => $e($hospitalPhone),
+            '{{hospital_logo_name}}' => $e($hospitalLogoName),
+            '{{hospital_logo_url}}' => $e($hospitalLogoUrl),
+            '{{hospital_logo_path}}' => $e($hospitalLogoUrl),
+            '{{signature_image_url}}' => $e($signatureImageUrl),
+            '{{signature_image_path}}' => $e($signatureImageUrl),
+        ];
+    }
+
+    private function resolvePdfAssetPath(array $candidates): string
+    {
+        foreach ($candidates as $candidate) {
+            $candidate = trim((string) $candidate);
+
+            if ($candidate === '') {
+                continue;
+            }
+
+            if (preg_match('/^https?:\/\//i', $candidate) === 1 || str_starts_with($candidate, 'data:')) {
+                continue;
+            }
+
+            if (preg_match('/^[A-Za-z]:[\\\\\/]/', $candidate) === 1) {
+                $absolutePath = $candidate;
+            } else {
+                $relativePath = ltrim(str_replace('\\', '/', $candidate), '/');
+                $absolutePath = str_starts_with($relativePath, 'public/')
+                    ? ROOTPATH . $relativePath
+                    : FCPATH . $relativePath;
+            }
+
+            $absolutePath = str_replace('\\', '/', $absolutePath);
+
+            if (is_file($absolutePath)) {
+                return $absolutePath;
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Replace all {{token}} placeholders in $html using the token map returned by buildPdfTokens().
+     */
+    private function applyPdfTokens(string $html, array $tokens): string
+    {
+        return str_replace(array_keys($tokens), array_values($tokens), $html);
+    }
+
+    private function buildDefaultPatientInfoHtml(array $data): string
+    {
+        $e = static function (string $v): string {
+            return htmlspecialchars($v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        };
+        $ageSex   = $e((string) ($data['age_text'] ?? '-')) . ' / ' . $e((string) ($data['gender_text'] ?? '-'));
+        $relative = $e(trim((string) ($data['relative_name'] ?? '') . ' ' . (string) ($data['relative_text'] ?? '')));
+
+        return '<table width="100%" style="border-collapse:collapse;margin-bottom:8px;font-size:11px;">'
+            . '<tr>'
+            . '<td width="50%" style="vertical-align:top;">'
+            . '<b>Invoice ID:</b> ' . $e((string) ($data['invoice_code'] ?? '')) . '<br>'
+            . '<b>Patient:</b> ' . $e((string) ($data['patient_name'] ?? '')) . '<br>'
+            . '<b>Relative:</b> ' . $relative . '<br>'
+            . '<b>Age/Sex:</b> ' . $ageSex
+            . '</td>'
+            . '<td width="50%" style="vertical-align:top;text-align:right;">'
+            . '<b>UHID:</b> ' . $e((string) ($data['uhid'] ?? '')) . '<br>'
+            . '<b>Collected:</b> ' . $e((string) ($data['collected_time'] ?? '')) . '<br>'
+            . '<b>Reported:</b> ' . $e((string) ($data['reported_time'] ?? '')) . '<br>'
+            . '<b>Printed:</b> ' . $e(date('d-m-Y h:i A'))
+            . '</td>'
+            . '</tr></table>';
+    }
+
+    private function buildAutoMpdfHeaderBlock(string $headerHtml, string $firstPageHeaderHtml, string $name): string
+    {
+        $headerHtml = trim($headerHtml);
+        $firstPageHeaderHtml = trim($firstPageHeaderHtml);
+        $combined = $headerHtml . $firstPageHeaderHtml;
+
+        if ($combined === '') {
+            return '';
+        }
+
+        if (preg_match('/<\s*(htmlpageheader|sethtmlpageheader)\b/i', $combined) === 1) {
+            return $combined;
+        }
+
+        return '';
+    }
+
+        private function buildAutoMpdfFooterBlock(string $footerHtml, string $lastPageFooterHtml, string $name): string
+    {
+        $footerHtml = trim($footerHtml);
+        $lastPageFooterHtml = trim($lastPageFooterHtml);
+        $combined = $footerHtml . $lastPageFooterHtml;
+
+        if ($combined === '') {
+            return '';
+        }
+
+        if (preg_match('/<\s*(htmlpagefooter|sethtmlpagefooter)\b/i', $combined) === 1) {
+            return $combined;
+        }
+
+        return '';
+    }
+
+    private function normalizeMarginMm($rawValue, float $default): float
+    {
+        if ($rawValue === null || $rawValue === '') {
+            return $default;
+        }
+
+        $value = (float) $rawValue;
+        if (! is_finite($value)) {
+            $value = $default;
+        }
+
+        $value = max(0.0, min(60.0, $value));
+
+        return round($value, 2);
+    }
+
+    private function cmToMm($rawCmValue, float $defaultCm): float
+    {
+        if ($rawCmValue === null || $rawCmValue === '') {
+            return round($defaultCm * 10.0, 2);
+        }
+
+        $cm = (float) $rawCmValue;
+        if (! is_finite($cm)) {
+            $cm = $defaultCm;
+        }
+
+        $cm = max(0.0, min(25.0, $cm));
+
+        return round($cm * 10.0, 2);
+    }
+
+    private function resolveFallbackReportHtml(int $labRepoId, int $chargeItemId, int $labType): string
+    {
+        $html = '';
+
+        if ($labRepoId > 0) {
+            $repoRow = $this->db->table('lab_repo')
+                ->select('HTMLData')
+                ->where('mstRepoKey', $labRepoId)
+                ->get(1)
+                ->getRowArray();
+            $html = trim((string) ($repoRow['HTMLData'] ?? ''));
+        }
+
+        if ($html !== '') {
+            return $html;
+        }
+
+        if (! $this->db->tableExists('radiology_ultrasound_template') || $chargeItemId <= 0) {
+            return '';
+        }
+
+        $invoiceItem = $this->db->table('invoice_item')
+            ->select('item_id')
+            ->where('id', $chargeItemId)
+            ->get(1)
+            ->getRowArray();
+
+        $chargeId = (int) ($invoiceItem['item_id'] ?? 0);
+
+        $builder = $this->db->table('radiology_ultrasound_template')
+            ->select('Findings, Impression')
+            ->where('Modality', $labType);
+
+        if ($chargeId > 0) {
+            $builder->groupStart()
+                ->where('charge_id', $chargeId)
+                ->orWhere('charge_id', 0)
+                ->groupEnd();
+        }
+
+        $template = $builder->orderBy('id', 'ASC')->get(1)->getRowArray();
+        if (! is_array($template)) {
+            return '';
+        }
+
+        $findings = trim((string) ($template['Findings'] ?? ''));
+        $impression = trim((string) ($template['Impression'] ?? ''));
+
+        if ($findings === '' && $impression === '') {
+            return '';
+        }
+
+        $html = $findings;
+        if ($impression !== '') {
+            $html .= '<div style="margin-top:10px;"><b>Impression :</b><br/>' . nl2br($impression) . '</div>';
+        }
+
+        return $html;
     }
 
     public function removeTest($labReqId)
@@ -1419,6 +2069,9 @@ class Diagnosis extends BaseController
         $labType = (int) $labType;
         $print = (int) $print;
         $printOnType = (int) $printOnType;
+        $templateId = (int) ($this->request->getGet('template_id') ?? 0);
+
+           set_time_limit(300);
 
         if ($invoiceId <= 0 || $labType <= 0) {
             return '<h3>Invalid parameters</h3>';
@@ -1450,31 +2103,233 @@ class Diagnosis extends BaseController
             . ' / Invoice ID :' . ($invoice->invoice_code ?? '')
             . ' / Person Name :' . ($patient->p_fname ?? '');
 
-        $isPlainPaper = ($printOnType === 1);
+        $isPlainPaper = false;
 
-        if ($print > 0) {
-            return view('diagnosis/print_compiled_report', [
-                'invoiceRequest' => $invoiceRequest,
-                'invoice' => $invoice,
-                'patient' => $patient,
-                'head' => $head,
-                'reportHead' => $reportHead,
-                'isPlainPaper' => $isPlainPaper,
-                'labType' => $labType,
-                'invoiceId' => $invoiceId,
-            ]);
+        $genderValue = (int) ($patient->gender ?? 0);
+        $genderText = $genderValue === 1 ? 'Male' : ($genderValue === 2 ? 'Female' : '-');
+
+        $ageText = '-';
+        if (function_exists('get_age_1')) {
+            $ageText = (string) get_age_1(
+                $patient->dob ?? null,
+                $patient->age ?? '',
+                $patient->age_in_month ?? '',
+                $patient->estimate_dob ?? ''
+            );
+        } elseif (! empty($patient->age)) {
+            $ageText = (string) $patient->age;
         }
 
-        return view('diagnosis/print_compiled_report', [
-            'invoiceRequest' => $invoiceRequest,
-            'invoice' => $invoice,
-            'patient' => $patient,
-            'head' => $head,
-            'reportHead' => $reportHead,
-            'isPlainPaper' => $isPlainPaper,
-            'labType' => $labType,
-            'invoiceId' => $invoiceId,
+        $reportHtml = trim((string) ($invoiceRequest->report_data ?? ''));
+        if ($reportHtml === '') {
+            $reportHtml = '<p>No compiled report data available for this request.</p>';
+        }
+
+        $printSetting = $this->getDiagnosisTemplateSetting($labType, $templateId);
+
+        $patientName  = trim((string) ($patient->p_fname ?? ''));
+        $relativeName = trim((string) ($patient->p_relative ?? ''));
+        $relativeText = trim((string) ($patient->p_rname ?? ''));
+        $repoTitle    = trim((string) ($itemType->group_desc ?? 'Lab Report'));
+
+        $tokens = $this->buildPdfTokens([
+            'invoice_code'   => $invoice->invoice_code ?? '',
+            'patient_name'   => $patientName,
+            'relative_type'  => $relativeName,
+            'relative_name'  => $relativeText,
+            'age'            => $ageText,
+            'gender'         => $genderText,
+            'uhid'           => $patient->p_code ?? '',
+            'collected_time' => $invoiceRequest->collected_time ?? '',
+            'reported_time'  => $invoiceRequest->reported_time ?? '',
+            'report_title'   => $repoTitle,
+            'doctor_name'    => $head->doc_name ?? '',
+            'doctor_education' => $head->doc_edu ?? '',
+            'technician_name' => $head->tech_name ?? '',
+            'signature_image_url' => (string) ($printSetting['signature_image'] ?? ''),
         ]);
+
+        $rawPatientInfoHtml = trim((string) ($printSetting['patient_info_html'] ?? ''));
+           if ($rawPatientInfoHtml !== '') {
+               $patientInfoHtml = $this->applyPdfTokens($rawPatientInfoHtml, $tokens);
+           } elseif (($printSetting['id'] ?? 0) <= 0) {
+               $patientInfoHtml = $this->buildDefaultPatientInfoHtml([
+                   'invoice_code'   => $invoice->invoice_code ?? '',
+                   'patient_name'   => $patientName,
+                   'relative_name'  => $relativeName,
+                   'relative_text'  => $relativeText,
+                   'age_text'       => $ageText,
+                   'gender_text'    => $genderText,
+                   'uhid'           => $patient->p_code ?? '',
+                   'collected_time' => $invoiceRequest->collected_time ?? '',
+                   'reported_time'  => $invoiceRequest->reported_time ?? '',
+               ]);
+           } else {
+               $patientInfoHtml = '';
+           }
+
+        $reportHtml = trim((string) ($printSetting['content_prefix_html'] ?? '')) . $reportHtml . trim((string) ($printSetting['content_suffix_html'] ?? ''));
+
+        $marginTop    = $this->cmToMm($printSetting['page_margin_top_cm'] ?? 1.2, 1.2);
+        $marginBottom = $this->cmToMm($printSetting['page_margin_bottom_cm'] ?? 1.2, 1.2);
+        $marginLeft   = $this->cmToMm($printSetting['page_margin_left_cm'] ?? 1.0, 1.0);
+        $marginRight  = $this->cmToMm($printSetting['page_margin_right_cm'] ?? 1.0, 1.0);
+        $marginHeader = $this->cmToMm($printSetting['margin_header_cm'] ?? 0.5, 0.5);
+        $marginFooter = $this->cmToMm($printSetting['margin_footer_cm'] ?? 1.5, 1.5);
+
+        $pdfHtml = view('diagnosis/pdf_compiled_report', [
+            'invoiceRequest'  => $invoiceRequest,
+            'invoice'         => $invoice,
+            'patient'         => $patient,
+            'reportHead'      => $reportHead,
+            'reportHtml'      => $reportHtml,
+            'isPlainPaper'    => $isPlainPaper,
+            'ageText'         => $ageText,
+            'genderText'      => $genderText,
+            'printSetting'    => $printSetting,
+            'labType'         => $labType,
+            'invoiceId'       => $invoiceId,
+            'itemType'        => $itemType,
+            'patientName'     => $patientName,
+            'relativeName'    => $relativeName,
+            'relativeText'    => $relativeText,
+            'repoTitle'       => $repoTitle,
+            'patientInfoHtml' => $patientInfoHtml,
+        ]);
+
+        $rawHeaderHtml = trim((string) ($printSetting['header_html'] ?? ''));
+        $rawFirstPageHeaderHtml = trim((string) ($printSetting['first_page_header_html'] ?? ''));
+        $rawFooterHtml = trim((string) ($printSetting['footer_html'] ?? ''));
+        $rawLastPageFooterHtml = trim((string) ($printSetting['last_page_footer_html'] ?? ''));
+
+        $autoHeaderHtml = $this->buildAutoMpdfHeaderBlock(
+            $rawHeaderHtml,
+            $rawFirstPageHeaderHtml,
+            'diag_auto_header_compiled'
+        );
+        $autoFooterHtml = $this->buildAutoMpdfFooterBlock(
+            $rawFooterHtml,
+            $rawLastPageFooterHtml,
+            'diag_auto_footer_compiled'
+        );
+
+        $prefixHtml = $this->applyPdfTokens(trim((string) ($printSetting['mpdf_prefix_html'] ?? ''))
+            . $autoHeaderHtml
+            . $autoFooterHtml, $tokens);
+        $suffixHtml = $this->applyPdfTokens(trim((string) ($printSetting['mpdf_suffix_html'] ?? '')), $tokens);
+
+        $mpdfTempDir = WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'mpdf';
+        if (! is_dir($mpdfTempDir)) {
+            mkdir($mpdfTempDir, 0755, true);
+        }
+
+        $t_start = microtime(true);
+        $mpdf = new Mpdf([
+            'format'                => (string) ($printSetting['page_size'] ?? 'A4'),
+            'margin_top'            => $marginTop,
+            'margin_bottom'         => $marginBottom,
+            'margin_left'           => $marginLeft,
+            'margin_right'          => $marginRight,
+            'margin_header'         => $marginHeader,
+            'margin_footer'         => $marginFooter,
+            'tempDir'               => $mpdfTempDir,
+            'autoScriptToLang'      => false,
+            'autoLanguageDetection' => false,
+            'autoArabic'            => false,
+            'autoVietnamese'        => false,
+        ]);
+        $t_mpdf_init = microtime(true);
+
+        // For plain HTML (without explicit mPDF tags), set header/footer via API.
+        $headerHasTags = preg_match('/<\s*(htmlpageheader|sethtmlpageheader)\b/i', $rawHeaderHtml . $rawFirstPageHeaderHtml) === 1;
+        $footerHasTags = preg_match('/<\s*(htmlpagefooter|sethtmlpagefooter)\b/i', $rawFooterHtml . $rawLastPageFooterHtml) === 1;
+
+        if (! $headerHasTags) {
+            $plainHeader = $this->applyPdfTokens($rawHeaderHtml . $rawFirstPageHeaderHtml, $tokens);
+            if ($plainHeader !== '') {
+                $mpdf->SetHTMLHeader($plainHeader, 'O');
+                $mpdf->SetHTMLHeader($plainHeader, 'E');
+            }
+        }
+
+        if (! $footerHasTags) {
+            $plainFooter = $this->applyPdfTokens($rawFooterHtml, $tokens);
+            if ($plainFooter === '') {
+                $plainFooter = $this->applyPdfTokens($rawLastPageFooterHtml, $tokens);
+            }
+
+            if ($plainFooter !== '') {
+                $mpdf->SetHTMLFooter($plainFooter, 'O');
+                $mpdf->SetHTMLFooter($plainFooter, 'E');
+            }
+        }
+
+        $backgroundImage = trim((string) ($printSetting['page_background_image'] ?? ''));
+        if ($backgroundImage !== '') {
+            $absolutePath = FCPATH . ltrim(str_replace('\\', '/', $backgroundImage), '/');
+            if (is_file($absolutePath)) {
+                $mpdf->SetWatermarkImage($absolutePath, 1, [210, 297], 'F');
+                $mpdf->showWatermarkImage = true;
+            }
+        }
+
+        $watermarkType = (string) ($printSetting['watermark_type'] ?? 'none');
+        $watermarkAlpha = (float) ($printSetting['watermark_alpha'] ?? 0.12);
+        if ($watermarkType === 'text') {
+            $text = trim((string) ($printSetting['watermark_text'] ?? ''));
+            if ($text !== '') {
+                $mpdf->SetWatermarkText($text, $watermarkAlpha);
+                $mpdf->showWatermarkText = true;
+            }
+        } elseif ($watermarkType === 'image') {
+            $wmImage = trim((string) ($printSetting['watermark_image'] ?? ''));
+            if ($wmImage !== '') {
+                $absolutePath = FCPATH . ltrim(str_replace('\\', '/', $wmImage), '/');
+                if (is_file($absolutePath)) {
+                    $mpdf->SetWatermarkImage($absolutePath, $watermarkAlpha);
+                    $mpdf->showWatermarkImage = true;
+                }
+            }
+        }
+
+        if ($prefixHtml !== '') {
+            $mpdf->WriteHTML($prefixHtml, HTMLParserMode::HTML_HEADER_BUFFER);
+        }
+        $t_prefix = microtime(true);
+
+        $mpdf->WriteHTML($pdfHtml);
+        $t_body = microtime(true);
+
+        if ($suffixHtml !== '') {
+            $mpdf->WriteHTML($suffixHtml, HTMLParserMode::HTML_HEADER_BUFFER, false, false);
+        }
+        $t_suffix = microtime(true);
+
+        $invoiceCode = preg_replace('/[^A-Za-z0-9\-_]/', '_', (string) ($invoice->invoice_code ?? 'invoice'));
+        $fileName = 'Compiled_Report_' . $invoiceCode . '_' . $labType . '.pdf';
+
+        $pdfOutput = $mpdf->Output($fileName, 'S');
+        $t_output = microtime(true);
+
+        log_message('debug', sprintf(
+            '[PDF_TIMING printPdfCreate] invoice=%s lab=%s | new_Mpdf()=%.2fs | WriteHTML(prefix)=%.2fs | WriteHTML(body)=%.2fs | WriteHTML(suffix)=%.2fs | Output()=%.2fs | TOTAL=%.2fs | body_bytes=%d',
+            $invoiceId, $labType,
+            $t_mpdf_init - $t_start,
+            $t_prefix  - $t_mpdf_init,
+            $t_body    - $t_prefix,
+            $t_suffix  - $t_body,
+            $t_output  - $t_suffix,
+            $t_output  - $t_start,
+            strlen($pdfHtml)
+        ));
+
+        return $this->response
+            ->setHeader('Content-Type', 'application/pdf')
+            ->setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+            ->setHeader('Pragma', 'no-cache')
+            ->setHeader('Expires', '0')
+            ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
+            ->setBody($pdfOutput);
     }
 
     public function reportFileList($invoiceId, $labType, $delete = 0)

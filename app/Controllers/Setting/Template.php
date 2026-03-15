@@ -638,6 +638,318 @@ class Template extends BaseController
         return $this->response->setBody($html);
     }
 
+    public function diagnosis_print_settings(int $modality = 3)
+    {
+        if ($resp = $this->requireAnyPermission(['template.pathology', 'template.ultrasound', 'template.xray', 'template.ct', 'template.mri', 'template.echo'])) {
+            return $resp;
+        }
+
+        $modalityList = [
+            5 => 'Pathology',
+            1 => 'Ultrasound',
+            2 => 'MRI',
+            3 => 'X-Ray',
+            4 => 'CT-Scan',
+            6 => 'Echo',
+        ];
+
+        if (! in_array($modality, [1, 2, 3, 4, 5, 6], true)) {
+            $modality = 3;
+        }
+
+        $notice = '';
+        $noticeType = 'success';
+
+        if (! $this->db->tableExists('diagnosis_print_templates')) {
+            return view('Setting/Template/diagnosis_print_settings', [
+                'modality' => $modality,
+                'row' => [],
+                'templates' => [],
+                'selected_template_id' => 0,
+                'notice' => 'diagnosis_print_templates table not found. Please run migration.',
+                'notice_type' => 'danger',
+                'columns_ready' => false,
+                'modality_list' => $modalityList,
+            ]);
+        }
+
+        $columnsReady = true;
+        $templateTable = $this->db->table('diagnosis_print_templates');
+        $templateFields = $this->db->getFieldNames('diagnosis_print_templates');
+        $hasSignatureImageColumn = in_array('signature_image', $templateFields, true);
+
+        // Backward-compatible: if this DB has not yet received the signature column,
+        // try to add it automatically so template-level signature upload can work.
+        if (! $hasSignatureImageColumn) {
+            try {
+                $this->db->query("ALTER TABLE diagnosis_print_templates ADD COLUMN signature_image VARCHAR(255) NULL AFTER watermark_image");
+                $templateFields = $this->db->getFieldNames('diagnosis_print_templates');
+                $hasSignatureImageColumn = in_array('signature_image', $templateFields, true);
+            } catch (\Throwable $e) {
+                // Keep page usable even when ALTER permission is not available.
+                $hasSignatureImageColumn = false;
+            }
+        }
+
+        $selectedTemplateId = (int) ($this->request->getGet('template_id') ?? 0);
+        $isNewTemplate = (int) ($this->request->getGet('new') ?? 0) === 1;
+
+        if (strtolower($this->request->getMethod()) === 'post') {
+            $modality = (int) ($this->request->getPost('modality') ?? $modality);
+            if (! in_array($modality, [1, 2, 3, 4, 5, 6], true)) {
+                $modality = 3;
+            }
+
+            $selectedTemplateId = (int) ($this->request->getPost('template_id') ?? 0);
+
+            if (! $columnsReady) {
+                $notice = 'Print settings columns are missing. Please run migration first.';
+                $noticeType = 'danger';
+            } else {
+                $existing = [];
+                if ($selectedTemplateId > 0) {
+                    $existing = $templateTable
+                        ->where('id', $selectedTemplateId)
+                        ->where('modality', $modality)
+                        ->get(1)
+                        ->getRowArray() ?? [];
+                }
+
+                $templateName = trim((string) ($this->request->getPost('template_name') ?? ''));
+                if ($templateName === '') {
+                    $templateName = 'Template ' . date('d-m-Y H:i');
+                }
+
+                $removeBackground = (int) ($this->request->getPost('remove_background') ?? 0) === 1;
+                $removeWatermarkImage = (int) ($this->request->getPost('remove_watermark_image') ?? 0) === 1;
+                $removeSignatureImage = (int) ($this->request->getPost('remove_signature_image') ?? 0) === 1;
+
+                $backgroundPath = (string) ($existing['page_background_image'] ?? '');
+                $watermarkImagePath = (string) ($existing['watermark_image'] ?? '');
+                $signatureImagePath = (string) ($existing['signature_image'] ?? '');
+
+                if ($removeBackground) {
+                    $backgroundPath = '';
+                }
+                if ($removeWatermarkImage) {
+                    $watermarkImagePath = '';
+                }
+                if ($removeSignatureImage) {
+                    $signatureImagePath = '';
+                }
+
+                $bgUpload = $this->request->getFile('page_background_image');
+                if ($bgUpload && $bgUpload->isValid() && ! $bgUpload->hasMoved()) {
+                    $ext = strtolower((string) $bgUpload->getExtension());
+                    if (in_array($ext, ['png', 'jpg', 'jpeg', 'webp'], true)) {
+                        $folder = rtrim(FCPATH, '/\\') . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'diagnosis_print_bg';
+                        if (! is_dir($folder)) {
+                            @mkdir($folder, 0777, true);
+                        }
+
+                        $newName = 'diag_tpl_bg_' . $modality . '_' . date('Ymd_His') . '.' . $ext;
+                        $bgUpload->move($folder, $newName, true);
+                        $backgroundPath = 'uploads/diagnosis_print_bg/' . $newName;
+                    } else {
+                        $notice = 'Background image must be PNG/JPG/JPEG/WEBP.';
+                        $noticeType = 'danger';
+                    }
+                }
+
+                $wmUpload = $this->request->getFile('watermark_image');
+                if ($wmUpload && $wmUpload->isValid() && ! $wmUpload->hasMoved()) {
+                    $ext = strtolower((string) $wmUpload->getExtension());
+                    if (in_array($ext, ['png', 'jpg', 'jpeg', 'webp'], true)) {
+                        $folder = rtrim(FCPATH, '/\\') . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'diagnosis_print_wm';
+                        if (! is_dir($folder)) {
+                            @mkdir($folder, 0777, true);
+                        }
+
+                        $newName = 'diag_tpl_wm_' . $modality . '_' . date('Ymd_His') . '.' . $ext;
+                        $wmUpload->move($folder, $newName, true);
+                        $watermarkImagePath = 'uploads/diagnosis_print_wm/' . $newName;
+                    } else {
+                        $notice = 'Watermark image must be PNG/JPG/JPEG/WEBP.';
+                        $noticeType = 'danger';
+                    }
+                }
+
+                if ($hasSignatureImageColumn) {
+                    $sigUpload = $this->request->getFile('signature_image');
+                    if ($sigUpload && $sigUpload->isValid() && ! $sigUpload->hasMoved()) {
+                        $ext = strtolower((string) $sigUpload->getExtension());
+                        if (in_array($ext, ['png', 'jpg', 'jpeg', 'webp'], true)) {
+                            $folder = rtrim(FCPATH, '/\\') . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'diagnosis_print_sign';
+                            if (! is_dir($folder)) {
+                                @mkdir($folder, 0777, true);
+                            }
+
+                            $newName = 'diag_tpl_sign_' . $modality . '_' . date('Ymd_His') . '.' . $ext;
+                            $sigUpload->move($folder, $newName, true);
+                            $signatureImagePath = 'uploads/diagnosis_print_sign/' . $newName;
+                        } else {
+                            $notice = 'Signature image must be PNG/JPG/JPEG/WEBP.';
+                            $noticeType = 'danger';
+                        }
+                    }
+                }
+
+                $data = [
+                    'modality' => $modality,
+                    'template_name' => $templateName,
+                    'page_size' => trim((string) ($this->request->getPost('page_size') ?? 'A4')) ?: 'A4',
+                    'page_margin_top_cm' => $this->normalizeMarginCm($this->request->getPost('page_margin_top_cm'), 1.2),
+                    'page_margin_bottom_cm' => $this->normalizeMarginCm($this->request->getPost('page_margin_bottom_cm'), 1.2),
+                    'page_margin_left_cm' => $this->normalizeMarginCm($this->request->getPost('page_margin_left_cm'), 1.0),
+                    'page_margin_right_cm' => $this->normalizeMarginCm($this->request->getPost('page_margin_right_cm'), 1.0),
+                    'margin_header_cm' => $this->normalizeMarginCm($this->request->getPost('margin_header_cm'), 0.5),
+                    'margin_footer_cm' => $this->normalizeMarginCm($this->request->getPost('margin_footer_cm'), 1.5),
+                    'page_background_image' => $backgroundPath,
+                    'watermark_type' => in_array((string) $this->request->getPost('watermark_type'), ['none', 'text', 'image'], true)
+                        ? (string) $this->request->getPost('watermark_type')
+                        : 'none',
+                    'watermark_text' => (string) ($this->request->getPost('watermark_text') ?? ''),
+                    'watermark_image' => $watermarkImagePath,
+                    'signature_image' => $signatureImagePath,
+                    'watermark_alpha' => $this->normalizeWatermarkAlpha($this->request->getPost('watermark_alpha')),
+                    'header_html' => (string) ($this->request->getPost('header_html') ?? ''),
+                    'first_page_header_html' => (string) ($this->request->getPost('first_page_header_html') ?? ''),
+                    'content_prefix_html' => (string) ($this->request->getPost('content_prefix_html') ?? ''),
+                    'content_suffix_html' => (string) ($this->request->getPost('content_suffix_html') ?? ''),
+                    'footer_html' => (string) ($this->request->getPost('footer_html') ?? ''),
+                    'last_page_footer_html' => (string) ($this->request->getPost('last_page_footer_html') ?? ''),
+                    'patient_info_html' => (string) ($this->request->getPost('patient_info_html') ?? ''),
+                    'mpdf_prefix_html' => (string) ($this->request->getPost('mpdf_prefix_html') ?? ''),
+                    'mpdf_suffix_html' => (string) ($this->request->getPost('mpdf_suffix_html') ?? ''),
+                    'is_default' => (int) ($this->request->getPost('is_default') ?? 0) === 1 ? 1 : 0,
+                    'status' => 1,
+                ];
+
+                if (! $hasSignatureImageColumn) {
+                    unset($data['signature_image']);
+                }
+
+                if ($noticeType !== 'danger') {
+                    if ($data['is_default'] === 1) {
+                        $templateTable
+                            ->where('modality', $modality)
+                            ->set('is_default', 0)
+                            ->update();
+                    }
+
+                    if (! empty($existing) && $selectedTemplateId > 0) {
+                        $templateTable
+                            ->where('id', $selectedTemplateId)
+                            ->where('modality', $modality)
+                            ->update($data);
+                    } else {
+                        $templateTable->insert($data);
+                        $selectedTemplateId = (int) $this->db->insertID();
+                    }
+
+                    $notice = (($modalityList[$modality] ?? 'Diagnosis') . ' print template saved.');
+                    $noticeType = 'success';
+                }
+            }
+
+            if ($this->request->isAJAX()) {
+                return $this->response->setJSON([
+                    'status' => $noticeType === 'success' ? 'success' : 'error',
+                    'notice' => $notice,
+                    'notice_type' => $noticeType,
+                    'modality' => $modality,
+                    'selected_template_id' => $selectedTemplateId,
+                    'csrfName' => csrf_token(),
+                    'csrfHash' => csrf_hash(),
+                ]);
+            }
+        }
+
+        $templates = $templateTable
+            ->select('id, template_name, is_default')
+            ->where('modality', $modality)
+            ->where('status', 1)
+            ->orderBy('is_default', 'DESC')
+            ->orderBy('template_name', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        if (! $isNewTemplate && $selectedTemplateId <= 0 && ! empty($templates)) {
+            $selectedTemplateId = (int) ($templates[0]['id'] ?? 0);
+        }
+
+        $row = [];
+        if ($selectedTemplateId > 0) {
+            $row = $templateTable
+                ->where('id', $selectedTemplateId)
+                ->where('modality', $modality)
+                ->get(1)
+                ->getRowArray() ?? [];
+        }
+
+        return view('Setting/Template/diagnosis_print_settings', [
+            'modality' => $modality,
+            'row' => $row,
+            'templates' => $templates,
+            'selected_template_id' => $selectedTemplateId,
+            'notice' => $notice,
+            'notice_type' => $noticeType,
+            'columns_ready' => $columnsReady,
+            'modality_list' => $modalityList,
+                'has_signature_image_column' => $hasSignatureImageColumn,
+            'has_signature_image_column' => $hasSignatureImageColumn,
+        ]);
+    }
+
+    private function normalizeWatermarkAlpha($rawValue): float
+    {
+        if ($rawValue === null || $rawValue === '') {
+            return 0.12;
+        }
+
+        $value = (float) $rawValue;
+        if (! is_finite($value)) {
+            $value = 0.12;
+        }
+
+        $value = max(0.01, min(1.0, $value));
+
+        return round($value, 2);
+    }
+
+    private function normalizeMarginCm($rawValue, float $default): float
+    {
+        if ($rawValue === null || $rawValue === '') {
+            return $default;
+        }
+
+        $value = (float) $rawValue;
+        if (! is_finite($value)) {
+            $value = $default;
+        }
+
+        // Allow large top margins like 6.1cm for heavy report headers.
+        $value = max(0.0, min(25.0, $value));
+
+        return round($value, 2);
+    }
+
+    private function normalizeMarginMm($rawValue, float $default): float
+    {
+        if ($rawValue === null || $rawValue === '') {
+            return $default;
+        }
+
+        $value = (float) $rawValue;
+        if (! is_finite($value)) {
+            $value = $default;
+        }
+
+        $value = max(0.0, min(60.0, $value));
+
+        return round($value, 2);
+    }
+
     private function renderOptionTable(int $mstTestKey): string
     {
         $sql = "select *, if(option_bold=1,'Bold','') as option_bold_str
