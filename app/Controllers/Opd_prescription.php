@@ -2181,6 +2181,25 @@ class Opd_prescription extends BaseController
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Medicine name is required']);
         }
 
+        $local = $this->lookupMedicineDetailsFromMaster($name, $formulation);
+        if (($local['genericname'] ?? '') !== '' || ($local['salt_name'] ?? '') !== '') {
+            return $this->response->setJSON([
+                'update' => 1,
+                'provider' => 'local-master',
+                'match_confidence' => (string) ($local['match_confidence'] ?? 'partial'),
+                'matched_item_name' => (string) ($local['matched_item_name'] ?? ''),
+                'details' => [
+                    'genericname' => trim((string) ($local['genericname'] ?? '')),
+                    'salt_name' => trim((string) ($local['salt_name'] ?? '')),
+                    'dosage_restriction' => trim((string) ($local['dosage_restriction'] ?? '')),
+                    'caution_note' => trim((string) ($local['caution_note'] ?? '')),
+                ],
+                'error_text' => 'Medicine details found from local master data',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
         $prompt = "You are a medicine data enrichment assistant for OPD master data in India.\n"
             . "For this medicine, provide structured details based on public medical references and standard labeling guidance.\n"
             . "Medicine Name: {$name}\n"
@@ -2191,17 +2210,57 @@ class Opd_prescription extends BaseController
         $this->lastAiProvider = 'none';
         $aiText = $this->generateClinicalTextWithGemini($prompt, 280);
         if ($aiText === null || trim($aiText) === '') {
-            return $this->response->setJSON(['update' => 0, 'error_text' => 'AI unavailable. Check AI settings/API key.']);
+            $fallback = $this->inferMedicineDetailsFromBrandName($name, $formulation);
+            if (($fallback['genericname'] ?? '') !== '' || ($fallback['salt_name'] ?? '') !== '') {
+                return $this->response->setJSON([
+                    'update' => 1,
+                    'provider' => 'local-brand-fallback',
+                    'match_confidence' => 'brand-fallback',
+                    'matched_item_name' => '',
+                    'details' => [
+                        'genericname' => trim((string) ($fallback['genericname'] ?? '')),
+                        'salt_name' => trim((string) ($fallback['salt_name'] ?? '')),
+                        'dosage_restriction' => trim((string) ($fallback['dosage_restriction'] ?? '')),
+                        'caution_note' => trim((string) ($fallback['caution_note'] ?? '')),
+                    ],
+                    'error_text' => 'AI unavailable. Fallback generic/salt suggestion prepared.',
+                    'csrfName' => csrf_token(),
+                    'csrfHash' => csrf_hash(),
+                ]);
+            }
+
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'AI unavailable and no local match found. Check AI settings/API key.']);
         }
 
         $parsed = $this->parseJsonFromAiResponse($aiText);
         if ($parsed === null) {
+            $fallback = $this->inferMedicineDetailsFromBrandName($name, $formulation);
+            if (($fallback['genericname'] ?? '') !== '' || ($fallback['salt_name'] ?? '') !== '') {
+                return $this->response->setJSON([
+                    'update' => 1,
+                    'provider' => 'local-brand-fallback',
+                    'match_confidence' => 'brand-fallback',
+                    'matched_item_name' => '',
+                    'details' => [
+                        'genericname' => trim((string) ($fallback['genericname'] ?? '')),
+                        'salt_name' => trim((string) ($fallback['salt_name'] ?? '')),
+                        'dosage_restriction' => trim((string) ($fallback['dosage_restriction'] ?? '')),
+                        'caution_note' => trim((string) ($fallback['caution_note'] ?? '')),
+                    ],
+                    'error_text' => 'AI parse failed. Fallback generic/salt suggestion prepared.',
+                    'csrfName' => csrf_token(),
+                    'csrfHash' => csrf_hash(),
+                ]);
+            }
+
             return $this->response->setJSON(['update' => 0, 'error_text' => 'AI response parse failed. Try again.']);
         }
 
         return $this->response->setJSON([
             'update' => 1,
             'provider' => $this->lastAiProvider,
+            'match_confidence' => 'ai',
+            'matched_item_name' => '',
             'details' => [
                 'genericname' => trim((string) ($parsed['genericname'] ?? '')),
                 'salt_name' => trim((string) ($parsed['salt_name'] ?? '')),
@@ -2212,6 +2271,174 @@ class Opd_prescription extends BaseController
             'csrfName' => csrf_token(),
             'csrfHash' => csrf_hash(),
         ]);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function lookupMedicineDetailsFromMaster(string $name, string $formulation = ''): array
+    {
+        $table = $this->findExistingTable(['opd_med_master']);
+        if ($table === null) {
+            return [];
+        }
+
+        $fields = $this->db->getFieldNames($table);
+        $nameField = $this->resolveFirstField($fields, ['item_name', 'med_name']);
+        $formField = $this->resolveFirstField($fields, ['formulation', 'med_type']);
+        $genericField = $this->resolveFirstField($fields, ['genericname', 'generic_name']);
+        $saltField = $this->resolveFirstField($fields, ['salt_name', 'sal_name', 'salt', 'saltname']);
+        $restrictionField = $this->resolveFirstField($fields, ['dosage_restriction', 'dose_restriction', 'restriction_note', 'restriction']);
+
+        if ($nameField === null || ($genericField === null && $saltField === null)) {
+            return [];
+        }
+
+        $name = trim($name);
+        if ($name === '') {
+            return [];
+        }
+
+        $exact = $this->db->table($table)
+            ->where('UPPER(' . $nameField . ')', strtoupper($name));
+
+        if ($formField !== null && trim($formulation) !== '') {
+            $exact->where('UPPER(' . $formField . ')', strtoupper(trim($formulation)));
+        }
+
+        $row = $exact->get(1)->getRowArray() ?? [];
+        $matchConfidence = 'partial';
+
+        if (empty($row)) {
+            $builder = $this->db->table($table);
+            $builder->groupStart()
+                ->like($nameField, $name)
+                ->orLike($nameField, preg_replace('/\s+/', ' ', $name) ?? $name)
+                ->groupEnd();
+
+            if ($formField !== null && trim($formulation) !== '') {
+                $builder->like($formField, trim($formulation));
+            }
+
+            $candidates = $builder->limit(15)->get()->getResultArray();
+            if (! empty($candidates)) {
+                $target = strtoupper($name);
+                usort($candidates, static function (array $a, array $b) use ($nameField, $target): int {
+                    $aName = strtoupper(trim((string) ($a[$nameField] ?? '')));
+                    $bName = strtoupper(trim((string) ($b[$nameField] ?? '')));
+                    $aScore = 0;
+                    $bScore = 0;
+                    if ($aName === $target) {
+                        $aScore += 1000;
+                    } elseif (str_starts_with($aName, $target)) {
+                        $aScore += 600;
+                    } elseif (str_contains($aName, $target)) {
+                        $aScore += 400;
+                    }
+                    if ($bName === $target) {
+                        $bScore += 1000;
+                    } elseif (str_starts_with($bName, $target)) {
+                        $bScore += 600;
+                    } elseif (str_contains($bName, $target)) {
+                        $bScore += 400;
+                    }
+
+                    if ($aScore !== $bScore) {
+                        return $bScore <=> $aScore;
+                    }
+
+                    return strlen($aName) <=> strlen($bName);
+                });
+                $row = $candidates[0] ?? [];
+                $picked = strtoupper(trim((string) ($row[$nameField] ?? '')));
+                $target = strtoupper($name);
+                if ($picked === $target) {
+                    $matchConfidence = 'exact';
+                } elseif (str_starts_with($picked, $target) || str_contains($picked, $target)) {
+                    $matchConfidence = 'close';
+                }
+            }
+        } else {
+            $matchConfidence = 'exact';
+        }
+
+        if (empty($row)) {
+            return [];
+        }
+
+        return [
+            'genericname' => $genericField !== null ? trim((string) ($row[$genericField] ?? '')) : '',
+            'salt_name' => $saltField !== null ? trim((string) ($row[$saltField] ?? '')) : '',
+            'dosage_restriction' => $restrictionField !== null ? trim((string) ($row[$restrictionField] ?? '')) : '',
+            'caution_note' => '',
+            'match_confidence' => $matchConfidence,
+            'matched_item_name' => trim((string) ($row[$nameField] ?? '')),
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function inferMedicineDetailsFromBrandName(string $name, string $formulation = ''): array
+    {
+        $text = strtoupper(trim($name));
+        if ($text === '') {
+            return [];
+        }
+
+        preg_match('/(\d{2,4})\s*MG/i', $name, $m);
+        $strength = isset($m[1]) ? trim((string) $m[1]) : '';
+
+        $map = [
+            'DOLO' => 'Paracetamol',
+            'CROCIN' => 'Paracetamol',
+            'CALPOL' => 'Paracetamol',
+            'PARACIP' => 'Paracetamol',
+            'PANTOCID' => 'Pantoprazole',
+            'PAN' => 'Pantoprazole',
+            'AZEE' => 'Azithromycin',
+            'AZTOR' => 'Atorvastatin',
+            'MONTAIR' => 'Montelukast',
+            'LEVOCET' => 'Levocetirizine',
+            'AUGMENTIN' => 'Amoxicillin + Clavulanic Acid',
+        ];
+
+        $generic = '';
+        foreach ($map as $brand => $gen) {
+            if (str_contains($text, $brand)) {
+                $generic = $gen;
+                break;
+            }
+        }
+
+        if ($generic === '') {
+            return [];
+        }
+
+        $salt = $generic;
+        if ($strength !== '') {
+            if ($generic === 'Amoxicillin + Clavulanic Acid' && $strength === '625') {
+                $salt = 'Amoxicillin 500 mg + Clavulanic Acid 125 mg';
+            } else {
+                $salt = $generic . ' ' . $strength . ' mg';
+            }
+        }
+
+        $doseRestriction = '';
+        if ($generic === 'Paracetamol') {
+            $doseRestriction = 'Adults: usually max 4 g/day total from all paracetamol-containing products.';
+        } elseif ($generic === 'Pantoprazole') {
+            $doseRestriction = 'Usually once daily before food unless specifically advised otherwise.';
+        } elseif ($generic === 'Azithromycin') {
+            $doseRestriction = 'Follow fixed daily schedule and complete full course.';
+        }
+
+        return [
+            'genericname' => $generic,
+            'salt_name' => $salt,
+            'dosage_restriction' => $doseRestriction,
+            'caution_note' => '',
+        ];
     }
 
     public function opd_medicince_remove(int $medId)

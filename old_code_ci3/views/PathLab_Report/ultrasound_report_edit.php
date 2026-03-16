@@ -106,11 +106,10 @@
 			var HTMLData=CKEDITOR.instances.HTMLData.getData();
             var Impression=$('#Impression').val();
 			var csrf_value=$('input[name=<?=$this->security->get_csrf_token_name()?>]').val();
-			var modality=<?=$modality?>;
 			
 			if(repo_id>0)
 			{
-				$.post('/index.php/Lab_Admin/report_ultrasound_update/'+modality,{ 
+				$.post('/index.php/Lab_Admin/report_ultrasound_update',{ 
 					"repo_id": repo_id, 
 					"input_Reportname": input_Reportname,
 					"charge_id":charge_id,
@@ -119,10 +118,14 @@
                     "Impression":Impression,
 					'<?=$this->security->get_csrf_token_name()?>':csrf_value
 					}, function(data){
-					notify(data.showcontent,'success');
-					}, 'json');
+					$('#msgshow').html(data.showcontent);
+					$("#alert_show").alert();
+					$("#alert_show").fadeTo(5000, 500).slideUp(500, function(){
+						$("#alert_show").slideUp(500);
+						});
+				}, 'json');
 			}else{
-				$.post('/index.php/Lab_Admin/report_ultrasound_insert/'+modality,{ 
+				$.post('/index.php/Lab_Admin/report_ultrasound_insert',{ 
 					"repo_id": repo_id, 
 					"input_Reportname": input_Reportname,
 					"charge_id":charge_id,
@@ -131,10 +134,14 @@
                     "Impression":Impression,
 					'<?=$this->security->get_csrf_token_name()?>':csrf_value
 					}, function(data){
-					notify(data.showcontent,'success');
+					$('#msgshow').html(data.showcontent);
+					$("#alert_show").alert();
+					$("#alert_show").fadeTo(5000, 500).slideUp(500, function(){
+						$("#alert_show").slideUp(500);
+						});
 					if(data.insertid>0)
 					{
-						load_form_div('/Lab_Admin/report_ultrasound_list/'+modality,'maindiv','Diagnosis Template');
+						load_form_div('/Lab_Admin/report_ultrasound_list','maindiv','Diagnosis Template');
 					}
 					
 					

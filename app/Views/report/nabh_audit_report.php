@@ -18,6 +18,7 @@
                         <option value="all">All</option>
                         <option value="ipd">IPD Discharge</option>
                         <option value="opd">OPD Consult</option>
+                        <option value="radiology">Radiology Edit</option>
                     </select>
                 </div>
                 <div class="col-md-3">

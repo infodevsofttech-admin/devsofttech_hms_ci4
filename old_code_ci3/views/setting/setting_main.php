@@ -31,20 +31,8 @@
 			<a class="btn btn-app" href="javascript:load_form_div('/Lab_Admin/report_list','maindiv','Diagnosis Template');">
 				<i class="fa fa-heartbeat"></i> Pathology Template
 			</a>
-			<a class="btn btn-app" href="javascript:load_form_div('/Lab_Admin/report_ultrasound_list/1','maindiv','Ultra Sound Template');">
+			<a class="btn btn-app" href="javascript:load_form_div('/Lab_Admin/report_ultrasound_list','maindiv','Diagnosis Template');">
 				<i class="fa fa-heartbeat"></i> Ultra Sound Template
-			</a>
-			<a class="btn btn-app" href="javascript:load_form_div('/Lab_Admin/report_ultrasound_list/3','maindiv','X-Ray Template');">
-				<i class="fa fa-heartbeat"></i> X-Ray Template
-			</a>
-			<a class="btn btn-app" href="javascript:load_form_div('/Lab_Admin/report_ultrasound_list/4','maindiv','CT-Scan Template');">
-				<i class="fa fa-heartbeat"></i> CT-Scan Template
-			</a>
-			<a class="btn btn-app" href="javascript:load_form_div('/Lab_Admin/report_ultrasound_list/2','maindiv','Mri Template Template');">
-				<i class="fa fa-heartbeat"></i> Mri Template
-			</a>
-			<a class="btn btn-app" href="javascript:load_form_div('/Lab_Admin/report_ultrasound_list/6','maindiv','ECHO Template');">
-				<i class="fa fa-heartbeat"></i> ECHO Template
 			</a>
 			<a class="btn btn-app" href="javascript:load_form_div('/Doc_Admin/doc_list','maindiv','Document Template');">
 				<i class="fa fa-file-text-o"></i> Document Template

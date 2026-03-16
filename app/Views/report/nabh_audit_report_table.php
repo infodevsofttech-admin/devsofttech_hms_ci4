@@ -9,6 +9,7 @@ $statusFilter = $status_filter ?? 'all';
 $overall = $summary['all'] ?? ['total' => 0, 'compliant' => 0, 'critical_missing' => 0, 'avg_completion' => 0];
 $ipd = $summary['ipd'] ?? ['total' => 0, 'compliant' => 0, 'critical_missing' => 0, 'avg_completion' => 0];
 $opd = $summary['opd'] ?? ['total' => 0, 'compliant' => 0, 'critical_missing' => 0, 'avg_completion' => 0];
+$radiology = $summary['radiology'] ?? ['total' => 0, 'compliant' => 0, 'critical_missing' => 0, 'avg_completion' => 0];
 ?>
 
 <div class="mb-3">
@@ -42,6 +43,15 @@ $opd = $summary['opd'] ?? ['total' => 0, 'compliant' => 0, 'critical_missing' =>
             <div>Compliant: <?= (int) ($opd['compliant'] ?? 0) ?></div>
             <div>Critical Missing: <?= (int) ($opd['critical_missing'] ?? 0) ?></div>
             <div>Avg Completion: <?= number_format((float) ($opd['avg_completion'] ?? 0), 1) ?>%</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="border rounded p-2">
+            <div><strong>Radiology Edit</strong></div>
+            <div>Total: <?= (int) ($radiology['total'] ?? 0) ?></div>
+            <div>Compliant: <?= (int) ($radiology['compliant'] ?? 0) ?></div>
+            <div>Critical Missing: <?= (int) ($radiology['critical_missing'] ?? 0) ?></div>
+            <div>Avg Completion: <?= number_format((float) ($radiology['avg_completion'] ?? 0), 1) ?>%</div>
         </div>
     </div>
 </div>

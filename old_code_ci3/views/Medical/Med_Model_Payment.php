@@ -167,7 +167,7 @@
 		 <b>Total Amount Paid : </b> Rs. <?=$inv_med_group[0]->payment_received ?>
 		 </br>
 		 <b>Balance Amount</b>: 
-		 Rs. <?=Round($inv_med_group[0]->payment_balance) ?><br>
+		 Rs. <?=$inv_med_group[0]->payment_balance ?><br>
 		 <a href="<?php echo '/Medical/payment_receipt/'.$ipd_info[0]->id.'/0';  ?>" target="_blank" class="btn btn-default"><i class="fa fa-print"></i> Print Cash</a>
 		</p>
 		

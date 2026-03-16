@@ -165,7 +165,7 @@ class Report4 extends MY_Controller {
 			$where.=" and o.insurance_id=".($ipd_type*-1)." ";
 		}
 
-		$sql="select o.id,o.case_id_code,Concat(o.insurance_no,'/',o.insurance_no_1) as case_info,p.p_fname,
+		$sql="select o.case_id_code,Concat(o.insurance_no,'/',o.insurance_no_1) as case_info,p.p_fname,
 		`o`.`status`,p.p_code,p.p_fname,
 		(case `o`.`status` when 0 then 'Pending' when 1 then 'Ready' when 2 then 'Submit' else 'Nothing' end) AS `org_submit_status`,
 		(o.inv_opd_amt+o.inv_opd_charge_amt) as Charge_amount,
@@ -176,7 +176,7 @@ class Report4 extends MY_Controller {
 		where ".$where." and (o.inv_opd_amt+o.inv_opd_charge_amt+o.inv_opd_med_amt)>0
 		group by o.id order by o.id";
 		
-		//echo $sql;
+		echo $sql;
 		
 		$query = $this->db->query($sql);
         $dischargelist= $query->result();
@@ -188,38 +188,31 @@ class Report4 extends MY_Controller {
 
 		$content.='<tr>
 					<th width="50px">#</th>
-					<th width="50px">Bill No.</th>
-					<th width="100px" align="Left">Case Info.</th>
+					<th width="100px" align="right">Case Info.</th>
 					<th>Org. Code</th>
 					<th>UHID</th>
 					<th>Person Name</th>
 					<th>Date</th>
 					<th width="100px" align="right">Charge Amt.</th>
 					<th width="100px" align="right">Med. Amt.</th>
-					<th width="100px" align="right">Net Amt.</th>
 				 </tr>';
 		
 		$sr_no=0;
-		$total_net_amount=0.00;
 		foreach($dischargelist as $row)
 		{
 			$sr_no=$sr_no+1;
-			$net_amount=($row->Charge_amount+$row->med_net_amount);
 			$content.='<tr>
 							<td>'.$sr_no.'</td>
-							<td>'.$row->id.'</td>
-							<td align="Left">'.$row->case_info.'</td>
+							<td align="right">'.$row->case_info.'</td>
 							<td>'.$row->case_id_code.'</td>
 							<td>'.$row->p_code.'</td>
 							<td>'.$row->p_fname.'</td>
 							<td>'.$row->str_date_registration.'</td>
 							<td align="right">'.$row->Charge_amount.'</td>
 							<td align="right">'.$row->med_net_amount.'</td>
-							<td align="right">'.$net_amount.'</td>
 					 </tr>';
 			$total_Payment+= $row->Charge_amount;
 			$total_Med_Payment+= $row->med_net_amount;
-			$total_net_amount+= $net_amount;
 			
 		}
 				$content.='<tr>
@@ -229,10 +222,8 @@ class Report4 extends MY_Controller {
 							<td></td>
 							<td></td>
 							<td></td>
-							<td></td>
-							<td align="right">'.$total_Payment.'</td>
-							<td align="right">'.$total_Med_Payment.'</td>
-							<td align="right">'.$total_net_amount.'</td>
+							<td>'.$total_Payment.'</td>
+							<td>'.$total_Med_Payment.'</td>
 					 </tr>';
 		
 		$content.="</table>";

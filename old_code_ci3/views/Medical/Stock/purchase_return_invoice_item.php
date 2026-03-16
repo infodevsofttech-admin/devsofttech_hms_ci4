@@ -7,7 +7,10 @@
 				<th>Exp.</th>
 				<th>MRP / P. Rate/Unit</th>
 				<th>Qty.(Unit / Pack)</th>
-				<th>Rate</th>
+				<th>GST %</th>
+				<th>Amount</th>
+				<th>GST Amount</th>
+				<th>Net Amount</th>
 				<th></th>
 			</tr>
 			<?php
@@ -23,7 +26,10 @@
 					echo '<td>'.$row->exp_date_str.'</td>';
 					echo '<td>'.$row->mrp.' / '.$row->purchase_unit_rate.'</td>';
 					echo '<td>'.floatval($row->r_qty).' / '.floatval($row->qty_pak).'</td>';
+					echo '<td>'.$row->gst_per.'</td>';
 					echo '<td>'.$row->r_amount.'</td>';
+					echo '<td>'.(($row->gst_per*$row->r_amount)/100).'</td>';
+					echo '<td>'.($row->r_amount + (($row->gst_per*$row->r_amount)/100)).'</td>';
 					echo '<td>';
 					if(1==1)
 					{

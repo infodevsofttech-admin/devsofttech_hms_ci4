@@ -6,6 +6,7 @@ class Payment_Medical extends MY_Controller {
     public function __construct()
 	{
 		parent::__construct();
+		
     }
     
     function index()
@@ -258,34 +259,6 @@ class Payment_Medical extends MY_Controller {
         }
 
 	}
-
-    public function payment_log(){
-        $this->load->view('Medical/payment_log');
-    }
-
-    public function payment_log_data(){
-
-        $opd_date_range=$this->input->post('opd_date_range');
-
-        $rangeArray = explode("S",$opd_date_range);
-		$minRange = str_replace('T',' ',$rangeArray[0]);
-		$maxRange = str_replace('T',' ',$rangeArray[1]);
-		
-		$sql="SELECT p.* ,
-            (case p.Customerof_type when 1 then p.Medical_invoice_code when 2 then p.ipd_id when 3 then p.Medical_invoice_code ELSE 'Unknown' END) AS Inv_code,
-            (case p.Customerof_type when 1 then 'UHID' when 2 then 'IPD' when 3 then 'CASH' ELSE 'Unknown' END) AS Bill_type 
-            ,l.update_by,l.insert_datetime AS log_insert,l.update_type,l.update_log,
-            (case update_type when 3 then 'Change Amount' when 2 then 'Cash to Bank' when 1 then 'Bank to Cash' ELSE 'Unknown' END ) AS LOG_type
-            FROM payment_history_medical p JOIN paymentmedical_history_log l ON p.id=l.pay_id
-            where  date(l.insert_datetime) between '".$minRange."' and '".$maxRange."'";
-		$query = $this->db->query($sql);
-        $data['paymentmedical_history_log']= $query->result();
-        
-        //echo $sql;
-        $data['opd_date_range']=$opd_date_range;
-
-        $this->load->view('Medical/payment_log_data',$data);
-    }
 
 }
 

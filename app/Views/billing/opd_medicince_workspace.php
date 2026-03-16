@@ -237,6 +237,39 @@
         $('#med_item_name,#med_formulation,#med_genericname,#med_salt_name,#med_dosage_restriction,#med_company_name').val('');
     }
 
+    function buildMedicinePayload() {
+        return {
+            id: parseInt($('#med_id').val() || '0', 10),
+            item_name: ($('#med_item_name').val() || '').trim(),
+            formulation: ($('#med_formulation').val() || '').trim(),
+            genericname: ($('#med_genericname').val() || '').trim(),
+            salt_name: ($('#med_salt_name').val() || '').trim(),
+            dosage_restriction: ($('#med_dosage_restriction').val() || '').trim(),
+            company_name: ($('#med_company_name').val() || '').trim()
+        };
+    }
+
+    function saveMedicine(payload, afterSave) {
+        if (!payload.item_name) {
+            setMsg('err', 'Medicine name is required.');
+            return;
+        }
+
+        apiPost('<?= base_url('Opd_prescription/opd_medicince_save') ?>', payload, function(data) {
+            if ((data.update || 0) != 1) {
+                setMsg('err', data.error_text || 'Unable to save medicine');
+                return;
+            }
+            $('#med_id').val(data.insertid || 0);
+            setMsg('ok', data.error_text || 'Saved');
+            loadList();
+            loadDuplicateReport();
+            if (typeof afterSave === 'function') {
+                afterSave(data || {});
+            }
+        });
+    }
+
     function fillForm(row) {
         row = row || {};
         $('#med_id').val(row.id || 0);
@@ -396,31 +429,7 @@
     }
 
     $('#btn_med_save').on('click', function() {
-        var payload = {
-            id: parseInt($('#med_id').val() || '0', 10),
-            item_name: ($('#med_item_name').val() || '').trim(),
-            formulation: ($('#med_formulation').val() || '').trim(),
-            genericname: ($('#med_genericname').val() || '').trim(),
-            salt_name: ($('#med_salt_name').val() || '').trim(),
-            dosage_restriction: ($('#med_dosage_restriction').val() || '').trim(),
-            company_name: ($('#med_company_name').val() || '').trim()
-        };
-
-        if (!payload.item_name) {
-            setMsg('err', 'Medicine name is required.');
-            return;
-        }
-
-        apiPost('<?= base_url('Opd_prescription/opd_medicince_save') ?>', payload, function(data) {
-            if ((data.update || 0) != 1) {
-                setMsg('err', data.error_text || 'Unable to save medicine');
-                return;
-            }
-            $('#med_id').val(data.insertid || 0);
-            setMsg('ok', data.error_text || 'Saved');
-            loadList();
-            loadDuplicateReport();
-        });
+        saveMedicine(buildMedicinePayload());
     });
 
     $(document).on('click', '.btn-med-edit', function() {
@@ -578,6 +587,34 @@
             }
 
             setMsg('ok', (data.error_text || 'AI details prepared') + '. Review and click Update.');
+
+            var provider = String(data.provider || '');
+            var confidence = String(data.match_confidence || '');
+            var medId = parseInt($('#med_id').val() || '0', 10);
+            var isNewMedicine = medId <= 0;
+
+            if (provider === 'local-master' && confidence === 'exact') {
+                var matchedName = String(data.matched_item_name || '').trim();
+                var askExact = 'Exact local match found';
+                if (matchedName) {
+                    askExact += ' (' + matchedName + ')';
+                }
+                askExact += '. Auto-save now?';
+                if (window.confirm(askExact)) {
+                    saveMedicine(buildMedicinePayload(), function() {
+                        setMsg('ok', 'Auto-saved using exact local master match.');
+                    });
+                }
+                return;
+            }
+
+            if (isNewMedicine && (provider === 'gemini' || provider === 'azure' || provider === 'local-brand-fallback')) {
+                if (window.confirm('Details prepared for a new medicine. Save this new master entry now?')) {
+                    saveMedicine(buildMedicinePayload(), function() {
+                        setMsg('ok', 'New medicine saved with suggested generic/salt details.');
+                    });
+                }
+            }
         });
     });
 

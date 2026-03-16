@@ -8,6 +8,7 @@ $timingTitle = $isPathologyFlow ? 'Lab Timing Information' : 'Imaging Workflow T
 $testListTitle = $isPathologyFlow ? 'Test List' : 'Imaging Study List';
 $collectedTimeLabel = $isPathologyFlow ? 'Sample Collection Time' : 'Request Collection Time';
 $isImagingFlow = !$isPathologyFlow;
+$printTemplates = $print_templates ?? [];
 ?>
 
 <?php if ($isImagingFlow): ?>
@@ -213,14 +214,24 @@ $isImagingFlow = !$isPathologyFlow;
                                 </button>
                             </div>
                             <div class="col-auto">
-                                <button type="button" class="btn btn-info" id="reportLetterheadBtn" onclick="generateReportLetterhead()">
-                                    <i class="bi bi-file-text"></i> Report in Letterhead
-                                </button>
-                            </div>
-                            <div class="col-auto">
-                                <button type="button" class="btn btn-secondary" id="reportPlainBtn" onclick="generateReportPlain()">
-                                    <i class="bi bi-file-earmark-text"></i> Report in Plain Paper
-                                </button>
+                                <?php if (! empty($printTemplates)): ?>
+                                    <div class="btn-group" role="group" aria-label="Template Print Group">
+                                        <?php foreach ($printTemplates as $tpl): ?>
+                                            <?php
+                                            $tplId = (int) ($tpl['id'] ?? 0);
+                                            $tplName = (string) ($tpl['template_name'] ?? ('Template ' . $tplId));
+                                            $isDefaultTpl = (int) ($tpl['is_default'] ?? 0) === 1;
+                                            ?>
+                                            <button type="button" class="btn <?= $isDefaultTpl ? 'btn-info' : 'btn-outline-info' ?>" onclick="generateReportByTemplate(<?= $tplId ?>)">
+                                                <i class="bi bi-file-earmark-pdf"></i> <?= esc($tplName) ?>
+                                            </button>
+                                        <?php endforeach; ?>
+                                    </div>
+                                <?php else: ?>
+                                    <button type="button" class="btn btn-info" onclick="generateReportByTemplate(0)">
+                                        <i class="bi bi-file-earmark-pdf"></i> Print Report
+                                    </button>
+                                <?php endif; ?>
                             </div>
                             <div class="col-auto">
                                 <button type="button" class="btn btn-success" id="uploadBtn" onclick="uploadReport()">
@@ -741,7 +752,10 @@ function update_report() {
     const htmlData = (typeof CKEDITOR !== 'undefined' && CKEDITOR.instances.HTMLShow)
         ? CKEDITOR.instances.HTMLShow.getData()
         : htmlField.value;
+    
+    // Send dual keys for backward compatibility (legacy + current)
     formData.append('HTMLData', htmlData);
+    formData.append('report_data', htmlData);
 
     if (isXrayMode) {
         const impressionField = document.getElementById('report_data_Impression');
@@ -749,6 +763,7 @@ function update_report() {
             ? CKEDITOR.instances.report_data_Impression.getData()
             : (impressionField ? impressionField.value : '');
         formData.append('report_data_Impression', impressionData);
+        formData.append('report_data_impression', impressionData);  // lowercase variant for compatibility
     }
 
     if (csrfField) {
@@ -1128,9 +1143,29 @@ function openForEdit(reqId, testName) {
     alert('Open for edit not yet implemented for req ID: ' + reqId);
 }
 
-function printSingleReport(reqId, testName) {
-    const printUrl = baseUrl + 'diagnosis/print-single-report/' + reqId;
+function printSingleReport(reqId, testName, templateId) {
+    const tplId = Number(templateId || 0);
+    let printUrl = baseUrl + 'diagnosis/print-single-report/' + reqId;
+    if (tplId > 0) {
+        printUrl += '?template_id=' + encodeURIComponent(String(tplId));
+    }
     window.open(printUrl, '_blank');
+}
+
+function openReportEditor(reqId, testName) {
+    const reason = prompt('Reason for editing verified report (NABH log):');
+    if (reason === null) {
+        return;
+    }
+
+    const cleanReason = String(reason || '').trim();
+    if (!cleanReason) {
+        alert('Edit reason is required for NABH audit log.');
+        return;
+    }
+
+    const editorUrl = baseUrl + 'diagnosis/open-report-editor/' + reqId + '?edit_reason=' + encodeURIComponent(cleanReason);
+    load_form(editorUrl, (testName || 'Radiology') + ' - Report Editor');
 }
 
 function toggleTestDetails(reqId) {
@@ -1257,16 +1292,12 @@ function compileReport() {
     });
 }
 
-function generateReportLetterhead() {
+function generateReportByTemplate(templateId) {
+    const tplId = Number(templateId || 0);
     const invoiceId = document.getElementById('invoiceId').value;
     const url = baseUrl + 'Lab_Admin/print_pdf_create/' + invoiceId + '/' + labType + '/1';
-    window.open(url, '_blank');
-}
-
-function generateReportPlain() {
-    const invoiceId = document.getElementById('invoiceId').value;
-    const url = baseUrl + 'Lab_Admin/print_pdf_create/' + invoiceId + '/' + labType + '/1/1';
-    window.open(url, '_blank');
+    const finalUrl = tplId > 0 ? (url + '?template_id=' + encodeURIComponent(String(tplId))) : url;
+    window.open(finalUrl, '_blank');
 }
 
 function uploadReport() {

@@ -37,7 +37,7 @@
 									<?=$OCaseMaster[0]->case_id_code ?>
 								</a>
 					<?php } ?>
-				<?php if(($invoiceMaster[0]->med_group_id==0 && ($invoiceMaster[0]->bill_opd_close==0)) || $this->ion_auth->in_group('MedicalStoreAdmin') ) {?>
+				<?php if($invoiceMaster[0]->med_group_id==0 && ($invoiceMaster[0]->inv_date==date('Y-m-d') or ($this->ion_auth->in_group('MedOLDRec'))) ){  ?>
 							<button  type="button" class="btn btn-warning btn-xs" onclick="edit_invoice('<?=$invoiceMaster[0]->id ?>')" >Open Bill For Edit</button>
 				<?php }  ?>
 				</p>
@@ -63,7 +63,6 @@
 						<th>CGST</th>
 						<th>SGST</th>
 						<th>Net Amount</th>
-						<th></th>
 					</tr>
 					<?php
 					
@@ -86,7 +85,6 @@
 							echo '<td>'.$row->CGST.'</td>';
 							echo '<td>'.$row->SGST.'</td>';
 							echo '<td>'.$row->twdisc_amount.'</td>';
-							echo '<td>'.$row->update_by_remark.'</td>';
 							echo '</tr>';
 						}
 					echo '<input type="hidden" id="srno" name="srno" value="'.$srno.'" />';
@@ -125,8 +123,7 @@
 							<input type="hidden" id="discount_apply" name="discount_apply" value="1" >
 						<?php } ?>
 						</th>
-						<th>
-						<button type="button" class="btn btn-primary" id="btn_update_ded">Update</button></th>
+						<th><button type="button" class="btn btn-primary" id="btn_update_ded">Update</button></th>
 					</tr>
 				</table>
 			</div>
@@ -151,6 +148,7 @@
 							<button type="button" class="btn btn-danger" id="btn_adjust_balance">Balance Adjust Amt.: Rs <?=$invoiceMaster[0]->payment_balance?></button>
 						<?php }  ?>
 						</th>
+					
 					</tr>
 				</table>
 			</div>

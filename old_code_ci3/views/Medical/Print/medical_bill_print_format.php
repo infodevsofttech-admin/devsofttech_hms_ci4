@@ -40,7 +40,7 @@
 		<tr>
 			<td style="width: 60%;vertical-align: top;">
 				<p align="center" style="font-size: 30px;"><?= M_store ?></p>
-				<p align="center" style="font-size: 12px"><?= M_address ?><br>
+				<p align="center" style="font-size: 12px"><?= M_address ?>, Uttarakhand<br>
 					<?php
 					if (M_Phone_Number != '') {
 						echo 'Phone: ' . M_Phone_Number;
@@ -173,7 +173,7 @@
 		</tr>
 		<tr>
 			<th style="width: 10px">#</th>
-			<th style="width: 120px" align="center"><?= $inv_med_group[0]->discount_group+$inv_med_group[0]->item_discount_amount ?></th>
+			<th style="width: 120px" align="center"><?= $inv_med_group[0]->discount_group ?></th>
 			<th style="width: 120px" align="center"><?= $inv_med_group[0]->CGST_Tamount ?></th>
 			<th style="width: 120px" align="center"><?= $inv_med_group[0]->SGST_Tamount ?></th>
 			<th style="width: 120px" align="center"><?= $inv_med_group[0]->TaxableAmount ?></th>

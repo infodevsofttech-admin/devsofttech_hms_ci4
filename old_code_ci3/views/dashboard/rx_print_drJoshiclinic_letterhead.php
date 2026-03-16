@@ -36,7 +36,7 @@ th, td {
 <p align="center"></p>
 </htmlpageheader>
 <htmlpagefooter name="myFooter">
-<p align="center"> </p>
+<p align="center">Print Time : <?=date('d-m-Y H:i:s')?></p>
 </htmlpagefooter>
 <div class="RxPlace">
         <?php
@@ -60,16 +60,8 @@ th, td {
             echo '<br/>';
             echo $refer_to;
             echo '<br/>';
+            echo $doctor;
             echo '<br/>';
-            
-            echo '<p align="Right">';
-            echo '<br/>';
-            echo '<br/>';
-            echo '<br/>';
-            echo '<b>'.$doc_name.'</b>';
-            echo '<br/>';
-            echo $doc_sign;
-            echo '</p>';
 
         ?>
 </div>

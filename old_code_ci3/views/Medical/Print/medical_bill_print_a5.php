@@ -23,7 +23,7 @@
 		<tr>
 			<td style="width: 70%;vertical-align: top;">
 				<p align="center" style="font-size: 15px;font-weight: bold;"><?= M_store ?></p>
-				<p align="center" style="font-size: 12px"><?= M_address ?><br>
+				<p align="center" style="font-size: 12px"><?= M_address ?>, Uttarakhand<br>
 					<?php
 					if (M_Phone_Number != '') {
 						echo 'Phone: ' . M_Phone_Number;
@@ -42,7 +42,7 @@
 					<?php if ($invoice_med_master[0]->customer_type == 0) { ?>
 						Phone No. : <?= $invoice_med_master[0]->inv_phone_number ?><br>
 						<?php if ($invoice_med_master[0]->doc_name != '') { ?>
-							Refer By : <?= $invoice_med_master[0]->doc_name ?><br>
+							Refer By : Dr. <?= $invoice_med_master[0]->doc_name ?><br>
 						<?php } ?>
 					<?php } ?>
 					<?php if ($invoice_med_master[0]->customer_type == 1 && count($patient_master) > 0) { ?>

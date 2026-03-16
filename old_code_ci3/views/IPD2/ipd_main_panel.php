@@ -293,11 +293,6 @@
 							<a href="<?php echo '/IpdNew/show_ipd_form/' . $ipd_info[0]->id . '/11';  ?>" target="_blank" class="btn btn-default"><i class="fa fa-print"></i> Sticker [2 x 8]</a>
 						</div>
 					</div>
-					<div class="col-md-3">
-						<div class="form-group">
-							<a href="<?php echo '/IpdNew/show_ipd_form/' . $ipd_info[0]->id . '/12';  ?>" target="_blank" class="btn btn-default"><i class="fa fa-print"></i>Sticker Single</a>
-						</div>
-					</div>
 				</div>
 				<div class="row">
 					<div class="col-md-3">
@@ -339,11 +334,6 @@
 					<div class="col-md-6">
 						<div class="form-group">
 							<a href="<?php echo '/IpdNew/show_ipd_form/' . $ipd_info[0]->id . '/3';  ?>" target="_blank" class="btn btn-default"><i class="fa fa-print"></i> Print SELF DECLARATOION FROM HEALTH INSURANCE CARD HOLDER</a>
-						</div>
-					</div>
-					<div class="col-md-6">
-						<div class="form-group">
-							<a href="<?php echo '/IpdNew/show_ipd_form/' . $ipd_info[0]->id . '/13';  ?>" target="_blank" class="btn btn-default"><i class="fa fa-print"></i> Print DECLARATOION For Ayusman</a>
 						</div>
 					</div>
 				</div>

@@ -20,7 +20,7 @@
 </td>
 <td style="width: 60%;vertical-align: top;">
     <p align="center" style="font-size: 26px;" ><b><?=H_Name?></b></p>
-    <p align="center" style="font-size: 15px" ><?=H_address_1?>, <?=H_address_2?><br>
+    <p align="center" style="font-size: 15px" ><?=H_address_1?>, Uttarakhand<br>
     <?php 
         if(H_phone_No!='')
         {

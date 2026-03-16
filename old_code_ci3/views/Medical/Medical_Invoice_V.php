@@ -163,7 +163,7 @@
                             <div class="form-group">
                                 <label>Unit Rate </label>
                                 <input class="form-control input-sm" name="input_product_unit_rate"
-                                    id="input_product_unit_rate" placeholder="Unit Rate" autocomplete="off"   />
+                                    id="input_product_unit_rate" placeholder="Unit Rate" autocomplete="off" />
                             </div>
                         </div>
                         <div class="col-md-3">
@@ -178,14 +178,8 @@
                         <div class="col-md-3">
                             <div class="form-group">
                                 <label>Disc %</label>
-                                <?php if($invoiceMaster[0]->ipd_id > 0){ 
-                                    $readonly="Readonly"; 
-                                }else{
-                                    $readonly="Readonly";
-                                }   
-                                ?>
                                 <input class="form-control number input-sm" name="input_disc" id="input_disc"
-                                    placeholder="Discount %" type="text" value=0 autocomplete="off" <?php echo $readonly ;?> />
+                                    placeholder="Discount %" type="text" value=0 autocomplete="off" />
                             </div>
                         </div>
                         <div class="col-md-3">
@@ -354,7 +348,7 @@ function add_item_invoice() {
                     $("#wait_for_next").val('0');
                 }, 1000);
 
-                if(expiry_alert<1){
+                if(expiry_alert<2){
                     notify('error', 'Please Attention', 'Product Expired');
                     return false;
                 }
@@ -398,6 +392,9 @@ function add_item_invoice() {
                         }
 
                         $("#<?=$this->security->get_csrf_token_name()?>").val(data.csrf_dst_name_value);
+
+                       
+
 
                     },
                     'json');
@@ -483,7 +480,6 @@ function add_item_from_old_list(input_qty, c_qty, l_ssno) {
 }
 
 function remove_item_invoice(itemid) {
-    
     var wait_for_next = $("#wait_for_next").val();
     var csrf_dst_name_value = $("input[name='<?=$this->security->get_csrf_token_name()?>']").val();
 
@@ -491,8 +487,6 @@ function remove_item_invoice(itemid) {
         alert('wait......');
         return false;
     }
-
-    
 
     $.post('/index.php/Medical/add_item/0', {
         "itemid": itemid,
@@ -554,12 +548,6 @@ function remove_item_add(itemid) {
         return false;
     }
 
-    $("#wait_for_next").val('1');
-
-    setTimeout(function() {
-        $("#wait_for_next").val('0');
-    }, 1000);
-
     $.post('/index.php/Medical/add_remove_item', {
         "itemid": itemid,
         "inv_id": inv_id,
@@ -604,11 +592,6 @@ $(document).ready(function() {
         }
     })
     .autocomplete( "instance" )._renderItem = function( ul, item ) {
-        if(item.l_new_stock >0){
-            //item.label= " &#127381; " + item.label ;
-            item.label= " 💡 " + item.label ;
-        }
-
         if(item.expiry_alert <2){
             return $( "<li class='ui-state-disabled'>" )
             .append( "<div>" + item.label + "<br>" + item.desc + "</div>" )
@@ -621,7 +604,7 @@ $(document).ready(function() {
     };
 });
 
-//load_form_div('/Medical/Invoice_old/<?=$invoiceMaster[0]->id ?>','search_body_part');
+load_form_div('/Medical/Invoice_old/<?=$invoiceMaster[0]->id ?>','search_body_part');
 document.getElementById("input_drug").accessKey = "s";
 document.getElementById("additem").accessKey = "i";
 </script>

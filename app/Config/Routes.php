@@ -17,6 +17,7 @@ $routes->get('Medical/CounterSaleForm', 'Medical::counter_sale_form');
 $routes->post('Medical/CounterSaleCreate', 'Medical::counter_sale_create');
 $routes->match(['get', 'post'], 'Medical/search', 'Medical::search');
 $routes->get('Medical/get_drug', 'Medical::get_drug');
+$routes->get('Medical/get_batch/(:num)', 'Medical::get_batch/$1');
 $routes->get('Medical/check_invoice/(:num)/(:num)/(:num)', 'Medical::check_invoice/$1/$2/$3');
 $routes->get('Medical/Invoice_counter_new/(:num)/(:num)/(:num)', 'Medical::Invoice_counter_new/$1/$2/$3');
 $routes->get('Medical/invoice_new/(:num)', 'Medical::invoice_new/$1');
@@ -107,6 +108,15 @@ $routes->post('Medical/challan_item_to_purchase/(:num)/(:num)', 'Medical::challa
 $routes->post('Medical/challan_item_return/(:num)', 'Medical::challan_item_return/$1');
 $routes->get('Medical/get_drug_master', 'Medical::get_drug_master');
 $routes->get('Medical/Purchase_return', 'Medical::purchase_return');
+$routes->get('Medical/PurchaseReturnNew', 'Medical::purchase_return_new');
+$routes->post('Medical/PurchaseReturnInvoice', 'Medical::purchase_return_invoice');
+$routes->post('Medical/CreatePurchaseReturn', 'Medical::create_purchase_return');
+$routes->get('Medical/PurchaseReturnInvoiceEdit/(:num)', 'Medical::purchase_return_invoice_edit/$1');
+$routes->get('Medical/PurchaseReturn_invoice_item_list/(:num)', 'Medical::purchase_return_invoice_item_list/$1');
+$routes->get('Medical/Purchase_Invoice_product/(:num)', 'Medical::purchase_invoice_product/$1');
+$routes->match(['get', 'post'], 'Medical/Purchase_Invoice_old/(:num)', 'Medical::purchase_invoice_old/$1');
+$routes->post('Medical/remove_item_invoice/(:num)', 'Medical::purchase_return_remove_item_invoice/$1');
+$routes->get('Medical/print_purchase_return/(:num)', 'Medical::print_purchase_return/$1');
 $routes->get('Medical/store_stock', 'Medical::store_stock');
 $routes->post('Medical/store_stock_result', 'Medical::store_stock_result');
 $routes->get('Medical/stock_result_excel/(:segment)/(:segment)/(:segment)', 'Medical::stock_result_excel/$1/$2/$3');
@@ -118,6 +128,18 @@ $routes->get('Medical_backpanel/store_stock', 'Medical::store_stock');
 $routes->get('Medical_backpanel/stock', 'Medical::store_stock');
 $routes->get('Medical_backpanel/Stock', 'Medical::store_stock');
 $routes->get('Medical_backpanel/Purchase_return', 'Medical::purchase_return');
+$routes->get('Medical_backpanel/PurchaseReturnNew', 'Medical::purchase_return_new');
+$routes->post('Medical_backpanel/PurchaseReturnInvoice', 'Medical::purchase_return_invoice');
+$routes->post('Medical_backpanel/CreatePurchaseReturn', 'Medical::create_purchase_return');
+$routes->get('Medical_backpanel/PurchaseReturnInvoiceEdit/(:num)', 'Medical::purchase_return_invoice_edit/$1');
+$routes->get('Medical_backpanel/PurchaseReturn_invoice_item_list/(:num)', 'Medical::purchase_return_invoice_item_list/$1');
+$routes->get('Medical_backpanel/Purchase_Invoice_product/(:num)', 'Medical::purchase_invoice_product/$1');
+$routes->match(['get', 'post'], 'Medical_backpanel/Purchase_Invoice_old/(:num)', 'Medical::purchase_invoice_old/$1');
+$routes->post('Medical_backpanel/add_remove_item', 'Medical::purchase_return_add_remove_item');
+$routes->post('Medical_backpanel/remove_item_invoice/(:num)', 'Medical::purchase_return_remove_item_invoice/$1');
+$routes->get('Medical_backpanel/get_drug', 'Medical::get_drug');
+$routes->get('Medical_backpanel/get_batch/(:num)', 'Medical::get_batch/$1');
+$routes->get('Medical_Print/print_purchase_return/(:num)', 'Medical::print_purchase_return/$1');
 $routes->get('Medical_backpanel/Report_Med_patient', 'Medical::report_med_patient');
 $routes->get('Medical_backpanel/drug_patient_distribute/(:segment)/(:segment)/(:segment)/(:segment)', 'Medical::drug_patient_distribute/$1/$2/$3/$4');
 $routes->get('Medical_backpanel/Print_bill_on_uhid', 'Medical::print_bill_on_uhid');
@@ -226,9 +248,16 @@ $routes->get('Finance', 'Finance::index');
 $routes->get('Finance/index', 'Finance::index');
 $routes->get('finance', 'Finance::index');
 $routes->get('finance/index', 'Finance::index');
+$routes->get('Finance/phase2', 'Finance::phase2');
+$routes->get('Finance/section/vendor_master', 'Finance::sectionVendorMaster');
+$routes->get('Finance/section/purchase_order', 'Finance::sectionPurchaseOrder');
+$routes->get('Finance/section/grn_entry', 'Finance::sectionGrnEntry');
+$routes->get('Finance/section/vendor_invoice', 'Finance::sectionVendorInvoice');
 $routes->get('Finance/vendors_table', 'Finance::vendorsTable');
 $routes->get('Finance/po_table', 'Finance::poTable');
+$routes->get('Finance/po_documents/(:num)', 'Finance::poDocuments/$1');
 $routes->get('Finance/grn_table', 'Finance::grnTable');
+$routes->get('Finance/grn_print/(:num)', 'Finance::grnPrint/$1');
 $routes->get('Finance/invoice_table', 'Finance::invoiceTable');
 $routes->get('Finance/cashbook', 'Finance::cashbook');
 $routes->get('Finance/cash_transactions_table', 'Finance::cashTransactionsTable');
@@ -241,6 +270,7 @@ $routes->get('Finance/bank_deposits_table', 'Finance::bankDepositsTable');
 $routes->get('Finance/compliance_report', 'Finance::complianceReport');
 $routes->post('Finance/vendor_create', 'Finance::vendorCreate');
 $routes->post('Finance/po_create', 'Finance::poCreate');
+$routes->post('Finance/po_update', 'Finance::poUpdate');
 $routes->post('Finance/grn_create', 'Finance::grnCreate');
 $routes->post('Finance/invoice_create', 'Finance::invoiceCreate');
 $routes->post('Finance/cash_transaction_create', 'Finance::cashTransactionCreate');
@@ -249,6 +279,10 @@ $routes->post('Finance/doctor_agreement_create', 'Finance::doctorAgreementCreate
 $routes->post('Finance/doctor_payout_create', 'Finance::doctorPayoutCreate');
 $routes->post('Finance/doctor_payout_approve', 'Finance::doctorPayoutApprove');
 $routes->post('Finance/bank_deposit_create', 'Finance::bankDepositCreate');
+$routes->get('Finance/section/pharmacy_bills', 'Finance::sectionPharmacyBills');
+$routes->get('Finance/pharmacy_bills_table', 'Finance::pharmacyBillsTable');
+$routes->post('Finance/pharmacy_bill_create', 'Finance::pharmacyBillCreate');
+$routes->post('Finance/pharmacy_bill_settle', 'Finance::pharmacyBillSettle');
 
 service('auth')->routes($routes);
 
@@ -442,6 +476,30 @@ $routes->post('Opd_prescription/section_template_track_usage', 'Opd_prescription
 $routes->get('Opd_prescription/section_template_list', 'Opd_prescription::section_template_list');
 $routes->get('Opd_prescription/section_past_data', 'Opd_prescription::section_past_data');
 $routes->get('Opd_prescription/template_workspace', 'Opd_prescription::template_workspace', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
+$routes->get('doctor_work/document_workspace', 'DoctorDocument::workspace', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
+
+// Legacy-compatible doctor document templates and issue flow.
+$routes->get('Doc_Admin/doc_list', 'DoctorDocument::doc_list', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
+$routes->get('Doc_Admin/docedit_load', 'DoctorDocument::docedit_load', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
+$routes->get('Doc_Admin/docedit_load/(:num)', 'DoctorDocument::docedit_load/$1', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
+$routes->post('Doc_Admin/report_insert', 'DoctorDocument::report_insert', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
+$routes->post('Doc_Admin/report_update', 'DoctorDocument::report_update', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
+$routes->get('Doc_Admin/doc_input_list/(:num)', 'DoctorDocument::doc_input_list/$1', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
+$routes->get('Doc_Admin/input_parameter_load/(:num)/(:num)', 'DoctorDocument::input_parameter_load/$1/$2', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
+$routes->post('Doc_Admin/input_parameter_add', 'DoctorDocument::input_parameter_add', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
+$routes->post('Doc_Admin/input_parameter_edit', 'DoctorDocument::input_parameter_edit', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
+
+$routes->get('Document_Patient/open_by_key', 'DoctorDocument::open_by_key', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
+$routes->get('Document_Patient/p_doc_record/(:num)', 'DoctorDocument::p_doc_record/$1', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
+$routes->post('Document_Patient/create_doc', 'DoctorDocument::create_doc', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
+$routes->get('Document_Patient/re_create_doc/(:num)', 'DoctorDocument::re_create_doc/$1', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
+$routes->get('Document_Patient/Pre_Data/(:num)', 'DoctorDocument::Pre_Data/$1', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
+$routes->post('Document_Patient/Entry_Update', 'DoctorDocument::Entry_Update', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
+$routes->post('Document_Patient/update_doc_field/(:num)', 'DoctorDocument::update_doc_field/$1', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
+$routes->get('Document_Patient/load_doc/(:num)', 'DoctorDocument::load_doc/$1', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
+$routes->post('Document_Patient/update_doc', 'DoctorDocument::update_doc', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
+$routes->get('Document_Patient/create_final/(:num)/(:num)', 'DoctorDocument::create_final/$1/$2', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
+$routes->get('Document_Patient/create_final/(:num)', 'DoctorDocument::create_final/$1', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
 $routes->get('Opd_prescription/clinical_template_monitor', 'Opd_prescription::clinical_template_monitor');
 $routes->get('Opd_prescription/clinical_template_usage_analytics', 'Opd_prescription::clinical_template_usage_analytics');
 $routes->get('Opd_prescription/clinical_template_doctors', 'Opd_prescription::clinical_template_doctors');
@@ -553,6 +611,9 @@ $routes->post('Lab_Admin/test_item_search', 'Setting\Template::test_item_search'
 
 $routes->match(['get', 'post'], 'setting/template/discharge_templates', 'Setting\Template::discharge_templates');
 $routes->get('setting/template/discharge_templates/delete/(:num)', 'Setting\Template::discharge_template_delete/$1');
+$routes->match(['get', 'post'], 'setting/template/diagnosis_print_settings', 'Setting\Template::diagnosis_print_settings');
+$routes->match(['get', 'post'], 'setting/template/diagnosis_print_settings/(:num)', 'Setting\Template::diagnosis_print_settings/$1');
+$routes->match(['get', 'post'], 'setting/template/document_print_settings', 'Setting\Template::document_print_settings');
 
 $routes->get('Opdcase/addopd/(:num)', 'Opdcase::addopd/$1');
 $routes->post('Opdcase/showfee', 'Opdcase::showfee');
@@ -573,6 +634,15 @@ $routes->get('Report/report_total_payment_app_show/(:segment)/(:segment)/(:segme
 $routes->get('Report/billing_operations_report', 'Report::billing_operations_report');
 $routes->get('Report/billing_operations_report_data/(:segment)/(:segment)', 'Report::billing_operations_report_data/$1/$2');
 $routes->get('Report/billing_operations_report_data/(:segment)/(:segment)/(:num)', 'Report::billing_operations_report_data/$1/$2/$3');
+
+$routes->get('Report/document_list', 'Report::document_list');
+$routes->get('Report/document_list_data/(:segment)/(:num)', 'Report::document_list_data/$1/$2');
+$routes->get('Report/document_list_data/(:segment)/(:num)/(:num)', 'Report::document_list_data/$1/$2/$3');
+
+// Legacy Report5 compatibility for Document Issue Report.
+$routes->get('Report5/document_list', 'Report::document_list');
+$routes->get('Report5/document_list_data/(:segment)/(:num)', 'Report::document_list_data/$1/$2');
+$routes->get('Report5/document_list_data/(:segment)/(:num)/(:num)', 'Report::document_list_data/$1/$2/$3');
 
 $routes->get('Report/diagnosis_report', 'Report::diagnosis_report', ['filter' => 'permission:diagnosis.report.view,diagnosis.access']);
 $routes->get('Report/diagnosis_report_data/(:segment)', 'Report::diagnosis_report_data/$1');
@@ -751,6 +821,10 @@ $routes->group('setting', static function($routes) {
     $routes->post('admin/ai-settings/save', 'Setting\\AiSettings::save');
     $routes->post('admin/ai-settings/test', 'Setting\\AiSettings::test');
     $routes->post('admin/ai-settings/usage', 'Setting\\AiSettings::usage');
+    $routes->get('admin/hospital-profile', 'Setting\\HospitalProfile::index');
+    $routes->post('admin/hospital-profile/save', 'Setting\\HospitalProfile::save');
+    $routes->post('admin/hospital-profile/delete-logo', 'Setting\\HospitalProfile::deleteLogo');
+    $routes->post('admin/hospital-profile/reset', 'Setting\\HospitalProfile::reset');
     $routes->get('admin/doctor', 'Setting\\Doctor::index');
     $routes->get('admin/doctor/new', 'Setting\\Doctor::create');
     $routes->post('admin/doctor/new', 'Setting\\Doctor::store');

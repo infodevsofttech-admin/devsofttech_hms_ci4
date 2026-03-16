@@ -2,16 +2,24 @@
 $invoiceCode = (string) ($invoice->inv_med_code ?? ('M' . date('ym') . str_pad(substr((string) ((int) ($invoice->id ?? 0)), -7, 7), 7, '0', STR_PAD_LEFT)));
 $invoiceDate = ! empty($invoice->inv_date) ? date('d-m-Y', strtotime((string) $invoice->inv_date)) : date('d-m-Y');
 
-$pharmacyName = defined('M_store') ? (string) M_store : 'Medical Store';
-$pharmacyAddress = defined('M_address') ? (string) M_address : '';
-$pharmacyPhone = defined('M_Phone_Number') ? (string) M_Phone_Number : '';
-$pharmacyState = defined('M_State') ? (string) M_State : '';
-$pharmacyGst = defined('H_Med_GST') ? (string) H_Med_GST : '';
+$pharmacyName = defined('H_Med_Name') ? (string) constant('H_Med_Name') : (defined('M_store') ? (string) constant('M_store') : 'Medical Store');
+$pharmacyAddress = defined('H_Med_address_1') ? (string) constant('H_Med_address_1') : (defined('M_address') ? (string) constant('M_address') : '');
+$pharmacyPhone = defined('H_Med_phone_No') ? (string) constant('H_Med_phone_No') : (defined('M_Phone_Number') ? (string) constant('M_Phone_Number') : '');
+$pharmacyState = defined('M_State') ? (string) constant('M_State') : '';
+$pharmacyGst = defined('H_Med_GST') ? (string) constant('H_Med_GST') : '';
+$pharmacyLogo = defined('H_Med_logo') ? trim((string) constant('H_Med_logo')) : '';
 
 $customerName = trim((string) ($invoice->inv_name ?? 'Walk-in Customer'));
 $customerCode = trim((string) ($invoice->patient_code ?? ''));
 $customerPhone = trim((string) ($invoice->inv_phone_number ?? ($patient->mphone1 ?? '')));
 $doctorName = trim((string) ($invoice->doc_name ?? ''));
+$doctorLabel = $doctorName !== '' ? (preg_match('/^dr\.?\s*/i', $doctorName) ? $doctorName : 'Dr. ' . $doctorName) : '-';
+$addressLine = $pharmacyAddress;
+if ($pharmacyState !== '') {
+    $addressLine .= ($addressLine !== '' ? ', ' : '') . $pharmacyState;
+} elseif ($addressLine !== '' && stripos($addressLine, 'uttarakhand') === false) {
+    $addressLine .= ', Uttarakhand';
+}
 
 $grossTotal = 0.0;
 $discountTotal = 0.0;
@@ -35,6 +43,10 @@ $tdPad = $compact ? '4px 4px' : '5px 5px';
         .header { border-bottom: 1px solid #d1d5db; padding: 10px 12px; }
         .store-name { font-size: <?= $titleFont ?>; font-weight: 700; letter-spacing: .2px; color:#111827; }
         .store-meta { font-size: <?= $compact ? '9px' : '10px' ?>; color:#374151; margin-top: 2px; line-height: 1.45; }
+        .store-head { width:100%; border-collapse: collapse; }
+        .store-head td { vertical-align: top; }
+        .store-logo { text-align:right; }
+        .store-logo img { max-height:54px; max-width:130px; }
         .doc-title { margin-top: 8px; font-weight: 700; font-size: <?= $compact ? '11px' : '12px' ?>; color:#111827; }
         .meta { width: 100%; border-collapse: collapse; }
         .meta td { border: 1px solid #e5e7eb; padding: <?= $tdPad ?>; vertical-align: top; }
@@ -57,12 +69,23 @@ $tdPad = $compact ? '4px 4px' : '5px 5px';
 <body>
     <div class="invoice-wrap">
         <div class="header">
-            <div class="store-name"><?= esc($pharmacyName !== '' ? $pharmacyName : 'Medical Store') ?></div>
-            <div class="store-meta">
-                <?= esc($pharmacyAddress) ?><?= $pharmacyState !== '' ? ', ' . esc($pharmacyState) : '' ?>
-                <?php if ($pharmacyPhone !== ''): ?> | Phone: <?= esc($pharmacyPhone) ?><?php endif; ?>
-                <?php if ($pharmacyGst !== ''): ?> | GSTIN: <?= esc($pharmacyGst) ?><?php endif; ?>
-            </div>
+            <table class="store-head">
+                <tr>
+                    <td>
+                        <div class="store-name"><?= esc($pharmacyName !== '' ? $pharmacyName : 'Medical Store') ?></div>
+                        <div class="store-meta">
+                            <?= esc($addressLine) ?>
+                            <?php if ($pharmacyPhone !== ''): ?> | Phone: <?= esc($pharmacyPhone) ?><?php endif; ?>
+                            <?php if ($pharmacyGst !== ''): ?> | GSTIN: <?= esc($pharmacyGst) ?><?php endif; ?>
+                        </div>
+                    </td>
+                    <td class="store-logo">
+                        <?php if ($pharmacyLogo !== ''): ?>
+                            <img src="<?= esc(base_url('assets/images/' . rawurlencode($pharmacyLogo))) ?>" alt="Pharmacy Logo">
+                        <?php endif; ?>
+                    </td>
+                </tr>
+            </table>
             <div class="doc-title">TAX INVOICE</div>
         </div>
 
@@ -73,7 +96,7 @@ $tdPad = $compact ? '4px 4px' : '5px 5px';
                     <div><strong><?= esc($customerName !== '' ? $customerName : 'Walk-in Customer') ?></strong></div>
                     <div class="muted">Patient Code: <?= esc($customerCode !== '' ? $customerCode : '-') ?></div>
                     <div class="muted">Phone: <?= esc($customerPhone !== '' ? $customerPhone : '-') ?></div>
-                    <div class="muted">Doctor: <?= esc($doctorName !== '' ? $doctorName : '-') ?></div>
+                    <div class="muted">Refer By: <?= esc($doctorLabel) ?></div>
                 </td>
                 <td style="width:50%;">
                     <div class="meta-title">Invoice Details</div>
@@ -142,7 +165,7 @@ $tdPad = $compact ? '4px 4px' : '5px 5px';
                             <td class="text-right"><?= esc(number_format((float) ($item->price ?? 0), 2)) ?></td>
                             <td class="text-right"><?= esc(number_format($gross, 2)) ?></td>
                             <td class="text-right"><?= esc(number_format($disc, 2)) ?></td>
-                            <td class="text-right\"><?= esc(number_format($cgst + $sgst, 2)) ?></td>
+                            <td class="text-right"><?= esc(number_format($cgst + $sgst, 2)) ?></td>
                             <td class="text-right"><?= esc(number_format($net, 2)) ?></td>
                         </tr>
                     <?php endforeach; ?>

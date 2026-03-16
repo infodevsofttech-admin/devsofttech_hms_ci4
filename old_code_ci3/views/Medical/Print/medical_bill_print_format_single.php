@@ -16,7 +16,7 @@
 	<tr>
     	<td style="width: 60%;vertical-align: top;">
 		    <p align="center" style="font-size: 25px;" ><?=M_store?></p>
-		    <p align="center" style="font-size: 12px" ><?=M_address?> <br>
+		    <p align="center" style="font-size: 12px" ><?=M_address?>, Uttarakhand<br>
             <?php 
                 if(M_Phone_Number!='')
                 {
@@ -45,14 +45,14 @@
 		 		<strong><?=$invoice_med_master[0]->inv_name?></strong><br>
 				<?php if($invoice_med_master[0]->customer_type==0) { ?>
 					Phone No. : <?=$invoice_med_master[0]->inv_phone_number?><br>
-					Refer By :  <?=$Doc_name ?><br>
+					Refer By : Dr. <?=$Doc_name ?><br>
 				<?php } ?>
 			 	<?php if($invoice_med_master[0]->customer_type==1 && count($patient_master)>0) { ?>
 				<i>Patient Info. as per Hospital Records</i><br>
 				<b>UHID ID :</b> <?=$patient_master[0]->p_code ?><br>
 				<?php } ?>
 				<?php if($invoice_med_master[0]->customer_type==1 && $invoice_med_master[0]->ipd_id==0 ) { ?>
-					Refer By :  <?=$Doc_name ?><br>
+					Refer By : Dr. <?=$Doc_name ?><br>
 				<?php } ?>
 				<?php if($invoice_med_master[0]->ipd_id>0) { ?>
 					<b>IPD Code :</b> <?=$ipd_master[0]->ipd_code ?><br>
@@ -94,7 +94,7 @@
 				{
 					if($head_start==0)
 						{
-							echo '<tr style="font-size: 12px;border-style:solid ;border-width:0.1mm;"><td colspan="12" ><b>Invoice ID : </b>'.$row->inv_med_code.' [<b>Dated : </b><i>'.$row->str_inv_date.'</i>]</td></tr>';
+							echo '<tr style="font-size: 12px;border-style:solid ;border-width:0.1mm;"><td colspan="11" ><b>Invoice ID : </b>'.$row->inv_med_code.' [<b>Dated : </b><i>'.$row->str_inv_date.'</i>]</td></tr>';
 							echo '<tr >';
 							echo '<th style="width: 20px">#</th>';
 							echo '<th align="left" style="width: 200px">Item Name</th>';
@@ -105,7 +105,6 @@
 							echo '<th align="right">Gross Amt</th>';
 							echo '<th align="right">Disc.</th>';
 							if(H_Med_GST!=''){
-							echo '<th align="center">TaxableAmt</th>';
 							echo '<th align="right">HSNCODE/GST</th>';
 							echo '<th align="right">GST</th>';
 							}
@@ -118,7 +117,7 @@
 
 						if($row->sale_return==1){
 							echo '<tr>';
-							echo '<td colspan="12">Sale Return</td>';
+							echo '<td colspan="11">Sale Return</td>';
 							echo '</tr>';
 						}
 
@@ -132,7 +131,6 @@
 							echo '<td align="right">'.$row->amount.'</td>';
 							echo '<td align="right">'.$row->d_amt.'</td>';
 							if(H_Med_GST!=''){
-							echo '<td align="right">'.$row->TaxableAmount.'</td>';
 							echo '<td align="center">'.$row->HSNCODE.'/'.$row->gst_per.'</td>';
 							echo '<td align="right">'.$row->gst.'</td>';
 							}
@@ -147,7 +145,6 @@
 					echo '<th align="right">'.$invoice_med_master[0]->gross_amount.'</th>';
 					echo '<th align="right">'.$invoice_med_master[0]->inv_disc_total.'</th>';
 					if(H_Med_GST!=''){
-					echo '<th align="right">'.$invoice_med_master[0]->TaxableAmount.'</th>';
 					echo '<th align="center"></th>';
 					echo '<th align="right">'.$invoice_med_master[0]->TGST.'</th>';
 					}

@@ -79,8 +79,6 @@
 					accesskey="E"><u>Edit</u></button>
 					-->
 
-					<!-- <button type="button" class="btn btn-danger" id="btn_lab" onclick="report_letter_head('<?=$inv_id ?>','<?=$lab_type ?>')" >Report in letter Head</button> -->
-
 					<button type="button" class="btn btn-warning" id="btn_ipd" 
 					data-toggle="modal"
 					data-target="#tallModal_4" data-testid="<?=$inv_id ?>" 
@@ -123,17 +121,20 @@
 					accesskey="W">Show Scan/Upload Reports</button>
 				</div>
 			</div>
+			
 			<div id="file_show">
 				
 			</div>
         </div>
 		<div class="col-md-6">
 		<input type="hidden" value="<?=$inv_id ?>" id="inv_id" name="inv_id" />
+			
 			<div class="row">
 				<div class="col-md-12">
 					<div class="box box-success">
 						<div class="box-header with-border">
-							<h3 class="box-title">Test List : [Invoice Code : <a href="javascript:load_form_div('/Lab_Report/test_list/<?=$inv_id ?>/<?=$lab_type ?>','test_list');"><?=$inv_code ?></a>]</h3>
+							<h3 class="box-title">Test List : [Invoice Code : <a href="javascript:load_form_div('/Lab_Report/select_lab_invoice/<?=$inv_id ?>/<?=$lab_type ?>','searchresult');"><?=$inv_code ?></a>]</h3>
+							
 						</div>
 						<div class="box-body" id="test_list">
 						</div>
@@ -492,14 +493,5 @@
 		refresh_data();
 		Webcam.reset();
 	});
-
-	function report_letter_head(inv_id,labtype)
-	{
-		
-				
-		var Get_Query='/index.php/Lab_Admin/print_pdf_create/'+inv_id+'/'+labtype+'/1';
-		
-		window.open(Get_Query, "_blank");
-	}
     
 </script>

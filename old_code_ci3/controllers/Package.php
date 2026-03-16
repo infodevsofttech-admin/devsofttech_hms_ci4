@@ -67,7 +67,7 @@ class Package extends MY_Controller
 		$query = $this->db->query($sql);
 		$data['package_group'] = $query->result();
 
-		$sql = "SELECT * FROM package where pakage_group_id=1";
+		$sql = "SELECT * FROM Package where pakage_group_id=1";
 		$query = $this->db->query($sql);
 		$data['data'] = $query->result();
 

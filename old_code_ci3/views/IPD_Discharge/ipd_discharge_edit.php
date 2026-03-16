@@ -1312,10 +1312,9 @@
                                         <label>
                                             <input type="checkbox" class="chk_food" name="food_interaction_<?= $i ?>"
                                                 value="<?= $row->id ?>" <?= $row->food_exist ?>>
-                                            <?= $row->food_short ?> <span class="text-muted" style="font-size: smaller;"><?= $row->food_desc ?></span>
+                                            <?= $row->food_short ?>
                                         </label>
                                     </div>
-
                                 <?php } ?>
                                 <hr />
                                 <h3>Other</h3>
@@ -1331,11 +1330,6 @@
                                 <textarea id="editor_FOOD_DRUG_INTERACTION_list"
                                     name="editor_FOOD_DRUG_INTERACTION_list" class="editor" rows="10"
                                     cols="80"><?= $content ?></textarea>
-                                    <script>
-                                    $(function() {
-                                        CKEDITOR.replace('editor_FOOD_DRUG_INTERACTION_list')
-                                    })
-                                </script>
                                 <br />
                                 <button type="button" class="btn btn-primary"
                                     onclick="save_FOOD_DRUG_INTERACTION()">Save</button>
@@ -1638,9 +1632,9 @@
 
     function save_FOOD_DRUG_INTERACTION() {
 
-        var editor_data=CKEDITOR.instances['editor_FOOD_DRUG_INTERACTION_list'].getData();
+        //var editor_data=CKEDITOR.instances['editor_FOOD_DRUG_INTERACTION_list'].getData();
 
-        //var editor_data = $('#editor_FOOD_DRUG_INTERACTION_list').val();
+        var editor_data = $('#editor_FOOD_DRUG_INTERACTION_list').val();
 
         var chkArray = [];
         $(".chk_food:checked").each(function() {

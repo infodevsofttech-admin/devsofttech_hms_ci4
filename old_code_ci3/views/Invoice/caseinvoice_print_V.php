@@ -129,25 +129,14 @@ footer: html_myFooter;
 			foreach($showinvoice2 as $row)
 				{ 
 					$srno=$srno+1;
-					 if($row->discount_amount>0){
-                                $readonly = 'readonly';
-                                $disabled = 'disabled';
-                                $rate = $row->d_rate;
-                                $discription = $row->Description.' (Discounted) Rate : '.$row->item_rate;
-                            }else{
-                                $readonly = '';
-                                $disabled = '';
-                                $rate = $row->item_rate;
-                                $discription = $row->Description;
-                            }
 					echo '<tr>';
 					echo '<td>'.$srno.'</td>';
 					echo '<td>'.$row->str_date.'</td>';
 					echo '<td>'.$row->Charge_type.'</td>';
-					echo '<td>'.$discription.'</td>';
+					echo '<td>'.$row->Description.'</td>';
 					echo '<td>'.$row->orgcode.'</td>';
 					echo '<td>'.$row->item_qty.'</td>';
-					echo '<td>'.$rate.'</td>';
+					echo '<td>'.$row->item_rate.'</td>';
 					echo '<td>'.$row->Code.'</td>';
 					echo '<td align="right">'.$row->Amount.'</td>';
 					echo '</tr>';

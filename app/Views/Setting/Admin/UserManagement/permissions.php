@@ -67,6 +67,7 @@
                                 'beta' => 'Beta',
                                 'template' => 'Templates',
                                 'pharmacy' => 'Pharmacy',
+                                'finance' => 'Finance',
                                 'opd' => 'OPD Doctor Panel',
                                 'billing.opd' => 'OPD',
                                 'billing.charges' => 'Charges',
@@ -102,6 +103,7 @@
                                 'users',
                                 'template',
                                 'pharmacy',
+                                'finance',
                                 'opd',
                                 'billing.opd',
                                 'billing.charges',
@@ -110,6 +112,13 @@
                                 'beta',
                                 'other',
                             ];
+
+                            // Ensure new permission groups are still shown even if not in the predefined display order.
+                            foreach (array_keys($groupedPermissions) as $detectedGroup) {
+                                if (! in_array($detectedGroup, $groupOrder, true)) {
+                                    $groupOrder[] = $detectedGroup;
+                                }
+                            }
                             ?>
                             <?php if (! empty($permissions)) : ?>
                                 <div class="row g-3">

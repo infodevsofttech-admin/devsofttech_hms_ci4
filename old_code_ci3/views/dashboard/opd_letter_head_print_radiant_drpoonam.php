@@ -1,13 +1,13 @@
 <style>@page {
     background: url('assets/images/Radiant_Letter_head_back.png') no-repeat 0 0;
     background-image-resize: 6;
-    margin-top: 4.5cm;
-    margin-bottom: 1cm;
+    margin-top: 5.8cm;
+    margin-bottom: 1.2cm;
     margin-left: 0.5cm;
     margin-right: 0.5cm;
 
-    margin-header:0.3cm;
-    margin-footer:0.5cm;
+    margin-header:1cm;
+    margin-footer:1cm;
     header: html_myHeader;
     footer: html_myFooter;
 
@@ -16,7 +16,7 @@
 .myfixed_vital {
     position: absolute;
     overflow: visible;
-    top: 66mm; 
+    top: 82mm; 
     left: 10mm; 
     width: 200mm;   /* you must specify a width */
     margin-top: auto;
@@ -110,16 +110,17 @@
 <table  cellspacing="0"  style="font-size: 12px;width:100%;border-style: inset;" >
     <tr>
         <td style="width: 50%;vertical-align: top;">
-            <p style="font-size: 12px;color:black;" ><span style="color:darkblue;">Address :</span>Near KVM School, 
-            <br/>Mukhani Road, Haldwani, Uttarakhand</p>
-            <p style="font-size: 12px;font-weight: bold;color:black;" >
-                <span style="color:darkblue;">Phone No. :</span>05946-365929<br/>
+            <p style="font-size: 14px;font-weight: bold;color:black;" ><span style="color:darkblue;">Address :</span>Near KVM School, 
+            <br/>Mukhani Road, 
+            <br/>Haldwani, Uttarakhand</p>
+            <p style="font-size: 14px;font-weight: bold;color:black;" >
+                <span style="color:darkblue;">Phone No. :</span>+91 8979565771<br/>
                 <span style="color:darkblue;">Email :</span>radianthospitalhaldwani@gmail.com<br/>
             </p>
 
         </td>
         <td style="width: 50%;vertical-align: top;text-align: right;">
-            <p  style="font-size: 20px;font-weight: bold;color:darkblue;" >
+            <p  style="font-size: 28px;font-weight: bold;color:darkblue;" >
             Dr. <?=$opd_master[0]->doc_name ?>
             </p>
             <?=nl2br($opd_master[0]->doc_sign)?>
@@ -130,10 +131,12 @@
 <htmlpagefooter name="myFooter">
     <table cellspacing="0"  style="font-size: 12px;width:100%;border-style: inset;">
         <tr>
-            <td style="width: 850px;vertical-align: top;">
-                OPD Timing : Morning 11.30am to 3.00pm | Evening 4.30pm to 7.00pm | Sunday:By Appointment only | Phone No.:05946-365929, 9760644918 | Valid for 7 days
+            <td style="width: 600px;vertical-align: top;">
+                OPD Timing : 11am to 05pm | Sunday : By Appointment only | Phone No. : 8171010848 | Valid for 7 days
             </td>
-            
+            <td style="width: 300px;vertical-align: top;">
+                Not Valid for Medico legal Purpose
+            </td>
         </tr>
     </table>
 </htmlpagefooter>

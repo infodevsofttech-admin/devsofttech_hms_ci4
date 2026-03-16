@@ -283,7 +283,7 @@ class Medical_Report extends MY_Controller
 					FROM purchase_invoice_item t
 					GROUP BY t.item_code) AS q ON q.item_code=i.item_code)
 					LEFT JOIN doctor_master d ON m.doc_id=d.id
-					Where $sql_where and m.ipd_id=0
+					Where $sql_where 
 					GROUP BY m.doc_id,i.item_code ORDER BY i.item_Name";
 
 
@@ -365,118 +365,6 @@ class Medical_Report extends MY_Controller
 		}
 	}
 
-	public function Report_daily_med_sale_doc_data_ipd($sale_date_range, $doc_id, $output = 0)
-	{
-		$sql_where = " 1=1 ";
-
-		$rangeArray = explode("S", $sale_date_range);
-		$minRange = $rangeArray[0];
-		$maxRange = $rangeArray[1];
-
-		if ($doc_id <> 0) {
-			//$doc_id_list = str_replace('S', ',', $doc_id);
-
-			$sql_where .= " and FIND_IN_SET($doc_id,ipd.doc_list)>0";
-		}
-
-		$sql_where .= " and ipd.discharge_date between '" . $minRange . "' and '" . $maxRange . "'";
-
-		if (!$this->ion_auth->in_group('MedOLDRec')) {
-			$sql_where .= " and ipd.discharge_date  >=date_add(sysdate(),interval -2 month)";
-		}
-
-		$sql = "SELECT ipd.doc_name,ipd.doc_list, i.item_code,i.item_Name,
-		SUM(if(m.sale_return=0,i.qty,i.qty*-1)) AS Sale_Qty,
-		SUM(if(m.sale_return=0,i.twdisc_amount,i.twdisc_amount*-1)) AS Sale_Amount,
-		SUM(if(m.sale_return=0,i.qty*p.purchase_unit_rate,i.qty*p.purchase_unit_rate*-1)) AS Purchase_Amount,
-		q.cur_qty,i.CGST_per,
-		SUM(if(m.sale_return=0,(i.CGST+i.SGST),(i.CGST+i.SGST)*-1)) AS Sale_GST
-		FROM ((((invoice_med_master m JOIN inv_med_item i ON m.id=i.inv_med_id AND m.ipd_id>0) JOIN v_ipd_list ipd ON m.ipd_id=ipd.id)
-					LEFT JOIN purchase_invoice_item p ON i.store_stock_id=p.id )
-					
-					JOIN (SELECT t.item_code,SUM(t.total_unit-total_sale_unit-total_return_unit-total_lost_unit) AS cur_qty
-					FROM purchase_invoice_item t					
-					GROUP BY t.item_code) AS q ON q.item_code=i.item_code)
-					Where $sql_where and m.ipd_id>0
-					GROUP BY m.doc_id,i.item_code ORDER BY i.item_Name";
-
-		$query = $this->db->query($sql);
-		$med_inv_total = $query->result();
-
-		$content = 'Date Between ' . $minRange . ' and ' . $maxRange . '<br/>
-		
-		<table border="1" width="100%" cellpadding="2" cellspacing="0">';
-
-		$content .= '<thead><tr>
-					<th width="50px">#</th>
-					<th>Doc. Name</th>
-					<th>Item Code</th>
-					<th>Item Name</th>
-					<th>Sale Qty</th>
-					<th>Sale Amt</th>
-					<th>Pur. Amt</th>
-					<th>Sale GST</th>
-					<th>Cur.Qty</th>
-				 </tr></thead><tbody>';
-		$sr_no = 0;
-		$tot_sale_amt = 0;
-		$tot_sale_gst = 0;
-		$tot_pur_amt = 0;
-		$tot_pur_return_amt = 0;
-
-		foreach ($med_inv_total as $row) {
-			$sr_no = $sr_no + 1;
-
-			$tot_sale_amt = $tot_sale_amt + $row->Sale_Amount;
-
-			$tot_pur_amt += $row->Purchase_Amount;
-
-			$tot_sale_gst += $row->Sale_GST;
-
-			$content .= '<tr>
-							<td  width="50px">' . $sr_no . '</td>
-							<td>' . $row->doc_name . '</td>
-							<td>' . $row->item_code . '</td>
-							<td >' . $row->item_Name . '</td>
-							<td align="right">' . $row->Sale_Qty . '</td>
-							<td align="right">' . $row->Sale_Amount . '</td>
-							<td align="right">' . $row->Purchase_Amount . '</td>
-							<td align="right">' . $row->Sale_GST . '</td>
-							<td align="right">' . $row->cur_qty . '</td>
-						</tr>';
-		}
-
-		$content .= '<tr>
-							<th  width="50px">#</th>
-							<th></th>
-							<th></th>
-							<th></th>
-							<th >Total Sale</th>
-							<th align="right">' . $tot_sale_amt . '</th>
-							<th align="right">' . $tot_pur_amt . '</th>
-							<th align="right">' . $tot_sale_gst . '</th>
-							<th></th>
-						</tr>';
-
-		$content .= '</tbody></table>';
-
-		$Tot_Margin = ($tot_sale_amt - $tot_pur_amt - $tot_sale_gst);
-
-		$content .= "Total Margin (Sale - Purchase - SaleGST): Rs. " . $Tot_Margin;
-
-		if ($output == 0) {
-
-			$this->load->library('m_pdf');
-			$file_name = "Report-MedicalSale-" . date('Ymdhis') . ".pdf";
-			$filepath = $file_name;
-			$this->m_pdf->pdf->WriteHTML($content);
-			$this->m_pdf->pdf->Output($filepath, "I");
-		} else {
-			$file_name = "Report-MedicalSale-" . date('Ymdhis') . ".pdf";
-
-			ExportExcel($content, $file_name);
-		}
-	}
 	//Company Wise Medicine Sale Report
 	public function Report_company_med_sale()
 	{
@@ -1537,7 +1425,7 @@ class Medical_Report extends MY_Controller
 
 		$sql_where .= " and m.inv_date between '" . $minRange . "' and '" . $maxRange . "'";
 
-		//$sql_where .= " and m.net_amount>0 ";
+		$sql_where .= " and m.net_amount>0 ";
 
 		if (!$this->ion_auth->in_group('MedOLDRec')) {
 			$sql_where .= " and m.inv_date  >=date_add(sysdate(),interval -1 day)";
@@ -2629,8 +2517,6 @@ class Medical_Report extends MY_Controller
 		ExportExcel($content, 'Report_Medical_gst_invoice');
 	}
 
-	
-
 	public function Report_5_HSNdata($sale_date_range, $output = 0)
 	{
 		$rangeArray = explode("S", $sale_date_range);
@@ -2639,7 +2525,7 @@ class Medical_Report extends MY_Controller
 
 		$where = "  m.inv_date between '" . $minRange . "' and '" . $maxRange . "'";
 
-		//$where .= " and m.net_amount>0 ";
+		$where .= " and m.net_amount>0 ";
 
 		if (!$this->ion_auth->in_group('MedOLDRec')) {
 			$where .= " and date(m.inv_date)  >=date(date_add(sysdate(),interval -2 day))";

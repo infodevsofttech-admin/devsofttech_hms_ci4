@@ -29,7 +29,6 @@
                 <button type="button" class="btn btn-warning" id="showreport_hsn_xls">HSN Wise Excel</button>
             </div>
         </div>
-         
     </div>
     <div class="row">
         <div class="col-md-12">
@@ -83,6 +82,7 @@ $(document).ready(function() {
         window.open(Get_Query, "_blank");
     });
 
+
 	$('#showreport_hsn').click(function() {
         var Get_Query = "/Medical_Report/Report_5_HSNdata/" + $('#opd_date_range').val();
         load_report_div(Get_Query, 'show_report');
@@ -94,7 +94,6 @@ $(document).ready(function() {
         window.open(Get_Query, "_blank");
     });
 
-    
 
 
 });

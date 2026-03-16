@@ -1,3 +1,4 @@
+
 <?php echo form_open(); ?>
 <input type="hidden" id="hid_value_req_id" value="<?=$report_format[0]->id ?>" />
 	
@@ -15,14 +16,7 @@
 			<div class="col-md-12">
 				<label>Impression</label>
 				<textarea id='report_data_Impression' name="report_data_Impression" class="form-control"  placeholder="Place some text here"><?=$report_format[0]->report_data_Impression ?></textarea>
-				<script>
-					CKEDITOR.replace( 'report_data_Impression', {
-						toolbar: [
-                			{ name: 'basicstyles', items: [ 'Bold', 'Italic' ] }
-            				]
-
-					} );
-				</script>
+				
 			</div>
 			<div class="col-md-12">
 				<button onclick="update_report()" type="button" class="btn btn-primary">Save</button>
@@ -32,17 +26,9 @@
 	</div>
 	<div class="col-md-4">
 		<div class="row">
-			<label>Templates</label>
-			<input type="text" id="template_search" class="form-control input-sm" placeholder="Search templates..." autocomplete="off" />
-
-			<div id="templateList" style="max-height:60vh; overflow-y:auto; margin-top:6px;">
-				<?php foreach($radiology_ultrasound_template as $row) { ?>
-					<div class="template-item">
-						<a href="javascript:set_template(<?=$row->id?>)"><?=$row->template_name?></a>
-					</div>
-				<?php } ?>
-				<div id="no_templates_msg" style="display:none; color:#888; padding:6px;">No templates found</div>
-			</div>
+			<?php foreach($radiology_ultrasound_template as $row) { ?>
+				<a href="javascript:set_template(<?=$row->id?>)"><?=$row->template_name?></a><br/>
+			<?php } ?>
 		</div>
 	</div>
 	
@@ -52,9 +38,7 @@
 	function update_report()
 	{
 		var HTMLData=CKEDITOR.instances.HTMLShow.getData();
-		var report_data_Impression=CKEDITOR.instances.report_data_Impression.getData();
-
-	//	var report_data_Impression=$('#report_data_Impression').val()
+		var report_data_Impression=$('#report_data_Impression').val()
 		var csrf_value=$('input[name=<?=$this->security->get_csrf_token_name()?>]').val();
 		
 		var req_id=$('#hid_value_req_id').val();
@@ -98,28 +82,4 @@
 	}
 
 
-	// Live filter for template list
-	$(function () {
-		$('#template_search').on('input', function () {
-			var q = $(this).val().toLowerCase().trim();
-			var count = 0;
-			$('#templateList .template-item').each(function () {
-				var show = $(this).text().toLowerCase().indexOf(q) !== -1;
-				$(this).toggle(show);
-				if (show) count++;
-			});
-			$('#no_templates_msg').toggle(count === 0);
-		});
-
-		// Optional: Enter opens the first visible template
-		$('#template_search').on('keydown', function (e) {
-			if (e.key === 'Enter') {
-				var $first = $('#templateList .template-item:visible a').first();
-				if ($first.length) {
-					e.preventDefault();
-					$first[0].click();
-				}
-			}
-		});
-	});
 </script>

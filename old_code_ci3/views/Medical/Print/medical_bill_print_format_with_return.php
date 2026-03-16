@@ -41,7 +41,7 @@
 	<tr>
 		<td style="width: 60%;vertical-align: top;">
 			<p align="center" style="font-size: 30px;" ><?=M_store?></p>
-			<p align="center" style="font-size: 12px" ><?=M_address?><br>
+			<p align="center" style="font-size: 12px" ><?=M_address?>, Uttarakhand<br>
             <?php 
                 if(M_Phone_Number!='')
                 {

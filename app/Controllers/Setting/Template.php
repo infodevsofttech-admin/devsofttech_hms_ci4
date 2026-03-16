@@ -798,10 +798,10 @@ class Template extends BaseController
                     'modality' => $modality,
                     'template_name' => $templateName,
                     'page_size' => trim((string) ($this->request->getPost('page_size') ?? 'A4')) ?: 'A4',
-                    'page_margin_top_cm' => $this->normalizeMarginCm($this->request->getPost('page_margin_top_cm'), 1.2),
-                    'page_margin_bottom_cm' => $this->normalizeMarginCm($this->request->getPost('page_margin_bottom_cm'), 1.2),
-                    'page_margin_left_cm' => $this->normalizeMarginCm($this->request->getPost('page_margin_left_cm'), 1.0),
-                    'page_margin_right_cm' => $this->normalizeMarginCm($this->request->getPost('page_margin_right_cm'), 1.0),
+                    'page_margin_top_cm' => $this->normalizeMarginCm($this->request->getPost('page_margin_top_cm'), 6.1),
+                    'page_margin_bottom_cm' => $this->normalizeMarginCm($this->request->getPost('page_margin_bottom_cm'), 2.5),
+                    'page_margin_left_cm' => $this->normalizeMarginCm($this->request->getPost('page_margin_left_cm'), 0.7),
+                    'page_margin_right_cm' => $this->normalizeMarginCm($this->request->getPost('page_margin_right_cm'), 0.7),
                     'margin_header_cm' => $this->normalizeMarginCm($this->request->getPost('margin_header_cm'), 0.5),
                     'margin_footer_cm' => $this->normalizeMarginCm($this->request->getPost('margin_footer_cm'), 1.5),
                     'page_background_image' => $backgroundPath,
@@ -898,6 +898,122 @@ class Template extends BaseController
             'modality_list' => $modalityList,
                 'has_signature_image_column' => $hasSignatureImageColumn,
             'has_signature_image_column' => $hasSignatureImageColumn,
+        ]);
+    }
+
+    public function document_print_settings()
+    {
+        if ($resp = $this->requireAnyPermission(['doctor_work.template_workspace.access', 'doctor_work.access', 'template.pathology'])) {
+            return $resp;
+        }
+
+        $notice = '';
+        $noticeType = 'success';
+        $selectedTemplateId = (int) ($this->request->getGet('template_id') ?? 0);
+        $isNewTemplate = (int) ($this->request->getGet('new') ?? 0) === 1;
+
+        if (! $this->db->tableExists('doc_print_templates')) {
+            return view('Setting/Template/document_print_settings', [
+                'row' => [],
+                'templates' => [],
+                'selected_template_id' => 0,
+                'notice' => 'doc_print_templates table not found. Please run migration.',
+                'notice_type' => 'danger',
+                'columns_ready' => false,
+            ]);
+        }
+
+        $templateTable = $this->db->table('doc_print_templates');
+
+        if (strtolower($this->request->getMethod()) === 'post') {
+            $selectedTemplateId = (int) ($this->request->getPost('template_id') ?? 0);
+            $existing = [];
+
+            if ($selectedTemplateId > 0) {
+                $existing = $templateTable
+                    ->where('id', $selectedTemplateId)
+                    ->get(1)
+                    ->getRowArray() ?? [];
+            }
+
+            $templateName = trim((string) ($this->request->getPost('template_name') ?? ''));
+            if ($templateName === '') {
+                $templateName = 'Document Template ' . date('d-m-Y H:i');
+            }
+
+            $pageSize = strtoupper(trim((string) ($this->request->getPost('page_size') ?? 'A4')));
+            if (! in_array($pageSize, ['A4', 'A4-L', 'LETTER', 'LEGAL'], true)) {
+                $pageSize = 'A4';
+            }
+
+            $data = [
+                'template_name' => $templateName,
+                'page_size' => $pageSize,
+                'page_margin_top_cm' => $this->normalizeMarginCm($this->request->getPost('page_margin_top_cm'), 6.1),
+                'page_margin_bottom_cm' => $this->normalizeMarginCm($this->request->getPost('page_margin_bottom_cm'), 2.5),
+                'page_margin_left_cm' => $this->normalizeMarginCm($this->request->getPost('page_margin_left_cm'), 0.7),
+                'page_margin_right_cm' => $this->normalizeMarginCm($this->request->getPost('page_margin_right_cm'), 0.7),
+                'margin_header_cm' => $this->normalizeMarginCm($this->request->getPost('margin_header_cm'), 0.5),
+                'margin_footer_cm' => $this->normalizeMarginCm($this->request->getPost('margin_footer_cm'), 1.5),
+                'header_html' => (string) ($this->request->getPost('header_html') ?? ''),
+                'footer_html' => (string) ($this->request->getPost('footer_html') ?? ''),
+                'is_default' => (int) ($this->request->getPost('is_default') ?? 0) === 1 ? 1 : 0,
+                'status' => 1,
+            ];
+
+            if ($data['is_default'] === 1) {
+                $templateTable->set('is_default', 0)->update();
+            }
+
+            if (! empty($existing) && $selectedTemplateId > 0) {
+                $templateTable->where('id', $selectedTemplateId)->update($data);
+            } else {
+                $templateTable->insert($data);
+                $selectedTemplateId = (int) $this->db->insertID();
+            }
+
+            $notice = 'Document print template saved.';
+            $noticeType = 'success';
+
+            if ($this->request->isAJAX()) {
+                return $this->response->setJSON([
+                    'status' => 'success',
+                    'notice' => $notice,
+                    'notice_type' => $noticeType,
+                    'selected_template_id' => $selectedTemplateId,
+                    'csrfName' => csrf_token(),
+                    'csrfHash' => csrf_hash(),
+                ]);
+            }
+        }
+
+        $templates = $templateTable
+            ->select('id, template_name, is_default, print_on_type')
+            ->where('status', 1)
+            ->orderBy('is_default', 'DESC')
+            ->orderBy('template_name', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        if (! $isNewTemplate && $selectedTemplateId <= 0 && ! empty($templates)) {
+            $selectedTemplateId = (int) ($templates[0]['id'] ?? 0);
+        }
+
+        $row = [];
+        if ($selectedTemplateId > 0) {
+            $row = $templateTable
+                ->where('id', $selectedTemplateId)
+                ->get(1)
+                ->getRowArray() ?? [];
+        }
+
+        return view('Setting/Template/document_print_settings', [
+            'row' => $row,
+            'templates' => $templates,
+            'selected_template_id' => $selectedTemplateId,
+            'notice' => $notice,
+            'notice_type' => $noticeType,
+            'columns_ready' => true,
         ]);
     }
 

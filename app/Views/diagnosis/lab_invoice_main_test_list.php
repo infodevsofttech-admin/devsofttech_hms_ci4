@@ -6,6 +6,7 @@ $currentLabType = (int) ($lab_type ?? $labType ?? 0);
 $isRadiologyFlow = !in_array($currentLabType, [5, 30], true);
 $flowTitle = $isRadiologyFlow ? 'Imaging Worklist' : 'Pathology Worklist';
 $statusPendingLabel = $isRadiologyFlow ? 'Report Pending' : 'Data Pending';
+$printTemplates = $print_templates ?? [];
 
 if (!empty($lab_invoice_request) && count($lab_invoice_request) > 0) {
     $labInvoiceData = $lab_invoice_request[0];
@@ -96,10 +97,35 @@ if (!empty($lab_invoice_request) && count($lab_invoice_request) > 0) {
 
                 <div class="d-flex flex-wrap gap-2 mb-2">
                     <?php if ($status == 2): ?>
-                        <button type="button" class="btn btn-success btn-sm"
-                            onclick="printSingleReport(<?php echo htmlspecialchars($test->req_id ?? '0'); ?>, '<?php echo htmlspecialchars($test->item_name ?? ''); ?>')">
-                            <i class="bi bi-printer"></i> Print Single Report
-                        </button>
+                        <?php if ($isRadiologyFlow): ?>
+                            <?php if (! empty($printTemplates)): ?>
+                                <?php foreach ($printTemplates as $tpl): ?>
+                                    <?php
+                                    $tplId = (int) ($tpl['id'] ?? 0);
+                                    $tplName = (string) ($tpl['template_name'] ?? ('Template ' . $tplId));
+                                    $isDefaultTpl = (int) ($tpl['is_default'] ?? 0) === 1;
+                                    ?>
+                                    <button type="button" class="btn <?= $isDefaultTpl ? 'btn-success' : 'btn-outline-success' ?> btn-sm"
+                                        onclick="printSingleReport(<?php echo htmlspecialchars($test->req_id ?? '0'); ?>, '<?php echo htmlspecialchars($test->item_name ?? ''); ?>', <?= $tplId ?>)">
+                                        <i class="bi bi-printer"></i> <?= esc($tplName) ?>
+                                    </button>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <button type="button" class="btn btn-success btn-sm"
+                                    onclick="printSingleReport(<?php echo htmlspecialchars($test->req_id ?? '0'); ?>, '<?php echo htmlspecialchars($test->item_name ?? ''); ?>', 0)">
+                                    <i class="bi bi-printer"></i> Print Report
+                                </button>
+                            <?php endif; ?>
+                            <button type="button" class="btn btn-outline-primary btn-sm"
+                                onclick="openReportEditor(<?php echo htmlspecialchars($test->req_id ?? '0'); ?>, '<?php echo htmlspecialchars($test->item_name ?? ''); ?>')">
+                                <i class="bi bi-pencil-square"></i> Edit
+                            </button>
+                        <?php else: ?>
+                            <button type="button" class="btn btn-success btn-sm"
+                                onclick="printSingleReport(<?php echo htmlspecialchars($test->req_id ?? '0'); ?>, '<?php echo htmlspecialchars($test->item_name ?? ''); ?>')">
+                                <i class="bi bi-printer"></i> Print Single Report
+                            </button>
+                        <?php endif; ?>
                         <button type="button" class="btn btn-outline-danger btn-sm"
                             onclick="removeTest(<?php echo htmlspecialchars($test->req_id ?? '0'); ?>)">
                             <i class="bi bi-trash"></i> Remove

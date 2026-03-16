@@ -15,6 +15,12 @@
                     <ul class="report-links">
                         <li><a href="javascript:load_form('<?= base_url('Report/collection_report') ?>','Collection Report');"><i class="bi bi-arrow-right-short"></i> Total Payment (Cash and Bank)</a></li>
                         <li><a href="javascript:load_form('<?= base_url('Report/billing_operations_report') ?>','Billing Operations Report');"><i class="bi bi-arrow-right-short"></i> Billing Operations Report</a></li>
+                        <li><a href="javascript:load_form('<?= base_url('Finance/index') ?>','Finance & Accounting');"><i class="bi bi-arrow-right-short"></i> Finance & Accounting (Phase 1)</a></li>
+                        <li><a href="javascript:load_form('<?= base_url('Finance/phase2') ?>','Finance & Accounting - Phase 2');"><i class="bi bi-arrow-right-short"></i> Finance & Accounting (Phase 2)</a></li>
+                        <li><a href="javascript:load_form('<?= base_url('Finance/cashbook') ?>','Cash Collection & Disbursement SOP');"><i class="bi bi-arrow-right-short"></i> Cash Collection & Disbursement SOP</a></li>
+                        <li><a href="javascript:load_form('<?= base_url('Finance/doctor_payout') ?>','Doctor Payout Workflow');"><i class="bi bi-arrow-right-short"></i> Doctor Payout Workflow</a></li>
+                        <li><a href="javascript:load_form('<?= base_url('Finance/bank_deposits') ?>','Bank Deposit Register');"><i class="bi bi-arrow-right-short"></i> Bank Deposit Register</a></li>
+                        <li><a href="javascript:load_form('<?= base_url('Finance/compliance_report') ?>','Finance Compliance Report');"><i class="bi bi-arrow-right-short"></i> Finance Compliance Report</a></li>
                         <li><a href="javascript:load_form('<?= base_url('Report/nabh_audit_report') ?>','NABH Audit Report');"><i class="bi bi-arrow-right-short"></i> NABH Audit Report</a></li>
                     </ul>
                 </div>
@@ -72,7 +78,9 @@
                         <span class="report-icon report-icon-slate"><i class="bi bi-file-earmark-text"></i></span>
                         <h5 class="report-card-title mb-0">Reports Document</h5>
                     </div>
-                    <div class="report-empty">Document reports are not migrated yet.</div>
+                    <ul class="report-links">
+                        <li><a href="javascript:load_form('<?= base_url('Report/document_list') ?>','Document Issue Report');"><i class="bi bi-arrow-right-short"></i> Document Issue Report</a></li>
+                    </ul>
                 </div>
             </div>
         </div>

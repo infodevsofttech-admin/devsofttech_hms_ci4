@@ -32,13 +32,6 @@
 				<button type="button" class="btn btn-primary" id="showreport_xls"  >Excel</button>
 			</div>
 		</div>
-		<div class="col-md-3">
-			<label> </label>
-			<div class="form-group">
-				<button type="button" class="btn btn-primary" id="showreport_ipd"  >Show IPD</button>
-				<button type="button" class="btn btn-primary" id="showreport_xls_ipd"  >Excel IPD</button>
-			</div>
-		</div>
 	</div>
 	
 	<div class="row">
@@ -89,18 +82,6 @@
 				$('#showreport_xls').click( function()
 				{
 					var Get_Query="/Medical_Report/Report_daily_med_sale_doc_data/"+$('#opd_date_range').val()+"/"+$('#doc_name_id').val()+"/1";
-					window.open(Get_Query, "_blank");
-				});
-
-				$('#showreport_ipd').click( function()
-				{
-					var Get_Query="/Medical_Report/Report_daily_med_sale_doc_data_ipd/"+$('#opd_date_range').val()+"/"+$('#doc_name_id').val()+"/0";
-					load_report_div(Get_Query,'show_report');
-				});
-				
-				$('#showreport_xls_ipd').click( function()
-				{
-					var Get_Query="/Medical_Report/Report_daily_med_sale_doc_data_ipd/"+$('#opd_date_range').val()+"/"+$('#doc_name_id').val()+"/1";
 					window.open(Get_Query, "_blank");
 				});
 	

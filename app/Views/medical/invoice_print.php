@@ -25,13 +25,23 @@
     </style>
 </head>
 <body>
+    <?php
+        $pharmacyName = defined('H_Med_Name') ? (string) constant('H_Med_Name') : ((defined('M_store') ? (string) constant('M_store') : 'Medical Store'));
+        $pharmacyAddress = defined('H_Med_address_1') ? (string) constant('H_Med_address_1') : (defined('M_address') ? (string) constant('M_address') : '');
+        $pharmacyPhone = defined('H_Med_phone_No') ? (string) constant('H_Med_phone_No') : (defined('M_Phone_Number') ? (string) constant('M_Phone_Number') : '');
+        $pharmacyGst = defined('H_Med_GST') ? (string) constant('H_Med_GST') : '';
+
+        $doctorName = trim((string) ($invoice->doc_name ?? ''));
+        $doctorLabel = $doctorName !== '' ? (preg_match('/^dr\.?\s*/i', $doctorName) ? $doctorName : 'Dr. ' . $doctorName) : '-';
+    ?>
     <div class="print-actions">
         <button onclick="window.print()">Print</button>
         <button onclick="window.close()">Close</button>
     </div>
 
-    <div class="title">Medical Invoice</div>
-    <div class="sub mb-12">Invoice No: <?= esc($invoice->inv_med_code ?? ('M' . date('ym') . str_pad(substr((string) ((int)($invoice->id ?? 0)), -7, 7), 7, '0', STR_PAD_LEFT))) ?></div>
+    <div class="title"><?= esc($pharmacyName !== '' ? $pharmacyName : 'Medical Store') ?></div>
+    <div class="sub"><?= esc($pharmacyAddress) ?><?php if ($pharmacyPhone !== ''): ?> | Phone: <?= esc($pharmacyPhone) ?><?php endif; ?><?php if ($pharmacyGst !== ''): ?> | GSTIN: <?= esc($pharmacyGst) ?><?php endif; ?></div>
+    <div class="sub mb-12"><strong>Medical Invoice No:</strong> <?= esc($invoice->inv_med_code ?? ('M' . date('ym') . str_pad(substr((string) ((int)($invoice->id ?? 0)), -7, 7), 7, '0', STR_PAD_LEFT))) ?></div>
 
     <div class="row mb-12">
         <div>
@@ -40,7 +50,7 @@
             <div class="mb-8"><strong>Patient Code:</strong> <?= esc($invoice->patient_code ?? '-') ?></div>
         </div>
         <div>
-            <div class="mb-8"><strong>Doctor:</strong> <?= esc($invoice->doc_name ?? '-') ?></div>
+            <div class="mb-8"><strong>Refer By:</strong> <?= esc($doctorLabel) ?></div>
             <div class="mb-8"><strong>Phone:</strong> <?= esc($invoice->inv_phone_number ?? ($patient->mphone1 ?? '-')) ?></div>
             <div class="mb-8"><strong>Type:</strong> <?= ((int)($invoice->ipd_credit ?? 0) === 1) ? 'Credit' : 'Cash' ?></div>
         </div>

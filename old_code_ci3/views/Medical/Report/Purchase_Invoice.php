@@ -93,7 +93,7 @@
 				{
 					var supplier_id=$('#input_supplier').val();
 					
-					var Get_Query="/Medical_Report/purchase_invoice_data_pdf/"+$('#inv_date_range').val()+
+					var Get_Query="/Medical_Report/purchase_invoice_data/"+$('#inv_date_range').val()+
 					"/"+supplier_id+"/1";
 					window.open(Get_Query, "_blank");
 				});
@@ -102,7 +102,7 @@
 				{
 					var supplier_id=$('#input_supplier').val();
 					
-					var Get_Query="/Medical_Report/purchase_invoice_data/"+$('#inv_date_range').val()+
+					var Get_Query="/Medical_Report/purchase_invoice_data_pdf/"+$('#inv_date_range').val()+
 					"/"+supplier_id;
 					load_report_div(Get_Query,'show_report');
 					

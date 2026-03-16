@@ -94,7 +94,6 @@
     <script>
         if (window.CKEDITOR) {
             CKEDITOR.config.versionCheck = false;
-            CKEDITOR.config.removePlugins = (CKEDITOR.config.removePlugins ? CKEDITOR.config.removePlugins + ',' : '') + 'notification,notificationaggregator';
         }
     </script>
     <script src="<?= base_url('assets/vendor/simple-datatables/simple-datatables.js') ?>"></script>
@@ -136,6 +135,7 @@
                 $.ajax({
                         url: ourl,
                         dataType: "html",
+                        async: true,
                             timeout: REQUEST_TIMEOUT_MS,
                         beforeSend: function() {
                             $('#main').html('loading...');
@@ -176,6 +176,7 @@
                 $.ajax({
                         url: ourl,
                         dataType: "html",
+                    async: true,
                             timeout: REQUEST_TIMEOUT_MS
                     })
                     .done(function(html) {

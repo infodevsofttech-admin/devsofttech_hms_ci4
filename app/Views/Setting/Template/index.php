@@ -8,12 +8,16 @@ $canMri = $user && method_exists($user, 'can') ? $user->can('template.mri') : fa
 $canEcho = $user && method_exists($user, 'can') ? $user->can('template.echo') : false;
 $canDischarge = $user && method_exists($user, 'can') ? $user->can('template.discharge') : false;
 $canOpdPrintTemplate = $user && method_exists($user, 'can') ? $user->can('billing.opd.edit') : false;
+$canDiagnosisPrintTemplate = $canPathology || $canUltrasound || $canXray || $canCt || $canMri || $canEcho;
+$canDoctorDocumentPrintTemplate = $user && method_exists($user, 'can')
+    ? ($user->can('doctor_work.template_workspace.access') || $user->can('doctor_work.access') || $user->can('template.pathology'))
+    : false;
 
 if (! $canOpdPrintTemplate && $user && method_exists($user, 'inGroup')) {
     $canOpdPrintTemplate = $user->inGroup('OPDEdit', 'admin', 'superadmin', 'developer');
 }
 
-$hasTemplateAccess = $canPathology || $canUltrasound || $canXray || $canCt || $canMri || $canEcho || $canDischarge;
+$hasTemplateAccess = $canPathology || $canUltrasound || $canXray || $canCt || $canMri || $canEcho || $canDischarge || $canDoctorDocumentPrintTemplate;
 ?>
 <section class="content">
     <div class="pagetitle">
@@ -200,6 +204,33 @@ $hasTemplateAccess = $canPathology || $canUltrasound || $canXray || $canCt || $c
                 <a class="admin-tile" href="javascript:load_form_div('<?= base_url('setting/template/discharge_templates') ?>','maindiv','IPD Discharge Template');">
                     <span class="tile-icon"><i class="bi bi-file-earmark-medical"></i></span>
                     <span>IPD Discharge Template</span>
+                </a>
+            </div>
+        <?php } ?>
+
+        <?php if ($canDiagnosisPrintTemplate) { ?>
+            <?php if ($canPathology) { ?>
+                <div class="col-6 col-md-2 col-lg-2">
+                    <a class="admin-tile" href="javascript:load_form_div('<?= base_url('setting/template/diagnosis_print_settings/5') ?>','maindiv','Pathology Print Template');">
+                        <span class="tile-icon"><i class="bi bi-printer"></i></span>
+                        <span>Pathology Print Template</span>
+                    </a>
+                </div>
+            <?php } ?>
+
+            <div class="col-6 col-md-2 col-lg-2">
+                <a class="admin-tile" href="javascript:load_form_div('<?= base_url('setting/template/diagnosis_print_settings/3') ?>','maindiv','Diagnosis Print Template');">
+                    <span class="tile-icon"><i class="bi bi-printer-fill"></i></span>
+                    <span>Diagnosis Print Template</span>
+                </a>
+            </div>
+        <?php } ?>
+
+        <?php if ($canDoctorDocumentPrintTemplate) { ?>
+            <div class="col-6 col-md-2 col-lg-2">
+                <a class="admin-tile" href="javascript:load_form_div('<?= base_url('setting/template/document_print_settings') ?>','maindiv','Document Print Template');">
+                    <span class="tile-icon"><i class="bi bi-file-earmark-pdf"></i></span>
+                    <span>Document Print Template</span>
                 </a>
             </div>
         <?php } ?>

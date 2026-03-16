@@ -78,18 +78,5 @@
 		</div>
 	  </div>
 	<?php }  ?>
-	<?php if ($this->ion_auth->in_group('DiagnosisIVF')) { ?>
-	  <div class="col-md-2">
-		<div class="thumbnail">
-		  <a href="javascript:load_form('/Lab_Report/lab_path/6','IVF Report');">
-			<img src="<?= base_url('assets/images/ivf_logo.png');?>" alt="IVF Report" style="width:100%" class="img-rounded">
-			<div class="caption">
-			  <H1>Ultra Sound.</H1>
-			</div>
-		  </a>
-		</div>
-	  </div>
-	<?php }  ?>
-	
 </div>
 </section>

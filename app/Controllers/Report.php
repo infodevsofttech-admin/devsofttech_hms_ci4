@@ -344,6 +344,130 @@ class Report extends BaseController
         ]);
     }
 
+    public function document_list()
+    {
+        $doctors = $this->db->table('doctor_master')
+            ->select('id, p_fname')
+            ->where('active', 1)
+            ->orderBy('p_fname', 'ASC')
+            ->get()
+            ->getResult();
+
+        return view('report/document_list', [
+            'doclist' => $doctors,
+        ]);
+    }
+
+    public function document_list_data(string $dateRange, int $drId, int $output = 0)
+    {
+        [$minRange, $maxRange] = $this->parseDateRange($dateRange);
+        $uhidFilter = trim((string) $this->request->getGet('uhid'));
+
+        if (! $this->db->tableExists('patient_doc') || ! $this->db->tableExists('doctor_master') || ! $this->db->tableExists('doc_format_master')) {
+            $content = '<div class="alert alert-danger mb-0">Document report tables are not available in this database.</div>';
+            return $this->response->setBody($content);
+        }
+
+        $patientTable = null;
+        if ($this->db->tableExists('patient_master_exten')) {
+            $patientTable = 'patient_master_exten';
+        } elseif ($this->db->tableExists('patient_master')) {
+            $patientTable = 'patient_master';
+        }
+
+        if ($patientTable === null) {
+            $content = '<div class="alert alert-danger mb-0">Patient master table not found for Document Issue Report.</div>';
+            return $this->response->setBody($content);
+        }
+
+        $docFields = $this->db->getFieldNames('patient_doc') ?? [];
+        $patientFields = $this->db->getFieldNames($patientTable) ?? [];
+        $doctorFields = $this->db->getFieldNames('doctor_master') ?? [];
+        $formatFields = $this->db->getFieldNames('doc_format_master') ?? [];
+
+        $dateIssueCol = $this->resolveExistingColumn($docFields, ['date_issue', 'issue_date', 'created_at']);
+        if ($dateIssueCol === null) {
+            $content = '<div class="alert alert-danger mb-0">Issue date column was not found in patient_doc table.</div>';
+            return $this->response->setBody($content);
+        }
+
+        $docPatientFkCol = $this->resolveExistingColumn($docFields, ['p_id', 'patient_id']);
+        $docDoctorFkCol = $this->resolveExistingColumn($docFields, ['dr_id', 'doc_id', 'doctor_id']);
+        $docFormatFkCol = $this->resolveExistingColumn($docFields, ['doc_format_id', 'format_id', 'df_id']);
+
+        if ($docPatientFkCol === null || $docDoctorFkCol === null || $docFormatFkCol === null) {
+            $content = '<div class="alert alert-danger mb-0">Document link columns are missing in patient_doc table.</div>';
+            return $this->response->setBody($content);
+        }
+
+        $patientPkCol = $this->resolveExistingColumn($patientFields, ['id']);
+        $patientNameCol = $this->resolveExistingColumn($patientFields, ['p_fname', 'patient_name', 'name']);
+        $patientRelativeCol = $this->resolveExistingColumn($patientFields, ['p_relative']);
+        $patientRelativeNameCol = $this->resolveExistingColumn($patientFields, ['p_rname', 'relative_name']);
+        $patientCodeCol = $this->resolveExistingColumn($patientFields, ['p_code', 'patient_code', 'uhid_no']);
+        $doctorPkCol = $this->resolveExistingColumn($doctorFields, ['id']);
+        $doctorNameCol = $this->resolveExistingColumn($doctorFields, ['p_fname', 'name', 'doc_name']);
+        $formatPkCol = $this->resolveExistingColumn($formatFields, ['df_id', 'id']);
+        $formatNameCol = $this->resolveExistingColumn($formatFields, ['doc_name', 'name', 'format_name']);
+
+        if ($patientPkCol === null || $patientNameCol === null || $doctorPkCol === null || $doctorNameCol === null || $formatPkCol === null || $formatNameCol === null) {
+            $content = '<div class="alert alert-danger mb-0">Required patient columns are missing for Document Issue Report.</div>';
+            return $this->response->setBody($content);
+        }
+
+        try {
+            $builder = $this->db->table('patient_doc d');
+            $builder->select('d.id AS doc_id')
+                ->select('f.' . $formatNameCol . ' AS doc_name', false)
+                ->select('doc.' . $doctorNameCol . ' AS dr_name', false)
+                ->select('doc.' . $doctorPkCol . ' AS dr_id', false)
+                ->select('p.' . $patientNameCol . ' AS p_fname', false)
+                ->select('p.' . $patientPkCol . ' AS id', false)
+                ->select($patientRelativeNameCol !== null ? ('p.' . $patientRelativeNameCol . ' AS p_rname') : "'' AS p_rname", false)
+                ->select($patientRelativeCol !== null ? ('p.' . $patientRelativeCol . ' AS p_relative') : "'' AS p_relative", false)
+                ->select($patientCodeCol !== null ? ('p.' . $patientCodeCol . ' AS p_code') : "'' AS p_code", false)
+                ->select('d.' . $dateIssueCol . ' AS date_issue', false)
+                ->select("DATE_FORMAT(d." . $dateIssueCol . ", '%d-%m-%Y') AS str_date_issue", false)
+                ->join($patientTable . ' p', 'p.' . $patientPkCol . '=d.' . $docPatientFkCol, 'inner')
+                ->join('doctor_master doc', 'd.' . $docDoctorFkCol . '=doc.' . $doctorPkCol, 'inner')
+                ->join('doc_format_master f', 'd.' . $docFormatFkCol . '=f.' . $formatPkCol, 'inner')
+                ->where('d.' . $dateIssueCol . ' >=', $minRange)
+                ->where('d.' . $dateIssueCol . ' <=', $maxRange)
+                ->orderBy('d.' . $dateIssueCol, 'DESC')
+                ->orderBy('d.id', 'DESC');
+
+            if ($drId > 0) {
+                $builder->where('doc.id', $drId);
+            }
+
+            if ($uhidFilter !== '' && $patientCodeCol !== null) {
+                $builder->like('p.' . $patientCodeCol, $uhidFilter);
+            }
+
+            $rows = $builder->get()->getResult();
+        } catch (\Throwable $e) {
+            log_message('error', 'Document Issue Report query failed: {message}', ['message' => $e->getMessage()]);
+            $content = '<div class="alert alert-danger mb-0">Unable to load Document Issue Report data. Please check database schema.</div>';
+            return $this->response->setBody($content);
+        }
+
+        $data = [
+            'rows' => $rows,
+            'min_range' => $minRange,
+            'max_range' => $maxRange,
+            'doctor_id' => $drId,
+            'uhid_filter' => $uhidFilter,
+        ];
+
+        $content = view('report/document_list_table', $data);
+        if ($output === 1) {
+            ExportExcel($content, 'document_List_' . date('YmdHis'));
+            return $this->response->setBody('');
+        }
+
+        return $this->response->setBody($content);
+    }
+
     public function diagnosis_report_data(
         string $dateRange,
         string $invoiceType = '0',
@@ -739,7 +863,7 @@ class Report extends BaseController
         [$minRange, $maxRange] = $this->parseDateRange($dateRange);
 
         $module = strtolower(trim($module));
-        if (! in_array($module, ['all', 'ipd', 'opd'], true)) {
+        if (! in_array($module, ['all', 'ipd', 'opd', 'radiology'], true)) {
             $module = 'all';
         }
 
@@ -759,7 +883,12 @@ class Report extends BaseController
             $opdRows = $this->getOpdNabhAuditRows($minRange, $maxRange);
         }
 
-        $rows = array_merge($ipdRows, $opdRows);
+        $radiologyRows = [];
+        if ($module === 'all' || $module === 'radiology') {
+            $radiologyRows = $this->getRadiologyNabhAuditRows($minRange, $maxRange);
+        }
+
+        $rows = array_merge($ipdRows, $opdRows, $radiologyRows);
 
         if ($status === 'critical-missing') {
             $rows = array_values(array_filter($rows, static function (array $row): bool {
@@ -801,12 +930,14 @@ class Report extends BaseController
             'all' => ['label' => 'Overall', 'total' => 0, 'compliant' => 0, 'critical_missing' => 0, 'avg_completion' => 0.0],
             'ipd' => ['label' => 'IPD Discharge', 'total' => 0, 'compliant' => 0, 'critical_missing' => 0, 'avg_completion' => 0.0],
             'opd' => ['label' => 'OPD Consult', 'total' => 0, 'compliant' => 0, 'critical_missing' => 0, 'avg_completion' => 0.0],
+            'radiology' => ['label' => 'Radiology Edit', 'total' => 0, 'compliant' => 0, 'critical_missing' => 0, 'avg_completion' => 0.0],
         ];
 
         $completionAccumulator = [
             'all' => 0.0,
             'ipd' => 0.0,
             'opd' => 0.0,
+            'radiology' => 0.0,
         ];
 
         foreach ($rows as $row) {
@@ -1185,6 +1316,118 @@ class Report extends BaseController
         }
 
         return $finalRows;
+    }
+
+    private function getRadiologyNabhAuditRows(string $minRange, string $maxRange): array
+    {
+        if (! $this->db->tableExists('lab_log')) {
+            return [];
+        }
+
+        $logFields = $this->db->getFieldNames('lab_log') ?? [];
+        foreach (['lab_repo_id', 'log_insert_time', 'log_type', 'log_Faults', 'comments'] as $requiredField) {
+            if (! in_array($requiredField, $logFields, true)) {
+                return [];
+            }
+        }
+
+        $builder = $this->db->table('lab_log lg')
+            ->select('lg.lab_repo_id as encounter_id')
+            ->select('lg.log_insert_time as encounter_datetime')
+            ->select('lg.log_by as edited_by')
+            ->select('lg.comments as comments')
+            ->where('lg.log_type', 'Report Edit')
+            ->where('lg.log_Faults', 'Radiology')
+            ->where('lg.log_insert_time >=', $minRange)
+            ->where('lg.log_insert_time <=', $maxRange)
+            ->orderBy('lg.id', 'DESC');
+
+        if ($this->db->tableExists('lab_request')) {
+            $labReqFields = $this->db->getFieldNames('lab_request') ?? [];
+            if (in_array('id', $labReqFields, true)) {
+                $builder->join('lab_request lr', 'lr.id = lg.lab_repo_id', 'left');
+
+                if (in_array('report_name', $labReqFields, true)) {
+                    $builder->select('lr.report_name as report_name');
+                } else {
+                    $builder->select("'' as report_name", false);
+                }
+
+                if (in_array('patient_id', $labReqFields, true) && $this->db->tableExists('patient_master')) {
+                    $patientFields = $this->db->getFieldNames('patient_master') ?? [];
+                    if (in_array('id', $patientFields, true)) {
+                        $builder->join('patient_master p', 'p.id = lr.patient_id', 'left');
+                        if (in_array('p_code', $patientFields, true)) {
+                            $builder->select('p.p_code as patient_code');
+                        } else {
+                            $builder->select("'' as patient_code", false);
+                        }
+                        if (in_array('p_fname', $patientFields, true)) {
+                            $builder->select('p.p_fname as patient_name');
+                        } else {
+                            $builder->select("'' as patient_name", false);
+                        }
+                    }
+                } else {
+                    $builder->select("'' as patient_code", false);
+                    $builder->select("'' as patient_name", false);
+                }
+            }
+        }
+
+        $resultRows = $builder->get()->getResultArray();
+        $finalRows = [];
+
+        foreach ($resultRows as $row) {
+            $reason = $this->extractEditReasonFromLabLogComment((string) ($row['comments'] ?? ''));
+            $hasReason = $reason !== '' && strtolower($reason) !== 'na';
+            $encounterCode = trim((string) ($row['report_name'] ?? ''));
+            if ($encounterCode === '') {
+                $encounterCode = 'REQ#' . (int) ($row['encounter_id'] ?? 0);
+            }
+
+            $finalRows[] = [
+                'module_key' => 'radiology',
+                'module_label' => 'Radiology Edit',
+                'encounter_id' => (int) ($row['encounter_id'] ?? 0),
+                'encounter_code' => $encounterCode,
+                'patient_code' => (string) ($row['patient_code'] ?? ''),
+                'patient_name' => (string) ($row['patient_name'] ?? ''),
+                'encounter_datetime' => (string) ($row['encounter_datetime'] ?? ''),
+                'ok_count' => $hasReason ? 1 : 0,
+                'total_count' => 1,
+                'completion_percent' => $hasReason ? 100.0 : 0.0,
+                'critical_missing_count' => $hasReason ? 0 : 1,
+                'critical_missing_labels' => $hasReason ? '-' : 'Edit reason missing',
+            ];
+        }
+
+        return $finalRows;
+    }
+
+    private function extractEditReasonFromLabLogComment(string $comment): string
+    {
+        $comment = trim($comment);
+        if ($comment === '') {
+            return '';
+        }
+
+        if (preg_match('/\[reason:(.*?)(?:\]\s*\[|\]$)/i', $comment, $matches) === 1) {
+            return trim((string) ($matches[1] ?? ''));
+        }
+
+        $startPos = stripos($comment, '[reason:');
+        if ($startPos === false) {
+            return '';
+        }
+
+        $raw = substr($comment, $startPos + 8);
+        $beforePos = stripos($raw, '[before:');
+        if ($beforePos !== false) {
+            $raw = substr($raw, 0, $beforePos);
+        }
+
+        return trim(str_replace(']', '', $raw));
     }
 
     private function buildOpdChecklistForAudit(array $row, array $availableCols): array

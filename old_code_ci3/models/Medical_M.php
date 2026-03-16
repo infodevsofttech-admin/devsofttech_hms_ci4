@@ -79,7 +79,6 @@
 			 return 0; 	
 		}
 
-
 		public function update_invoiceitem($data,$old_id_no)
 		{
 			$this->db->set($data); 

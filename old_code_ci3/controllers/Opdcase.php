@@ -14,7 +14,7 @@ class Opdcase extends MY_Controller {
 		$sql="select p.*,if(p.gender=1,'Male','Female') as xgender,
 		i.ins_company_name,i.short_name,i.opd_rate_direct,i.charge_rate_direct,
 		i.opd_credit,i.charge_credit,i.opd_allowed,i.charge_cash,i.id as ins_id,
-		IFNULL(GET_AGE_BY_DOB(dob),age) AS age 
+		GET_AGE_1(dob,age,age_in_month,estimate_dob) AS age 
 		from patient_master p left join hc_insurance i on p.insurance_id=i.id  where p.id=".$pno;
 		$query = $this->db->query($sql);
         $data['person_info']= $query->result();
@@ -83,7 +83,7 @@ class Opdcase extends MY_Controller {
         $data['opd_master']= $query->result();
 
 		$sql="select *,if(gender=1,'Male','Female') as xgender,
-		IFNULL(GET_AGE_BY_DOB(dob),age) AS age from patient_master where id='".$data['opd_master'][0]->p_id."' ";
+		GET_AGE_1(dob,age,age_in_month,estimate_dob) AS age from patient_master where id='".$data['opd_master'][0]->p_id."' ";
 
         $query = $this->db->query($sql);
         $data['patient_master']= $query->result();
@@ -145,7 +145,7 @@ class Opdcase extends MY_Controller {
         $data['opd_master']= $query->result();
 
 		$sql="select *,if(gender=1,'Male','Female') as xgender,
-		IFNULL(GET_AGE_BY_DOB(dob),age) AS age from patient_master where id='".$data['opd_master'][0]->p_id."' ";
+		GET_AGE_1(dob,age,age_in_month,estimate_dob) AS age from patient_master where id='".$data['opd_master'][0]->p_id."' ";
 
         $query = $this->db->query($sql);
         $data['patient_master']= $query->result();

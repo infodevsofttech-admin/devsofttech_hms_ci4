@@ -29,16 +29,6 @@
 					</a>
 				</li>
 				<li>
-					<a href="javascript:load_form_div('/Payment_Medical/payment_log','maindiv');">
-						<i class="fa fa-hand-pointer-o"></i> <span>Med. Payment Edit Logs</span>
-					</a>
-				</li>
-				<li>
-					<a href="javascript:load_form_div('/Medical_backpanel/invoice_item_log','maindiv');">
-						<i class="fa fa-hand-pointer-o"></i> <span>Med. Invoice Item Update Logs</span>
-					</a>
-				</li>
-				<li>
 					<a href="javascript:load_form_div('/Medical_backpanel/stock','maindiv');">
 						<i class="fa fa-hand-pointer-o"></i> <span>Stock Report</span>
 					</a>

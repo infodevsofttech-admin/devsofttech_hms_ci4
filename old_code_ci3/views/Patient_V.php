@@ -33,8 +33,7 @@
                                                 <option value="Mr.">Mr.</option>
                                                 <option value="Mrs.">Mrs.</option>
                                                 <option value="Ms.">Ms.</option>
-                                                <option value="Master" selected="selected">Master</option>
-                                                <option value="Baby">Baby</option>
+                                                <option value="Master">Master</option>
                                                 <option value="Baby Girl">Baby Girl</option>
                                                 <option value="Baby Boy">Baby Boy</option>
                                                 <option value="Mohd.">Mohd.</option>
@@ -86,7 +85,7 @@
                                 </div>
                                 <div class="row well well-sm">
                                     <?php
-									$chk_age=0;
+									$chk_age=1;
 									if($chk_age==1)
 									{
 										$checkbox_checked="checked";
@@ -100,7 +99,7 @@
 								?>
                                     <div class="col-md-3">
                                         <div class="form-group">
-                                            <label><input id="chk_age" name="chk_age" type="checkbox" > Estimate
+                                            <label><input id="chk_age" name="chk_age" type="checkbox" checked> Estimate
                                                 Age</label>
                                         </div>
                                     </div>
@@ -146,11 +145,11 @@
                                         <div class="form-group">
                                             <label>Relation</label>
                                             <select class="form-control input-sm" name="cbo_relation" id="cbo_relation">
-                                                <option value="W/o">W/o</option>
-                                                <option value="S/o">S/o</option>
-                                                <option value="D/o">D/o</option>
-                                                <option value="C/o">C/o</option>
-                                                <option value="M/o">M/o</option>
+                                                <option value="Wife of">Wife of</option>
+                                                <option value="Son of">Son of</option>
+                                                <option value="Daughter of">Daughter of</option>
+                                                <option value="Care of">Care of</option>
+                                                <option value="Mother of">Mother of</option>
                                             </select>
                                         </div>
                                     </div>

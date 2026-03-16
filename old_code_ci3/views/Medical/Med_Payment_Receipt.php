@@ -1,3 +1,9 @@
+﻿<?php
+$pharmacyName = defined('H_Med_Name') ? H_Med_Name : (defined('M_store') ? M_store : 'Medical Store');
+$pharmacyAddress = defined('H_Med_address_1') ? H_Med_address_1 : (defined('M_address') ? M_address : '');
+$pharmacyPhone = defined('H_Med_phone_No') ? H_Med_phone_No : (defined('M_Phone_Number') ? M_Phone_Number : '');
+$pharmacyGst = defined('H_Med_GST') ? H_Med_GST : '';
+?>
 <style>@page {
         margin-top: 4.2cm;
         margin-bottom: 1.2cm;
@@ -15,8 +21,8 @@
     <table style="font-size: 12px;" cellpadding="5">
 	<tr>
     	<td style="width: 60%;vertical-align: top;">
-		    <p align="center" style="font-size: 30px;" ><?=M_store?></p>
-		    <p align="center" style="font-size: 12px" ><?=M_address?>, Uttarakhand<br>
+		    <p align="center" style="font-size: 30px;" ><?=$pharmacyName?></p>
+		    <p align="center" style="font-size: 12px" ><?=$pharmacyAddress?>, Uttarakhand<br>
             <?php 
                 if(M_Phone_Number!='')
                 {
@@ -93,10 +99,10 @@
 <br/>
 <?php if(count($inv_med_group)>0) { ?>
 		 <b>Pharmacy Bill Amount at the Time  of Print Receipt </b>: 
-		 Rs. <?=$inv_med_group[0]->net_amount ?><br>
+		 Rs. <?=Round($inv_med_group[0]->net_amount) ?><br>
 		 <b>Total Amount Paid : </b> Rs. <?=$inv_med_group[0]->payment_received ?><br>
 		 <?php
-			$balance_amount=$inv_med_group[0]->net_amount-$inv_med_group[0]->payment_received;
+			$balance_amount=Round($inv_med_group[0]->net_amount-$inv_med_group[0]->payment_received);
 		
 		 ?>
 		 <b>Balance Amount : </b> Rs. <?=Round($balance_amount)?><br>
@@ -109,5 +115,5 @@
 <br/>
 <br/>
 <p align="right">
-	<b>For <?=M_store?> </b>
+	<b>For <?=$pharmacyName?> </b>
 </p>

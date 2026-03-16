@@ -65,9 +65,6 @@
 				</div>
 			</div>
 			</div>
-			<div id="date_show">
-				
-			</div>
 			<div class="row">
 				<input type="hidden" value="<?= $inv_id ?>" id="inv_id" name="inv_id" />
 				<div class="col-md-12">
@@ -126,7 +123,6 @@
 	$(document).ready(function() {
 		var lab_type = $('#lab_type').val();
 		var inv_id = $('#inv_id').val();
-		load_form_div('/Lab_Report/lab_date_show/'+inv_id+'/'+lab_type,'date_show');
 		load_form_div('/Lab_Report/xray_test_list/' + inv_id + '/' + lab_type, 'test_list');
 		//load_form_div('/Lab_Report/report_file_list/'+inv_id+'/'+lab_type,'file_show');
 	});

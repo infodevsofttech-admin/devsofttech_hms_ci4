@@ -153,7 +153,7 @@ class Report extends MY_Controller {
 		o.doc_name ,if(o.insurance_id>1,'Org.','Direct') as 'Type',
 		m.mode_desc as 'PayMode',o.opd_fee_gross_amount as 'GrossAmt',
 		o.opd_discount as Discount,	o.opd_fee_amount as 'FeeAmt',
-		o.prepared_by,IFNULL(GET_AGE_BY_DOB(dob),age)  as Age ";
+		o.prepared_by,GET_AGE_1(dob,age,age_in_month,estimate_dob)  as Age ";
 		
 		$sql_from=" from opd_master o join payment_mode m join patient_master p on o.payment_mode=m.id and p.id=o.p_id";
 		

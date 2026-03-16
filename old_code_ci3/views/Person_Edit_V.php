@@ -36,8 +36,7 @@
                                     <option value="Mr." <?=combo_checked("Mr.",$data[0]->title)?>>Mr.</option>
                                     <option value="Mrs." <?=combo_checked("Mrs.",$data[0]->title)?>>Mrs.</option>
                                     <option value="Ms." <?=combo_checked("Ms.",$data[0]->title)?>>Ms.</option>
-                                    <option value="Master" <?=combo_checked("Master",$data[0]->title)?>>Master</option>
-                                    <option value="Baby" <?=combo_checked("Baby",$data[0]->title)?>>Baby</option>
+                                    <option value="Master" <?=combo_checked("Master.",$data[0]->title)?>>Master</option>
                                     <option value="Baby Girl" <?=combo_checked("Baby Girl",$data[0]->title)?>>Baby Girl
                                     </option>
                                     <option value="Baby Boy" <?=combo_checked("Baby Boy",$data[0]->title)?>>Baby Boy
@@ -151,15 +150,15 @@
                             <div class="form-group">
                                 <label>Relation</label>
                                 <select class="form-control input-sm" name="cbo_relation" id="cbo_relation">
-                                    <option value="W/o" <?=combo_checked("W/o",$data[0]->p_relative)?>>W/o
+                                    <option value="Wife of" <?=combo_checked("Wife of",$data[0]->p_relative)?>>Wife of
                                     </option>
-                                    <option value="S/o" <?=combo_checked("S/o",$data[0]->p_relative)?>>S/o
+                                    <option value="Son of" <?=combo_checked("Son of",$data[0]->p_relative)?>>Son of
                                     </option>
-                                    <option value="D/o" <?=combo_checked("D/o",$data[0]->p_relative)?>>
-                                        D/o</option>
-                                    <option value="C/o" <?=combo_checked("C/o",$data[0]->p_relative)?>>C/o
+                                    <option value="Daughter of" <?=combo_checked("Daughter of",$data[0]->p_relative)?>>
+                                        Daughter of</option>
+                                    <option value="Care of" <?=combo_checked("Care of",$data[0]->p_relative)?>>Care of
                                     </option>
-                                    <option value="M/o" <?=combo_checked("M/o",$data[0]->p_relative)?>>M/o
+                                    <option value="Mother of" <?=combo_checked("Mother of",$data[0]->p_relative)?>>Mother of
                                     </option>
                                 </select>
                             </div>
@@ -265,7 +264,7 @@
 function onchange_title() {
     var d = $('#cbo_title').val();
 
-    if (d == "Mr." || d == "Master" || d == "Baby Boy" || d == "Mohd.") {
+    if (d == "Mr." || d == "Master" || d == "Baby Boy") {
         $("#options_gender1").prop("checked", true);
     } else {
         $("#options_gender2").prop("checked", true);

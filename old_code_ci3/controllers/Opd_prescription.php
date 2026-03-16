@@ -360,7 +360,7 @@ class Opd_prescription extends MY_Controller{
 	{
 		$data['p_id']=$p_id;
 
-		$sql="select *,IFNULL(GET_AGE_BY_DOB(dob),age) as str_age,
+		$sql="select *,GET_AGE_1(dob,age,age_in_month,estimate_dob) as str_age,
 		Date_Format(insert_date,'%Y-%m-%d') as str_regdate,
 		if(gender=1,'Male','Female') as xgender ,
 		if(date_add(insert_date,interval 12 hour)>sysdate(),1,0) as p_edit
@@ -881,104 +881,6 @@ class Opd_prescription extends MY_Controller{
 
 			echo json_encode($row_set); //format the array into json data
 		}
-	}
-
-	// Enhanced medicine autocomplete API
-	public function get_medicine_autocomplete()
-	{
-		$this->load->helper('url');
-		
-		// Get search parameters
-		$query = $this->input->get('query') ?: $this->input->get('term');
-		$category = $this->input->get('category') ?: 'medicine_name';
-		$limit = (int)($this->input->get('limit') ?: 10);
-		
-		if (empty($query) || strlen($query) < 1) {
-			echo json_encode(['success' => false, 'data' => []]);
-			return;
-		}
-
-		$user = $this->ion_auth->user()->row();
-		$doc_id = $user->id;
-		
-		$response_data = [];
-		
-		switch($category) {
-			case 'medicine_name':
-				$sql = "SELECT DISTINCT item_name as text, 'global' as scope, id as med_id, formulation, genericname 
-						FROM opd_med_master 
-						WHERE item_name LIKE ? 
-						ORDER BY item_name 
-						LIMIT ?";
-				$result = $this->db->query($sql, ['%' . $query . '%', $limit]);
-				
-				foreach($result->result() as $row) {
-					$response_data[] = [
-						'text' => $row->text,
-						'scope' => $row->scope,
-						'med_id' => $row->med_id,
-						'formulation' => $row->formulation,
-						'genericname' => $row->genericname
-					];
-				}
-				break;
-				
-			case 'dosage':
-				$dosage_patterns = [
-					'1-0-1', '1-1-1', '0-1-0', '1-0-0', '0-0-1', '2-1-1', '1-1-2',
-					'1/2-0-1/2', '1/2-1/2-1/2', '2-0-2', '1-2-1', '3-2-1', '1-1-1-1',
-					'2-2-2', '1/4-1/4-1/4', '3/4-3/4-3/4', 'As required', 'SOS'
-				];
-				foreach($dosage_patterns as $pattern) {
-					if (stripos($pattern, $query) !== false) {
-						$response_data[] = ['text' => $pattern, 'scope' => 'global'];
-					}
-				}
-				break;
-				
-			case 'dosage_when':
-				$when_options = [
-					'Before meal', 'After meal', 'With meal', 'Empty stomach', 
-					'At bedtime', 'Morning', 'Evening', 'As directed'
-				];
-				foreach($when_options as $option) {
-					if (stripos($option, $query) !== false) {
-						$response_data[] = ['text' => $option, 'scope' => 'global'];
-					}
-				}
-				break;
-				
-			case 'dosage_frequency':
-				$frequency_options = [
-					'Daily', 'Twice daily', 'Thrice daily', 'Four times daily',
-					'Once weekly', 'Twice weekly', 'Every other day', 'As needed',
-					'Every 4 hours', 'Every 6 hours', 'Every 8 hours', 'Every 12 hours'
-				];
-				foreach($frequency_options as $option) {
-					if (stripos($option, $query) !== false) {
-						$response_data[] = ['text' => $option, 'scope' => 'global'];
-					}
-				}
-				break;
-				
-			case 'dosage_duration':
-				$duration_options = [
-					'3 days', '5 days', '7 days', '10 days', '14 days', '21 days', '30 days',
-					'1 week', '2 weeks', '3 weeks', '1 month', '2 months', '3 months',
-					'Till symptoms subside', 'Continue as advised'
-				];
-				foreach($duration_options as $option) {
-					if (stripos($option, $query) !== false) {
-						$response_data[] = ['text' => $option, 'scope' => 'global'];
-					}
-				}
-				break;
-		}
-		
-		echo json_encode([
-			'success' => true, 
-			'data' => array_slice($response_data, 0, $limit)
-		]);
 	}
  
 	public function opd_prescription_save()

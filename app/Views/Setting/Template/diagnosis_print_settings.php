@@ -90,19 +90,19 @@ $panelTitle = $modalityLabel . ' Print Template';
                     </div>
                     <div class="col-md-2">
                         <label class="form-label small">Top Margin (cm)</label>
-                        <input type="number" step="0.1" min="0" max="25" class="form-control form-control-sm" name="page_margin_top_cm" value="<?= esc((string) ($row['page_margin_top_cm'] ?? '1.2')) ?>">
+                        <input type="number" step="0.1" min="0" max="25" class="form-control form-control-sm" name="page_margin_top_cm" value="<?= esc((string) ($row['page_margin_top_cm'] ?? '6.1')) ?>">
                     </div>
                     <div class="col-md-2">
                         <label class="form-label small">Bottom Margin (cm)</label>
-                        <input type="number" step="0.1" min="0" max="25" class="form-control form-control-sm" name="page_margin_bottom_cm" value="<?= esc((string) ($row['page_margin_bottom_cm'] ?? '1.2')) ?>">
+                        <input type="number" step="0.1" min="0" max="25" class="form-control form-control-sm" name="page_margin_bottom_cm" value="<?= esc((string) ($row['page_margin_bottom_cm'] ?? '2.5')) ?>">
                     </div>
                     <div class="col-md-2">
                         <label class="form-label small">Left Margin (cm)</label>
-                        <input type="number" step="0.1" min="0" max="25" class="form-control form-control-sm" name="page_margin_left_cm" value="<?= esc((string) ($row['page_margin_left_cm'] ?? '1.0')) ?>">
+                        <input type="number" step="0.1" min="0" max="25" class="form-control form-control-sm" name="page_margin_left_cm" value="<?= esc((string) ($row['page_margin_left_cm'] ?? '0.7')) ?>">
                     </div>
                     <div class="col-md-2">
                         <label class="form-label small">Right Margin (cm)</label>
-                        <input type="number" step="0.1" min="0" max="25" class="form-control form-control-sm" name="page_margin_right_cm" value="<?= esc((string) ($row['page_margin_right_cm'] ?? '1.0')) ?>">
+                        <input type="number" step="0.1" min="0" max="25" class="form-control form-control-sm" name="page_margin_right_cm" value="<?= esc((string) ($row['page_margin_right_cm'] ?? '0.7')) ?>">
                     </div>
                     <div class="col-md-2">
                         <label class="form-label small">Header Margin (cm)</label>

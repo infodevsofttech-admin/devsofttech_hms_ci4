@@ -69,7 +69,7 @@ class Report2 extends MY_Controller {
 		$discount=$ipdmaster[0]->Discount;
 		
 		$sql="select *,if(gender=1,'Male','Female') as xgender,
-		IFNULL(GET_AGE_BY_DOB(dob),age)   AS age from patient_master where id='".$pno."' ";
+		GET_AGE_1(dob,age,age_in_month,estimate_dob)   AS age from patient_master where id='".$pno."' ";
 
         $query = $this->db->query($sql);
         $person_info= $query->result();
@@ -309,14 +309,12 @@ class Report2 extends MY_Controller {
 					
 					$table_body='';
 					$table_Doctor_Total=0.00;
-					$table_qty_total=0.00;
 					$table_Diagnosis_Head_Total=0.00;
 					$table_Grand_Total=0.00;
 
 					$table_Doctor_act_Total=0.00;
 					$table_Diagnosis_act_Head_Total=0.00;
 					$table_Grand_act_Total=0.00;
-					$table_grand_qty_total=0.00;
 
 					//echo $sql_f_all.$sql_from.$sql_where.$gwhere.'  '.$sql_order.'<br><hr>';
 					$doc_name_head='';
@@ -357,12 +355,10 @@ class Report2 extends MY_Controller {
 						$table_Doctor_Total=$table_Doctor_Total+$rowdata[$i]->Total_Amount;
 						$table_Diagnosis_Head_Total=$table_Diagnosis_Head_Total+$rowdata[$i]->Total_Amount;
 						$table_Grand_Total=$table_Grand_Total+$rowdata[$i]->Total_Amount;
-						$table_qty_total=$table_qty_total+$rowdata[$i]->No_qty;
 
 						$table_Doctor_act_Total=$table_Doctor_act_Total+$rowdata[$i]->Total_Act_Amount;
 						$table_Diagnosis_act_Head_Total=$table_Diagnosis_act_Head_Total+$rowdata[$i]->Total_Act_Amount;
 						$table_Grand_act_Total=$table_Grand_act_Total+$rowdata[$i]->Total_Act_Amount;
-						$table_grand_qty_total=$table_grand_qty_total+$rowdata[$i]->No_qty;
 						
 						if($Diagnosis_id<1)
 						{
@@ -381,7 +377,6 @@ class Report2 extends MY_Controller {
 									
 									$table_Diagnosis_Head_Total=0.00;
 									$table_Diagnosis_act_Head_Total=0.00;
-									$table_qty_total=0.00;
 								}
 							}else{
 								$table_body.='<tr>';
@@ -395,7 +390,6 @@ class Report2 extends MY_Controller {
 									
 									$table_Diagnosis_Head_Total=0.00;
 									$table_Diagnosis_act_Head_Total=0.00;
-									$table_qty_total=0.00;
 							}
 						
 						}
@@ -407,30 +401,28 @@ class Report2 extends MY_Controller {
 								$table_body.='<tr>';
 								$table_body.='<td></td>';
 								$table_body.='<td></td>';
+								$table_body.='<td></td>';
 								$table_body.='<td>Total Doctor Head</td>';
-								$table_body.='<td>'.$table_qty_total.'</td>';
 								$table_body.='<td align="right">'.$table_Doctor_Total.'</td>';
 								$table_body.='<td align="right">'.$table_Doctor_act_Total.'</td>';
 								$table_body.='</tr>';
 								
 								$table_Doctor_Total=0.00;
 								$table_Doctor_act_Total=0.00;
-								$table_qty_total=0.00;
-
+								
 							}
 						}else{
 								$table_body.='<tr>';
 								$table_body.='<td></td>';
 								$table_body.='<td></td>';
+								$table_body.='<td></td>';
 								$table_body.='<td>Total Doctor Head</td>';
-								$table_body.='<td>'.$table_qty_total.'</td>';
 								$table_body.='<td align="right">'.$table_Doctor_Total.'</td>';
 								$table_body.='<td align="right">'.$table_Doctor_act_Total.'</td>';
 								$table_body.='</tr>';
 								
 								$table_Doctor_Total=0.00;
 								$table_Doctor_act_Total=0.00;
-								$table_qty_total=0.00;
 						}
 						
 					}
@@ -439,7 +431,7 @@ class Report2 extends MY_Controller {
 					$table_footer.='<td ><b>Total</b></td>';
 					$table_footer.='<td align="right"></td>';
 					$table_footer.='<td align="right"></td>';
-					$table_footer.='<td align="right">'.$table_grand_qty_total.'</td>';
+					$table_footer.='<td align="right"></td>';
 					$table_footer.='<td align="right">'.$table_Grand_Total.'</td>';
 					$table_footer.='<td align="right">'.$table_Grand_act_Total.'</td>';
 					$table_footer.='</tr>';
@@ -849,7 +841,6 @@ class Report2 extends MY_Controller {
 					
 	}
 	
-
 	public function report_Diagnosis_item_count($opd_date_range,$emp_name_id,$Diagnosis_id)
 		{
 			$sql_f_all = "select m.invoice_code,p.p_code,p.p_fname,y.group_desc,t.item_name,t.item_qty, 

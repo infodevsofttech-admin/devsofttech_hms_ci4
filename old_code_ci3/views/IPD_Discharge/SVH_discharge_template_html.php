@@ -138,6 +138,9 @@
 <?php if (isset($discharge_general_exam)) { ?>
     <?= $discharge_general_exam ?>
 <?php } ?>
+<?php if (isset($discharge_sys_exam)) { ?>
+    <?= $discharge_sys_exam ?>
+<?php } ?>
 <?php if (isset($lab_test_content)) { ?>
     <?= $lab_test_content ?>
 <?php } ?>

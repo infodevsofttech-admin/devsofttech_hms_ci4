@@ -39,7 +39,7 @@
     <p align="center"></p>
 </htmlpageheader>
 <htmlpagefooter name="myFooter">
-    <p align="center"> </p>
+    <p align="center">Print Time : <?= date('d-m-Y H:i:s') ?></p>
 </htmlpagefooter>
 <div class="head_part">
     <table width="100%" border="0" style="font-size:10pt;">
@@ -127,17 +127,6 @@
     }
     echo '<br/>';
     
-    //echo $doctor;
-echo '<br/>';
-            
-            echo '<p align="Right">';
-            echo '<br/>';
-            echo '<br/>';
-            echo '<br/>';
-            echo '<b>'.$doc_name.'</b>';
-            echo '<br/>';
-            echo $doc_sign;
-            echo '</p>';
-
+    echo $doctor;
     ?>
 </div>

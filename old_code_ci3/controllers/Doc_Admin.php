@@ -8,11 +8,15 @@ class Doc_Admin extends MY_Controller {
 	}
 
 	
+
 	public function doc_list()
 	{
 		$sql="select * from doc_format_master where active=1";
 		$query = $this->db->query($sql);
         $data['doc_master']= $query->result();
+
+		echo 'Test';
+
 
 		$this->load->view('DocAdmin/doc_list',$data);
 	}

@@ -97,15 +97,20 @@
 								echo '<td>'.$row->Package.'</td>';
 								echo '<td>'.$row->net_amount.'</td>';
 								echo '<td>';
-								if($ipd_master[0]->ipd_status==0 || $this->ion_auth->in_group('admin'))
+								if($ipd_master[0]->ipd_status==0)
 								{
 									echo '<button type="button" class="btn btn-primary"  onclick="edit_invoice('.$row->id.')">Edit</button>';
 									if($row->group_invoice_id==0 && $row->ipd_credit==0 )
 									{
 										echo '<button type="button" class="btn btn-primary" id="btn_group" onclick="Med_Group('.$row->id.','.$row->ipd_id.')">Group</button>';
 									}
+								}else{
+									if($row->ipd_credit==0 )
+									{
+										echo '<button type="button" class="btn btn-primary"  onclick="edit_invoice('.$row->id.')">Edit</button>';
+									}
+									
 								}
-
 								echo '<a href="/Medical_Print/invoice_print_single_bill/'.$row->id.'" target="_blank" class="btn btn-default"><i class="fa fa-print"></i> Print</a>';
 								
 								echo '</td>';

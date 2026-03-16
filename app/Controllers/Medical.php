@@ -551,6 +551,55 @@ class Medical extends BaseController
         return $this->response->setJSON($result);
     }
 
+    public function get_batch($itemId)
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        $itemId = (int) $itemId;
+        $term = trim((string) $this->request->getGet('term'));
+
+        if ($itemId <= 0 || ! $this->db->tableExists('purchase_invoice_item')) {
+            return $this->response->setJSON([]);
+        }
+
+        $itemFields = $this->db->getFieldNames('purchase_invoice_item') ?? [];
+        if (! in_array('batch_no', $itemFields, true) || ! in_array('item_code', $itemFields, true)) {
+            return $this->response->setJSON([]);
+        }
+
+        $builder = $this->db->table('purchase_invoice_item')
+            ->select('batch_no')
+            ->where('item_code', $itemId)
+            ->where('batch_no !=', '');
+
+        if ($term !== '') {
+            $builder->like('batch_no', $term, 'after');
+        }
+
+        $rows = $builder
+            ->groupBy('batch_no')
+            ->orderBy('batch_no', 'ASC')
+            ->limit(100)
+            ->get()
+            ->getResultArray();
+
+        $result = [];
+        foreach ($rows as $row) {
+            $batch = (string) ($row['batch_no'] ?? '');
+            if ($batch === '') {
+                continue;
+            }
+            $result[] = [
+                'label' => $batch,
+                'value' => $batch,
+            ];
+        }
+
+        return $this->response->setJSON($result);
+    }
+
     public function get_drug_master()
     {
         if ($deny = $this->ensurePharmacyAccess()) {
@@ -5978,7 +6027,484 @@ class Medical extends BaseController
             return $deny;
         }
 
-        return view('medical/placeholder', ['title' => 'Purchase Return']);
+        return view('medical/purchase_return');
+    }
+
+    public function purchase_return_new()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        $supplierData = [];
+        if ($this->db->tableExists('med_supplier')) {
+            $supplierData = $this->db->table('med_supplier')
+                ->orderBy('name_supplier', 'ASC')
+                ->get()
+                ->getResult();
+        }
+
+        return view('medical/new_purchase_return_invoice', [
+            'supplier_data' => $supplierData,
+        ]);
+    }
+
+    public function purchase_return_invoice()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        $rows = [];
+        if ($this->db->tableExists('purchase_return_invoice')) {
+            $searchRaw = (string) ($this->request->getPost('txtsearch') ?? $this->request->getGet('txtsearch'));
+            $search = preg_replace('/[^A-Za-z0-9_ \-]/', '', trim($searchRaw));
+            $invNoCol = $this->purchaseReturnInvoiceNoColumn();
+
+            $builder = $this->db->table('purchase_return_invoice p')
+                ->select("p.id, p.{$invNoCol} AS p_r_invoice_no, p.date_of_invoice, DATE_FORMAT(p.date_of_invoice,'%d-%m-%Y') AS str_date_of_invoice, p.sid, IFNULL(s.name_supplier,'-') AS name_supplier, IFNULL(s.short_name,'-') AS short_name", false)
+                ->join('med_supplier s', 'p.sid=s.sid', 'left');
+
+            if ($search !== '') {
+                $builder->groupStart();
+                $builder->like("p.{$invNoCol}", $search);
+                if (ctype_digit($search)) {
+                    $builder->orWhere('p.id', (int) $search);
+                }
+                $builder->groupEnd();
+            }
+
+            $rows = $builder
+                ->orderBy('p.id', 'DESC')
+                ->limit(50)
+                ->get()
+                ->getResult();
+        }
+
+        return view('medical/purchase_return_supplier_list', [
+            'purchase_return_invoice' => $rows,
+        ]);
+    }
+
+    public function create_purchase_return()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        if (! $this->request->isAJAX() || ! $this->db->tableExists('purchase_return_invoice')) {
+            return $this->response->setJSON([
+                'insertid' => 0,
+                'show_text' => 'Invalid request',
+            ]);
+        }
+
+        $sid = (int) ($this->request->getPost('input_supplier') ?? 0);
+        $invoiceDate = $this->normalizeUiDate((string) ($this->request->getPost('datepicker_invoice') ?? ''));
+
+        $errors = [];
+        if ($sid <= 0) {
+            $errors[] = 'Supplier is required';
+        }
+        if ($invoiceDate === '') {
+            $errors[] = 'Invoice date is invalid';
+        }
+
+        if ($errors !== []) {
+            return $this->response->setJSON([
+                'insertid' => 0,
+                'show_text' => implode('<br>', array_map('esc', $errors)),
+            ]);
+        }
+
+        $fields = $this->db->getFieldNames('purchase_return_invoice') ?? [];
+        $insert = [];
+        if (in_array('sid', $fields, true)) {
+            $insert['sid'] = $sid;
+        }
+        if (in_array('date_of_invoice', $fields, true)) {
+            $insert['date_of_invoice'] = $invoiceDate;
+        }
+        if (in_array('status', $fields, true)) {
+            $insert['status'] = 0;
+        }
+
+        $this->db->table('purchase_return_invoice')->insert($insert);
+        $insertId = (int) $this->db->insertID();
+
+        if ($insertId > 0 && in_array('p_r_invoice_no', $fields, true)) {
+            $invoiceNo = 'PR' . date('ym') . str_pad((string) ($insertId % 1000), 3, '0', STR_PAD_LEFT);
+            $this->db->table('purchase_return_invoice')
+                ->where('id', $insertId)
+                ->update(['p_r_invoice_no' => $invoiceNo]);
+        }
+
+        return $this->response->setJSON([
+            'insertid' => $insertId,
+            'show_text' => $insertId > 0 ? 'Added Successfully' : 'Unable to create purchase return invoice',
+        ]);
+    }
+
+    public function purchase_return_invoice_edit($invId)
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        $invId = (int) $invId;
+        if ($invId <= 0 || ! $this->db->tableExists('purchase_return_invoice')) {
+            return '<div class="alert alert-warning m-2">Purchase return invoice not found.</div>';
+        }
+
+        $invNoCol = $this->purchaseReturnInvoiceNoColumn();
+        $invoice = $this->db->table('purchase_return_invoice p')
+            ->select("p.id, p.{$invNoCol} AS Invoice_no, p.date_of_invoice, DATE_FORMAT(p.date_of_invoice,'%d/%m/%Y') AS str_date_of_invoice, p.sid, p.status AS inv_status, IFNULL(s.name_supplier,'-') AS name_supplier, IFNULL(s.short_name,'-') AS short_name, IFNULL(s.gst_no,'-') AS gst_no", false)
+            ->join('med_supplier s', 'p.sid=s.sid', 'left')
+            ->where('p.id', $invId)
+            ->get()
+            ->getRow();
+
+        if (! $invoice) {
+            return '<div class="alert alert-warning m-2">Purchase return invoice not found.</div>';
+        }
+
+        $items = $this->fetchPurchaseReturnItems($invId);
+        $content = view('medical/purchase_return_invoice_item', [
+            'purchase_return_invoice_item' => $items,
+        ]);
+
+        return view('medical/purchase_return_invoice_edit', [
+            'purchase_return_invoice' => $invoice,
+            'purchase_return_invoice_item' => $items,
+            'content' => $content,
+        ]);
+    }
+
+    public function purchase_return_invoice_item_list($invId)
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        $invId = (int) $invId;
+        $items = $this->fetchPurchaseReturnItems($invId);
+        $invoice = null;
+        if ($invId > 0 && $this->db->tableExists('purchase_return_invoice')) {
+            $invoice = $this->db->table('purchase_return_invoice')->where('id', $invId)->get()->getRow();
+        }
+
+        return view('medical/purchase_return_invoice_item', [
+            'purchase_return_invoice_item' => $items,
+            'purchase_return_invoice' => $invoice ? [$invoice] : [],
+        ]);
+    }
+
+    public function purchase_invoice_product($suppId)
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        return view('medical/purchase_return_product_search', [
+            'supp_id' => (int) $suppId,
+        ]);
+    }
+
+    public function purchase_invoice_old($suppId)
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        $suppId = (int) $suppId;
+        $searchRaw = (string) ($this->request->getPost('txtsearch') ?? $this->request->getGet('txtsearch'));
+        $search = preg_replace('/[^A-Za-z0-9_ \-]/', '', trim($searchRaw));
+
+        $rows = [];
+        if (
+            $suppId > 0
+            && $this->db->tableExists('purchase_invoice')
+            && $this->db->tableExists('purchase_invoice_item')
+            && $this->db->tableExists('med_supplier')
+        ) {
+            $itemFields = $this->db->getFieldNames('purchase_invoice_item') ?? [];
+
+            $curQtyExpr = '(IFNULL(i.total_unit,0)-IFNULL(i.total_sale_unit,0)-IFNULL(i.total_lost_unit,0)-IFNULL(i.total_return_unit,0))';
+            $builder = $this->db->table('purchase_invoice p')
+                ->select("p.id AS pur_id, p.Invoice_no, p.date_of_invoice, IF(i.expiry_date<DATE_ADD(CURDATE(),INTERVAL 3 MONTH),1,0) AS isExp, DATE_FORMAT(p.date_of_invoice,'%d-%m-%Y') AS str_date_of_invoice, DATE_FORMAT(i.expiry_date,'%m-%Y') AS exp_date, p.sid, IFNULL(s.name_supplier,'-') AS name_supplier, IFNULL(s.short_name,'-') AS short_name, IFNULL(s.gst_no,'-') AS gst_no, IFNULL(p.T_Net_Amount,0) AS tamount, i.*, {$curQtyExpr} AS cur_qty", false)
+                ->join('med_supplier s', 'p.sid=s.sid', 'inner')
+                ->join('purchase_invoice_item i', 'p.id=i.purchase_id', 'inner')
+                ->where('s.sid', $suppId)
+                ->where('p.date_of_invoice >= DATE_ADD(CURDATE(), INTERVAL -1 YEAR)', null, false)
+                ->where("{$curQtyExpr} > 0", null, false);
+
+            if (in_array('remove_item', $itemFields, true)) {
+                $builder->where('i.remove_item', 0);
+            }
+            if (in_array('item_return', $itemFields, true)) {
+                $builder->where('i.item_return', 0);
+            }
+
+            if ($search !== '') {
+                $builder->groupStart();
+                $builder->like('p.Invoice_no', $search);
+                if (ctype_digit($search)) {
+                    $builder->orWhere('p.id', (int) $search);
+                }
+                $builder->groupEnd();
+            }
+
+            $rows = $builder
+                ->orderBy('p.id', 'DESC')
+                ->get()
+                ->getResult();
+        }
+
+        return view('medical/purchase_return_old_invoice_list', [
+            'purchase_list' => $rows,
+        ]);
+    }
+
+    public function purchase_return_add_remove_item()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        $invId = (int) ($this->request->getPost('inv_id') ?? 0);
+        $itemId = (int) ($this->request->getPost('itemid') ?? 0);
+        $rqty = (float) ($this->request->getPost('rqty') ?? 0);
+        $rbatchNo = trim((string) ($this->request->getPost('rbatch_no') ?? ''));
+        $rexpiryDt = trim((string) ($this->request->getPost('rexpiry_dt') ?? ''));
+
+        $respond = function (int $update, string $msgText) use ($invId) {
+            return $this->response->setJSON([
+                'update' => $update,
+                'msg_text' => $msgText,
+                'content' => view('medical/purchase_return_invoice_item', [
+                    'purchase_return_invoice_item' => $this->fetchPurchaseReturnItems($invId),
+                ]),
+            ]);
+        };
+
+        if (
+            $invId <= 0
+            || $itemId <= 0
+            || $rqty <= 0
+            || ! $this->db->tableExists('purchase_return_invoice')
+            || ! $this->db->tableExists('purchase_return_invoice_item')
+            || ! $this->db->tableExists('purchase_invoice_item')
+        ) {
+            return $respond(0, 'Invalid return input');
+        }
+
+        $invoice = $this->db->table('purchase_return_invoice')->where('id', $invId)->get()->getRow();
+        if (! $invoice) {
+            return $respond(0, 'Purchase return invoice not found');
+        }
+
+        $sourceItem = $this->db->table('purchase_invoice_item')->where('id', $itemId)->get()->getRow();
+        if (! $sourceItem) {
+            return $respond(0, 'No item found');
+        }
+
+        $totalUnit = (float) ($sourceItem->total_unit ?? 0);
+        $totalSaleUnit = (float) ($sourceItem->total_sale_unit ?? 0);
+        $totalReturnUnit = (float) ($sourceItem->total_return_unit ?? 0);
+        $totalLostUnit = (float) ($sourceItem->total_lost_unit ?? 0);
+        $curQty = $totalUnit - $totalSaleUnit - $totalReturnUnit - $totalLostUnit;
+
+        if ($curQty <= 0) {
+            return $respond(0, 'Current Item Qty is 0');
+        }
+        if ($rqty > $curQty) {
+            return $respond(0, 'Current Item Qty is ' . rtrim(rtrim((string) $curQty, '0'), '.'));
+        }
+
+        $fields = $this->db->getFieldNames('purchase_return_invoice_item') ?? [];
+        $insert = [];
+        if (in_array('purchase_inv_id', $fields, true)) {
+            $insert['purchase_inv_id'] = $invId;
+        }
+        if (in_array('purchase_item_id', $fields, true)) {
+            $insert['purchase_item_id'] = $itemId;
+        }
+        if (in_array('item_code', $fields, true)) {
+            $insert['item_code'] = $sourceItem->item_code ?? 0;
+        }
+        if (in_array('Item_name', $fields, true)) {
+            $insert['Item_name'] = $sourceItem->Item_name ?? ($sourceItem->item_name ?? '');
+        }
+        if (in_array('batch_no_r', $fields, true)) {
+            $insert['batch_no_r'] = $rbatchNo;
+        }
+        if (in_array('expiry_date_r', $fields, true)) {
+            $insert['expiry_date_r'] = $rexpiryDt !== '' ? $rexpiryDt : null;
+        }
+        if (in_array('qty', $fields, true)) {
+            $insert['qty'] = $rqty;
+        }
+
+        $this->db->table('purchase_return_invoice_item')->insert($insert);
+        $newId = (int) $this->db->insertID();
+        if ($newId <= 0) {
+            return $respond(0, 'Item not added');
+        }
+
+        $this->adjustPurchaseItemReturnUnit($itemId, $rqty);
+        return $respond(1, 'Item Added');
+    }
+
+    public function purchase_return_remove_item_invoice($itemId)
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        $itemId = (int) $itemId;
+        if ($itemId <= 0 || ! $this->db->tableExists('purchase_return_invoice_item')) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'msg_text' => 'Invalid return item',
+                'content' => '',
+            ]);
+        }
+
+        $row = $this->db->table('purchase_return_invoice_item')->where('id', $itemId)->get()->getRow();
+        if (! $row) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'msg_text' => 'No item found',
+                'content' => '',
+            ]);
+        }
+
+        $invId = (int) ($row->purchase_inv_id ?? 0);
+        $sourceItemId = (int) ($row->purchase_item_id ?? 0);
+        $qty = (float) ($row->qty ?? 0);
+
+        $this->db->table('purchase_return_invoice_item')->where('id', $itemId)->delete();
+        if ($sourceItemId > 0 && $qty > 0) {
+            $this->adjustPurchaseItemReturnUnit($sourceItemId, -1 * $qty);
+        }
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'msg_text' => 'Item Removed',
+            'content' => view('medical/purchase_return_invoice_item', [
+                'purchase_return_invoice_item' => $this->fetchPurchaseReturnItems($invId),
+            ]),
+        ]);
+    }
+
+    public function print_purchase_return($invId)
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        $invId = (int) $invId;
+        if ($invId <= 0 || ! $this->db->tableExists('purchase_return_invoice')) {
+            return $this->response->setStatusCode(404)->setBody('Purchase return invoice not found');
+        }
+
+        $invNoCol = $this->purchaseReturnInvoiceNoColumn();
+        $invoice = $this->db->table('purchase_return_invoice p')
+            ->select("p.id, p.{$invNoCol} AS Invoice_no, p.date_of_invoice, DATE_FORMAT(p.date_of_invoice,'%d/%m/%Y') AS str_date_of_invoice, p.sid, p.status AS inv_status, IFNULL(s.name_supplier,'-') AS name_supplier, IFNULL(s.short_name,'-') AS short_name, IFNULL(s.gst_no,'-') AS gst_no", false)
+            ->join('med_supplier s', 'p.sid=s.sid', 'left')
+            ->where('p.id', $invId)
+            ->get()
+            ->getRow();
+
+        if (! $invoice) {
+            return $this->response->setStatusCode(404)->setBody('Purchase return invoice not found');
+        }
+
+        $items = $this->fetchPurchaseReturnItems($invId);
+        $content = view('medical/purchase_return_invoice_item_print', [
+            'purchase_return_invoice' => [$invoice],
+            'purchase_return_invoice_item' => $items,
+        ]);
+
+        $mpdf = new Mpdf([
+            'mode' => 'utf-8',
+            'format' => 'A4',
+            'tempDir' => WRITEPATH . 'cache/mpdf',
+        ]);
+        $mpdf->showWatermarkText = false;
+        $mpdf->WriteHTML($content);
+
+        $filename = 'Return_Invoice-' . $invId . '-' . date('YmdHis') . '.pdf';
+        return $this->response
+            ->setHeader('Content-Type', 'application/pdf')
+            ->setBody($mpdf->Output($filename, 'S'));
+    }
+
+    private function purchaseReturnInvoiceNoColumn(): string
+    {
+        $fields = $this->db->getFieldNames('purchase_return_invoice') ?? [];
+        if (in_array('p_r_invoice_no', $fields, true)) {
+            return 'p_r_invoice_no';
+        }
+
+        return in_array('Invoice_no', $fields, true) ? 'Invoice_no' : 'id';
+    }
+
+    private function fetchPurchaseReturnItems(int $invId): array
+    {
+        if (
+            $invId <= 0
+            || ! $this->db->tableExists('purchase_return_invoice_item')
+            || ! $this->db->tableExists('purchase_invoice_item')
+        ) {
+            return [];
+        }
+
+        $itemFields = $this->db->getFieldNames('purchase_invoice_item') ?? [];
+        $gstPerExpr = '0';
+        if (in_array('CGST_per_old', $itemFields, true) && in_array('CGST_per', $itemFields, true)) {
+            $gstPerExpr = 'IF(p.CGST_per_old IS NULL, p.CGST_per, p.CGST_per_old) * 2';
+        } elseif (in_array('CGST_per', $itemFields, true)) {
+            $gstPerExpr = 'p.CGST_per * 2';
+        }
+
+        return $this->db->table('purchase_return_invoice_item r')
+            ->select("p.*, r.purchase_inv_id, r.qty AS r_qty, ROUND(r.qty/IFNULL(NULLIF(p.packing,0),1),2) AS qty_pak, r.id AS r_id, IF(IFNULL(r.batch_no_r,'')='', p.batch_no, r.batch_no_r) AS batch_no_r_s, DATE_FORMAT(p.expiry_date,'%m/%y') AS exp_date_str, p.purchase_unit_rate*r.qty AS r_amount, p.purchase_unit_rate, {$gstPerExpr} AS gst_per", false)
+            ->join('purchase_invoice_item p', 'r.purchase_item_id=p.id', 'inner')
+            ->where('r.purchase_inv_id', $invId)
+            ->orderBy('r.id', 'ASC')
+            ->get()
+            ->getResult();
+    }
+
+    private function adjustPurchaseItemReturnUnit(int $purchaseItemId, float $qtyDelta): void
+    {
+        if ($purchaseItemId <= 0 || ! $this->db->tableExists('purchase_invoice_item')) {
+            return;
+        }
+
+        $fields = $this->db->getFieldNames('purchase_invoice_item') ?? [];
+        if (! in_array('total_return_unit', $fields, true)) {
+            return;
+        }
+
+        $row = $this->db->table('purchase_invoice_item')
+            ->select('id,total_return_unit')
+            ->where('id', $purchaseItemId)
+            ->get()
+            ->getRow();
+        if (! $row) {
+            return;
+        }
+
+        $nextQty = (float) ($row->total_return_unit ?? 0) + $qtyDelta;
+        if ($nextQty < 0) {
+            $nextQty = 0;
+        }
+
+        $this->db->table('purchase_invoice_item')
+            ->where('id', $purchaseItemId)
+            ->update(['total_return_unit' => $nextQty]);
     }
 
     public function main_store_placeholder($slug = '')

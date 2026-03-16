@@ -29,10 +29,52 @@
         <p class="text-muted">No report files found.</p>
     <?php endif; ?>
 
+    <div class="col-12 mb-2" id="lab_ai_status_wrap"></div>
     <div class="col-12" id="lab_ai_values_wrap"></div>
 </div>
 
 <script>
+var aiLastFailedRequest = null;
+
+function setAiStatus(message, level, showRetry) {
+    var wrap = document.getElementById('lab_ai_status_wrap');
+    if (!wrap) {
+        return;
+    }
+
+    if (!message) {
+        wrap.innerHTML = '';
+        return;
+    }
+
+    var css = 'alert-info';
+    if (level === 'success') {
+        css = 'alert-success';
+    } else if (level === 'error') {
+        css = 'alert-danger';
+    } else if (level === 'warn') {
+        css = 'alert-warning';
+    }
+
+    var retryHtml = '';
+    if (showRetry && aiLastFailedRequest) {
+        retryHtml = '<button type="button" class="btn btn-sm btn-outline-danger ms-2" onclick="retryLastAiExtract()">Retry AI Extract</button>';
+    }
+
+    wrap.innerHTML = '<div class="alert ' + css + ' py-2 mb-2">' + message + retryHtml + '</div>';
+}
+
+function postWithTimeout(url, payload, timeoutMs) {
+    return $.ajax({
+        url: url,
+        method: 'POST',
+        data: payload,
+        dataType: 'json',
+        timeout: timeoutMs,
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    });
+}
+
 function loadAiExtractedValues() {
     var invoiceId = <?= (int) ($invoice_id ?? 0) ?>;
     var labType = <?= (int) ($lab_type ?? 0) ?>;
@@ -65,29 +107,48 @@ function extractLabValuesFromFile(fileId) {
         return;
     }
 
-    var body = new FormData();
-    body.append('file_upload_id', String(fileId));
-    body.append('invoice_id', String(invoiceId));
-    body.append('lab_type', String(labType));
-    body.append('panel_name', panelName || '');
+    var payload = {
+        file_upload_id: String(fileId),
+        invoice_id: String(invoiceId),
+        lab_type: String(labType),
+        panel_name: panelName || ''
+    };
 
-    fetch('<?= base_url('diagnosis/ai-extract-report-values') ?>', {
-        method: 'POST',
-        body: body,
-        headers: { 'X-Requested-With': 'XMLHttpRequest' }
-    })
-    .then(function(response) { return response.json(); })
-    .then(function(result) {
+    setAiStatus('Running AI extraction...', 'info', false);
+
+    postWithTimeout('<?= base_url('diagnosis/ai-extract-report-values') ?>', payload, 90000)
+    .done(function(result) {
         if ((result.update || 0) !== 1) {
-            alert(result.error_text || 'AI extraction failed');
+            var err = result.error_text || 'AI extraction failed';
+            aiLastFailedRequest = {
+                fileId: fileId,
+                panelName: panelName || '',
+            };
+            setAiStatus(err, 'error', true);
             return;
         }
-        alert(result.error_text || 'Extraction complete');
+
+        aiLastFailedRequest = null;
+        setAiStatus(result.error_text || 'Extraction complete', 'success', false);
         loadAiExtractedValues();
     })
-    .catch(function() {
-        alert('AI extraction request failed');
+    .fail(function(xhr, textStatus) {
+        var isTimeout = textStatus === 'timeout';
+        aiLastFailedRequest = {
+            fileId: fileId,
+            panelName: panelName || '',
+        };
+        setAiStatus(isTimeout ? 'AI extraction timed out. You can retry now.' : 'AI extraction request failed.', 'error', true);
     });
+}
+
+function retryLastAiExtract() {
+    if (!aiLastFailedRequest || !aiLastFailedRequest.fileId) {
+        setAiStatus('No failed request available to retry.', 'warn', false);
+        return;
+    }
+
+    extractLabValuesFromFile(aiLastFailedRequest.fileId);
 }
 
 function bindDoctorVerifyAction() {
@@ -123,10 +184,8 @@ function bindDoctorVerifyAction() {
     verifyBtn.setAttribute('data-ai-verify-btn', '1');
     verifyBtn.textContent = 'Mark Doctor Verified';
     verifyBtn.onclick = function() {
-        var form = new FormData();
         fetch('<?= base_url('diagnosis/ai-verify-extracted-values') ?>/' + batchId, {
             method: 'POST',
-            body: form,
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         })
         .then(function(response) { return response.json(); })

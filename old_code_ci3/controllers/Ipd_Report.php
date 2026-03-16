@@ -5,6 +5,7 @@ class Ipd_Report extends MY_Controller {
     public function __construct()
 	{
 		parent::__construct();
+		$this->load->library("Pdf");
 	}
 	
 	public function Ipd_bal_panel()

@@ -36,7 +36,7 @@ th, td {
 <table  cellspacing="0"  style="font-size: 10px;width:100%;border-style: inset;" >
     <tr>
         <td style="width: 100px;vertical-align: top;">
-            <img style="width: 75px;vertical-align: top;"  src="/assets/images/<?=H_logo?>" />
+            <img style="width: 75px;vertical-align: top;"  src="assets/images/<?=H_logo?>" />
         </td>
         <td style="width: 400px;vertical-align: top;text-align: left;">
             <p align="center" style="font-size: 20px;" ><?=H_Name?></p>
@@ -59,7 +59,7 @@ th, td {
 <hr/>
 </htmlpageheader>
 <htmlpagefooter name="myFooter">
-<p align="center"> </p>
+<p align="center">Print Time : <?=date('d-m-Y H:i:s')?></p>
 </htmlpagefooter>
 <table width="100%" border="0" style="font-size:10pt;">
 <tr>
@@ -146,17 +146,7 @@ th, td {
             }
             echo '<br/>';
             
-            //echo $doctor;
-            
-            echo '<p align="Right">';
-            echo '<br/>';
-            echo '<br/>';
-            echo '<br/>';
-            echo '<b>'.$doc_name.'</b>';
-            echo '<br/>';
-            echo $doc_sign;
-            echo '</p>';
-
+            echo $doctor;
 
         ?>
 </div>

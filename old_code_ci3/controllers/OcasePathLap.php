@@ -276,7 +276,7 @@ class OcasePathLap extends MY_Controller {
 	public function addPathTest($pno,$ins_id=0)
 	{
 		$sql="select *,if(gender=1,'Male','Female') as xgender,
-		IFNULL(GET_AGE_BY_DOB(dob),age)  AS age from patient_master where id='".$pno."' ";
+		GET_AGE_1(dob,age,age_in_month,estimate_dob)  AS age from patient_master where id='".$pno."' ";
         $query = $this->db->query($sql);
         $data['person_info']= $query->result();
 		
@@ -447,7 +447,7 @@ class OcasePathLap extends MY_Controller {
 		$data['invoice_master']= $query->result();
 		
 		$sql="select *,if(gender=1,'Male','Female') as xgender,
-		IFNULL(GET_AGE_BY_DOB(dob),age)   AS age from patient_master where id=".$data['invoice_master'][0]->attach_id;
+		GET_AGE_1(dob,age,age_in_month,estimate_dob)   AS age from patient_master where id=".$data['invoice_master'][0]->attach_id;
         $query = $this->db->query($sql);
         $data['patient_master']= $query->result();
 		
@@ -621,7 +621,7 @@ class OcasePathLap extends MY_Controller {
 		$data['invoice_master']= $query->result();
 		
 		$sql="select *,if(gender=1,'Male','Female') as xgender,
-		IFNULL(GET_AGE_BY_DOB(dob),age)  AS age from patient_master where id=".$data['invoice_master'][0]->attach_id;
+		GET_AGE_1(dob,age,age_in_month,estimate_dob)  AS age from patient_master where id=".$data['invoice_master'][0]->attach_id;
         $query = $this->db->query($sql);
         $data['patient_master']= $query->result();
 		

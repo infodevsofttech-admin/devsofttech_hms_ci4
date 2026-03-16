@@ -1,0 +1,105 @@
+<section class="content-header">
+    <h1>
+        Daily Payment Report  
+    </h1>
+</section>
+<section class="content">
+	<div class="row">
+		<div class="col-md-6">
+			<label>Date Range</label>
+			<div id="reportrange" class="pull-right" style="background: #fff; cursor: pointer; padding: 5px 10px; border: 1px solid #ccc; width: 100%">
+				<i class="glyphicon glyphicon-calendar fa fa-calendar"></i>&nbsp;
+				<span></span> <b class="caret"></b>
+				</div>
+				<input type="hidden" name="opd_date_range" id="opd_date_range"  /> 
+		</div>
+        <div class="col-md-4">
+			<label>Employee Name</label>
+			<select class="form-control select2" id="emp_name_id" name="emp_name_id" multiple="multiple" data-placeholder="Select a Employees"  >	
+				<option value='0' >All Employees</option>
+				<?php 
+				foreach($emplist as $row)
+				{ 
+					echo '<option value='.$row->id.'  >'.$row->first_name.' '.$row->last_name.'</option>';
+				}
+				?>
+			</select>
+		</div>
+		<div class="col-md-2">
+			<label> </label>
+			<div class="form-group">
+				<button type="button" class="btn btn-primary" id="showreport"  >Show</button>
+				<button type="button" class="btn btn-primary" id="showreport_xls"  >Excel</button>
+			</div>
+		</div>
+	</div>
+	
+	<div class="row">
+		<div class="col-md-12">
+			<div id="show_report"></div>
+		</div>
+	</div>
+</section>
+<script >
+$(document).ready(function() {
+		var start = moment();
+		var end = moment();
+		
+		function cb(start, end) {
+			$('#reportrange span').html(start.format('D-MM-YYYY h:mm:ss a') + ' - ' + end.format('D-MM-YYYY h:mm:ss a'));
+			$('#opd_date_range').val(start.format('YYYY-MM-DD[T00:00:00]')+'S'+end.format('YYYY-MM-DD[T23:59:59]'));
+		}
+
+		$('#reportrange').daterangepicker({
+			timePicker: true,
+			timePickerIncrement: 1,
+			locale: {
+				format: 'DD-MM-YYYY HH:mm'
+			}					
+		}, cb);
+
+		cb(start, end);
+
+		$('#reportrange').on('apply.daterangepicker', function(ev, picker) {
+			var date_first=picker.startDate.format('YYYY-MM-DD[T]HH:mm:ss');
+			var date_second=picker.endDate.format('YYYY-MM-DD[T]HH:mm:ss');
+
+			$('#opd_date_range').val(date_first+'S'+date_second);
+		});
+
+		
+		$('#showreport').click( function()
+		{
+			var emp_list=$('#emp_name_id').val();
+			
+			if(emp_list==null || emp_list=='' )
+			{
+				emp_list="0";
+			}else{
+				emp_list=emp_list.toString().split(",").join("S");
+			}
+			
+			var Get_Query="/Medical_Report/Report_Payment_Recieved_data/"+$('#opd_date_range').val()+"/"+emp_list+"/0";
+			load_report_div(Get_Query,'show_report');
+		});
+		
+		$('#showreport_xls').click( function()
+		{
+			var emp_list=$('#emp_name_id').val();
+			
+			if(emp_list==null || emp_list=='' )
+			{
+				emp_list="0";
+			}else{
+				emp_list=emp_list.toString().split(",").join("S");
+			}
+			
+			var Get_Query="/Medical_Report/Report_Payment_Recieved_data/"+$('#opd_date_range').val()+"/"+emp_list+"/1";
+			window.open(Get_Query, "_blank");
+			
+		});
+
+			
+				
+});
+</script>

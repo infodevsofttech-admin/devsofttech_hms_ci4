@@ -226,7 +226,7 @@ EOD;
 		o.opd_fee_gross_amount as 'GrossAmt',
 		o.opd_discount as Discount,
 		o.opd_fee_amount as 'FeeAmt',
-		o.prepared_by,IFNULL(GET_AGE_BY_DOB(dob),age)  as Age ";
+		o.prepared_by,GET_AGE_1(dob,age,age_in_month,estimate_dob)  as Age ";
 		
 		$sql_from=" from opd_master o join payment_mode m join patient_master p on o.payment_mode=m.id and p.id=o.p_id";
 		

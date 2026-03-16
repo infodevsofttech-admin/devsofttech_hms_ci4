@@ -1532,7 +1532,7 @@ class Medical_backpanel extends MY_Controller
 		$data['purchase_return_invoice'] = $query->result();
 
 		$sql = "select p.*,r.purchase_inv_id,r.qty as r_qty,Round(r.qty/p.packing,2) AS qty_pak,r.id as r_id,if(r.batch_no_r='',p.batch_no,r.batch_no_r) as  batch_no_r_s, 
-		date_format(p.expiry_date,'%m/%y') as exp_date_str ,p.purchase_unit_rate*r.qty AS r_amount,p.purchase_unit_rate
+		date_format(p.expiry_date,'%m/%y') as exp_date_str ,p.purchase_unit_rate*r.qty AS r_amount,p.purchase_unit_rate,if(p.CGST_per_old IS NULL,CGST_per,CGST_per_old)*2 AS gst_per
 		from purchase_return_invoice_item r join purchase_invoice_item p on r.purchase_item_id=p.id
 		where purchase_inv_id=" . $inv_id;
 		$query = $this->db->query($sql);
@@ -1669,7 +1669,7 @@ class Medical_backpanel extends MY_Controller
 		}
 
 		$sql = "select p.*,r.purchase_inv_id,r.qty as r_qty,Round(r.qty/p.packing,2) AS qty_pak,r.id as r_id,if(r.batch_no_r='',p.batch_no,r.batch_no_r) as  batch_no_r_s, 
-		date_format(p.expiry_date,'%m/%y') as exp_date_str ,p.purchase_unit_rate*r.qty AS r_amount,p.purchase_unit_rate
+		date_format(p.expiry_date,'%m/%y') as exp_date_str ,p.purchase_unit_rate*r.qty AS r_amount,p.purchase_unit_rate,if(p.CGST_per_old IS NULL,CGST_per,CGST_per_old)*2 AS gst_per
 		from purchase_return_invoice_item r join purchase_invoice_item p on r.purchase_item_id=p.id
 		where purchase_inv_id=" . $inv_id;
 		$query = $this->db->query($sql);
@@ -1798,7 +1798,7 @@ class Medical_backpanel extends MY_Controller
 			$msg_box = "Item Removed";
 
 			$sql = "select p.*,r.purchase_inv_id,r.qty as r_qty,Round(r.qty/p.packing,2) AS qty_pak,r.id as r_id,if(r.batch_no_r='',p.batch_no,r.batch_no_r) as  batch_no_r_s, 
-			date_format(p.expiry_date,'%m/%y') as exp_date_str ,p.purchase_unit_rate*r.qty AS r_amount,p.purchase_unit_rate
+			date_format(p.expiry_date,'%m/%y') as exp_date_str ,p.purchase_unit_rate*r.qty AS r_amount,p.purchase_unit_rate,if(p.CGST_per_old IS NULL,CGST_per,CGST_per_old)*2 AS gst_per
 			from purchase_return_invoice_item r join purchase_invoice_item p on r.purchase_item_id=p.id
 			where purchase_inv_id=" . $inv_id;
 			$query = $this->db->query($sql);

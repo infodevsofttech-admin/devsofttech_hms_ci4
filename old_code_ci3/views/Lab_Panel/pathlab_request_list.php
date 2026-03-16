@@ -2,7 +2,7 @@
 <input type="hidden" id="lab_type" name="lab_type" value="<?=$lab_type ?>" />
 <?php echo form_open('Patient/search', array('role'=>'form','class'=>'form2')); ?>
 <div class="row">
-	<div Class="col-xs-3">			
+	<div Class="col-xs-4">			
 		<div class="input-group input-group-sm">
 				<input class="form-control" type="text" id="txtsearch" name="txtsearch" placeholder="Invoice Last 6 digit ,UHID,Phone No.">
 					<span class="input-group-btn">
@@ -10,7 +10,7 @@
 				</span>
 		</div>
 	</div>
-	<div Class="col-xs-3">
+	<div Class="col-xs-4">
 		<div class="input-group input-group-sm">
 		<input class="form-control" type="text" id="txtsearch_srno" name="txtsearch_srno" placeholder="Daily Serial No.">
 				<span class="input-group-btn">
@@ -18,21 +18,12 @@
 			</span>
 		</div>
 	</div>
-	<div Class="col-xs-3">
+	<div Class="col-xs-4">
 		<div class="input-group input-group-sm">
 		<input class="form-control" type="text" id="txtsearch_labno" name="txtsearch_labno" placeholder="Lab No.">
 				<span class="input-group-btn">
 				<button type="button" id="btn_labno" class="btn btn-info btn-flat">Search By Lab No. </button>
 			</span>
-		</div>
-	</div>
-	<div Class="col-xs-3">
-		<div class="input-group input-group-sm">
-			<?php  if($lab_type==5){  ?>
-				<a href="javascript:load_form_div('/Lab_Admin/report_list','searchresult','Diagnosis Template');" class="btn btn-primary btn-flat">Template</a>
-			<?php } else  { ?>
-				<a href="javascript:load_form_div('/Lab_Admin/report_ultrasound_list/<?php echo $lab_type; ?>','searchresult','Mri Template');" class="btn btn-primary btn-flat">Template</a>
-			<?php } ?>
 		</div>
 	</div>
 </div>

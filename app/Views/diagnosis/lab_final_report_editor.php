@@ -1,6 +1,7 @@
 <?php
 $report = $report_format[0] ?? null;
 $templates = $radiology_ultrasound_template ?? [];
+$editReason = trim((string) ($edit_reason ?? ''));
 ?>
 
 <form method="post" onsubmit="return false;">
@@ -20,6 +21,7 @@ $templates = $radiology_ultrasound_template ?? [];
             <input type="hidden" id="hid_value_report_name" value="<?= esc($report->report_name ?? '') ?>">
             <input type="hidden" id="invoice_id" value="<?= esc($report->charge_id ?? '') ?>">
             <input type="hidden" id="lab_type" value="<?= esc($report->lab_type ?? '') ?>">
+            <input type="hidden" id="report_status" value="<?= esc((string) ($report->status ?? '0')) ?>">
 
             <?php
                 $ipdId = (int) ($report->ipd_id ?? 0);
@@ -64,6 +66,14 @@ $templates = $radiology_ultrasound_template ?? [];
                 </div>
             </div>
 
+            <div class="row mb-3">
+                <div class="col-md-12">
+                    <label for="edit_reason" class="form-label"><strong>Edit Reason (NABH Audit)</strong></label>
+                    <textarea id="edit_reason" class="form-control" rows="2" placeholder="Enter reason for report correction/clarification"><?= esc($editReason) ?></textarea>
+                    <small class="text-muted">Required when saving changes to an already verified report.</small>
+                </div>
+            </div>
+
             <hr/>
 
             <div class="row g-3">
@@ -73,6 +83,7 @@ $templates = $radiology_ultrasound_template ?? [];
                         <textarea id="HTMLShow" name="HTMLShow" class="form-control" rows="12"><?= $report->Report_Data ?? '' ?></textarea>
                         <script>
                             if (typeof CKEDITOR !== 'undefined') {
+                                CKEDITOR.config.removePlugins = '';
                                 CKEDITOR.replace('HTMLShow');
                             }
                         </script>
@@ -85,6 +96,7 @@ $templates = $radiology_ultrasound_template ?? [];
                         <textarea id="report_data_Impression" name="report_data_Impression" class="form-control" rows="8"><?= $report->report_data_Impression ?? '' ?></textarea>
                         <script>
                             if (typeof CKEDITOR !== 'undefined') {
+                                CKEDITOR.config.removePlugins = '';
                                 CKEDITOR.replace('report_data_Impression', {
                                     toolbar: [
                                         ['Bold', 'Italic', 'Underline', '-', 'FontSize', '-', 'JustifyLeft', 'JustifyCenter', 'JustifyRight'],
@@ -181,10 +193,13 @@ $templates = $radiology_ultrasound_template ?? [];
             })();
 
             // Modal helper function
+            window._imagingSupportModalInstance = window._imagingSupportModalInstance || null;
             function openImagingSupportModal(title, html) {
                 document.getElementById('imagingSupportModalTitle').textContent = title || 'Imaging Support';
                 document.getElementById('imagingSupportModalBody').innerHTML = html;
-                new bootstrap.Modal(document.getElementById('imagingSupportModal')).show();
+                const el = document.getElementById('imagingSupportModal');
+                window._imagingSupportModalInstance = bootstrap.Modal.getOrCreateInstance(el);
+                window._imagingSupportModalInstance.show();
             }
 
             // Show imaging uploads (gallery)
@@ -214,25 +229,39 @@ $templates = $radiology_ultrasound_template ?? [];
             }
 
             function runImagingAiDiagnosis(reqId, testName) {
-                const btn = event.target.closest('button');
+                const btn = (typeof event !== 'undefined' && event && event.target)
+                    ? event.target.closest('button') : null;
                 if (btn) btn.disabled = true;
                 const indicator = document.createElement('span');
                 indicator.textContent = ' Processing...';
                 if (btn) btn.appendChild(indicator);
 
+                openImagingSupportModal((testName || 'AI Diagnosis') + ' - AI Diagnosis',
+                    '<div class="text-center py-4"><div class="spinner-border" role="status"></div>' +
+                    '<div class="mt-2 text-muted">AI is reviewing uploaded images...</div></div>');
+
+                const formData = new FormData();
+                formData.append('<?= csrf_token() ?>', '<?= csrf_hash() ?>');
+
                 fetch(baseUrl + 'diagnosis/imaging-ai-diagnosis/' + reqId, {
                     method: 'POST',
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'Content-Type': 'application/x-www-form-urlencoded'
-                    },
-                    body: '<?= csrf_token() ?>=<?= csrf_hash() ?>'
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    body: formData
                 })
-                .then(r => r.text())
-                .then(html => {
-                    openImagingSupportModal(testName + ' - AI Diagnosis', html);
+                .then(r => r.json())
+                .then(result => {
+                    if ((result.update || 0) !== 1) {
+                        openImagingSupportModal((testName || 'AI Diagnosis') + ' - AI Diagnosis',
+                            '<div class="alert alert-danger mb-0">' + (result.error_text || 'AI diagnosis failed') + '</div>');
+                        return;
+                    }
+                    openImagingSupportModal((testName || 'AI Diagnosis') + ' - AI Diagnosis',
+                        result.html || '<div class="alert alert-warning mb-0">AI result not available.</div>');
                 })
-                .catch(e => alert('Error: ' + e.message))
+                .catch(e => {
+                    openImagingSupportModal((testName || 'AI Diagnosis') + ' - AI Diagnosis',
+                        '<div class="alert alert-danger mb-0">AI diagnosis request failed: ' + e.message + '</div>');
+                })
                 .finally(() => {
                     if (btn) {
                         btn.disabled = false;
@@ -284,9 +313,20 @@ $templates = $radiology_ultrasound_template ?? [];
                 }
 
                 const data = new FormData();
+                const editReason = (document.getElementById('edit_reason')?.value || '').trim();
+                const reportStatus = Number(document.getElementById('report_status')?.value || 0);
+
+                if (reportStatus === 2 && !editReason) {
+                    alert('Edit reason is required for verified report changes (NABH audit).');
+                    return;
+                }
+
                 data.append('<?= csrf_token() ?>', '<?= csrf_hash() ?>');
+                data.append('HTMLData', reportData);
+                data.append('report_data_Impression', impressionData);
                 data.append('report_data', reportData);
                 data.append('report_data_impression', impressionData);
+                data.append('edit_reason', editReason);
 
                 fetch(baseUrl + 'diagnosis/update-report/' + reqId, {
                     method: 'POST',
@@ -322,13 +362,22 @@ $templates = $radiology_ultrasound_template ?? [];
             }
 
             // Paste AI diagnosis draft to editor
+            function pasteAiDiagnosisDraft(button) {
+                applyAiDiagnosisDraftToEditor(button, false);
+            }
+
             function pasteAiDiagnosisDraftAndSave(button) {
                 applyAiDiagnosisDraftToEditor(button, true);
             }
 
             function applyAiDiagnosisDraftToEditor(button, autoSave) {
-                const findingsHtml = document.getElementById('ai_findings_text') ? document.getElementById('ai_findings_text').textContent : '';
-                const impressionHtml = document.getElementById('ai_impression_text') ? document.getElementById('ai_impression_text').textContent : '';
+                // Read HTML from hidden textareas injected by the AI result modal view
+                const findingsTarget  = button ? button.getAttribute('data-findings-target')   : null;
+                const impressionTarget = button ? button.getAttribute('data-impression-target') : null;
+                const findingsEl  = findingsTarget  ? document.querySelector(findingsTarget)  : null;
+                const impressionEl = impressionTarget ? document.querySelector(impressionTarget) : null;
+                const findingsHtml  = findingsEl  ? findingsEl.value  : '';
+                const impressionHtml = impressionEl ? impressionEl.value : '';
 
                 if (typeof CKEDITOR !== 'undefined') {
                     if (CKEDITOR.instances.HTMLShow) {
@@ -348,6 +397,15 @@ $templates = $radiology_ultrasound_template ?? [];
 
                 if (autoSave) {
                     setTimeout(() => update_report(), 180);
+                }
+
+                // Close modal and fully remove backdrop
+                if (window._imagingSupportModalInstance) {
+                    window._imagingSupportModalInstance.hide();
+                } else {
+                    const el = document.getElementById('imagingSupportModal');
+                    const inst = bootstrap.Modal.getInstance(el);
+                    if (inst) inst.hide();
                 }
             }
             </script>

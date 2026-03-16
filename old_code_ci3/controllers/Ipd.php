@@ -187,7 +187,7 @@ class Ipd extends MY_Controller {
 		$tcharge=$charge1+$charge2;
 		
 		$sql="select *,if(gender=1,'Male','FeMale') as xgender,
-		IFNULL(GET_AGE_BY_DOB(dob),age) AS age from patient_master where id='".$pno."' ";
+		GET_AGE_1(dob,age,age_in_month,estimate_dob) AS age from patient_master where id='".$pno."' ";
 
         $query = $this->db->query($sql);
         $data['person_info']= $query->result();
@@ -296,7 +296,7 @@ class Ipd extends MY_Controller {
 		$pno=$data['ipdmaster'][0]->p_id;
 		
 		$sql="select *,if(gender=1,'Male','FeMale') as xgender,
-		IFNULL(GET_AGE_BY_DOB(dob),age)  AS age from patient_master where id='".$pno."' ";
+		GET_AGE_1(dob,age,age_in_month,estimate_dob)  AS age from patient_master where id='".$pno."' ";
 
         $query = $this->db->query($sql);
         $data['person_info']= $query->result();
@@ -740,7 +740,7 @@ class Ipd extends MY_Controller {
         $data['ipd_list']= $query->result();
 		
 		$sql="select *,if(gender=1,'Male','FeMale') as xgender,
-		IFNULL(GET_AGE_BY_DOB(dob),age)  AS age from patient_master where id='".$data['ipd_info'][0]->p_id."' ";
+		GET_AGE_1(dob,age,age_in_month,estimate_dob)  AS age from patient_master where id='".$data['ipd_info'][0]->p_id."' ";
         $query = $this->db->query($sql);
         $data['person_info']= $query->result();
 		
@@ -783,7 +783,7 @@ class Ipd extends MY_Controller {
 		$tcharge=$charge1+$charge2;
 
 		$sql="select *,if(gender=1,'Male','FeMale') as xgender,
-		IFNULL(GET_AGE_BY_DOB(dob),age) AS age from patient_master where id='".$data['ipd_info'][0]->p_id."' ";
+		GET_AGE_1(dob,age,age_in_month,estimate_dob) AS age from patient_master where id='".$data['ipd_info'][0]->p_id."' ";
         $query = $this->db->query($sql);
         $data['person_info']= $query->result();
 		
@@ -879,7 +879,7 @@ class Ipd extends MY_Controller {
 		$ipdno=$data['ipd_info'][0]->id;
 
 		$sql="select *,if(gender=1,'Male','FeMale') as xgender,
-		IFNULL(GET_AGE_BY_DOB(dob),age)  AS age from patient_master where id='".$data['ipd_info'][0]->p_id."' ";
+		GET_AGE_1(dob,age,age_in_month,estimate_dob)  AS age from patient_master where id='".$data['ipd_info'][0]->p_id."' ";
         $query = $this->db->query($sql);
         $data['person_info']= $query->result();
 		
@@ -1015,7 +1015,7 @@ class Ipd extends MY_Controller {
         $data['ipd_info']= $query->result();
 
 		$sql="select *,if(gender=1,'Male','FeMale') as xgender,
-		IFNULL(GET_AGE_BY_DOB(dob),age)  AS age from patient_master where id='".$data['ipd_info'][0]->p_id."' ";
+		GET_AGE_1(dob,age,age_in_month,estimate_dob)  AS age from patient_master where id='".$data['ipd_info'][0]->p_id."' ";
         $query = $this->db->query($sql);
         $data['person_info']= $query->result();
 		
@@ -1078,7 +1078,7 @@ class Ipd extends MY_Controller {
 			redirect('Ipd/ipd_panel/'.$data['ipd_info'][0]->id);
 		}else{
 			$sql="select *,if(gender=1,'Male','FeMale') as xgender,
-			IFNULL(GET_AGE_BY_DOB(dob),age)   AS age from patient_master where id='".$pno."' ";
+			GET_AGE_1(dob,age,age_in_month,estimate_dob)   AS age from patient_master where id='".$pno."' ";
             
 			$query = $this->db->query($sql);
 			$data['person_info']= $query->result();
@@ -1138,7 +1138,7 @@ class Ipd extends MY_Controller {
 		$pno=$data['ipd_master'][0]->p_id;
 		
 		$sql="select *,if(gender=1,'Male','FeMale') as xgender,
-		IFNULL(GET_AGE_BY_DOB(dob),age)   AS age from patient_master where id='".$pno."' ";
+		GET_AGE_1(dob,age,age_in_month,estimate_dob)   AS age from patient_master where id='".$pno."' ";
 
         $query = $this->db->query($sql);
         $data['person_info']= $query->result();
@@ -1159,7 +1159,7 @@ class Ipd extends MY_Controller {
         $data['ipd_info']= $query->result();
 
 		$sql="select *,if(gender=1,'Male','FeMale') as xgender,
-		IFNULL(GET_AGE_BY_DOB(dob),age) as str_age from patient_master where id='".$data['ipd_info'][0]->p_id."' ";
+		GET_AGE_1(dob,age,age_in_month,estimate_dob) as str_age from patient_master where id='".$data['ipd_info'][0]->p_id."' ";
         $query = $this->db->query($sql);
         $data['person_info']= $query->result();
 
@@ -1444,7 +1444,7 @@ class Ipd extends MY_Controller {
 		$discount=$data['ipd_info'][0]->Discount;
 
 		$sql="select *,if(gender=1,'Male','FeMale') as xgender,
-		IFNULL(GET_AGE_BY_DOB(dob),age) AS age from patient_master where id='".$data['ipd_info'][0]->p_id."' ";
+		GET_AGE_1(dob,age,age_in_month,estimate_dob) AS age from patient_master where id='".$data['ipd_info'][0]->p_id."' ";
         $query = $this->db->query($sql);
         $data['person_info']= $query->result();
 	

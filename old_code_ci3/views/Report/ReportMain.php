@@ -178,16 +178,6 @@
 					</a>
 				</li>
 				<li>
-					<a href="javascript:load_form('/Report5/pregnancy_search');">
-					<i class="fa fa-hand-pointer-o"></i> <span>Pregnancy Data</span>
-					</a>
-				</li>
-				<li>
-					<a href="javascript:load_form('/Report5/Report_XRay_chest');">
-					<i class="fa fa-hand-pointer-o"></i> <span>X-Ray Chest</span>
-					</a>
-				</li>
-				<li>
 					<a href="javascript:load_form('/Report6/lab_logs');">
 					<i class="fa fa-hand-pointer-o"></i> <span>Lab Logs</span>
 					</a>

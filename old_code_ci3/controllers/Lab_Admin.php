@@ -10,21 +10,18 @@ class Lab_Admin extends MY_Controller {
 	public function report_list()
 	{
 		$sql="select g.RepoGrp,r.Title,r.mstRepoKey
-				FROM (lab_repo r join lab_rgroups g on r.GrpKey=g.mstRGrpKey)
-				JOIN hc_items i ON r.charge_id=i.id AND i.itype in (5,6)";
+				from lab_repo r join lab_rgroups g on r.GrpKey=g.mstRGrpKey";
 		$query = $this->db->query($sql);
         $data['labReport_master']= $query->result();
 
 		$this->load->view('PathLab_Report/lab_report_list',$data);
 	}
 
-	public function report_ultrasound_list($modality=2)
+	public function report_ultrasound_list()
 	{
-		$sql="select * 	from radiology_ultrasound_template where modality=".$modality;
+		$sql="select * 	from radiology_ultrasound_template ";
 		$query = $this->db->query($sql);
         $data['labReport_master']= $query->result();
-
-		$data['modality']=$modality;
 
 		$this->load->view('PathLab_Report/ultrasound_template_list',$data);
 	}
@@ -559,7 +556,7 @@ class Lab_Admin extends MY_Controller {
 		}
 		
 		//$sql="select * from hc_items where itype=5 and  id not  in (select charge_id from lab_repo where charge_id>0 and charge_id<>".$item_id.")";
-		$sql="select * from hc_items where itype in (5,30,6) and  id not  in (select charge_id from lab_repo where charge_id>0 and charge_id<>".$item_id.") order by idesc ";
+		$sql="select * from hc_items where itype in (5,30) and  id not  in (select charge_id from lab_repo where charge_id>0 and charge_id<>".$item_id.") order by idesc ";
 		
 		$query = $this->db->query($sql);
         $data['hc_items']= $query->result();
@@ -583,9 +580,9 @@ class Lab_Admin extends MY_Controller {
 		$this->load->view('PathLab_Report/lab_report_edit',$data);
 	}
 
-	public function reportedit_ultrasound_load($modality=2,$repo_id=0)
+	public function reportedit_ultrasound_load($repo_id=0)
 	{
-		$sql="select * from radiology_ultrasound_template where modality=$modality and id=".$repo_id;
+		$sql="select * from radiology_ultrasound_template where id=".$repo_id;
 		$query = $this->db->query($sql);
         $data['labReport_master']= $query->result();
 		
@@ -595,17 +592,13 @@ class Lab_Admin extends MY_Controller {
 		{
 			$item_id=$data['labReport_master'][0]->charge_id;
 		}
-
 		
-		
-		$sql="select * from hc_items where itype=$modality order by idesc ";
+		$sql="select * from hc_items where itype=1 order by idesc ";
 		
 		$query = $this->db->query($sql);
         $data['hc_items']= $query->result();
 		
 		$data['repo_id']=$repo_id;
-
-		$data['modality']=$modality;
 		
 		$this->load->view('PathLab_Report/ultrasound_report_edit',$data);
 	}
@@ -665,7 +658,7 @@ class Lab_Admin extends MY_Controller {
 					'Title'=> $this->input->post('input_Reportname'),
 					'GrpKey'=> $this->input->post('group_id'),
 					'charge_id'=> $this->input->post('charge_id'),
-					'HTMLData'=> $this->input->post('HTMLData'),
+					'HTMLData'=> $this->input->post('HTMLData')
 					);
 
 			$this->PathLab_M->update_report($data,$id_key);
@@ -688,7 +681,7 @@ class Lab_Admin extends MY_Controller {
 		echo $encode_data;
 	}
 	
-	public function report_ultrasound_insert($modality)
+	public function report_ultrasound_insert()
 	{
 		if (!$this->input->is_ajax_request()) { exit('no valid req.'); }
 		
@@ -714,14 +707,14 @@ class Lab_Admin extends MY_Controller {
 						'title'=> $this->input->post('group_id'),
 						'charge_id'=> $this->input->post('charge_id'),
 						'Findings'=> $this->input->post('HTMLData'),
-						'Impression'=> $this->input->post('Impression'),
-						'modality'=> $modality
+						'Impression'=> $this->input->post('Impression')
 						);
 			$insertid=$this->PathLab_M->insert_ultrasound_report($data);
-			$showcontent="Data Saved successfully";
+			$showcontent=Show_Alert('success','Saved','Data Saved successfully');
+					
 			
 		}else{
-			$showcontent =validation_errors();
+			$showcontent =Show_Alert('danger','Error',validation_errors());
 		}
 		
 		$rvar=array(
@@ -734,7 +727,7 @@ class Lab_Admin extends MY_Controller {
 		
 	}
 	
-	public function report_ultrasound_update($modality=2)
+	public function report_ultrasound_update()
 	{
 		
 		$this->load->model('PathLab_M');
@@ -777,8 +770,7 @@ class Lab_Admin extends MY_Controller {
 					'title'=> $this->input->post('group_id'),
 					'charge_id'=> $charge_id_post,
 					'Findings'=> $this->input->post('HTMLData'),
-					'Impression'=> $this->input->post('Impression'),
-					'modality'=> $modality
+					'Impression'=> $this->input->post('Impression')
 					);
 
 			$this->PathLab_M->update_ultrasound_report($data,$id_key);
@@ -1933,7 +1925,7 @@ class Lab_Admin extends MY_Controller {
 			$RawData=$RawData.$report_data_Impression;
 		}
 
-		$complete_report=$RawData;
+		$complete_report=$Header.' <br/>'.$RawData;
 		
 		$sql="select * from diagnosis_head_name where d_type=".$lab_type;
 		$query = $this->db->query($sql);
@@ -1984,7 +1976,6 @@ class Lab_Admin extends MY_Controller {
 			
 			$data['complete_report']=$complete_report;
 			$data['report_head']=$report_head;
-			$data['report_header']=$Header;
 
 
 			$data['print_on_type']=$print_on_type;
@@ -2636,7 +2627,7 @@ class Lab_Admin extends MY_Controller {
 				}
 				
 
-				//$this->m_pdf->pdf->curlAllowUnsafeSslRequests = true;
+				$this->m_pdf->pdf->curlAllowUnsafeSslRequests = true;
 
 				$this->m_pdf->pdf->shrink_tables_to_fit = 1;
 
@@ -2645,7 +2636,6 @@ class Lab_Admin extends MY_Controller {
 		 		        
 		        $this->m_pdf->pdf->Output($filepath,"I");
 		      
-				//echo $content;
 			}else{
 				$this->load->view('PathLab_Report/lab_final_print',$data);
 			}

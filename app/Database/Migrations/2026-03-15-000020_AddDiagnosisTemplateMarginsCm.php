@@ -37,7 +37,7 @@ class AddDiagnosisTemplateMarginsCm extends Migration
                 'type' => 'decimal',
                 'constraint' => '6,2',
                 'null' => true,
-                'default' => '1.20',
+                'default' => '6.10',
                 'after' => 'page_size',
             ];
         }
@@ -46,7 +46,7 @@ class AddDiagnosisTemplateMarginsCm extends Migration
                 'type' => 'decimal',
                 'constraint' => '6,2',
                 'null' => true,
-                'default' => '1.20',
+                'default' => '2.50',
                 'after' => 'page_margin_top_cm',
             ];
         }
@@ -55,7 +55,7 @@ class AddDiagnosisTemplateMarginsCm extends Migration
                 'type' => 'decimal',
                 'constraint' => '6,2',
                 'null' => true,
-                'default' => '1.00',
+                'default' => '0.70',
                 'after' => 'page_margin_bottom_cm',
             ];
         }
@@ -64,7 +64,7 @@ class AddDiagnosisTemplateMarginsCm extends Migration
                 'type' => 'decimal',
                 'constraint' => '6,2',
                 'null' => true,
-                'default' => '1.00',
+                'default' => '0.70',
                 'after' => 'page_margin_left_cm',
             ];
         }

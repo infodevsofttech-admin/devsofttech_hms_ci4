@@ -1217,18 +1217,69 @@ class Diagnosis extends BaseController
     public function finalUpdate($labReqId)
     {
         $labReqId = (int) $labReqId;
-        $htmlData = (string) $this->request->getPost('HTMLData');
+        // Accept both legacy and current POST keys for backward compatibility
+        $htmlData = (string) ($this->request->getPost('HTMLData') ?? $this->request->getPost('report_data') ?? '');
+        $impression = (string) ($this->request->getPost('report_data_Impression') ?? $this->request->getPost('report_data_impression') ?? '');
+        $editReason = trim((string) ($this->request->getPost('edit_reason') ?? ''));
 
         if ($labReqId <= 0) {
             return $this->response->setJSON(['status' => 'error', 'message' => 'Invalid request id']);
         }
 
         try {
+            $before = $this->db->table('lab_request')
+                ->select('id, status, report_edit_req_no, Report_Data, report_data_Impression')
+                ->where('id', $labReqId)
+                ->get(1)
+                ->getRowArray() ?? [];
+
+            // NABH audit requirement: edit reason required for verified reports (status = 2)
+            if ((int) ($before['status'] ?? 0) === 2 && $editReason === '') {
+                return $this->response->setJSON([
+                    'status' => 'error',
+                    'message' => 'Edit reason is required for verified report changes (NABH audit).',
+                ]);
+            }
+
             $this->db->table('lab_request')
                 ->where('id', $labReqId)
-                ->update(['Report_Data' => $htmlData]);
+                ->update([
+                    'Report_Data' => $htmlData,
+                    'report_data_Impression' => $impression,
+                ]);
 
-            return $this->response->setJSON(['status' => 'success', 'message' => 'Report updated']);
+            // Track edit version for verified reports
+            $fields = $this->db->getFieldNames('lab_request');
+            if (in_array('report_edit_req_no', $fields, true) && (int) ($before['status'] ?? 0) === 2) {
+                $nextEditNo = (int) ($before['report_edit_req_no'] ?? 0) + 1;
+                $this->db->table('lab_request')
+                    ->where('id', $labReqId)
+                    ->update(['report_edit_req_no' => $nextEditNo]);
+            }
+
+            // NABH compliance: log all changes to verified reports
+            if ($this->db->tableExists('lab_log')) {
+                $user = service('auth')->user();
+                $userId = (int) ($user->id ?? 0);
+                $userName = $user ? trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) : 'System';
+
+                $beforeHash = md5((string) ($before['Report_Data'] ?? '') . '|' . (string) ($before['report_data_Impression'] ?? ''));
+                $afterHash = md5($htmlData . '|' . $impression);
+                $reasonLog = $editReason !== '' ? $editReason : 'NA';
+
+                $this->db->table('lab_log')->insert([
+                    'lab_repo_id' => $labReqId,
+                    'log_by_id' => $userId,
+                    'log_by' => $userName,
+                    'log_type_id' => 0,
+                    'log_type' => 'Report Edit',
+                    'log_Faults_id' => 0,
+                    'log_Faults' => 'Pathology',
+                    'comments' => 'Editor save [reason:' . substr($reasonLog, 0, 350) . '] [before:' . substr($beforeHash, 0, 8) . ' after:' . substr($afterHash, 0, 8) . ']',
+                ]);
+            }
+
+            return $this->response->setJSON(['status' => 'success', 'message' => 'Saved']);
         } catch (\Throwable $e) {
             return $this->response->setJSON(['status' => 'error', 'message' => $e->getMessage()]);
         }
@@ -1530,11 +1581,11 @@ class Diagnosis extends BaseController
 
         $defaults = array_merge($legacy, [
             'page_size' => 'A4',
-            'page_margin_top_cm' => 1.2,
+            'page_margin_top_cm' => 6.1,
                'id' => 0,
-            'page_margin_bottom_cm' => 1.2,
-            'page_margin_left_cm' => 1.0,
-            'page_margin_right_cm' => 1.0,
+            'page_margin_bottom_cm' => 2.5,
+            'page_margin_left_cm' => 0.7,
+            'page_margin_right_cm' => 0.7,
             'margin_header_cm' => 0.5,
             'margin_footer_cm' => 1.5,
             'page_background_image' => '',

@@ -15,11 +15,11 @@
     <table style="font-size: 14px;width:100%;" autosize="1" >
 	<tr>
 		<td style="vertical-align: top;">
-            <img style="width: 75px;vertical-align: top;"  src="/assets/images/<?=H_logo?>" />
+            <img style="width: 75px;vertical-align: top;"  src="assets/images/<?=H_logo?>" />
         </td>
         <td style="vertical-align: top;text-align:center;">
             <p style="font-size: 22px;text-align:left;" ><?=H_Name?></p>
-            <p  style="font-size: 12px;text-align:left;" ><?=H_address_1?>, <?=H_address_2?> <br>
+            <p  style="font-size: 12px;text-align:left;" ><?=H_address_1?>, Uttarakhand<br>
             <?php
                 if(H_phone_No!='')
                 {

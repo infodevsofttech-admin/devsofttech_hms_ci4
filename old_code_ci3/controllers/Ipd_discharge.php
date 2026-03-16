@@ -184,7 +184,7 @@ class Ipd_discharge extends MY_Controller
 			WHERE m.attach_id=" . $p_id . " and  m.inv_date between '" . $ipd_admit_date . "'  and '" . $ipd_discharge_date . "' 
 			GROUP BY m.inv_date";
 
-		echo $sql;
+		//echo $sql;
 
 		$query = $this->db->query($sql);
 		$data['lab_request'] = $query->result();

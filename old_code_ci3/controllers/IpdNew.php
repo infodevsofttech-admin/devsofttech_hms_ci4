@@ -324,6 +324,8 @@ class IpdNew extends MY_Controller {
 				$content=$this->load->view('IPD2/ipd_invoice_print_TPA_V',$data,TRUE);
 			}else if($print==5){
 				$content=$this->load->view('IPD2/ipd_invoice_print_on_letterhead',$data,TRUE);
+			}else if($print==6){
+				$content=$this->load->view('IPD2/ipd_invoice_print_on_letterhead_wo_payment',$data,TRUE);
 			}else{
 				$content='Blank';
 			}
@@ -666,6 +668,10 @@ class IpdNew extends MY_Controller {
         $query = $this->db->query($sql);
         $data['refer_list']= $query->result();
 
+		$sql="select * from  hc_department  order by vName";
+		$query = $this->db->query($sql);
+		$data['hc_department']= $query->result();
+
 
 		$this->load->view('IPD2/ipd_main_panel',$data);
 	}
@@ -711,6 +717,26 @@ class IpdNew extends MY_Controller {
 			$ipdno=$ipdcode;
 		}
 
+		$sql="select * from ipd_master where id='".$ipdno."' ";
+		$query = $this->db->query($sql);
+		$ipd_master= $query->result();
+
+		$data['ipd_master']=$ipd_master;
+		//Check IPD Bill lock
+
+		if(isset($ipd_master[0]->cr_to_cash_medical))
+		{
+			if($ipd_master[0]->cr_to_cash_medical==1){
+				echo 'Please contact Admin';
+				exit();
+			}
+		}
+
+		if($ipd_master[0]->Discount3>0){
+			echo 'Please contact Admin';
+			exit();
+		}
+
 		//calculate_IPD
 
 		
@@ -740,11 +766,7 @@ class IpdNew extends MY_Controller {
         $query = $this->db->query($sql);
 		$data['case_master']= $query->result();
 				
-		$sql="select * from ipd_master where id='".$ipdno."' ";
-		$query = $this->db->query($sql);
-		$ipd_master= $query->result();
-
-		$data['ipd_master']=$ipd_master;
+		
 
 		$sql="select *,Date_Format(payment_date,'%d-%M-%Y') as pay_date_str,
 		Concat(if(payment_mode=1,'Cash','BANK'),if(credit_debit=0,'','-Return')) as pay_mode 
@@ -939,8 +961,12 @@ class IpdNew extends MY_Controller {
 		}elseif($form_no==9){
 			$this->m_pdf->pdf->showWatermarkText = false;
 			$content=$this->load->view('IPD_Format/form_fluid_in_out',$data,TRUE);
-		}elseif($form_no==13){
-			$content=$this->load->view('IPD2/print_ipd_form4',$data,TRUE);
+		}elseif($form_no==10){
+			$this->m_pdf->pdf->showWatermarkText = false;
+			$content=$this->load->view('IPD_Format/ipd_sticker_print',$data,TRUE);
+		}elseif($form_no==11){
+			$this->m_pdf->pdf->showWatermarkText = false;
+			$content=$this->load->view('IPD_Format/ipd_sticker_print_2',$data,TRUE);
 		}else{
 			$content="";
 		}
@@ -1003,16 +1029,17 @@ class IpdNew extends MY_Controller {
 			$query = $this->db->query($sql);
 			$data['refer_master']= $query->result();
 
+			$sql="select * from  hc_department  order by vName";
+			$query = $this->db->query($sql);
+			$data['hc_department']= $query->result();
 
 			$this->load->view('IPD2/Ipd_Registration_V',$data);
 		}
-	
 	}
 	
 	public function AddNew() { 
 		if (!$this->input->is_ajax_request()) { exit('no valid req.'); }
 			
-
 			$data['master'] = array( 
 				'p_id' => $this->input->post('pid'), 
 				'P_name' => $this->input->post('pname'),
@@ -1028,7 +1055,8 @@ class IpdNew extends MY_Controller {
 				'case_type' => $this->input->post('optionsRadios_mlc'),
 				'case_id' => $this->input->post('optionsRadios_org'),
 				'reg_time' => $this->input->post('res_time'),
-				'refer_by' => $this->input->post('refer_by_list')
+				'refer_by' => $this->input->post('refer_by_list'),
+				'dept_id' => $this->input->post('dept_id')
 			); 
 
 			$groupData = $this->input->post('doc_id');
@@ -1239,6 +1267,29 @@ echo $encode_data;
                 $rvar=array(
                 'insertid' =>$inser_id,
 				'showcontent' => "Admit Date Updated"
+                );
+
+                $encode_data = json_encode($rvar);
+                echo $encode_data;
+	}
+
+	public function update_department($ipd_id)
+	{
+		if (!$this->input->is_ajax_request()) { exit('no valid req.'); }
+                
+				$dept_id=$this->input->post('dept_id');
+
+                $data['master'] = array( 
+					'dept_id' => $dept_id
+				); 
+				
+				$this->Ipd_M->update($data['master'],$ipd_id);
+
+				$inser_id=1;
+
+                $rvar=array(
+                'insertid' =>$inser_id,
+				'showcontent' => "Department Updated"
                 );
 
                 $encode_data = json_encode($rvar);

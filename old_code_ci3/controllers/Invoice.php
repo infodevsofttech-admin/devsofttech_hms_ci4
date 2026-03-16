@@ -65,7 +65,7 @@ class Invoice extends MY_Controller {
         $data['opd_master']= $query->result();
 	
 		$sql="select *,if(gender=1,'Male','FeMale') as xgender,
-		IFNULL(GET_AGE_BY_DOB(dob),age)  AS age from patient_master where id='".$data['opd_master'][0]->p_id."' ";
+		GET_AGE_1(dob,age,age_in_month,estimate_dob)  AS age from patient_master where id='".$data['opd_master'][0]->p_id."' ";
   
         $query = $this->db->query($sql);
         $data['patient_master']= $query->result();
@@ -117,7 +117,7 @@ class Invoice extends MY_Controller {
         $data['payment_history']= $query->result();
 
 		$sql="select *,if(gender=1,'Male','FeMale') as xgender,
-		IFNULL(GET_AGE_BY_DOB(dob),age)  AS age from patient_master where id=".$data['invoice_master'][0]->attach_id;
+		GET_AGE_1(dob,age,age_in_month,estimate_dob)  AS age from patient_master where id=".$data['invoice_master'][0]->attach_id;
         $query = $this->db->query($sql);
         $data['patient_master']= $query->result();
 		
@@ -728,7 +728,7 @@ class Invoice extends MY_Controller {
 			$data['org_info']= $query->result();
 			
 			$sql="select *,if(gender=1,'Male','Female') as xgender,
-			IFNULL(GET_AGE_BY_DOB(dob),age) as str_age from patient_master where id='".$data['req_payment_order'][0]->patient_id."' ";
+			GET_AGE_1(dob,age,age_in_month,estimate_dob) as str_age from patient_master where id='".$data['req_payment_order'][0]->patient_id."' ";
 			$query = $this->db->query($sql);
 			$data['person_info']= $query->result();
 
@@ -845,7 +845,7 @@ class Invoice extends MY_Controller {
 	        $data['org_info']= $query->result();
 			
 			$sql="select *,if(gender=1,'Male','Female') as xgender,
-			IFNULL(GET_AGE_BY_DOB(dob),age) as str_age from patient_master where id='".$data['req_payment_order'][0]->patient_id."' ";
+			GET_AGE_1(dob,age,age_in_month,estimate_dob) as str_age from patient_master where id='".$data['req_payment_order'][0]->patient_id."' ";
 	        $query = $this->db->query($sql);
 			$data['patient_master']= $query->result();
 			

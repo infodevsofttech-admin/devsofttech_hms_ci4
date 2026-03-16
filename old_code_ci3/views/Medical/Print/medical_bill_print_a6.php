@@ -21,7 +21,7 @@
 	</tr>
 	<tr>
     	<td style="width: 60%;vertical-align: top;">
-		    <p align="center" style="font-size: 10px" ><?=M_address?><br>
+		    <p align="center" style="font-size: 10px" ><?=M_address?>, Uttarakhand<br>
             <?php 
                 if(M_Phone_Number!='')
                 {
@@ -52,12 +52,12 @@
 		 		<strong><?=$invoice_med_master[0]->inv_name?></strong><br>
 				<?php if($invoice_med_master[0]->customer_type==0) { ?>
 					Phone No. : <?=$invoice_med_master[0]->inv_phone_number?><br>
-					Refer By :   <?=$Doc_name ?><br>
+					Refer By : Dr. <?=$Doc_name ?><br>
 				<?php } ?>
 			 	<?php if($invoice_med_master[0]->customer_type==1 && count($patient_master)>0) { ?>
 				<i>Patient Info. as per Hospital Records</i><br>
 				<b>UHID ID :</b> <?=$patient_master[0]->p_code ?><br>
-					Refer By : <?=$Doc_name ?><br>
+					Refer By : Dr. <?=$Doc_name ?><br>
 				<?php } ?>
 				<?php if($invoice_med_master[0]->ipd_id>0) { ?>
 					<b>IPD Code :</b> <?=$ipd_master[0]->ipd_code ?><br>

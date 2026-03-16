@@ -42,7 +42,7 @@ class IPD_Nursing extends MY_Controller {
 		$p_id=$data['ipd_info'][0]->p_id;
 
 		$sql="select *,if(gender=1,'Male','FeMale') as xgender,
-		IFNULL(GET_AGE_BY_DOB(dob),age)  AS age 
+		GET_AGE_1(dob,age,age_in_month,estimate_dob)  AS age 
 		from patient_master where id='".$p_id."' ";
         $query = $this->db->query($sql);
         $data['person_info']= $query->result();
@@ -86,7 +86,7 @@ class IPD_Nursing extends MY_Controller {
         $data['ipd_list']= $query->result();
 		
 		$sql="select *,if(gender=1,'Male','FeMale') as xgender,
-		IFNULL(GET_AGE_BY_DOB(dob),age)  AS age from patient_master where id='".$data['ipd_info'][0]->p_id."' ";
+		GET_AGE_1(dob,age,age_in_month,estimate_dob)  AS age from patient_master where id='".$data['ipd_info'][0]->p_id."' ";
         $query = $this->db->query($sql);
         $data['person_info']= $query->result();
 		

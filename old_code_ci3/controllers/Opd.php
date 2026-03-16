@@ -1718,7 +1718,7 @@ class Opd extends MY_Controller {
         $query = $this->db->query($sql);
         $data['doc_master']= $query->result();
 
-		$sql="SELECT o.opd_id,o.opd_code,p.id,p.p_code,p.p_fname as P_name,m.queue_no,o.opd_fee_desc,o.payment_status,p.p_rname,o.opd_no,
+		$sql="SELECT o.opd_id,o.opd_code,p.id,p.p_code,p.p_fname as P_name,m.queue_no,o.opd_fee_desc,o.payment_status,p.p_rname,
 			group_concat('ID:',`h`.`id`,'/M:',(case `h`.`payment_mode` when 1 then 'Cash' when 2 then 'BANK ' when 0 then 'Pending' else 'Other' end) separator ',') AS `Paymode`
 			FROM ((opd_master o JOIN patient_master p ON o.p_id=p.id)
 			LEFT JOIN opd_prescription m ON o.opd_id=m.opd_id)

@@ -65,7 +65,7 @@ class Orgcase extends MY_Controller {
 		$this->db->query("CALL p_org_update(".$caseid.")");
 		
 		$sql="select *,if(gender=1,'Male','Female') as xgender,
-		IFNULL(GET_AGE_BY_DOB(dob),age)   AS age from patient_master where id='".$pno."' ";
+		GET_AGE_1(dob,age,age_in_month,estimate_dob)   AS age from patient_master where id='".$pno."' ";
 
         $query = $this->db->query($sql);
         $data['person_info']= $query->result();
@@ -178,7 +178,7 @@ class Orgcase extends MY_Controller {
 		$this->db->query("CALL p_org_update(".$caseid.")");
 		
 		$sql="select *,if(gender=1,'Male','Female') as xgender,
-		IFNULL(GET_AGE_BY_DOB(dob),age)   AS age from patient_master where id='".$pno."' ";
+		GET_AGE_1(dob,age,age_in_month,estimate_dob)   AS age from patient_master where id='".$pno."' ";
 
         $query = $this->db->query($sql);
         $data['person_info']= $query->result();
@@ -299,12 +299,12 @@ class Orgcase extends MY_Controller {
 				'code' => $orgcode
 			);
 		
-		
+		/*
 		$sql="select * from hc_items_insurance where  hc_items_id=".$master_item_id." and hc_insurance_id=".$insurance_id;
 		$query = $this->db->query($sql);
 		$chkitem= $query->result();
 		
-		if($insurance_id==2)
+		if($insurance_id>2)
 		{
 			if(count($chkitem)>0 )
 			{
@@ -313,7 +313,7 @@ class Orgcase extends MY_Controller {
 				$insDone=$this->item_M->insert_in_item( $data['update_insurance_item']);
 			}
 		}
-		
+		*/
 		
 		$sql="select * from invoice_item where id=".$item_id;
 		$query = $this->db->query($sql);
@@ -431,7 +431,7 @@ class Orgcase extends MY_Controller {
 		$pno=$data['orgcase'][0]->p_id;
 		
 		$sql="select *,if(gender=1,'Male','Female') as xgender,
-		IFNULL(GET_AGE_BY_DOB(dob),age)   AS age from patient_master where id='".$pno."' ";
+		GET_AGE_1(dob,age,age_in_month,estimate_dob)   AS age from patient_master where id='".$pno."' ";
 
         $query = $this->db->query($sql);
         $data['person_info']= $query->result();
@@ -599,7 +599,7 @@ class Orgcase extends MY_Controller {
 		$claim_id=$data['orgcase'][0]->insurance_no_1;
 		
 		$sql="select *,if(gender=1,'Male','Female') as xgender,
-		IFNULL(GET_AGE_BY_DOB(dob),age)   AS age from patient_master where id='".$pno."' ";
+		GET_AGE_1(dob,age,age_in_month,estimate_dob)   AS age from patient_master where id='".$pno."' ";
 
         $query = $this->db->query($sql);
         $data['person_info']= $query->result();
@@ -653,7 +653,7 @@ class Orgcase extends MY_Controller {
 		$claim_id=$data['orgcase'][0]->insurance_no_1;
 		
 		$sql="select *,if(gender=1,'Male','Female') as xgender,
-		IFNULL(GET_AGE_BY_DOB(dob),age)   AS age from patient_master where id='".$pno."' ";
+		GET_AGE_1(dob,age,age_in_month,estimate_dob)   AS age from patient_master where id='".$pno."' ";
 
         $query = $this->db->query($sql);
         $data['person_info']= $query->result();
@@ -1102,7 +1102,7 @@ class Orgcase extends MY_Controller {
         $data['ipd_info']= $query->result();
 
 		$sql="select *,if(gender=1,'Male','Female') as xgender,
-		IFNULL(GET_AGE_BY_DOB(dob),age) as str_age from patient_master where id='".$data['org_info'][0]->p_id."' ";
+		GET_AGE_1(dob,age,age_in_month,estimate_dob) as str_age from patient_master where id='".$data['org_info'][0]->p_id."' ";
         $query = $this->db->query($sql);
         $data['person_info']= $query->result();
 
@@ -1120,7 +1120,7 @@ class Orgcase extends MY_Controller {
         $data['ipd_info']= $query->result();
 
 		$sql="select *,if(gender=1,'Male','Female') as xgender,
-		IFNULL(GET_AGE_BY_DOB(dob),age) as str_age from patient_master where id='".$data['org_info'][0]->p_id."' ";
+		GET_AGE_1(dob,age,age_in_month,estimate_dob) as str_age from patient_master where id='".$data['org_info'][0]->p_id."' ";
         $query = $this->db->query($sql);
         $data['person_info']= $query->result();
 
@@ -1153,7 +1153,7 @@ class Orgcase extends MY_Controller {
 			$patient_id=$org_info[0]->p_id;
 
         	$sql="select *,if(gender=1,'Male','Female') as xgender,
-			IFNULL(GET_AGE_BY_DOB(dob),age) as str_age from patient_master where id='".$patient_id."' ";
+			GET_AGE_1(dob,age,age_in_month,estimate_dob) as str_age from patient_master where id='".$patient_id."' ";
 			$query = $this->db->query($sql);
 			$person_info= $query->result();
 		
@@ -1216,7 +1216,7 @@ class Orgcase extends MY_Controller {
 			$patient_id=$org_info[0]->p_id;
 
         	$sql="select *,if(gender=1,'Male','Female') as xgender,
-			IFNULL(GET_AGE_BY_DOB(dob),age) as str_age from patient_master where id='".$patient_id."' ";
+			GET_AGE_1(dob,age,age_in_month,estimate_dob) as str_age from patient_master where id='".$patient_id."' ";
 			$query = $this->db->query($sql);
 			$person_info= $query->result();
 		

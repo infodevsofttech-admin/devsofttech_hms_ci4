@@ -39,9 +39,6 @@ footer: html_myFooter;
            <b>Dr. <?=$opd_master[0]->doc_name ?></b>
         </p>
         <?=nl2br($opd_master[0]->doc_sign)?>
-        <br/>
-        
-        <p align="center" style="font-size: 14px;"><b>FOR APPOINTMENT <br/> MOB - 7466985557  </b> </p>
         </td>
     </tr>
 </table>
