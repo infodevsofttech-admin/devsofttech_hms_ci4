@@ -773,7 +773,7 @@ class Setup extends BaseController
             foreach ($pending as $stmt) {
                 $message = (string) ($deferredLastErrors[$stmt] ?? 'Unresolved FK dependency after retries');
 
-                if ($this->isCreateTableStatement($stmt) && stripos($message, 'cannot add foreign key constraint') !== false) {
+                if ($this->canRetryCreateTableWithoutForeignKeys($stmt, $message)) {
                     $retry = $this->stripForeignKeysFromCreateTable($stmt);
                     if ($retry !== $stmt && $retry !== '') {
                         try {
@@ -1693,6 +1693,33 @@ class Setup extends BaseController
         }
 
         if (str_contains($messageLower, 'cannot add foreign key constraint')) {
+            return true;
+        }
+
+        if (str_contains($messageLower, 'foreign key constraint is incorrectly formed')) {
+            return true;
+        }
+
+        if (str_contains($messageLower, 'errno: 150')) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private function canRetryCreateTableWithoutForeignKeys(string $stmt, string $message): bool
+    {
+        if (!$this->isCreateTableStatement($stmt)) {
+            return false;
+        }
+
+        $messageLower = strtolower($message);
+
+        if (str_contains($messageLower, 'cannot add foreign key constraint')) {
+            return true;
+        }
+
+        if (str_contains($messageLower, 'failed to open the referenced table')) {
             return true;
         }
 
