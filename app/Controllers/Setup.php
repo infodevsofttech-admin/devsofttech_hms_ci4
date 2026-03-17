@@ -699,6 +699,7 @@ class Setup extends BaseController
         $truncated = false;
         $attempted = 0;
 
+        $pending = [];
         foreach ($sqlList as $stmt) {
             if ($attempted >= $maxStatements) {
                 $truncated = true;
@@ -714,18 +715,65 @@ class Setup extends BaseController
             if ($stmt === '') {
                 continue;
             }
-            $attempted++;
-            try {
-                $client->query($stmt);
-                $applied++;
-            } catch (\Throwable $e) {
-                $message = (string) $e->getMessage();
 
-                if ($this->isSafeToSkipSyncStatement($message, $stmt)) {
+            $attempted++;
+            $pending[] = $stmt;
+        }
+
+        $maxPasses = (int) env('setup.sync.max_apply_retry_passes', 6);
+        if ($maxPasses < 1) {
+            $maxPasses = 1;
+        }
+
+        $deferredLastErrors = [];
+        for ($pass = 1; $pass <= $maxPasses && !empty($pending); $pass++) {
+            if ((microtime(true) - $startedAt) >= $maxRuntimeSeconds) {
+                $truncated = true;
+                break;
+            }
+
+            $nextPending = [];
+            $appliedThisPass = 0;
+
+            foreach ($pending as $stmt) {
+                if ((microtime(true) - $startedAt) >= $maxRuntimeSeconds) {
+                    $truncated = true;
+                    $nextPending[] = $stmt;
                     continue;
                 }
 
-                if ($this->isCreateTableStatement($stmt) && stripos($message, 'Cannot add foreign key constraint') !== false) {
+                try {
+                    $client->query($stmt);
+                    $applied++;
+                    $appliedThisPass++;
+                } catch (\Throwable $e) {
+                    $message = (string) $e->getMessage();
+
+                    if ($this->isSafeToSkipSyncStatement($message, $stmt)) {
+                        continue;
+                    }
+
+                    if ($this->shouldDeferSyncStatement($message, $stmt)) {
+                        $nextPending[] = $stmt;
+                        $deferredLastErrors[$stmt] = $message;
+                        continue;
+                    }
+
+                    $errors[] = $message . ' | SQL: ' . mb_substr($stmt, 0, 180);
+                }
+            }
+
+            $pending = $nextPending;
+            if ($appliedThisPass === 0) {
+                break;
+            }
+        }
+
+        if (!empty($pending)) {
+            foreach ($pending as $stmt) {
+                $message = (string) ($deferredLastErrors[$stmt] ?? 'Unresolved FK dependency after retries');
+
+                if ($this->isCreateTableStatement($stmt) && stripos($message, 'cannot add foreign key constraint') !== false) {
                     $retry = $this->stripForeignKeysFromCreateTable($stmt);
                     if ($retry !== $stmt && $retry !== '') {
                         try {
@@ -1626,6 +1674,33 @@ class Setup extends BaseController
         }
 
         if (str_contains($messageLower, 'specified key was too long') && str_contains($messageLower, 'max key length is') && str_contains($stmtLower, 'alter table')) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private function shouldDeferSyncStatement(string $message, string $stmt): bool
+    {
+        if (!$this->isCreateTableStatement($stmt) && stripos($stmt, 'ALTER TABLE') !== 0) {
+            return false;
+        }
+
+        $messageLower = strtolower($message);
+
+        if (str_contains($messageLower, 'failed to open the referenced table')) {
+            return true;
+        }
+
+        if (str_contains($messageLower, 'cannot add foreign key constraint')) {
+            return true;
+        }
+
+        if (str_contains($messageLower, 'foreign key constraint is incorrectly formed')) {
+            return true;
+        }
+
+        if (str_contains($messageLower, 'errno: 150')) {
             return true;
         }
 
