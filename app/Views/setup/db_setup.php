@@ -62,6 +62,21 @@
                 <?php endif; ?>
             </form>
 
+            <form method="post" action="<?= base_url('setup/db-tools/export-master-seed') ?>" style="margin-bottom:12px;">
+                <?= csrf_field() ?>
+                <?php if (!empty($setup_key ?? '')) : ?>
+                    <input type="hidden" name="key" value="<?= esc($setup_key) ?>">
+                <?php endif; ?>
+                <button type="submit" class="btn btn-success">Export Master Seed Data (from current DB)</button>
+                <span class="text-muted" style="margin-left:10px;">File: <?= esc($master_seed_file ?? '') ?></span>
+                <?php if (!empty($master_seed_exists ?? false)) : ?>
+                    <span class="label label-success" style="margin-left:6px;">Found</span>
+                <?php else : ?>
+                    <span class="label label-warning" style="margin-left:6px;">Not Found</span>
+                <?php endif; ?>
+                <div class="text-muted" style="margin-top:4px;">Uses .env key <code>setup.seed.export_tables</code> (comma-separated table names).</div>
+            </form>
+
             <form method="post" action="<?= base_url('setup/db-tools/schema-sync') ?>">
                 <?= csrf_field() ?>
                 <?php if (!empty($setup_key ?? '')) : ?>
@@ -143,6 +158,24 @@
                         Re-run <strong>Apply Sync to Client DB</strong> to continue remaining statements,
                         or increase <code>setup.sync.max_apply_statements_per_run</code> / <code>setup.sync.max_runtime_seconds</code> in .env.
                     </div>
+                <?php endif; ?>
+
+                <?php if (array_key_exists('seed', (array) $sync_result)) : ?>
+                    <?php $seedResult = is_array($sync_result['seed'] ?? null) ? $sync_result['seed'] : []; ?>
+                    <?php if (!empty($seedResult['errors'] ?? [])) : ?>
+                        <div class="alert alert-danger">
+                            <strong>Seed Apply Errors:</strong>
+                            <?php foreach (($seedResult['errors'] ?? []) as $seedErr) : ?>
+                                <div><?= esc($seedErr) ?></div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php else : ?>
+                        <div class="alert alert-success">
+                            Seed data applied successfully.
+                            Rows upserted: <?= esc((string) ($seedResult['applied'] ?? 0)) ?>,
+                            tables skipped: <?= esc((string) ($seedResult['skipped'] ?? 0)) ?>.
+                        </div>
+                    <?php endif; ?>
                 <?php endif; ?>
 
                 <div class="form-group">

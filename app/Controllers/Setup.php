@@ -30,6 +30,20 @@ class Setup extends BaseController
         return APPPATH . 'Database/master_schema.json';
     }
 
+    private function masterSeedFilePath(): string
+    {
+        $fromEnv = trim((string) env('setup.seed.file', ''));
+        if ($fromEnv !== '') {
+            if (str_starts_with($fromEnv, '/') || preg_match('/^[A-Za-z]:[\\\/]/', $fromEnv) === 1) {
+                return $fromEnv;
+            }
+
+            return ROOTPATH . ltrim(str_replace(['\\'], '/', $fromEnv), '/');
+        }
+
+        return APPPATH . 'Database/master_seed_data.json';
+    }
+
     private function isSetupLocked(): bool
     {
         return is_file($this->lockFilePath());
@@ -181,6 +195,16 @@ class Setup extends BaseController
                 $syncResult['apply_truncated'] = $applyResult['truncated'];
             }
 
+            if ($action === 'apply') {
+                $canRunSeed = empty($syncResult['errors'])
+                    && empty($syncResult['apply_errors'] ?? [])
+                    && empty($syncResult['apply_truncated'] ?? false);
+
+                if ($canRunSeed) {
+                    $syncResult['seed'] = $this->applySeedDataToClientDb();
+                }
+            }
+
             return $syncResult;
         } catch (\Throwable $e) {
             log_message('error', 'Setup schemaSync failed: {message}', ['message' => $e->getMessage()]);
@@ -220,6 +244,56 @@ class Setup extends BaseController
         }
 
         session()->setFlashdata('setup_msg', 'Master schema exported: ' . $file);
+        return redirect()->to($this->dbToolsUrlWithKey());
+    }
+
+    public function exportMasterSeedData()
+    {
+        if ($deny = $this->ensureSetupAccess()) {
+            return $deny;
+        }
+
+        $tables = $this->parseSeedTableList();
+        if (empty($tables)) {
+            session()->setFlashdata('setup_msg', 'No seed tables configured. Set setup.seed.export_tables in .env (comma-separated table names).');
+            return redirect()->to($this->dbToolsUrlWithKey());
+        }
+
+        $seedPayload = [
+            'generated_at' => date('Y-m-d H:i:s'),
+            'source' => 'local-current-db',
+            'tables' => [],
+        ];
+
+        foreach ($tables as $tableName) {
+            if (!$this->tableExists($tableName)) {
+                $seedPayload['tables'][$tableName] = [];
+                continue;
+            }
+
+            try {
+                $rows = $this->db->table($tableName)->get()->getResultArray();
+                $seedPayload['tables'][$tableName] = is_array($rows) ? $rows : [];
+            } catch (\Throwable $e) {
+                log_message('error', 'Seed export table read failed for {table}: {message}', ['table' => $tableName, 'message' => $e->getMessage()]);
+                $seedPayload['tables'][$tableName] = [];
+            }
+        }
+
+        $file = $this->masterSeedFilePath();
+        $dir = dirname($file);
+        if (!is_dir($dir) && !mkdir($dir, 0777, true) && !is_dir($dir)) {
+            session()->setFlashdata('setup_msg', 'Unable to create seed file directory.');
+            return redirect()->to($this->dbToolsUrlWithKey());
+        }
+
+        $json = json_encode($seedPayload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        if (!is_string($json) || @file_put_contents($file, $json) === false) {
+            session()->setFlashdata('setup_msg', 'Unable to write seed data file.');
+            return redirect()->to($this->dbToolsUrlWithKey());
+        }
+
+        session()->setFlashdata('setup_msg', 'Master seed data exported: ' . $file . ' (' . count($tables) . ' table(s)).');
         return redirect()->to($this->dbToolsUrlWithKey());
     }
 
@@ -515,6 +589,8 @@ class Setup extends BaseController
             'sync_client_database' => (string) env('setup.sync.client.database', ''),
             'master_schema_file' => $this->masterSchemaFilePath(),
             'master_schema_exists' => is_file($this->masterSchemaFilePath()),
+            'master_seed_file' => $this->masterSeedFilePath(),
+            'master_seed_exists' => is_file($this->masterSeedFilePath()),
             'diagnostics' => $this->collectSetupDiagnostics($dbError),
         ];
     }
@@ -947,6 +1023,143 @@ class Setup extends BaseController
             'errors' => [],
             'tables' => $decoded['tables'],
             'source' => 'master-schema-file',
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function loadMasterSeedDefinition(): array
+    {
+        $file = $this->masterSeedFilePath();
+        if (!is_file($file)) {
+            return [
+                'errors' => ['Master seed data file not found: ' . $file],
+                'tables' => [],
+                'source' => 'master-seed-file',
+            ];
+        }
+
+        $json = @file_get_contents($file);
+        $decoded = is_string($json) ? json_decode($json, true) : null;
+        if (!is_array($decoded) || !is_array($decoded['tables'] ?? null)) {
+            return [
+                'errors' => ['Invalid master seed data file format: ' . $file],
+                'tables' => [],
+                'source' => 'master-seed-file',
+            ];
+        }
+
+        return [
+            'errors' => [],
+            'tables' => $decoded['tables'],
+            'source' => 'master-seed-file',
+        ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function parseSeedTableList(): array
+    {
+        $raw = trim((string) env('setup.seed.export_tables', ''));
+        if ($raw === '') {
+            return [];
+        }
+
+        $parts = preg_split('/[\s,]+/', $raw) ?: [];
+        $out = [];
+        foreach ($parts as $part) {
+            $name = strtolower(trim((string) $part));
+            $name = preg_replace('/[^a-z0-9_]/', '', $name) ?? '';
+            if ($name !== '') {
+                $out[$name] = true;
+            }
+        }
+
+        return array_keys($out);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function applySeedDataToClientDb(): array
+    {
+        $definition = $this->loadMasterSeedDefinition();
+        if (!empty($definition['errors'])) {
+            return [
+                'applied' => 0,
+                'skipped' => 0,
+                'errors' => (array) $definition['errors'],
+                'tables' => [],
+            ];
+        }
+
+        $tables = is_array($definition['tables'] ?? null) ? $definition['tables'] : [];
+        if (empty($tables)) {
+            return [
+                'applied' => 0,
+                'skipped' => 0,
+                'errors' => [],
+                'tables' => [],
+            ];
+        }
+
+        $client = $this->resolveClientConnection();
+        $applied = 0;
+        $skipped = 0;
+        $errors = [];
+        $tableStats = [];
+
+        foreach ($tables as $tableName => $rows) {
+            $table = strtolower(trim((string) $tableName));
+            if ($table === '') {
+                continue;
+            }
+
+            $safeTable = preg_replace('/[^a-z0-9_]/', '', $table) ?? '';
+            if ($safeTable === '') {
+                continue;
+            }
+
+            if (!$this->tableExistsInConnection($client, $safeTable)) {
+                $skipped++;
+                $tableStats[] = $safeTable . ' (skipped: table missing)';
+                continue;
+            }
+
+            if (!is_array($rows)) {
+                $skipped++;
+                $tableStats[] = $safeTable . ' (skipped: invalid row list)';
+                continue;
+            }
+
+            $tableApplied = 0;
+            foreach ($rows as $row) {
+                if (!is_array($row) || empty($row)) {
+                    continue;
+                }
+
+                try {
+                    // REPLACE provides idempotent seed behavior: on re-run, rows with existing
+                    // PRIMARY or UNIQUE keys are updated instead of duplicated.
+                    // This ensures seed data can be safely applied multiple times.
+                    $client->table($safeTable)->replace($row);
+                    $applied++;
+                    $tableApplied++;
+                } catch (\Throwable $e) {
+                    $errors[] = $safeTable . ': ' . $e->getMessage();
+                }
+            }
+
+            $tableStats[] = $safeTable . ' (rows: ' . $tableApplied . ')';
+        }
+
+        return [
+            'applied' => $applied,
+            'skipped' => $skipped,
+            'errors' => $errors,
+            'tables' => $tableStats,
         ];
     }
 
@@ -2263,6 +2476,21 @@ class Setup extends BaseController
 
         try {
             $tables = $this->db->listTables();
+            return in_array($tableName, $tables, true);
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    private function tableExistsInConnection($db, string $tableName): bool
+    {
+        $tableName = trim($tableName);
+        if ($tableName === '') {
+            return false;
+        }
+
+        try {
+            $tables = $db->listTables();
             return in_array($tableName, $tables, true);
         } catch (\Throwable $e) {
             return false;
