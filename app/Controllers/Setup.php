@@ -633,6 +633,8 @@ class Setup extends BaseController
 
         $createCount = 0;
         $alterCount = 0;
+        $missingCreateSqlByTable = [];
+        $alterStatements = [];
 
         foreach ($masterTables as $table => $masterTableDef) {
             if ($processedTables >= $maxTables) {
@@ -656,7 +658,7 @@ class Setup extends BaseController
                     }
                 }
                 if ($createSql !== '') {
-                    $sql[] = $createSql;
+                    $missingCreateSqlByTable[$table] = $createSql;
                     $createCount++;
                 }
                 continue;
@@ -665,11 +667,22 @@ class Setup extends BaseController
             $tableAlterSql = $this->buildAlterSqlForTableFromSchema((array) $masterTableDef, $client, $table);
             if (!empty($tableAlterSql)) {
                 foreach ($tableAlterSql as $stmt) {
-                    $sql[] = $stmt;
+                    $alterStatements[] = $stmt;
                 }
                 $alterCount += count($tableAlterSql);
             }
 
+        }
+
+        if (!empty($missingCreateSqlByTable)) {
+            $orderedCreateStatements = $this->orderCreateTableStatementsByDependency($missingCreateSqlByTable, array_keys($clientTables));
+            foreach ($orderedCreateStatements as $stmt) {
+                $sql[] = $stmt;
+            }
+        }
+
+        foreach ($alterStatements as $stmt) {
+            $sql[] = $stmt;
         }
 
         return [
@@ -685,6 +698,75 @@ class Setup extends BaseController
             'source' => (string) ($masterSchema['source'] ?? 'master-schema-file'),
             'truncated' => $truncated,
         ];
+    }
+
+    /**
+     * @param array<string, string> $createSqlByTable
+     * @param array<int, string> $alreadyExistingTables
+     * @return array<int, string>
+     */
+    private function orderCreateTableStatementsByDependency(array $createSqlByTable, array $alreadyExistingTables): array
+    {
+        $existing = array_fill_keys(array_map(static fn ($t) => strtolower((string) $t), $alreadyExistingTables), true);
+        $pending = $createSqlByTable;
+        $ordered = [];
+
+        while (!empty($pending)) {
+            $progress = false;
+
+            foreach ($pending as $table => $createSql) {
+                $deps = $this->extractReferencedTablesFromCreateSql($createSql);
+                $blocked = false;
+
+                foreach ($deps as $depTable) {
+                    $depKey = strtolower($depTable);
+                    if (isset($pending[$depTable]) && !isset($existing[$depKey])) {
+                        $blocked = true;
+                        break;
+                    }
+                }
+
+                if ($blocked) {
+                    continue;
+                }
+
+                $ordered[] = $createSql;
+                $existing[strtolower($table)] = true;
+                unset($pending[$table]);
+                $progress = true;
+            }
+
+            if ($progress) {
+                continue;
+            }
+
+            // Cycles or unresolved references: keep deterministic fallback order.
+            ksort($pending);
+            foreach ($pending as $table => $createSql) {
+                $ordered[] = $createSql;
+            }
+            break;
+        }
+
+        return $ordered;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function extractReferencedTablesFromCreateSql(string $createSql): array
+    {
+        $refs = [];
+        if (preg_match_all('/REFERENCES\s+`([^`]+)`/i', $createSql, $matches) === 1 || !empty($matches[1])) {
+            foreach ((array) ($matches[1] ?? []) as $table) {
+                $name = trim((string) $table);
+                if ($name !== '') {
+                    $refs[] = $name;
+                }
+            }
+        }
+
+        return array_values(array_unique($refs));
     }
 
     /**
