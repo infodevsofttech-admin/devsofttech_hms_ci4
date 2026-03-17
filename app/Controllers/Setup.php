@@ -624,9 +624,9 @@ class Setup extends BaseController
         $masterTables = $masterSchema['tables'] ?? [];
         $clientTables = array_flip($client->listTables());
 
-        $maxTables = (int) env('setup.sync.max_tables_per_run', 150);
-        if ($maxTables <= 0) {
-            $maxTables = 150;
+        $maxTables = (int) env('setup.sync.max_tables_per_run', 0);
+        if ($maxTables < 0) {
+            $maxTables = 0;
         }
         $processedTables = 0;
         $truncated = false;
@@ -636,8 +636,35 @@ class Setup extends BaseController
         $missingCreateSqlByTable = [];
         $alterStatements = [];
 
+        // Prioritize known parent tables that commonly unblock FK-dependent tables.
+        $priorityParentTables = ['users', 'hc_insurancebak', 'opd_advice_type'];
+        foreach ($priorityParentTables as $priorityTable) {
+            if (isset($clientTables[$priorityTable])) {
+                continue;
+            }
+
+            if (!isset($masterTables[$priorityTable])) {
+                continue;
+            }
+
+            $priorityCreateSql = (string) (($masterTables[$priorityTable]['create_sql'] ?? ''));
+            if ($priorityCreateSql === '') {
+                continue;
+            }
+
+            $priorityCreateSql = $this->ensureCreateTableIfNotExists($priorityCreateSql);
+            if ($priorityCreateSql !== '' && !str_ends_with($priorityCreateSql, ';')) {
+                $priorityCreateSql .= ';';
+            }
+
+            if ($priorityCreateSql !== '') {
+                $missingCreateSqlByTable[$priorityTable] = $priorityCreateSql;
+                $createCount++;
+            }
+        }
+
         foreach ($masterTables as $table => $masterTableDef) {
-            if ($processedTables >= $maxTables) {
+            if ($maxTables > 0 && $processedTables >= $maxTables) {
                 $truncated = true;
                 break;
             }
@@ -657,7 +684,7 @@ class Setup extends BaseController
                         $createSql .= ';';
                     }
                 }
-                if ($createSql !== '') {
+                if ($createSql !== '' && !isset($missingCreateSqlByTable[$table])) {
                     $missingCreateSqlByTable[$table] = $createSql;
                     $createCount++;
                 }
