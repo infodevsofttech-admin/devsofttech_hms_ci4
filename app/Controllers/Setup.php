@@ -254,9 +254,10 @@ class Setup extends BaseController
         }
 
         $tables = $this->parseSeedTableList();
+        $exportedAllTables = false;
         if (empty($tables)) {
-            session()->setFlashdata('setup_msg', 'No seed tables configured. Set setup.seed.export_tables in .env (comma-separated table names).');
-            return redirect()->to($this->dbToolsUrlWithKey());
+            $tables = $this->db->listTables();
+            $exportedAllTables = true;
         }
 
         $seedPayload = [
@@ -266,17 +267,18 @@ class Setup extends BaseController
         ];
 
         foreach ($tables as $tableName) {
-            if (!$this->tableExists($tableName)) {
+            $resolvedTable = $this->resolveTableNameInConnection($this->db, (string) $tableName);
+            if ($resolvedTable === null) {
                 $seedPayload['tables'][$tableName] = [];
                 continue;
             }
 
             try {
-                $rows = $this->db->table($tableName)->get()->getResultArray();
-                $seedPayload['tables'][$tableName] = is_array($rows) ? $rows : [];
+                $rows = $this->db->table($resolvedTable)->get()->getResultArray();
+                $seedPayload['tables'][$resolvedTable] = is_array($rows) ? $rows : [];
             } catch (\Throwable $e) {
-                log_message('error', 'Seed export table read failed for {table}: {message}', ['table' => $tableName, 'message' => $e->getMessage()]);
-                $seedPayload['tables'][$tableName] = [];
+                log_message('error', 'Seed export table read failed for {table}: {message}', ['table' => $resolvedTable, 'message' => $e->getMessage()]);
+                $seedPayload['tables'][$resolvedTable] = [];
             }
         }
 
@@ -293,7 +295,8 @@ class Setup extends BaseController
             return redirect()->to($this->dbToolsUrlWithKey());
         }
 
-        session()->setFlashdata('setup_msg', 'Master seed data exported: ' . $file . ' (' . count($tables) . ' table(s)).');
+        $mode = $exportedAllTables ? 'all tables (setup.seed.export_tables not set)' : 'configured table list';
+        session()->setFlashdata('setup_msg', 'Master seed data exported: ' . $file . ' (' . count((array) $seedPayload['tables']) . ' table(s), mode: ' . $mode . ').');
         return redirect()->to($this->dbToolsUrlWithKey());
     }
 
@@ -1070,14 +1073,14 @@ class Setup extends BaseController
         $parts = preg_split('/[\s,]+/', $raw) ?: [];
         $out = [];
         foreach ($parts as $part) {
-            $name = strtolower(trim((string) $part));
-            $name = preg_replace('/[^a-z0-9_]/', '', $name) ?? '';
+            $name = trim((string) $part);
+            $name = preg_replace('/[^a-zA-Z0-9_]/', '', $name) ?? '';
             if ($name !== '') {
-                $out[$name] = true;
+                $out[strtolower($name)] = $name;
             }
         }
 
-        return array_keys($out);
+        return array_values($out);
     }
 
     /**
@@ -1112,17 +1115,18 @@ class Setup extends BaseController
         $tableStats = [];
 
         foreach ($tables as $tableName => $rows) {
-            $table = strtolower(trim((string) $tableName));
+            $table = trim((string) $tableName);
             if ($table === '') {
                 continue;
             }
 
-            $safeTable = preg_replace('/[^a-z0-9_]/', '', $table) ?? '';
+            $safeTable = preg_replace('/[^a-zA-Z0-9_]/', '', $table) ?? '';
             if ($safeTable === '') {
                 continue;
             }
 
-            if (!$this->tableExistsInConnection($client, $safeTable)) {
+            $resolvedTable = $this->resolveTableNameInConnection($client, $safeTable);
+            if ($resolvedTable === null) {
                 $skipped++;
                 $tableStats[] = $safeTable . ' (skipped: table missing)';
                 continue;
@@ -1144,15 +1148,15 @@ class Setup extends BaseController
                     // REPLACE provides idempotent seed behavior: on re-run, rows with existing
                     // PRIMARY or UNIQUE keys are updated instead of duplicated.
                     // This ensures seed data can be safely applied multiple times.
-                    $client->table($safeTable)->replace($row);
+                    $client->table($resolvedTable)->replace($row);
                     $applied++;
                     $tableApplied++;
                 } catch (\Throwable $e) {
-                    $errors[] = $safeTable . ': ' . $e->getMessage();
+                    $errors[] = $resolvedTable . ': ' . $e->getMessage();
                 }
             }
 
-            $tableStats[] = $safeTable . ' (rows: ' . $tableApplied . ')';
+            $tableStats[] = $resolvedTable . ' (rows: ' . $tableApplied . ')';
         }
 
         return [
@@ -2475,8 +2479,7 @@ class Setup extends BaseController
         }
 
         try {
-            $tables = $this->db->listTables();
-            return in_array($tableName, $tables, true);
+            return $this->resolveTableNameInConnection($this->db, $tableName) !== null;
         } catch (\Throwable $e) {
             return false;
         }
@@ -2490,11 +2493,32 @@ class Setup extends BaseController
         }
 
         try {
-            $tables = $db->listTables();
-            return in_array($tableName, $tables, true);
+            return $this->resolveTableNameInConnection($db, $tableName) !== null;
         } catch (\Throwable $e) {
             return false;
         }
+    }
+
+    private function resolveTableNameInConnection($db, string $tableName): ?string
+    {
+        $tableName = trim($tableName);
+        if ($tableName === '') {
+            return null;
+        }
+
+        try {
+            $tables = $db->listTables();
+            foreach ($tables as $existingTable) {
+                $existing = (string) $existingTable;
+                if (strcasecmp($existing, $tableName) === 0) {
+                    return $existing;
+                }
+            }
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        return null;
     }
 
     private function columnExists(string $tableName, string $columnName): bool
