@@ -259,6 +259,26 @@ class Setup extends BaseController
             $tables = $this->db->listTables();
             $exportedAllTables = true;
         }
+        // Tables that must never be exported in all-tables mode:
+        // audit trails, session logs, queue tables, and CI framework internals
+        // can contain secret values (API keys set via admin UI) or sensitive data.
+        $neverExport = [
+            'clinical_audit_trail',
+            'lab_log',
+            'bridge_sync_queue',
+            'ci_sessions',
+            'sessions',
+            'auth_token_logins',
+            'auth_logins',
+            'auth_remember_tokens',
+            'patient_duplicate_log',
+        ];
+
+        if ($exportedAllTables) {
+            $tables = array_values(array_filter($tables, static function ($t) use ($neverExport): bool {
+                return ! in_array(strtolower((string) $t), $neverExport, true);
+            }));
+        }
 
         $seedPayload = [
             'generated_at' => date('Y-m-d H:i:s'),
