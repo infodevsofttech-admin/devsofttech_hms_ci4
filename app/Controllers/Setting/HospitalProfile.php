@@ -110,7 +110,15 @@ class HospitalProfile extends BaseController
 
             $targetDir = FCPATH . 'assets/images';
             if (! is_dir($targetDir)) {
-                @mkdir($targetDir, 0775, true);
+                mkdir($targetDir, 0775, true);
+            }
+            if (! is_dir($targetDir)) {
+                return $this->response->setJSON([
+                    'update'   => 0,
+                    'error_text' => 'Cannot create upload directory. Check server write permissions.',
+                    'csrfName' => csrf_token(),
+                    'csrfHash' => csrf_hash(),
+                ]);
             }
 
             $newName = 'hospital_logo_' . date('Ymd_His') . '_' . substr(md5((string) mt_rand()), 0, 8) . '.' . $ext;
@@ -144,7 +152,15 @@ class HospitalProfile extends BaseController
 
             $targetDir = FCPATH . 'assets/images';
             if (! is_dir($targetDir)) {
-                @mkdir($targetDir, 0775, true);
+                mkdir($targetDir, 0775, true);
+            }
+            if (! is_dir($targetDir)) {
+                return $this->response->setJSON([
+                    'update'   => 0,
+                    'error_text' => 'Cannot create upload directory. Check server write permissions.',
+                    'csrfName' => csrf_token(),
+                    'csrfHash' => csrf_hash(),
+                ]);
             }
 
             $newName = 'pharmacy_logo_' . date('Ymd_His') . '_' . substr(md5((string) mt_rand()), 0, 8) . '.' . $ext;
