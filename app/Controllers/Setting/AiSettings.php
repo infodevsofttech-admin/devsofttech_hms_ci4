@@ -125,7 +125,7 @@ class AiSettings extends BaseController
                 'error_text' => 'Usage table unavailable',
                 'usage' => [
                     'total_today' => 0,
-                    'gemini_today' => 0,
+                    'ai_today' => 0,
                     'fallback_today' => 0,
                     'last_hour' => 0,
                     'daily_limit' => 20,
@@ -154,17 +154,13 @@ class AiSettings extends BaseController
             ->where('created_at <=', $end)
             ->countAllResults();
 
-        $geminiToday = (int) $this->db->table('lab_ai_extraction_batches')
-            ->where('created_at >=', $start)
-            ->where('created_at <=', $end)
-            ->where("LOWER(ai_provider) = 'gemini'", null, false)
-            ->countAllResults();
-
         $fallbackToday = (int) $this->db->table('lab_ai_extraction_batches')
             ->where('created_at >=', $start)
             ->where('created_at <=', $end)
             ->where("LOWER(ai_provider) IN ('local-xray-fallback','regex-fallback')", null, false)
             ->countAllResults();
+
+        $aiToday = max(0, $totalToday - $fallbackToday);
 
         $lastHour = (int) $this->db->table('lab_ai_extraction_batches')
             ->where('created_at >=', $hourStart)
@@ -192,7 +188,7 @@ class AiSettings extends BaseController
             ];
         }
 
-        $ratio = (int) round(($geminiToday / max(1, $dailyLimit)) * 100);
+        $ratio = (int) round(($aiToday / max(1, $dailyLimit)) * 100);
         $level = 'ok';
         if ($ratio >= 100) {
             $level = 'critical';
@@ -206,7 +202,7 @@ class AiSettings extends BaseController
             'update' => 1,
             'usage' => [
                 'total_today' => $totalToday,
-                'gemini_today' => $geminiToday,
+                'ai_today' => $aiToday,
                 'fallback_today' => $fallbackToday,
                 'last_hour' => $lastHour,
                 'daily_limit' => $dailyLimit,
@@ -249,7 +245,7 @@ class AiSettings extends BaseController
                 $headers['Authorization'] = 'Bearer ' . $token;
             }
 
-            $client = service('curlrequest', $this->geminiHttpOptions());
+            $client = service('curlrequest', $this->aiHttpOptions());
             $response = $client->post(rtrim($endpoint, '/'), [
                 'headers' => $headers,
                 'json' => [
@@ -326,7 +322,7 @@ class AiSettings extends BaseController
                 $headers['Authorization'] = 'Bearer ' . $token;
             }
 
-            $client = service('curlrequest', $this->geminiHttpOptions());
+            $client = service('curlrequest', $this->aiHttpOptions());
             $url = rtrim($baseUrl, '/') . '/translate?text=test&target_lang=en';
             $response = $client->get($url, [
                 'headers' => $headers,
@@ -364,7 +360,7 @@ class AiSettings extends BaseController
     /**
      * @return array<string, mixed>
      */
-    private function geminiHttpOptions(): array
+    private function aiHttpOptions(): array
     {
         $options = [
             'timeout' => 20,

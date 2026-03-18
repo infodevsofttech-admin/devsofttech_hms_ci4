@@ -480,11 +480,11 @@ class Opd_prescription extends BaseController
 
         $prompt = $this->buildClinicalPrompt($mode, $text);
         $this->lastAiProvider = 'none';
-        $draft = $this->generateClinicalTextWithGemini($prompt);
+        $draft = $this->generateClinicalTextWithAi($prompt);
 
         if ($draft !== null && trim($draft) !== '') {
-            $provider = $this->lastAiProvider === 'azure' ? 'azure' : 'gemini';
-            $providerLabel = $provider === 'azure' ? 'Azure OpenAI' : 'Gemini';
+            $provider = $this->lastAiProvider === 'azure' ? 'azure' : 'ai';
+            $providerLabel = $provider === 'azure' ? 'Azure OpenAI' : 'AI';
             return $this->response->setJSON([
                 'update' => 1,
                 'draft_text' => trim($draft),
@@ -571,7 +571,7 @@ class Opd_prescription extends BaseController
 
         $prompt = $this->buildFullClinicalDraftPrompt($input);
         $this->lastAiProvider = 'none';
-        $draftText = $this->generateClinicalTextWithGemini($prompt);
+        $draftText = $this->generateClinicalTextWithAi($prompt);
         $drafts = $this->extractFullDraftJson($draftText);
 
         if ($drafts === null) {
@@ -579,8 +579,8 @@ class Opd_prescription extends BaseController
             $aiMode = 'fallback';
             $message = 'AI unavailable. Template draft prepared from entered data.';
         } else {
-            $aiMode = $this->lastAiProvider === 'azure' ? 'azure' : 'gemini';
-            $message = 'Full clinical draft prepared using ' . ($aiMode === 'azure' ? 'Azure OpenAI' : 'Gemini') . '.';
+            $aiMode = $this->lastAiProvider === 'azure' ? 'azure' : 'ai';
+            $message = 'Full clinical draft prepared using ' . ($aiMode === 'azure' ? 'Azure OpenAI' : 'AI') . '.';
         }
 
         return $this->response->setJSON([
@@ -2208,7 +2208,7 @@ class Opd_prescription extends BaseController
             . "Use short plain text values. If unsure for a field, keep empty string.";
 
         $this->lastAiProvider = 'none';
-        $aiText = $this->generateClinicalTextWithGemini($prompt, 280);
+        $aiText = $this->generateClinicalTextWithAi($prompt, 280);
         if ($aiText === null || trim($aiText) === '') {
             $fallback = $this->inferMedicineDetailsFromBrandName($name, $formulation);
             if (($fallback['genericname'] ?? '') !== '' || ($fallback['salt_name'] ?? '') !== '') {
@@ -2229,7 +2229,7 @@ class Opd_prescription extends BaseController
                 ]);
             }
 
-            return $this->response->setJSON(['update' => 0, 'error_text' => 'AI unavailable and no local match found. Check AI settings/API key.']);
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'AI unavailable and no local match found. Check AI settings.']);
         }
 
         $parsed = $this->parseJsonFromAiResponse($aiText);
@@ -2605,11 +2605,11 @@ class Opd_prescription extends BaseController
             . "English Advice: {$sourceText}";
 
         $this->lastAiProvider = 'none';
-        $aiText = $this->generateClinicalTextWithGemini($prompt, 220);
+        $aiText = $this->generateClinicalTextWithAi($prompt, 220);
         if ($aiText === null || trim($aiText) === '') {
             return $this->response->setJSON([
                 'update' => 0,
-                'error_text' => 'AI unavailable. Check AI settings/API key.',
+                'error_text' => 'AI unavailable. Check AI settings.',
                 'csrfName' => csrf_token(),
                 'csrfHash' => csrf_hash(),
             ]);
@@ -3014,13 +3014,13 @@ class Opd_prescription extends BaseController
         $finalComplaints = array_values($normalized);
 
         $this->lastAiProvider = 'none';
-        $geminiDraft = $this->generateComplaintDraftWithGemini($finalComplaints, $currentText);
-        if ($geminiDraft !== null && trim($geminiDraft) !== '') {
-            $provider = $this->lastAiProvider === 'azure' ? 'azure' : 'gemini';
-            $providerLabel = $provider === 'azure' ? 'Azure OpenAI' : 'Gemini';
+        $aiDraft = $this->generateComplaintDraftWithAi($finalComplaints, $currentText);
+        if ($aiDraft !== null && trim($aiDraft) !== '') {
+            $provider = $this->lastAiProvider === 'azure' ? 'azure' : 'ai';
+            $providerLabel = $provider === 'azure' ? 'Azure OpenAI' : 'AI';
             return $this->response->setJSON([
                 'update' => 1,
-                'draft_text' => trim($geminiDraft),
+                'draft_text' => trim($aiDraft),
                 'error_text' => 'AI draft prepared using ' . $providerLabel,
                 'ai_mode' => $provider,
                 'csrfName' => csrf_token(),
@@ -5373,34 +5373,6 @@ class Opd_prescription extends BaseController
         return array_values($out);
     }
 
-    private function getGeminiApiKey(): string
-    {
-        foreach (['GEMINI_API_KEY', 'AI_GEMINI_API_KEY', 'APP_GEMINI_API_KEY', 'H_GEMINI_API_KEY'] as $constName) {
-            if (defined($constName)) {
-                $value = trim((string) constant($constName));
-                if ($value !== '') {
-                    return $value;
-                }
-            }
-        }
-
-        if ($this->db->tableExists('hospital_setting')) {
-            $row = $this->db->table('hospital_setting')
-                ->select('s_value')
-                ->whereIn('s_name', ['GEMINI_API_KEY', 'AI_GEMINI_API_KEY', 'APP_GEMINI_API_KEY', 'H_GEMINI_API_KEY'])
-                ->where('s_value !=', '')
-                ->orderBy('s_name', 'ASC')
-                ->get(1)
-                ->getRowArray();
-
-            if (! empty($row['s_value'])) {
-                return trim((string) $row['s_value']);
-            }
-        }
-
-        return '';
-    }
-
     /**
      * @return array{endpoint:string,api_key:string,deployment:string,api_version:string}
      */
@@ -5475,7 +5447,7 @@ class Opd_prescription extends BaseController
     /**
      * @param array<int, string> $complaints
      */
-    private function generateComplaintDraftWithGemini(array $complaints, string $currentText): ?string
+    private function generateComplaintDraftWithAi(array $complaints, string $currentText): ?string
     {
         if (empty($complaints)) {
             return null;
@@ -5487,7 +5459,7 @@ Input complaints: " . implode(', ', $complaints) . "
 Additional raw doctor notes: " . $currentText . "
 Output only one plain text sentence starting with 'Chief complaints:' and no markdown.";
 
-        return $this->generateClinicalTextWithGemini($prompt, 180);
+        return $this->generateClinicalTextWithAi($prompt, 180);
     }
 
     private function generateClinicalTextWithAzureOpenAi(string $prompt, int $maxOutputTokens = 300): ?string
@@ -5665,70 +5637,9 @@ Input: " . $text;
         return implode(' ', $sentences);
     }
 
-    private function generateClinicalTextWithGemini(string $prompt, int $maxOutputTokens = 300): ?string
+    private function generateClinicalTextWithAi(string $prompt, int $maxOutputTokens = 300): ?string
     {
-        $azureText = $this->generateClinicalTextWithAzureOpenAi($prompt, $maxOutputTokens);
-        if ($azureText !== null && trim($azureText) !== '') {
-            return $azureText;
-        }
-
-        $apiKey = $this->getGeminiApiKey();
-        if ($apiKey === '' || trim($prompt) === '') {
-            return null;
-        }
-
-        try {
-            $httpOptions = [
-                'timeout' => 20,
-                'http_errors' => false,
-            ];
-            if (defined('ENVIRONMENT') && in_array((string) ENVIRONMENT, ['development', 'testing'], true)) {
-                $httpOptions['verify'] = false;
-            }
-
-            $client = service('curlrequest', $httpOptions);
-            $payload = [
-                'contents' => [[
-                    'parts' => [[
-                        'text' => $prompt,
-                    ]],
-                ]],
-                'generationConfig' => [
-                    'temperature' => 0.2,
-                    'topP' => 0.9,
-                    'maxOutputTokens' => max(64, $maxOutputTokens),
-                ],
-            ];
-
-            foreach (['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-latest'] as $modelName) {
-                $url = 'https://generativelanguage.googleapis.com/v1beta/models/' . $modelName . ':generateContent?key=' . urlencode($apiKey);
-                $response = $client->post($url, [
-                    'headers' => ['Content-Type' => 'application/json'],
-                    'json' => $payload,
-                ]);
-
-                if ($response->getStatusCode() < 200 || $response->getStatusCode() >= 300) {
-                    continue;
-                }
-
-                $decoded = json_decode((string) $response->getBody(), true);
-                $parts = $decoded['candidates'][0]['content']['parts'] ?? [];
-                $text = '';
-                foreach ($parts as $part) {
-                    $text .= (string) ($part['text'] ?? '');
-                }
-
-                $text = trim($text);
-                if ($text !== '') {
-                    $this->lastAiProvider = 'gemini';
-                    return preg_replace('/\s+/', ' ', $text) ?: $text;
-                }
-            }
-        } catch (\Throwable $e) {
-            return null;
-        }
-
-        return null;
+        return $this->generateClinicalTextWithAzureOpenAi($prompt, $maxOutputTokens);
     }
 
     /**
@@ -6331,91 +6242,9 @@ OPD SNAPSHOT JSON: " . $payload;
 
     private function extractClinicalTextFromScan(string $filePath, string $scanType = ''): ?string
     {
-        $apiKey = $this->getGeminiApiKey();
-        if ($apiKey === '') {
-            return null;
-        }
-
-        $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
-        $mimeMap = [
-            'jpg' => 'image/jpeg',
-            'jpeg' => 'image/jpeg',
-            'png' => 'image/png',
-            'webp' => 'image/webp',
-            'pdf' => 'application/pdf',
-        ];
-        $mime = $mimeMap[$ext] ?? '';
-        if ($mime === '') {
-            return null;
-        }
-
-        $raw = @file_get_contents($filePath);
-        if ($raw === false || $raw === '') {
-            return null;
-        }
-
-        if (strlen($raw) > 8 * 1024 * 1024) {
-            return null;
-        }
-
-        $typeHint = $scanType !== '' ? strtoupper($scanType) : 'GENERAL';
-        $prompt = "You are a medical report transcription assistant.\n"
-            . "Extract readable text from this " . $typeHint . " scan.\n"
-            . "Return concise structured plain text with sections: Findings, Impression, Values(if present).\n"
-            . "Do not invent data. If unreadable, mention unreadable fields.";
-
-        try {
-            $client = service('curlrequest', [
-                'timeout' => 30,
-                'http_errors' => false,
-            ]);
-
-            $payload = [
-                'contents' => [[
-                    'parts' => [
-                        ['text' => $prompt],
-                        [
-                            'inlineData' => [
-                                'mimeType' => $mime,
-                                'data' => base64_encode($raw),
-                            ],
-                        ],
-                    ],
-                ]],
-                'generationConfig' => [
-                    'temperature' => 0.1,
-                    'topP' => 0.8,
-                    'maxOutputTokens' => 600,
-                ],
-            ];
-
-            foreach (['gemini-2.0-flash', 'gemini-1.5-flash'] as $modelName) {
-                $url = 'https://generativelanguage.googleapis.com/v1beta/models/' . $modelName . ':generateContent?key=' . urlencode($apiKey);
-                $response = $client->post($url, [
-                    'headers' => ['Content-Type' => 'application/json'],
-                    'json' => $payload,
-                ]);
-
-                if ($response->getStatusCode() < 200 || $response->getStatusCode() >= 300) {
-                    continue;
-                }
-
-                $decoded = json_decode((string) $response->getBody(), true);
-                $parts = $decoded['candidates'][0]['content']['parts'] ?? [];
-                $text = '';
-                foreach ($parts as $part) {
-                    $text .= (string) ($part['text'] ?? '');
-                }
-
-                $text = trim($text);
-                if ($text !== '') {
-                    return preg_replace('/\s+/', ' ', $text) ?: $text;
-                }
-            }
-        } catch (\Throwable $e) {
-            return null;
-        }
-
+        // Legacy external scan extraction has been removed from this module.
+        // Keep returning null so existing fallback paths continue to work.
+        unset($filePath, $scanType);
         return null;
     }
 

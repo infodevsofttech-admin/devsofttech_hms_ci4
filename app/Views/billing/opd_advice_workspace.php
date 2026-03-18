@@ -227,7 +227,7 @@
             $('#advice_hi').val((data.translated_text || '').toString());
             var langName = (data.target_language_name || '').toString();
             var provider = (data.provider || '').toString();
-            var providerLabel = provider === 'azure' ? 'Azure OpenAI' : (provider === 'gemini' ? 'Gemini' : 'AI');
+            var providerLabel = provider === 'azure' ? 'Azure OpenAI' : 'AI';
             setMsg('ok', 'Translated to ' + (langName || 'selected language') + ' using ' + providerLabel + '.');
         });
     });

@@ -295,7 +295,8 @@ class Setup extends BaseController
 
             try {
                 $rows = $this->db->table($resolvedTable)->get()->getResultArray();
-                $seedPayload['tables'][$resolvedTable] = is_array($rows) ? $rows : [];
+                $rows = is_array($rows) ? $rows : [];
+                $seedPayload['tables'][$resolvedTable] = $this->sanitizeSeedRows($resolvedTable, $rows);
             } catch (\Throwable $e) {
                 log_message('error', 'Seed export table read failed for {table}: {message}', ['table' => $resolvedTable, 'message' => $e->getMessage()]);
                 $seedPayload['tables'][$resolvedTable] = [];
@@ -1101,6 +1102,59 @@ class Setup extends BaseController
         }
 
         return array_values($out);
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $rows
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function sanitizeSeedRows(string $tableName, array $rows): array
+    {
+        $table = strtolower(trim($tableName));
+        if ($rows === []) {
+            return $rows;
+        }
+
+        if ($table === 'hospital_setting') {
+            return array_values(array_filter($rows, function (array $row): bool {
+                $name = strtoupper(trim((string) ($row['s_name'] ?? '')));
+                return ! $this->isSensitiveSettingName($name);
+            }));
+        }
+
+        if ($table === 'clinical_audit_trail') {
+            return array_values(array_filter($rows, function (array $row): bool {
+                if (strtolower(trim((string) ($row['module'] ?? ''))) !== 'hospital_setting') {
+                    return true;
+                }
+
+                $recordId = strtoupper(trim((string) ($row['record_id'] ?? '')));
+                $fieldName = strtoupper(trim((string) ($row['field_name'] ?? '')));
+                return ! ($this->isSensitiveSettingName($recordId) || $this->isSensitiveSettingName($fieldName));
+            }));
+        }
+
+        return $rows;
+    }
+
+    private function isSensitiveSettingName(string $name): bool
+    {
+        if ($name === '') {
+            return false;
+        }
+
+        if (str_contains($name, 'API_KEY') || str_contains($name, 'TOKEN') || str_contains($name, 'SECRET')) {
+            return true;
+        }
+
+        foreach (['GEMINI_', 'AZURE_', 'OPENAI_'] as $prefix) {
+            if (str_starts_with($name, $prefix)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

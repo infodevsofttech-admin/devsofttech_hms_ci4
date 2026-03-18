@@ -608,7 +608,7 @@
                 return;
             }
 
-            if (isNewMedicine && (provider === 'gemini' || provider === 'azure' || provider === 'local-brand-fallback')) {
+            if (isNewMedicine && (provider === 'azure' || provider === 'local-brand-fallback')) {
                 if (window.confirm('Details prepared for a new medicine. Save this new master entry now?')) {
                     saveMedicine(buildMedicinePayload(), function() {
                         setMsg('ok', 'New medicine saved with suggested generic/salt details.');

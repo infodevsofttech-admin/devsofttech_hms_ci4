@@ -12,10 +12,7 @@ $impressionInputId = 'ai_impression_' . $batchId;
 $providerKey = strtolower($provider);
 $providerLabel = $provider !== '' ? $provider : 'ai-server';
 $providerBadgeClass = 'bg-secondary';
-if ($providerKey === 'gemini') {
-    $providerLabel = 'Gemini';
-    $providerBadgeClass = 'bg-primary';
-} elseif ($providerKey === 'local-xray-fallback') {
+if ($providerKey === 'local-xray-fallback') {
     $providerLabel = 'Local X-ray Fallback';
     $providerBadgeClass = 'bg-warning text-dark';
 } elseif ($providerKey === 'regex-fallback') {

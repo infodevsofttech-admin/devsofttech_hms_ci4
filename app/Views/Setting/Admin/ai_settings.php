@@ -60,7 +60,7 @@
 
         <div class="row">
             <div class="col-md-6 mb-3">
-                <label class="form-label">Gemini Daily Limit (guardrail)</label>
+                <label class="form-label">AI Daily Limit (guardrail)</label>
                 <input type="number" min="1" max="10000" class="form-control" id="diagnosis_ai_daily_limit" value="<?= esc($diagnosis_ai_daily_limit ?? '20') ?>">
                 <div class="form-text">Used for warning levels at 70% and 90%.</div>
             </div>
@@ -75,7 +75,7 @@
                 <span class="badge bg-secondary" id="ai_usage_level">Unknown</span>
             </div>
             <div class="row g-2">
-                <div class="col-md-3"><div class="small text-muted">Gemini Calls</div><div id="ai_usage_gemini" class="fw-bold">-</div></div>
+                <div class="col-md-3"><div class="small text-muted">AI Calls</div><div id="ai_usage_ai" class="fw-bold">-</div></div>
                 <div class="col-md-3"><div class="small text-muted">Fallback Calls</div><div id="ai_usage_fallback" class="fw-bold">-</div></div>
                 <div class="col-md-3"><div class="small text-muted">Total Calls</div><div id="ai_usage_total" class="fw-bold">-</div></div>
                 <div class="col-md-3"><div class="small text-muted">Last Hour</div><div id="ai_usage_hour" class="fw-bold">-</div></div>
@@ -204,7 +204,7 @@
                 return;
             }
 
-            $('#ai_usage_gemini').text((usage.gemini_today || 0) + ' / ' + (usage.daily_limit || 0));
+            $('#ai_usage_ai').text((usage.ai_today || 0) + ' / ' + (usage.daily_limit || 0));
             $('#ai_usage_fallback').text(usage.fallback_today || 0);
             $('#ai_usage_total').text(usage.total_today || 0);
             $('#ai_usage_hour').text(usage.last_hour || 0);
@@ -224,7 +224,7 @@
             }
 
             $('#ai_usage_level').removeClass().addClass('badge ' + levelClass).text(levelText);
-            $('#ai_usage_hint').text('Gemini utilization: ' + (usage.ratio || 0) + '%. Thresholds: 70% warning, 90% high.');
+            $('#ai_usage_hint').text('AI utilization: ' + (usage.ratio || 0) + '%. Thresholds: 70% warning, 90% high.');
         });
     }
 
