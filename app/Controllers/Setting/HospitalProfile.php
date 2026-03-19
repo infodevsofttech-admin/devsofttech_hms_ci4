@@ -3,6 +3,7 @@
 namespace App\Controllers\Setting;
 
 use App\Controllers\BaseController;
+use CodeIgniter\HTTP\Files\UploadedFile;
 
 class HospitalProfile extends BaseController
 {
@@ -95,88 +96,40 @@ class HospitalProfile extends BaseController
             $savedCount++;
         }
 
-        $logoFile = $this->request->getFile('hospital_logo');
-        if ($logoFile && $logoFile->isValid() && ! $logoFile->hasMoved()) {
-            $ext = strtolower((string) $logoFile->getExtension());
-            $allowed = ['png', 'jpg', 'jpeg', 'webp'];
-            if (! in_array($ext, $allowed, true)) {
-                return $this->response->setJSON([
-                    'update' => 0,
-                    'error_text' => 'Logo must be png, jpg, jpeg, or webp.',
-                    'csrfName' => csrf_token(),
-                    'csrfHash' => csrf_hash(),
-                ]);
-            }
-
-            $targetDir = FCPATH . 'assets/images';
-            if (! is_dir($targetDir)) {
-                mkdir($targetDir, 0775, true);
-            }
-            if (! is_dir($targetDir)) {
-                return $this->response->setJSON([
-                    'update'   => 0,
-                    'error_text' => 'Cannot create upload directory. Check server write permissions.',
-                    'csrfName' => csrf_token(),
-                    'csrfHash' => csrf_hash(),
-                ]);
-            }
-
-            $newName = 'hospital_logo_' . date('Ymd_His') . '_' . substr(md5((string) mt_rand()), 0, 8) . '.' . $ext;
-            $logoFile->move($targetDir, $newName, true);
-
-            $oldLogo = $this->readSettingValue('H_logo');
-            if ($this->upsertSettingValue('H_logo', $newName)) {
-                $savedCount++;
-            }
-
-            if ($oldLogo !== '' && $oldLogo !== $newName) {
-                $oldPath = $targetDir . DIRECTORY_SEPARATOR . basename($oldLogo);
-                if (is_file($oldPath)) {
-                    @unlink($oldPath);
-                }
-            }
+        $logoResult = $this->processLogoUpload(
+            $this->request->getFile('hospital_logo'),
+            'hospital_logo',
+            'H_logo',
+            'Logo'
+        );
+        if (! $logoResult['ok']) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => $logoResult['error'],
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+        if ($logoResult['changed']) {
+            $savedCount++;
         }
 
-        $pharmacyLogoFile = $this->request->getFile('pharmacy_logo');
-        if ($pharmacyLogoFile && $pharmacyLogoFile->isValid() && ! $pharmacyLogoFile->hasMoved()) {
-            $ext = strtolower((string) $pharmacyLogoFile->getExtension());
-            $allowed = ['png', 'jpg', 'jpeg', 'webp'];
-            if (! in_array($ext, $allowed, true)) {
-                return $this->response->setJSON([
-                    'update' => 0,
-                    'error_text' => 'Pharmacy logo must be png, jpg, jpeg, or webp.',
-                    'csrfName' => csrf_token(),
-                    'csrfHash' => csrf_hash(),
-                ]);
-            }
-
-            $targetDir = FCPATH . 'assets/images';
-            if (! is_dir($targetDir)) {
-                mkdir($targetDir, 0775, true);
-            }
-            if (! is_dir($targetDir)) {
-                return $this->response->setJSON([
-                    'update'   => 0,
-                    'error_text' => 'Cannot create upload directory. Check server write permissions.',
-                    'csrfName' => csrf_token(),
-                    'csrfHash' => csrf_hash(),
-                ]);
-            }
-
-            $newName = 'pharmacy_logo_' . date('Ymd_His') . '_' . substr(md5((string) mt_rand()), 0, 8) . '.' . $ext;
-            $pharmacyLogoFile->move($targetDir, $newName, true);
-
-            $oldLogo = $this->readSettingValue('H_Med_logo');
-            if ($this->upsertSettingValue('H_Med_logo', $newName)) {
-                $savedCount++;
-            }
-
-            if ($oldLogo !== '' && $oldLogo !== $newName) {
-                $oldPath = $targetDir . DIRECTORY_SEPARATOR . basename($oldLogo);
-                if (is_file($oldPath)) {
-                    @unlink($oldPath);
-                }
-            }
+        $pharmacyLogoResult = $this->processLogoUpload(
+            $this->request->getFile('pharmacy_logo'),
+            'pharmacy_logo',
+            'H_Med_logo',
+            'Pharmacy logo'
+        );
+        if (! $pharmacyLogoResult['ok']) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => $pharmacyLogoResult['error'],
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+        if ($pharmacyLogoResult['changed']) {
+            $savedCount++;
         }
 
         return $this->response->setJSON([
@@ -323,5 +276,83 @@ class HospitalProfile extends BaseController
         }
 
         return (bool) $ok;
+    }
+
+    private function processLogoUpload(?UploadedFile $file, string $filePrefix, string $settingKey, string $label): array
+    {
+        if (! $file || $file->getError() === UPLOAD_ERR_NO_FILE) {
+            return ['ok' => true, 'changed' => false, 'error' => ''];
+        }
+
+        if (! $file->isValid()) {
+            return [
+                'ok' => false,
+                'changed' => false,
+                'error' => $label . ' upload failed: ' . $file->getErrorString(),
+            ];
+        }
+
+        if ($file->hasMoved()) {
+            return ['ok' => true, 'changed' => false, 'error' => ''];
+        }
+
+        $ext = strtolower((string) $file->getExtension());
+        $allowed = ['png', 'jpg', 'jpeg', 'webp'];
+        if (! in_array($ext, $allowed, true)) {
+            return [
+                'ok' => false,
+                'changed' => false,
+                'error' => $label . ' must be png, jpg, jpeg, or webp.',
+            ];
+        }
+
+        $targetDir = FCPATH . 'assets/images';
+        if (! is_dir($targetDir) && ! @mkdir($targetDir, 0775, true) && ! is_dir($targetDir)) {
+            return [
+                'ok' => false,
+                'changed' => false,
+                'error' => 'Cannot create upload directory. Check server write permissions.',
+            ];
+        }
+
+        if (! is_writable($targetDir)) {
+            return [
+                'ok' => false,
+                'changed' => false,
+                'error' => 'Upload directory is not writable. Set write permission on public/assets/images.',
+            ];
+        }
+
+        $newName = $filePrefix . '_' . date('Ymd_His') . '_' . substr(md5((string) mt_rand()), 0, 8) . '.' . $ext;
+
+        try {
+            $file->move($targetDir, $newName, true);
+        } catch (\Throwable $e) {
+            log_message('error', '[HospitalProfile] ' . $label . ' move failed: ' . $e->getMessage());
+
+            return [
+                'ok' => false,
+                'changed' => false,
+                'error' => $label . ' upload failed. Check write permission on public/assets/images and PHP upload temp directory.',
+            ];
+        }
+
+        $oldLogo = $this->readSettingValue($settingKey);
+        if (! $this->upsertSettingValue($settingKey, $newName)) {
+            return [
+                'ok' => false,
+                'changed' => false,
+                'error' => 'Unable to save ' . strtolower($label) . ' setting.',
+            ];
+        }
+
+        if ($oldLogo !== '' && $oldLogo !== $newName) {
+            $oldPath = $targetDir . DIRECTORY_SEPARATOR . basename($oldLogo);
+            if (is_file($oldPath)) {
+                @unlink($oldPath);
+            }
+        }
+
+        return ['ok' => true, 'changed' => true, 'error' => ''];
     }
 }
