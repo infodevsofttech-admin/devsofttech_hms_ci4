@@ -7,6 +7,8 @@ use App\Models\DoctorModel;
 
 class Doctor extends BaseController
 {
+    private const OPD_TEMPLATE_KEY_PREFIX = 'OPD_PRINT_TEMPLATE__';
+
     public function index(): string
     {
         $doctorModel = new DoctorModel();
@@ -23,6 +25,7 @@ class Doctor extends BaseController
         return view('Setting/Doctor/Doctor_V', [
             'errors' => session('errors'),
             'template_options' => $templateContext['options'],
+            'opd_print_template_options' => $templateContext['opd_print_options'],
             'template_fields' => $templateContext['fields'],
         ]);
     }
@@ -42,6 +45,7 @@ class Doctor extends BaseController
                     'errors' => $this->validator->getErrors(),
                     'formData' => $this->request->getPost(),
                     'template_options' => $templateContext['options'],
+                    'opd_print_template_options' => $templateContext['opd_print_options'],
                     'template_fields' => $templateContext['fields'],
                 ]);
             }
@@ -80,8 +84,7 @@ class Doctor extends BaseController
             if (! in_array($dbField, $templateContext['fields'], true)) {
                 continue;
             }
-            $templateName = strtolower(trim((string) $this->request->getPost($inputField)));
-            $templateName = preg_replace('/[^a-z0-9_\-]/', '', $templateName) ?? '';
+            $templateName = $this->normalizeTemplateId((string) $this->request->getPost($inputField));
             $data[$dbField] = $templateName;
         }
 
@@ -99,6 +102,7 @@ class Doctor extends BaseController
                     'errors' => $errors,
                     'formData' => $this->request->getPost(),
                     'template_options' => $templateContext['options'],
+                    'opd_print_template_options' => $templateContext['opd_print_options'],
                     'template_fields' => $templateContext['fields'],
                 ]);
             }
@@ -123,6 +127,7 @@ class Doctor extends BaseController
             'doc_ipd_fee_list' => $doctorModel->getDoctorIpdFees($id),
             'doc_ipd_fee_type' => $doctorModel->getIpdFeeTypes(),
             'template_options' => $templateContext['options'],
+            'opd_print_template_options' => $templateContext['opd_print_options'],
             'template_fields' => $templateContext['fields'],
         ]);
     }
@@ -165,8 +170,7 @@ class Doctor extends BaseController
             if (! in_array($dbField, $templateContext['fields'], true)) {
                 continue;
             }
-            $templateName = strtolower(trim((string) $this->request->getPost($inputField)));
-            $templateName = preg_replace('/[^a-z0-9_\-]/', '', $templateName) ?? '';
+            $templateName = $this->normalizeTemplateId((string) $this->request->getPost($inputField));
             $data[$dbField] = $templateName;
         }
 
@@ -573,59 +577,67 @@ class Doctor extends BaseController
         ];
 
         if (! $this->db->tableExists('doctor_master')) {
-            return ['fields' => [], 'options' => []];
+            return ['fields' => [], 'options' => [], 'opd_print_options' => []];
         }
 
         $doctorFields = $this->db->getFieldNames('doctor_master') ?? [];
         $availableFields = array_values(array_intersect($allTemplateFields, $doctorFields));
 
-        $options = [];
-
-        $templateDir = APPPATH . 'Views/billing/opd_templates';
-        if (is_dir($templateDir)) {
-            $htmlFiles = glob($templateDir . '/*.html') ?: [];
-            foreach ($htmlFiles as $file) {
-                $name = strtolower(trim((string) basename((string) $file, '.html')));
-                $name = preg_replace('/[^a-z0-9_\-]/', '', $name) ?? '';
-                if ($name !== '') {
-                    $options[] = $name;
-                }
-            }
-
-            $phpFiles = glob($templateDir . '/*.php') ?: [];
-            foreach ($phpFiles as $file) {
-                $name = strtolower(trim((string) basename((string) $file, '.php')));
-                $name = preg_replace('/[^a-z0-9_\-]/', '', $name) ?? '';
-                if ($name !== '') {
-                    $options[] = $name;
-                }
-            }
-        }
-
-        foreach ($availableFields as $field) {
-            $rows = $this->db->table('doctor_master')
-                ->select($field . ' as template_name')
-                ->where($field . ' IS NOT NULL', null, false)
-                ->where($field . ' !=', '')
-                ->distinct()
-                ->get()
-                ->getResultArray();
-
-            foreach ($rows as $row) {
-                $name = strtolower(trim((string) ($row['template_name'] ?? '')));
-                $name = preg_replace('/[^a-z0-9_\-]/', '', $name) ?? '';
-                if ($name !== '') {
-                    $options[] = $name;
-                }
-            }
-        }
+        $options = $this->collectStoredTemplateOptions();
+        $opdPrintOptions = $options;
 
         $options = array_values(array_unique($options));
         sort($options);
+        $opdPrintOptions = array_values(array_unique($opdPrintOptions));
+        sort($opdPrintOptions);
 
         return [
             'fields' => $availableFields,
             'options' => $options,
+            'opd_print_options' => $opdPrintOptions,
         ];
     }
+
+    private function normalizeTemplateId(string $templateId): string
+    {
+        $templateId = strtolower(trim($templateId));
+        $templateId = str_replace([' ', '.'], '_', $templateId);
+        $templateId = preg_replace('/[^a-z0-9_\-]+/', '_', $templateId) ?? '';
+        $templateId = preg_replace('/_{2,}/', '_', $templateId) ?? $templateId;
+
+        return trim($templateId, '_-');
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function collectStoredTemplateOptions(): array
+    {
+        if (! $this->db->tableExists('hospital_setting')) {
+            return [];
+        }
+
+        $rows = $this->db->table('hospital_setting')
+            ->select('s_name')
+            ->like('s_name', self::OPD_TEMPLATE_KEY_PREFIX, 'after')
+            ->get()
+            ->getResultArray();
+
+        $options = [];
+        foreach ($rows as $row) {
+            $storageKey = (string) ($row['s_name'] ?? '');
+            if (! str_starts_with($storageKey, self::OPD_TEMPLATE_KEY_PREFIX)) {
+                continue;
+            }
+
+            $templateId = substr($storageKey, strlen(self::OPD_TEMPLATE_KEY_PREFIX));
+            $templateId = $this->normalizeTemplateId((string) $templateId);
+            if ($templateId !== '') {
+                $options[] = $templateId;
+            }
+        }
+
+        return $options;
+    }
+
 }

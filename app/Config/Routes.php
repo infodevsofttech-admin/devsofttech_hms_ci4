@@ -452,6 +452,9 @@ $routes->get('Opd/opd_lettre_print/(:num)', 'Opd::opd_lettre_print/$1');
 $routes->get('Opd/opd_lettre_pdf/(:num)', 'Opd::opd_lettre_pdf/$1');
 $routes->get('Opd/print_template_builder', 'Opd::print_template_builder');
 $routes->post('Opd/print_template_save', 'Opd::print_template_save');
+$routes->post('Opd/print_template_rename', 'Opd::print_template_rename');
+$routes->post('Opd/print_template_delete', 'Opd::print_template_delete');
+$routes->match(['get', 'post'], 'Opd/paper_print_settings', 'Opd::paper_print_settings');
 
 $routes->get('opd_print/invoice_print_pdf/(:num)', 'Opd::invoice_print_pdf/$1');
 $routes->get('opd_print/opd_PDF_print/(:num)', 'Opd::opd_pdf_print/$1');

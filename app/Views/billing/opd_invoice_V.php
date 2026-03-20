@@ -207,8 +207,9 @@ if ($user && method_exists($user, 'inGroup')) {
                 <div class="col-sm-6">
                     <a href="<?= base_url('opd_print/invoice_print_pdf') ?>/<?= esc($opd_master[0]->opd_id ?? 0) ?>" target="_blank" class="btn btn-outline-secondary">Print Invoice</a>
                     <a href="<?= base_url('opd_print/opd_PDF_print') ?>/<?= esc($opd_master[0]->opd_id ?? 0) ?>" target="_blank" class="btn btn-outline-secondary">Print OPD HEAD in Letter Head</a>
-                    <a href="<?= base_url('opd_print/opd_Cont_print') ?>/<?= esc($opd_master[0]->opd_id ?? 0) ?>" target="_blank" class="btn btn-outline-secondary">Print Cont. Paper</a>
                     <a href="<?= base_url('opd_print/opd_blank_print') ?>/<?= esc($opd_master[0]->opd_id ?? 0) ?>" target="_blank" class="btn btn-outline-secondary">Print OPD HEAD in Blank Page</a>
+                    <a href="<?= base_url('opd_print/opd_Cont_print') ?>/<?= esc($opd_master[0]->opd_id ?? 0) ?>" target="_blank" class="btn btn-outline-secondary">Print Cont. Paper</a>
+                    
                 </div>
                 <div class="col-sm-6">
                     <?php if (($refund_status ?? 0) == 1) : ?>

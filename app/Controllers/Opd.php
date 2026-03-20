@@ -6,10 +6,15 @@ use App\Controllers\BaseController;
 use App\Models\OpdModel;
 use App\Models\PaymentModel;
 use CodeIgniter\I18n\Time;
+use Mpdf\HTMLParserMode;
 use Mpdf\Mpdf;
 
 class Opd extends BaseController
 {
+    private const OPD_PAPER_SETTING_KEY = 'OPD_PAPER_PRINT_SETTINGS';
+    private const OPD_PAPER_SETTING_KEY_PREFIX = 'OPD_PAPER_PRINT_SETTINGS__';
+    private const OPD_TEMPLATE_KEY_PREFIX = 'OPD_PRINT_TEMPLATE__';
+
     /**
      * @var array<int, string>
      */
@@ -59,8 +64,7 @@ class Opd extends BaseController
         }
 
         $templateNames = $this->collectOpdTemplateNames();
-        $name = strtolower(trim((string) $this->request->getGet('name')));
-        $name = preg_replace('/[^a-z0-9_\-]/', '', $name) ?? '';
+        $name = $this->normalizeOpdTemplateId((string) $this->request->getGet('name'));
 
         if ($mode === 'list') {
             return view('billing/opd_template_builder_list', [
@@ -94,6 +98,7 @@ class Opd extends BaseController
             'template_content' => $content,
             'template_names' => $templateNames,
             'placeholders' => $placeholders,
+            'paper_settings' => $this->getOpdPaperPrintSetting($name),
         ]);
     }
 
@@ -102,83 +107,17 @@ class Opd extends BaseController
      */
     private function collectOpdTemplateNames(): array
     {
-        $names = [];
-
-        $dir = APPPATH . 'Views/billing/opd_templates';
-        if (is_dir($dir)) {
-            $htmlFiles = glob($dir . '/*.html') ?: [];
-            foreach ($htmlFiles as $file) {
-                $key = basename((string) $file, '.html');
-                if ($key !== '') {
-                    $names[] = strtolower($key);
-                }
-            }
-
-            $phpFiles = glob($dir . '/*.php') ?: [];
-            foreach ($phpFiles as $file) {
-                $key = basename((string) $file, '.php');
-                if ($key !== '') {
-                    $names[] = strtolower($key);
-                }
-            }
-        }
-
-        if ($this->db->tableExists('doctor_master')) {
-            $doctorFields = $this->db->getFieldNames('doctor_master');
-            $templateFields = array_values(array_intersect(
-                ['opd_print_format', 'opd_blank_print', 'rx_pre_print_letter_head_format', 'rx_blank_letter_head', 'rx_plain_paper'],
-                $doctorFields
-            ));
-
-            foreach ($templateFields as $field) {
-                $rows = $this->db->table('doctor_master')
-                    ->select($field . ' as template_name')
-                    ->where($field . ' IS NOT NULL', null, false)
-                    ->where($field . ' !=', '')
-                    ->distinct()
-                    ->get()
-                    ->getResultArray();
-
-                foreach ($rows as $row) {
-                    $templateName = strtolower(trim((string) ($row['template_name'] ?? '')));
-                    $templateName = preg_replace('/[^a-z0-9_\-]/', '', $templateName) ?? '';
-                    if ($templateName !== '') {
-                        $names[] = $templateName;
-                    }
-                }
-            }
-        }
-
-        $names = array_values(array_unique($names));
-        sort($names);
-
-        return $names;
+        return $this->collectStoredOpdTemplateNames();
     }
 
     private function readOpdTemplateContentByName(string $name): string
     {
-        $name = strtolower(trim($name));
-        $name = preg_replace('/[^a-z0-9_\-]/', '', $name) ?? '';
+        $name = $this->normalizeOpdTemplateId($name);
         if ($name === '') {
             return '';
         }
 
-        $htmlFile = APPPATH . 'Views/billing/opd_templates/' . $name . '.html';
-        if (is_file($htmlFile)) {
-            return (string) file_get_contents($htmlFile);
-        }
-
-        $newPhpFile = APPPATH . 'Views/billing/opd_templates/' . $name . '.php';
-        if (is_file($newPhpFile)) {
-            return $this->convertLegacyTemplateSourceToBuilderHtml((string) file_get_contents($newPhpFile));
-        }
-
-        $legacyPhpFile = ROOTPATH . 'old_code_ci3/views/dashboard/' . $name . '.php';
-        if (is_file($legacyPhpFile)) {
-            return $this->convertLegacyTemplateSourceToBuilderHtml((string) file_get_contents($legacyPhpFile));
-        }
-
-        return '';
+        return $this->readStoredOpdTemplateContent($name);
     }
 
     public function print_template_save()
@@ -197,8 +136,7 @@ class Opd extends BaseController
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid section']);
         }
 
-        $name = strtolower(trim((string) $this->request->getPost('name')));
-        $name = preg_replace('/[^a-z0-9_\-]/', '', $name) ?? '';
+        $name = $this->normalizeOpdTemplateId((string) $this->request->getPost('name'));
         if ($name === '') {
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Template name required']);
         }
@@ -208,14 +146,7 @@ class Opd extends BaseController
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Template content required']);
         }
 
-        $dir = $this->resolveTemplateSectionDirectory($section);
-        if (!is_dir($dir) && !mkdir($dir, 0777, true) && !is_dir($dir)) {
-            return $this->response->setJSON(['update' => 0, 'error_text' => 'Unable to create template directory']);
-        }
-
-        $file = $dir . '/' . $name . '.html';
-        $bytes = @file_put_contents($file, $content);
-        if ($bytes === false) {
+        if (! $this->saveStoredOpdTemplateContent($name, $content)) {
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Unable to save template']);
         }
 
@@ -226,6 +157,356 @@ class Opd extends BaseController
             'name' => $name,
             'csrfName' => csrf_token(),
             'csrfHash' => csrf_hash(),
+        ]);
+    }
+
+    public function print_template_rename()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        if (! $this->canManageOpdPrintTemplates()) {
+            return $this->response->setStatusCode(403)->setJSON(['update' => 0, 'error_text' => 'Access denied']);
+        }
+
+        $oldName = $this->normalizeOpdTemplateId((string) $this->request->getPost('old_name'));
+        $newName = $this->normalizeOpdTemplateId((string) $this->request->getPost('new_name'));
+
+        if ($oldName === '' || $newName === '') {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Both old and new template names are required']);
+        }
+        if ($oldName === $newName) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'New template name must be different']);
+        }
+
+        if (! $this->renameStoredOpdTemplateContent($oldName, $newName)) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Template not found or rename failed']);
+        }
+
+        $this->renameOpdPaperSettingStorageKey($oldName, $newName);
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'error_text' => 'Template renamed',
+            'old_name' => $oldName,
+            'new_name' => $newName,
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
+    private function renameOpdPaperSettingStorageKey(string $oldName, string $newName): void
+    {
+        if (! $this->db->tableExists('hospital_setting')) {
+            return;
+        }
+
+        $oldKey = $this->getOpdPaperSettingStorageKey($oldName);
+        $newKey = $this->getOpdPaperSettingStorageKey($newName);
+        if ($oldKey === $newKey) {
+            return;
+        }
+
+        $existsNew = $this->db->table('hospital_setting')
+            ->select('id')
+            ->where('s_name', $newKey)
+            ->get(1)
+            ->getRowArray();
+
+        if (! empty($existsNew['id'])) {
+            return;
+        }
+
+        $this->db->table('hospital_setting')
+            ->where('s_name', $oldKey)
+            ->update(['s_name' => $newKey]);
+    }
+
+    public function print_template_delete()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        if (! $this->canManageOpdPrintTemplates()) {
+            return $this->response->setStatusCode(403)->setJSON(['update' => 0, 'error_text' => 'Access denied']);
+        }
+
+        $templateName = $this->normalizeOpdTemplateId((string) $this->request->getPost('template_name'));
+
+        if ($templateName === '') {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Template name is required']);
+        }
+
+        if (! $this->deleteStoredOpdTemplateContent($templateName)) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Template not found or delete failed']);
+        }
+
+        $this->deleteOpdPaperSettingStorageKey($templateName);
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'error_text' => 'Template deleted',
+            'template_name' => $templateName,
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
+    private function deleteOpdPaperSettingStorageKey(string $templateName): void
+    {
+        if (! $this->db->tableExists('hospital_setting')) {
+            return;
+        }
+
+        $key = $this->getOpdPaperSettingStorageKey($templateName);
+        $this->db->table('hospital_setting')
+            ->where('s_name', $key)
+            ->delete();
+    }
+
+    private function normalizeOpdTemplateId(string $templateId): string
+    {
+        $templateId = strtolower(trim($templateId));
+        $templateId = str_replace([' ', '.'], '_', $templateId);
+        $templateId = preg_replace('/[^a-z0-9_\-]+/', '_', $templateId) ?? '';
+        $templateId = preg_replace('/_{2,}/', '_', $templateId) ?? $templateId;
+
+        return trim($templateId, '_-');
+    }
+
+    private function getOpdTemplateStorageKey(string $templateId): string
+    {
+        $templateId = $this->normalizeOpdTemplateId($templateId);
+        if ($templateId === '') {
+            return '';
+        }
+
+        return self::OPD_TEMPLATE_KEY_PREFIX . $templateId;
+    }
+
+    private function readStoredOpdTemplateContent(string $templateId): string
+    {
+        $storageKey = $this->getOpdTemplateStorageKey($templateId);
+        if ($storageKey === '' || ! $this->db->tableExists('hospital_setting')) {
+            return '';
+        }
+
+        $row = $this->db->table('hospital_setting')
+            ->select('s_value')
+            ->where('s_name', $storageKey)
+            ->get(1)
+            ->getRowArray();
+
+        return trim((string) ($row['s_value'] ?? ''));
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function collectStoredOpdTemplateNames(): array
+    {
+        if (! $this->db->tableExists('hospital_setting')) {
+            return [];
+        }
+
+        $rows = $this->db->table('hospital_setting')
+            ->select('s_name')
+            ->like('s_name', self::OPD_TEMPLATE_KEY_PREFIX, 'after')
+            ->get()
+            ->getResultArray();
+
+        $names = [];
+        foreach ($rows as $row) {
+            $storageKey = (string) ($row['s_name'] ?? '');
+            if (! str_starts_with($storageKey, self::OPD_TEMPLATE_KEY_PREFIX)) {
+                continue;
+            }
+
+            $templateId = substr($storageKey, strlen(self::OPD_TEMPLATE_KEY_PREFIX));
+            $templateId = $this->normalizeOpdTemplateId((string) $templateId);
+            if ($templateId !== '') {
+                $names[] = $templateId;
+            }
+        }
+
+        $names = array_values(array_unique($names));
+        sort($names);
+
+        return $names;
+    }
+
+    private function saveStoredOpdTemplateContent(string $templateId, string $content): bool
+    {
+        $storageKey = $this->getOpdTemplateStorageKey($templateId);
+        if ($storageKey === '' || ! $this->db->tableExists('hospital_setting')) {
+            return false;
+        }
+
+        $this->ensureHospitalSettingValueCanStoreLargePayload();
+
+        $existing = $this->db->table('hospital_setting')
+            ->select('id')
+            ->where('s_name', $storageKey)
+            ->get(1)
+            ->getRowArray();
+
+        if (! empty($existing['id'])) {
+            return (bool) $this->db->table('hospital_setting')
+                ->where('id', (int) $existing['id'])
+                ->update(['s_value' => $content]);
+        }
+
+        return (bool) $this->db->table('hospital_setting')->insert([
+            's_name' => $storageKey,
+            's_value' => $content,
+        ]);
+    }
+
+    private function renameStoredOpdTemplateContent(string $oldTemplateId, string $newTemplateId): bool
+    {
+        $oldKey = $this->getOpdTemplateStorageKey($oldTemplateId);
+        $newKey = $this->getOpdTemplateStorageKey($newTemplateId);
+        if ($oldKey === '' || $newKey === '' || ! $this->db->tableExists('hospital_setting')) {
+            return false;
+        }
+
+        $existingOld = $this->db->table('hospital_setting')
+            ->select('id')
+            ->where('s_name', $oldKey)
+            ->get(1)
+            ->getRowArray();
+        if (empty($existingOld['id'])) {
+            return false;
+        }
+
+        $existingNew = $this->db->table('hospital_setting')
+            ->select('id')
+            ->where('s_name', $newKey)
+            ->get(1)
+            ->getRowArray();
+        if (! empty($existingNew['id'])) {
+            return false;
+        }
+
+        return (bool) $this->db->table('hospital_setting')
+            ->where('id', (int) $existingOld['id'])
+            ->update(['s_name' => $newKey]);
+    }
+
+    private function deleteStoredOpdTemplateContent(string $templateId): bool
+    {
+        $storageKey = $this->getOpdTemplateStorageKey($templateId);
+        if ($storageKey === '' || ! $this->db->tableExists('hospital_setting')) {
+            return false;
+        }
+
+        $row = $this->db->table('hospital_setting')
+            ->select('id')
+            ->where('s_name', $storageKey)
+            ->get(1)
+            ->getRowArray();
+        if (empty($row['id'])) {
+            return false;
+        }
+
+        return (bool) $this->db->table('hospital_setting')
+            ->where('id', (int) $row['id'])
+            ->delete();
+    }
+
+    public function paper_print_settings()
+    {
+        if (! $this->canManageOpdPrintTemplates()) {
+            return $this->response->setStatusCode(403)->setBody('Access denied: OPD paper print settings are restricted.');
+        }
+
+        $templateName = $this->normalizeOpdTemplateId((string) ($this->request->getPost('template_name') ?? $this->request->getGet('template_name') ?? ''));
+
+        $notice = '';
+        $noticeType = 'success';
+        $settings = $this->getOpdPaperPrintSetting($templateName);
+
+        if (strtolower($this->request->getMethod()) === 'post') {
+            $isReset = (int) ($this->request->getPost('reset') ?? 0) === 1;
+            if ($isReset) {
+                $cleared = $this->clearOpdPaperPrintSetting($templateName);
+                $settings = $this->getOpdPaperPrintSetting($templateName);
+                $notice = $cleared ? 'OPD paper print settings reset.' : 'Unable to reset OPD paper print settings.';
+                $noticeType = $cleared ? 'success' : 'danger';
+
+                if ($this->request->isAJAX()) {
+                    return $this->response->setJSON([
+                        'status' => $cleared ? 'success' : 'error',
+                        'notice' => $notice,
+                        'notice_type' => $noticeType,
+                        'csrfName' => csrf_token(),
+                        'csrfHash' => csrf_hash(),
+                        'settings' => $settings,
+                    ]);
+                }
+            }
+
+            $pageSize = strtoupper(trim((string) ($this->request->getPost('page_size') ?? 'A4')));
+            if (! in_array($pageSize, ['A4', 'A4-L', 'A5', 'A6', 'LETTER', 'LEGAL', 'CUSTOM'], true)) {
+                $pageSize = 'A4';
+            }
+
+            $customWidthMm = (int) $this->normalizeOpdPrintMarginCm($this->request->getPost('custom_width_mm'), 210.0);
+            $customHeightMm = (int) $this->normalizeOpdPrintMarginCm($this->request->getPost('custom_height_mm'), 297.0);
+            if ($customWidthMm < 20) {
+                $customWidthMm = 20;
+            }
+            if ($customWidthMm > 600) {
+                $customWidthMm = 600;
+            }
+            if ($customHeightMm < 20) {
+                $customHeightMm = 20;
+            }
+            if ($customHeightMm > 1000) {
+                $customHeightMm = 1000;
+            }
+
+            $settings = [
+                'page_size' => $pageSize,
+                'custom_width_mm' => $customWidthMm,
+                'custom_height_mm' => $customHeightMm,
+                'page_margin_top_cm' => $this->normalizeOpdPrintMarginCm($this->request->getPost('page_margin_top_cm'), 6.1),
+                'page_margin_bottom_cm' => $this->normalizeOpdPrintMarginCm($this->request->getPost('page_margin_bottom_cm'), 2.5),
+                'page_margin_left_cm' => $this->normalizeOpdPrintMarginCm($this->request->getPost('page_margin_left_cm'), 0.7),
+                'page_margin_right_cm' => $this->normalizeOpdPrintMarginCm($this->request->getPost('page_margin_right_cm'), 0.7),
+                'margin_header_cm' => $this->normalizeOpdPrintMarginCm($this->request->getPost('margin_header_cm'), 0.5),
+                'margin_footer_cm' => $this->normalizeOpdPrintMarginCm($this->request->getPost('margin_footer_cm'), 1.5),
+                'paper_html_content' => (string) ($this->request->getPost('paper_html_content') ?? ''),
+                'header_html' => (string) ($this->request->getPost('header_html') ?? ''),
+                'footer_html' => (string) ($this->request->getPost('footer_html') ?? ''),
+            ];
+
+            $saved = $this->saveOpdPaperPrintSetting($settings, $templateName);
+            if ($saved) {
+                $notice = 'OPD paper print settings saved.';
+                $noticeType = 'success';
+            } else {
+                $notice = 'Unable to save OPD paper print settings.';
+                $noticeType = 'danger';
+            }
+
+            if ($this->request->isAJAX()) {
+                return $this->response->setJSON([
+                    'status' => $saved ? 'success' : 'error',
+                    'notice' => $notice,
+                    'notice_type' => $noticeType,
+                    'csrfName' => csrf_token(),
+                    'csrfHash' => csrf_hash(),
+                ]);
+            }
+        }
+
+        return view('billing/opd_paper_print_settings', [
+            'settings' => $settings,
+            'notice' => $notice,
+            'notice_type' => $noticeType,
         ]);
     }
 
@@ -289,8 +570,8 @@ class Opd extends BaseController
     private function shouldAllowInsecureSslForEndpoint(string $endpoint): bool
     {
         $toggle = strtolower($this->readScanAiSettingValue(
-            ['AZURE_ALLOW_INSECURE_SSL', 'AI_AZURE_ALLOW_INSECURE_SSL', 'APP_AZURE_ALLOW_INSECURE_SSL', 'H_AZURE_ALLOW_INSECURE_SSL'],
-            ['AZURE_ALLOW_INSECURE_SSL']
+            ['DIAGNOSIS_AI_ALLOW_INSECURE_SSL', 'AI_DIAGNOSIS_AI_ALLOW_INSECURE_SSL', 'APP_DIAGNOSIS_AI_ALLOW_INSECURE_SSL', 'H_DIAGNOSIS_AI_ALLOW_INSECURE_SSL'],
+            ['DIAGNOSIS_AI_ALLOW_INSECURE_SSL']
         ));
         if (in_array($toggle, ['1', 'true', 'yes', 'on'], true)) {
             return true;
@@ -1058,8 +1339,15 @@ class Opd extends BaseController
             $layoutMode = 'full';
         }
 
+        $templateKey = $this->normalizeOpdTemplateId((string) $this->request->getGet('template'));
+
         $allowedModes = ['full', 'meta_content', 'content_only', 'header_meta', 'meta_only'];
         if (! in_array($layoutMode, $allowedModes, true)) {
+            $layoutMode = 'full';
+        }
+
+        // If template is explicitly requested, always render full layout so header/footer are applied.
+        if ($templateKey !== '') {
             $layoutMode = 'full';
         }
 
@@ -1071,75 +1359,246 @@ class Opd extends BaseController
         }
 
         $data['print_layout_mode'] = $layoutMode;
-        $templateKey = strtolower(trim((string) $this->request->getGet('template')));
-        $templateKey = preg_replace('/[^a-z0-9_\-]/', '', $templateKey) ?? '';
 
         $isComposedTemplate = $templateKey !== '' && str_starts_with($templateKey, 'compose_');
         if ($isComposedTemplate) {
             $html = $this->renderComposedOpdPrint($data, $templateKey);
         } else {
-
-            $viewPath = 'billing/opd_letter_head_pdf';
             $customHtml = '';
             if ($templateKey !== '') {
-                $customFile = APPPATH . 'Views/billing/opd_templates/' . $templateKey . '.php';
-                $customHtmlFile = APPPATH . 'Views/billing/opd_templates/' . $templateKey . '.html';
-                if (is_file($customFile)) {
-                    $viewPath = 'billing/opd_templates/' . $templateKey;
-                } elseif (is_file($customHtmlFile)) {
-                    $customHtml = (string) file_get_contents($customHtmlFile);
-                }
+                $customHtml = $this->readStoredOpdTemplateContent($templateKey);
             }
 
-            if ($viewPath !== 'billing/opd_letter_head_pdf') {
-                $html = view($viewPath, $data);
-            } elseif ($customHtml !== '') {
+            if ($customHtml !== '') {
                 $legacyVars = $this->buildLegacyDashboardTemplateVars($data);
                 $html = $this->renderCurlyTemplate($customHtml, $legacyVars);
-            } elseif ($templateKey !== '') {
-                $legacyFile = ROOTPATH . 'old_code_ci3/views/dashboard/' . $templateKey . '.php';
-                if (is_file($legacyFile)) {
-                    $legacyVars = $this->buildLegacyDashboardTemplateVars($data);
-                    $html = $this->renderLegacyPhpTemplate($legacyFile, $legacyVars);
-                } else {
-                    $html = view('billing/opd_letter_head_pdf', $data);
-                }
             } else {
                 $html = view('billing/opd_letter_head_pdf', $data);
             }
         }
 
+        // SHORT-CIRCUIT: When DB template content is found, render it directly with token
+        // substitution and skip all per-template paper settings entirely.
+        if ($customHtml !== '') {
+            $tokenVars = $this->buildOpdPdfTokenVars($data);
+            $html = $this->applyOpdPdfTemplateTokens($customHtml, $tokenVars);
+            $html = $this->sanitizeOpdNamedHeaderFooterReferences($html);
+
+            $mpdf = new Mpdf([
+                'mode'             => 'utf-8',
+                'format'           => 'A4',
+                'orientation'      => 'P',
+                'margin_left'      => 5,
+                'margin_right'     => 5,
+                'margin_top'       => 5,
+                'margin_bottom'    => 5,
+                'margin_header'    => 5,
+                'margin_footer'    => 5,
+                'default_font'     => 'freeserif',
+                'autoScriptToLang' => true,
+                'autoLangToFont'   => true,
+                'tempDir'          => WRITEPATH . 'cache',
+            ]);
+
+            $opdCode = (string) ($data['opd_master'][0]->opd_code ?? ('OPD-' . $opdId));
+            $mpdf->SetTitle('OPD Prescription ' . $opdCode);
+            $mpdf->WriteHTML($html);
+
+            $fileName = 'OPD_Prescription_' . str_replace('/', '-', $opdCode) . '.pdf';
+            return $this->response
+                ->setHeader('Content-Type', 'application/pdf')
+                ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
+                ->setBody($mpdf->Output($fileName, 'S'));
+        }
+
+        $docPrintSetting = $this->getOpdPaperPrintSetting($templateKey);
+        $tokenVars = $this->buildOpdPdfTokenVars($data);
+
         $paper = strtolower(trim((string) $this->request->getGet('paper')));
-        $format = 'A4';
+        $format = strtoupper(trim((string) ($docPrintSetting['page_size'] ?? 'A4')));
+        if ($format === '') {
+            $format = 'A4';
+        }
         if (in_array($paper, ['a5', 'a6', 'letter'], true)) {
             $format = strtoupper($paper);
         }
 
-        $marginLeft = 8;
-        $marginRight = 8;
-        $marginTop = 8;
-        $marginBottom = 8;
+        $customWidthMm = (int) $this->normalizeOpdPrintMarginCm($docPrintSetting['custom_width_mm'] ?? null, 210.0);
+        $customHeightMm = (int) $this->normalizeOpdPrintMarginCm($docPrintSetting['custom_height_mm'] ?? null, 297.0);
+        if ($customWidthMm < 20) {
+            $customWidthMm = 20;
+        }
+        if ($customWidthMm > 600) {
+            $customWidthMm = 600;
+        }
+        if ($customHeightMm < 20) {
+            $customHeightMm = 20;
+        }
+        if ($customHeightMm > 1000) {
+            $customHeightMm = 1000;
+        }
+        $mpdfFormat = $format === 'CUSTOM' ? [$customWidthMm, $customHeightMm] : $format;
+
+        $hasDocSetting = ! empty($docPrintSetting);
+        if ($hasDocSetting) {
+            $marginLeftCm = $this->normalizeOpdPrintMarginCm($docPrintSetting['page_margin_left_cm'] ?? null, 0.7);
+            $marginRightCm = $this->normalizeOpdPrintMarginCm($docPrintSetting['page_margin_right_cm'] ?? null, 0.7);
+            $marginTopCm = $this->normalizeOpdPrintMarginCm($docPrintSetting['page_margin_top_cm'] ?? null, 6.1);
+            $marginBottomCm = $this->normalizeOpdPrintMarginCm($docPrintSetting['page_margin_bottom_cm'] ?? null, 2.5);
+            $marginHeaderCm = $this->normalizeOpdPrintMarginCm($docPrintSetting['margin_header_cm'] ?? null, 0.5);
+            $marginFooterCm = $this->normalizeOpdPrintMarginCm($docPrintSetting['margin_footer_cm'] ?? null, 1.5);
+            $marginLeft = $marginLeftCm * 10;
+            $marginRight = $marginRightCm * 10;
+            $marginTop = $marginTopCm * 10;
+            $marginBottom = $marginBottomCm * 10;
+            $marginHeader = $marginHeaderCm * 10;
+            $marginFooter = $marginFooterCm * 10;
+        } else {
+            $marginLeftCm = 0.7;
+            $marginRightCm = 0.7;
+            $marginTopCm = 6.1;
+            $marginBottomCm = 2.5;
+            $marginHeaderCm = 0.5;
+            $marginFooterCm = 1.5;
+            $marginLeft = 8;
+            $marginRight = 8;
+            $marginTop = 8;
+            $marginBottom = 8;
+            $marginHeader = 5;
+            $marginFooter = 10;
+        }
 
         if ($format === 'A6') {
             $marginLeft = 6;
             $marginRight = 6;
             $marginTop = 6;
             $marginBottom = 6;
+            $marginLeftCm = 0.6;
+            $marginRightCm = 0.6;
+            $marginTopCm = 0.6;
+            $marginBottomCm = 0.6;
         }
+
+        // Add margin variables to token replacement
+        $tokenVars['MarginTop'] = (string) $marginTopCm;
+        $tokenVars['MarginBottom'] = (string) $marginBottomCm;
+        $tokenVars['MarginLeft'] = (string) $marginLeftCm;
+        $tokenVars['MarginRight'] = (string) $marginRightCm;
+        $tokenVars['MarginHeader'] = (string) $marginHeaderCm;
+        $tokenVars['MarginFooter'] = (string) $marginFooterCm;
+        // Aliases for alternate naming
+        $tokenVars['page_margin_top_cm'] = (string) $marginTopCm;
+        $tokenVars['page_margin_bottom_cm'] = (string) $marginBottomCm;
+        $tokenVars['page_margin_left_cm'] = (string) $marginLeftCm;
+        $tokenVars['page_margin_right_cm'] = (string) $marginRightCm;
+        $tokenVars['margin_header_cm'] = (string) $marginHeaderCm;
+        $tokenVars['margin_footer_cm'] = (string) $marginFooterCm;
 
         $mpdf = new Mpdf([
             'mode' => 'utf-8',
-            'format' => $format,
+            'format' => $mpdfFormat,
             'orientation' => 'P',
             'margin_left' => $marginLeft,
             'margin_right' => $marginRight,
             'margin_top' => $marginTop,
             'margin_bottom' => $marginBottom,
+            'margin_header' => $marginHeader,
+            'margin_footer' => $marginFooter,
             'default_font' => 'freeserif',
             'autoScriptToLang' => true,
             'autoLangToFont' => true,
             'tempDir' => WRITEPATH . 'cache',
         ]);
+
+        $rawHeaderHtml = trim((string) ($docPrintSetting['header_html'] ?? ''));
+        $rawFooterHtml = trim((string) ($docPrintSetting['footer_html'] ?? ''));
+        $rawPaperHtmlContent = trim((string) ($docPrintSetting['paper_html_content'] ?? ''));
+        $prefixHtml = '';
+
+        // Build base @page CSS block from margin settings.
+        $buildPageStyleBlock = static function (bool $useHeader, bool $useFooter) use ($marginTopCm, $marginBottomCm, $marginLeftCm, $marginRightCm, $marginHeaderCm, $marginFooterCm): string {
+            $css = '<style>@page {' . "\n"
+                . 'margin-top: ' . $marginTopCm . 'cm;' . "\n"
+                . 'margin-bottom: ' . $marginBottomCm . 'cm;' . "\n"
+                . 'margin-left: ' . $marginLeftCm . 'cm;' . "\n"
+                . 'margin-right: ' . $marginRightCm . 'cm;' . "\n"
+                . 'margin-header: ' . $marginHeaderCm . 'cm;' . "\n"
+                . 'margin-footer: ' . $marginFooterCm . 'cm;' . "\n";
+
+            if ($useHeader) {
+                $css .= 'header: html_myHeader;' . "\n";
+            }
+            if ($useFooter) {
+                $css .= 'footer: html_myFooter;' . "\n";
+            }
+
+            $css .= '}' . "\n" . '</style>' . "\n";
+
+            return $css;
+        };
+
+        // Resolve body content first.
+        if ($rawPaperHtmlContent !== '') {
+            $hasContentPlaceholder = preg_match('/<\?=\s*\$content\s*\?>|<\?=\$content\?>|\{\{content\}\}|\{content\}/i', $rawPaperHtmlContent) === 1;
+            $paperHtml = $this->applyOpdPdfTemplateTokens($rawPaperHtmlContent, $tokenVars);
+            $paperHtml = str_replace(['<?= $content ?>', '<?=$content?>', '{{content}}', '{content}'], $html, $paperHtml);
+            if ($hasContentPlaceholder && strpos($paperHtml, $html) === false) {
+                $paperHtml .= $html;
+            }
+            $html = $this->sanitizeOpdNamedHeaderFooterReferences($paperHtml);
+        }
+
+        // If separate header/footer fields are provided, always apply them around the resolved body.
+        if ($rawHeaderHtml !== '' || $rawFooterHtml !== '') {
+            $combinedHtml = $buildPageStyleBlock($rawHeaderHtml !== '', $rawFooterHtml !== '');
+
+            if ($rawHeaderHtml !== '') {
+                $renderedHeaderHtml = $this->applyOpdPdfTemplateTokens($rawHeaderHtml, $tokenVars);
+                if (!preg_match('/<\s*htmlpageheader\b/i', $renderedHeaderHtml)) {
+                    $combinedHtml .= '<htmlpageheader name="myHeader">' . "\n" . $renderedHeaderHtml . "\n" . '</htmlpageheader>' . "\n";
+                } else {
+                    $combinedHtml .= $renderedHeaderHtml . "\n";
+                }
+            }
+
+            if ($rawFooterHtml !== '') {
+                $renderedFooterHtml = $this->applyOpdPdfTemplateTokens($rawFooterHtml, $tokenVars);
+                if (!preg_match('/<\s*htmlpagefooter\b/i', $renderedFooterHtml)) {
+                    $combinedHtml .= '<htmlpagefooter name="myFooter">' . "\n" . $renderedFooterHtml . "\n" . '</htmlpagefooter>' . "\n";
+                } else {
+                    $combinedHtml .= $renderedFooterHtml . "\n";
+                }
+            }
+
+            $combinedHtml .= $html;
+            $html = $this->sanitizeOpdNamedHeaderFooterReferences($combinedHtml);
+            $rawHeaderHtml = '';
+            $rawFooterHtml = '';
+        }
+
+        if ($rawHeaderHtml !== '') {
+            $renderedHeaderHtml = $this->applyOpdPdfTemplateTokens($rawHeaderHtml, $tokenVars);
+            if (preg_match('/<\s*(htmlpageheader|sethtmlpageheader)\b/i', $renderedHeaderHtml) === 1) {
+                $prefixHtml .= $renderedHeaderHtml;
+            } else {
+                $mpdf->SetHTMLHeader($renderedHeaderHtml, 'O');
+                $mpdf->SetHTMLHeader($renderedHeaderHtml, 'E');
+            }
+        }
+
+        if ($rawFooterHtml !== '') {
+            $renderedFooterHtml = $this->applyOpdPdfTemplateTokens($rawFooterHtml, $tokenVars);
+            if (preg_match('/<\s*(htmlpagefooter|sethtmlpagefooter)\b/i', $renderedFooterHtml) === 1) {
+                $prefixHtml .= $renderedFooterHtml;
+            } else {
+                $mpdf->SetHTMLFooter($renderedFooterHtml, 'O');
+                $mpdf->SetHTMLFooter($renderedFooterHtml, 'E');
+            }
+        }
+
+        if ($prefixHtml !== '') {
+            $mpdf->WriteHTML($prefixHtml, HTMLParserMode::HTML_HEADER_BUFFER);
+        }
 
         $opdCode = (string) ($data['opd_master'][0]->opd_code ?? ('OPD-' . $opdId));
         $mpdf->SetTitle('OPD Prescription ' . $opdCode);
@@ -1155,20 +1614,24 @@ class Opd extends BaseController
 
     public function opd_pdf_print(int $opdId)
     {
-        $printConfig = $this->resolveDoctorPrintConfigByField($opdId, 'opd_print_format', 'meta_only');
-        $url = base_url('Opd/opd_lettre_pdf/' . (int) $opdId . '?layout=' . urlencode($printConfig['layout']));
+        $printConfig = $this->resolveDoctorPrintConfigByField($opdId, 'opd_blank_print', 'meta_only');
+        $url = base_url('Opd/opd_lettre_pdf/' . (int) $opdId);
         if ($printConfig['template'] !== '') {
-            $url .= '&template=' . urlencode($printConfig['template']);
+            $url .= '?template=' . urlencode($printConfig['template']);
+        } else {
+            $url .= '?layout=' . urlencode($printConfig['layout']);
         }
         return redirect()->to($url);
     }
 
     public function opd_blank_print(int $opdId)
     {
-        $printConfig = $this->resolveDoctorPrintConfigByField($opdId, 'opd_blank_print', 'header_meta');
-        $url = base_url('Opd/opd_lettre_pdf/' . (int) $opdId . '?layout=' . urlencode($printConfig['layout']));
+        $printConfig = $this->resolveDoctorPrintConfigByField($opdId, 'opd_print_format', 'header_meta');
+        $url = base_url('Opd/opd_lettre_pdf/' . (int) $opdId);
         if ($printConfig['template'] !== '') {
-            $url .= '&template=' . urlencode($printConfig['template']);
+            $url .= '?template=' . urlencode($printConfig['template']);
+        } else {
+            $url .= '?layout=' . urlencode($printConfig['layout']);
         }
         return redirect()->to($url);
     }
@@ -1176,9 +1639,11 @@ class Opd extends BaseController
     public function opd_cont_print(int $opdId)
     {
         $printConfig = $this->resolveDoctorPrintConfigByField($opdId, 'opd_print_format', 'content_only');
-        $url = base_url('Opd/opd_lettre_pdf/' . (int) $opdId . '?layout=' . urlencode($printConfig['layout']));
+        $url = base_url('Opd/opd_lettre_pdf/' . (int) $opdId);
         if ($printConfig['template'] !== '') {
-            $url .= '&template=' . urlencode($printConfig['template']);
+            $url .= '?template=' . urlencode($printConfig['template']);
+        } else {
+            $url .= '?layout=' . urlencode($printConfig['layout']);
         }
         return redirect()->to($url);
     }
@@ -1224,7 +1689,7 @@ class Opd extends BaseController
             return ['layout' => 'full', 'template' => ''];
         }
 
-        $templateKey = preg_replace('/[^a-z0-9_\-]/', '', $raw) ?? '';
+        $templateKey = $this->normalizeOpdTemplateId($raw);
         if ($templateKey !== '') {
             return ['layout' => $fallbackLayout, 'template' => $templateKey];
         }
@@ -1519,29 +1984,334 @@ class Opd extends BaseController
         }, $html);
     }
 
-    private function convertLegacyTemplateSourceToBuilderHtml(string $source): string
+    private function getOpdPaperSettingStorageKey(string $templateName = ''): string
     {
-        if (trim($source) === '') {
+        $templateName = $this->normalizeOpdTemplateId($templateName);
+        if ($templateName === '') {
+            return self::OPD_PAPER_SETTING_KEY;
+        }
+
+        return self::OPD_PAPER_SETTING_KEY_PREFIX . $templateName;
+    }
+
+    private function readOpdPaperSettingPayloadByKey(string $storageKey): string
+    {
+        if (! $this->db->tableExists('hospital_setting')) {
             return '';
         }
 
-        $html = str_replace(["\r\n", "\r"], "\n", $source);
+        $row = $this->db->table('hospital_setting')
+            ->select('s_value')
+            ->where('s_name', $storageKey)
+            ->get(1)
+            ->getRowArray();
 
-        $patterns = [
-            '/<\?php\s+echo\s+esc\(\s*\$([a-zA-Z_][a-zA-Z0-9_]*)[^\)]*\)\s*;?\s*\?>/i' => '{{$1}}',
-            '/<\?php\s+echo\s+\$([a-zA-Z_][a-zA-Z0-9_]*)\s*;?\s*\?>/i' => '{{$1}}',
-            '/<\?=\s*\$([a-zA-Z_][a-zA-Z0-9_]*)\s*;?\s*\?>/i' => '{{$1}}',
-            '/<\?php\s+echo\s*\(\s*\$([a-zA-Z_][a-zA-Z0-9_]*)\s*\)\s*;?\s*\?>/i' => '{{$1}}',
+        return trim((string) ($row['s_value'] ?? ''));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function getOpdPaperPrintSetting(string $templateName = ''): array
+    {
+        $defaults = [
+            'page_size' => 'A4',
+            'custom_width_mm' => 210,
+            'custom_height_mm' => 297,
+            'page_margin_top_cm' => 6.1,
+            'page_margin_bottom_cm' => 2.5,
+            'page_margin_left_cm' => 0.7,
+            'page_margin_right_cm' => 0.7,
+            'margin_header_cm' => 0.5,
+            'margin_footer_cm' => 1.5,
+            'paper_html_content' => '',
+            'header_html' => '',
+            'footer_html' => '',
         ];
 
-        foreach ($patterns as $regex => $replacement) {
-            $html = (string) preg_replace($regex, $replacement, $html);
+        $storageKey = $this->getOpdPaperSettingStorageKey($templateName);
+        $raw = $this->readOpdPaperSettingPayloadByKey($storageKey);
+        if ($raw === '' && $storageKey !== self::OPD_PAPER_SETTING_KEY) {
+            // Backward compatibility with legacy global settings.
+            $raw = $this->readOpdPaperSettingPayloadByKey(self::OPD_PAPER_SETTING_KEY);
+        }
+        if ($raw === '') {
+            return $defaults;
         }
 
-        $html = (string) preg_replace('/<\?(?:php|=)[\s\S]*?\?>/i', '', $html);
-        $html = trim($html);
+        $decoded = json_decode($raw, true);
+        if (! is_array($decoded)) {
+            return $defaults;
+        }
+
+        return array_merge($defaults, $decoded);
+    }
+
+    /**
+     * @param array<string, mixed> $settings
+     */
+    private function saveOpdPaperPrintSetting(array $settings, string $templateName = ''): bool
+    {
+        if (! $this->db->tableExists('hospital_setting')) {
+            return false;
+        }
+
+        $payload = json_encode($settings, JSON_UNESCAPED_UNICODE);
+        if ($payload === false) {
+            return false;
+        }
+
+        $storageKey = $this->getOpdPaperSettingStorageKey($templateName);
+
+        $this->ensureHospitalSettingValueCanStoreLargePayload();
+
+        $existing = $this->db->table('hospital_setting')
+            ->select('id')
+            ->where('s_name', $storageKey)
+            ->get(1)
+            ->getRowArray();
+
+        if (! empty($existing['id'])) {
+            $ok = $this->db->table('hospital_setting')
+                ->where('id', (int) $existing['id'])
+                ->update(['s_value' => $payload]);
+
+            if (! $ok) {
+                return false;
+            }
+
+            return $this->isOpdPaperSettingPayloadPersisted($payload, $storageKey);
+        }
+
+        $ok = $this->db->table('hospital_setting')->insert([
+            's_name' => $storageKey,
+            's_value' => $payload,
+        ]);
+
+        if (! $ok) {
+            return false;
+        }
+
+        return $this->isOpdPaperSettingPayloadPersisted($payload, $storageKey);
+    }
+
+    private function ensureHospitalSettingValueCanStoreLargePayload(): void
+    {
+        try {
+            $row = $this->db->query("SHOW COLUMNS FROM hospital_setting LIKE 's_value'")->getRowArray();
+            $type = strtolower(trim((string) ($row['Type'] ?? '')));
+            if ($type === '') {
+                return;
+            }
+
+            // Legacy schema uses varchar(200), which truncates template HTML payloads.
+            if (str_starts_with($type, 'varchar(')) {
+                $this->db->query('ALTER TABLE hospital_setting MODIFY s_value LONGTEXT CHARACTER SET utf32 COLLATE utf32_unicode_ci DEFAULT NULL');
+            }
+        } catch (\Throwable $e) {
+            // Keep save flow non-fatal; caller validates persistence right after save.
+        }
+    }
+
+    private function isOpdPaperSettingPayloadPersisted(string $payload, string $storageKey): bool
+    {
+        $row = $this->db->table('hospital_setting')
+            ->select('s_value')
+            ->where('s_name', $storageKey)
+            ->get(1)
+            ->getRowArray();
+
+        return ((string) ($row['s_value'] ?? '')) === $payload;
+    }
+
+    private function clearOpdPaperPrintSetting(string $templateName = ''): bool
+    {
+        if (! $this->db->tableExists('hospital_setting')) {
+            return false;
+        }
+
+        $storageKey = $this->getOpdPaperSettingStorageKey($templateName);
+
+        $ok = $this->db->table('hospital_setting')
+            ->where('s_name', $storageKey)
+            ->delete();
+
+        return (bool) $ok;
+    }
+
+    private function normalizeOpdPrintMarginCm($value, float $default): float
+    {
+        if ($value === null || $value === '') {
+            return $default;
+        }
+
+        $number = (float) $value;
+        if (! is_finite($number)) {
+            $number = $default;
+        }
+
+        $number = max(0.0, min(25.0, $number));
+
+        return round($number, 2);
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, string>
+     */
+    private function buildOpdPdfTokenVars(array $data): array
+    {
+        $legacy = $this->buildLegacyDashboardTemplateVars($data);
+        $tokens = [];
+        foreach ($legacy as $key => $value) {
+            if (is_scalar($value)) {
+                $tokens[(string) $key] = (string) $value;
+            }
+        }
+
+        // Load hospital settings from database
+        $hName = $this->readSettingValueFromDb('H_Name');
+        $hAddress1 = $this->readSettingValueFromDb('H_address_1');
+        $hAddress2 = $this->readSettingValueFromDb('H_address_2');
+        $hPhone = $this->readSettingValueFromDb('H_phone_No');
+        $hEmail = $this->readSettingValueFromDb('H_Email');
+        $hLogo = $this->readSettingValueFromDb('H_logo');
+
+        // Try constants as fallback if database values are empty
+        if ($hName === '') {
+            $hName = defined('H_Name') ? (string) constant('H_Name') : '';
+        }
+        if ($hAddress1 === '') {
+            $hAddress1 = defined('H_address_1') ? (string) constant('H_address_1') : '';
+        }
+        if ($hAddress2 === '') {
+            $hAddress2 = defined('H_address_2') ? (string) constant('H_address_2') : '';
+        }
+        if ($hPhone === '') {
+            $hPhone = defined('H_phone_No') ? (string) constant('H_phone_No') : '';
+        }
+        if ($hEmail === '') {
+            $hEmail = defined('H_Email') ? (string) constant('H_Email') : '';
+        }
+        if ($hLogo === '') {
+            $hLogo = defined('H_logo') ? (string) constant('H_logo') : '';
+        }
+
+        $tokens['H_Name'] = $hName;
+        $tokens['H_address_1'] = $hAddress1;
+        $tokens['H_address_2'] = $hAddress2;
+        $tokens['H_phone_No'] = $hPhone;
+        $tokens['H_Email'] = $hEmail;
+        $tokens['H_logo'] = $hLogo;
+        $tokens['H_logo_abs'] = $hLogo !== '' ? FCPATH . 'assets/images/' . $hLogo : '';
+
+        $tokens['hospital_name'] = $hName;
+        $tokens['hospital_address'] = trim($hAddress1 . ', ' . $hAddress2, ', ');
+        $tokens['hospital_phone'] = $hPhone;
+        $tokens['hospital_email'] = $hEmail;
+        $tokens['print_time'] = date('d-m-Y H:i:s');
+        $tokens['current_date'] = date('d-m-Y');
+        $tokens['doctor_name'] = trim((string) ($tokens['doctor_name'] ?? (($data['opd_master'][0]->doc_name ?? '') ?? '')));
+        $tokens['doctor_sign_html'] = nl2br((string) ($data['opd_master'][0]->doc_sign ?? ''));
+        $tokens['content'] = (string) ($tokens['content'] ?? '');
+
+        return $tokens;
+    }
+
+    /**
+     * @param array<string, string> $vars
+     */
+    private function applyOpdPdfTemplateTokens(string $templateHtml, array $vars): string
+    {
+        if ($templateHtml === '') {
+            return '';
+        }
+
+        $templateHtml = $this->normalizeLegacyOpdPaperTemplate($templateHtml);
+
+        $replace = [];
+        foreach ($vars as $key => $value) {
+            $replace['{{' . $key . '}}'] = $value;
+            $replace['{' . $key . '}'] = $value;
+        }
+
+        return strtr($templateHtml, $replace);
+    }
+
+    private function normalizeLegacyOpdPaperTemplate(string $html): string
+    {
+        $out = str_replace(["\r\n", "\r"], "\n", $html);
+
+        $mapPatterns = [
+            '/<\?=\s*H_Name\s*\?>/i' => '{{H_Name}}',
+            '/<\?=\s*H_address_1\s*\?>/i' => '{{H_address_1}}',
+            '/<\?=\s*H_address_2\s*\?>/i' => '{{H_address_2}}',
+            '/<\?=\s*H_phone_No\s*\?>/i' => '{{H_phone_No}}',
+            '/<\?=\s*H_Email\s*\?>/i' => '{{H_Email}}',
+            '/<\?=\s*H_logo\s*\?>/i' => '{{H_logo}}',
+            '/<\?=\s*\$opd_master\[0\]->doc_name\s*\?>/i' => '{{doctor_name}}',
+            '/<\?=\s*nl2br\(\s*\$opd_master\[0\]->doc_sign\s*\)\s*\?>/i' => '{{doctor_sign_html}}',
+            '/<\?=\s*date\(\s*[\"\']d-m-Y\s+H:i:s[\"\']\s*\)\s*\?>/i' => '{{print_time}}',
+            '/<\?=\s*\$content\s*\?>/i' => '{{content}}',
+            '/<\?=\s*\$content\s*;?\s*\?>/i' => '{{content}}',
+            '/<\?=\s*\$\w+\s*\?>/i' => '',
+        ];
+
+        foreach ($mapPatterns as $pattern => $replacement) {
+            $out = (string) preg_replace($pattern, $replacement, $out);
+        }
+
+        // Legacy conditional phone block fallback.
+        $out = (string) preg_replace(
+            '/<\?php\s*if\s*\(\s*H_phone_No\s*!\s*=\s*[\"\']{0,1}\s*[\"\']{0,1}\s*\)\s*\{\s*echo\s*[\"\']Phone:\s*[\"\']\s*\.\s*H_phone_No\s*;\s*\}\s*\?>/is',
+            'Phone: {{H_phone_No}}',
+            $out
+        );
+
+        // Convert generic echo statements that match a known scalar token key.
+        $out = (string) preg_replace('/<\?php\s+echo\s+\$content\s*;?\s*\?>/i', '{{content}}', $out);
+
+        // Remove remaining PHP blocks that cannot be interpreted safely.
+        $out = (string) preg_replace('/<\?(?:php|=)[\s\S]*?\?>/i', '', $out);
+
+        return trim($out);
+    }
+
+    private function sanitizeOpdNamedHeaderFooterReferences(string $html): string
+    {
+        if ($html === '') {
+            return '';
+        }
+
+        $hasMyHeaderBlock = preg_match('/<\s*htmlpageheader\b[^>]*\bname\s*=\s*["\']myHeader["\']/i', $html) === 1;
+        $hasMyFooterBlock = preg_match('/<\s*htmlpagefooter\b[^>]*\bname\s*=\s*["\']myFooter["\']/i', $html) === 1;
+
+        if (! $hasMyHeaderBlock) {
+            $html = (string) preg_replace('/^\s*header\s*:\s*html_myHeader\s*;\s*$/im', '', $html);
+        }
+        if (! $hasMyFooterBlock) {
+            $html = (string) preg_replace('/^\s*footer\s*:\s*html_myFooter\s*;\s*$/im', '', $html);
+        }
 
         return $html;
+    }
+
+    /**
+     * Read a setting value from the hospital_setting table
+     */
+    private function readSettingValueFromDb(string $name): string
+    {
+        if (! $this->db->tableExists('hospital_setting')) {
+            return '';
+        }
+
+        $row = $this->db->table('hospital_setting')
+            ->select('s_value')
+            ->where('s_name', $name)
+            ->get(1)
+            ->getRowArray();
+
+        return trim((string) ($row['s_value'] ?? ''));
     }
 
     private function buildOpdLetterPrintData(int $opdId, int $sessionId = 0, bool $includeContent = true): ?array
@@ -2652,9 +3422,9 @@ class Opd extends BaseController
         $readiness = $this->getScanAiReadiness();
         $this->addScanAiDebug('readiness: ' . $readiness['summary']);
 
-        // Fail early when neither Azure OpenAI nor Document Intelligence is configured.
-        if (! $readiness['azure_openai'] && ! $readiness['docintel']) {
-            $msg = 'AI not configured. Set Azure OpenAI deployment (vision-capable). Optional DocIntel improves OCR.';
+        // Fail early when neither AI server diagnosis nor OCR endpoints are configured.
+        if (! $readiness['ai_server'] && ! $readiness['ocr_server']) {
+            $msg = 'AI not configured. Set DIAGNOSIS_AI_SERVER_URL and DIAGNOSIS_AI_OCR_ENDPOINT in AI Settings.';
             $this->updateScanAiColumns($fileId, [
                 'scan_type' => $scanType,
                 'document_type' => $this->classifyDocumentType('', $scanType, $filename),
@@ -2731,7 +3501,7 @@ class Opd extends BaseController
 
             $documentType = $this->classifyDocumentType('', $scanType, $filename);
             $debugInfo = $this->formatScanAiDebug();
-            $failMsg = 'Azure providers could not read usable text from this file. ' . $readiness['summary'] . '. Ensure Azure deployment supports image input and DocIntel endpoint/API is valid.';
+            $failMsg = 'AI server could not read usable text from this file. ' . $readiness['summary'] . '. Ensure OCR endpoint and token settings are valid.';
             if ($debugInfo !== '') {
                 $failMsg .= ' Debug: ' . $debugInfo;
             }
@@ -3341,312 +4111,121 @@ class Opd extends BaseController
     }
 
     /**
-     * @return array{endpoint:string,api_key:string,deployment:string,api_version:string}
-     */
-    private function getAzureOpenAiConfigForScan(): array
-    {
-        $endpoint = $this->readScanAiSettingValue(
-            ['AZURE_OPENAI_ENDPOINT', 'AI_AZURE_OPENAI_ENDPOINT', 'APP_AZURE_OPENAI_ENDPOINT', 'H_AZURE_OPENAI_ENDPOINT'],
-            ['AZURE_OPENAI_ENDPOINT']
-        );
-
-        $apiKey = $this->readScanAiSettingValue(
-            ['AZURE_OPENAI_API_KEY', 'AI_AZURE_OPENAI_API_KEY', 'APP_AZURE_OPENAI_API_KEY', 'H_AZURE_OPENAI_API_KEY'],
-            ['AZURE_OPENAI_API_KEY']
-        );
-
-        $deployment = $this->readScanAiSettingValue(
-            ['AZURE_OPENAI_DEPLOYMENT', 'AI_AZURE_OPENAI_DEPLOYMENT', 'APP_AZURE_OPENAI_DEPLOYMENT', 'H_AZURE_OPENAI_DEPLOYMENT'],
-            ['AZURE_OPENAI_DEPLOYMENT']
-        );
-
-        $apiVersion = $this->readScanAiSettingValue(
-            ['AZURE_OPENAI_API_VERSION', 'AI_AZURE_OPENAI_API_VERSION', 'APP_AZURE_OPENAI_API_VERSION', 'H_AZURE_OPENAI_API_VERSION'],
-            ['AZURE_OPENAI_API_VERSION']
-        );
-
-        if ($apiVersion === '') {
-            $apiVersion = '2024-10-21';
-        }
-
-        $endpoint = $this->normalizeAzureEndpointBase($endpoint);
-
-        return [
-            'endpoint' => $endpoint,
-            'api_key' => $apiKey,
-            'deployment' => $deployment,
-            'api_version' => $apiVersion,
-        ];
-    }
-
-    /**
-     * @return array{azure_openai:bool,docintel:bool,summary:string}
+     * @return array{ai_server:bool,ocr_server:bool,summary:string}
      */
     private function getScanAiReadiness(): array
     {
-        $azure = $this->getAzureOpenAiConfigForScan();
-        $azureOpenAi = ($azure['endpoint'] !== '' && $azure['api_key'] !== '' && $azure['deployment'] !== '');
+        $base = $this->resolveAiServerBaseUrlForScan();
+        $aiServer = $base !== '';
 
-        $docIntelEndpoint = rtrim($this->readScanAiSettingValue(
-            ['AZURE_DOCINTEL_ENDPOINT', 'AI_AZURE_DOCINTEL_ENDPOINT', 'APP_AZURE_DOCINTEL_ENDPOINT', 'H_AZURE_DOCINTEL_ENDPOINT'],
-            ['AZURE_DOCINTEL_ENDPOINT']
-        ), '/');
-        $docIntelKey = $this->readScanAiSettingValue(
-            ['AZURE_DOCINTEL_KEY', 'AI_AZURE_DOCINTEL_KEY', 'APP_AZURE_DOCINTEL_KEY', 'H_AZURE_DOCINTEL_KEY'],
-            ['AZURE_DOCINTEL_KEY']
-        );
-        $docIntel = ($docIntelEndpoint !== '' && $docIntelKey !== '');
+        $ocrEndpoint = rtrim($this->readScanAiSettingValue([], ['DIAGNOSIS_AI_OCR_ENDPOINT']), '/');
+        $ocrReady = $ocrEndpoint !== '';
 
         $parts = [];
-        $parts[] = 'AzureOpenAI=' . ($azureOpenAi ? 'set' : 'missing endpoint/key/deployment');
-        $parts[] = 'DocIntel=' . ($docIntel ? 'set' : 'missing endpoint/key');
+        $parts[] = 'AIServer=' . ($aiServer ? 'set' : 'missing base URL');
+        $parts[] = 'OCR=' . ($ocrReady ? 'set' : 'missing endpoint');
 
         return [
-            'azure_openai' => $azureOpenAi,
-            'docintel' => $docIntel,
+            'ai_server' => $aiServer,
+            'ocr_server' => $ocrReady,
             'summary' => implode(', ', $parts),
         ];
     }
 
     private function callAzureOpenAiVision(string $filePath, string $mimeType, string $prompt, int $maxTokens = 1200, bool $jsonObject = false): string
     {
-        $cfg = $this->getAzureOpenAiConfigForScan();
-        if ($cfg['endpoint'] === '' || $cfg['api_key'] === '' || $cfg['deployment'] === '') {
-            $this->addScanAiDebug('azure vision skipped: endpoint/key/deployment missing');
-            return '';
-        }
-
-        if (! str_starts_with($mimeType, 'image/')) {
-            $this->addScanAiDebug('azure vision skipped: non-image mime ' . $mimeType);
-            return '';
-        }
-
-        $bytes = @file_get_contents($filePath);
-        if ($bytes === false || $bytes === '') {
-            $this->addScanAiDebug('azure vision skipped: file read failed');
-            return '';
-        }
-
-        $dataUrl = 'data:' . $mimeType . ';base64,' . base64_encode($bytes);
-        $url = $cfg['endpoint'] . '/openai/deployments/' . rawurlencode($cfg['deployment']) . '/chat/completions?api-version=' . rawurlencode($cfg['api_version']);
-
-        for ($attempt = 0; $attempt < 2; $attempt++) {
-            $forceInsecure = $attempt === 1;
-            try {
-                $client = service('curlrequest', $this->buildAzureCurlOptions($cfg['endpoint'], 30, $forceInsecure));
-
-                $payload = [
-                    'messages' => [[
-                        'role' => 'user',
-                        'content' => [
-                            ['type' => 'text', 'text' => $prompt],
-                            ['type' => 'image_url', 'image_url' => ['url' => $dataUrl]],
-                        ],
-                    ]],
-                    'temperature' => 0.1,
-                    'max_tokens' => $maxTokens,
-                ];
-
-                if ($jsonObject) {
-                    $payload['response_format'] = ['type' => 'json_object'];
-                }
-
-                $response = $client->post($url, [
-                    'headers' => [
-                        'api-key' => $cfg['api_key'],
-                        'Content-Type' => 'application/json',
-                    ],
-                    'json' => $payload,
-                ]);
-
-                if ($response->getStatusCode() < 200 || $response->getStatusCode() >= 300) {
-                    $this->addScanAiDebug('azure vision HTTP ' . $response->getStatusCode());
-                    return '';
-                }
-
-                $decoded = json_decode((string) $response->getBody(), true);
-                $content = trim((string) ($decoded['choices'][0]['message']['content'] ?? ''));
-                if ($content === '') {
-                    $this->addScanAiDebug('azure vision returned empty content');
-                }
-                return $content;
-            } catch (\Throwable $e) {
-                if (! $forceInsecure && $this->isSslCertificateError($e)) {
-                    $this->addScanAiDebug('azure vision SSL error; retry insecure');
-                    continue;
-                }
-                $this->addScanAiDebug('azure vision exception: ' . $e->getMessage());
-                return '';
-            }
-        }
-
+        unset($filePath, $mimeType, $prompt, $maxTokens, $jsonObject);
+        $this->addScanAiDebug('visual interpretation via Azure is disabled; using AI server OCR/diagnosis flow');
         return '';
     }
 
     private function callAzureOpenAiText(string $prompt, int $maxTokens = 1200, bool $jsonObject = false): string
     {
-        $cfg = $this->getAzureOpenAiConfigForScan();
-        if ($cfg['endpoint'] === '' || $cfg['api_key'] === '' || $cfg['deployment'] === '') {
-            $this->addScanAiDebug('azure text skipped: endpoint/key/deployment missing');
-            return '';
-        }
-
-        $url = $cfg['endpoint'] . '/openai/deployments/' . rawurlencode($cfg['deployment']) . '/chat/completions?api-version=' . rawurlencode($cfg['api_version']);
-
-        for ($attempt = 0; $attempt < 2; $attempt++) {
-            $forceInsecure = $attempt === 1;
-            try {
-                $client = service('curlrequest', $this->buildAzureCurlOptions($cfg['endpoint'], 30, $forceInsecure));
-
-                $payload = [
-                    'messages' => [[
-                        'role' => 'user',
-                        'content' => $prompt,
-                    ]],
-                    'temperature' => 0.1,
-                    'max_tokens' => $maxTokens,
-                ];
-                if ($jsonObject) {
-                    $payload['response_format'] = ['type' => 'json_object'];
-                }
-
-                $response = $client->post($url, [
-                    'headers' => [
-                        'api-key' => $cfg['api_key'],
-                        'Content-Type' => 'application/json',
-                    ],
-                    'json' => $payload,
-                ]);
-
-                if ($response->getStatusCode() < 200 || $response->getStatusCode() >= 300) {
-                    $this->addScanAiDebug('azure text HTTP ' . $response->getStatusCode());
-                    return '';
-                }
-
-                $decoded = json_decode((string) $response->getBody(), true);
-                $content = trim((string) ($decoded['choices'][0]['message']['content'] ?? ''));
-                if ($content === '') {
-                    $this->addScanAiDebug('azure text returned empty content');
-                }
-                return $content;
-            } catch (\Throwable $e) {
-                if (! $forceInsecure && $this->isSslCertificateError($e)) {
-                    $this->addScanAiDebug('azure text SSL error; retry insecure');
-                    continue;
-                }
-                $this->addScanAiDebug('azure text exception: ' . $e->getMessage());
-                return '';
-            }
-        }
-
+        unset($prompt, $maxTokens, $jsonObject);
+        $this->addScanAiDebug('text generation via Azure is disabled; using AI server flow');
         return '';
     }
 
     private function extractTextWithAzureDocumentIntelligence(string $filePath): string
     {
-        $endpoint = rtrim($this->readScanAiSettingValue(
-            ['AZURE_DOCINTEL_ENDPOINT', 'AI_AZURE_DOCINTEL_ENDPOINT', 'APP_AZURE_DOCINTEL_ENDPOINT', 'H_AZURE_DOCINTEL_ENDPOINT'],
-            ['AZURE_DOCINTEL_ENDPOINT']
-        ), '/');
-        $endpoint = $this->normalizeAzureEndpointBase($endpoint);
-        $key = $this->readScanAiSettingValue(
-            ['AZURE_DOCINTEL_KEY', 'AI_AZURE_DOCINTEL_KEY', 'APP_AZURE_DOCINTEL_KEY', 'H_AZURE_DOCINTEL_KEY'],
-            ['AZURE_DOCINTEL_KEY']
-        );
+        $endpoint = rtrim($this->readScanAiSettingValue([], ['DIAGNOSIS_AI_OCR_ENDPOINT']), '/');
+        $token = trim($this->readScanAiSettingValue([], ['DIAGNOSIS_AI_PARSE_TOKEN']));
 
-        if ($endpoint === '' || $key === '' || !is_file($filePath)) {
-            $this->addScanAiDebug('docintel skipped: endpoint/key/file missing');
+        if ($endpoint === '' || !is_file($filePath)) {
+            $this->addScanAiDebug('ai server OCR skipped: endpoint/file missing');
             return '';
         }
 
-        for ($attempt = 0; $attempt < 2; $attempt++) {
-            $forceInsecure = $attempt === 1;
-            try {
-                $client = service('curlrequest', $this->buildAzureCurlOptions($endpoint, 40, $forceInsecure));
+        try {
+            $headers = ['Accept' => 'application/json'];
+            if ($token !== '') {
+                $headers['Authorization'] = 'Bearer ' . $token;
+            }
 
-                $bytes = @file_get_contents($filePath);
-                if ($bytes === false || $bytes === '') {
-                    return '';
-                }
-
-                $mimeType = $this->guessMimeTypeFromPath($filePath);
-                $analyzeUrls = [
-                    $endpoint . '/documentintelligence/documentModels/prebuilt-read:analyze?api-version=2024-02-29-preview',
-                    $endpoint . '/documentintelligence/documentModels/prebuilt-read:analyze?api-version=2023-07-31',
-                    $endpoint . '/formrecognizer/documentModels/prebuilt-read:analyze?api-version=2023-07-31',
-                ];
-
-                // Try multiple API routes for compatibility with different Azure environments.
-                foreach ($analyzeUrls as $analyzeUrl) {
-                    $submit = $client->post($analyzeUrl, [
-                        'headers' => [
-                            'Content-Type' => $mimeType !== '' ? $mimeType : 'application/octet-stream',
-                            'Ocp-Apim-Subscription-Key' => $key,
-                        ],
-                        'body' => $bytes,
-                    ]);
-
-                    if ($submit->getStatusCode() < 200 || $submit->getStatusCode() >= 300) {
-                        $this->addScanAiDebug('docintel submit HTTP ' . $submit->getStatusCode() . ' @ ' . basename($analyzeUrl));
-                        continue;
-                    }
-
-                    $submitBody = json_decode((string) $submit->getBody(), true);
-                    if (is_array($submitBody)) {
-                        $inlineText = $this->extractTextFromDocIntelPayload($submitBody);
-                        if ($inlineText !== '') {
-                            return $inlineText;
-                        }
-                    }
-
-                    $operationLocation = trim((string) $submit->getHeaderLine('Operation-Location'));
-                    if ($operationLocation === '') {
-                        $this->addScanAiDebug('docintel missing operation-location @ ' . basename($analyzeUrl));
-                        continue;
-                    }
-
-                    for ($i = 0; $i < 14; $i++) {
-                        usleep(900000);
-                        $poll = $client->get($operationLocation, [
-                            'headers' => [
-                                'Ocp-Apim-Subscription-Key' => $key,
-                            ],
-                        ]);
-
-                        if ($poll->getStatusCode() < 200 || $poll->getStatusCode() >= 300) {
-                            $this->addScanAiDebug('docintel poll HTTP ' . $poll->getStatusCode());
-                            continue;
-                        }
-
-                        $decoded = json_decode((string) $poll->getBody(), true);
-                        if (!is_array($decoded)) {
-                            continue;
-                        }
-
-                        $status = strtolower((string) ($decoded['status'] ?? ''));
-                        if ($status === 'succeeded') {
-                            $text = $this->extractTextFromDocIntelPayload($decoded);
-                            if ($text !== '') {
-                                return $text;
-                            }
-                        }
-
-                        if ($status === 'failed') {
-                            $this->addScanAiDebug('docintel status failed');
-                            break;
-                        }
-                    }
-                }
-
-                return '';
-            } catch (\Throwable $e) {
-                if (! $forceInsecure && $this->isSslCertificateError($e)) {
-                    $this->addScanAiDebug('docintel SSL error; retry insecure');
-                    continue;
-                }
-                $this->addScanAiDebug('docintel exception: ' . $e->getMessage());
+            $client = service('curlrequest', $this->buildAzureCurlOptions($endpoint, 40, false));
+            $mime = $this->guessMimeTypeFromPath($filePath);
+            if (! str_starts_with($mime, 'image/')) {
                 return '';
             }
+
+            $curlFile = new \CURLFile($filePath, $mime, basename($filePath));
+            $response = $client->post($endpoint, [
+                'headers' => $headers,
+                'multipart' => [
+                    'file' => $curlFile,
+                ],
+            ]);
+
+            if ($response->getStatusCode() < 200 || $response->getStatusCode() >= 300) {
+                return '';
+            }
+
+            $decoded = json_decode((string) $response->getBody(), true);
+            if (! is_array($decoded)) {
+                return '';
+            }
+
+            foreach (['ocr_text', 'text', 'extracted_text'] as $key) {
+                $text = trim((string) ($decoded[$key] ?? ''));
+                if ($text !== '') {
+                    return $text;
+                }
+            }
+        } catch (\Throwable $e) {
+            return '';
+        }
+
+        return '';
+    }
+
+    private function resolveAiServerBaseUrlForScan(): string
+    {
+        $base = rtrim($this->readScanAiSettingValue([], ['DIAGNOSIS_AI_SERVER_URL']), '/');
+        if ($base !== '') {
+            return $base;
+        }
+
+        $candidates = [
+            trim($this->readScanAiSettingValue([], ['DIAGNOSIS_AI_PARSE_ENDPOINT'])),
+            trim($this->readScanAiSettingValue([], ['DIAGNOSIS_AI_OCR_ENDPOINT'])),
+        ];
+
+        foreach ($candidates as $url) {
+            if ($url === '') {
+                continue;
+            }
+
+            $parts = @parse_url($url);
+            if (! is_array($parts) || empty($parts['scheme']) || empty($parts['host'])) {
+                continue;
+            }
+
+            $base = (string) $parts['scheme'] . '://' . (string) $parts['host'];
+            if (! empty($parts['port'])) {
+                $base .= ':' . (int) $parts['port'];
+            }
+
+            return rtrim($base, '/');
         }
 
         return '';

@@ -5,7 +5,7 @@ $studyName = trim((string) ($study_name ?? ''));
 $findingsHtml = (string) ($findings_html ?? '');
 $impressionHtml = (string) ($impression_html ?? '');
 $summaryText = trim((string) ($summary_text ?? ''));
-$provider = trim((string) ($provider ?? 'azure-openai'));
+$provider = trim((string) ($provider ?? 'ai-server'));
 $model = trim((string) ($model ?? ''));
 $findingsInputId = 'ai_findings_' . $batchId;
 $impressionInputId = 'ai_impression_' . $batchId;
@@ -18,8 +18,8 @@ if ($providerKey === 'local-xray-fallback') {
 } elseif ($providerKey === 'regex-fallback') {
     $providerLabel = 'Regex Fallback';
     $providerBadgeClass = 'bg-warning text-dark';
-} elseif ($providerKey === 'azure-openai') {
-    $providerLabel = 'Azure OpenAI';
+} elseif ($providerKey === 'ai-server') {
+    $providerLabel = 'AI Server';
     $providerBadgeClass = 'bg-info text-dark';
 }
 $isFallback = in_array($providerKey, ['local-xray-fallback', 'regex-fallback'], true);

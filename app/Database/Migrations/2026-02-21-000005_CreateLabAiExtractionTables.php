@@ -41,7 +41,7 @@ class CreateLabAiExtractionTables extends Migration
             'ai_provider' => [
                 'type' => 'VARCHAR',
                 'constraint' => 50,
-                'default' => 'azure-openai',
+                'default' => 'ai-server',
             ],
             'model_name' => [
                 'type' => 'VARCHAR',

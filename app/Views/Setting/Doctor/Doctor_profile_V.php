@@ -89,6 +89,7 @@ if (!empty($data) && !empty($data[0])) {
                 <?php
                 $templateFieldSet = array_flip($template_fields ?? []);
                 $templateOptions = $template_options ?? [];
+                $opdPrintTemplateOptions = $opd_print_template_options ?? [];
                 ?>
                 <?php if (! empty($templateFieldSet)) : ?>
                     <div class="row g-3 mt-1">
@@ -97,7 +98,7 @@ if (!empty($data) && !empty($data[0])) {
                                 <label class="form-label">OPD Print Template</label>
                                 <select class="form-select" name="tmpl_opd_print_format">
                                     <option value="">-- Select Template --</option>
-                                    <?php foreach ($templateOptions as $tmpl) : ?>
+                                    <?php foreach ($opdPrintTemplateOptions as $tmpl) : ?>
                                         <option value="<?= esc($tmpl) ?>" <?= combo_checked($tmpl, strtolower(trim((string) ($data[0]->opd_print_format ?? '')))) ?>><?= esc($tmpl) ?></option>
                                     <?php endforeach; ?>
                                 </select>

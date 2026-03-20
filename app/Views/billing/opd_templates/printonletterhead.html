@@ -1,0 +1,84 @@
+<style>@page {
+margin-top: 4cm;
+margin-bottom: 2.5cm;
+margin-left: 0.7cm;
+margin-right: 0.7cm;
+margin-header: 0.5cm;
+margin-footer: 1.5cm;
+header: html_myHeader;
+footer: html_myFooter;
+}
+</style>
+
+<htmlpageheader name="myHeader">
+<table cellspacing="0" style="font-size: 10px;width:100%;border-style: inset;">
+    <tr>
+        <td style="width: 120px;vertical-align: top;">
+            <img style="width: 100px;vertical-align: top;" src="{{H_logo_abs}}" />
+        </td>
+        <td style="width: 400px;vertical-align: top;text-align: left;">
+            <p align="center" style="font-size: 20px;">{{H_Name}}</p>
+            <p align="center" style="font-size: 12px">{{H_address_1}}, {{H_address_2}}<br>Phone: {{H_phone_No}}</p>
+        </td>
+        <td style="width: 300px;vertical-align: top;text-align: right;">
+            <p align="right" style="font-size: 22px;">Dr. {{doctor_name}}</p>
+            {{doctor_sign_html}}
+        </td>
+    </tr>
+</table>
+<hr/>
+</htmlpageheader>
+
+<htmlpagefooter name="myFooter">
+<p align="right" style="font-size: 10px;">Prescription Generated: {{print_time}}</p>
+<p style="font-size: 9px;">Please ensure doctor registration number and signature/stamp are present for regulatory compliance.</p>
+</htmlpagefooter>
+
+<table width="100%" style="font-size: 11px; border-collapse: collapse;">
+    <tr>
+        <td width="50%">
+            <strong>Name:</strong> {{pName}}<br>
+            <strong>S/o:</strong> [Father Name]<br>
+            <strong>Gender/Age:</strong> {{age_sex}}<br>
+            <strong>Mob:</strong> {{phoneno}}<br>
+            <strong>Address:</strong> [Address]
+        </td>
+        <td width="50%">
+            <strong>UHID:</strong> {{uhid_no}}<br>
+            <strong>Sr No.:</strong> [Sr No]<br>
+            <strong>OPD No.:</strong> {{opd_no}}<br>
+            <strong>Date & Time:</strong> {{opd_date}} 12:00 AM<br>
+            <strong>Valid Upto:</strong> [Valid Date]
+        </td>
+    </tr>
+</table>
+
+<table width="100%" style="font-size: 11px; border-collapse: collapse; margin-top: 10px;">
+    <tr>
+        <td width="33%">
+            <strong>DEPARTMENT:</strong><br>{{Complaint}}
+        </td>
+        <td width="33%">
+            <strong>DIAGNOSIS:</strong><br>{{diagnosis}}
+        </td>
+        <td width="33%">
+            <strong>Last Visit:</strong> [Date]<br>
+            <strong>No. of Visit:</strong> [Count]
+        </td>
+    </tr>
+</table>
+
+<h3 style="margin: 15px 0 10px 0;">Rx :</h3>
+
+{{medical}}
+
+<p style="margin-top: 20px; font-size: 10px;">
+    <strong>Investigation:</strong> {{investigation}}<br>
+    <strong>Advice:</strong> {{advice}}
+</p>
+
+<div style="margin-top: 40px; text-align: right;">
+    <p><strong>Dr. {{doctor_name}}</strong></p>
+    {{doctor_sign_html}}
+    <p style="font-size: 10px; margin-top: 5px;"><strong>Reg. No.: 80982</strong></p>
+</div>

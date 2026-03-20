@@ -483,8 +483,8 @@ class Opd_prescription extends BaseController
         $draft = $this->generateClinicalTextWithAi($prompt);
 
         if ($draft !== null && trim($draft) !== '') {
-            $provider = $this->lastAiProvider === 'azure' ? 'azure' : 'ai';
-            $providerLabel = $provider === 'azure' ? 'Azure OpenAI' : 'AI';
+            $provider = $this->lastAiProvider === 'ai-server' ? 'ai-server' : 'ai';
+            $providerLabel = $provider === 'ai-server' ? 'AI Server' : 'AI';
             return $this->response->setJSON([
                 'update' => 1,
                 'draft_text' => trim($draft),
@@ -579,8 +579,8 @@ class Opd_prescription extends BaseController
             $aiMode = 'fallback';
             $message = 'AI unavailable. Template draft prepared from entered data.';
         } else {
-            $aiMode = $this->lastAiProvider === 'azure' ? 'azure' : 'ai';
-            $message = 'Full clinical draft prepared using ' . ($aiMode === 'azure' ? 'Azure OpenAI' : 'AI') . '.';
+            $aiMode = $this->lastAiProvider === 'ai-server' ? 'ai-server' : 'ai';
+            $message = 'Full clinical draft prepared using ' . ($aiMode === 'ai-server' ? 'AI Server' : 'AI') . '.';
         }
 
         return $this->response->setJSON([
@@ -2597,37 +2597,12 @@ class Opd_prescription extends BaseController
 
         $targetLanguageName = $supportedLanguages[$targetLang];
 
-        $prompt = "You are a clinical translation assistant for OPD patient advice in India.\n"
-            . "Translate the following English patient advice into {$targetLanguageName}.\n"
-            . "Keep meaning medically accurate, simple, and patient-friendly.\n"
-            . "Return ONLY valid JSON object: {\"translated_text\":\"...\"}.\n"
-            . "Do not include markdown, extra keys, or explanation.\n"
-            . "English Advice: {$sourceText}";
-
         $this->lastAiProvider = 'none';
-        $aiText = $this->generateClinicalTextWithAi($prompt, 220);
-        if ($aiText === null || trim($aiText) === '') {
-            return $this->response->setJSON([
-                'update' => 0,
-                'error_text' => 'AI unavailable. Check AI settings.',
-                'csrfName' => csrf_token(),
-                'csrfHash' => csrf_hash(),
-            ]);
-        }
-
-        $parsed = $this->parseJsonFromAiResponse($aiText);
-        $translatedText = trim((string) ($parsed['translated_text'] ?? ''));
-
-        if ($translatedText === '') {
-            $translatedText = trim(strip_tags((string) $aiText));
-            $translatedText = preg_replace('/```(?:json)?|```/i', '', $translatedText) ?? $translatedText;
-            $translatedText = trim($translatedText);
-        }
-
+        $translatedText = $this->translateAdviceWithAiServer($sourceText, $targetLang);
         if ($translatedText === '') {
             return $this->response->setJSON([
                 'update' => 0,
-                'error_text' => 'Translation failed. Try again.',
+                'error_text' => 'AI server unavailable. Check DIAGNOSIS_AI_SERVER_URL and token settings.',
                 'csrfName' => csrf_token(),
                 'csrfHash' => csrf_hash(),
             ]);
@@ -2635,7 +2610,7 @@ class Opd_prescription extends BaseController
 
         return $this->response->setJSON([
             'update' => 1,
-            'provider' => $this->lastAiProvider,
+            'provider' => 'ai-server',
             'target_lang' => $targetLang,
             'target_language_name' => $targetLanguageName,
             'translated_text' => $translatedText,
@@ -3016,8 +2991,8 @@ class Opd_prescription extends BaseController
         $this->lastAiProvider = 'none';
         $aiDraft = $this->generateComplaintDraftWithAi($finalComplaints, $currentText);
         if ($aiDraft !== null && trim($aiDraft) !== '') {
-            $provider = $this->lastAiProvider === 'azure' ? 'azure' : 'ai';
-            $providerLabel = $provider === 'azure' ? 'Azure OpenAI' : 'AI';
+            $provider = $this->lastAiProvider === 'ai-server' ? 'ai-server' : 'ai';
+            $providerLabel = $provider === 'ai-server' ? 'AI Server' : 'AI';
             return $this->response->setJSON([
                 'update' => 1,
                 'draft_text' => trim($aiDraft),
@@ -5374,59 +5349,10 @@ class Opd_prescription extends BaseController
     }
 
     /**
-     * @return array{endpoint:string,api_key:string,deployment:string,api_version:string}
-     */
-    private function getAzureOpenAiConfig(): array
-    {
-        $endpoint = $this->readAiSettingValue(
-            ['AZURE_OPENAI_ENDPOINT', 'AI_AZURE_OPENAI_ENDPOINT', 'APP_AZURE_OPENAI_ENDPOINT', 'H_AZURE_OPENAI_ENDPOINT'],
-            ['AZURE_OPENAI_ENDPOINT']
-        );
-
-        $apiKey = $this->readAiSettingValue(
-            ['AZURE_OPENAI_API_KEY', 'AI_AZURE_OPENAI_API_KEY', 'APP_AZURE_OPENAI_API_KEY', 'H_AZURE_OPENAI_API_KEY'],
-            ['AZURE_OPENAI_API_KEY']
-        );
-
-        $deployment = $this->readAiSettingValue(
-            ['AZURE_OPENAI_DEPLOYMENT', 'AI_AZURE_OPENAI_DEPLOYMENT', 'APP_AZURE_OPENAI_DEPLOYMENT', 'H_AZURE_OPENAI_DEPLOYMENT'],
-            ['AZURE_OPENAI_DEPLOYMENT']
-        );
-
-        $apiVersion = $this->readAiSettingValue(
-            ['AZURE_OPENAI_API_VERSION', 'AI_AZURE_OPENAI_API_VERSION', 'APP_AZURE_OPENAI_API_VERSION', 'H_AZURE_OPENAI_API_VERSION'],
-            ['AZURE_OPENAI_API_VERSION']
-        );
-
-        if ($apiVersion === '') {
-            $apiVersion = '2024-10-21';
-        }
-
-        return [
-            'endpoint' => rtrim($endpoint, '/'),
-            'api_key' => $apiKey,
-            'deployment' => $deployment,
-            'api_version' => $apiVersion,
-        ];
-    }
-
-    /**
-     * @param array<int, string> $constCandidates
      * @param array<int, string> $settingCandidates
      */
-    private function readAiSettingValue(array $constCandidates, array $settingCandidates): string
+    private function readAiSettingValue(array $settingCandidates): string
     {
-        foreach ($constCandidates as $constName) {
-            if (! defined($constName)) {
-                continue;
-            }
-
-            $value = trim((string) constant($constName));
-            if ($value !== '') {
-                return $value;
-            }
-        }
-
         if ($this->db->tableExists('hospital_setting') && ! empty($settingCandidates)) {
             $row = $this->db->table('hospital_setting')
                 ->select('s_value')
@@ -5460,61 +5386,6 @@ Additional raw doctor notes: " . $currentText . "
 Output only one plain text sentence starting with 'Chief complaints:' and no markdown.";
 
         return $this->generateClinicalTextWithAi($prompt, 180);
-    }
-
-    private function generateClinicalTextWithAzureOpenAi(string $prompt, int $maxOutputTokens = 300): ?string
-    {
-        $cfg = $this->getAzureOpenAiConfig();
-        if ($cfg['endpoint'] === '' || $cfg['api_key'] === '' || $cfg['deployment'] === '' || trim($prompt) === '') {
-            return null;
-        }
-
-        try {
-            $httpOptions = [
-                'timeout' => 20,
-                'http_errors' => false,
-            ];
-            if (defined('ENVIRONMENT') && in_array((string) ENVIRONMENT, ['development', 'testing'], true)) {
-                $httpOptions['verify'] = false;
-            }
-
-            $client = service('curlrequest', $httpOptions);
-            $url = $cfg['endpoint'] . '/openai/deployments/' . rawurlencode($cfg['deployment'])
-                . '/chat/completions?api-version=' . rawurlencode($cfg['api_version']);
-
-            $response = $client->post($url, [
-                'headers' => [
-                    'api-key' => $cfg['api_key'],
-                    'Content-Type' => 'application/json',
-                ],
-                'json' => [
-                    'messages' => [
-                        ['role' => 'system', 'content' => 'You are a clinical OPD assistant. Return plain text only, no markdown.'],
-                        ['role' => 'user', 'content' => $prompt],
-                    ],
-                    'temperature' => 0.2,
-                    'top_p' => 0.9,
-                    'max_tokens' => max(64, $maxOutputTokens),
-                ],
-            ]);
-
-            if ($response->getStatusCode() < 200 || $response->getStatusCode() >= 300) {
-                return null;
-            }
-
-            $decoded = json_decode((string) $response->getBody(), true);
-            $text = trim((string) ($decoded['choices'][0]['message']['content'] ?? ''));
-
-            $text = trim($text);
-            if ($text === '') {
-                return null;
-            }
-
-            $this->lastAiProvider = 'azure';
-            return preg_replace('/\s+/', ' ', $text) ?: $text;
-        } catch (\Throwable $e) {
-            return null;
-        }
     }
 
     private function buildClinicalPrompt(string $mode, string $text): string
@@ -5639,7 +5510,84 @@ Input: " . $text;
 
     private function generateClinicalTextWithAi(string $prompt, int $maxOutputTokens = 300): ?string
     {
-        return $this->generateClinicalTextWithAzureOpenAi($prompt, $maxOutputTokens);
+        unset($prompt, $maxOutputTokens);
+        return null;
+    }
+
+    private function resolveAiServerBaseUrl(): string
+    {
+        $base = rtrim($this->readAiSettingValue(['DIAGNOSIS_AI_SERVER_URL']), '/');
+        if ($base !== '') {
+            return $base;
+        }
+
+        $candidates = [
+            trim($this->readAiSettingValue(['DIAGNOSIS_AI_PARSE_ENDPOINT'])),
+            trim($this->readAiSettingValue(['DIAGNOSIS_AI_OCR_ENDPOINT'])),
+        ];
+
+        foreach ($candidates as $url) {
+            if ($url === '') {
+                continue;
+            }
+
+            $parts = @parse_url($url);
+            if (! is_array($parts) || empty($parts['scheme']) || empty($parts['host'])) {
+                continue;
+            }
+
+            $base = (string) $parts['scheme'] . '://' . (string) $parts['host'];
+            if (! empty($parts['port'])) {
+                $base .= ':' . (int) $parts['port'];
+            }
+
+            return rtrim($base, '/');
+        }
+
+        return '';
+    }
+
+    private function translateAdviceWithAiServer(string $sourceText, string $targetLang): string
+    {
+        $base = $this->resolveAiServerBaseUrl();
+        if ($base === '') {
+            return '';
+        }
+
+        $token = trim($this->readAiSettingValue(['DIAGNOSIS_AI_PARSE_TOKEN']));
+
+        try {
+            $options = [
+                'timeout' => 20,
+                'http_errors' => false,
+            ];
+            if (defined('ENVIRONMENT') && in_array((string) ENVIRONMENT, ['development', 'testing'], true)) {
+                $options['verify'] = false;
+            }
+
+            $headers = ['Accept' => 'application/json'];
+            if ($token !== '') {
+                $headers['Authorization'] = 'Bearer ' . $token;
+            }
+
+            $client = service('curlrequest', $options);
+            $url = $base . '/translate?text=' . rawurlencode($sourceText) . '&target_lang=' . rawurlencode($targetLang);
+            $response = $client->get($url, ['headers' => $headers]);
+            if ($response->getStatusCode() < 200 || $response->getStatusCode() >= 300) {
+                return '';
+            }
+
+            $decoded = json_decode((string) $response->getBody(), true);
+            $translated = trim((string) ($decoded['translated_text'] ?? ''));
+            if ($translated === '') {
+                return '';
+            }
+
+            $this->lastAiProvider = 'ai-server';
+            return $translated;
+        } catch (\Throwable $e) {
+            return '';
+        }
     }
 
     /**
