@@ -860,7 +860,7 @@ class Diagnosis extends BaseController
             $dataLabTestList = $this->db->query($itemSql, [$labReqId])->getResult();
 
             $repoFormat = $this->db->table('lab_repo')
-                ->select('mstRepoKey, Title, HTMLData')
+                ->select('mstRepoKey, Title, HTMLData, RTFData')
                 ->where('mstRepoKey', (int) $labRequest->lab_repo_id)
                 ->get()
                 ->getRow();
@@ -869,7 +869,10 @@ class Diagnosis extends BaseController
                 ? $repoFormat->Title
                 : ($labRequest->report_name ?? 'Lab Report');
 
-            $reportString = $repoFormat->HTMLData ?? '';
+            $reportString = (string) ($repoFormat->HTMLData ?? '');
+            if (trim($reportString) === '') {
+                $reportString = (string) ($repoFormat->RTFData ?? '');
+            }
             $reportHeader = '<table border="0" cellpadding="1" cellspacing="1" style="width:100%"><tbody><tr><td><h3>' .
                 htmlspecialchars((string) $reportTitle, ENT_QUOTES, 'UTF-8') .
                 '</h3></td></tr></tbody></table>';
@@ -971,7 +974,7 @@ class Diagnosis extends BaseController
             }
 
             $repoFormat = $this->db->table('lab_repo')
-                ->select('Title, HTMLData')
+                ->select('Title, HTMLData, RTFData')
                 ->where('mstRepoKey', (int) ($labRequest->lab_repo_id ?? 0))
                 ->get()
                 ->getRow();
@@ -981,6 +984,9 @@ class Diagnosis extends BaseController
                 : (string) ($labRequest->report_name ?? 'Radiology Report');
 
             $reportString = (string) ($repoFormat->HTMLData ?? '');
+            if (trim($reportString) === '') {
+                $reportString = (string) ($repoFormat->RTFData ?? '');
+            }
             $reportHeader = '<table border="0" cellpadding="1" cellspacing="1" style="width:100%"><tbody><tr><td><h3>' .
                 htmlspecialchars($reportTitle, ENT_QUOTES, 'UTF-8') .
                 '</h3></td></tr></tbody></table>';

@@ -123,6 +123,22 @@
 </section>
 </form>
 
+<!-- Print Buttons Section -->
+<div class="card mt-3">
+  <div class="card-body p-3">
+    <div class="row g-2">
+      <div class="col-md-12">
+        <a href="<?= base_url('billing/charges/print_invoice') ?>/<?= esc($invoice_master[0]->id ?? 0) ?>/0" target="_blank" class="btn btn-primary">
+          <i class="fas fa-print"></i> Print A4
+        </a>
+        <a href="<?= base_url('billing/charges/print_invoice') ?>/<?= esc($invoice_master[0]->id ?? 0) ?>/1" target="_blank" class="btn btn-primary">
+          <i class="fas fa-print"></i> Print Double Copy
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
 <?php if (($invoice_master[0]->payment_status ?? 0) == 0 && $canChargePay) : ?>
   <div class="card">
     <div class="card-body p-3">

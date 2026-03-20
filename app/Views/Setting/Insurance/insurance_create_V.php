@@ -1,4 +1,53 @@
-<div class="card">
+<style>
+    .insurance-form-theme {
+        border: 0;
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: 0 14px 32px rgba(15, 23, 42, 0.08);
+    }
+
+    .insurance-form-theme > .card-header {
+        background: linear-gradient(120deg, #1d4ed8 0%, #0ea5e9 55%, #22c55e 100%);
+        color: #ffffff;
+        border-bottom: 0;
+        padding: 14px 16px;
+    }
+
+    .insurance-form-theme > .card-header .card-title {
+        font-weight: 700;
+        letter-spacing: .2px;
+    }
+
+    .insurance-form-theme > .card-body {
+        background: #f8fafc;
+        padding: 18px;
+    }
+
+    .insurance-form-theme .form-label {
+        font-weight: 600;
+        color: #0f172a;
+    }
+
+    .insurance-form-theme .form-control {
+        border-radius: 10px;
+        border: 1px solid #cbd5e1;
+        box-shadow: none;
+        transition: border-color .2s ease, box-shadow .2s ease;
+    }
+
+    .insurance-form-theme .form-control:focus {
+        border-color: #0284c7;
+        box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.16);
+    }
+
+    .insurance-form-theme #btn_update {
+        border-radius: 10px;
+        padding: 10px 16px;
+        font-weight: 600;
+    }
+</style>
+
+<div class="card insurance-form-theme">
     <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
         <h3 class="card-title mb-0">Insurance Company - Add New</h3>
         <div class="card-tools ms-auto">

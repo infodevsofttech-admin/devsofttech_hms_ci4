@@ -119,6 +119,7 @@ class CaseMaster extends BaseController
             'input_insurance_id' => 'required|min_length[2]|max_length[30]',
             'input_card_holder_name' => 'required|min_length[2]|max_length[50]',
         ];
+        $validation = service('validation');
         $validation->setRules($rules);
         if (! $validation->withRequest($this->request)->run()) {
             $errorText = implode("\n", $validation->getErrors());

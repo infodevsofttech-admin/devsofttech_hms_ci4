@@ -289,6 +289,11 @@ service('auth')->routes($routes);
 // Legacy compatibility: some IPD charge screens still refresh via old IpdNew URL.
 $routes->get('IpdNew/show_ipd_items/(:num)', 'Billing\\Ipd::panelTab/$1/ipd-charges');
 $routes->get('IpdNew/show_ipd_items/(:num)/(:num)', 'Billing\\Ipd::panelTab/$1/ipd-charges');
+// Legacy compatibility: patient profile still calls old new-IPD URL.
+$routes->get('IpdNew/addipd/(:num)', 'Billing\\Ipd::legacyAddIpd/$1');
+$routes->post('IpdNew/AddNew', 'Billing\\Ipd::legacyAddNew');
+$routes->post('IpdNew/addnew', 'Billing\\Ipd::legacyAddNew');
+$routes->get('IpdNew/ipd_panel/(:num)', 'Billing\\Ipd::panel/$1');
 
 // Legacy compatibility: old discharge summary links should open current discharge tab.
 $routes->match(['get', 'post'], 'Ipd_discharge/ipd_select/(:num)', 'Ipd_discharge::ipd_select/$1');
@@ -407,6 +412,7 @@ $routes->group('billing', function($routes) {
     $routes->post('charges/cancel-invoice/(:num)', 'Billing\\Charges::cancel_invoice/$1');
     $routes->post('charges/update-correction', 'Billing\\Charges::update_correction_charges');
     $routes->get('charges/show/(:num)', 'Billing\\Charges::show/$1');
+    $routes->get('charges/print_invoice/(:num)/(:num)', 'Billing\\Charges::print_invoice/$1/$2');
     $routes->post('charges/delete', 'Billing\\Charges::delete');
     $routes->post('charges/update-discount', 'Billing\\Charges::updateDiscount');
 });

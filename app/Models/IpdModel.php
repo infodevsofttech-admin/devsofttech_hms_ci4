@@ -56,11 +56,15 @@ class IpdModel extends Model
         $docList = $data['doc_list'] ?? [];
         if (! empty($docList)) {
             foreach ($docList as $docId) {
-                $this->db->table('ipd_master_doc_list')->insert([
+                $docPayload = $this->filterTableDataByExistingColumns('ipd_master_doc_list', [
                     'doc_id' => $docId,
                     'ipd_id' => $insertId,
                     'log' => 'Insert By :' . $userSignature,
                 ]);
+
+                if (! empty($docPayload)) {
+                    $this->db->table('ipd_master_doc_list')->insert($docPayload);
+                }
             }
         }
 
@@ -69,6 +73,11 @@ class IpdModel extends Model
 
     public function addIpdDoc(array $docData): int
     {
+        $docData = $this->filterTableDataByExistingColumns('ipd_master_doc_list', $docData);
+        if (empty($docData)) {
+            return 0;
+        }
+
         $inserted = $this->db->table('ipd_master_doc_list')->insert($docData);
 
         return $inserted ? (int) $this->db->insertID() : 0;
@@ -101,22 +110,93 @@ class IpdModel extends Model
         return 1;
     }
 
+    private function filterTableDataByExistingColumns(string $table, array $data): array
+    {
+        if (! $this->db->tableExists($table)) {
+            return [];
+        }
+
+        $fields = $this->db->getFieldNames($table) ?? [];
+        if (empty($fields)) {
+            return $data;
+        }
+
+        return array_intersect_key($data, array_flip($fields));
+    }
+
     public function bedAssign(array $data): int
     {
-        $inserted = $this->db->table('ipd_bed_assign')->insert($data);
-        if (! $inserted) {
+        $ipdId = (int) ($data['ipd_id'] ?? 0);
+        $bedId = (int) ($data['bed_id'] ?? 0);
+        $fromDate = (string) ($data['Fdate'] ?? date('Y-m-d H:i:s'));
+        $toDate = (string) ($data['TDate'] ?? $fromDate);
+
+        if ($ipdId <= 0 || $bedId <= 0) {
             return 0;
         }
 
-        $insertId = (int) $this->db->insertID();
+        $insertId = 0;
 
-        $this->db->table('hc_bed_master')
-            ->where('bed_used_p_id', $data['ipd_id'])
-            ->update(['bed_used_p_id' => 0]);
+        if ($this->db->tableExists('bed_assignment_history')) {
+            $wardId = null;
+            if ($this->db->tableExists('bed_master') && in_array('ward_id', $this->db->getFieldNames('bed_master') ?? [], true)) {
+                $bedRow = $this->db->table('bed_master')
+                    ->select('ward_id')
+                    ->where('id', $bedId)
+                    ->get()
+                    ->getRowArray();
+                $wardId = isset($bedRow['ward_id']) ? (int) $bedRow['ward_id'] : null;
+            }
 
-        $this->db->table('hc_bed_master')
-            ->where('id', $data['bed_id'])
-            ->update(['bed_used_p_id' => $data['ipd_id']]);
+            $assignedBy = (int) ($this->getUserIdentity()['id'] ?? 0);
+
+            $inserted = $this->db->table('bed_assignment_history')->insert([
+                'ipd_id' => $ipdId,
+                'bed_id' => $bedId,
+                'assignment_type' => 'admission',
+                'assigned_date' => $fromDate,
+                'discharged_date' => $toDate,
+                'assigned_by' => $assignedBy > 0 ? $assignedBy : null,
+                'ward_id' => $wardId,
+            ]);
+
+            if (! $inserted) {
+                return 0;
+            }
+
+            $insertId = (int) $this->db->insertID();
+        } elseif ($this->db->tableExists('ipd_bed_assign')) {
+            $inserted = $this->db->table('ipd_bed_assign')->insert([
+                'ipd_id' => $ipdId,
+                'Fdate' => $fromDate,
+                'TDate' => $toDate,
+                'bed_id' => $bedId,
+            ]);
+
+            if (! $inserted) {
+                return 0;
+            }
+
+            $insertId = (int) $this->db->insertID();
+        } else {
+            return 0;
+        }
+
+        if ($this->db->tableExists('hc_bed_master') && in_array('bed_used_p_id', $this->db->getFieldNames('hc_bed_master') ?? [], true)) {
+            $this->db->table('hc_bed_master')
+                ->where('bed_used_p_id', $ipdId)
+                ->update(['bed_used_p_id' => 0]);
+
+            $this->db->table('hc_bed_master')
+                ->where('id', $bedId)
+                ->update(['bed_used_p_id' => $ipdId]);
+        }
+
+        if ($this->db->tableExists('bed_master') && in_array('bed_status', $this->db->getFieldNames('bed_master') ?? [], true)) {
+            $this->db->table('bed_master')
+                ->where('id', $bedId)
+                ->update(['bed_status' => 'occupied']);
+        }
 
         return $insertId;
     }

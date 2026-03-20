@@ -81,6 +81,47 @@ class Template extends BaseController
         return $map[$modality] ?? null;
     }
 
+        private function buildDefaultPathologyTemplate(string $reportName): string
+        {
+                $name = strtolower(trim($reportName));
+                $isCbc = str_contains($name, 'cbc') || str_contains($name, 'complete blood count') || str_contains($name, 'hemogram');
+
+                if (! $isCbc) {
+                        return '';
+                }
+
+                return <<<HTML
+<p><strong>COMPLETE BLOOD COUNT (CBC)</strong></p>
+<table style="width:100%;border-collapse:collapse;font-size:12px;" border="1" cellpadding="6" cellspacing="0">
+    <thead>
+        <tr style="background:#f4f6f8;">
+            <th style="text-align:left;">Investigation</th>
+            <th style="text-align:center;">Result</th>
+            <th style="text-align:center;">Unit</th>
+            <th style="text-align:center;">Reference Range</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr><td>Hemoglobin (Hb)</td><td style="text-align:center;">&nbsp;</td><td style="text-align:center;">g/dL</td><td style="text-align:center;">12.0 - 16.0</td></tr>
+        <tr><td>Total WBC Count (TLC)</td><td style="text-align:center;">&nbsp;</td><td style="text-align:center;">/cumm</td><td style="text-align:center;">4,000 - 11,000</td></tr>
+        <tr><td>Neutrophils</td><td style="text-align:center;">&nbsp;</td><td style="text-align:center;">%</td><td style="text-align:center;">40 - 75</td></tr>
+        <tr><td>Lymphocytes</td><td style="text-align:center;">&nbsp;</td><td style="text-align:center;">%</td><td style="text-align:center;">20 - 40</td></tr>
+        <tr><td>Eosinophils</td><td style="text-align:center;">&nbsp;</td><td style="text-align:center;">%</td><td style="text-align:center;">1 - 6</td></tr>
+        <tr><td>Monocytes</td><td style="text-align:center;">&nbsp;</td><td style="text-align:center;">%</td><td style="text-align:center;">2 - 10</td></tr>
+        <tr><td>Basophils</td><td style="text-align:center;">&nbsp;</td><td style="text-align:center;">%</td><td style="text-align:center;">0 - 2</td></tr>
+        <tr><td>RBC Count</td><td style="text-align:center;">&nbsp;</td><td style="text-align:center;">million/cumm</td><td style="text-align:center;">4.0 - 5.5</td></tr>
+        <tr><td>PCV (HCT)</td><td style="text-align:center;">&nbsp;</td><td style="text-align:center;">%</td><td style="text-align:center;">36 - 46</td></tr>
+        <tr><td>MCV</td><td style="text-align:center;">&nbsp;</td><td style="text-align:center;">fL</td><td style="text-align:center;">80 - 100</td></tr>
+        <tr><td>MCH</td><td style="text-align:center;">&nbsp;</td><td style="text-align:center;">pg</td><td style="text-align:center;">27 - 32</td></tr>
+        <tr><td>MCHC</td><td style="text-align:center;">&nbsp;</td><td style="text-align:center;">g/dL</td><td style="text-align:center;">31 - 36</td></tr>
+        <tr><td>Platelet Count</td><td style="text-align:center;">&nbsp;</td><td style="text-align:center;">lakh/cumm</td><td style="text-align:center;">1.5 - 4.5</td></tr>
+        <tr><td>ESR</td><td style="text-align:center;">&nbsp;</td><td style="text-align:center;">mm/hr</td><td style="text-align:center;">0 - 20</td></tr>
+    </tbody>
+</table>
+<p><strong>Peripheral Smear:</strong> Normocytic normochromic RBCs. No hemoparasite seen.</p>
+HTML;
+        }
+
     private function requireModalityPermission(int $modality)
     {
         $permission = $this->permissionForModality($modality);
@@ -194,6 +235,24 @@ class Template extends BaseController
         $query = $this->db->query($sql);
         $data['labReport_master'] = $query->getResult();
 
+        if (! empty($data['labReport_master'])) {
+            $existingHtml = trim((string) ($data['labReport_master'][0]->HTMLData ?? ''));
+            if ($existingHtml === '') {
+                $legacyHtml = trim((string) ($data['labReport_master'][0]->RTFData ?? ''));
+                if ($legacyHtml !== '') {
+                    $data['labReport_master'][0]->HTMLData = $legacyHtml;
+                    $existingHtml = $legacyHtml;
+                }
+            }
+
+            if ($existingHtml === '') {
+                $defaultHtml = $this->buildDefaultPathologyTemplate((string) ($data['labReport_master'][0]->Title ?? ''));
+                if ($defaultHtml !== '') {
+                    $data['labReport_master'][0]->HTMLData = $defaultHtml;
+                }
+            }
+        }
+
         $itemId = 0;
         if (! empty($data['labReport_master'])) {
             $itemId = (int) ($data['labReport_master'][0]->charge_id ?? 0);
@@ -264,6 +323,13 @@ class Template extends BaseController
         $groupId = (int) $this->request->getPost('group_id');
         $htmlData = (string) $this->request->getPost('HTMLData');
 
+        if (trim($htmlData) === '') {
+            $defaultHtml = $this->buildDefaultPathologyTemplate($inputReportName);
+            if ($defaultHtml !== '') {
+                $htmlData = $defaultHtml;
+            }
+        }
+
         if ($repoId <= 0 || $inputReportName === '') {
             return $this->response->setJSON([
                 'update_record' => 0,
@@ -277,6 +343,7 @@ class Template extends BaseController
             'GrpKey' => $groupId,
             'charge_id' => $chargeId,
             'HTMLData' => $htmlData,
+            'RTFData' => $htmlData,
         ], $repoId);
 
         return $this->response->setJSON([
@@ -303,6 +370,13 @@ class Template extends BaseController
         $groupId = (int) $this->request->getPost('group_id');
         $htmlData = (string) $this->request->getPost('HTMLData');
 
+        if (trim($htmlData) === '') {
+            $defaultHtml = $this->buildDefaultPathologyTemplate($inputReportName);
+            if ($defaultHtml !== '') {
+                $htmlData = $defaultHtml;
+            }
+        }
+
         if ($inputReportName === '') {
             return $this->response->setJSON([
                 'insertid' => 0,
@@ -316,6 +390,7 @@ class Template extends BaseController
             'GrpKey' => $groupId,
             'charge_id' => $chargeId,
             'HTMLData' => $htmlData,
+            'RTFData' => $htmlData,
         ]);
 
         return $this->response->setJSON([

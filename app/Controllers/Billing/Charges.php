@@ -4,6 +4,7 @@ namespace App\Controllers\Billing;
 
 use App\Controllers\BaseController;
 use App\Models\InvoiceModel;
+use Mpdf\Mpdf;
 
 class Charges extends BaseController
 {
@@ -1016,5 +1017,117 @@ class Charges extends BaseController
         $paymentModel->insertPayment($paydata);
 
         return $this->response->setJSON(['update' => 1]);
+    }
+
+    public function print_invoice(int $invoiceId, int $printMode = 0)
+    {
+        if ($resp = $this->requirePermission('billing.charges.view')) {
+            return $resp;
+        }
+
+        // Retrieve all invoice data (same as show method)
+        $invoiceModel = new InvoiceModel();
+        $invoiceModel->updateInvoiceFinal($invoiceId);
+
+        $sql = "select i.*,t.group_desc from invoice_item i join hc_item_type t on i.item_type=t.itype_id
+            where i.inv_master_id=" . (int) $invoiceId;
+        $query = $this->db->query($sql);
+        $data['invoiceDetails'] = $query->getResult();
+
+        $sql = "select *,
+            (case payment_mode when 1 then 'Cash' when 2 then 'Bank Card/Online' when 3 then 'IPD Credit' when 4 then 'Org. Credit' else 'Pending' end) as Payment_type_str
+            from invoice_master where id=" . (int) $invoiceId;
+        $query = $this->db->query($sql);
+        $data['invoice_master'] = $query->getResult();
+
+        if (empty($data['invoice_master'])) {
+            return $this->response->setStatusCode(404)->setBody('Invoice not found');
+        }
+
+        $insCompId = (int) ($data['invoice_master'][0]->insurance_id ?? 0);
+        $insId = (int) ($data['invoice_master'][0]->insurance_card_id ?? 0);
+
+        $sql = "select * from hc_insurance_card where id=" . $insId;
+        $query = $this->db->query($sql);
+        $data['hc_insurance_card'] = $query->getResult();
+
+        $sql = "select * from hc_insurance where id=" . $insCompId;
+        $query = $this->db->query($sql);
+        $data['insurance'] = $query->getResult();
+
+        $sql = "select p.*,f.full_path as profile_picture
+            from patient_master p
+            left join file_upload_data f on p.profile_file_id=f.id
+            where p.id=" . (int) ($data['invoice_master'][0]->attach_id ?? 0);
+        $query = $this->db->query($sql);
+        $data['patient_master'] = $query->getResult();
+        if (!empty($data['patient_master'])) {
+            $row = $data['patient_master'][0];
+            $row->age = get_age_1($row->dob ?? null, $row->age ?? '', $row->age_in_month ?? '', $row->estimate_dob ?? '');
+            $row->xgender = ($row->gender ?? 0) == 1 ? 'Male' : 'Female';
+        }
+
+        $sql = "select * from ipd_master where ipd_status=0 and p_id=" . (int) ($data['invoice_master'][0]->attach_id ?? 0);
+        if (($data['invoice_master'][0]->ipd_id ?? 0) > 0) {
+            $sql = "select * from ipd_master where id=" . (int) $data['invoice_master'][0]->ipd_id;
+        }
+        $query = $this->db->query($sql);
+        $data['ipd_master'] = $query->getResult();
+
+        $sql = "select * from organization_case_master where case_type=0 and status=0 and p_id=" . (int) ($data['invoice_master'][0]->attach_id ?? 0);
+        if (($data['invoice_master'][0]->insurance_case_id ?? 0) > 0) {
+            $sql = "select * from organization_case_master where case_type=0 and id=" . (int) $data['invoice_master'][0]->insurance_case_id;
+        } elseif (count($data['ipd_master'] ?? []) > 0) {
+            if (($data['ipd_master'][0]->case_id ?? 0) > 0) {
+                $sql = "select * from organization_case_master where case_type=0 and id=" . (int) $data['ipd_master'][0]->case_id;
+            }
+        }
+        $query = $this->db->query($sql);
+        $data['case_master'] = $query->getResult();
+
+        $sql = "select *,
+            (case payment_mode when 1 then 'Cash' when 2 then 'Bank Card' when 3 then 'Org Credit' when 4 then 'Adjustment' else 'Pending' end) as Payment_type_str
+            from payment_history where payof_type=2 and payof_id=" . (int) $invoiceId;
+        $query = $this->db->query($sql);
+        $data['payment_history_details'] = $query->getResult();
+
+        // Generate PDF using mPDF
+        $mpdfTempDir = WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'mpdf';
+        if (!is_dir($mpdfTempDir)) {
+            mkdir($mpdfTempDir, 0755, true);
+        }
+
+        if ($printMode === 1) {
+            // Legacy behavior: A4 landscape with two copies side-by-side in one page.
+            $htmlContent = view('billing/charges/invoice_pdf_double', $data);
+            $mpdf = new Mpdf([
+                'tempDir' => $mpdfTempDir,
+                'format' => 'A4-L',
+                'margin_top' => 12,
+                'margin_bottom' => 10,
+                'margin_left' => 5,
+                'margin_right' => 5,
+            ]);
+            $mpdf->WriteHTML($htmlContent);
+        } else {
+            $htmlContent = view('billing/charges/invoice_pdf_template', $data);
+            $mpdf = new Mpdf([
+                'tempDir' => $mpdfTempDir,
+                'format' => 'A4',
+                'margin_top' => 10,
+                'margin_bottom' => 10,
+                'margin_left' => 10,
+                'margin_right' => 10,
+            ]);
+            $mpdf->WriteHTML($htmlContent);
+        }
+
+        $invoiceCode = (string) ($data['invoice_master'][0]->invoice_code ?? 'Invoice');
+        $fileName = $invoiceCode . '.pdf';
+
+        return $this->response
+            ->setHeader('Content-Type', 'application/pdf')
+            ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
+            ->setBody($mpdf->Output($fileName, 'S'));
     }
 }

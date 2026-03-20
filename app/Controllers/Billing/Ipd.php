@@ -170,6 +170,205 @@ class Ipd extends BaseController
         return view('billing/ipd/panel', $panelData);
     }
 
+    public function legacyAddIpd(int $patientId)
+    {
+        $permission = $this->requireAnyPermission([
+            'billing.access',
+            'billing.ipd.current-admission',
+            'billing.ipd.invoice',
+        ]);
+        if ($permission) {
+            return $permission;
+        }
+
+        $patientId = (int) $patientId;
+        if ($patientId <= 0) {
+            return redirect()->to(base_url('billing/ipd/current-admission'));
+        }
+
+        $activeIpd = $this->db->table('ipd_master')
+            ->select('id')
+            ->where('p_id', $patientId)
+            ->where('ipd_status', 0)
+            ->orderBy('id', 'DESC')
+            ->get(1)
+            ->getRowArray();
+
+        if (! empty($activeIpd['id'])) {
+            return redirect()->to(base_url('billing/ipd/panel/' . (int) $activeIpd['id']));
+        }
+
+        $data = $this->buildLegacyIpdRegistrationData($patientId);
+        if (empty($data['person_info'])) {
+            return $this->response->setStatusCode(404)->setBody('Patient not found');
+        }
+
+        return view('billing/ipd/legacy_registration', $data);
+    }
+
+    public function legacyAddNew()
+    {
+        $permission = $this->requireAnyPermission([
+            'billing.access',
+            'billing.ipd.current-admission',
+            'billing.ipd.invoice',
+        ]);
+        if ($permission) {
+            return $permission;
+        }
+
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'insertid' => 0,
+                'error_text' => 'Invalid request',
+            ]);
+        }
+
+        $patientId = (int) ($this->request->getPost('pid') ?? 0);
+        $docList = $this->request->getPost('doc_id');
+        $docList = is_array($docList) ? array_values(array_filter(array_map('intval', $docList), static fn ($id) => $id > 0)) : [];
+
+        if ($patientId <= 0 || empty($docList)) {
+            return $this->response->setJSON([
+                'insertid' => 0,
+                'error_text' => 'Please select at least one doctor.',
+            ]);
+        }
+
+        $registerDateInput = (string) ($this->request->getPost('res_date') ?? '');
+        $registerDate = $registerDateInput !== '' ? str_to_MysqlDate($registerDateInput) : date('Y-m-d');
+
+        $master = [
+            'p_id' => $patientId,
+            'P_name' => (string) ($this->request->getPost('pname') ?? ''),
+            'relation' => (string) ($this->request->getPost('r_relation') ?? ''),
+            'contact_person_Name' => (string) ($this->request->getPost('rp_name') ?? ''),
+            'insurance_id' => (int) ($this->request->getPost('insur_list') ?? 0),
+            'policy_no' => (string) ($this->request->getPost('insur_no') ?? ''),
+            'register_date' => $registerDate,
+            'problem' => (string) ($this->request->getPost('problem') ?? ''),
+            'remark' => (string) ($this->request->getPost('remark') ?? ''),
+            'P_mobile1' => (string) ($this->request->getPost('phone1') ?? ''),
+            'P_mobile2' => (string) ($this->request->getPost('phone2') ?? ''),
+            'case_type' => (int) ($this->request->getPost('optionsRadios_mlc') ?? 0),
+            'case_id' => (int) ($this->request->getPost('optionsRadios_org') ?? 0),
+            'reg_time' => (string) ($this->request->getPost('res_time') ?? date('H:i')),
+            'refer_by' => (int) ($this->request->getPost('refer_by_list') ?? 0),
+            'dept_id' => (int) ($this->request->getPost('dept_id') ?? 0),
+        ];
+
+        $insertId = $this->ipdEditModel->insertIpd([
+            'master' => $master,
+            'doc_list' => $docList,
+        ]);
+
+        if ($insertId > 0) {
+            $roomId = (int) ($this->request->getPost('room_list') ?? 0);
+            if ($roomId > 0) {
+                $this->ipdEditModel->bedAssign([
+                    'ipd_id' => $insertId,
+                    'Fdate' => date('Y-m-d H:i:s'),
+                    'TDate' => date('Y-m-d H:i:s'),
+                    'bed_id' => $roomId,
+                ]);
+            }
+
+            $caseId = (int) ($master['case_id'] ?? 0);
+            if ($caseId > 0 && $this->db->tableExists('organization_case_master')) {
+                $this->db->table('organization_case_master')
+                    ->where('id', $caseId)
+                    ->update(['ipd_id' => $insertId]);
+            }
+        }
+
+        return $this->response->setJSON([
+            'insertid' => (int) $insertId,
+        ]);
+    }
+
+    private function buildLegacyIpdRegistrationData(int $patientId): array
+    {
+        $person = $this->db->table('patient_master')
+            ->select("*, if(gender=1,'Male','FeMale') as xgender", false)
+            ->where('id', $patientId)
+            ->get()
+            ->getRow();
+
+        if ($person) {
+            $person->age = get_age_1(
+                $person->dob ?? null,
+                $person->age ?? '',
+                $person->age_in_month ?? '',
+                $person->estimate_dob ?? ''
+            );
+        }
+
+        $docSpecList = $this->db->query(
+            "select d.id, d.p_fname, group_concat(m.SpecName) as SpecName
+             from doctor_master d
+             join doc_spec s on d.id = s.doc_id
+             join med_spec m on s.med_spec_id = m.id
+             where d.active = 1
+             group by d.id
+             order by d.p_fname"
+        )->getResult();
+
+        $ipdBedList = [];
+        if ($this->db->tableExists('bed_master')) {
+            $ipdBedList = $this->db->query(
+                "select b.id,
+                        concat('Bed No:', coalesce(b.bed_number, b.bed_code), '/', '[', coalesce(w.ward_name, ''), ']') as Bed_Desc
+                 from bed_master b
+                 left join ward_master w on w.id = b.ward_id
+                 where b.bed_status = 'available'
+                 order by b.bed_number, b.id"
+            )->getResult();
+        } elseif ($this->db->tableExists('hc_bed_master')) {
+            $ipdBedList = $this->db->query(
+                "select id, concat('Bed No:', coalesce(bed_no, bed_number), '/', '[', coalesce(room_name, ward_name), ']') as Bed_Desc
+                 from hc_bed_master
+                 where ifnull(bed_used_p_id,0)=0"
+            )->getResult();
+        }
+
+        $caseMaster = [];
+        if ($this->db->tableExists('organization_case_master')) {
+            $caseMaster = $this->db->table('organization_case_master')
+                ->where('status', 0)
+                ->where('case_type', 1)
+                ->where('ipd_id', 0)
+                ->where('p_id', $patientId)
+                ->get()
+                ->getResult();
+        }
+
+        $referMaster = [];
+        if ($this->db->tableExists('refer_master')) {
+            $referMaster = $this->db->table('refer_master')
+                ->where('active', 1)
+                ->orderBy('f_name', 'ASC')
+                ->get()
+                ->getResult();
+        }
+
+        $hcDepartment = [];
+        if ($this->db->tableExists('hc_department')) {
+            $hcDepartment = $this->db->table('hc_department')
+                ->orderBy('vName', 'ASC')
+                ->get()
+                ->getResult();
+        }
+
+        return [
+            'person_info' => $person,
+            'doc_spec_l' => $docSpecList,
+            'ipd_bed_list' => $ipdBedList,
+            'case_master' => $caseMaster,
+            'refer_master' => $referMaster,
+            'hc_department' => $hcDepartment,
+        ];
+    }
+
     public function panelTab(int $ipdId, string $tab)
     {
         $permission = $this->requireAnyPermission([
