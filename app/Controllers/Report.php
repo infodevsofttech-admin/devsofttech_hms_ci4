@@ -508,7 +508,7 @@ class Report extends BaseController
             $builder->whereIn('t.item_type', $diagList);
         }
 
-        $builder->groupBy(['y.group_desc', 't.item_id'])
+        $builder->groupBy(['y.group_desc', 't.item_id', 't.item_name'])
             ->orderBy('y.group_desc', 'ASC')
             ->orderBy('t.item_name', 'ASC');
 
