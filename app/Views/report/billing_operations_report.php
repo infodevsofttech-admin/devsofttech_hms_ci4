@@ -24,9 +24,12 @@ $doctors = $doctors ?? [];
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-2 d-flex gap-2">
-                    <button type="button" class="btn btn-primary w-100" id="billing_show">Show</button>
-                    <button type="button" class="btn btn-outline-primary w-100" id="billing_export">Export</button>
+                <div class="col-md-2">
+                    <div class="btn-group w-100" role="group" aria-label="Billing report actions">
+                        <button type="button" class="btn btn-primary" id="billing_show">Show</button>
+                        <button type="button" class="btn btn-outline-primary" id="billing_export">Export</button>
+                        <button type="button" class="btn btn-outline-danger" id="billing_pdf">PDF</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -83,6 +86,11 @@ $doctors = $doctors ?? [];
 
     document.getElementById('billing_export').addEventListener('click', function() {
         window.open(buildUrl(true), '_blank');
+    });
+
+    document.getElementById('billing_pdf').addEventListener('click', function() {
+        var url = buildUrl(false) + '/2';
+        window.open(url, '_blank');
     });
 
     $('.select2').select2({

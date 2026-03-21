@@ -29,9 +29,10 @@ $doclist = $doclist ?? [];
                     <input type="text" class="form-control" id="uhid_filter" placeholder="UHID / PCode">
                 </div>
                 <div class="col-md-3">
-                    <div class="d-flex gap-2">
+                    <div class="btn-group" role="group" aria-label="Document report actions">
                         <button type="button" class="btn btn-primary" id="showreport">Show</button>
                         <button type="button" class="btn btn-outline-primary" id="showreportexport">Export</button>
+                        <button type="button" class="btn btn-outline-danger" id="showreportpdf">PDF</button>
                     </div>
                 </div>
             </div>
@@ -80,6 +81,11 @@ $doclist = $doclist ?? [];
 
         document.getElementById('showreportexport').addEventListener('click', function() {
             window.open(buildUrl(true), '_blank');
+        });
+
+        document.getElementById('showreportpdf').addEventListener('click', function() {
+            var pdfUrl = buildUrl(false) + '/2';
+            window.open(pdfUrl, '_blank');
         });
     })();
 </script>

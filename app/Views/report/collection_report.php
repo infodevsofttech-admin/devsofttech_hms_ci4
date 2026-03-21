@@ -36,9 +36,17 @@ $payModes = $pay_modes ?? [];
                 </div>
             </div>
 
-            <div class="mt-3 d-flex gap-2">
-                <button type="button" class="btn btn-primary" id="show_report">Show</button>
-                <button type="button" class="btn btn-outline-primary" id="export_report">Export</button>
+            <div class="mt-3 d-flex flex-wrap gap-2">
+                <div class="btn-group" role="group" aria-label="Collection details actions">
+                    <button type="button" class="btn btn-primary" id="show_report">Show Details</button>
+                    <button type="button" class="btn btn-outline-primary" id="export_report">Details Export</button>
+                    <button type="button" class="btn btn-outline-danger" id="pdf_report">Details PDF</button>
+                </div>
+                <div class="btn-group" role="group" aria-label="Collection total actions">
+                    <button type="button" class="btn btn-warning" id="show_total_amount">Show Total Amount</button>
+                    <button type="button" class="btn btn-outline-primary" id="total_export_report">Total Export</button>
+                    <button type="button" class="btn btn-outline-danger" id="total_pdf_report">Total PDF</button>
+                </div>
             </div>
         </div>
     </div>
@@ -78,7 +86,7 @@ $payModes = $pay_modes ?? [];
         document.getElementById('report_start').value = toInputValue(start);
         document.getElementById('report_end').value = toInputValue(end);
 
-        function buildQuery() {
+        function buildBaseQuery() {
             var startVal = toRangeValue(document.getElementById('report_start').value, toInputValue(start));
             var endVal = toRangeValue(document.getElementById('report_end').value, toInputValue(end));
             var dateRange = startVal + 'S' + endVal;
@@ -93,17 +101,50 @@ $payModes = $pay_modes ?? [];
             var empList = empValues.length ? empValues.join('S') : '0';
             var payMode = document.getElementById('paymode_id').value || '0';
 
-            return '<?= base_url('Report/report_total_payment_app_show') ?>/' 
-                + encodeURIComponent(dateRange) + '/' + empList + '/' + payMode;
+            return {
+                dateRange: encodeURIComponent(dateRange),
+                empList: empList,
+                payMode: payMode,
+            };
+        }
+
+        function buildDetailQuery() {
+            var q = buildBaseQuery();
+            return '<?= base_url('Report/report_total_payment_app_show') ?>/' + q.dateRange + '/' + q.empList + '/' + q.payMode;
+        }
+
+        function buildTotalQuery() {
+            var q = buildBaseQuery();
+            return '<?= base_url('Report/report_total_payment_total_amount_show') ?>/' + q.dateRange + '/' + q.empList + '/' + q.payMode;
         }
 
         document.getElementById('show_report').addEventListener('click', function() {
-            var url = buildQuery();
+            var url = buildDetailQuery();
             load_form_div(url, 'report_result');
         });
 
+        document.getElementById('show_total_amount').addEventListener('click', function() {
+            var totalUrl = buildTotalQuery();
+            load_form_div(totalUrl, 'report_result');
+        });
+
         document.getElementById('export_report').addEventListener('click', function() {
-            var url = buildQuery() + '/1';
+            var url = buildDetailQuery() + '/0/1';
+            window.open(url, '_blank');
+        });
+
+        document.getElementById('pdf_report').addEventListener('click', function() {
+            var url = buildDetailQuery() + '/0/2';
+            window.open(url, '_blank');
+        });
+
+        document.getElementById('total_export_report').addEventListener('click', function() {
+            var url = buildTotalQuery() + '/1';
+            window.open(url, '_blank');
+        });
+
+        document.getElementById('total_pdf_report').addEventListener('click', function() {
+            var url = buildTotalQuery() + '/2';
             window.open(url, '_blank');
         });
 

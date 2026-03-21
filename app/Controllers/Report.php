@@ -2,6 +2,8 @@
 
 namespace App\Controllers;
 
+use Mpdf\Mpdf;
+
 class Report extends BaseController
 {
     public function index()
@@ -101,6 +103,151 @@ class Report extends BaseController
         if ($output === 1) {
             ExportExcel($content, 'Payment');
             return $this->response->setBody('');
+        }
+
+        if ($output === 2) {
+            $mpdfTempDir = WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'mpdf';
+            if (! is_dir($mpdfTempDir)) {
+                mkdir($mpdfTempDir, 0755, true);
+            }
+
+            $mpdf = new Mpdf([
+                'tempDir' => $mpdfTempDir,
+                'format' => 'A4-L',
+                'margin_top' => 8,
+                'margin_bottom' => 8,
+                'margin_left' => 8,
+                'margin_right' => 8,
+            ]);
+
+            $pdfHtml = '<style>'
+                . 'body{font-family:Arial,sans-serif;color:#111;font-size:12px;}'
+                . 'table{width:100%;border-collapse:collapse;}'
+                . 'th,td{border:1px solid #9aa4ad;padding:6px 8px;}'
+                . 'th{text-align:left;background:#f5f6f7;}'
+                . '.text-end{text-align:right;}'
+                . '.table-warning td,.table-warning th{background:#fff6cc !important;}'
+                . '</style>'
+                . '<h3 style="margin:0 0 10px 0;">Collection Report</h3>'
+                . $content;
+
+            $mpdf->WriteHTML($pdfHtml);
+
+            $fileName = 'Collection_Report_' . date('Ymd_His') . '.pdf';
+
+            return $this->response
+                ->setHeader('Content-Type', 'application/pdf')
+                ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
+                ->setBody($mpdf->Output($fileName, 'S'));
+        }
+
+        return $this->response->setBody($content);
+    }
+
+    public function report_total_payment_total_amount_show(
+        string $dateRange,
+        string $employeeIds,
+        string $payModeId,
+        int $output = 0
+    ) {
+        [$minRange, $maxRange] = $this->parseDateRange($dateRange);
+
+        $builder = $this->db->table('payment_history p');
+        $builder->select('p.update_by_id as user_id')
+            ->select('COALESCE(u.username, p.update_by) as user_name', false)
+            ->select('SUM(CASE WHEN p.credit_debit = 0 AND p.payof_type = 1 THEN p.amount ELSE 0 END) as opd_amount', false)
+            ->select('SUM(CASE WHEN p.credit_debit = 0 AND p.payof_type = 2 THEN p.amount ELSE 0 END) as charge_amount', false)
+            ->select('SUM(CASE WHEN p.credit_debit = 0 AND p.payof_type = 4 THEN p.amount ELSE 0 END) as ipd_amount', false)
+            ->select('SUM(CASE WHEN p.credit_debit = 0 AND p.payof_type = 3 THEN p.amount ELSE 0 END) as org_amount', false)
+            ->select('SUM(CASE WHEN p.credit_debit = 1 THEN p.amount ELSE 0 END) as return_amount', false)
+            ->select('SUM(CASE WHEN p.credit_debit = 0 THEN p.amount ELSE 0 END) - SUM(CASE WHEN p.credit_debit = 1 THEN p.amount ELSE 0 END) as total_amount', false)
+            ->join('users u', 'u.id = p.update_by_id', 'left')
+            ->where('p.payment_date >=', $minRange)
+            ->where('p.payment_date <=', $maxRange);
+
+        $empList = $this->normalizeIdList($employeeIds);
+        if (! empty($empList)) {
+            $builder->whereIn('p.update_by_id', $empList);
+        }
+
+        $payMode = (int) $payModeId;
+        if ($payMode < 1) {
+            $builder->whereIn('p.payment_mode', [1, 2]);
+        } else {
+            $builder->where('p.payment_mode', $payMode);
+        }
+
+        $rows = $builder
+            ->groupBy(['p.update_by_id', 'u.username'])
+            ->orderBy('u.username', 'ASC')
+            ->orderBy('p.update_by_id', 'ASC')
+            ->get()
+            ->getResult();
+
+        $totals = [
+            'opd_amount' => 0.0,
+            'charge_amount' => 0.0,
+            'ipd_amount' => 0.0,
+            'org_amount' => 0.0,
+            'return_amount' => 0.0,
+            'total_amount' => 0.0,
+        ];
+
+        foreach ($rows as $row) {
+            $totals['opd_amount'] += (float) ($row->opd_amount ?? 0);
+            $totals['charge_amount'] += (float) ($row->charge_amount ?? 0);
+            $totals['ipd_amount'] += (float) ($row->ipd_amount ?? 0);
+            $totals['org_amount'] += (float) ($row->org_amount ?? 0);
+            $totals['return_amount'] += (float) ($row->return_amount ?? 0);
+            $totals['total_amount'] += (float) ($row->total_amount ?? 0);
+        }
+
+        $content = view('report/collection_report_total_table', [
+            'rows' => $rows,
+            'totals' => $totals,
+            'min_range' => $minRange,
+            'max_range' => $maxRange,
+        ]);
+
+        if ($output === 1) {
+            ExportExcel($content, 'Collection_Report_Total_' . date('YmdHis'));
+            return $this->response->setBody('');
+        }
+
+        if ($output === 2) {
+            $mpdfTempDir = WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'mpdf';
+            if (! is_dir($mpdfTempDir)) {
+                mkdir($mpdfTempDir, 0755, true);
+            }
+
+            $mpdf = new Mpdf([
+                'tempDir' => $mpdfTempDir,
+                'format' => 'A4-L',
+                'margin_top' => 8,
+                'margin_bottom' => 8,
+                'margin_left' => 8,
+                'margin_right' => 8,
+            ]);
+
+            $pdfHtml = '<style>'
+                . 'body{font-family:Arial,sans-serif;color:#111;font-size:12px;}'
+                . 'table{width:100%;border-collapse:collapse;}'
+                . 'th,td{border:1px solid #9aa4ad;padding:6px 8px;}'
+                . 'th{text-align:left;background:#f5f6f7;}'
+                . '.text-end{text-align:right;}'
+                . '.table-warning td,.table-warning th{background:#fff6cc !important;}'
+                . '</style>'
+                . '<h3 style="margin:0 0 10px 0;">Collection Report - Total Amount</h3>'
+                . $content;
+
+            $mpdf->WriteHTML($pdfHtml);
+
+            $fileName = 'Collection_Report_Total_' . date('Ymd_His') . '.pdf';
+
+            return $this->response
+                ->setHeader('Content-Type', 'application/pdf')
+                ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
+                ->setBody($mpdf->Output($fileName, 'S'));
         }
 
         return $this->response->setBody($content);
@@ -327,6 +474,42 @@ class Report extends BaseController
             return $this->response->setBody('');
         }
 
+        if ($output === 2) {
+            $mpdfTempDir = WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'mpdf';
+            if (! is_dir($mpdfTempDir)) {
+                mkdir($mpdfTempDir, 0755, true);
+            }
+
+            $mpdf = new Mpdf([
+                'tempDir' => $mpdfTempDir,
+                'format' => 'A4-L',
+                'margin_top' => 8,
+                'margin_bottom' => 8,
+                'margin_left' => 8,
+                'margin_right' => 8,
+            ]);
+
+            $pdfHtml = '<style>'
+                . 'body{font-family:Arial,sans-serif;color:#111;font-size:12px;}'
+                . 'table{width:100%;border-collapse:collapse;}'
+                . 'th,td{border:1px solid #9aa4ad;padding:6px 8px;}'
+                . 'th{text-align:left;background:#f5f6f7;}'
+                . '.text-end{text-align:right;}'
+                . '.table-light td,.table-light th{background:#f5f6f7 !important;}'
+                . '</style>'
+                . '<h3 style="margin:0 0 10px 0;">Billing Operations Report</h3>'
+                . $content;
+
+            $mpdf->WriteHTML($pdfHtml);
+
+            $fileName = 'Billing_Operations_Report_' . date('Ymd_His') . '.pdf';
+
+            return $this->response
+                ->setHeader('Content-Type', 'application/pdf')
+                ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
+                ->setBody($mpdf->Output($fileName, 'S'));
+        }
+
         return $this->response->setBody($content);
     }
 
@@ -465,6 +648,42 @@ class Report extends BaseController
             return $this->response->setBody('');
         }
 
+        if ($output === 2) {
+            $mpdfTempDir = WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'mpdf';
+            if (! is_dir($mpdfTempDir)) {
+                mkdir($mpdfTempDir, 0755, true);
+            }
+
+            $mpdf = new Mpdf([
+                'tempDir' => $mpdfTempDir,
+                'format' => 'A4',
+                'margin_top' => 8,
+                'margin_bottom' => 8,
+                'margin_left' => 8,
+                'margin_right' => 8,
+            ]);
+
+            $pdfHtml = '<style>'
+                . 'body{font-family:Arial,sans-serif;color:#111;font-size:12px;}'
+                . 'table{width:100%;border-collapse:collapse;}'
+                . 'th,td{border:1px solid #9aa4ad;padding:6px 8px;}'
+                . 'th{text-align:left;background:#f5f6f7;}'
+                . '.text-end{text-align:right;}'
+                . '.table-light td,.table-light th{background:#f5f6f7 !important;}'
+                . '</style>'
+                . '<h3 style="margin:0 0 10px 0;">Document Issue Report</h3>'
+                . $content;
+
+            $mpdf->WriteHTML($pdfHtml);
+
+            $fileName = 'Document_Issue_Report_' . date('Ymd_His') . '.pdf';
+
+            return $this->response
+                ->setHeader('Content-Type', 'application/pdf')
+                ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
+                ->setBody($mpdf->Output($fileName, 'S'));
+        }
+
         return $this->response->setBody($content);
     }
 
@@ -476,12 +695,18 @@ class Report extends BaseController
     ) {
         [$minRange, $maxRange] = $this->parseDateRange($dateRange);
 
+        $netAmountExpr = "ROUND(IF(m.invoice_status=1, (t.item_amount - (t.item_amount * m.discount_amount / NULLIF(m.total_amount, 0))), 0), 2)";
+
         $builder = $this->db->table('invoice_master m');
         $builder->select('y.group_desc, t.item_name')
             ->select('COUNT(t.id) as no_test', false)
             ->select('SUM(t.item_qty) as no_qty', false)
-            ->select('SUM(ROUND(IF(m.invoice_status=1, (t.item_amount - (t.item_amount * m.discount_amount / m.total_amount)), 0), 2)) as total_amount', false)
+            ->select('SUM(' . $netAmountExpr . ') as total_amount', false)
             ->select('SUM(IF(m.invoice_status=1, t.item_amount, 0)) as total_act_amount', false)
+            ->select('SUM(CASE WHEN m.ipd_id = 0 AND IFNULL(m.insurance_case_id, 0) = 0 THEN ' . $netAmountExpr . ' ELSE 0 END) as direct_patient_amount', false)
+            ->select('SUM(CASE WHEN m.ipd_id > 0 AND IFNULL(m.insurance_case_id, 0) = 0 THEN ' . $netAmountExpr . ' ELSE 0 END) as ipd_direct_amount', false)
+            ->select('SUM(CASE WHEN m.ipd_id > 0 AND IFNULL(m.insurance_case_id, 0) > 0 THEN ' . $netAmountExpr . ' ELSE 0 END) as ipd_tpa_amount', false)
+            ->select('SUM(CASE WHEN m.ipd_id = 0 AND IFNULL(m.insurance_case_id, 0) > 0 THEN ' . $netAmountExpr . ' ELSE 0 END) as org_credit_amount', false)
             ->join('invoice_item t', 'm.id = t.inv_master_id', 'inner')
             ->join('hc_item_type y', 't.item_type = y.itype_id', 'inner')
             ->where('y.is_ipd_opd IN (0, 1)', null, false)
@@ -528,6 +753,45 @@ class Report extends BaseController
         if ($output === 1) {
             ExportExcel($content, 'Diagnosis_Report');
             return $this->response->setBody('');
+        }
+
+        if ($output === 2) {
+            $mpdfTempDir = WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'mpdf';
+            if (! is_dir($mpdfTempDir)) {
+                mkdir($mpdfTempDir, 0755, true);
+            }
+
+            $mpdf = new Mpdf([
+                'tempDir' => $mpdfTempDir,
+                'format' => 'A4-L',
+                'margin_top' => 8,
+                'margin_bottom' => 8,
+                'margin_left' => 8,
+                'margin_right' => 8,
+            ]);
+
+            $pdfHtml = '<style>'
+                . 'body{font-family:Arial,sans-serif;color:#111;font-size:12px;}'
+                . 'table{width:100%;border-collapse:collapse;}'
+                . 'th,td{border:1px solid #9aa4ad;padding:6px 8px;}'
+                . 'th{background:#f5f6f7;text-align:left;}'
+                . '.text-end{text-align:right;}'
+                . '.table-info td,.table-info th{background:#d9edf7 !important;}'
+                . '.table-secondary td,.table-secondary th{background:#eceff1 !important;}'
+                . '.table-primary td,.table-primary th{background:#dbe9ff !important;}'
+                . '.mb-3{margin-bottom:12px;}'
+                . '</style>'
+                . '<h3 style="margin:0 0 10px 0;">Diagnosis Report</h3>'
+                . $content;
+
+            $mpdf->WriteHTML($pdfHtml);
+
+            $fileName = 'Diagnosis_Report_' . date('Ymd_His') . '.pdf';
+
+            return $this->response
+                ->setHeader('Content-Type', 'application/pdf')
+                ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
+                ->setBody($mpdf->Output($fileName, 'S'));
         }
 
         return $this->response->setBody($content);

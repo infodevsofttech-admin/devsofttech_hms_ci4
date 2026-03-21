@@ -652,6 +652,8 @@ $routes->get('Report/report_total_payment_app_show/(:segment)/(:segment)/(:segme
 $routes->get('Report/report_total_payment_app_show/(:segment)/(:segment)/(:segment)/(:num)', 'Report::report_total_payment_app_show/$1/$2/$3/$4');
 $routes->get('Report/report_total_payment_app_show/(:segment)/(:segment)/(:segment)/(:segment)', 'Report::report_total_payment_app_show/$1/$2/$3/$4');
 $routes->get('Report/report_total_payment_app_show/(:segment)/(:segment)/(:segment)/(:segment)/(:num)', 'Report::report_total_payment_app_show/$1/$2/$3/$4/$5');
+$routes->get('Report/report_total_payment_total_amount_show/(:segment)/(:segment)/(:segment)', 'Report::report_total_payment_total_amount_show/$1/$2/$3');
+$routes->get('Report/report_total_payment_total_amount_show/(:segment)/(:segment)/(:segment)/(:num)', 'Report::report_total_payment_total_amount_show/$1/$2/$3/$4');
 
 $routes->get('Report/billing_operations_report', 'Report::billing_operations_report');
 $routes->get('Report/billing_operations_report_data/(:segment)/(:segment)', 'Report::billing_operations_report_data/$1/$2');

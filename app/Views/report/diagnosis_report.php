@@ -35,9 +35,12 @@ $itemTypes = $item_types ?? [];
                 </div>
             </div>
 
-            <div class="mt-3 d-flex gap-2">
-                <button type="button" class="btn btn-primary" id="show_report">Show</button>
-                <button type="button" class="btn btn-outline-primary" id="export_report">Export</button>
+            <div class="mt-3">
+                <div class="btn-group" role="group" aria-label="Diagnosis report actions">
+                    <button type="button" class="btn btn-primary" id="show_report">Show</button>
+                    <button type="button" class="btn btn-outline-primary" id="export_report">Export</button>
+                    <button type="button" class="btn btn-outline-danger" id="pdf_report">PDF</button>
+                </div>
             </div>
         </div>
     </div>
@@ -104,6 +107,11 @@ $itemTypes = $item_types ?? [];
 
         document.getElementById('export_report').addEventListener('click', function() {
             var url = buildQuery() + '/1';
+            window.open(url, '_blank');
+        });
+
+        document.getElementById('pdf_report').addEventListener('click', function() {
+            var url = buildQuery() + '/2';
             window.open(url, '_blank');
         });
 
