@@ -17,7 +17,14 @@ class BackfillMedicalInvoiceCodes extends Migration
         }
 
         $invDateExpression = $this->db->fieldExists('inv_date', 'invoice_med_master')
-            ? "COALESCE(NULLIF(inv_date, '0000-00-00'), CURDATE())"
+            ? "(
+                CASE
+                    WHEN inv_date IS NULL THEN CURDATE()
+                    WHEN CAST(inv_date AS CHAR) = '' THEN CURDATE()
+                    WHEN CAST(inv_date AS CHAR) LIKE '0000-00-00%' THEN CURDATE()
+                    ELSE CAST(inv_date AS DATE)
+                END
+            )"
             : 'CURDATE()';
 
         $sql = "UPDATE invoice_med_master
