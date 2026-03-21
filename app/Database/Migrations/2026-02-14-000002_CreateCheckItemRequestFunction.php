@@ -8,19 +8,21 @@ class CreateCheckItemRequestFunction extends Migration
 {
     public function up()
     {
-        $sql = "CREATE FUNCTION IF NOT EXISTS `check_item_request`(
+        $this->db->query("DROP FUNCTION IF EXISTS `check_item_request`");
+
+        $sql = "CREATE FUNCTION `check_item_request`(
             `xcharge_id` INT,
             `xcharge_item_id` INT
         )
         RETURNS varchar(50) CHARSET utf8mb3 COLLATE utf8mb3_unicode_ci
         LANGUAGE SQL
-        NOT DETERMINISTIC
-        CONTAINS SQL
-        SQL SECURITY DEFINER
-        COMMENT ''
+        DETERMINISTIC
+        READS SQL DATA
+        SQL SECURITY INVOKER
         BEGIN
             Declare xReturn varchar(50) default '0#0';
-            Declare xNo_Count,xStatus varchar(5) default '0';
+            Declare xNo_Count int default 0;
+            Declare xStatus varchar(5) default '0';
             
             select count(*) into xNo_Count from lab_request  where charge_id=xcharge_id and charge_item_id=xcharge_item_id;
             
