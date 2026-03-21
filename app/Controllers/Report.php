@@ -154,7 +154,7 @@ class Report extends BaseController
 
         $builder = $this->db->table('payment_history p');
         $builder->select('p.update_by_id as user_id')
-            ->select('COALESCE(u.username, p.update_by) as user_name', false)
+            ->select('COALESCE(u.username, MAX(p.update_by)) as user_name', false)
             ->select('SUM(CASE WHEN p.credit_debit = 0 AND p.payof_type = 1 THEN p.amount ELSE 0 END) as opd_amount', false)
             ->select('SUM(CASE WHEN p.credit_debit = 0 AND p.payof_type = 2 THEN p.amount ELSE 0 END) as charge_amount', false)
             ->select('SUM(CASE WHEN p.credit_debit = 0 AND p.payof_type = 4 THEN p.amount ELSE 0 END) as ipd_amount', false)
