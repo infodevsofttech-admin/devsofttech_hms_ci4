@@ -40,6 +40,7 @@ class IpdBillingModel extends Model
             'str_register_date',
             'str_discharge_date',
             'status_desc',
+            'action',
         ];
 
         $totalBuilder = $this->baseIpdListQuery();
@@ -72,7 +73,8 @@ class IpdBillingModel extends Model
                 if(i.ipd_status = 1,'Discharged','Admit') as Disstatus,
                 date_format(i.register_date,'%d-%m-%Y') as str_register_date,
                 date_format(i.discharge_date,'%d-%m-%Y') as str_discharge_date,
-                d.status_desc as status_desc",
+                d.status_desc as status_desc,
+                i.id as ipd_id",
                 false
             )
             ->orderBy($orderColumn, $orderDir)
@@ -83,6 +85,14 @@ class IpdBillingModel extends Model
         $data = [];
         foreach ($rows as $row) {
             $item = [];
+            $ipdId = (int) ($row['ipd_id'] ?? 0);
+            $actionHtml = '';
+            if ($ipdId > 0) {
+                $panelUrl = base_url('billing/ipd/panel/' . $ipdId);
+                $actionHtml = '<button class="btn btn-sm btn-primary" onclick="load_form_div(\'' . $panelUrl . '\',\'maindiv\',\'IPD Panel\');"><i class="bi bi-eye"></i> View</button>';
+            }
+            $row['action'] = $actionHtml;
+
             foreach ($columns as $column) {
                 $item[] = $row[$column] ?? '';
             }

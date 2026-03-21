@@ -91,11 +91,11 @@ if ($person) {
                         <strong>/ Age :</strong> <?= esc($age) ?>
                         <strong>/ Gender :</strong> <?= esc($person->xgender ?? '') ?>
                         <strong>/ UHID :</strong> <?= esc($person->p_code ?? '') ?>
-                        <strong>/ No of Days :</strong> <?= esc($ipd->no_days ?? '') ?>
+                        <strong>/ No of Days :</strong> <span id="ipd-panel-no-days"><?= esc($ipd->no_days ?? '') ?></span>
                     </p>
                     <p class="mb-0">
-                        <strong>Admit Date :</strong> <?= esc($ipd->str_register_date ?? '') ?>
-                        <strong>/ Discharge Date :</strong> <?= esc($ipd->str_discharge_date ?? '') ?>
+                        <strong>Admit Date :</strong> <span id="ipd-panel-admit-date"><?= esc($ipd->str_register_date ?? '') ?></span>
+                        <strong>/ Discharge Date :</strong> <span id="ipd-panel-discharge-date"><?= esc($ipd->str_discharge_date ?? '') ?></span>
                     </p>
                 </div>
 
@@ -282,6 +282,42 @@ if ($person) {
         var firstTab = document.querySelector('#ipdPanelTabs button[data-url]');
         if (firstTab) {
             loadTabContent(firstTab);
+        }
+
+        if (window.jQuery) {
+            $(document).on('ipd:admission-updated', function(event, detail) {
+                detail = detail || {};
+                var admitDate = document.getElementById('ipd-panel-admit-date');
+                var dischargeDate = document.getElementById('ipd-panel-discharge-date');
+                var noDays = document.getElementById('ipd-panel-no-days');
+
+                if (admitDate && typeof detail.admit_date === 'string') {
+                    admitDate.textContent = detail.admit_date;
+                }
+                if (dischargeDate && typeof detail.discharge_date === 'string') {
+                    dischargeDate.textContent = detail.discharge_date;
+                }
+                if (noDays && typeof detail.no_days === 'string') {
+                    noDays.textContent = detail.no_days;
+                }
+            });
+        } else {
+            document.addEventListener('ipd:admission-updated', function(event) {
+                var detail = event.detail || {};
+                var admitDate = document.getElementById('ipd-panel-admit-date');
+                var dischargeDate = document.getElementById('ipd-panel-discharge-date');
+                var noDays = document.getElementById('ipd-panel-no-days');
+
+                if (admitDate && typeof detail.admit_date === 'string') {
+                    admitDate.textContent = detail.admit_date;
+                }
+                if (dischargeDate && typeof detail.discharge_date === 'string') {
+                    dischargeDate.textContent = detail.discharge_date;
+                }
+                if (noDays && typeof detail.no_days === 'string') {
+                    noDays.textContent = detail.no_days;
+                }
+            });
         }
 
         var payModal = document.getElementById('payModal');

@@ -72,34 +72,49 @@
 <script src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
 <script>
     $(document).ready(function() {
-        var start = moment();
-        var end = moment();
+        var dateFilterReady = (typeof window.moment === 'function') && $.fn && (typeof $.fn.daterangepicker === 'function');
 
-        function cb(startDate, endDate) {
-            $('#reportrange span').html(startDate.format('D-MM-YYYY') + ' - ' + endDate.format('D-MM-YYYY'));
-            $('#ipd_date_range').val(startDate.format('YYYY-MM-DD') + 'S' + endDate.format('YYYY-MM-DD'));
+        function fallbackRangeToday() {
+            var iso = '<?= date('Y-m-d') ?>';
+            var display = '<?= date('d-m-Y') ?>';
+            $('#reportrange span').text(display + ' - ' + display);
+            $('#ipd_date_range').val(iso + 'S' + iso);
         }
 
-        $('#reportrange').daterangepicker({
-            startDate: start,
-            endDate: end,
-            ranges: {
-                'Today': [moment(), moment()],
-                'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
-                'Last 7 Days': [moment().subtract(6, 'days'), moment()],
-                'Last 30 Days': [moment().subtract(29, 'days'), moment()],
-                'This Month': [moment().startOf('month'), moment().endOf('month')],
-                'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+        if (dateFilterReady) {
+            var start = moment();
+            var end = moment();
+
+            function cb(startDate, endDate) {
+                $('#reportrange span').html(startDate.format('D-MM-YYYY') + ' - ' + endDate.format('D-MM-YYYY'));
+                $('#ipd_date_range').val(startDate.format('YYYY-MM-DD') + 'S' + endDate.format('YYYY-MM-DD'));
             }
-        }, cb);
 
-        cb(start, end);
+            $('#reportrange').daterangepicker({
+                startDate: start,
+                endDate: end,
+                ranges: {
+                    'Today': [moment(), moment()],
+                    'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+                    'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+                    'Last 30 Days': [moment().subtract(29, 'days'), moment()],
+                    'This Month': [moment().startOf('month'), moment().endOf('month')],
+                    'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+                }
+            }, cb);
 
-        $('#reportrange').on('apply.daterangepicker', function(ev, picker) {
-            var dateFirst = picker.startDate.format('YYYY-MM-DD');
-            var dateSecond = picker.endDate.format('YYYY-MM-DD');
-            $('#ipd_date_range').val(dateFirst + 'S' + dateSecond);
-        });
+            cb(start, end);
+
+            $('#reportrange').on('apply.daterangepicker', function(ev, picker) {
+                var dateFirst = picker.startDate.format('YYYY-MM-DD');
+                var dateSecond = picker.endDate.format('YYYY-MM-DD');
+                $('#ipd_date_range').val(dateFirst + 'S' + dateSecond);
+            });
+        } else {
+            $('#reportrange').addClass('text-muted');
+            $('#reportrange span').text('Date filter fallback mode (moment blocked by browser/privacy settings).');
+            fallbackRangeToday();
+        }
 
         $('#showreport1').click(function() {
             var range = $('#ipd_date_range').val();

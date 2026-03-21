@@ -15,6 +15,9 @@ if ($ipd) {
 $billTotals = $bill_totals ?? ['gross' => 0.0, 'net' => 0.0];
 $paidTotal = (float) ($billTotals['paid'] ?? 0);
 $balanceTotal = (float) ($billTotals['balance'] ?? 0);
+$showPrintActions = (bool) ($show_print_actions ?? true);
+$canPrintBill = (bool) ($can_print_bill ?? false);
+$showPaymentDetails = (bool) ($show_payment_details ?? true);
 $grossAmount = (float) ($ipd->gross_amount ?? 0);
 $netAmount = (float) ($ipd->net_amount ?? 0);
  $balanceAmount = (float) ($ipd->balance_amount ?? 0);
@@ -27,12 +30,28 @@ if ($netAmount <= 0) {
 if ($balanceAmount <= 0) {
     $balanceAmount = $balanceTotal;
 }
+$isDischargeFinal = (int) ($ipd->discarge_patient_status ?? 0) > 0;
+$billHeaderTitle = $isDischargeFinal ? 'Bill No. : ' . (string) ($ipd->ipd_code ?? '') : 'IPD Invoice';
 ?>
 
 <div class="card border-top border-3 border-danger">
     <div class="card-header">
-        <strong>IPD Invoice</strong>
-        <span class="text-muted">/ IPD ID: <?= esc($ipd->ipd_code ?? '') ?></span>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div>
+                <strong><?= esc($billHeaderTitle) ?></strong>
+                <span class="text-muted">/ IPD ID: <?= esc($ipd->ipd_code ?? '') ?></span>
+            </div>
+            <?php if ($showPrintActions && $canPrintBill && ! empty($ipd->id)) : ?>
+                <div class="d-flex flex-wrap gap-2">
+                    <a class="btn btn-sm btn-outline-primary" target="_blank" href="<?= site_url('billing/ipd/bill-print/' . (int) $ipd->id . '/1') ?>">Print Bill</a>
+                    <a class="btn btn-sm btn-outline-secondary" target="_blank" href="<?= site_url('billing/ipd/bill-print/' . (int) $ipd->id . '/2') ?>">Print Without Payment</a>
+                    <a class="btn btn-sm btn-outline-dark" target="_blank" href="<?= site_url('billing/ipd/bill-print/' . (int) $ipd->id . '/5') ?>">Letter Head w/o Payment</a>
+                    <a class="btn btn-sm btn-outline-dark" target="_blank" href="<?= site_url('billing/ipd/bill-print/' . (int) $ipd->id . '/6') ?>">Letter Head</a>
+                    <a class="btn btn-sm btn-outline-info" target="_blank" href="<?= site_url('billing/ipd/bill-print/' . (int) $ipd->id . '/3') ?>">Item Amt. With Discount</a>
+                    <a class="btn btn-sm btn-outline-success" target="_blank" href="<?= site_url('billing/ipd/bill-print/' . (int) $ipd->id . '/4') ?>">TPA Final Bill</a>
+                </div>
+            <?php endif; ?>
+        </div>
     </div>
     <div class="card-body">
         <p class="mb-2">
@@ -247,25 +266,27 @@ if ($balanceAmount <= 0) {
                         <th>Net Amount</th>
                         <th class="text-end"><?= esc(number_format($netAmount, 2)) ?></th>
                     </tr>
-                    <tr>
-                        <th>#</th>
-                        <th colspan="2">
-                            Payment Recd.<br>
-                            <?php
-                            $i = 1;
-                            foreach ($ipd_payment ?? [] as $row) {
-                                $i++;
-                                echo '[' . esc($row->id ?? '') . ':' . esc($row->pay_mode ?? '') . ':' . esc($row->pay_date_str ?? '') . ':' . esc($row->amount ?? '') . '] / ';
-                                if ($i % 3 === 0) {
-                                    echo '<br>';
+                    <?php if ($showPaymentDetails) : ?>
+                        <tr>
+                            <th>#</th>
+                            <th colspan="2">
+                                Payment Recd.<br>
+                                <?php
+                                $i = 1;
+                                foreach ($ipd_payment ?? [] as $row) {
+                                    $i++;
+                                    echo '[' . esc($row->id ?? '') . ':' . esc($row->pay_mode ?? '') . ':' . esc($row->pay_date_str ?? '') . ':' . esc($row->amount ?? '') . '] / ';
+                                    if ($i % 3 === 0) {
+                                        echo '<br>';
+                                    }
                                 }
-                            }
-                            ?>
-                        </th>
-                        <th></th>
-                        <th></th>
-                        <th class="text-end"><?= esc(number_format($paidTotal > 0 ? $paidTotal : (float) ($ipd->total_paid_amount ?? 0), 2)) ?></th>
-                    </tr>
+                                ?>
+                            </th>
+                            <th></th>
+                            <th></th>
+                            <th class="text-end"><?= esc(number_format($paidTotal > 0 ? $paidTotal : (float) ($ipd->total_paid_amount ?? 0), 2)) ?></th>
+                        </tr>
+                    <?php endif; ?>
                     <tr>
                         <th>#</th>
                         <th></th>

@@ -315,6 +315,12 @@ $routes->get('Ipd_discharge/show_discharge/(:num)', 'Ipd_discharge::show_dischar
 $routes->get('Ipd_discharge/show_discharge/(:num)/(:num)', 'Ipd_discharge::show_discharge/$1/$2');
 $routes->get('Ipd_discharge/show_file3/(:num)', 'Ipd_discharge::show_file3/$1');
 
+// Legacy CI3 compatibility links for IPD bill print modes.
+$routes->get('ipdNew/ipd_complete_invoice/(:num)', 'Billing\\Ipd::billPrint/$1/1');
+$routes->get('ipdNew/ipd_complete_invoice/(:num)/(:num)', 'Billing\\Ipd::billPrint/$1/$2');
+$routes->get('IpdNew/ipd_complete_invoice/(:num)', 'Billing\\Ipd::billPrint/$1/1');
+$routes->get('IpdNew/ipd_complete_invoice/(:num)/(:num)', 'Billing\\Ipd::billPrint/$1/$2');
+
 $routes->get('setup/db-tools', 'Setup::dbTools');
 $routes->post('setup/db-tools/generate', 'Setup::generateMigrations');
 $routes->post('setup/db-tools/export-master-schema', 'Setup::exportMasterSchema');
@@ -334,6 +340,12 @@ $routes->group('billing', function($routes) {
     $routes->post('ipd/list', 'Billing\\Ipd::getIpdTable');
     $routes->get('ipd/panel/(:num)', 'Billing\\Ipd::panel/$1');
     $routes->get('ipd/panel/(:num)/tab/(:segment)', 'Billing\\Ipd::panelTab/$1/$2');
+    $routes->post('ipd/panel/(:num)/admission', 'Billing\Ipd::updateAdmission/$1');
+    $routes->post('ipd/panel/(:num)/discharge/update', 'Billing\\Ipd::updateDischargeProcess/$1');
+    $routes->post('ipd/panel/(:num)/discharge/discount/(:num)', 'Billing\\Ipd::updateDischargeDiscount/$1/$2');
+    $routes->post('ipd/panel/(:num)/discharge/charge/(:num)', 'Billing\\Ipd::updateDischargeCharge/$1/$2');
+    $routes->get('ipd/bill-print/(:num)', 'Billing\\Ipd::billPrint/$1');
+    $routes->get('ipd/bill-print/(:num)/(:num)', 'Billing\\Ipd::billPrint/$1/$2');
     $routes->post('ipd/charge/add/(:num)', 'Billing\\Ipd::addIpdCharge/$1');
     $routes->post('ipd/charge/update/(:num)', 'Billing\\Ipd::updateIpdCharge/$1');
     $routes->post('ipd/charge/delete/(:num)', 'Billing\\Ipd::deleteIpdCharge/$1');

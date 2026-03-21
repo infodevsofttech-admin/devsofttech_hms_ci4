@@ -110,6 +110,49 @@ class IpdModel extends Model
         return 1;
     }
 
+    public function replaceIpdDoctors(int $ipdId, array $doctorIds): void
+    {
+        $ipdId = (int) $ipdId;
+        if ($ipdId <= 0 || ! $this->db->tableExists('ipd_master_doc_list')) {
+            return;
+        }
+
+        $doctorIds = array_values(array_unique(array_filter(array_map('intval', $doctorIds), static fn ($id) => $id > 0)));
+
+        $existingRows = $this->db->table('ipd_master_doc_list')
+            ->select('id, doc_id')
+            ->where('ipd_id', $ipdId)
+            ->get()
+            ->getResultArray();
+
+        $existingDoctorIds = [];
+        foreach ($existingRows as $row) {
+            $docId = (int) ($row['doc_id'] ?? 0);
+            $rowId = (int) ($row['id'] ?? 0);
+            if ($docId <= 0 || $rowId <= 0) {
+                continue;
+            }
+
+            $existingDoctorIds[] = $docId;
+            if (! in_array($docId, $doctorIds, true)) {
+                $this->removeIpdDoc($rowId);
+            }
+        }
+
+        $userSignature = $this->getUserSignature();
+        foreach ($doctorIds as $docId) {
+            if (in_array($docId, $existingDoctorIds, true)) {
+                continue;
+            }
+
+            $this->addIpdDoc([
+                'ipd_id' => $ipdId,
+                'doc_id' => $docId,
+                'log' => 'Insert By :' . $userSignature,
+            ]);
+        }
+    }
+
     private function filterTableDataByExistingColumns(string $table, array $data): array
     {
         if (! $this->db->tableExists($table)) {

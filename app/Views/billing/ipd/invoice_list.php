@@ -59,6 +59,7 @@
                             <th>Registration</th>
                             <th>Discharge</th>
                             <th>Dis. Status</th>
+                            <th>Action</th>
                         </tr>
                     </thead>
                     <thead>
@@ -69,6 +70,7 @@
                             <td><input class="form-control" type="text" data-column="3"></td>
                             <td><input class="form-control" type="text" data-column="4"></td>
                             <td><input class="form-control" type="text" data-column="5"></td>
+                            <td></td>
                             <td></td>
                             <td></td>
                             <td></td>
@@ -92,32 +94,60 @@
             return;
         }
 
-        var start = moment();
-        var end = moment();
+        var dateFilterReady = (typeof window.moment === 'function') && $.fn && (typeof $.fn.daterangepicker === 'function');
+        var start = null;
+        var end = null;
 
-        function cb(startDate, endDate) {
-            $('#reportrange span').html(startDate.format('MMMM D, YYYY') + ' - ' + endDate.format('MMMM D, YYYY'));
+        function fmtYmd(dateValue) {
+            if (!dateValue) {
+                return '';
+            }
+            if (typeof dateValue.format === 'function') {
+                return dateValue.format('YYYY-MM-DD');
+            }
+            var txt = String(dateValue || '').trim();
+            if (/^\d{4}-\d{2}-\d{2}/.test(txt)) {
+                return txt.substring(0, 10);
+            }
+
+            return '';
         }
 
-        $('#reportrange').daterangepicker({
-            startDate: start,
-            endDate: end,
-            ranges: {
-                'Today': [moment(), moment()],
-                'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
-                'Last 7 Days': [moment().subtract(6, 'days'), moment()],
-                'Last 30 Days': [moment().subtract(29, 'days'), moment()],
-                'This Month': [moment().startOf('month'), moment().endOf('month')],
-                'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
-            }
-        }, cb);
+        if (dateFilterReady) {
+            start = moment();
+            end = moment();
 
-        cb(start, end);
+            function cb(startDate, endDate) {
+                $('#reportrange span').html(startDate.format('MMMM D, YYYY') + ' - ' + endDate.format('MMMM D, YYYY'));
+            }
+
+            $('#reportrange').daterangepicker({
+                startDate: start,
+                endDate: end,
+                ranges: {
+                    'Today': [moment(), moment()],
+                    'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+                    'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+                    'Last 30 Days': [moment().subtract(29, 'days'), moment()],
+                    'This Month': [moment().startOf('month'), moment().endOf('month')],
+                    'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+                }
+            }, cb);
+
+            cb(start, end);
+        } else {
+            $('#chk_date').prop('checked', false).prop('disabled', true);
+            $('#reportrange').addClass('text-muted');
+            $('#reportrange span').text('Date filter unavailable (moment blocked by browser/privacy settings).');
+        }
 
         var dataTable = $('#ipd-invoice-grid').DataTable({
             order: [[0, 'desc']],
             processing: true,
             serverSide: true,
+            columnDefs: [
+                { targets: [10], orderable: false, searchable: false }
+            ],
             ajax: {
                 url: "<?= base_url('billing/ipd/list') ?>",
                 type: 'post',
@@ -134,10 +164,13 @@
         $('#ipd-invoice-grid_filter').css('display', 'none');
 
         $('#chk_date').on('click', function() {
+            if (!dateFilterReady) {
+                return;
+            }
             if (this.checked) {
                 var choAdmitType = $('#ipd_admit_type').val();
-                var dateFirst = start.format('YYYY-MM-DD');
-                var dateSecond = end.format('YYYY-MM-DD');
+                var dateFirst = fmtYmd(start);
+                var dateSecond = fmtYmd(end);
                 dataTable.columns(7).search(dateFirst + '/' + dateSecond + '/' + choAdmitType).draw();
             } else {
                 dataTable.columns(7).search('').draw();
@@ -145,10 +178,13 @@
         });
 
         $('#ipd_admit_type').change(function() {
+            if (!dateFilterReady) {
+                return;
+            }
             if ($('#chk_date').is(':checked')) {
                 var choAdmitType = $('#ipd_admit_type').val();
-                var dateFirst = start.format('YYYY-MM-DD');
-                var dateSecond = end.format('YYYY-MM-DD');
+                var dateFirst = fmtYmd(start);
+                var dateSecond = fmtYmd(end);
                 dataTable.columns(7).search(dateFirst + '/' + dateSecond + '/' + choAdmitType).draw();
             }
         });
@@ -160,6 +196,9 @@
         });
 
         $('#reportrange').on('apply.daterangepicker', function(ev, picker) {
+            if (!dateFilterReady) {
+                return;
+            }
             var dateFirst = picker.startDate.format('YYYY-MM-DD');
             var dateSecond = picker.endDate.format('YYYY-MM-DD');
             start = picker.startDate;

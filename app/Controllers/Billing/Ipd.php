@@ -9,6 +9,7 @@ use App\Models\IpdBillingModel;
 use App\Models\IpdModel;
 use App\Models\NursingBedsideItemModel;
 use App\Models\PaymentModel;
+use Mpdf\Mpdf;
 
 class Ipd extends BaseController
 {
@@ -385,7 +386,7 @@ class Ipd extends BaseController
         }
 
         if ($tab === 'admission') {
-            return view('billing/ipd/panel_admission', $panelData);
+            return view('billing/ipd/panel_admission', $this->buildAdmissionTabData($panelData, $ipdId));
         }
 
         if ($tab === 'bed-assign') {
@@ -462,54 +463,13 @@ class Ipd extends BaseController
         }
 
         if ($tab === 'bill-details') {
-            $panelData['ipd_packages'] = $this->ipdModel->getIpdPackages($ipdId);
-            $panelData['ipd_invoice_items'] = $this->ipdModel->getIpdInvoiceItems(
-                $ipdId,
-                ! empty($panelData['ipd_packages'])
-            );
-            $panelData['showinvoice'] = $this->ipdModel->getIpdInvoiceCharges($ipdId);
-            $panelData['inv_med_list'] = $this->ipdModel->getIpdMedicalCredits($ipdId);
-            $panelData['ipd_payment'] = $this->ipdModel->getPayments($ipdId);
-            $panelData['insurance'] = $this->ipdModel->getIpdInsurance($ipdId);
-
-            $grossTotal = 0.0;
-            foreach ($panelData['ipd_packages'] as $row) {
-                $grossTotal += (float) ($row->package_Amount ?? 0);
-            }
-            foreach ($panelData['ipd_invoice_items'] as $row) {
-                $grossTotal += (float) ($row->item_amount ?? 0);
-            }
-            foreach ($panelData['showinvoice'] as $row) {
-                $grossTotal += (float) ($row->amount ?? 0);
-            }
-            foreach ($panelData['inv_med_list'] as $row) {
-                $grossTotal += (float) ($row->net_amount ?? 0);
-            }
-
-            $ipd = $panelData['ipd_info'] ?? null;
-            $discountTotal = (float) ($ipd->Discount ?? 0) + (float) ($ipd->Discount2 ?? 0) + (float) ($ipd->Discount3 ?? 0);
-            $extraCharge = (float) ($ipd->chargeamount1 ?? 0) + (float) ($ipd->chargeamount2 ?? 0);
-            $netTotal = ($grossTotal + $extraCharge) - $discountTotal;
-
-            $panelData['bill_totals'] = [
-                'gross' => $grossTotal,
-                'net' => $netTotal,
-            ];
-
-            $totalPaid = 0.0;
-            foreach ($panelData['ipd_payment'] as $row) {
-                $amount = (float) ($row->amount ?? 0);
-                $creditDebit = (int) ($row->credit_debit ?? 0);
-                $totalPaid += $creditDebit === 0 ? $amount : $amount * -1;
-            }
-            $panelData['bill_totals']['paid'] = $totalPaid;
-            $panelData['bill_totals']['balance'] = $netTotal - $totalPaid;
-
-            return view('billing/ipd/panel_bill_details', $panelData);
+            return view('billing/ipd/panel_bill_details', $this->buildBillDetailsTabData($panelData, $ipdId));
         }
 
         if ($tab === 'discharge-process') {
             $panelData['discharge_info'] = $this->ipdModel->getDischargeInfo($ipdId);
+            $user = auth()->user();
+            $panelData['can_edit_discharge'] = $user !== null && $user->can('billing.ipd.discharge.edit');
 
             return view('billing/ipd/panel_discharge', $panelData);
         }
@@ -517,6 +477,319 @@ class Ipd extends BaseController
         return view('billing/ipd/panel_placeholder', [
             'title' => ucwords(str_replace('-', ' ', $tab)),
         ]);
+    }
+
+    public function updateAdmission(int $ipdId)
+    {
+        $permission = $this->requireAnyPermission([
+            'billing.ipd.admission.edit',
+        ]);
+        if ($permission) {
+            return $permission;
+        }
+
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0, 'message' => 'Invalid request']);
+        }
+
+        $panelData = $this->ipdModel->getIpdPanelInfo($ipdId);
+        if (empty($panelData)) {
+            return $this->response->setStatusCode(404)->setJSON(['update' => 0, 'message' => 'IPD not found']);
+        }
+
+        $registerDate = $this->normalizeAdmissionDate((string) ($this->request->getPost('register_date') ?? ''));
+        if ($registerDate === null) {
+            return $this->response->setStatusCode(422)->setJSON(['update' => 0, 'message' => 'Enter a valid admission date']);
+        }
+
+        $regTime = $this->normalizeAdmissionTime((string) ($this->request->getPost('reg_time') ?? ''));
+        if ($regTime === null) {
+            return $this->response->setStatusCode(422)->setJSON(['update' => 0, 'message' => 'Enter a valid admission time']);
+        }
+
+        $doctorIds = $this->request->getPost('doc_id');
+        $doctorIds = is_array($doctorIds)
+            ? array_values(array_unique(array_filter(array_map('intval', $doctorIds), static fn ($id) => $id > 0)))
+            : [];
+
+        $ipdFields = $this->db->getFieldNames('ipd_master') ?? [];
+        $fieldMap = array_flip($ipdFields);
+
+        $primaryDoctorId = $doctorIds[0] ?? 0;
+        $primaryDoctorName = $primaryDoctorId > 0 ? $this->ipdModel->getDoctorNameById($primaryDoctorId) : '';
+
+        $masterUpdate = [];
+        if (isset($fieldMap['register_date'])) {
+            $masterUpdate['register_date'] = $registerDate;
+        }
+        if (isset($fieldMap['reg_time'])) {
+            $masterUpdate['reg_time'] = $regTime;
+        }
+        if (isset($fieldMap['reg_time_bak'])) {
+            $masterUpdate['reg_time_bak'] = $regTime;
+        }
+        if (isset($fieldMap['case_type'])) {
+            $masterUpdate['case_type'] = (int) ($this->request->getPost('case_type') ?? 0) === 1 ? 1 : 0;
+        }
+        if (isset($fieldMap['dept_id'])) {
+            $masterUpdate['dept_id'] = (int) ($this->request->getPost('dept_id') ?? 0);
+        }
+        if (isset($fieldMap['refer_by'])) {
+            $masterUpdate['refer_by'] = (int) ($this->request->getPost('refer_by') ?? 0);
+        }
+        if (isset($fieldMap['problem'])) {
+            $masterUpdate['problem'] = substr((string) ($this->request->getPost('problem') ?? ''), 0, 200);
+        }
+        if (isset($fieldMap['remark'])) {
+            $masterUpdate['remark'] = (string) ($this->request->getPost('remark') ?? '');
+        }
+        if (isset($fieldMap['contact_person_Name'])) {
+            $masterUpdate['contact_person_Name'] = substr((string) ($this->request->getPost('contact_person_Name') ?? ''), 0, 50);
+        }
+        if (isset($fieldMap['P_mobile1'])) {
+            $masterUpdate['P_mobile1'] = substr((string) ($this->request->getPost('P_mobile1') ?? ''), 0, 50);
+        }
+        if (isset($fieldMap['P_mobile2'])) {
+            $masterUpdate['P_mobile2'] = substr((string) ($this->request->getPost('P_mobile2') ?? ''), 0, 50);
+        }
+        if (isset($fieldMap['relation'])) {
+            $masterUpdate['relation'] = substr((string) ($this->request->getPost('relation') ?? ''), 0, 50);
+        }
+        if (isset($fieldMap['r_doc_id'])) {
+            $masterUpdate['r_doc_id'] = $primaryDoctorId;
+        }
+        if (isset($fieldMap['r_doc_name'])) {
+            $masterUpdate['r_doc_name'] = $primaryDoctorName;
+        }
+
+        $this->db->transStart();
+        if (! empty($masterUpdate)) {
+            $this->ipdEditModel->updateIpd($masterUpdate, $ipdId);
+        }
+        $this->ipdEditModel->replaceIpdDoctors($ipdId, $doctorIds);
+        $this->db->transComplete();
+
+        if (! $this->db->transStatus()) {
+            return $this->response->setStatusCode(500)->setJSON(['update' => 0, 'message' => 'Unable to update admission details']);
+        }
+
+        $freshPanelData = $this->ipdModel->getIpdPanelInfo($ipdId);
+        $admissionData = $this->buildAdmissionTabData($freshPanelData, $ipdId);
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'message' => 'Admission details updated.',
+            'html' => view('billing/ipd/panel_admission', $admissionData),
+            'header' => $this->buildAdmissionHeaderPayload($freshPanelData),
+        ]);
+    }
+
+    public function updateDischargeDiscount(int $ipdId, int $slot)
+    {
+        $permission = $this->requireAnyPermission([
+            'billing.ipd.discharge.edit',
+        ]);
+        if ($permission) {
+            return $permission;
+        }
+
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0, 'message' => 'Invalid request']);
+        }
+
+        if (! in_array($slot, [1, 2, 3], true)) {
+            return $this->response->setStatusCode(422)->setJSON(['update' => 0, 'message' => 'Invalid discount slot']);
+        }
+
+        $fieldMap = $this->getIpdFieldMap();
+        $amount = max(0, (float) ($this->request->getPost('amount') ?? 0));
+        $remark = trim((string) ($this->request->getPost('remark') ?? ''));
+
+        $amountKey = $slot === 1 ? 'Discount' : 'Discount' . $slot;
+        $remarkKey = $slot === 1 ? 'Discount_Remark' : 'Discount_Remark' . $slot;
+
+        $update = [];
+        if (isset($fieldMap[$amountKey])) {
+            $update[$amountKey] = $amount;
+        }
+        if (isset($fieldMap[$remarkKey])) {
+            $update[$remarkKey] = substr($remark, 0, 200);
+        }
+
+        if (empty($update)) {
+            return $this->response->setStatusCode(422)->setJSON(['update' => 0, 'message' => 'Discount fields are not available in schema']);
+        }
+
+        $this->ipdEditModel->updateIpd($update, $ipdId);
+        $this->ipdEditModel->calculateIPD($ipdId);
+
+        return $this->buildDischargeProcessResponse($ipdId, 'Discount updated.');
+    }
+
+    public function updateDischargeCharge(int $ipdId, int $slot)
+    {
+        $permission = $this->requireAnyPermission([
+            'billing.ipd.discharge.edit',
+        ]);
+        if ($permission) {
+            return $permission;
+        }
+
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0, 'message' => 'Invalid request']);
+        }
+
+        if (! in_array($slot, [1, 2], true)) {
+            return $this->response->setStatusCode(422)->setJSON(['update' => 0, 'message' => 'Invalid additional charge slot']);
+        }
+
+        $fieldMap = $this->getIpdFieldMap();
+        $amount = max(0, (float) ($this->request->getPost('amount') ?? 0));
+        $remark = trim((string) ($this->request->getPost('remark') ?? ''));
+
+        $remarkKey = 'charge' . $slot;
+        $amountKey = 'chargeamount' . $slot;
+        $byKey = 'charge_by' . $slot;
+
+        $update = [];
+        if (isset($fieldMap[$remarkKey])) {
+            $update[$remarkKey] = substr($remark, 0, 200);
+        }
+        if (isset($fieldMap[$amountKey])) {
+            $update[$amountKey] = $amount;
+        }
+        if (isset($fieldMap[$byKey])) {
+            $user = auth()->user();
+            $update[$byKey] = (string) ($user->username ?? $user->email ?? 'system');
+        }
+
+        if (empty($update)) {
+            return $this->response->setStatusCode(422)->setJSON(['update' => 0, 'message' => 'Charge fields are not available in schema']);
+        }
+
+        $this->ipdEditModel->updateIpd($update, $ipdId);
+        $this->ipdEditModel->calculateIPD($ipdId);
+
+        return $this->buildDischargeProcessResponse($ipdId, 'Additional charge updated.');
+    }
+
+    public function updateDischargeProcess(int $ipdId)
+    {
+        $permission = $this->requireAnyPermission([
+            'billing.ipd.discharge.edit',
+        ]);
+        if ($permission) {
+            return $permission;
+        }
+
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0, 'message' => 'Invalid request']);
+        }
+
+        $fieldMap = $this->getIpdFieldMap();
+
+        $dischargeDate = $this->normalizeAdmissionDate((string) ($this->request->getPost('discharge_date') ?? ''));
+        if ($dischargeDate === null) {
+            return $this->response->setStatusCode(422)->setJSON(['update' => 0, 'message' => 'Enter a valid discharge date']);
+        }
+
+        $dischargeTime = $this->normalizeAdmissionTime((string) ($this->request->getPost('discharge_time') ?? ''));
+        if ($dischargeTime === null) {
+            return $this->response->setStatusCode(422)->setJSON(['update' => 0, 'message' => 'Enter a valid discharge time']);
+        }
+
+        $status = (int) ($this->request->getPost('discharge_status') ?? 0);
+        if ($status < 1 || $status > 7) {
+            return $this->response->setStatusCode(422)->setJSON(['update' => 0, 'message' => 'Select valid discharge status']);
+        }
+
+        $update = [];
+        if (isset($fieldMap['discarge_patient_status'])) {
+            $update['discarge_patient_status'] = $status;
+        }
+        if (isset($fieldMap['discharge_date'])) {
+            $update['discharge_date'] = $dischargeDate;
+        }
+        if (isset($fieldMap['discharge_time'])) {
+            $update['discharge_time'] = $dischargeTime;
+        }
+        if (isset($fieldMap['discharge_time_bak'])) {
+            $update['discharge_time_bak'] = $dischargeTime;
+        }
+        if (isset($fieldMap['discharge_remark'])) {
+            $update['discharge_remark'] = (string) ($this->request->getPost('discharge_remark') ?? '');
+        }
+        if (isset($fieldMap['discharge_balance_user'])) {
+            $update['discharge_balance_user'] = substr((string) ($this->request->getPost('balance_user') ?? ''), 0, 200);
+        }
+        if (isset($fieldMap['discharge_balance_remark'])) {
+            $update['discharge_balance_remark'] = substr((string) ($this->request->getPost('balance_remark') ?? ''), 0, 200);
+        }
+        if (isset($fieldMap['discharge_by'])) {
+            $user = auth()->user();
+            $update['discharge_by'] = (string) ($user->username ?? $user->email ?? 'system');
+        }
+        if (isset($fieldMap['ipd_status'])) {
+            $update['ipd_status'] = 1;
+        }
+
+        if (empty($update)) {
+            return $this->response->setStatusCode(422)->setJSON(['update' => 0, 'message' => 'Discharge fields are not available in schema']);
+        }
+
+        $this->ipdEditModel->updateIpd($update, $ipdId);
+        $this->ipdEditModel->calculateIPD($ipdId);
+
+        return $this->buildDischargeProcessResponse($ipdId, 'Discharge status updated.');
+    }
+
+    public function billPrint(int $ipdId, int $mode = 1)
+    {
+        $permission = $this->requireAnyPermission([
+            'billing.ipd.bill.print',
+            'billing.ipd.invoice',
+        ]);
+        if ($permission) {
+            return $permission;
+        }
+
+        $panelData = $this->ipdModel->getIpdPanelInfo($ipdId);
+        if (empty($panelData)) {
+            return $this->response->setStatusCode(404)->setBody('IPD not found');
+        }
+
+        $mode = max(1, min(6, $mode));
+        $data = $this->buildBillDetailsTabData($panelData, $ipdId);
+        $data['show_print_actions'] = false;
+        $data['show_payment_details'] = in_array($mode, [1, 6], true);
+        $data['letterhead_mode'] = in_array($mode, [5, 6], true);
+        $data['print_mode'] = $mode;
+
+        $html = view('billing/ipd/bill_print', $data);
+
+        $mpdfTempDir = WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'mpdf';
+        if (! is_dir($mpdfTempDir)) {
+            mkdir($mpdfTempDir, 0755, true);
+        }
+
+        $mpdf = new Mpdf([
+            'tempDir' => $mpdfTempDir,
+            'format' => 'A4',
+            'margin_top' => 8,
+            'margin_bottom' => 8,
+            'margin_left' => 8,
+            'margin_right' => 8,
+        ]);
+
+        $mpdf->WriteHTML($html);
+
+        $ipdCode = (string) ($data['ipd_info']->ipd_code ?? ('IPD-' . $ipdId));
+        $fileName = 'IPD_Bill_' . preg_replace('/[^A-Za-z0-9_\-]/', '_', $ipdCode) . '_M' . $mode . '.pdf';
+
+        return $this->response
+            ->setHeader('Content-Type', 'application/pdf')
+            ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
+            ->setBody($mpdf->Output($fileName, 'S'));
     }
 
     public function addIpdCharge(int $ipdId)
@@ -1516,6 +1789,219 @@ class Ipd extends BaseController
             'total_paid' => $totalPaid,
             'total_balance' => $totalBalance,
         ];
+    }
+
+    private function buildBillDetailsTabData(array $panelData, int $ipdId): array
+    {
+        $panelData['ipd_packages'] = $this->ipdModel->getIpdPackages($ipdId);
+        $panelData['ipd_invoice_items'] = $this->ipdModel->getIpdInvoiceItems(
+            $ipdId,
+            ! empty($panelData['ipd_packages'])
+        );
+        $panelData['showinvoice'] = $this->ipdModel->getIpdInvoiceCharges($ipdId);
+        $panelData['inv_med_list'] = $this->ipdModel->getIpdMedicalCredits($ipdId);
+        $panelData['ipd_payment'] = $this->ipdModel->getPayments($ipdId);
+        $panelData['insurance'] = $this->ipdModel->getIpdInsurance($ipdId);
+
+        $grossTotal = 0.0;
+        foreach ($panelData['ipd_packages'] as $row) {
+            $grossTotal += (float) ($row->package_Amount ?? 0);
+        }
+        foreach ($panelData['ipd_invoice_items'] as $row) {
+            $grossTotal += (float) ($row->item_amount ?? 0);
+        }
+        foreach ($panelData['showinvoice'] as $row) {
+            $grossTotal += (float) ($row->amount ?? 0);
+        }
+        foreach ($panelData['inv_med_list'] as $row) {
+            $grossTotal += (float) ($row->net_amount ?? 0);
+        }
+
+        $ipd = $panelData['ipd_info'] ?? null;
+        $discountTotal = (float) ($ipd->Discount ?? 0) + (float) ($ipd->Discount2 ?? 0) + (float) ($ipd->Discount3 ?? 0);
+        $extraCharge = (float) ($ipd->chargeamount1 ?? 0) + (float) ($ipd->chargeamount2 ?? 0);
+        $netTotal = ($grossTotal + $extraCharge) - $discountTotal;
+
+        $panelData['bill_totals'] = [
+            'gross' => $grossTotal,
+            'net' => $netTotal,
+        ];
+
+        $totalPaid = 0.0;
+        foreach ($panelData['ipd_payment'] as $row) {
+            $amount = (float) ($row->amount ?? 0);
+            $creditDebit = (int) ($row->credit_debit ?? 0);
+            $totalPaid += $creditDebit === 0 ? $amount : $amount * -1;
+        }
+        $panelData['bill_totals']['paid'] = $totalPaid;
+        $panelData['bill_totals']['balance'] = $netTotal - $totalPaid;
+
+        $user = auth()->user();
+        $panelData['can_print_bill'] = $user !== null && $user->can('billing.ipd.bill.print');
+        $panelData['show_print_actions'] = true;
+        $panelData['show_payment_details'] = true;
+
+        return $panelData;
+    }
+
+    private function buildDischargeProcessResponse(int $ipdId, string $message)
+    {
+        $panelData = $this->ipdModel->getIpdPanelInfo($ipdId);
+        if (empty($panelData)) {
+            return $this->response->setStatusCode(404)->setJSON(['update' => 0, 'message' => 'IPD not found']);
+        }
+
+        $panelData['discharge_info'] = $this->ipdModel->getDischargeInfo($ipdId);
+        $user = auth()->user();
+        $panelData['can_edit_discharge'] = $user !== null && $user->can('billing.ipd.discharge.edit');
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'message' => $message,
+            'html' => view('billing/ipd/panel_discharge', $panelData),
+        ]);
+    }
+
+    private function getIpdFieldMap(): array
+    {
+        $ipdFields = $this->db->getFieldNames('ipd_master') ?? [];
+
+        return array_flip($ipdFields);
+    }
+
+    private function buildAdmissionTabData(array $panelData, int $ipdId): array
+    {
+        $ipd = $panelData['ipd_info'] ?? null;
+        $panelData['admission_doctors'] = $this->getAdmissionDoctors($ipdId);
+        $panelData['selected_doctor_ids'] = array_values(array_map(
+            static fn ($doctor) => (int) ($doctor->id ?? 0),
+            $panelData['admission_doctors']
+        ));
+        $panelData['available_doctors'] = $this->ipdModel->getIpdDoctorList();
+        $panelData['departments'] = $this->getAdmissionDepartments();
+        $panelData['refer_master'] = $this->getAdmissionReferMasters();
+        $panelData['register_date_input'] = $this->formatHtmlDateInput((string) ($ipd->register_date ?? ''));
+        $panelData['reg_time_input'] = $this->formatHtmlTimeInput((string) ($ipd->reg_time ?? ''));
+        $user = auth()->user();
+        $panelData['can_edit_admission'] = $user !== null && $user->can('billing.ipd.admission.edit');
+
+        return $panelData;
+    }
+
+    private function getAdmissionDoctors(int $ipdId): array
+    {
+        if (! $this->db->tableExists('ipd_master_doc_list') || ! $this->db->tableExists('doctor_master')) {
+            return [];
+        }
+
+        return $this->db->table('ipd_master_doc_list l')
+            ->select("d.id, concat_ws(' ', 'Dr.', d.p_fname, d.p_mname, d.p_lname) as doctor_name", false)
+            ->join('doctor_master d', 'd.id = l.doc_id', 'inner')
+            ->where('l.ipd_id', $ipdId)
+            ->groupBy('d.id, d.p_fname, d.p_mname, d.p_lname')
+            ->orderBy('d.p_fname', 'ASC')
+            ->get()
+            ->getResult();
+    }
+
+    private function getAdmissionDepartments(): array
+    {
+        if (! $this->db->tableExists('hc_department')) {
+            return [];
+        }
+
+        return $this->db->table('hc_department')
+            ->orderBy('vName', 'ASC')
+            ->get()
+            ->getResult();
+    }
+
+    private function getAdmissionReferMasters(): array
+    {
+        if (! $this->db->tableExists('refer_master')) {
+            return [];
+        }
+
+        return $this->db->table('refer_master')
+            ->where('active', 1)
+            ->orderBy('f_name', 'ASC')
+            ->get()
+            ->getResult();
+    }
+
+    private function buildAdmissionHeaderPayload(array $panelData): array
+    {
+        $ipd = $panelData['ipd_info'] ?? null;
+
+        return [
+            'admit_date' => (string) ($ipd->str_register_date ?? ''),
+            'discharge_date' => (string) ($ipd->str_discharge_date ?? ''),
+            'no_days' => (string) ($ipd->no_days ?? ''),
+        ];
+    }
+
+    private function formatHtmlDateInput(string $dateValue): string
+    {
+        $dateValue = trim($dateValue);
+        if ($dateValue === '') {
+            return date('Y-m-d');
+        }
+
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateValue) === 1) {
+            return $dateValue;
+        }
+
+        $timestamp = strtotime($dateValue);
+
+        return $timestamp !== false ? date('Y-m-d', $timestamp) : date('Y-m-d');
+    }
+
+    private function formatHtmlTimeInput(string $timeValue): string
+    {
+        $timeValue = trim($timeValue);
+        if ($timeValue === '') {
+            return date('H:i');
+        }
+
+        if (preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $timeValue) === 1) {
+            return substr($timeValue, 0, 5);
+        }
+
+        $timestamp = strtotime($timeValue);
+
+        return $timestamp !== false ? date('H:i', $timestamp) : date('H:i');
+    }
+
+    private function normalizeAdmissionDate(string $dateValue): ?string
+    {
+        $dateValue = trim($dateValue);
+        if ($dateValue === '') {
+            return null;
+        }
+
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateValue) === 1) {
+            return $dateValue;
+        }
+
+        $timestamp = strtotime($dateValue);
+
+        return $timestamp !== false ? date('Y-m-d', $timestamp) : null;
+    }
+
+    private function normalizeAdmissionTime(string $timeValue): ?string
+    {
+        $timeValue = trim($timeValue);
+        if ($timeValue === '') {
+            return null;
+        }
+
+        if (preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $timeValue) === 1) {
+            return substr($timeValue, 0, 5);
+        }
+
+        $timestamp = strtotime($timeValue);
+
+        return $timestamp !== false ? date('H:i', $timestamp) : null;
     }
 
     private function requireAnyPermission(array $permissions)
