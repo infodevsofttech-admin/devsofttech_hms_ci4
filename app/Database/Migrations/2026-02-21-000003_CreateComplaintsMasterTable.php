@@ -124,7 +124,24 @@ class CreateComplaintsMasterTable extends Migration
         unset($row);
 
         if (! empty($rows)) {
-            $this->db->table('complaints_master')->insertBatch($rows);
+            $existingCodes = $this->db->table('complaints_master')
+                ->select('Code')
+                ->get()
+                ->getResultArray();
+
+            $existingCodeMap = [];
+            foreach ($existingCodes as $existing) {
+                $existingCodeMap[(int) ($existing['Code'] ?? 0)] = true;
+            }
+
+            $newRows = array_values(array_filter(
+                $rows,
+                static fn(array $row): bool => ! isset($existingCodeMap[(int) ($row['Code'] ?? 0)])
+            ));
+
+            if (! empty($newRows)) {
+                $this->db->table('complaints_master')->insertBatch($newRows);
+            }
         }
     }
 
