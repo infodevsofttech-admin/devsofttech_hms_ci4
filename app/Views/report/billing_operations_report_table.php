@@ -4,9 +4,26 @@ $invoiceSummary = $invoice_summary ?? [];
 $invoiceRows = $invoice_rows ?? [];
 $ipdSummary = $ipd_summary ?? [];
 $ipdPaymentRows = $ipd_payment_rows ?? [];
+
+$formatIndianDateTime = static function ($value): string {
+    $value = trim((string) $value);
+    if ($value === '') {
+        return '';
+    }
+
+    $timestamp = strtotime($value);
+    if ($timestamp === false) {
+        return $value;
+    }
+
+    return date('d-m-Y H:i:s', $timestamp);
+};
+
+$minRangeDisplay = $formatIndianDateTime($min_range ?? '');
+$maxRangeDisplay = $formatIndianDateTime($max_range ?? '');
 ?>
 <div class="mb-3 small text-muted">
-    Date: <strong><?= esc((string) ($min_range ?? '')) ?></strong> to <strong><?= esc((string) ($max_range ?? '')) ?></strong>
+    Date: <strong><?= esc($minRangeDisplay) ?></strong> to <strong><?= esc($maxRangeDisplay) ?></strong>
     <?php if (! empty($doctor_filter)): ?>
         | Doctor: <strong><?= esc((string) $doctor_filter) ?></strong>
     <?php endif; ?>
@@ -110,7 +127,7 @@ $ipdPaymentRows = $ipd_payment_rows ?? [];
                 <tr>
                     <td><?= $sr++ ?></td>
                     <td><?= esc((string) ($row->inv_name ?? ('INV#' . ($row->id ?? '')))) ?></td>
-                    <td><?= esc((string) ($row->inv_date ?? '')) ?></td>
+                    <td><?= esc($formatIndianDateTime((string) ($row->inv_date ?? ''))) ?></td>
                     <td><?= (int) ($row->test_count ?? 0) ?></td>
                     <td><?= number_format((float) ($row->test_amount ?? 0), 2) ?></td>
                     <td><?= number_format((float) ($row->invoice_amount ?? 0), 2) ?></td>

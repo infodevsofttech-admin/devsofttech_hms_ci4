@@ -10,9 +10,26 @@ $totals = $totals ?? [
 ];
 $minRange = $min_range ?? '';
 $maxRange = $max_range ?? '';
+
+$formatIndianDateTime = static function ($value): string {
+    $value = trim((string) $value);
+    if ($value === '') {
+        return '';
+    }
+
+    $timestamp = strtotime($value);
+    if ($timestamp === false) {
+        return $value;
+    }
+
+    return date('d-m-Y H:i:s', $timestamp);
+};
+
+$minRangeDisplay = $formatIndianDateTime($minRange);
+$maxRangeDisplay = $formatIndianDateTime($maxRange);
 ?>
 
-<p class="mb-2"><strong>Date Range:</strong> <?= esc($minRange) ?> to <?= esc($maxRange) ?></p>
+<p class="mb-2"><strong>Date Range:</strong> <?= esc($minRangeDisplay) ?> to <?= esc($maxRangeDisplay) ?></p>
 
 <?php if (empty($rows)) : ?>
     <div class="text-muted">No records found for the selected filters.</div>

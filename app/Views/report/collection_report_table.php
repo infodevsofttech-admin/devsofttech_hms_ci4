@@ -5,9 +5,26 @@ $maxRange = $max_range ?? '';
 $totalCr = (float) ($total_cr ?? 0);
 $totalDr = (float) ($total_dr ?? 0);
 $netTotal = (float) ($net_total ?? 0);
+
+$formatIndianDateTime = static function ($value): string {
+    $value = trim((string) $value);
+    if ($value === '') {
+        return '';
+    }
+
+    $timestamp = strtotime($value);
+    if ($timestamp === false) {
+        return $value;
+    }
+
+    return date('d-m-Y H:i:s', $timestamp);
+};
+
+$minRangeDisplay = $formatIndianDateTime($minRange);
+$maxRangeDisplay = $formatIndianDateTime($maxRange);
 ?>
 
-<p class="mb-2">Date(YYYY-MM-DD h:m) between <?= esc($minRange) ?> and <?= esc($maxRange) ?></p>
+<p class="mb-2"><strong>Date Range:</strong> <?= esc($minRangeDisplay) ?> to <?= esc($maxRangeDisplay) ?></p>
 
 <?php if (empty($rows)) : ?>
     <div class="text-muted">No records found for the selected filters.</div>

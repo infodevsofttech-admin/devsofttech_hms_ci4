@@ -3,10 +3,27 @@ $rows = $rows ?? [];
 $minRange = $min_range ?? '';
 $maxRange = $max_range ?? '';
 $uhidFilter = trim((string) ($uhid_filter ?? ''));
+
+$formatIndianDateTime = static function ($value): string {
+    $value = trim((string) $value);
+    if ($value === '') {
+        return '';
+    }
+
+    $timestamp = strtotime($value);
+    if ($timestamp === false) {
+        return $value;
+    }
+
+    return date('d-m-Y H:i:s', $timestamp);
+};
+
+$minRangeDisplay = $formatIndianDateTime($minRange);
+$maxRangeDisplay = $formatIndianDateTime($maxRange);
 ?>
 
 <div class="mb-3">
-    <p><strong>Date Range:</strong> <?= esc($minRange) ?> to <?= esc($maxRange) ?></p>
+    <p><strong>Date Range:</strong> <?= esc($minRangeDisplay) ?> to <?= esc($maxRangeDisplay) ?></p>
     <?php if ($uhidFilter !== '') : ?>
         <p><strong>UHID Filter:</strong> <?= esc($uhidFilter) ?></p>
     <?php endif; ?>
