@@ -206,6 +206,12 @@ $hasTemplateAccess = $canPathology || $canUltrasound || $canXray || $canCt || $c
                     <span>IPD Discharge Template</span>
                 </a>
             </div>
+            <div class="col-6 col-md-2 col-lg-2">
+                <a class="admin-tile" href="javascript:load_form_div('<?= base_url('setting/template/ipd_document_templates') ?>','maindiv','IPD Document Master');">
+                    <span class="tile-icon"><i class="bi bi-file-earmark-richtext"></i></span>
+                    <span>IPD Document Master</span>
+                </a>
+            </div>
         <?php } ?>
 
         <?php if ($canDiagnosisPrintTemplate) { ?>

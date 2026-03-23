@@ -21,6 +21,64 @@ class Invoice extends BaseController
         return view('Invoice/payment_request_list');
     }
 
+    public function opdlist()
+    {
+        $search = trim((string) $this->request->getGet('q'));
+
+        $builder = $this->db->table('opd_master o')
+            ->select('o.opd_id, o.opd_code, o.P_name, o.p_id, o.doc_name, o.apointment_date, o.payment_status, o.payment_mode, o.insurance_id')
+            ->select('p.p_code, p.mphone1, p.email1')
+            ->join('patient_master p', 'p.id = o.p_id', 'left')
+            ->orderBy('o.opd_id', 'DESC')
+            ->limit(200);
+
+        if ($search !== '') {
+            $builder->groupStart()
+                ->like('o.opd_code', $search, 'both')
+                ->orLike('p.p_code', $search, 'both')
+                ->orLike('o.P_name', $search, 'both')
+                ->orLike('p.mphone1', $search, 'both')
+                ->orLike('p.email1', $search, 'both')
+                ->groupEnd();
+        }
+
+        $rows = $builder->get()->getResult();
+
+        return view('Invoice/opd_invoice_list', [
+            'search' => $search,
+            'rows' => $rows,
+        ]);
+    }
+
+    public function chargeslist()
+    {
+        $search = trim((string) $this->request->getGet('q'));
+
+        $builder = $this->db->table('invoice_master i')
+            ->select('i.id as inv_id, i.invoice_code, i.inv_date, i.attach_id, i.insurance_id, i.invoice_status, i.payment_mode, i.payment_part_balance, i.net_amount, i.refer_by_other')
+            ->select('p.p_code, p.p_fname, p.mphone1, p.email1')
+            ->join('patient_master p', 'p.id = i.attach_id and i.attach_type=0', 'left')
+            ->orderBy('i.id', 'DESC')
+            ->limit(200);
+
+        if ($search !== '') {
+            $builder->groupStart()
+                ->like('i.invoice_code', $search, 'both')
+                ->orLike('p.p_code', $search, 'both')
+                ->orLike('p.p_fname', $search, 'both')
+                ->orLike('p.mphone1', $search, 'both')
+                ->orLike('p.email1', $search, 'both')
+                ->groupEnd();
+        }
+
+        $rows = $builder->get()->getResult();
+
+        return view('Invoice/charges_invoice_list', [
+            'search' => $search,
+            'rows' => $rows,
+        ]);
+    }
+
     public function getRequestTable()
     {
         if (! $this->request->isAJAX()) {

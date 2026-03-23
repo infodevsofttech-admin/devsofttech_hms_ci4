@@ -294,6 +294,10 @@ $routes->get('IpdNew/addipd/(:num)', 'Billing\\Ipd::legacyAddIpd/$1');
 $routes->post('IpdNew/AddNew', 'Billing\\Ipd::legacyAddNew');
 $routes->post('IpdNew/addnew', 'Billing\\Ipd::legacyAddNew');
 $routes->get('IpdNew/ipd_panel/(:num)', 'Billing\\Ipd::panel/$1');
+$routes->get('IpdNew/show_ipd_form/(:num)', 'Billing\\Ipd::showIpdForm/$1/1');
+$routes->get('IpdNew/show_ipd_form/(:num)/(:num)', 'Billing\\Ipd::showIpdForm/$1/$2');
+$routes->get('ipdNew/show_ipd_form/(:num)', 'Billing\\Ipd::showIpdForm/$1/1');
+$routes->get('ipdNew/show_ipd_form/(:num)/(:num)', 'Billing\\Ipd::showIpdForm/$1/$2');
 
 // Legacy compatibility: old discharge summary links should open current discharge tab.
 $routes->match(['get', 'post'], 'Ipd_discharge/ipd_select/(:num)', 'Ipd_discharge::ipd_select/$1');
@@ -346,6 +350,8 @@ $routes->group('billing', function($routes) {
     $routes->post('ipd/panel/(:num)/discharge/charge/(:num)', 'Billing\\Ipd::updateDischargeCharge/$1/$2');
     $routes->get('ipd/bill-print/(:num)', 'Billing\\Ipd::billPrint/$1');
     $routes->get('ipd/bill-print/(:num)/(:num)', 'Billing\\Ipd::billPrint/$1/$2');
+    $routes->get('ipd/show-form/(:num)', 'Billing\\Ipd::showIpdForm/$1/1');
+    $routes->get('ipd/show-form/(:num)/(:num)', 'Billing\\Ipd::showIpdForm/$1/$2');
     $routes->post('ipd/charge/add/(:num)', 'Billing\\Ipd::addIpdCharge/$1');
     $routes->post('ipd/charge/update/(:num)', 'Billing\\Ipd::updateIpdCharge/$1');
     $routes->post('ipd/charge/delete/(:num)', 'Billing\\Ipd::deleteIpdCharge/$1');
@@ -457,6 +463,7 @@ $routes->post('Opd/showfee', 'Opd::showfee');
 $routes->post('Opd/confirm_opd', 'Opd::confirm_opd');
 $routes->post('Opd/confirm_payment', 'Opd::confirm_payment');
 $routes->post('Opd/opd_discount_update/(:num)', 'Opd::opd_discount_update/$1');
+$routes->post('Opd/opd_cancel/(:num)', 'Opd::opd_cancel/$1');
 $routes->match(['get', 'post'], 'Opd/opd_load_doc/(:num)', 'Opd::opd_load_doc/$1');
 $routes->match(['get', 'post'], 'Opd/opd_file_last_list', 'Opd::opd_file_last_list');
 $routes->match(['get', 'post'], 'Opd/opd_file_last_list/(:num)', 'Opd::opd_file_last_list/$1');
@@ -599,6 +606,8 @@ $routes->get('Opd_prescription/show_medical_item/(:num)', 'Opd_prescription::sho
 $routes->get('Opd_prescription/prescribed_dose/(:num)/(:num)', 'Opd_prescription::prescribed_dose/$1/$2');
 
 $routes->get('Invoice/list_req_payment', 'Invoice::list_req_payment');
+$routes->get('Invoice/opdlist', 'Invoice::opdlist');
+$routes->get('Invoice/chargeslist', 'Invoice::chargeslist');
 $routes->post('Invoice/getRequestTable', 'Invoice::getRequestTable');
 $routes->get('Invoice/payment_form/(:num)', 'Invoice::payment_form/$1');
 $routes->post('Invoice/req_payment_process', 'Invoice::req_payment_process');
@@ -633,6 +642,8 @@ $routes->post('Lab_Admin/test_item_search', 'Setting\Template::test_item_search'
 
 $routes->match(['get', 'post'], 'setting/template/discharge_templates', 'Setting\Template::discharge_templates');
 $routes->get('setting/template/discharge_templates/delete/(:num)', 'Setting\Template::discharge_template_delete/$1');
+$routes->match(['get', 'post'], 'setting/template/ipd_document_templates', 'Setting\Template::ipd_document_templates');
+$routes->get('setting/template/ipd_document_templates/delete/(:num)', 'Setting\Template::ipd_document_template_delete/$1');
 $routes->match(['get', 'post'], 'setting/template/diagnosis_print_settings', 'Setting\Template::diagnosis_print_settings');
 $routes->match(['get', 'post'], 'setting/template/diagnosis_print_settings/(:num)', 'Setting\Template::diagnosis_print_settings/$1');
 $routes->match(['get', 'post'], 'setting/template/document_print_settings', 'Setting\Template::document_print_settings');
@@ -901,6 +912,13 @@ $routes->group('setting', static function($routes) {
     $routes->post('admin/reffer/types/update', 'Setting\\Reffer::updateType');
     $routes->post('admin/reffer/types/delete', 'Setting\\Reffer::deleteType');
     $routes->get('admin/bed-management', 'Setting\\BedManagement::index');
+    $routes->get('admin/departments', 'Setting\\BedManagement::departments');
+    $routes->post('admin/departments/save', 'Setting\\BedManagement::saveDepartment');
+    $routes->post('admin/departments/delete', 'Setting\\BedManagement::deleteDepartment');
+    $routes->get('admin/wards', 'Setting\\BedManagement::wards');
+    $routes->get('admin/bed-status', 'Setting\\BedManagement::bedStatus');
+    $routes->post('admin/wards/save', 'Setting\\BedManagement::saveWard');
+    $routes->post('admin/wards/delete', 'Setting\\BedManagement::deleteWard');
     $routes->get('admin/bed-categories', 'Setting\\BedManagement::categories');
     $routes->post('admin/bed-categories/save', 'Setting\\BedManagement::saveCategory');
     $routes->post('admin/bed-categories/delete', 'Setting\\BedManagement::deleteCategory');

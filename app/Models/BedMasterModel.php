@@ -6,8 +6,9 @@ use CodeIgniter\Model;
 
 class BedMasterModel extends Model
 {
-    protected $table = 'bed_master';
+    protected $table      = 'bed_master';
     protected $primaryKey = 'id';
+    protected $returnType = 'object';
     protected $allowedFields = [
         'bed_code',
         'bed_number',

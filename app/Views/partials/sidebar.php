@@ -107,6 +107,12 @@ if (! $canDiagnosis && $user && method_exists($user, 'inGroup')) {
             <span>Dashboard</span>
         </a>
     </li>
+    <li class="nav-item">
+        <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('setting/admin/bed-status') ?>','Bed Status');">
+            <i class="bi bi-geo-alt"></i>
+            <span>Bed Status</span>
+        </a>
+    </li>
     <?php if ($canBilling) { ?>
         
     <li class="nav-heading">Billing</li>
@@ -114,6 +120,18 @@ if (! $canDiagnosis && $user && method_exists($user, 'inGroup')) {
         <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('/billing/patient') ?>','Patient List')">
             <i class="bi bi-person-lines-fill"></i>
             <span>Patient List</span>
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Invoice/opdlist') ?>','OPD Invoice')">
+            <i class="bi bi-receipt"></i>
+            <span>OPD Invoice</span>
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Invoice/chargeslist') ?>','Charges Invoice')">
+            <i class="bi bi-journal-text"></i>
+            <span>Charges Invoice</span>
         </a>
     </li>
         <li class="nav-item">

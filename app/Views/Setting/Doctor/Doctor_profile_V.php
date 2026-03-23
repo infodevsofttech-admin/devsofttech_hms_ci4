@@ -21,6 +21,12 @@ if (!empty($data) && !empty($data[0])) {
     }
 }
 ?>
+<?php
+$doctorDobValue = '';
+if (!empty($data) && !empty($data[0]) && !empty($data[0]->dob)) {
+    $doctorDobValue = trim((string) $data[0]->dob);
+}
+?>
 <?php if (! empty($data)) : ?>
     <div class="card">
         <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
@@ -77,7 +83,7 @@ if (!empty($data) && !empty($data[0])) {
                     </div>
                     <div class="col-md-3">
                         <label class="form-label">Date of Birth</label>
-                        <input class="form-control datepicker" name="datepicker_dob" value="<?= esc(MysqlDate_to_str($data[0]->dob ?? '')) ?>" type="text" />
+                        <input class="form-control" name="datepicker_dob" value="<?= esc($doctorDobValue) ?>" type="date" />
                     </div>
                 </div>
                 <div class="row g-3 mt-1">

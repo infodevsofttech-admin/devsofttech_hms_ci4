@@ -48,6 +48,341 @@ class BedManagement extends BaseController
         return $builder->countAllResults() > 0;
     }
 
+    private function wardCodeExists(string $wardCode, int $excludeId = 0): bool
+    {
+        $builder = $this->db->table('ward_master')->where('ward_code', $wardCode);
+        if ($excludeId > 0) {
+            $builder->where('id !=', $excludeId);
+        }
+
+        return $builder->countAllResults() > 0;
+    }
+
+    public function wards(): string
+    {
+        $departments = [(object) [
+            'iId' => 0,
+            'vName' => 'All Department',
+        ]];
+
+        if ($this->db->tableExists('hc_department')) {
+            $departmentRows = $this->db->table('hc_department')
+                ->orderBy('vName', 'ASC')
+                ->get()
+                ->getResult();
+
+            $departments = array_merge($departments, $departmentRows);
+        }
+
+        $wardBuilder = $this->db->table('ward_master w')
+            ->orderBy('w.ward_name', 'ASC');
+
+        if ($this->db->tableExists('hc_department')) {
+            $wardBuilder->select('w.*, COALESCE(d.vName, "All Department") AS department_name', false)
+                ->join('hc_department d', 'd.iId = w.department_id', 'left');
+        } else {
+            $wardBuilder->select('w.*, "All Department" AS department_name', false);
+        }
+
+        $wardRows = $wardBuilder->get()->getResult();
+
+        return view('Setting/Bed/ward_list', [
+            'wards' => $wardRows,
+            'departments' => $departments,
+        ]);
+    }
+
+    public function saveWard()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $id = (int) $this->request->getPost('id');
+        $wardCode = trim((string) $this->request->getPost('ward_code'));
+        $wardName = trim((string) $this->request->getPost('ward_name'));
+        $departmentIdRaw = $this->request->getPost('department_id');
+        $departmentId = $departmentIdRaw === null || $departmentIdRaw === '' ? 0 : (int) $departmentIdRaw;
+
+        if ($wardCode === '' || $wardName === '') {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Ward code and ward name are required.']);
+        }
+
+        if ($this->wardCodeExists($wardCode, $id)) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Ward code already exists.']);
+        }
+
+        if ($departmentId > 0 && $this->db->tableExists('hc_department')) {
+            $departmentExists = $this->db->table('hc_department')
+                ->where('iId', $departmentId)
+                ->countAllResults();
+
+            if ($departmentExists <= 0) {
+                return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid department selected.']);
+            }
+        }
+
+        $user = auth()->user();
+        $data = [
+            'ward_code' => $wardCode,
+            'ward_name' => $wardName,
+            'department_id' => $departmentId,
+            'building_id' => $this->request->getPost('building_id') ?: null,
+            'floor_number' => $this->request->getPost('floor_number') ?: null,
+            'ward_type' => $this->request->getPost('ward_type') ?: 'General',
+            'gender_type' => $this->request->getPost('gender_type') ?: 'unisex',
+            'ward_category' => $this->request->getPost('ward_category') ?: 'adult',
+            'total_capacity' => $this->request->getPost('total_capacity') ?: 0,
+            'nurse_station_location' => $this->request->getPost('nurse_station_location'),
+            'has_oxygen' => $this->request->getPost('has_oxygen') ? 1 : 0,
+            'has_suction' => $this->request->getPost('has_suction') ? 1 : 0,
+            'has_monitor' => $this->request->getPost('has_monitor') ? 1 : 0,
+            'status' => $this->request->getPost('status') ?: 'active',
+            'remarks' => $this->request->getPost('remarks'),
+        ];
+
+        $model = new WardModel();
+        if ($id > 0) {
+            $updated = $model->update($id, $data);
+
+            return $this->response->setJSON([
+                'update' => $updated ? 1 : 0,
+                'showcontent' => $updated ? 'Data Saved successfully' : 'Please check',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $data['created_by'] = $user->id ?? null;
+        $insertId = $model->insert($data);
+
+        return $this->response->setJSON([
+            'insertid' => $insertId,
+            'error_text' => $insertId > 0 ? '' : 'Please check',
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
+    public function deleteWard()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $id = (int) $this->request->getPost('id');
+        if ($id <= 0) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid ward ID']);
+        }
+
+        $bedCount = $this->db->table('bed_master')
+            ->where('ward_id', $id)
+            ->countAllResults();
+
+        if ($bedCount > 0) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => $bedCount . ' bed(s) are mapped with this ward. Cannot delete.',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $model = new WardModel();
+        $deleted = $model->delete($id);
+
+        return $this->response->setJSON([
+            'update' => $deleted ? 1 : 0,
+            'error_text' => $deleted ? '' : 'Delete failed. Please try again.',
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
+    public function departments(): string
+    {
+        if (! $this->db->tableExists('hc_department')) {
+            return view('Setting/Bed/department_list', [
+                'departments' => [],
+                'tableMissing' => true,
+            ]);
+        }
+
+        $departmentRows = $this->db->table('hc_department')
+            ->orderBy('vName', 'ASC')
+            ->get()
+            ->getResult();
+
+        return view('Setting/Bed/department_list', [
+            'departments' => $departmentRows,
+            'tableMissing' => false,
+        ]);
+    }
+
+    public function saveDepartment()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        if (! $this->db->tableExists('hc_department')) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Department table not found.']);
+        }
+
+        $id = (int) $this->request->getPost('id');
+        $name = trim((string) $this->request->getPost('department_name'));
+        $typeId = $this->request->getPost('hc_type_id');
+        $typeId = $typeId === null || $typeId === '' ? null : (int) $typeId;
+
+        if ($name === '') {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Department name is required.']);
+        }
+
+        $duplicate = $this->db->table('hc_department')
+            ->where('vName', $name);
+        if ($id > 0) {
+            $duplicate->where('iId !=', $id);
+        }
+
+        if ($duplicate->countAllResults() > 0) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Department name already exists.']);
+        }
+
+        $payload = [
+            'vName' => $name,
+            'hc_type_id' => $typeId,
+        ];
+
+        if ($id > 0) {
+            $updated = $this->db->table('hc_department')
+                ->where('iId', $id)
+                ->update($payload);
+
+            return $this->response->setJSON([
+                'update' => $updated ? 1 : 0,
+                'showcontent' => $updated ? 'Data Saved successfully' : 'Please check',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $inserted = $this->db->table('hc_department')->insert($payload);
+        $insertId = $inserted ? (int) $this->db->insertID() : 0;
+
+        return $this->response->setJSON([
+            'insertid' => $insertId,
+            'error_text' => $insertId > 0 ? '' : 'Please check',
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
+    public function deleteDepartment()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        if (! $this->db->tableExists('hc_department')) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Department table not found.']);
+        }
+
+        $id = (int) $this->request->getPost('id');
+        if ($id <= 0) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid department ID']);
+        }
+
+        $wardCount = $this->db->table('ward_master')
+            ->where('department_id', $id)
+            ->countAllResults();
+
+        if ($wardCount > 0) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => $wardCount . ' ward(s) use this department. Cannot delete.',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $this->db->table('hc_department')->where('iId', $id)->delete();
+        $deleted = $this->db->affectedRows() > 0;
+
+        return $this->response->setJSON([
+            'update' => $deleted ? 1 : 0,
+            'error_text' => $deleted ? '' : 'Delete failed. Please try again.',
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
+    public function bedStatus(): string
+    {
+        $departments = [(object) ['iId' => 0, 'vName' => 'All Department']];
+        if ($this->db->tableExists('hc_department')) {
+            $departments = array_merge(
+                $departments,
+                $this->db->table('hc_department')->orderBy('vName', 'ASC')->get()->getResult()
+            );
+        }
+
+        $wards = $this->db->table('ward_master')
+            ->select('id, ward_name, department_id')
+            ->orderBy('ward_name', 'ASC')
+            ->get()
+            ->getResult();
+
+        $builder = $this->db->table('ipd_master i')
+            ->select('i.id as ipd_id, i.ipd_code, i.register_date, i.p_id')
+            ->where('i.ipd_status', 0)
+            ->orderBy('i.id', 'DESC');
+
+        if ($this->db->tableExists('patient_master')) {
+            $builder->select('p.p_code, p.p_fname, p.p_lname, p.mphone1, p.mphone2')
+                ->join('patient_master p', 'p.id = i.p_id', 'left');
+        }
+
+        if ($this->db->tableExists('bed_assignment_history')) {
+            $builder->join(
+                '(select max(id) as id, ipd_id from bed_assignment_history group by ipd_id) bah_latest',
+                'bah_latest.ipd_id = i.id',
+                'left',
+                false
+            )->join('bed_assignment_history bah', 'bah.id = bah_latest.id', 'left');
+
+            if ($this->db->tableExists('bed_master')) {
+                $builder->join('bed_master b', 'b.id = bah.bed_id', 'left');
+            }
+            if ($this->db->tableExists('ward_master')) {
+                $builder->join('ward_master w', 'w.id = bah.ward_id', 'left');
+            }
+        } else {
+            if ($this->db->tableExists('bed_master')) {
+                $builder->join('bed_master b', 'b.current_ipd_id = i.id', 'left');
+            }
+            if ($this->db->tableExists('ward_master')) {
+                $builder->join('ward_master w', 'w.id = b.ward_id', 'left');
+            }
+        }
+
+        $builder->select('b.bed_number, b.bed_code, w.id as ward_id, w.ward_name, w.department_id');
+
+        if ($this->db->tableExists('hc_department')) {
+            $builder->select('d.vName as department_name')
+                ->join('hc_department d', 'd.iId = w.department_id', 'left');
+        } else {
+            $builder->select('"All Department" as department_name', false);
+        }
+
+        $rows = $builder->get()->getResult();
+
+        return view('Setting/Bed/bed_status_list', [
+            'rows' => $rows,
+            'departments' => $departments,
+            'wards' => $wards,
+        ]);
+    }
+
     public function categories(): string
     {
         $model = new BedCategoryModel();
@@ -72,34 +407,35 @@ class BedManagement extends BaseController
         }
 
         $data = [
-            'category_code' => $code,
-            'category_name' => $name,
-            'category_type' => $this->request->getPost('category_type'),
-            'base_charge_per_day' => $this->request->getPost('base_charge_per_day') ?? 0,
+            'category_code'        => $code,
+            'category_name'        => $name,
+            'category_type'        => $this->request->getPost('category_type'),
+            'base_charge_per_day'  => $this->request->getPost('base_charge_per_day') ?? 0,
             'nursing_charge_per_day' => $this->request->getPost('nursing_charge_per_day') ?? 0,
-            'amenities' => $this->request->getPost('amenities'),
-            'description' => $this->request->getPost('description'),
-            'status' => $this->request->getPost('status') ?? 'active',
+            'amenities'            => $this->request->getPost('amenities'),
+            'description'          => $this->request->getPost('description'),
+            'status'               => $this->request->getPost('status') ?? 'active',
         ];
 
         $model = new BedCategoryModel();
         if ($id > 0) {
             $updated = $model->update($id, $data);
+
             return $this->response->setJSON([
-                'update' => $updated ? 1 : 0,
+                'update'      => $updated ? 1 : 0,
                 'showcontent' => $updated ? 'Data Saved successfully' : 'Please check',
-                'csrfName' => csrf_token(),
-                'csrfHash' => csrf_hash(),
+                'csrfName'    => csrf_token(),
+                'csrfHash'    => csrf_hash(),
             ]);
         }
 
         $insertId = $model->insert($data);
 
         return $this->response->setJSON([
-            'insertid' => $insertId,
+            'insertid'   => $insertId,
             'error_text' => $insertId > 0 ? '' : 'Please check',
-            'csrfName' => csrf_token(),
-            'csrfHash' => csrf_hash(),
+            'csrfName'   => csrf_token(),
+            'csrfHash'   => csrf_hash(),
         ]);
     }
 
@@ -114,26 +450,41 @@ class BedManagement extends BaseController
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid category ID']);
         }
 
-        $model = new BedCategoryModel();
+        // Block deletion if any beds in this category are currently occupied by IPD patients
+        $inUseCount = $this->db->table('bed_master')
+            ->where('bed_category_id', $id)
+            ->where('current_ipd_id IS NOT NULL', null, false)
+            ->countAllResults();
+
+        if ($inUseCount > 0) {
+            return $this->response->setJSON([
+                'update'     => 0,
+                'error_text' => "{$inUseCount} bed(s) in this category are currently occupied by IPD patient(s). Cannot delete.",
+                'csrfName'   => csrf_token(),
+                'csrfHash'   => csrf_hash(),
+            ]);
+        }
+
+        $model   = new BedCategoryModel();
         $deleted = $model->delete($id);
 
         return $this->response->setJSON([
-            'update' => $deleted ? 1 : 0,
-            'error_text' => $deleted ? '' : 'Please check',
-            'csrfName' => csrf_token(),
-            'csrfHash' => csrf_hash(),
+            'update'     => $deleted ? 1 : 0,
+            'error_text' => $deleted ? '' : 'Delete failed. Please try again.',
+            'csrfName'   => csrf_token(),
+            'csrfHash'   => csrf_hash(),
         ]);
     }
 
     public function beds(): string
     {
-        $bedModel = new BedMasterModel();
-        $wardModel = new WardModel();
+        $bedModel      = new BedMasterModel();
+        $wardModel     = new WardModel();
         $categoryModel = new BedCategoryModel();
 
         return view('Setting/Bed/bed_list', [
-            'beds' => $bedModel->getAllWithRelations(),
-            'wards' => $wardModel->getAllActive(),
+            'beds'       => $bedModel->getAllWithRelations(),
+            'wards'      => $wardModel->getAllActive(),
             'categories' => $categoryModel->getAll(),
         ]);
     }
@@ -144,10 +495,10 @@ class BedManagement extends BaseController
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
         }
 
-        $id = (int) $this->request->getPost('id');
-        $bedCode = trim((string) $this->request->getPost('bed_code'));
-        $bedNumber = trim((string) $this->request->getPost('bed_number'));
-        $wardId = (int) $this->request->getPost('ward_id');
+        $id         = (int) $this->request->getPost('id');
+        $bedCode    = trim((string) $this->request->getPost('bed_code'));
+        $bedNumber  = trim((string) $this->request->getPost('bed_number'));
+        $wardId     = (int) $this->request->getPost('ward_id');
         $categoryId = (int) $this->request->getPost('bed_category_id');
 
         if ($bedCode === '' || $bedNumber === '' || $wardId <= 0 || $categoryId <= 0) {
@@ -163,41 +514,42 @@ class BedManagement extends BaseController
         }
 
         $data = [
-            'bed_code' => $bedCode,
-            'bed_number' => $bedNumber,
-            'ward_id' => $wardId,
-            'bed_category_id' => $categoryId,
-            'bed_status' => $this->request->getPost('bed_status') ?? 'available',
-            'bed_position' => $this->request->getPost('bed_position'),
-            'has_oxygen' => $this->request->getPost('has_oxygen') ? 1 : 0,
-            'has_suction' => $this->request->getPost('has_suction') ? 1 : 0,
-            'has_monitor' => $this->request->getPost('has_monitor') ? 1 : 0,
-            'has_ventilator' => $this->request->getPost('has_ventilator') ? 1 : 0,
-            'is_isolation_bed' => $this->request->getPost('is_isolation_bed') ? 1 : 0,
-            'base_charge_override' => $this->request->getPost('base_charge_override') ?: null,
+            'bed_code'              => $bedCode,
+            'bed_number'            => $bedNumber,
+            'ward_id'               => $wardId,
+            'bed_category_id'       => $categoryId,
+            'bed_status'            => $this->request->getPost('bed_status') ?? 'available',
+            'bed_position'          => $this->request->getPost('bed_position'),
+            'has_oxygen'            => $this->request->getPost('has_oxygen') ? 1 : 0,
+            'has_suction'           => $this->request->getPost('has_suction') ? 1 : 0,
+            'has_monitor'           => $this->request->getPost('has_monitor') ? 1 : 0,
+            'has_ventilator'        => $this->request->getPost('has_ventilator') ? 1 : 0,
+            'is_isolation_bed'      => $this->request->getPost('is_isolation_bed') ? 1 : 0,
+            'base_charge_override'  => $this->request->getPost('base_charge_override') ?: null,
             'nursing_charge_override' => $this->request->getPost('nursing_charge_override') ?: null,
-            'status' => $this->request->getPost('status') ?? 'active',
-            'remarks' => $this->request->getPost('remarks'),
+            'status'                => $this->request->getPost('status') ?? 'active',
+            'remarks'               => $this->request->getPost('remarks'),
         ];
 
         $model = new BedMasterModel();
         if ($id > 0) {
             $updated = $model->update($id, $data);
+
             return $this->response->setJSON([
-                'update' => $updated ? 1 : 0,
+                'update'      => $updated ? 1 : 0,
                 'showcontent' => $updated ? 'Data Saved successfully' : 'Please check',
-                'csrfName' => csrf_token(),
-                'csrfHash' => csrf_hash(),
+                'csrfName'    => csrf_token(),
+                'csrfHash'    => csrf_hash(),
             ]);
         }
 
         $insertId = $model->insert($data);
 
         return $this->response->setJSON([
-            'insertid' => $insertId,
+            'insertid'   => $insertId,
             'error_text' => $insertId > 0 ? '' : 'Please check',
-            'csrfName' => csrf_token(),
-            'csrfHash' => csrf_hash(),
+            'csrfName'   => csrf_token(),
+            'csrfHash'   => csrf_hash(),
         ]);
     }
 
@@ -212,20 +564,20 @@ class BedManagement extends BaseController
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid bed ID']);
         }
 
-        $model = new BedMasterModel();
+        $model   = new BedMasterModel();
         $deleted = $model->delete($id);
 
         return $this->response->setJSON([
-            'update' => $deleted ? 1 : 0,
+            'update'     => $deleted ? 1 : 0,
             'error_text' => $deleted ? '' : 'Please check',
-            'csrfName' => csrf_token(),
-            'csrfHash' => csrf_hash(),
+            'csrfName'   => csrf_token(),
+            'csrfHash'   => csrf_hash(),
         ]);
     }
 
     public function maintenance(): string
     {
-        $bedModel = new BedMasterModel();
+        $bedModel         = new BedMasterModel();
         $maintenanceModel = new BedMaintenanceLogModel();
 
         return view('Setting/Bed/maintenance_list', [
@@ -240,45 +592,46 @@ class BedManagement extends BaseController
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
         }
 
-        $id = (int) $this->request->getPost('id');
+        $id    = (int) $this->request->getPost('id');
         $bedId = (int) $this->request->getPost('bed_id');
-        $type = trim((string) $this->request->getPost('maintenance_type'));
+        $type  = trim((string) $this->request->getPost('maintenance_type'));
 
         if ($bedId <= 0 || $type === '') {
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Bed and maintenance type are required.']);
         }
 
         $data = [
-            'bed_id' => $bedId,
-            'maintenance_type' => $type,
-            'scheduled_date' => $this->request->getPost('scheduled_date') ?: null,
-            'completed_date' => $this->normalizeDateTime($this->request->getPost('completed_date')),
-            'performed_by' => $this->request->getPost('performed_by'),
-            'issue_description' => $this->request->getPost('issue_description'),
-            'action_taken' => $this->request->getPost('action_taken'),
+            'bed_id'               => $bedId,
+            'maintenance_type'     => $type,
+            'scheduled_date'       => $this->request->getPost('scheduled_date') ?: null,
+            'completed_date'       => $this->normalizeDateTime($this->request->getPost('completed_date')),
+            'performed_by'         => $this->request->getPost('performed_by'),
+            'issue_description'    => $this->request->getPost('issue_description'),
+            'action_taken'         => $this->request->getPost('action_taken'),
             'next_maintenance_date' => $this->request->getPost('next_maintenance_date') ?: null,
-            'cost' => $this->request->getPost('cost') ?: 0,
-            'status' => $this->request->getPost('status') ?? 'pending',
+            'cost'                 => $this->request->getPost('cost') ?: 0,
+            'status'               => $this->request->getPost('status') ?? 'pending',
         ];
 
         $model = new BedMaintenanceLogModel();
         if ($id > 0) {
             $updated = $model->update($id, $data);
+
             return $this->response->setJSON([
-                'update' => $updated ? 1 : 0,
+                'update'      => $updated ? 1 : 0,
                 'showcontent' => $updated ? 'Data Saved successfully' : 'Please check',
-                'csrfName' => csrf_token(),
-                'csrfHash' => csrf_hash(),
+                'csrfName'    => csrf_token(),
+                'csrfHash'    => csrf_hash(),
             ]);
         }
 
         $insertId = $model->insert($data);
 
         return $this->response->setJSON([
-            'insertid' => $insertId,
+            'insertid'   => $insertId,
             'error_text' => $insertId > 0 ? '' : 'Please check',
-            'csrfName' => csrf_token(),
-            'csrfHash' => csrf_hash(),
+            'csrfName'   => csrf_token(),
+            'csrfHash'   => csrf_hash(),
         ]);
     }
 
@@ -293,27 +646,27 @@ class BedManagement extends BaseController
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid maintenance ID']);
         }
 
-        $model = new BedMaintenanceLogModel();
+        $model   = new BedMaintenanceLogModel();
         $deleted = $model->delete($id);
 
         return $this->response->setJSON([
-            'update' => $deleted ? 1 : 0,
+            'update'     => $deleted ? 1 : 0,
             'error_text' => $deleted ? '' : 'Please check',
-            'csrfName' => csrf_token(),
-            'csrfHash' => csrf_hash(),
+            'csrfName'   => csrf_token(),
+            'csrfHash'   => csrf_hash(),
         ]);
     }
 
     public function assignmentHistory(): string
     {
-        $model = new BedAssignmentHistoryModel();
-        $bedModel = new BedMasterModel();
+        $model     = new BedAssignmentHistoryModel();
+        $bedModel  = new BedMasterModel();
         $wardModel = new WardModel();
 
         return view('Setting/Bed/assignment_history', [
             'assignments' => $model->getAllWithRelations(),
-            'beds' => $bedModel->getAllWithRelations(),
-            'wards' => $wardModel->getAllActive(),
+            'beds'        => $bedModel->getAllWithRelations(),
+            'wards'       => $wardModel->getAllActive(),
         ]);
     }
 
@@ -323,10 +676,10 @@ class BedManagement extends BaseController
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
         }
 
-        $id = (int) $this->request->getPost('id');
-        $bedId = (int) $this->request->getPost('bed_id');
-        $wardId = (int) $this->request->getPost('ward_id');
-        $type = trim((string) $this->request->getPost('assignment_type'));
+        $id           = (int) $this->request->getPost('id');
+        $bedId        = (int) $this->request->getPost('bed_id');
+        $wardId       = (int) $this->request->getPost('ward_id');
+        $type         = trim((string) $this->request->getPost('assignment_type'));
         $assignedDate = $this->normalizeDateTime($this->request->getPost('assigned_date'));
 
         if ($bedId <= 0 || $wardId <= 0 || $type === '' || $assignedDate === null) {
@@ -334,39 +687,40 @@ class BedManagement extends BaseController
         }
 
         $data = [
-            'ipd_id' => $this->request->getPost('ipd_id') ?: null,
-            'bed_id' => $bedId,
-            'assignment_type' => $type,
-            'assigned_date' => $assignedDate,
-            'discharged_date' => $this->normalizeDateTime($this->request->getPost('discharged_date')),
-            'assigned_by' => $this->request->getPost('assigned_by') ?: null,
-            'transfer_reason' => $this->request->getPost('transfer_reason'),
+            'ipd_id'              => $this->request->getPost('ipd_id') ?: null,
+            'bed_id'              => $bedId,
+            'assignment_type'     => $type,
+            'assigned_date'       => $assignedDate,
+            'discharged_date'     => $this->normalizeDateTime($this->request->getPost('discharged_date')),
+            'assigned_by'         => $this->request->getPost('assigned_by') ?: null,
+            'transfer_reason'     => $this->request->getPost('transfer_reason'),
             'transfer_from_bed_id' => $this->request->getPost('transfer_from_bed_id') ?: null,
-            'remarks' => $this->request->getPost('remarks'),
-            'ward_id' => $wardId,
-            'released_date' => $this->normalizeDateTime($this->request->getPost('released_date')),
-            'total_days' => $this->request->getPost('total_days') ?: 0,
-            'release_reason' => $this->request->getPost('release_reason'),
+            'remarks'             => $this->request->getPost('remarks'),
+            'ward_id'             => $wardId,
+            'released_date'       => $this->normalizeDateTime($this->request->getPost('released_date')),
+            'total_days'          => $this->request->getPost('total_days') ?: 0,
+            'release_reason'      => $this->request->getPost('release_reason'),
         ];
 
         $model = new BedAssignmentHistoryModel();
         if ($id > 0) {
             $updated = $model->update($id, $data);
+
             return $this->response->setJSON([
-                'update' => $updated ? 1 : 0,
+                'update'      => $updated ? 1 : 0,
                 'showcontent' => $updated ? 'Data Saved successfully' : 'Please check',
-                'csrfName' => csrf_token(),
-                'csrfHash' => csrf_hash(),
+                'csrfName'    => csrf_token(),
+                'csrfHash'    => csrf_hash(),
             ]);
         }
 
         $insertId = $model->insert($data);
 
         return $this->response->setJSON([
-            'insertid' => $insertId,
+            'insertid'   => $insertId,
             'error_text' => $insertId > 0 ? '' : 'Please check',
-            'csrfName' => csrf_token(),
-            'csrfHash' => csrf_hash(),
+            'csrfName'   => csrf_token(),
+            'csrfHash'   => csrf_hash(),
         ]);
     }
 
@@ -381,14 +735,14 @@ class BedManagement extends BaseController
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid assignment ID']);
         }
 
-        $model = new BedAssignmentHistoryModel();
+        $model   = new BedAssignmentHistoryModel();
         $deleted = $model->delete($id);
 
         return $this->response->setJSON([
-            'update' => $deleted ? 1 : 0,
+            'update'     => $deleted ? 1 : 0,
             'error_text' => $deleted ? '' : 'Please check',
-            'csrfName' => csrf_token(),
-            'csrfHash' => csrf_hash(),
+            'csrfName'   => csrf_token(),
+            'csrfHash'   => csrf_hash(),
         ]);
     }
 }

@@ -180,6 +180,9 @@ if ($person) {
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab_discharge" data-url="<?= site_url('billing/ipd/panel/' . (int) ($ipd->id ?? 0) . '/tab/discharge-process') ?>" type="button" role="tab">Discharge Process</button>
                 </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab_documents" data-url="<?= site_url('billing/ipd/panel/' . (int) ($ipd->id ?? 0) . '/tab/documents') ?>" type="button" role="tab">Documents</button>
+                </li>
             </ul>
             <div class="tab-content">
                 <div class="tab-pane fade show active" id="tab_admission" role="tabpanel">
@@ -208,6 +211,9 @@ if ($person) {
                 </div>
                 <div class="tab-pane fade" id="tab_discharge" role="tabpanel">
                     <div class="ipd-tab-panel" id="tab_discharge_content">Loading...</div>
+                </div>
+                <div class="tab-pane fade" id="tab_documents" role="tabpanel">
+                    <div class="ipd-tab-panel" id="tab_documents_content">Loading...</div>
                 </div>
             </div>
         </div>

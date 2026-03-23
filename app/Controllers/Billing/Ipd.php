@@ -474,6 +474,13 @@ class Ipd extends BaseController
             return view('billing/ipd/panel_discharge', $panelData);
         }
 
+        if ($tab === 'documents') {
+            return view('billing/ipd/panel_documents', [
+                'ipd_id' => $ipdId,
+                'ipd_info' => $panelData['ipd_info'] ?? null,
+            ]);
+        }
+
         return view('billing/ipd/panel_placeholder', [
             'title' => ucwords(str_replace('-', ' ', $tab)),
         ]);
@@ -785,6 +792,67 @@ class Ipd extends BaseController
 
         $ipdCode = (string) ($data['ipd_info']->ipd_code ?? ('IPD-' . $ipdId));
         $fileName = 'IPD_Bill_' . preg_replace('/[^A-Za-z0-9_\-]/', '_', $ipdCode) . '_M' . $mode . '.pdf';
+
+        return $this->response
+            ->setHeader('Content-Type', 'application/pdf')
+            ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
+            ->setBody($mpdf->Output($fileName, 'S'));
+    }
+
+    public function showIpdForm(int $ipdId, int $formNo = 1)
+    {
+        $permission = $this->requireAnyPermission([
+            'billing.ipd.bill.print',
+            'billing.ipd.invoice',
+        ]);
+        if ($permission) {
+            return $permission;
+        }
+
+        $formMeta = $this->getIpdFormMeta($formNo);
+        if ($formMeta === null) {
+            return $this->response->setStatusCode(404)->setBody('Unsupported form ID');
+        }
+
+        $data = $this->buildIpdPrintableFormData($ipdId, $formNo);
+        if ($data === null) {
+            return $this->response->setStatusCode(404)->setBody('IPD not found');
+        }
+
+        $html = view('billing/ipd/ipd_form_print', $data);
+        $customTemplate = $this->getActiveIpdDocumentTemplate($formNo);
+        if ($customTemplate !== null) {
+            $html = $this->renderIpdDocumentTemplateHtml($customTemplate, $data);
+        }
+
+        $mpdfTempDir = WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'mpdf';
+        if (! is_dir($mpdfTempDir)) {
+            mkdir($mpdfTempDir, 0755, true);
+        }
+
+        $mpdfConfig = [
+            'tempDir' => $mpdfTempDir,
+            'margin_top' => 8,
+            'margin_bottom' => 8,
+            'margin_left' => 8,
+            'margin_right' => 8,
+        ];
+
+        if (in_array($formNo, [10, 11], true)) {
+            $mpdfConfig['format'] = $formNo === 10 ? [50.8, 152.4] : [50.8, 203.2];
+            $mpdfConfig['margin_top'] = 2;
+            $mpdfConfig['margin_bottom'] = 2;
+            $mpdfConfig['margin_left'] = 2;
+            $mpdfConfig['margin_right'] = 2;
+        } else {
+            $mpdfConfig['format'] = 'A4';
+        }
+
+        $mpdf = new Mpdf($mpdfConfig);
+        $mpdf->WriteHTML($html);
+
+        $ipdCode = (string) ($data['ipd_info']->ipd_code ?? ('IPD-' . $ipdId));
+        $fileName = 'IPD_Form_' . (int) $formNo . '_' . preg_replace('/[^A-Za-z0-9_\-]/', '_', $ipdCode) . '.pdf';
 
         return $this->response
             ->setHeader('Content-Type', 'application/pdf')
@@ -1773,6 +1841,157 @@ class Ipd extends BaseController
         }
 
         return [$start, $end];
+    }
+
+    private function getIpdFormMeta(int $formNo): ?array
+    {
+        $meta = [
+            1 => ['title' => 'Face Form'],
+            3 => ['title' => 'Self Declaration Form'],
+            5 => ['title' => 'Admission Assessment Form'],
+            8 => ['title' => 'Progress Notes and Doctor Order'],
+            9 => ['title' => 'Fluid In / Out'],
+            10 => ['title' => 'Sticker [2 x 6]'],
+            11 => ['title' => 'Sticker [2 x 8]'],
+        ];
+
+        return $meta[$formNo] ?? null;
+    }
+
+    private function buildIpdPrintableFormData(int $ipdId, int $formNo): ?array
+    {
+        $panelData = $this->ipdModel->getIpdPanelInfo($ipdId);
+        if (empty($panelData)) {
+            return null;
+        }
+
+        $ipdInfo = $panelData['ipd_info'] ?? null;
+        $personInfo = $panelData['person_info'] ?? null;
+        if ($ipdInfo === null || $personInfo === null) {
+            return null;
+        }
+
+        $personInfo->age = get_age_1(
+            $personInfo->dob ?? null,
+            $personInfo->age ?? '',
+            $personInfo->age_in_month ?? '',
+            $personInfo->estimate_dob ?? ''
+        );
+
+        $doctorRows = [];
+        if ($this->db->tableExists('ipd_master_doc_list') && $this->db->tableExists('doctor_master')) {
+            $doctorRows = $this->db->table('ipd_master_doc_list l')
+                ->select("concat_ws(' ', 'Dr.', d.p_fname, d.p_mname, d.p_lname) as doc_name", false)
+                ->join('doctor_master d', 'd.id = l.doc_id', 'inner')
+                ->where('l.ipd_id', $ipdId)
+                ->groupBy('d.id, d.p_fname, d.p_mname, d.p_lname')
+                ->orderBy('d.p_fname', 'ASC')
+                ->get()
+                ->getResultArray();
+        }
+
+        $doctorNames = array_values(array_filter(array_map(
+            static fn ($row) => trim((string) ($row['doc_name'] ?? '')),
+            $doctorRows
+        )));
+
+        if (empty($doctorNames)) {
+            $fallbackDoctor = trim((string) ($ipdInfo->r_doc_name ?? ''));
+            if ($fallbackDoctor !== '') {
+                $doctorNames[] = $fallbackDoctor;
+            }
+        }
+
+        $insuranceName = trim((string) ($ipdInfo->ins_company_name ?? ''));
+        if ($insuranceName === '' && $this->db->tableExists('organization_case_master')) {
+            $insuranceRow = $this->db->table('organization_case_master o')
+                ->select('h.ins_company_name')
+                ->join('hc_insurance h', 'h.id = o.insurance_id', 'left')
+                ->where('o.id', (int) ($ipdInfo->case_id ?? 0))
+                ->get()
+                ->getRowArray();
+            $insuranceName = trim((string) ($insuranceRow['ins_company_name'] ?? ''));
+        }
+
+        $hospitalName = defined('H_Name') ? (string) constant('H_Name') : 'Hospital';
+        $hospitalAddress = defined('H_address_1') ? (string) constant('H_address_1') : '';
+
+        return [
+            'form_no' => $formNo,
+            'form_meta' => $this->getIpdFormMeta($formNo),
+            'ipd_info' => $ipdInfo,
+            'person_info' => $personInfo,
+            'doctor_names' => $doctorNames,
+            'insurance_name' => $insuranceName,
+            'hospital_name' => $hospitalName,
+            'hospital_address' => $hospitalAddress,
+            'generated_at' => date('d-m-Y h:i A'),
+        ];
+    }
+
+    private function getActiveIpdDocumentTemplate(int $formNo): ?array
+    {
+        if (! $this->db->tableExists('ipd_document_templates')) {
+            return null;
+        }
+
+        $row = $this->db->table('ipd_document_templates')
+            ->select('id, form_no, template_name, template_html')
+            ->where('form_no', $formNo)
+            ->where('status', 1)
+            ->orderBy('id', 'DESC')
+            ->get(1)
+            ->getRowArray();
+
+        if (! is_array($row) || empty($row)) {
+            return null;
+        }
+
+        return $row;
+    }
+
+    private function renderIpdDocumentTemplateHtml(array $templateRow, array $data): string
+    {
+        $templateHtml = (string) ($templateRow['template_html'] ?? '');
+        if (trim($templateHtml) === '') {
+            return view('billing/ipd/ipd_form_print', $data);
+        }
+
+        $formMeta = $data['form_meta'] ?? [];
+        $ipd = $data['ipd_info'] ?? null;
+        $person = $data['person_info'] ?? null;
+        $doctorNames = is_array($data['doctor_names'] ?? null) ? $data['doctor_names'] : [];
+
+        $patientName = trim((string) (($person->title ?? '') . ' ' . ($person->p_fname ?? '')));
+        if ($patientName === '') {
+            $patientName = '-';
+        }
+
+        $age = (string) ($person->age ?? '-');
+        $gender = (string) ($person->xgender ?? '-');
+        $ageGender = trim($age . ' / ' . $gender);
+        if ($ageGender === '/') {
+            $ageGender = '-';
+        }
+
+        $replacements = [
+            '{{FORM_TITLE}}' => esc((string) ($formMeta['title'] ?? 'IPD Form')),
+            '{{HOSPITAL_NAME}}' => esc((string) ($data['hospital_name'] ?? 'Hospital')),
+            '{{HOSPITAL_ADDRESS}}' => esc((string) ($data['hospital_address'] ?? '')),
+            '{{PATIENT_NAME}}' => esc($patientName),
+            '{{AGE}}' => esc($age),
+            '{{GENDER}}' => esc($gender),
+            '{{AGE_GENDER}}' => esc($ageGender),
+            '{{UHID}}' => esc((string) ($person->p_code ?? '-')),
+            '{{IPD_CODE}}' => esc((string) ($ipd->ipd_code ?? '-')),
+            '{{ADMIT_DATE}}' => esc((string) ($ipd->str_register_date ?? ($ipd->register_date ?? '-'))),
+            '{{DOCTORS}}' => esc(! empty($doctorNames) ? implode(', ', $doctorNames) : '-'),
+            '{{INSURANCE_NAME}}' => esc((string) ($data['insurance_name'] ?? 'Direct')),
+            '{{CURRENT_DATE}}' => esc(date('d-m-Y')),
+            '{{CURRENT_DATETIME}}' => esc((string) ($data['generated_at'] ?? date('d-m-Y h:i A'))),
+        ];
+
+        return strtr($templateHtml, $replacements);
     }
 
     private function calculateCashBalanceTotals(array $rows): array

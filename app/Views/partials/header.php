@@ -39,8 +39,24 @@
                         }
                     }
                 }
+
+                $serverTimeZoneId = 'Asia/Kolkata';
+                $serverNow = new DateTimeImmutable('now', new DateTimeZone($serverTimeZoneId));
+                $serverTimeZoneLabel = trim((string) $serverNow->format('T'));
+                if ($serverTimeZoneLabel === '' || $serverTimeZoneLabel === 'GMT') {
+                    $serverTimeZoneLabel = $serverTimeZoneId;
+                }
+                $serverEpochMs = (int) round(microtime(true) * 1000);
+                $serverDisplayTime = $serverNow->format('d-m-Y h:i A') . ' (' . $serverTimeZoneLabel . ')';
             ?>
             <ul class="d-flex align-items-center">
+                <li class="nav-item pe-3 d-none d-md-flex align-items-center text-nowrap" title="Server time">
+                    <i class="bi bi-clock me-1"></i>
+                    <span id="header-server-datetime"
+                          data-server-epoch-ms="<?= esc((string) $serverEpochMs) ?>"
+                          data-server-timezone-id="<?= esc($serverTimeZoneId) ?>"
+                          data-server-timezone-label="<?= esc($serverTimeZoneLabel) ?>"><?= esc($serverDisplayTime) ?></span>
+                </li>
                 <li class="nav-item dropdown pe-3">
                     <a class="nav-link nav-profile d-flex align-items-center pe-0" href="#" data-bs-toggle="dropdown">
                         <img src="<?= base_url('assets/img/profile-img.jpg') ?>" alt="Profile" class="rounded-circle">
@@ -76,3 +92,94 @@
                 </li>
             </ul>
         </nav>
+
+<script>
+    (function () {
+        var el = document.getElementById('header-server-datetime');
+        if (!el) {
+            return;
+        }
+
+        var serverEpochMs = Number(el.getAttribute('data-server-epoch-ms') || '0');
+        if (!Number.isFinite(serverEpochMs) || serverEpochMs <= 0) {
+            return;
+        }
+
+        var tzId = String(el.getAttribute('data-server-timezone-id') || '');
+        var tzLabel = String(el.getAttribute('data-server-timezone-label') || tzId || 'UTC');
+        var dateCtor = window['Date'];
+        var intlObj = window['Intl'];
+        if (!dateCtor) {
+            return;
+        }
+
+        var clientBaseMs = dateCtor.now();
+
+        function pad2(value) {
+            return String(value).padStart(2, '0');
+        }
+
+        function formatServerDateTime(epochMs) {
+            var dateObj = new dateCtor(epochMs);
+            var parts = null;
+
+            try {
+                if (!intlObj || !intlObj.DateTimeFormat) {
+                    throw new Error('Intl unavailable');
+                }
+
+                parts = new intlObj.DateTimeFormat('en-GB', {
+                    timeZone: tzId || undefined,
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: true
+                }).formatToParts(dateObj);
+            } catch (e) {
+                parts = null;
+            }
+
+            if (parts) {
+                var map = {};
+                parts.forEach(function (part) {
+                    if (part.type !== 'literal') {
+                        map[part.type] = part.value;
+                    }
+                });
+
+                var dd = map.day || pad2(dateObj.getDate());
+                var mm = map.month || pad2(dateObj.getMonth() + 1);
+                var yyyy = map.year || String(dateObj.getFullYear());
+                var hh = map.hour || '12';
+                var min = map.minute || pad2(dateObj.getMinutes());
+                var period = String(map.dayPeriod || '').toUpperCase();
+                if (period !== 'AM' && period !== 'PM') {
+                    period = dateObj.getHours() >= 12 ? 'PM' : 'AM';
+                }
+
+                return dd + '-' + mm + '-' + yyyy + ' ' + hh + ':' + min + ' ' + period + ' (' + tzLabel + ')';
+            }
+
+            var fallbackHours = dateObj.getHours();
+            var fallbackPeriod = fallbackHours >= 12 ? 'PM' : 'AM';
+            var fallbackHour12 = fallbackHours % 12;
+            if (fallbackHour12 === 0) {
+                fallbackHour12 = 12;
+            }
+
+            return pad2(dateObj.getDate()) + '-' + pad2(dateObj.getMonth() + 1) + '-' + dateObj.getFullYear()
+                + ' ' + pad2(fallbackHour12) + ':' + pad2(dateObj.getMinutes()) + ' ' + fallbackPeriod + ' (' + tzLabel + ')';
+        }
+
+        function refreshClock() {
+            var nowMs = dateCtor.now();
+            var currentServerMs = serverEpochMs + (nowMs - clientBaseMs);
+            el.textContent = formatServerDateTime(currentServerMs);
+        }
+
+        refreshClock();
+        setInterval(refreshClock, 1000);
+    })();
+</script>

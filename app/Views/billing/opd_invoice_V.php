@@ -1,9 +1,16 @@
 <?php
 $canEdit = false;
 $user = auth()->user();
-if ($user && method_exists($user, 'inGroup')) {
-    $canEdit = $user->inGroup('OPDEdit');
+if ($user) {
+    if (method_exists($user, 'can') && $user->can('billing.opd.edit')) {
+        $canEdit = true;
+    }
+
+    if (! $canEdit && method_exists($user, 'inGroup')) {
+        $canEdit = $user->inGroup('OPDEdit');
+    }
 }
+$paymentHistoryRows = $payment_history_rows ?? [];
 ?>
 <section class="content-header">
     <h1>OPD Invoice</h1>
@@ -223,6 +230,50 @@ if ($user && method_exists($user, 'inGroup')) {
             </div>
         <?php endif; ?>
 
+        <hr />
+        <div class="row g-3">
+            <div class="col-12">
+                <h5 class="mb-2">Payment History</h5>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>Mode</th>
+                                <th class="text-end">Amount</th>
+                                <th>Remark</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if (!empty($paymentHistoryRows)) : ?>
+                                <?php foreach ($paymentHistoryRows as $historyRow) : ?>
+                                    <?php
+                                    $isRefund = (int) ($historyRow->credit_debit ?? 0) === 1;
+                                    $historyDate = trim((string) ($historyRow->payment_date ?? ''));
+                                    if ($historyDate === '') {
+                                        $historyDate = trim((string) ($historyRow->insert_time ?? ''));
+                                    }
+                                    ?>
+                                    <tr>
+                                        <td><?= esc($historyDate) ?></td>
+                                        <td><?= $isRefund ? '<span class="text-danger">Refund</span>' : '<span class="text-success">Received</span>' ?></td>
+                                        <td><?= esc($historyRow->payment_mode_str ?? '') ?></td>
+                                        <td class="text-end"><?= esc(number_format((float) ($historyRow->amount ?? 0), 2, '.', '')) ?></td>
+                                        <td><?= esc($historyRow->remark ?? '') ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php else : ?>
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted">No payment history entries.</td>
+                                </tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         <?php if ($canEdit && ((int) ($opd_master[0]->opd_status ?? 0) === 1 || (int) ($opd_master[0]->opd_status ?? 0) === 2)) : ?>
             <hr />
             <div class="row g-3">
@@ -419,7 +470,8 @@ if ($user && method_exists($user, 'inGroup')) {
                     "oid": $('#oid').val(),
                     "input_remark": $('#input_remark').val(),
                     [csrf.name]: csrf.value
-                }, function() {
+                }, function(data) {
+                    updateCsrf(data);
                     load_form('<?= base_url('Opd/invoice') ?>/' + $('#oid').val());
                 });
             }

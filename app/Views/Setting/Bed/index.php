@@ -11,6 +11,24 @@
 
     <div class="row g-3">
         <div class="col-6 col-md-3">
+            <a class="admin-tile" href="javascript:load_form_div('<?= base_url('setting/admin/bed-status') ?>','maindiv','Bed Status');">
+                <i class="bi bi-geo-alt"></i>
+                <span>Bed Status</span>
+            </a>
+        </div>
+        <div class="col-6 col-md-3">
+            <a class="admin-tile" href="javascript:load_form_div('<?= base_url('setting/admin/departments') ?>','maindiv','Departments');">
+                <i class="bi bi-diagram-2"></i>
+                <span>Departments</span>
+            </a>
+        </div>
+        <div class="col-6 col-md-3">
+            <a class="admin-tile" href="javascript:load_form_div('<?= base_url('setting/admin/wards') ?>','maindiv','Wards');">
+                <i class="bi bi-diagram-3"></i>
+                <span>Wards</span>
+            </a>
+        </div>
+        <div class="col-6 col-md-3">
             <a class="admin-tile" href="javascript:load_form_div('<?= base_url('setting/admin/bed-categories') ?>','maindiv','Bed Categories');">
                 <i class="bi bi-layers"></i>
                 <span>Bed Categories</span>

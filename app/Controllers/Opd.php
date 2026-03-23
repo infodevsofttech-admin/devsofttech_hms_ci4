@@ -1204,6 +1204,12 @@ class Opd extends BaseController
         $query = $this->db->query($sql);
         $data['payment_history'] = $query->getResult();
 
+        $sql = "select id,payment_date,insert_time,payment_mode,credit_debit,amount,remark,card_tran_id,update_by,
+            (case payment_mode when 0 then 'Zero Amount' when 1 then 'Cash' when 2 then 'Bank/Online' when 3 then 'Return Cash' when 4 then 'Bank Return' else 'Other' end) as payment_mode_str
+            from payment_history where payof_type=1 and payof_id=" . (int) $opdId . " order by id desc";
+        $query = $this->db->query($sql);
+        $data['payment_history_rows'] = $query->getResult();
+
         $paidAmount = 0;
         if (!empty($data['payment_history']) && $data['payment_history'][0]->paid_amount) {
             $paidAmount = (float) $data['payment_history'][0]->paid_amount;
@@ -2918,6 +2924,95 @@ class Opd extends BaseController
         return $this->response->setJSON([
             'update' => 1,
             'showcontent' => 'Discount updated',
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
+    public function opd_cancel(int $opdId)
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'update' => 0,
+                'error_text' => 'Invalid request',
+            ]);
+        }
+
+        $opdId = (int) ($this->request->getPost('oid') ?? $opdId);
+        if ($opdId <= 0) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Invalid OPD ID',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $opdRow = $this->db->table('opd_master')->where('opd_id', $opdId)->get(1)->getRowArray();
+        if (empty($opdRow)) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'OPD not found',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $user = auth()->user();
+        $userId = (int) ($user->id ?? 0);
+        $userName = (string) ($user->username ?? $user->email ?? 'User');
+        $userLabel = $userName . '[' . $userId . ']:T-' . date('d-m-Y H:i:s');
+
+        $remarkInput = trim((string) $this->request->getPost('input_remark'));
+        $remarkPrefix = $remarkInput !== '' ? $remarkInput : 'Cancel OPD';
+        $statusRemark = $remarkPrefix . ' [Update By:' . $userLabel . ']';
+
+        $sql = "select coalesce(sum(if(credit_debit>0,amount*-1,amount)),0) as paid_amount
+            from payment_history where payof_type=1 and payof_id=" . (int) $opdId;
+        $query = $this->db->query($sql);
+        $paymentHistory = $query->getResult();
+        $paidAmount = (float) ($paymentHistory[0]->paid_amount ?? 0);
+
+        $refundPaymentId = 0;
+        $this->db->transStart();
+
+        if ($paidAmount > 0 && (int) ($opdRow['opd_status'] ?? 0) !== 3) {
+            $paymentModel = new PaymentModel();
+            $refundPaymentId = $paymentModel->insertPayment([
+                'payment_mode' => '1',
+                'payof_type' => '1',
+                'payof_id' => $opdId,
+                'payof_code' => (string) ($opdRow['opd_code'] ?? ''),
+                'credit_debit' => '1',
+                'amount' => $paidAmount,
+                'payment_date' => date('Y-m-d H:i:s'),
+                'remark' => 'Refund: ' . $remarkPrefix,
+                'update_by' => $userLabel,
+                'update_by_id' => $userId,
+            ]);
+        }
+
+        $this->db->table('opd_master')
+            ->where('opd_id', $opdId)
+            ->update([
+                'opd_status' => '3',
+                'opd_status_remark' => $statusRemark,
+            ]);
+
+        $this->db->transComplete();
+        if (! $this->db->transStatus()) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Unable to cancel OPD. Please retry.',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'showcontent' => 'OPD cancelled' . ($refundPaymentId > 0 ? ' and refund posted' : ''),
+            'refund_payment_id' => $refundPaymentId,
             'csrfName' => csrf_token(),
             'csrfHash' => csrf_hash(),
         ]);

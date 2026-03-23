@@ -1,10 +1,16 @@
 <div class="card">
     <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
         <h3 class="card-title mb-0">Bed Master</h3>
-        <button class="btn btn-light" type="button" onclick="load_form_div('<?= base_url('setting/admin/bed-management') ?>','maindiv','Bed Management');">
-            <i class="bi bi-arrow-left"></i>
-            Back
-        </button>
+        <div class="d-flex align-items-center gap-2">
+            <button class="btn btn-outline-primary" type="button" onclick="load_form_div('<?= base_url('setting/admin/bed-status') ?>','maindiv','Bed Status');">
+                <i class="bi bi-geo-alt"></i>
+                Bed Status
+            </button>
+            <button class="btn btn-light" type="button" onclick="load_form_div('<?= base_url('setting/admin/bed-management') ?>','maindiv','Bed Management');">
+                <i class="bi bi-arrow-left"></i>
+                Back
+            </button>
+        </div>
     </div>
     <div class="card-body">
         <div id="bedAlert" class="alert alert-danger d-none"></div>
@@ -28,6 +34,9 @@
                             <option value="<?= esc($ward->id ?? 0) ?>"><?= esc($ward->ward_name ?? '') ?></option>
                         <?php } ?>
                     </select>
+                    <div class="mt-1">
+                        <button type="button" class="btn btn-link btn-sm p-0" onclick="load_form_div('<?= base_url('setting/admin/wards') ?>','maindiv','Wards');">Manage Wards</button>
+                    </div>
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">Category</label>

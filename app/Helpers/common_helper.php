@@ -2,7 +2,13 @@
 
 function str_to_MysqlDate(string $strDate): string
 {
+    $strDate = trim($strDate);
+
     if ($strDate !== '') {
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $strDate) === 1) {
+            return $strDate;
+        }
+
         $date = explode('/', $strDate);
         if (count($date) === 3) {
             return $date[2] . '-' . $date[1] . '-' . $date[0];

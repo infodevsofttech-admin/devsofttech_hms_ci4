@@ -6,8 +6,9 @@ use CodeIgniter\Model;
 
 class BedCategoryModel extends Model
 {
-    protected $table = 'bed_category_master';
-    protected $primaryKey = 'id';
+    protected $table       = 'bed_category_master';
+    protected $primaryKey  = 'id';
+    protected $returnType  = 'object';
     protected $allowedFields = [
         'category_code',
         'category_name',

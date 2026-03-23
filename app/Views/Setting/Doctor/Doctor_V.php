@@ -11,6 +11,13 @@
     <div class="card-body">
         <?php $errors = $errors ?? session('errors'); ?>
         <?php $formData = $formData ?? []; ?>
+        <?php
+        $doctorDobValue = trim((string) ($formData['datepicker_dob'] ?? ''));
+        if ($doctorDobValue !== '' && preg_match('/^\d{2}\/\d{2}\/\d{4}$/', $doctorDobValue) === 1) {
+            [$dobDay, $dobMonth, $dobYear] = explode('/', $doctorDobValue);
+            $doctorDobValue = $dobYear . '-' . $dobMonth . '-' . $dobDay;
+        }
+        ?>
         <?php if (! empty($errors)) : ?>
             <div class="alert alert-danger">
                 <?php foreach ((array) $errors as $error) : ?>
@@ -61,7 +68,7 @@
                 </div>
                 <div class="col-md-4">
                     <label class="form-label">Date of Birth</label>
-                    <input class="form-control datepicker" name="datepicker_dob" type="text" value="<?= esc($formData['datepicker_dob'] ?? '') ?>">
+                    <input class="form-control" name="datepicker_dob" type="date" value="<?= esc($doctorDobValue) ?>">
                 </div>
             </div>
             <?php

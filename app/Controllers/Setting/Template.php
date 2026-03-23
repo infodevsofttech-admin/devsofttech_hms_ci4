@@ -1346,4 +1346,343 @@ HTML;
 
         return redirect()->to(base_url('setting/template/discharge_templates'));
     }
+
+    private function ensureIpdDocumentTemplateTable(): void
+    {
+        if ($this->db->tableExists('ipd_document_templates')) {
+            return;
+        }
+
+        $sql = "CREATE TABLE IF NOT EXISTS ipd_document_templates (
+            id INT NOT NULL AUTO_INCREMENT,
+            form_no INT NOT NULL,
+            template_name VARCHAR(160) NOT NULL,
+            template_html LONGTEXT NOT NULL,
+            status TINYINT(1) NOT NULL DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY idx_form_no (form_no),
+            KEY idx_status (status)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+        $this->db->query($sql);
+    }
+
+    private function defaultIpdDocumentTemplates(): array
+    {
+        return [
+            [
+                'form_no' => 1,
+                'template_name' => 'Legacy Face Form (IPD2)',
+                'template_html' => <<<'HTML'
+<style>
+  .ipd-form { font-size: 12px; line-height: 1.35; }
+  .ipd-form h3 { margin: 0 0 10px 0; text-align: center; }
+  .ipd-form table { width: 100%; border-collapse: collapse; }
+  .ipd-form .meta td { border: 1px solid #444; padding: 6px; vertical-align: top; }
+</style>
+<div class="ipd-form">
+  <h3>BED HEAD TICKET</h3>
+  <table class="meta">
+    <tr>
+      <td style="width:50%;">
+        <b>Patient Information</b><br><br>
+        <b>Patient Name:</b> {{PATIENT_NAME}}<br>
+        <b>Age/Gender:</b> {{AGE_GENDER}}<br>
+        <b>UHID:</b> {{UHID}}<br>
+        <b>IPD Code:</b> {{IPD_CODE}}<br>
+        <b>Date And Time of Admission:</b> {{ADMIT_DATE}}
+      </td>
+      <td style="width:50%;">
+        <b>Hospital:</b> {{HOSPITAL_NAME}}<br>
+        <b>Address:</b> {{HOSPITAL_ADDRESS}}<br>
+        <b>Doctors:</b> {{DOCTORS}}<br>
+        <b>Insurance:</b> {{INSURANCE_NAME}}
+      </td>
+    </tr>
+  </table>
+
+  <h3 style="font-size:18px;margin-top:12px;">सहमति पत्र</h3>
+  <p style="font-size:15px;">
+    मैं इलाज कराने का/की इच्छुक हूँ। मैं {{HOSPITAL_NAME}} के चिकित्सक और उनके सहायकों को अपना उपचार,
+    परीक्षण, परामर्श, जांच, औषधि देने एवं आवश्यक चिकित्सा प्रक्रियाएं करने की स्वीकृति देता/देती हूँ।
+    मुझे बीमारी, संभावित जटिलताओं और उपचार में होने वाले खर्च के बारे में समझा दिया गया है।
+  </p>
+
+  <p style="margin-top:18px;">हस्ताक्षर / अंगूठा निशान: __________________________</p>
+  <p>नाम: __________________________ &nbsp;&nbsp; मरीज से संबंध: __________________________</p>
+  <p>पता: __________________________ &nbsp;&nbsp; फ़ोन नंबर: __________________________</p>
+</div>
+HTML,
+            ],
+            [
+                'form_no' => 3,
+                'template_name' => 'Legacy Self Declaration (IPD2)',
+                'template_html' => <<<'HTML'
+<div style="font-size:12px;line-height:1.35;">
+  <h3 style="text-align:center;margin:0 0 10px 0;">SELF DECLARATION FROM HEALTH INSURANCE CARD HOLDER</h3>
+  <h3 style="text-align:center;margin:0 0 10px 0;">मेडिक्लेम बीमा कार्ड धारक द्वारा स्वघोषणा</h3>
+
+  <table border="1" cellpadding="6" cellspacing="0" style="width:100%;border-collapse:collapse;">
+    <tr>
+      <td><b>Patient Name:</b> {{PATIENT_NAME}}</td>
+      <td><b>UHID:</b> {{UHID}}</td>
+      <td><b>IPD:</b> {{IPD_CODE}}</td>
+    </tr>
+    <tr>
+      <td><b>Age/Gender:</b> {{AGE_GENDER}}</td>
+      <td><b>Admission:</b> {{ADMIT_DATE}}</td>
+      <td><b>Insurance:</b> {{INSURANCE_NAME}}</td>
+    </tr>
+  </table>
+
+  <p style="margin-top:12px;">
+    मैं __________________________ यह घोषणा करता/करती हूँ कि मरीज {{PATIENT_NAME}} का मेडिक्लेम {{INSURANCE_NAME}} में है,
+    और भर्ती दिनांक {{ADMIT_DATE}} को हुई है। मैंने आवश्यक दस्तावेज जमा कर दिए हैं और यदि क्लेम पूर्ण/आंशिक स्वीकृत नहीं होता
+    है तो शेष देय राशि का भुगतान स्वयं करूँगा/करूँगी।
+  </p>
+
+  <p>हस्ताक्षर / अंगूठा निशान: __________________________</p>
+  <p>नाम: __________________________ &nbsp;&nbsp; मरीज से संबंध: __________________________</p>
+  <p>पता: __________________________ &nbsp;&nbsp; फ़ोन नंबर: __________________________</p>
+  <p>दिनांक: {{CURRENT_DATE}}</p>
+</div>
+HTML,
+            ],
+            [
+                'form_no' => 5,
+                'template_name' => 'Legacy Admission History & Physical Assessment',
+                'template_html' => <<<'HTML'
+<div style="font-size:11px;line-height:1.3;">
+  <h3 style="text-align:center;margin:0 0 8px 0;">ADMISSION HISTORY AND PHYSICAL ASSESSMENT FORM</h3>
+  <p><b>Patient:</b> {{PATIENT_NAME}} &nbsp; <b>Age/Gender:</b> {{AGE_GENDER}} &nbsp; <b>UHID:</b> {{UHID}} &nbsp; <b>IPD:</b> {{IPD_CODE}} &nbsp; <b>Admit Date:</b> {{ADMIT_DATE}}</p>
+  <p><b>Diagnosis:</b> ______________________________________________</p>
+  <p><b>Time of Patient Arrival:</b> ____________ &nbsp;&nbsp; <b>Time of Doctor Assessment:</b> ____________</p>
+  <p><b>Consciousness:</b> [ ] Awake [ ] Alert [ ] In pain [ ] Response to verbal commands [ ] Unresponsive</p>
+  <p><b>GCS:</b> E___ V___ M___ &nbsp;&nbsp; <b>Airway/Breathing:</b> [ ] Clear [ ] Noisy [ ] Stridor [ ] Obstruction</p>
+  <p><b>Allergic To:</b> ______________________________________________</p>
+  <p><b>Present Complaints:</b></p>
+  <div style="border:1px solid #666;height:52px;"></div>
+
+  <p style="margin-top:8px;"><b>Past Medical History:</b></p>
+  <table border="1" cellpadding="4" cellspacing="0" style="width:100%;border-collapse:collapse;">
+    <tr><td style="width:25%;">Diabetes / Metabolic</td><td style="width:25%;"></td><td style="width:25%;">Jaundice / CLD</td><td style="width:25%;"></td></tr>
+    <tr><td>Hypertension / IHD</td><td></td><td>Osteoarthritis</td><td></td></tr>
+    <tr><td>Asthma / COPD / TB</td><td></td><td>Tuberculosis</td><td></td></tr>
+    <tr><td colspan="4">Others:</td></tr>
+  </table>
+
+  <p><b>Drug History:</b></p>
+  <div style="border:1px solid #666;height:42px;"></div>
+  <p><b>Past Surgical History:</b></p>
+  <div style="border:1px solid #666;height:42px;"></div>
+
+  <p><b>Declaration:</b> I hereby declare that the facts recorded above are accurate to the best of my knowledge.</p>
+  <p>Name of Patient/Relative: ________________________ &nbsp; Signature: ________________________</p>
+  <p>Date: {{CURRENT_DATE}}</p>
+</div>
+HTML,
+            ],
+            [
+                'form_no' => 8,
+                'template_name' => 'Legacy Progress Notes and Doctor Order',
+                'template_html' => <<<'HTML'
+<div style="font-size:11px;line-height:1.3;">
+  <h3 style="text-align:center;margin:0 0 8px 0;">PROGRESS NOTES AND DOCTOR'S ORDER</h3>
+  <p><b>Name:</b> {{PATIENT_NAME}} &nbsp; <b>IPD:</b> {{IPD_CODE}} &nbsp; <b>UHID:</b> {{UHID}} &nbsp; <b>Age/Gender:</b> {{AGE_GENDER}}</p>
+  <hr>
+  <table border="1" cellpadding="5" cellspacing="0" style="width:100%;border-collapse:collapse;">
+    <tr>
+      <th style="width:18%;text-align:center;">DATE</th>
+      <th style="text-align:center;">PROGRESS NOTES AND DOCTOR'S ORDER</th>
+    </tr>
+    <tr>
+      <td style="height:420px;"></td>
+      <td></td>
+    </tr>
+  </table>
+</div>
+HTML,
+            ],
+            [
+                'form_no' => 9,
+                'template_name' => 'Legacy Oral / Enteral Intake Output Chart',
+                'template_html' => <<<'HTML'
+<div style="font-size:11px;line-height:1.25;">
+  <h3 style="text-align:center;margin:0 0 8px 0;">ORAL / ENTERAL INTAKE & OUTPUT CHART</h3>
+  <p><b>Name:</b> {{PATIENT_NAME}} &nbsp; <b>IPD:</b> {{IPD_CODE}} &nbsp; <b>UHID:</b> {{UHID}} &nbsp; <b>Age/Gender:</b> {{AGE_GENDER}}</p>
+  <hr>
+  <table border="1" cellpadding="4" cellspacing="0" style="width:100%;border-collapse:collapse;">
+    <tr>
+      <th style="width:6%;">SR.No.</th>
+      <th style="width:10%;">Date</th>
+      <th style="width:8%;">Time</th>
+      <th style="width:17%;">Description</th>
+      <th style="width:7%;">Vol.</th>
+      <th style="width:7%;">Vol.</th>
+      <th style="width:7%;">Total</th>
+      <th style="width:7%;">Urine</th>
+      <th style="width:7%;">Stool</th>
+      <th style="width:7%;">Other</th>
+      <th style="width:7%;">Other</th>
+      <th style="width:7%;">Other</th>
+      <th style="width:7%;">Total</th>
+    </tr>
+    <tr><td>1</td><td style="height:24px;"></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+    <tr><td>2</td><td style="height:24px;"></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+    <tr><td>3</td><td style="height:24px;"></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+    <tr><td>4</td><td style="height:24px;"></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+    <tr><td>5</td><td style="height:24px;"></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+  </table>
+</div>
+HTML,
+            ],
+            [
+                'form_no' => 10,
+                'template_name' => 'Legacy Sticker [2 x 6]',
+                'template_html' => <<<'HTML'
+<div style="font-size:9px;border:1px dashed #444;padding:4px;line-height:1.25;">
+  <div><b>{{HOSPITAL_NAME}}</b></div>
+  <div><b>Patient Name:</b> {{PATIENT_NAME}}</div>
+  <div><b>Age / Gender:</b> {{AGE_GENDER}}</div>
+  <div><b>UHID / Patient ID:</b> {{UHID}}</div>
+  <div><b>IPD Code:</b> {{IPD_CODE}}</div>
+  <div><b>Dept./Doctor:</b> {{DOCTORS}}</div>
+  <div><b>Date of Admission:</b> {{ADMIT_DATE}}</div>
+</div>
+HTML,
+            ],
+            [
+                'form_no' => 11,
+                'template_name' => 'Legacy Sticker [2 x 8]',
+                'template_html' => <<<'HTML'
+<div style="font-size:9px;border:1px dashed #444;padding:4px;line-height:1.25;">
+  <div><b>{{HOSPITAL_NAME}}</b></div>
+  <div><b>{{HOSPITAL_ADDRESS}}</b></div>
+  <div><b>Patient Name:</b> {{PATIENT_NAME}}</div>
+  <div><b>Age / Gender:</b> {{AGE_GENDER}}</div>
+  <div><b>UHID / Patient ID:</b> {{UHID}}</div>
+  <div><b>IPD Code:</b> {{IPD_CODE}}</div>
+  <div><b>Dept./Doctor:</b> {{DOCTORS}}</div>
+  <div><b>Date of Admission:</b> {{ADMIT_DATE}}</div>
+  <div><b>Insurance:</b> {{INSURANCE_NAME}}</div>
+</div>
+HTML,
+            ],
+        ];
+    }
+
+    private function ensureDefaultIpdDocumentTemplatesSeeded(): void
+    {
+        $this->ensureIpdDocumentTemplateTable();
+        if (! $this->db->tableExists('ipd_document_templates')) {
+            return;
+        }
+
+        $table = $this->db->table('ipd_document_templates');
+        foreach ($this->defaultIpdDocumentTemplates() as $row) {
+            $formNo = (int) ($row['form_no'] ?? 0);
+            $templateName = (string) ($row['template_name'] ?? '');
+            if ($formNo <= 0 || $templateName === '') {
+                continue;
+            }
+
+            $exists = $this->db->table('ipd_document_templates')
+                ->where('form_no', $formNo)
+                ->where('template_name', $templateName)
+                ->countAllResults();
+
+            if ($exists > 0) {
+                continue;
+            }
+
+            $table->insert([
+                'form_no' => $formNo,
+                'template_name' => $templateName,
+                'template_html' => (string) ($row['template_html'] ?? ''),
+                'status' => 1,
+            ]);
+        }
+    }
+
+    public function ipd_document_templates()
+    {
+        if ($resp = $this->requireAnyPermission(['template.discharge'])) {
+            return $resp;
+        }
+
+        $this->ensureDefaultIpdDocumentTemplatesSeeded();
+
+        $notice = '';
+        $noticeType = 'success';
+
+        if (strtolower($this->request->getMethod()) === 'post') {
+            $id = (int) ($this->request->getPost('id') ?? 0);
+            $formNo = (int) ($this->request->getPost('form_no') ?? 0);
+            $templateName = trim((string) ($this->request->getPost('template_name') ?? ''));
+            $templateHtml = (string) ($this->request->getPost('template_html') ?? '');
+            $status = (int) ($this->request->getPost('status') ?? 1) === 1 ? 1 : 0;
+
+            if (! in_array($formNo, [1, 3, 5, 8, 9, 10, 11], true)) {
+                $notice = 'Invalid form number.';
+                $noticeType = 'danger';
+            } elseif ($templateName === '' || trim($templateHtml) === '') {
+                $notice = 'Form number, template name and HTML are required.';
+                $noticeType = 'danger';
+            } else {
+                $table = $this->db->table('ipd_document_templates');
+                $data = [
+                    'form_no' => $formNo,
+                    'template_name' => $templateName,
+                    'template_html' => $templateHtml,
+                    'status' => $status,
+                ];
+
+                if ($id > 0) {
+                    $table->where('id', $id)->update($data);
+                    $notice = 'Template updated.';
+                } else {
+                    $table->insert($data);
+                    $notice = 'Template created.';
+                }
+            }
+        }
+
+        $editId = (int) ($this->request->getGet('edit') ?? 0);
+        $editRow = [];
+        if ($editId > 0) {
+            $editRow = $this->db->table('ipd_document_templates')
+                ->where('id', $editId)
+                ->get(1)
+                ->getRowArray() ?? [];
+        }
+
+        $rows = $this->db->table('ipd_document_templates')
+            ->orderBy('form_no', 'ASC')
+            ->orderBy('id', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        return view('Setting/Template/ipd_document_templates', [
+            'rows' => $rows,
+            'edit_row' => $editRow,
+            'notice' => $notice,
+            'notice_type' => $noticeType,
+        ]);
+    }
+
+    public function ipd_document_template_delete(int $id)
+    {
+        if ($resp = $this->requireAnyPermission(['template.discharge'])) {
+            return $resp;
+        }
+
+        $id = (int) $id;
+        if ($id > 0 && $this->db->tableExists('ipd_document_templates')) {
+            $this->db->table('ipd_document_templates')->where('id', $id)->delete();
+        }
+
+        return redirect()->to(base_url('setting/template/ipd_document_templates'));
+    }
 }

@@ -6,8 +6,9 @@ use CodeIgniter\Model;
 
 class WardModel extends Model
 {
-    protected $table = 'ward_master';
+    protected $table      = 'ward_master';
     protected $primaryKey = 'id';
+    protected $returnType = 'object';
     protected $allowedFields = [
         'ward_code',
         'ward_name',
@@ -26,6 +27,11 @@ class WardModel extends Model
         'remarks',
         'created_by',
     ];
+
+    public function getAll(): array
+    {
+        return $this->orderBy('ward_name', 'ASC')->findAll();
+    }
 
     public function getAllActive(): array
     {
