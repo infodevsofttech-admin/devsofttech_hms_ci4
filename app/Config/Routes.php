@@ -345,6 +345,7 @@ $routes->group('billing', function($routes) {
     $routes->get('ipd/panel/(:num)', 'Billing\\Ipd::panel/$1');
     $routes->get('ipd/panel/(:num)/tab/(:segment)', 'Billing\\Ipd::panelTab/$1/$2');
     $routes->post('ipd/panel/(:num)/admission', 'Billing\Ipd::updateAdmission/$1');
+    $routes->post('ipd/panel/(:num)/diagnosis/include/(:num)', 'Billing\\Ipd::updateDiagnosisChargeInclude/$1/$2');
     $routes->post('ipd/panel/(:num)/discharge/update', 'Billing\\Ipd::updateDischargeProcess/$1');
     $routes->post('ipd/panel/(:num)/discharge/discount/(:num)', 'Billing\\Ipd::updateDischargeDiscount/$1/$2');
     $routes->post('ipd/panel/(:num)/discharge/charge/(:num)', 'Billing\\Ipd::updateDischargeCharge/$1/$2');
@@ -361,6 +362,11 @@ $routes->group('billing', function($routes) {
     $routes->post('ipd/nursing-charge/delete/(:num)/(:num)', 'Billing\\Ipd::deleteNursingCharge/$1/$2');
     $routes->post('ipd/charge/package/(:num)', 'Billing\\Ipd::updateIpdChargePackage/$1');
     $routes->post('ipd/package/add/(:num)', 'Billing\\Ipd::addIpdPackage/$1');
+    $routes->get('ipd/panel/(:num)/ayushman/search', 'Billing\Ipd::searchAyushmanPackages/$1');
+    $routes->post('ipd/panel/(:num)/ayushman/map/(:num)', 'Billing\Ipd::saveAyushmanPackageMapping/$1/$2');
+    $routes->post('ipd/panel/(:num)/ayushman/checklist', 'Billing\Ipd::saveAyushmanChecklist/$1');
+    $routes->get('ipd/panel/(:num)/ayushman/claim-sheet', 'Billing\Ipd::ayushmanClaimSheet/$1');
+    $routes->get('ipd/panel/(:num)/ayushman/claim-sheet/(:num)', 'Billing\Ipd::ayushmanClaimSheet/$1/$2');
     $routes->post('ipd/package/update/(:num)', 'Billing\\Ipd::updateIpdPackage/$1');
     $routes->post('ipd/package/delete/(:num)', 'Billing\\Ipd::deleteIpdPackage/$1');
     $routes->get('ipd/payment/modal/(:num)', 'Billing\\Ipd::loadPaymentModal/$1');
@@ -700,6 +706,12 @@ $routes->get('Report/insurance_ipd_report_data/(:segment)/(:segment)/(:segment)/
 $routes->get('Report/insurance_combined_report', 'Report::insurance_combined_report');
 $routes->get('Report/insurance_combined_report_data/(:segment)/(:segment)/(:segment)', 'Report::insurance_combined_report_data/$1/$2/$3');
 $routes->get('Report/insurance_combined_report_data/(:segment)/(:segment)/(:segment)/(:num)', 'Report::insurance_combined_report_data/$1/$2/$3/$4');
+$routes->get('Report/ayushman_unmapped_report', 'Report::ayushman_unmapped_report');
+$routes->get('Report/ayushman_unmapped_report_data/(:segment)', 'Report::ayushman_unmapped_report_data/$1');
+$routes->get('Report/ayushman_unmapped_report_data/(:segment)/(:num)', 'Report::ayushman_unmapped_report_data/$1/$2');
+$routes->get('Report/ayushman_case_dashboard', 'Report::ayushman_case_dashboard');
+$routes->get('Report/ayushman_case_dashboard_data/(:segment)/(:segment)', 'Report::ayushman_case_dashboard_data/$1/$2');
+$routes->get('Report/ayushman_case_dashboard_data/(:segment)/(:segment)/(:num)', 'Report::ayushman_case_dashboard_data/$1/$2/$3');
 
 // Legacy Report4 compatibility for Insurance Case reports
 $routes->get('Report4/echs_ipd_list_main', 'Report::echs_ipd_list_main');

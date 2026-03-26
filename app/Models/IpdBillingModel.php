@@ -140,9 +140,15 @@ class IpdBillingModel extends Model
             ->select("in_master.ins_company_name as ins_company_name", false)
             ->select("in_master.short_name as ins_short_name", false)
             ->select("o.case_id_code as case_id_code", false)
+            ->select("o.Org_insurance_comp as org_insurance_comp", false)
+            ->select("o.doc_recd as doc_recd", false)
             ->select("o.insurance_no as insurance_no", false)
             ->select("o.insurance_no_1 as insurance_no_1", false)
             ->select("o.insurance_no_2 as insurance_no_2", false)
+            ->select("o.preauth_send as preauth_send", false)
+            ->select("o.final_bill_send as final_bill_send", false)
+            ->select("o.org_approved_status as org_approved_status", false)
+            ->select("o.remark as remark", false)
             ->join('organization_case_master o', 'i.case_id = o.id', 'left')
             ->join('hc_insurance in_master', 'in_master.id = o.insurance_id', 'left')
             ->where('i.id', $ipdId)
@@ -422,6 +428,123 @@ class IpdBillingModel extends Model
             ->getResult();
     }
 
+    public function getAyushmanSpecialities(): array
+    {
+        if (! $this->db->tableExists('ayushman_package_master')) {
+            return [];
+        }
+
+        return $this->db->table('ayushman_package_master')
+            ->select('speciality_code, speciality_name')
+            ->groupBy('speciality_code, speciality_name')
+            ->orderBy('speciality_name', 'ASC')
+            ->get()
+            ->getResultArray();
+    }
+
+    public function searchAyushmanPackages(string $query = '', string $specialityCode = '', int $limit = 25): array
+    {
+        if (! $this->db->tableExists('ayushman_package_master')) {
+            return [];
+        }
+
+        $builder = $this->db->table('ayushman_package_master a')
+            ->select('a.id, a.speciality_code, a.speciality_name, a.procedure_code, a.procedure_name, a.package_amount, a.preauth_required, a.procedure_type, a.government_reserved, a.pre_investigations, a.post_investigations, a.linked_package_id')
+            ->select('p.ipd_pakage_name as linked_package_name', false)
+            ->join('package p', 'p.id = a.linked_package_id', 'left');
+
+        if ($specialityCode !== '') {
+            $builder->where('a.speciality_code', $specialityCode);
+        }
+
+        $query = trim($query);
+        if ($query !== '') {
+            $builder->groupStart()
+                ->like('a.procedure_code', $query)
+                ->orLike('a.procedure_name', $query)
+                ->orLike('a.speciality_name', $query)
+                ->groupEnd();
+        }
+
+        $limit = max(1, min(100, $limit));
+
+        return $builder
+            ->orderBy('a.speciality_name', 'ASC')
+            ->orderBy('a.procedure_name', 'ASC')
+            ->limit($limit)
+            ->get()
+            ->getResultArray();
+    }
+
+    public function getAyushmanPackageById(int $id): ?array
+    {
+        if ($id <= 0 || ! $this->db->tableExists('ayushman_package_master')) {
+            return null;
+        }
+
+        $row = $this->db->table('ayushman_package_master')
+            ->where('id', $id)
+            ->get()
+            ->getRowArray();
+
+        return is_array($row) && ! empty($row) ? $row : null;
+    }
+
+    public function getAllPackageOptions(): array
+    {
+        return $this->db->table('package p')
+            ->select('p.id, p.ipd_pakage_name, p.Pakage_Min_Amount, g.pakage_group_name')
+            ->join('package_group g', 'g.pak_id = p.pakage_group_id', 'left')
+            ->orderBy('g.pakage_group_name', 'ASC')
+            ->orderBy('p.ipd_pakage_name', 'ASC')
+            ->get()
+            ->getResultArray();
+    }
+
+    public function updateAyushmanPackageLink(int $ayushmanId, int $linkedPackageId): bool
+    {
+        if ($ayushmanId <= 0 || ! $this->db->tableExists('ayushman_package_master')) {
+            return false;
+        }
+
+        $exists = $this->db->table('ayushman_package_master')
+            ->select('id')
+            ->where('id', $ayushmanId)
+            ->get(1)
+            ->getRowArray();
+
+        if (! is_array($exists) || empty($exists)) {
+            return false;
+        }
+
+        $update = [
+            'linked_package_id' => $linkedPackageId > 0 ? $linkedPackageId : null,
+            'updated_at' => date('Y-m-d H:i:s'),
+        ];
+
+        $this->db->table('ayushman_package_master')
+            ->where('id', $ayushmanId)
+            ->update($update);
+
+        return true;
+    }
+
+    public function getAyushmanChecklistForIpd(int $ipdId): array
+    {
+        if ($ipdId <= 0 || ! $this->db->tableExists('ayushman_package_master')) {
+            return [];
+        }
+
+        return $this->db->table('ipd_package p')
+            ->select('p.id as ipd_package_id, p.package_name, p.package_desc, p.comment, p.org_code, p.package_Amount')
+            ->select('a.id as ayushman_id, a.speciality_code, a.speciality_name, a.procedure_code, a.procedure_name, a.preauth_required, a.pre_investigations, a.post_investigations, a.linked_package_id')
+            ->join('ayushman_package_master a', 'a.procedure_code = p.org_code', 'inner')
+            ->where('p.ipd_id', $ipdId)
+            ->orderBy('p.id', 'DESC')
+            ->get()
+            ->getResultArray();
+    }
+
     public function getPackageWithInsurance(int $packageId, int $insuranceId): ?object
     {
         return $this->db->table('package p')
@@ -451,6 +574,31 @@ class IpdBillingModel extends Model
             ->orderBy('i.id', 'DESC')
             ->get()
             ->getResult();
+    }
+
+    public function updateDiagnosisChargeInclude(int $ipdId, int $invoiceId, int $include): bool
+    {
+        if ($ipdId <= 0 || $invoiceId <= 0) {
+            return false;
+        }
+
+        $exists = $this->db->table('invoice_master')
+            ->select('id')
+            ->where('id', $invoiceId)
+            ->where('ipd_id', $ipdId)
+            ->get(1)
+            ->getRowArray();
+        if (! is_array($exists) || empty($exists)) {
+            return false;
+        }
+
+        $builder = $this->db->table('invoice_master');
+        $builder->where('id', $invoiceId)
+            ->where('ipd_id', $ipdId)
+            ->set('ipd_include', $include > 0 ? 1 : 0)
+            ->update();
+
+        return true;
     }
 
     public function getPayments(int $ipdId): array

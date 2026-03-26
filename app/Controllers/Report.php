@@ -900,6 +900,149 @@ class Report extends BaseController
         ]);
     }
 
+    public function ayushman_unmapped_report()
+    {
+        $specialities = [];
+        if ($this->db->tableExists('ayushman_package_master')) {
+            $specialities = $this->db->table('ayushman_package_master')
+                ->select('speciality_code, speciality_name')
+                ->groupBy('speciality_code, speciality_name')
+                ->orderBy('speciality_name', 'ASC')
+                ->get()
+                ->getResult();
+        }
+
+        return view('report/ayushman_unmapped_report', [
+            'specialities' => $specialities,
+        ]);
+    }
+
+    public function ayushman_unmapped_report_data(string $specialityCode = '0', int $output = 0)
+    {
+        if (! $this->db->tableExists('ayushman_package_master')) {
+            return $this->response->setBody('<div class="alert alert-warning">Ayushman package master table is not available.</div>');
+        }
+
+        $builder = $this->db->table('ayushman_package_master a')
+            ->select('a.speciality_code, a.speciality_name, a.procedure_code, a.procedure_name, a.package_amount, a.preauth_required, a.pre_investigations, a.post_investigations')
+            ->where('(a.linked_package_id IS NULL OR a.linked_package_id = 0)', null, false)
+            ->orderBy('a.speciality_name', 'ASC')
+            ->orderBy('a.procedure_name', 'ASC');
+
+        if ($specialityCode !== '0') {
+            $builder->where('a.speciality_code', $specialityCode);
+        }
+
+        $rows = $builder->get()->getResult();
+        $data = [
+            'rows' => $rows,
+            'speciality_code' => $specialityCode,
+        ];
+
+        $content = view('report/ayushman_unmapped_report_table', $data);
+
+        if ($output === 1) {
+            ExportExcel($content, 'Ayushman_Unmapped_Procedures_' . date('YmdHis'));
+            return $this->response->setBody('');
+        }
+
+        return $this->response->setBody($content);
+    }
+
+    public function ayushman_case_dashboard()
+    {
+        return view('report/ayushman_case_dashboard');
+    }
+
+    public function ayushman_case_dashboard_data(string $dateRange, string $alertType = 'all', int $output = 0)
+    {
+        [$minRange, $maxRange] = $this->parseDateRange($dateRange);
+
+        $builder = $this->db->table('organization_case_master o')
+            ->select('o.id as case_id, o.case_id_code, o.preauth_send, o.doc_recd, o.final_bill_send, o.org_approved_status, o.Org_insurance_comp')
+            ->select('i.id as ipd_id, i.ipd_code')
+            ->select("DATE_FORMAT(i.register_date, '%d-%m-%Y') as str_register_date", false)
+            ->select('p.p_code, p.p_fname')
+            ->select('ins.short_name as insurance_company')
+            ->select('(SELECT COUNT(*) FROM ipd_package ip JOIN ayushman_package_master a ON a.procedure_code = ip.org_code WHERE ip.ipd_id = i.id) as ayushman_proc_count', false)
+            ->select('(SELECT COUNT(*) FROM ipd_package ip JOIN ayushman_package_master a ON a.procedure_code = ip.org_code WHERE ip.ipd_id = i.id AND (a.linked_package_id IS NULL OR a.linked_package_id = 0)) as unmapped_count', false)
+            ->select('(SELECT COUNT(*) FROM ipd_package ip JOIN ayushman_package_master a ON a.procedure_code = ip.org_code WHERE ip.ipd_id = i.id AND a.preauth_required = 1) as preauth_required_count', false)
+            ->join('ipd_master i', 'o.id = i.case_id', 'inner')
+            ->join('patient_master p', 'i.p_id = p.id', 'inner')
+            ->join('hc_insurance ins', 'ins.id = o.insurance_id', 'left')
+            ->where('o.case_type', 1)
+            ->where('i.register_date >=', $minRange)
+            ->where('i.register_date <=', $maxRange)
+            ->groupStart()
+                ->like('o.Org_insurance_comp', 'ayushman')
+                ->orLike('o.Org_insurance_comp', 'pmjay')
+                ->orLike('ins.short_name', 'ayushman')
+                ->orLike('ins.ins_company_name', 'ayushman')
+            ->groupEnd()
+            ->orderBy('i.id', 'DESC');
+
+        $rows = $builder->get()->getResultArray();
+
+        $alertType = strtolower(trim($alertType));
+        if (! in_array($alertType, ['all', 'preauth-pending', 'docs-pending', 'mapping-gap'], true)) {
+            $alertType = 'all';
+        }
+
+        $rows = array_values(array_filter($rows, static function (array $row) use ($alertType): bool {
+            $preauthPending = (int) ($row['preauth_required_count'] ?? 0) > 0 && (int) ($row['preauth_send'] ?? 0) !== 1;
+            $docsPending = (int) ($row['doc_recd'] ?? 0) !== 1;
+            $mappingGap = (int) ($row['unmapped_count'] ?? 0) > 0;
+
+            if ($alertType === 'preauth-pending') {
+                return $preauthPending;
+            }
+            if ($alertType === 'docs-pending') {
+                return $docsPending;
+            }
+            if ($alertType === 'mapping-gap') {
+                return $mappingGap;
+            }
+
+            return true;
+        }));
+
+        $summary = [
+            'total_cases' => count($rows),
+            'preauth_pending' => 0,
+            'docs_pending' => 0,
+            'mapping_gaps' => 0,
+        ];
+
+        foreach ($rows as $row) {
+            if ((int) ($row['preauth_required_count'] ?? 0) > 0 && (int) ($row['preauth_send'] ?? 0) !== 1) {
+                $summary['preauth_pending']++;
+            }
+            if ((int) ($row['doc_recd'] ?? 0) !== 1) {
+                $summary['docs_pending']++;
+            }
+            if ((int) ($row['unmapped_count'] ?? 0) > 0) {
+                $summary['mapping_gaps']++;
+            }
+        }
+
+        $data = [
+            'rows' => $rows,
+            'summary' => $summary,
+            'min_range' => $minRange,
+            'max_range' => $maxRange,
+            'alert_type' => $alertType,
+        ];
+
+        $content = view('report/ayushman_case_dashboard_table', $data);
+
+        if ($output === 1) {
+            ExportExcel($content, 'Ayushman_Case_Dashboard_' . date('YmdHis'));
+            return $this->response->setBody('');
+        }
+
+        return $this->response->setBody($content);
+    }
+
     public function insurance_opd_report_data(
         string $dateRange,
         string $insuranceId = '0',

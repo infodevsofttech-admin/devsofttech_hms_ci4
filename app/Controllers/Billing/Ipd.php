@@ -439,6 +439,9 @@ class Ipd extends BaseController
             }
             $panelData['ipd_insurance_id'] = $insCompId;
             $panelData['package_list'] = $this->ipdModel->getPackageListForInsurance($insCompId);
+            $panelData['ayushman_specialities'] = $this->ipdModel->getAyushmanSpecialities();
+            $panelData['all_package_options'] = $this->ipdModel->getAllPackageOptions();
+            $panelData['ayushman_checklist_items'] = $this->ipdModel->getAyushmanChecklistForIpd($ipdId);
 
             return view('billing/ipd/panel_package', $panelData);
         }
@@ -588,6 +591,37 @@ class Ipd extends BaseController
             'message' => 'Admission details updated.',
             'html' => view('billing/ipd/panel_admission', $admissionData),
             'header' => $this->buildAdmissionHeaderPayload($freshPanelData),
+        ]);
+    }
+
+    public function updateDiagnosisChargeInclude(int $ipdId, int $invoiceId)
+    {
+        $permission = $this->requireAnyPermission([
+            'billing.access',
+            'billing.ipd.invoice',
+        ]);
+        if ($permission) {
+            return $permission;
+        }
+
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => false, 'error' => 'Invalid request']);
+        }
+
+        if ($ipdId <= 0 || $invoiceId <= 0) {
+            return $this->response->setStatusCode(422)->setJSON(['ok' => false, 'error' => 'Invalid invoice reference']);
+        }
+
+        $include = (int) ($this->request->getPost('ipd_include') ?? 0) === 1 ? 1 : 0;
+        $updated = $this->ipdModel->updateDiagnosisChargeInclude($ipdId, $invoiceId, $include);
+
+        if (! $updated) {
+            return $this->response->setStatusCode(500)->setJSON(['ok' => false, 'error' => 'Unable to update include status']);
+        }
+
+        return $this->response->setJSON([
+            'ok' => true,
+            'ipd_include' => $include,
         ]);
     }
 
@@ -1415,6 +1449,7 @@ class Ipd extends BaseController
         }
 
         $packageId = (int) ($this->request->getPost('package_id') ?? 0);
+        $ayushmanPackageId = (int) ($this->request->getPost('ayushman_package_id') ?? 0);
         $packageName = (string) ($this->request->getPost('package_name') ?? '');
         $comment = (string) ($this->request->getPost('comment') ?? '');
         $inputAmount = (float) ($this->request->getPost('input_amount') ?? 0);
@@ -1429,13 +1464,61 @@ class Ipd extends BaseController
         $amount = $inputAmount;
         $orgCode = '';
 
+        if ($ayushmanPackageId > 0) {
+            $ayushmanPackage = $this->ipdModel->getAyushmanPackageById($ayushmanPackageId);
+            if ($ayushmanPackage === null) {
+                return $this->response->setStatusCode(404)->setJSON([
+                    'ok' => false,
+                    'error' => 'Ayushman package not found.',
+                ]);
+            }
+
+            $packageId = (int) ($ayushmanPackage['linked_package_id'] ?? 0);
+            $packageName = (string) ($ayushmanPackage['procedure_name'] ?? $packageName);
+            $amount = (float) ($ayushmanPackage['package_amount'] ?? $amount);
+            $orgCode = (string) ($ayushmanPackage['procedure_code'] ?? '');
+
+            $descParts = [];
+            $specialityName = trim((string) ($ayushmanPackage['speciality_name'] ?? ''));
+            if ($specialityName !== '') {
+                $descParts[] = 'Speciality: ' . $specialityName;
+            }
+            $procedureType = trim((string) ($ayushmanPackage['procedure_type'] ?? ''));
+            if ($procedureType !== '') {
+                $descParts[] = 'Type: ' . $procedureType;
+            }
+            $preauthRequired = (int) ($ayushmanPackage['preauth_required'] ?? 0) === 1 ? 'Yes' : 'No';
+            $descParts[] = 'Preauth: ' . $preauthRequired;
+            array_unshift($descParts, 'Ayushman');
+            $packageDesc = substr(implode(' | ', $descParts), 0, 250);
+
+            $commentParts = [];
+            if ($orgCode !== '') {
+                $commentParts[] = 'Ayushman Code: ' . $orgCode;
+            }
+            $preInvestigations = trim((string) ($ayushmanPackage['pre_investigations'] ?? ''));
+            if ($preInvestigations !== '') {
+                $commentParts[] = 'Pre: ' . $preInvestigations;
+            }
+            $postInvestigations = trim((string) ($ayushmanPackage['post_investigations'] ?? ''));
+            if ($postInvestigations !== '') {
+                $commentParts[] = 'Post: ' . $postInvestigations;
+            }
+            if ($comment !== '') {
+                $commentParts[] = $comment;
+            }
+            $comment = substr(implode(' | ', $commentParts), 0, 250);
+        }
+
         if ($packageId > 1) {
             $package = $this->ipdModel->getPackageWithInsurance($packageId, $insCompId);
             if ($package) {
-                $packageName = (string) ($package->ipd_pakage_name ?? $packageName);
-                $packageDesc = (string) ($package->Pakage_description ?? $packageDesc);
+                if ($ayushmanPackageId <= 0) {
+                    $packageName = (string) ($package->ipd_pakage_name ?? $packageName);
+                    $packageDesc = (string) ($package->Pakage_description ?? $packageDesc);
+                    $orgCode = (string) ($package->code ?? '');
+                }
                 $amount = (float) ($package->amount1 ?? $amount);
-                $orgCode = (string) ($package->code ?? '');
             }
         }
 
@@ -1472,6 +1555,181 @@ class Ipd extends BaseController
             'ok' => $insertId > 0,
             'id' => $insertId,
         ]);
+    }
+
+    public function searchAyushmanPackages(int $ipdId)
+    {
+        $permission = $this->requireAnyPermission([
+            'billing.access',
+            'billing.ipd.invoice',
+        ]);
+        if ($permission) {
+            return $permission;
+        }
+
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => false, 'error' => 'Invalid request']);
+        }
+
+        $panelData = $this->ipdModel->getIpdPanelInfo($ipdId);
+        if (empty($panelData)) {
+            return $this->response->setStatusCode(404)->setJSON(['ok' => false, 'error' => 'IPD not found']);
+        }
+
+        $query = trim((string) ($this->request->getGet('q') ?? ''));
+        $specialityCode = trim((string) ($this->request->getGet('speciality_code') ?? ''));
+        $items = $this->ipdModel->searchAyushmanPackages($query, $specialityCode, 30);
+
+        return $this->response->setJSON([
+            'ok' => true,
+            'items' => $items,
+        ]);
+    }
+
+    public function saveAyushmanPackageMapping(int $ipdId, int $ayushmanId)
+    {
+        $permission = $this->requireAnyPermission([
+            'billing.access',
+            'billing.ipd.invoice',
+        ]);
+        if ($permission) {
+            return $permission;
+        }
+
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => false, 'error' => 'Invalid request']);
+        }
+
+        $panelData = $this->ipdModel->getIpdPanelInfo($ipdId);
+        if (empty($panelData)) {
+            return $this->response->setStatusCode(404)->setJSON(['ok' => false, 'error' => 'IPD not found']);
+        }
+
+        $linkedPackageId = (int) ($this->request->getPost('linked_package_id') ?? 0);
+        $updated = $this->ipdModel->updateAyushmanPackageLink($ayushmanId, $linkedPackageId);
+        if (! $updated) {
+            return $this->response->setStatusCode(404)->setJSON(['ok' => false, 'error' => 'Ayushman treatment not found']);
+        }
+
+        $mappedPackage = null;
+        if ($linkedPackageId > 0) {
+            foreach ($this->ipdModel->getAllPackageOptions() as $row) {
+                if ((int) ($row['id'] ?? 0) === $linkedPackageId) {
+                    $mappedPackage = trim((string) ($row['ipd_pakage_name'] ?? ''));
+                    break;
+                }
+            }
+        }
+
+        return $this->response->setJSON([
+            'ok' => true,
+            'linked_package_id' => $linkedPackageId,
+            'linked_package_name' => $mappedPackage,
+        ]);
+    }
+
+    public function saveAyushmanChecklist(int $ipdId)
+    {
+        $permission = $this->requireAnyPermission([
+            'billing.access',
+            'billing.ipd.invoice',
+        ]);
+        if ($permission) {
+            return $permission;
+        }
+
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => false, 'error' => 'Invalid request']);
+        }
+
+        $panelData = $this->ipdModel->getIpdPanelInfo($ipdId);
+        if (empty($panelData)) {
+            return $this->response->setStatusCode(404)->setJSON(['ok' => false, 'error' => 'IPD not found']);
+        }
+
+        $ipdInfo = $panelData['ipd_info'] ?? null;
+        $caseId = (int) ($ipdInfo->case_id ?? 0);
+        if ($caseId <= 0) {
+            return $this->response->setStatusCode(422)->setJSON(['ok' => false, 'error' => 'No organization case linked to this IPD']);
+        }
+
+        $fieldMap = array_flip($this->db->getFieldNames('organization_case_master') ?? []);
+        $update = [];
+
+        if (isset($fieldMap['preauth_send'])) {
+            $update['preauth_send'] = (int) ($this->request->getPost('preauth_send') ?? 0) === 1 ? 1 : 0;
+        }
+        if (isset($fieldMap['doc_recd'])) {
+            $update['doc_recd'] = (int) ($this->request->getPost('doc_recd') ?? 0) === 1 ? 1 : 0;
+        }
+        if (isset($fieldMap['final_bill_send'])) {
+            $update['final_bill_send'] = (int) ($this->request->getPost('final_bill_send') ?? 0) === 1 ? 1 : 0;
+        }
+        if (isset($fieldMap['org_approved_status'])) {
+            $update['org_approved_status'] = trim((string) ($this->request->getPost('org_approved_status') ?? 'Under Process'));
+        }
+        if (isset($fieldMap['remark'])) {
+            $update['remark'] = trim((string) ($this->request->getPost('remark') ?? ''));
+        }
+
+        if (isset($fieldMap['org_approved_status_id']) && $this->db->tableExists('org_approved_status')) {
+            $statusText = (string) ($update['org_approved_status'] ?? '');
+            if ($statusText !== '') {
+                $statusRow = $this->db->table('org_approved_status')
+                    ->select('id')
+                    ->where('app_status', $statusText)
+                    ->get(1)
+                    ->getRowArray();
+                if (is_array($statusRow) && ! empty($statusRow['id'])) {
+                    $update['org_approved_status_id'] = (int) $statusRow['id'];
+                }
+            }
+        }
+
+        if (empty($update)) {
+            return $this->response->setJSON(['ok' => true]);
+        }
+
+        $this->db->table('organization_case_master')
+            ->where('id', $caseId)
+            ->update($update);
+
+        return $this->response->setJSON([
+            'ok' => true,
+            'message' => 'Ayushman checklist updated.',
+        ]);
+    }
+
+    public function ayushmanClaimSheet(int $ipdId, int $output = 0)
+    {
+        $permission = $this->requireAnyPermission([
+            'billing.access',
+            'billing.ipd.invoice',
+        ]);
+        if ($permission) {
+            return $permission;
+        }
+
+        $panelData = $this->ipdModel->getIpdPanelInfo($ipdId);
+        if (empty($panelData)) {
+            return $this->response->setStatusCode(404)->setBody('IPD not found');
+        }
+
+        $checklistItems = $this->ipdModel->getAyushmanChecklistForIpd($ipdId);
+        $data = [
+            'ipd_info' => $panelData['ipd_info'] ?? null,
+            'person_info' => $panelData['person_info'] ?? null,
+            'checklist_items' => $checklistItems,
+            'generated_at' => date('d-m-Y H:i:s'),
+        ];
+
+        $content = view('billing/ipd/ayushman_claim_sheet', $data);
+        if ($output === 1) {
+            ExportExcel($content, 'Ayushman_Claim_Sheet_' . $ipdId);
+            return $this->response->setBody('');
+        }
+
+        return $this->response->setBody($content);
     }
 
     public function updateIpdPackage(int $packageItemId)

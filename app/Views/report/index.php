@@ -80,6 +80,8 @@
                     <ul class="report-links">
                         <li><a href="javascript:load_form('<?= base_url('Report/insurance_ipd_report') ?>','Insurance Case IPD');"><i class="bi bi-arrow-right-short"></i> Insurance Case IPD</a></li>
                         <li><a href="javascript:load_form('<?= base_url('Report/insurance_opd_report') ?>','Insurance Case OPD');"><i class="bi bi-arrow-right-short"></i> Insurance Case OPD</a></li>
+                        <li><a href="javascript:load_form('<?= base_url('Report/ayushman_case_dashboard') ?>','Ayushman Case Dashboard');"><i class="bi bi-arrow-right-short"></i> Ayushman Case Dashboard</a></li>
+                        <li><a href="javascript:load_form('<?= base_url('Report/ayushman_unmapped_report') ?>','Ayushman Unmapped Procedures');"><i class="bi bi-arrow-right-short"></i> Ayushman Unmapped Procedures</a></li>
                         <li><a href="javascript:load_form('<?= base_url('org-packing') ?>','Org. OPD Packing');"><i class="bi bi-arrow-right-short"></i> Or. OPD Packing</a></li>
                     </ul>
                 </div>
