@@ -10,6 +10,7 @@ use CodeIgniter\I18n\Time;
 class Opd_prescription extends BaseController
 {
     private string $lastAiProvider = 'none';
+    private string $lastAiServerError = '';
 
     private function canAccessPrescription(): bool
     {
@@ -1318,6 +1319,7 @@ class Opd_prescription extends BaseController
         $updateByText = $userLabel . '[' . ($user->id ?? 0) . ']:' . date('d-m-Y H:i:s');
 
         $inserted = 0;
+        $skipped = 0;
         foreach ($templateRows as $row) {
             $insert = [];
 
@@ -1345,6 +1347,11 @@ class Opd_prescription extends BaseController
             }
 
             if (! empty($insert)) {
+                if ($this->isDuplicateMedicineRow($sessionTable, $sessionFields, $sessionId, $insert)) {
+                    $skipped++;
+                    continue;
+                }
+
                 $this->db->table($sessionTable)->insert($insert);
                 $inserted++;
 
@@ -1359,7 +1366,10 @@ class Opd_prescription extends BaseController
             'update' => 1,
             'opd_session_id' => $sessionId,
             'inserted_count' => $inserted,
-            'error_text' => $inserted > 0 ? ($inserted . ' medicine(s) added from Rx-Group.') : 'No medicine inserted from Rx-Group.',
+            'skipped_count' => $skipped,
+            'error_text' => $inserted > 0
+                ? ($inserted . ' medicine(s) added from Rx-Group.' . ($skipped > 0 ? (' ' . $skipped . ' duplicate(s) skipped.') : ''))
+                : ($skipped > 0 ? ($skipped . ' duplicate medicine(s) already present.') : 'No medicine inserted from Rx-Group.'),
             'csrfName' => csrf_token(),
             'csrfHash' => csrf_hash(),
         ]);
@@ -2200,6 +2210,25 @@ class Opd_prescription extends BaseController
             ]);
         }
 
+        $serverDetails = $this->fetchMedicineDetailsFromAiServer($name, $formulation);
+        if (($serverDetails['genericname'] ?? '') !== '' || ($serverDetails['salt_name'] ?? '') !== '') {
+            return $this->response->setJSON([
+                'update' => 1,
+                'provider' => 'ai-server',
+                'match_confidence' => 'ai-server',
+                'matched_item_name' => '',
+                'details' => [
+                    'genericname' => trim((string) ($serverDetails['genericname'] ?? '')),
+                    'salt_name' => trim((string) ($serverDetails['salt_name'] ?? '')),
+                    'dosage_restriction' => trim((string) ($serverDetails['dosage_restriction'] ?? '')),
+                    'caution_note' => trim((string) ($serverDetails['caution_note'] ?? '')),
+                ],
+                'error_text' => 'Medicine details prepared from AI server',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
         $prompt = "You are a medicine data enrichment assistant for OPD master data in India.\n"
             . "For this medicine, provide structured details based on public medical references and standard labeling guidance.\n"
             . "Medicine Name: {$name}\n"
@@ -2229,7 +2258,14 @@ class Opd_prescription extends BaseController
                 ]);
             }
 
-            return $this->response->setJSON(['update' => 0, 'error_text' => 'AI unavailable and no local match found. Check AI settings.']);
+            $aiServerHint = $this->lastAiServerError !== ''
+                ? (' AI-server attempts: ' . $this->lastAiServerError)
+                : '';
+
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'AI unavailable and no local match found. Check AI settings (DIAGNOSIS_AI_SERVER_URL or DIAGNOSIS_AI_MEDICINE_ENDPOINT).' . $aiServerHint,
+            ]);
         }
 
         $parsed = $this->parseJsonFromAiResponse($aiText);
@@ -2271,6 +2307,253 @@ class Opd_prescription extends BaseController
             'csrfName' => csrf_token(),
             'csrfHash' => csrf_hash(),
         ]);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function fetchMedicineDetailsFromAiServer(string $itemName, string $formulation): array
+    {
+        $this->lastAiServerError = '';
+        $itemName = trim($itemName);
+        if ($itemName === '') {
+            return [];
+        }
+
+        $configuredEndpointsRaw = trim($this->readAiSettingValue([
+            'DIAGNOSIS_AI_MEDICINE_ENDPOINT',
+            'DIAGNOSIS_AI_MEDICINE_DETAILS_ENDPOINT',
+            'AI_SERVER_MEDICINE_ENDPOINT',
+        ]));
+
+        $token = trim($this->readAiSettingValue(['DIAGNOSIS_AI_PARSE_TOKEN', 'AI_SERVER_TOKEN']));
+        if ($token === '') {
+            $token = trim((string) getenv('DIAGNOSIS_AI_PARSE_TOKEN'));
+        }
+        if ($token === '') {
+            $token = trim((string) getenv('AI_SERVER_TOKEN'));
+        }
+
+        $payload = [
+            'item_name' => $itemName,
+            'medicine_name' => $itemName,
+            'name' => $itemName,
+            'formulation' => trim($formulation),
+            'mode' => 'medicine-details',
+        ];
+
+        $headers = [
+            'Accept' => 'application/json',
+            'Content-Type' => 'application/json',
+        ];
+        if ($token !== '') {
+            $headers['Authorization'] = 'Bearer ' . $token;
+        }
+
+        $baseCandidates = $this->resolveAiServerBaseCandidates();
+        $defaultPaths = [
+            '/medicine-details',
+            '/medicine/details',
+            '/medicine/enrich',
+            '/medicine/lookup',
+            '/api/medicine/details',
+            '/api/medicine/enrich',
+            '/api/medicine/lookup',
+            '/api/v1/medicine/details',
+            '/api/v1/medicine/enrich',
+            '/api/v1/medicine/lookup',
+            '/v1/medicine/details',
+            '/v1/medicine/enrich',
+            '/v1/medicine/lookup',
+        ];
+
+        $endpointCandidates = [];
+        if ($configuredEndpointsRaw !== '') {
+            $parts = preg_split('/[\r\n,]+/', $configuredEndpointsRaw) ?: [];
+            foreach ($parts as $part) {
+                $candidate = trim((string) $part);
+                if ($candidate === '') {
+                    continue;
+                }
+
+                // Normalize accidental Windows-style slashes from settings values.
+                $candidate = str_replace('\\', '/', $candidate);
+
+                if (preg_match('#^https?://#i', $candidate) === 1) {
+                    $endpointCandidates[] = rtrim($candidate, '/');
+                    continue;
+                }
+
+                $path = '/' . ltrim($candidate, '/');
+                foreach ($baseCandidates as $base) {
+                    $endpointCandidates[] = rtrim($base, '/') . $path;
+                }
+            }
+        }
+
+        foreach ($baseCandidates as $base) {
+            foreach ($defaultPaths as $path) {
+                $endpointCandidates[] = rtrim($base, '/') . $path;
+            }
+        }
+
+        $endpointCandidates = array_values(array_unique($endpointCandidates));
+        $endpointCandidates = array_values(array_filter($endpointCandidates, static function ($url): bool {
+            $text = (string) $url;
+            if ($text === '') {
+                return false;
+            }
+
+            $lower = strtolower($text);
+            if (strpos($text, '\\') !== false || strpos($lower, '%5c') !== false) {
+                return false;
+            }
+
+            return true;
+        }));
+        $statusTrail = [];
+
+        foreach ($endpointCandidates as $endpointUrl) {
+            if (strpos($endpointUrl, '\\') !== false || strpos(strtolower($endpointUrl), '%5c') !== false) {
+                $statusTrail[] = 'skipped-malformed @ ' . $endpointUrl;
+                continue;
+            }
+
+            try {
+                $options = [
+                    'timeout' => 20,
+                    'http_errors' => false,
+                ];
+                if (defined('ENVIRONMENT') && in_array((string) ENVIRONMENT, ['development', 'testing'], true)) {
+                    $options['verify'] = false;
+                }
+
+                $client = service('curlrequest', $options);
+                $response = $client->post($endpointUrl, [
+                    'headers' => $headers,
+                    'json' => $payload,
+                ]);
+
+                $status = (int) $response->getStatusCode();
+                $statusTrail[] = $status . ' @ ' . $endpointUrl;
+                if ($status < 200 || $status >= 300) {
+                    continue;
+                }
+
+                $decoded = json_decode((string) $response->getBody(), true);
+                if (!is_array($decoded)) {
+                    continue;
+                }
+
+                $details = is_array($decoded['details'] ?? null) ? $decoded['details'] : $decoded;
+                $data = is_array($decoded['data'] ?? null) ? $decoded['data'] : [];
+
+                $generic = trim((string) (
+                    $details['genericname']
+                    ?? $details['generic_name']
+                    ?? $data['genericname']
+                    ?? $data['generic_name']
+                    ?? $data['medicine_name']
+                    ?? ''
+                ));
+
+                $salt = trim((string) (
+                    $details['salt_name']
+                    ?? $details['salt']
+                    ?? $data['salt_name']
+                    ?? $data['salt']
+                    ?? ''
+                ));
+
+                if ($salt === '' && is_array($data['brand_names'] ?? null)) {
+                    $salt = trim(implode(', ', array_slice(array_map('strval', $data['brand_names']), 0, 3)));
+                }
+
+                $dosage = trim((string) (
+                    $details['dosage_restriction']
+                    ?? $details['restriction']
+                    ?? $data['dosage_restriction']
+                    ?? $data['restriction']
+                    ?? ((is_array($data['dosage'] ?? null) ? ($data['dosage']['adult_dose'] ?? '') : ''))
+                    ?? ''
+                ));
+
+                $caution = trim((string) (
+                    $details['caution_note']
+                    ?? $details['caution']
+                    ?? $data['caution_note']
+                    ?? $data['caution']
+                    ?? ''
+                ));
+
+                if ($caution === '') {
+                    $pieces = [];
+                    if (is_array($data['contraindications'] ?? null) && !empty($data['contraindications'])) {
+                        $pieces[] = 'Contra: ' . implode(', ', array_slice(array_map('strval', $data['contraindications']), 0, 2));
+                    }
+                    if (is_array($data['precautions'] ?? null) && !empty($data['precautions'])) {
+                        $pieces[] = 'Prec: ' . implode(', ', array_slice(array_map('strval', $data['precautions']), 0, 2));
+                    }
+                    if (is_array($data['drug_interactions'] ?? null) && !empty($data['drug_interactions'])) {
+                        $pieces[] = 'Interacts: ' . implode(', ', array_slice(array_map('strval', $data['drug_interactions']), 0, 2));
+                    }
+                    $caution = trim(implode(' | ', $pieces));
+                }
+
+                $out = [
+                    'genericname' => $generic,
+                    'salt_name' => $salt,
+                    'dosage_restriction' => $this->formatMedicineNote($dosage, 420),
+                    'caution_note' => $this->formatMedicineNote($caution, 520),
+                ];
+
+                if ($out['genericname'] !== '' || $out['salt_name'] !== '') {
+                    $this->lastAiProvider = 'ai-server';
+                    $this->lastAiServerError = '';
+                    return $out;
+                }
+
+                $statusTrail[] = 'empty-payload @ ' . $endpointUrl;
+            } catch (\Throwable $e) {
+                $statusTrail[] = 'error @ ' . $endpointUrl . ' :: ' . $e->getMessage();
+            }
+        }
+
+        if (! empty($statusTrail)) {
+            $this->lastAiServerError = implode(' | ', array_slice($statusTrail, 0, 5));
+        }
+
+        return [];
+    }
+
+    private function formatMedicineNote(string $value, int $maxLen = 500): string
+    {
+        $text = trim($value);
+        if ($text === '') {
+            return '';
+        }
+
+        // Normalize separators for UI readability while preserving meaning.
+        $text = str_replace(["\r\n", "\n", "\r"], ' | ', $text);
+        $text = preg_replace('/\s*\|\s*/', ' | ', $text) ?? $text;
+        $text = preg_replace('/\s+/', ' ', $text) ?? $text;
+        $text = trim($text, " \t\n\r\0\x0B|");
+
+        if ($maxLen < 80) {
+            $maxLen = 80;
+        }
+
+        if (mb_strlen($text) <= $maxLen) {
+            return $text;
+        }
+
+        $short = mb_substr($text, 0, $maxLen);
+        $lastSep = mb_strrpos($short, ' | ');
+        if ($lastSep !== false && $lastSep > (int) ($maxLen * 0.6)) {
+            $short = mb_substr($short, 0, $lastSep);
+        }
+
+        return rtrim($short, " ,;|.") . '...';
     }
 
     /**
@@ -3634,6 +3917,18 @@ class Opd_prescription extends BaseController
         }
 
         $rows = $builder->get()->getResultArray();
+
+        $doseMap = $this->getDoseMasterLabelMap('opd_dose_shed', ['dose_shed_id', 'id'], ['dose_show_sign', 'dose_sign', 'dose_sign_desc', 'name']);
+        $whenMap = $this->getDoseMasterLabelMap('opd_dose_when', ['dose_when_id', 'id'], ['dose_sign', 'dose_sign_desc', 'name']);
+        $freqMap = $this->getDoseMasterLabelMap('opd_dose_frequency', ['dose_freq_id', 'id'], ['dose_sign', 'dose_sign_desc', 'name']);
+
+        foreach ($rows as &$row) {
+            $row['dosage_label'] = $this->resolveDoseMasterLabel($row['dosage'] ?? '', $doseMap);
+            $row['dosage_when_label'] = $this->resolveDoseMasterLabel($row['dosage_when'] ?? '', $whenMap);
+            $row['dosage_freq_label'] = $this->resolveDoseMasterLabel($row['dosage_freq'] ?? '', $freqMap);
+        }
+        unset($row);
+
         return $this->response->setJSON(['rows' => $rows]);
     }
 
@@ -3704,6 +3999,16 @@ class Opd_prescription extends BaseController
         if (in_array('update_by', $fields, true)) {
             $userLabel = $user ? ($user->username ?? $user->email ?? 'User') : 'User';
             $insert['update_by'] = $userLabel . '[' . ($user->id ?? 0) . ']:' . date('d-m-Y H:i:s');
+        }
+
+        if ($this->isDuplicateMedicineRow($table, $fields, $sessionId, $insert)) {
+            return $this->response->setJSON([
+                'update' => 1,
+                'opd_session_id' => $sessionId,
+                'error_text' => 'Medicine already exists in this prescription. Duplicate skipped.',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
         }
 
         $this->db->table($table)->insert($insert);
@@ -3894,6 +4199,17 @@ class Opd_prescription extends BaseController
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Medicine name is required']);
         }
 
+        $candidate = array_replace($current, $update);
+        $sessionId = (int) ($candidate['opd_pre_id'] ?? 0);
+        if ($sessionId > 0 && $this->isDuplicateMedicineRow($table, $fields, $sessionId, $candidate, $id)) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Same medicine row already exists. Duplicate update blocked.',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
         $user = auth()->user();
         if (in_array('update_by', $fields, true)) {
             $userLabel = $user ? ($user->username ?? $user->email ?? 'User') : 'User';
@@ -3909,6 +4225,33 @@ class Opd_prescription extends BaseController
             'csrfName' => csrf_token(),
             'csrfHash' => csrf_hash(),
         ]);
+    }
+
+    private function isDuplicateMedicineRow(string $table, array $fields, int $sessionId, array $row, int $excludeId = 0): bool
+    {
+        if ($sessionId <= 0 || ! in_array('opd_pre_id', $fields, true)) {
+            return false;
+        }
+
+        $builder = $this->db->table($table)->where('opd_pre_id', $sessionId);
+        if ($excludeId > 0 && in_array('id', $fields, true)) {
+            $builder->where('id !=', $excludeId);
+        }
+
+        foreach (['med_id', 'med_name', 'med_type', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days', 'qty', 'remark'] as $field) {
+            if (! in_array($field, $fields, true)) {
+                continue;
+            }
+
+            $value = isset($row[$field]) ? trim((string) $row[$field]) : '';
+            if ($value === '') {
+                $builder->groupStart()->where($field, '')->orWhere($field, null)->groupEnd();
+            } else {
+                $builder->where($field, $value);
+            }
+        }
+
+        return $builder->get(1)->getRowArray() !== null;
     }
 
     public function medicine_remove($id)
@@ -5397,6 +5740,29 @@ Return plain text only, no markdown.
 Input: " . $text;
         }
 
+        if ($mode === 'local_to_medical') {
+            return "You are a medical documentation specialist for Indian OPD. Convert the following patient complaints written in Hindi, Hinglish, or a mix of local language and English into precise clinical English with correct standard medical terminology.
+Rules:
+- Replace colloquial terms with proper medical terms (e.g., bukhar → pyrexia/fever, khansi → cough, saans phoolna → dyspnoea, sir dard → cephalalgia/headache, body dard → myalgia, thakaan → fatigue, chakkar → vertigo/giddiness, ulti → vomiting/emesis, jalan → burning sensation, thandi lagana → chills/rigors, kamzori → weakness/asthenia).
+- Preserve all durations, severity, and context exactly as mentioned.
+- Output concise, professional clinical English suitable for OPD documentation.
+- Return plain text only, no bullet points, no markdown.
+Input: " . $text;
+        }
+
+        if ($mode === 'local_to_patient_voice') {
+            return "You are a translator for Indian hospital OPD. The following text is a patient describing their symptoms in Hindi, Hinglish, or mixed language.
+Translate it into natural, first-person English exactly as the patient would say it — conversational, not clinical.
+Rules:
+- Use first-person (\"I feel\", \"I have\", \"I am\", \"I've had\").
+- Preserve the exact meaning, durations, and sequence.
+- Do NOT use medical jargon or clinical terms — keep it as natural spoken English.
+- Example: \"Teen din se bukhar hai\" → \"I've had a fever for three days.\"
+- Example: \"Thand lag rahi hai aur jukham hai\" → \"I'm feeling cold and I have a cold.\"
+- Return plain text only, no bullet points, no markdown.
+Input: " . $text;
+        }
+
         if ($mode === 'diagnosis') {
             return "You are a clinical OPD assistant. Rewrite diagnosis text into concise professional medical English.
 Preserve meaning, do not invent findings. Return plain text only.
@@ -5443,6 +5809,89 @@ Input: " . $text;
             }
 
             return $this->normalizeClinicalSentenceFlow($converted);
+        }
+
+        if ($mode === 'local_to_medical') {
+            $dictionary = [
+                'bukhar'         => 'fever',
+                'khansi'         => 'cough',
+                'pet dard'       => 'abdominal pain',
+                'sir dard'       => 'headache',
+                'sar dard'       => 'headache',
+                'ulti'           => 'vomiting',
+                'kamzori'        => 'weakness',
+                'saans phoolna'  => 'dyspnoea',
+                'saans'          => 'breathing',
+                'jukaam'         => 'rhinitis',
+                'chakkar'        => 'vertigo',
+                'dast'           => 'loose motions',
+                'jalan'          => 'burning sensation',
+                'thakaan'        => 'fatigue',
+                'body dard'      => 'myalgia',
+                'badan dard'     => 'myalgia',
+                'thandi lagna'   => 'chills',
+                'thandi lagana'  => 'chills',
+                'kaanp'          => 'rigors',
+                'neend'          => 'sleep',
+                'bhookh'         => 'appetite',
+                'paani'          => 'water intake',
+                'peshab'         => 'urination',
+                'seena dard'     => 'chest pain',
+                'ghabrahat'      => 'palpitations',
+            ];
+
+            $converted = mb_strtolower($source);
+            foreach ($dictionary as $from => $to) {
+                $converted = preg_replace('/\b' . preg_quote($from, '/') . '\b/u', $to, $converted) ?? $converted;
+            }
+
+            return $this->normalizeClinicalSentenceFlow($converted);
+        }
+
+        if ($mode === 'local_to_patient_voice') {
+            // Basic word-swap into first-person English; AI path is strongly preferred for this mode
+            $dictionary = [
+                'teen din se'     => 'for three days I have had',
+                'do din se'       => 'for two days I have had',
+                'ek din se'       => 'since yesterday I have had',
+                'subah se'        => 'since morning I have had',
+                'raat se'         => 'since last night I have had',
+                'bukhar hai'      => 'a fever',
+                'bukhar'          => 'fever',
+                'khansi hai'      => 'a cough',
+                'khansi'          => 'a cough',
+                'jukham hai'      => 'a cold',
+                'jukham'          => 'a cold',
+                'thand lag rahi hai' => 'I am feeling cold',
+                'thandi lag rahi hai' => 'I am feeling cold',
+                'thand lag raha hai' => 'I am feeling cold',
+                'chakkar aa raha hai' => 'I am feeling dizzy',
+                'chakkar'         => 'dizziness',
+                'ulti ho rahi hai' => 'I am vomiting',
+                'ulti'            => 'vomiting',
+                'pet dard hai'    => 'I have abdominal pain',
+                'pet dard'        => 'abdominal pain',
+                'sir dard hai'    => 'I have a headache',
+                'sir dard'        => 'a headache',
+                'saans phool rahi hai' => 'I am having difficulty breathing',
+                'saans'           => 'breathing',
+                'kamzori'         => 'weakness',
+                'thakaan'         => 'tiredness',
+                'dast'            => 'loose motions',
+                'jalan'           => 'a burning sensation',
+                'aur'             => 'and',
+                'hai'             => '',
+                'hain'            => '',
+            ];
+
+            $converted = mb_strtolower($source);
+            foreach ($dictionary as $from => $to) {
+                $converted = str_replace($from, $to, $converted);
+            }
+            $converted = preg_replace('/\s+/', ' ', trim($converted)) ?? $converted;
+            $converted = ucfirst($converted);
+
+            return $converted;
         }
 
         return $this->normalizeClinicalSentenceFlow($source);
@@ -5510,7 +5959,119 @@ Input: " . $text;
 
     private function generateClinicalTextWithAi(string $prompt, int $maxOutputTokens = 300): ?string
     {
-        unset($prompt, $maxOutputTokens);
+        $prompt = trim($prompt);
+        if ($prompt === '') {
+            return null;
+        }
+
+        $apiKey = trim($this->readAiSettingValue([
+            'GEMINI_API_KEY',
+            'DIAGNOSIS_AI_GEMINI_API_KEY',
+            'DIAGNOSIS_GEMINI_API_KEY',
+        ]));
+        if ($apiKey === '') {
+            $apiKey = trim((string) getenv('GEMINI_API_KEY'));
+        }
+        if ($apiKey === '') {
+            return null;
+        }
+
+        $modelCandidatesRaw = trim($this->readAiSettingValue([
+            'DIAGNOSIS_AI_GEMINI_MODELS',
+            'DIAGNOSIS_AI_GEMINI_MODEL',
+            'GEMINI_MODEL_CANDIDATES',
+            'GEMINI_MODEL',
+        ]));
+
+        $models = [];
+        if ($modelCandidatesRaw !== '') {
+            $parts = preg_split('/[,\s]+/', $modelCandidatesRaw) ?: [];
+            foreach ($parts as $part) {
+                $model = trim((string) $part);
+                if ($model !== '') {
+                    $models[] = $model;
+                }
+            }
+        }
+        if (empty($models)) {
+            $models = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+        }
+
+        $maxOutputTokens = max(64, min(2048, (int) $maxOutputTokens));
+
+        foreach ($models as $model) {
+            try {
+                $url = 'https://generativelanguage.googleapis.com/v1beta/models/'
+                    . rawurlencode($model)
+                    . ':generateContent?key='
+                    . rawurlencode($apiKey);
+
+                $payload = [
+                    'contents' => [[
+                        'parts' => [[
+                            'text' => $prompt,
+                        ]],
+                    ]],
+                    'generationConfig' => [
+                        'temperature' => 0.2,
+                        'maxOutputTokens' => $maxOutputTokens,
+                    ],
+                ];
+
+                $options = [
+                    'timeout' => 30,
+                    'http_errors' => false,
+                ];
+                if (defined('ENVIRONMENT') && in_array((string) ENVIRONMENT, ['development', 'testing'], true)) {
+                    $options['verify'] = false;
+                }
+
+                $client = service('curlrequest', $options);
+                $response = $client->post($url, [
+                    'headers' => [
+                        'Accept' => 'application/json',
+                        'Content-Type' => 'application/json',
+                    ],
+                    'body' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                ]);
+
+                $code = (int) $response->getStatusCode();
+                if ($code < 200 || $code >= 300) {
+                    continue;
+                }
+
+                $decoded = json_decode((string) $response->getBody(), true);
+                if (!is_array($decoded)) {
+                    continue;
+                }
+
+                $out = '';
+                $candidates = $decoded['candidates'] ?? [];
+                if (is_array($candidates)) {
+                    foreach ($candidates as $candidate) {
+                        $parts = $candidate['content']['parts'] ?? [];
+                        if (!is_array($parts)) {
+                            continue;
+                        }
+                        foreach ($parts as $part) {
+                            $piece = trim((string) ($part['text'] ?? ''));
+                            if ($piece !== '') {
+                                $out .= ($out === '' ? '' : "\n") . $piece;
+                            }
+                        }
+                    }
+                }
+
+                $out = trim($out);
+                if ($out !== '') {
+                    $this->lastAiProvider = 'gemini';
+                    return $out;
+                }
+            } catch (\Throwable $e) {
+                continue;
+            }
+        }
+
         return null;
     }
 
@@ -5545,6 +6106,67 @@ Input: " . $text;
         }
 
         return '';
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function resolveAiServerBaseCandidates(): array
+    {
+        $bases = [];
+
+        $direct = trim($this->resolveAiServerBaseUrl());
+        if ($direct !== '') {
+            $bases[] = rtrim($direct, '/');
+        }
+
+        $derivedFromEndpoint = [
+            trim($this->readAiSettingValue(['DIAGNOSIS_AI_PARSE_ENDPOINT'])),
+            trim($this->readAiSettingValue(['DIAGNOSIS_AI_OCR_ENDPOINT'])),
+        ];
+
+        foreach ($derivedFromEndpoint as $endpointUrl) {
+            if ($endpointUrl === '') {
+                continue;
+            }
+
+            $parts = @parse_url($endpointUrl);
+            if (! is_array($parts) || empty($parts['scheme']) || empty($parts['host'])) {
+                continue;
+            }
+
+            $origin = (string) $parts['scheme'] . '://' . (string) $parts['host'];
+            if (! empty($parts['port'])) {
+                $origin .= ':' . (int) $parts['port'];
+            }
+            $origin = rtrim($origin, '/');
+            $bases[] = $origin;
+
+            $path = trim((string) ($parts['path'] ?? ''));
+            if ($path !== '' && $path !== '/') {
+                $dirPath = trim((string) dirname($path));
+                if ($dirPath !== '' && $dirPath !== '.') {
+                    $dirPath = '/' . trim($dirPath, '/');
+                    $bases[] = $origin . $dirPath;
+
+                    $segments = array_values(array_filter(explode('/', trim($dirPath, '/')), static fn($x) => $x !== ''));
+                    if (count($segments) > 1) {
+                        $running = '';
+                        foreach ($segments as $index => $segment) {
+                            if ($index >= count($segments) - 1) {
+                                break;
+                            }
+                            $running .= '/' . $segment;
+                            $bases[] = $origin . $running;
+                        }
+                    }
+                }
+            }
+        }
+
+        $bases[] = 'http://139.59.13.39:8000';
+
+        return array_values(array_unique(array_filter(array_map(static fn($v) => rtrim((string) $v, '/'), $bases))));
     }
 
     private function translateAdviceWithAiServer(string $sourceText, string $targetLang): string

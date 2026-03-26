@@ -317,8 +317,8 @@
             $tb.empty();
             if (!rows.length) {
                 $tb.html('<tr><td colspan="9" class="text-muted">No medicine found</td></tr>');
-                if (medMasterDataTable && $.fn.dataTable.isDataTable('#tbl_med_master')) {
-                    medMasterDataTable.destroy();
+                if ($.fn.dataTable.isDataTable('#tbl_med_master')) {
+                    $('#tbl_med_master').DataTable().clear().destroy();
                     medMasterDataTable = null;
                 }
                 if (activeListFilter === 'generic_issue') {
@@ -369,8 +369,8 @@
             return;
         }
 
-        if (medMasterDataTable && $.fn.dataTable.isDataTable('#tbl_med_master')) {
-            medMasterDataTable.destroy();
+        if ($.fn.dataTable.isDataTable('#tbl_med_master')) {
+            $('#tbl_med_master').DataTable().clear().destroy();
             medMasterDataTable = null;
         }
 
