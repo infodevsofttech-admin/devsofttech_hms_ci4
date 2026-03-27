@@ -157,3 +157,58 @@ function cal_exp(string $exp)
 
     return $result;
 }
+
+if (! function_exists('hospital_setting_value')) {
+    function hospital_setting_value(string $name, string $default = ''): string
+    {
+        static $settings = null;
+
+        if ($settings === null) {
+            $settings = [];
+
+            try {
+                $db = db_connect();
+                if ($db && method_exists($db, 'tableExists') && $db->tableExists('hospital_setting')) {
+                    $rows = $db->table('hospital_setting')
+                        ->select('s_name, s_value')
+                        ->get()
+                        ->getResultArray();
+
+                    foreach ($rows as $row) {
+                        $key = trim((string) ($row['s_name'] ?? ''));
+                        if ($key === '') {
+                            continue;
+                        }
+
+                        $settings[$key] = trim((string) ($row['s_value'] ?? ''));
+                    }
+                }
+            } catch (\Throwable $e) {
+                $settings = [];
+            }
+        }
+
+        return array_key_exists($name, $settings) ? (string) $settings[$name] : $default;
+    }
+}
+
+if (! function_exists('hms_footer_version')) {
+    function hms_default_version_id(): string
+    {
+        return date('y') . '.' . str_pad((string) ((int) date('z') + 1), 3, '0', STR_PAD_LEFT);
+    }
+}
+
+if (! function_exists('hms_footer_version')) {
+    function hms_footer_version(string $default = ''): string
+    {
+        foreach (['HMS_UPDATE_ID', 'HMS_VERSION_NO', 'APP_VERSION_NO'] as $key) {
+            $value = hospital_setting_value($key, '');
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return $default !== '' ? $default : hms_default_version_id();
+    }
+}

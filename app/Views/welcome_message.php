@@ -1,3 +1,4 @@
+<?php helper('common'); ?>
 <!DOCTYPE html>
 <html lang="en">
 
@@ -34,6 +35,7 @@
 <body>
 
     <?php $user = auth()->user(); ?>
+    <?php $footerVersion = hms_footer_version(); ?>
 
     <header id="header" class="header fixed-top d-flex align-items-center">
         <div class="d-flex align-items-center justify-content-between">
@@ -56,7 +58,7 @@
 
     <footer id="footer" class="footer">
         <div class="copyright">
-            &copy; 2017 - <?= date('Y') ?> <strong><span>E-Atria</span></strong>. All Rights Reserved
+            &copy; 2017 - 2026 <strong><span>E-Atria</span></strong>. All Rights Reserved | Version: <?= esc($footerVersion) ?>
         </div>
     </footer>
     <div id="wait"

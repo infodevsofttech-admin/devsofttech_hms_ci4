@@ -1,3 +1,4 @@
+<?php helper('common'); ?>
 <!DOCTYPE html>
 <html lang="en">
 
@@ -28,6 +29,8 @@
 </head>
 
 <body>
+
+    <?php $footerVersion = hms_footer_version(); ?>
 
     <main>
         <div class="container">
@@ -128,6 +131,10 @@
 
         </div>
     </main>
+
+    <footer class="py-3 text-center text-muted small">
+        &copy; 2017 - 2026 <strong>E-Atria</strong>. All Rights Reserved | Version: <?= esc($footerVersion) ?>
+    </footer>
 
     <a href="#" class="back-to-top d-flex align-items-center justify-content-center"><i class="bi bi-arrow-up-short"></i></a>
 

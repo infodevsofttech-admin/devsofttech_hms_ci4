@@ -15,6 +15,7 @@ class HospitalProfile extends BaseController
 
         $logo = $this->readSettingValue('H_logo');
         $pharmacyLogo = $this->readSettingValue('H_Med_logo');
+        helper('common');
 
         return view('Setting/Admin/hospital_profile', [
             'hospital_name' => $this->readSettingValue('H_Name'),
@@ -22,6 +23,9 @@ class HospitalProfile extends BaseController
             'hospital_address_2' => $this->readSettingValue('H_address_2'),
             'hospital_phone' => $this->readSettingValue('H_phone_No'),
             'hospital_email' => $this->readSettingValue('H_Email'),
+            'footer_version' => $this->readSettingValue('HMS_UPDATE_ID') !== ''
+                ? $this->readSettingValue('HMS_UPDATE_ID')
+                : hms_default_version_id(),
             'hospital_logo' => $logo,
             'hospital_logo_url' => $logo !== '' ? base_url('assets/images/' . rawurlencode($logo)) : '',
             'pharmacy_name' => $this->readSettingValue('H_Med_Name'),
@@ -52,6 +56,7 @@ class HospitalProfile extends BaseController
         $address2 = trim((string) $this->request->getPost('hospital_address_2'));
         $phone = trim((string) $this->request->getPost('hospital_phone'));
         $email = trim((string) $this->request->getPost('hospital_email'));
+        $footerVersion = trim((string) $this->request->getPost('footer_version'));
 
         $pharmacyName = trim((string) $this->request->getPost('pharmacy_name'));
         $pharmacyAddress = trim((string) $this->request->getPost('pharmacy_address'));
@@ -81,6 +86,9 @@ class HospitalProfile extends BaseController
             $savedCount++;
         }
         if ($this->upsertSettingValue('H_Email', $email)) {
+            $savedCount++;
+        }
+        if ($this->upsertSettingValue('HMS_UPDATE_ID', $footerVersion)) {
             $savedCount++;
         }
         if ($this->upsertSettingValue('H_Med_Name', $pharmacyName)) {
@@ -196,6 +204,7 @@ class HospitalProfile extends BaseController
             'H_address_2',
             'H_phone_No',
             'H_Email',
+            'HMS_UPDATE_ID',
             'H_logo',
             'H_Med_Name',
             'H_Med_address_1',
