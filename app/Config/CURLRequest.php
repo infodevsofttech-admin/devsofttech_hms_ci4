@@ -17,10 +17,7 @@ class CURLRequest extends BaseConfig
      *
      * @see https://www.php.net/manual/en/curl.constants.php#constant.curl-lock-data-connect
      */
-    public array $shareConnectionOptions = [
-        CURL_LOCK_DATA_CONNECT,
-        CURL_LOCK_DATA_DNS,
-    ];
+    public array $shareConnectionOptions = [];
 
     /**
      * --------------------------------------------------------------------------
@@ -33,4 +30,18 @@ class CURLRequest extends BaseConfig
      * It may cause an error request with unnecessary headers.
      */
     public bool $shareOptions = false;
+
+    public function __construct()
+    {
+        parent::__construct();
+
+        // Some cURL builds do not expose these constants; skip sharing in that case.
+        if (defined('CURL_LOCK_DATA_CONNECT')) {
+            $this->shareConnectionOptions[] = constant('CURL_LOCK_DATA_CONNECT');
+        }
+
+        if (defined('CURL_LOCK_DATA_DNS')) {
+            $this->shareConnectionOptions[] = constant('CURL_LOCK_DATA_DNS');
+        }
+    }
 }
