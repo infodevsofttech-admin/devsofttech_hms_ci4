@@ -1112,10 +1112,11 @@
             var target = ($btn.data('target') || '').toString();
             var baseText = ($btn.data('label') || '🎙 Med Mic').toString();
 
-            $btn.removeClass('btn-danger').addClass('btn-medical-stt').prop('disabled', false).text(baseText);
+            // Always keep btn-medical-stt so the click handler always fires
+            $btn.removeClass('btn-danger').prop('disabled', false).text(baseText);
 
             if (activeTarget && target === activeTarget) {
-                $btn.removeClass('btn-medical-stt').addClass('btn-danger').text('⏹ Stop Mic');
+                $btn.addClass('btn-danger').text('⏹ Stop Mic');
             }
         });
     }
