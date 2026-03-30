@@ -1014,6 +1014,11 @@
                             <button type="button" class="btn btn-primary btn-sm" id="btn_crgc_add_med">+ Add Medicine</button>
                         </div>
                     </div>
+                    <!-- Current session medicines quick-add -->
+                    <div id="crgc_session_meds_wrap" class="mt-3" style="display:none;">
+                        <div class="fw-semibold mb-1">Medicines from current consult <small class="text-muted fw-normal">(check to include)</small></div>
+                        <div id="crgc_session_meds_list" class="d-flex flex-wrap gap-2"></div>
+                    </div>
                     <!-- Medicine list -->
                     <div class="mt-3" id="crgc_med_list_wrap" style="display:none;">
                         <div class="fw-semibold mb-1">Medicines to Add <span class="badge bg-secondary" id="crgc_med_count">0</span></div>
@@ -3914,6 +3919,7 @@
     });
 
     function renderMedicine(rows) {
+        currentSessionMedicineRows = rows || [];
         var $tb = $('#tbl_medicine tbody');
         $tb.empty();
         if (!rows || rows.length === 0) {
@@ -4281,6 +4287,7 @@
     // ---- Create Rx-Group from consult page ----
     var crgcMedicineList = [];
     var crgcMedSuggestRows = [];
+    var currentSessionMedicineRows = [];
 
     function populateCrgcDoseMasters() {
         var cache = medicineDoseMasterCache || { dose: [], when: [], freq: [], where: [] };
@@ -4346,10 +4353,88 @@
         clearCrgcMedForm();
         renderCrgcMedicineTable();
         populateCrgcDoseMasters();
+        // Show current session medicines as quick-add checkboxes
+        renderCrgcSessionMedsList();
         try {
             bootstrap.Modal.getOrCreateInstance(document.getElementById('rxGroupCreateModal')).show();
         } catch (e) {}
     }
+
+    function renderCrgcSessionMedsList() {
+        var rows = currentSessionMedicineRows || [];
+        var $wrap = $('#crgc_session_meds_wrap');
+        var $list = $('#crgc_session_meds_list');
+        $list.empty();
+        if (!rows.length) {
+            $wrap.hide();
+            return;
+        }
+        $wrap.show();
+        rows.forEach(function(row, idx) {
+            var label = [row.med_type, row.med_name].filter(Boolean).join(' ');
+            var dose = [row.dosage_label || row.dosage, row.dosage_when_label || row.dosage_when, row.dosage_freq_label || row.dosage_freq].filter(Boolean).join(' ');
+            if (dose) { label += ' (' + dose + ')'; }
+            var checked = true; // pre-checked by default
+            var id = 'crgc_smed_' + idx;
+            $list.append(
+                '<div class="form-check form-check-inline border rounded px-2 py-1">'
+                + '<input class="form-check-input crgc-smed-cb" type="checkbox" id="' + id + '" data-idx="' + idx + '"' + (checked ? ' checked' : '') + '>'
+                + '<label class="form-check-label small" for="' + id + '">'
+                + $('<div>').text(label).html()
+                + '</label></div>'
+            );
+        });
+        // Pre-populate crgcMedicineList from checked rows
+        crgcMedicineList = rows.map(function(row) {
+            return {
+                med_id: parseInt(row.med_id || row.id || 0, 10),
+                med_name: (row.med_name || '').trim(),
+                med_type: (row.med_type || '').trim(),
+                genericname: '',
+                dosage: (row.dosage || '').trim(),
+                dosage_when: (row.dosage_when || '').trim(),
+                dosage_freq: (row.dosage_freq || '').trim(),
+                dosage_where: (row.dosage_where || '').trim(),
+                no_of_days: (row.no_of_days || '').trim(),
+                qty: (row.qty || '').trim(),
+                remark: (row.remark || '').trim()
+            };
+        });
+        renderCrgcMedicineTable();
+    }
+
+    // When a session-medicine checkbox is toggled, add/remove from crgcMedicineList
+    $(document).on('change', '.crgc-smed-cb', function() {
+        var rows = currentSessionMedicineRows || [];
+        var checked = [];
+        $('.crgc-smed-cb:checked').each(function() {
+            var idx = parseInt($(this).data('idx') || '0', 10);
+            if (rows[idx]) { checked.push(idx); }
+        });
+        // Rebuild from checked session rows, then keep any manually added medicines
+        var sessionNames = rows.map(function(r) { return (r.med_name || '').trim().toUpperCase(); });
+        var manual = crgcMedicineList.filter(function(m) {
+            return sessionNames.indexOf((m.med_name || '').trim().toUpperCase()) === -1;
+        });
+        var fromSession = checked.map(function(idx) {
+            var row = rows[idx];
+            return {
+                med_id: parseInt(row.med_id || row.id || 0, 10),
+                med_name: (row.med_name || '').trim(),
+                med_type: (row.med_type || '').trim(),
+                genericname: '',
+                dosage: (row.dosage || '').trim(),
+                dosage_when: (row.dosage_when || '').trim(),
+                dosage_freq: (row.dosage_freq || '').trim(),
+                dosage_where: (row.dosage_where || '').trim(),
+                no_of_days: (row.no_of_days || '').trim(),
+                qty: (row.qty || '').trim(),
+                remark: (row.remark || '').trim()
+            };
+        });
+        crgcMedicineList = fromSession.concat(manual);
+        renderCrgcMedicineTable();
+    });
 
     // Medicine name autocomplete inside create modal
     $('#crgc_med_name').on('input', function() {
