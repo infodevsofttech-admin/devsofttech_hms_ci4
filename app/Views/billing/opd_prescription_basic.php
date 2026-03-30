@@ -267,6 +267,11 @@
                 <span id="rx_status_text" class="ms-2 text-muted">No local changes</span>
             </div>
             <div>
+                <select class="form-select form-select-sm d-inline-block" id="speech_mode_select" style="width:auto;min-width:150px;">
+                    <option value="auto">Mic Mode: Auto</option>
+                    <option value="browser">Mic Mode: Browser</option>
+                    <option value="server">Mic Mode: Server</option>
+                </select>
                 <button type="button" class="btn btn-outline-warning btn-sm" id="btn_new_opd_session_reset" title="Start clean OPD session view (clear Advice/Investigation/Medicine list)">New OPD Session</button>
                 <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_restore_draft">Restore Draft</button>
                 <button type="button" class="btn btn-outline-success btn-sm" id="btn_local_clinical_assist" title="Local rule-based support using complaints + vitals">Clinical Assist (Local)</button>
@@ -966,6 +971,8 @@
     var _onHttps = (window.location.protocol === 'https:');
     var complaintsSttServerHealthUrl    = _onHttps ? '<?= base_url('stt-proxy/health') ?>' : 'http://139.59.13.39:8000/health';
     var complaintsSttServerTranscribeUrl = _onHttps ? '<?= base_url('stt-proxy') ?>'        : 'http://139.59.13.39:8000/stt/transcribe';
+    var speechModePreferenceKey = 'opd_speech_mode_preference';
+    var speechModePreference = (localStorage.getItem(speechModePreferenceKey) || 'auto').toString();
     var draftKey = 'opd_rx_draft_' + ($('#opd_id').val() || '0');
     var templateLoadState = { target: '', section: '', rows: [] };
     var templateSaveState = { section: '', text: '', scope: 'doctor' };
@@ -1054,6 +1061,89 @@
         if (note) {
             $('.jsError').removeClass('text-danger text-success').addClass('text-muted').text(note);
         }
+    }
+
+    function getSpeechModePreference() {
+        var pref = (speechModePreference || 'auto').toString().toLowerCase();
+        if (pref !== 'auto' && pref !== 'browser' && pref !== 'server') {
+            pref = 'auto';
+        }
+        return pref;
+    }
+
+    function applySpeechModePreference() {
+        var pref = getSpeechModePreference();
+
+        if ($('#speech_mode_select').length) {
+            $('#speech_mode_select').val(pref);
+        }
+
+        if (pref === 'browser') {
+            if (complaintsSpeechRecognition) {
+                setComplaintsMicMode('browser', 'Speech mode set to Browser.');
+            } else {
+                setComplaintsMicMode('off', 'Browser speech is not supported for Complaints Mic.');
+            }
+
+            if (medicalSpeechRecognition) {
+                setMedicalMicMode('browser', 'Speech mode set to Browser.');
+            } else {
+                setMedicalMicMode('off', 'Browser speech is not supported for Med Mic.');
+            }
+            return;
+        }
+
+        checkComplaintsSttServer().then(function(serverUp) {
+            if (pref === 'server') {
+                if (serverUp) {
+                    setComplaintsMicMode('server', 'Speech mode set to Server.');
+                    setMedicalMicMode('server', 'Speech mode set to Server.');
+                } else {
+                    if (complaintsSpeechRecognition) {
+                        setComplaintsMicMode('browser', 'Server unavailable. Browser mode active.');
+                    } else {
+                        setComplaintsMicMode('off', 'Server unavailable and browser speech unsupported.');
+                    }
+
+                    if (medicalSpeechRecognition) {
+                        setMedicalMicMode('browser', 'Server unavailable. Browser mode active.');
+                    } else {
+                        setMedicalMicMode('off', 'Server unavailable and browser speech unsupported.');
+                    }
+                }
+                return;
+            }
+
+            // Auto mode
+            if (serverUp) {
+                setComplaintsMicMode('server', 'Complaints Mic ready (server mode).');
+                setMedicalMicMode('server', 'Medical Mic ready (server mode).');
+            } else {
+                if (complaintsSpeechRecognition) {
+                    setComplaintsMicMode('browser', 'Complaints Mic ready (browser mode).');
+                } else {
+                    setComplaintsMicMode('off', 'Complaints Mic unavailable in this browser.');
+                }
+
+                if (medicalSpeechRecognition) {
+                    setMedicalMicMode('browser', 'Medical Mic ready (browser mode).');
+                } else {
+                    setMedicalMicMode('off', 'Medical Mic unavailable in this browser.');
+                }
+            }
+        }).catch(function() {
+            if (complaintsSpeechRecognition) {
+                setComplaintsMicMode('browser', 'Complaints Mic ready (browser mode).');
+            } else {
+                setComplaintsMicMode('off', 'Complaints Mic unavailable in this browser.');
+            }
+
+            if (medicalSpeechRecognition) {
+                setMedicalMicMode('browser', 'Medical Mic ready (browser mode).');
+            } else {
+                setMedicalMicMode('off', 'Medical Mic unavailable in this browser.');
+            }
+        });
     }
 
     function setComplaintsMicListening(listening) {
@@ -1534,22 +1624,7 @@
             };
         }
 
-        // Check server STT availability first; fallback to browser, then off
-        checkComplaintsSttServer().then(function(serverUp) {
-            if (serverUp) {
-                setComplaintsMicMode('server', 'Complaints Mic ready (server STT).');
-            } else if (complaintsSpeechRecognition) {
-                setComplaintsMicMode('browser', 'Complaints Mic ready (browser mode).');
-            } else {
-                setComplaintsMicMode('off', 'Complaints Mic unavailable in this browser.');
-            }
-        }).catch(function() {
-            if (complaintsSpeechRecognition) {
-                setComplaintsMicMode('browser', 'Complaints Mic ready (browser mode).');
-            } else {
-                setComplaintsMicMode('off', 'Complaints Mic unavailable in this browser.');
-            }
-        });
+        setComplaintsMicMode('off', 'Checking speech mode...');
 
         $('#btn_complaints_mic').on('click', function() {
             if (complaintsMicMode === 'server') {
@@ -1596,21 +1671,7 @@
             };
         }
 
-        checkComplaintsSttServer().then(function(serverUp) {
-            if (serverUp) {
-                setMedicalMicMode('server', 'Medical Mic ready (server mode).');
-            } else if (medicalSpeechRecognition) {
-                setMedicalMicMode('browser', 'Medical Mic ready (browser mode).');
-            } else {
-                setMedicalMicMode('off', 'Medical Mic unavailable in this browser.');
-            }
-        }).catch(function() {
-            if (medicalSpeechRecognition) {
-                setMedicalMicMode('browser', 'Medical Mic ready (browser mode).');
-            } else {
-                setMedicalMicMode('off', 'Medical Mic unavailable in this browser.');
-            }
-        });
+        setMedicalMicMode('off', 'Checking speech mode...');
 
         $(document).on('click', '.btn-medical-stt', function() {
             var targetId = ($(this).data('target') || '').toString();
@@ -2968,6 +3029,33 @@
     renderComplaintChips();
     initComplaintsSpeech();
     initMedicalSpeechButtons();
+    applySpeechModePreference();
+
+    $('#speech_mode_select').val(getSpeechModePreference());
+    $('#speech_mode_select').on('change', function() {
+        var nextPref = (($(this).val() || 'auto').toString().toLowerCase());
+        if (nextPref !== 'auto' && nextPref !== 'browser' && nextPref !== 'server') {
+            nextPref = 'auto';
+        }
+
+        speechModePreference = nextPref;
+        localStorage.setItem(speechModePreferenceKey, nextPref);
+
+        if (complaintsMicActive && complaintsMediaRecorder) {
+            complaintsMediaRecorder.stop();
+        }
+        if (complaintsMicActive && complaintsSpeechRecognition) {
+            complaintsSpeechRecognition.stop();
+        }
+        if (medicalSttActive && medicalSttRecorder) {
+            medicalSttRecorder.stop();
+        }
+        if (medicalBrowserSttActive && medicalSpeechRecognition) {
+            medicalSpeechRecognition.stop();
+        }
+
+        applySpeechModePreference();
+    });
     setTimeout(loadPatientScanHistory, 50);
 
     $(document).on('click', '.btn-ai-rewrite', function() {
