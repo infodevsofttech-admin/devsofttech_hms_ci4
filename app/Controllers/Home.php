@@ -259,8 +259,33 @@ class Home extends BaseController
         }
 
         $file = $this->request->getFile('audio');
-        if ($file === null || ! $file->isValid()) {
-            return $this->response->setStatusCode(400)->setJSON(['error' => 'No valid audio file received']);
+        if ($file === null) {
+            // Fallback key for compatibility with alternate STT clients.
+            $file = $this->request->getFile('file');
+        }
+
+        if ($file === null) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'error' => 'No audio file received',
+                'expected_field' => 'audio',
+            ]);
+        }
+
+        if (! $file->isValid()) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'error' => 'Invalid uploaded audio file',
+                'upload_error_code' => $file->getError(),
+                'upload_error' => $file->getErrorString(),
+                'upload_max_filesize' => (string) ini_get('upload_max_filesize'),
+                'post_max_size' => (string) ini_get('post_max_size'),
+            ]);
+        }
+
+        $fileSize = (int) $file->getSize();
+        if ($fileSize <= 0) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'error' => 'Empty audio received',
+            ]);
         }
 
         $lang    = (string) ($this->request->getPost('lang') ?? 'en-IN');
@@ -294,7 +319,7 @@ class Home extends BaseController
                 ->setJSON(['error' => 'STT server unreachable', 'detail' => $curlErr]);
         }
 
-        $decoded = json_decode($body, true);
+        $decoded = json_decode((string) $body, true);
         if ($decoded === null) {
             return $this->response->setStatusCode(502)
                 ->setJSON(['error' => 'Invalid response from STT server']);

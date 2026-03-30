@@ -1207,6 +1207,11 @@
                 medicalSttTarget = '';
                 setMedicalMicButtonState('');
 
+                if (!blob || !blob.size || blob.size < 1024) {
+                    $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Recording too short. Please record for at least 1-2 seconds.');
+                    return;
+                }
+
                 sendMedicalAudioToServer(blob, targetForTranscript).then(function(transcript) {
                     appendTranscriptToField(targetForTranscript, transcript);
                     $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text('Medical speech text added.');
@@ -1360,6 +1365,11 @@
 
                 stopComplaintsMediaStream();
                 setComplaintsMicListening(false);
+
+                if (!blob || !blob.size || blob.size < 1024) {
+                    $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Recording too short. Please record for at least 1-2 seconds.');
+                    return;
+                }
 
                 sendComplaintsAudioToServer(blob).then(function(transcript) {
                     appendTranscriptToComplaints(transcript);
