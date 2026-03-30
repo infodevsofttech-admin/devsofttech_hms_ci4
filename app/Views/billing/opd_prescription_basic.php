@@ -959,6 +959,9 @@
     var medicalSttStream = null;
     var medicalSttChunks = [];
     var medicalSttActive = false;
+    var medicalMicMode = 'off';
+    var medicalSpeechRecognition = null;
+    var medicalBrowserSttActive = false;
     // Use server-side proxy when page is HTTPS (avoids mixed-content block)
     var _onHttps = (window.location.protocol === 'https:');
     var complaintsSttServerHealthUrl    = _onHttps ? '<?= base_url('stt-proxy/health') ?>' : 'http://139.59.13.39:8000/health';
@@ -1112,15 +1115,40 @@
         $('.btn-medical-stt').each(function() {
             var $btn = $(this);
             var target = ($btn.data('target') || '').toString();
-            var baseText = ($btn.data('label') || '🎙 Med Mic').toString();
+            var fallbackLabel = medicalMicMode === 'browser' ? '🎤 Med Mic' : '🎙 Med Mic';
+            if (medicalMicMode === 'off') {
+                fallbackLabel = '⏸ Med Mic';
+            }
+            var baseText = ($btn.data('label') || fallbackLabel).toString();
 
             // Always keep btn-medical-stt so the click handler always fires
-            $btn.removeClass('btn-danger').prop('disabled', false).text(baseText);
+            $btn.removeClass('btn-danger').prop('disabled', medicalMicMode === 'off').text(baseText);
 
             if (activeTarget && target === activeTarget) {
                 $btn.addClass('btn-danger').text('⏹ Stop Mic');
             }
         });
+    }
+
+    function setMedicalMicMode(mode, note) {
+        medicalMicMode = mode;
+
+        var label = '⏸ Med Mic';
+        if (mode === 'server') {
+            label = '🎙 Med Mic';
+        } else if (mode === 'browser') {
+            label = '🎤 Med Mic';
+        }
+
+        $('.btn-medical-stt').each(function() {
+            $(this).data('label', label).attr('data-label', label);
+        });
+
+        setMedicalMicButtonState('');
+
+        if (note) {
+            $('.jsError').removeClass('text-danger text-success').addClass('text-muted').text(note);
+        }
     }
 
     function stopMedicalSttStream() {
@@ -1164,13 +1192,63 @@
         });
     }
 
+    function startMedicalBrowserStt(targetId) {
+        if (!targetId || !$('#' + targetId).length) {
+            return;
+        }
+
+        if (!medicalSpeechRecognition) {
+            $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Medical browser speech recognition is not available.');
+            return;
+        }
+
+        if (medicalSttActive && medicalSttRecorder) {
+            $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Server Med Mic is running. Stop it first.');
+            return;
+        }
+
+        if (medicalBrowserSttActive) {
+            if (medicalSttTarget === targetId) {
+                medicalSpeechRecognition.stop();
+                $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text('Processing medical transcript...');
+                return;
+            }
+            $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Medical browser mic is already recording another field. Stop it first.');
+            return;
+        }
+
+        medicalSttTarget = targetId;
+        medicalBrowserSttActive = true;
+        setMedicalMicButtonState(targetId);
+        $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text('Listening medical speech (browser mode)... click same Mic to stop.');
+
+        try {
+            medicalSpeechRecognition.start();
+        } catch (e) {
+            medicalBrowserSttActive = false;
+            medicalSttTarget = '';
+            setMedicalMicButtonState('');
+            $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Could not start medical browser speech recognition.');
+        }
+    }
+
     function startMedicalServerStt(targetId) {
         if (!targetId || !$('#' + targetId).length) {
             return;
         }
 
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
-            $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Medical speech is not available in this browser.');
+            if (medicalSpeechRecognition) {
+                setMedicalMicMode('browser', 'Server recording is unavailable. Switched to browser mode.');
+                startMedicalBrowserStt(targetId);
+                return;
+            }
+            setMedicalMicMode('off', 'Medical speech is not available in this browser.');
+            return;
+        }
+
+        if (medicalBrowserSttActive && medicalSpeechRecognition) {
+            $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Browser Med Mic is running. Stop it first.');
             return;
         }
 
@@ -1220,7 +1298,11 @@
                         $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Medical speech input error: ' + (error.message || 'Invalid request'));
                         return;
                     }
-                    $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Medical speech server unavailable. Please try again.');
+                    if (medicalSpeechRecognition) {
+                        setMedicalMicMode('browser', 'Medical server unavailable. Switched to browser mode.');
+                    } else {
+                        $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Medical speech server unavailable. Please try again.');
+                    }
                 });
             };
 
@@ -1232,7 +1314,11 @@
             medicalSttActive = false;
             medicalSttTarget = '';
             setMedicalMicButtonState('');
-            $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Microphone permission denied for medical speech.');
+            if (medicalSpeechRecognition) {
+                setMedicalMicMode('browser', 'Microphone permission failed for server mode. Switched to browser mode.');
+            } else {
+                $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Microphone permission denied for medical speech.');
+            }
         });
     }
 
@@ -1475,10 +1561,64 @@
     }
 
     function initMedicalSpeechButtons() {
-        setMedicalMicButtonState('');
+        var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (SpeechRecognition) {
+            medicalSpeechRecognition = new SpeechRecognition();
+            medicalSpeechRecognition.lang = 'en-IN';
+            medicalSpeechRecognition.interimResults = true;
+            medicalSpeechRecognition.continuous = false;
+
+            medicalSpeechRecognition.onresult = function(event) {
+                var finalTranscript = '';
+                for (var i = event.resultIndex; i < event.results.length; i++) {
+                    var t = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) {
+                        finalTranscript += t;
+                    }
+                }
+
+                if (finalTranscript.trim() && medicalSttTarget) {
+                    appendTranscriptToField(medicalSttTarget, finalTranscript.trim());
+                }
+            };
+
+            medicalSpeechRecognition.onerror = function(event) {
+                medicalBrowserSttActive = false;
+                medicalSttTarget = '';
+                setMedicalMicButtonState('');
+                $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Medical browser speech error: ' + (event.error || 'unknown'));
+            };
+
+            medicalSpeechRecognition.onend = function() {
+                medicalBrowserSttActive = false;
+                medicalSttTarget = '';
+                setMedicalMicButtonState('');
+            };
+        }
+
+        checkComplaintsSttServer().then(function(serverUp) {
+            if (serverUp) {
+                setMedicalMicMode('server', 'Medical Mic ready (server mode).');
+            } else if (medicalSpeechRecognition) {
+                setMedicalMicMode('browser', 'Medical Mic ready (browser mode).');
+            } else {
+                setMedicalMicMode('off', 'Medical Mic unavailable in this browser.');
+            }
+        }).catch(function() {
+            if (medicalSpeechRecognition) {
+                setMedicalMicMode('browser', 'Medical Mic ready (browser mode).');
+            } else {
+                setMedicalMicMode('off', 'Medical Mic unavailable in this browser.');
+            }
+        });
+
         $(document).on('click', '.btn-medical-stt', function() {
             var targetId = ($(this).data('target') || '').toString();
-            startMedicalServerStt(targetId);
+            if (medicalMicMode === 'server') {
+                startMedicalServerStt(targetId);
+            } else if (medicalMicMode === 'browser') {
+                startMedicalBrowserStt(targetId);
+            }
         });
     }
 
