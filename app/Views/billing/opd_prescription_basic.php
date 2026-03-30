@@ -972,7 +972,7 @@
     var complaintsSttServerHealthUrl    = _onHttps ? '<?= base_url('stt-proxy/health') ?>' : 'http://139.59.13.39:8000/health';
     var complaintsSttServerTranscribeUrl = _onHttps ? '<?= base_url('stt-proxy') ?>'        : 'http://139.59.13.39:8000/stt/transcribe';
     var speechModePreferenceKey = 'opd_speech_mode_preference';
-    var speechModePreference = (localStorage.getItem(speechModePreferenceKey) || 'auto').toString();
+    var speechModePreference = (localStorage.getItem(speechModePreferenceKey) || 'browser').toString();
     var draftKey = 'opd_rx_draft_' + ($('#opd_id').val() || '0');
     var templateLoadState = { target: '', section: '', rows: [] };
     var templateSaveState = { section: '', text: '', scope: 'doctor' };
@@ -3023,6 +3023,10 @@
         e.preventDefault();
         e.returnValue = '';
     });
+
+    // Force browser mic by default in production-safe mode until server STT is stable.
+    speechModePreference = 'browser';
+    localStorage.setItem(speechModePreferenceKey, 'browser');
 
     refreshCounters();
     setStatus('normal', 'No local changes');
