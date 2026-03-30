@@ -40,7 +40,7 @@
                             ⚠ <?= esc((string) ($scan['ai_alert_text'] ?? '')) ?>
                         </div>
 
-                        <div class="text-muted js-history-report" style="white-space:pre-line;line-height:1.2;">
+                        <div class="small bg-light border rounded px-2 py-1 js-history-report" style="line-height:1.25;">
                             <?= esc((string) ($scan['report_text'] ?? '')) ?>
                         </div>
 

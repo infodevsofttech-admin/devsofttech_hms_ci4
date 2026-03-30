@@ -3159,9 +3159,53 @@
         $('#patient_scan_history_body').html('<div class="text-muted">Loading scan history...</div>');
         $.get('<?= base_url('Opd_prescription/patient_scan_history') ?>/' + opdId, function(html) {
             $('#patient_scan_history_body').html(html || '<div class="text-muted">No scan history found.</div>');
+            $('#patient_scan_history_body .js-history-report').each(function() {
+                var raw = ($(this).text() || '').toString();
+                $(this).html(formatAiReportHtml(raw));
+            });
         }).fail(function() {
             $('#patient_scan_history_body').html('<div class="text-danger">Unable to load scan history.</div>');
         });
+    }
+
+    function formatAiReportHtml(report) {
+        report = (report || '').toString().trim();
+        if (!report) {
+            return '<span class="text-muted">No AI report.</span>';
+        }
+
+        var normalized = report.replace(/\s+/g, ' ').replace(/\s*\|\s*/g, '|').trim();
+        var pieces = normalized.split('|').map(function(p) {
+            return p.trim();
+        }).filter(function(p) {
+            return p.length > 0;
+        });
+
+        if (pieces.length <= 1) {
+            pieces = normalized.split(/(?=(?:Summary|Impression|Findings|Red flags|Suggested tests|Suitability|Confidence|Ventricular rate|PR interval|QRS duration|QT\/QTc|Axis|Risk level|Alert)\s*:)/i)
+                .map(function(p) { return p.trim(); })
+                .filter(function(p) { return p.length > 0; });
+        }
+
+        if (!pieces.length) {
+            pieces = [normalized];
+        }
+
+        var html = '';
+        pieces.slice(0, 16).forEach(function(seg) {
+            var m = seg.match(/^([A-Za-z][A-Za-z0-9\s\/.()%-]{1,50})\s*:\s*(.+)$/);
+            if (m) {
+                html += '<div class="mb-1">'
+                    + '<span class="fw-semibold text-dark">' + $('<div>').text(m[1].trim() + ':').html() + '</span> '
+                    + '<span class="text-muted">' + $('<div>').text(m[2].trim()).html() + '</span>'
+                    + '</div>';
+                return;
+            }
+
+            html += '<div class="mb-1 text-muted">' + $('<div>').text(seg).html() + '</div>';
+        });
+
+        return html;
     }
 
     $('.rx-field').on('input', function() {
@@ -3364,7 +3408,7 @@
 
             if ((data.content_description || '').toString().trim() !== '') {
                 var report = (data.content_description || '').toString();
-                $item.find('.js-history-report').text(report);
+                $item.find('.js-history-report').html(formatAiReportHtml(report));
                 $item.find('.btn-use-history-report').data('report', report);
             }
 
