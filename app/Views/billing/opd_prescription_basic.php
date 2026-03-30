@@ -4207,6 +4207,24 @@
         renderRxGroupModal(rxGroupCache);
     });
 
+    function applyMedicineSelection(rowData) {
+        var medName = (rowData.med_name || '').toString().trim();
+        if (medName) { $('#med_name').val(medName); }
+        $('#med_type').val((rowData.med_type || '').toString());
+        var medId = parseInt(rowData.id || 0, 10);
+        var isFav = parseInt(rowData.is_favorite || 0, 10) === 1;
+        if (medId > 0) {
+            $('#med_name').data('med-id', medId);
+            $('#btn_toggle_med_favorite')
+                .data('med-id', medId)
+                .text(isFav ? '★' : '☆')
+                .removeClass('btn-outline-warning btn-warning')
+                .addClass(isFav ? 'btn-warning' : 'btn-outline-warning')
+                .show();
+            loadMedicineSubstitutes(medId, medName);
+        }
+    }
+
     $('#med_name').on('input', function() {
         var q = ($(this).val() || '').trim();
         if (q.length < 2) {
@@ -4218,71 +4236,40 @@
             var html = '';
             medicineSuggestRows = data.rows || [];
             medicineSuggestRows.forEach(function(row) {
-                var label = (row.med_name || '').toString();
-                if ((parseInt(row.is_favorite || 0, 10) === 1)) {
-                    label = '★ ' + label;
-                }
-                if (parseInt(row.use_count || 0, 10) > 0) {
-                    label += ' (' + parseInt(row.use_count || 0, 10) + ')';
-                }
-
                 html += '<option '
-                    + 'value="' + $('<div>').text(label).html() + '" '
+                    + 'value="' + $('<div>').text(row.med_name || '').html() + '" '
                     + 'data-name="' + $('<div>').text(row.med_name || '').html() + '" '
                     + 'data-id="' + parseInt(row.id || 0, 10) + '" '
                     + 'data-type="' + $('<div>').text(row.med_type || '').html() + '" '
                     + 'data-fav="' + parseInt(row.is_favorite || 0, 10) + '"></option>';
             });
             $('#medicine_suggest').html(html);
+
+            // Detect datalist selection: if current value exactly matches a row, fill type etc.
+            // (Chrome fires 'input' on datalist pick, not 'change')
+            var currentVal = ($('#med_name').val() || '').trim().toUpperCase();
+            for (var i = 0; i < medicineSuggestRows.length; i++) {
+                if ((medicineSuggestRows[i].med_name || '').trim().toUpperCase() === currentVal) {
+                    applyMedicineSelection(medicineSuggestRows[i]);
+                    break;
+                }
+            }
         });
     });
 
     $('#med_name').on('change', function() {
-        var val = $(this).val();
-        var matched = null;
-        $('#medicine_suggest option').each(function() {
-            if ($(this).val() === val) {
-                matched = $(this);
-                return false;
+        var val = ($(this).val() || '').trim();
+        var matchedRow = null;
+        for (var i = 0; i < medicineSuggestRows.length; i++) {
+            if ((medicineSuggestRows[i].med_name || '').trim().toUpperCase() === val.toUpperCase()) {
+                matchedRow = medicineSuggestRows[i];
+                break;
             }
-        });
-
-        if (!matched) {
-            var normalizedInput = val.replace(/^★\s*/, '').replace(/\s*\(\d+\)\s*$/, '').trim();
-            $('#medicine_suggest option').each(function() {
-                if (String($(this).data('name') || '').trim().toUpperCase() === normalizedInput.toUpperCase()) {
-                    matched = $(this);
-                    return false;
-                }
-            });
         }
-
-        if (matched) {
-            var medName = String(matched.data('name') || '').trim();
-            if (medName) {
-                $('#med_name').val(medName);
-            }
-
-            if (!$('#med_type').val()) {
-                $('#med_type').val(matched.data('type') || '');
-            }
-
-            var medId = parseInt(matched.data('id') || '0', 10);
-            var isFav = parseInt(matched.data('fav') || '0', 10) === 1;
-            if (medId > 0) {
-                $('#med_name').data('med-id', medId);
-                $('#btn_toggle_med_favorite')
-                    .data('med-id', medId)
-                    .text(isFav ? '★' : '☆')
-                    .removeClass('btn-outline-warning btn-warning')
-                    .addClass(isFav ? 'btn-warning' : 'btn-outline-warning')
-                    .show();
-
-                loadMedicineSubstitutes(medId, medName);
-            }
+        if (matchedRow) {
+            applyMedicineSelection(matchedRow);
             return;
         }
-
         $('#med_name').removeData('med-id');
         $('#btn_toggle_med_favorite').hide().data('med-id', 0).text('☆').removeClass('btn-warning').addClass('btn-outline-warning');
         $('#substitute_box').hide();
