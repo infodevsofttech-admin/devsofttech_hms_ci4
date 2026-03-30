@@ -3168,6 +3168,84 @@
         });
     }
 
+    function formatEcgReportHtml(report) {
+        var text = (report || '').toString().replace(/\s+/g, ' ').trim();
+        if (!text) {
+            return '';
+        }
+
+        function readVal(regex) {
+            var m = text.match(regex);
+            return m && m[1] ? m[1].trim() : '';
+        }
+
+        var metrics = [];
+        var vent = readVal(/Vent\.?\s*Rate\s*\(?BPM\)?\s*[:=]?\s*(\d{2,3})/i);
+        var pr = readVal(/PR\s*Int\.?\s*\(?ms\)?\s*[:=]?\s*(\d{2,4})/i);
+        var pqrs = readVal(/P\/QRS\/T\s*Int\.?\s*\(?ms\)?\s*[:=]?\s*([0-9\s]+(?:\/[0-9\s]+)?)/i);
+        var qt = readVal(/QT\/QTe?\s*Int\s*\(?ms\)?\s*[:=]?\s*([0-9\s\/.-]{3,20})/i);
+        var axis = readVal(/P\/QRS\/T\s*Axis\s*\(?Deg\)?\.?\s*[:=]?\s*([0-9\s+\/-]{2,30})/i);
+
+        if (vent) { metrics.push('Ventricular Rate: ' + vent + ' bpm'); }
+        if (pr) { metrics.push('PR Interval: ' + pr + ' ms'); }
+        if (pqrs) { metrics.push('P/QRS/T Int: ' + pqrs); }
+        if (qt) { metrics.push('QT/QTc: ' + qt); }
+        if (axis) { metrics.push('Axis: ' + axis); }
+
+        var findings = [];
+        ['Normal Sinus Rhythm', 'Left Axis Deviation', 'Borderline Normal ECG', 'Sinus Tachycardia', 'Sinus Bradycardia'].forEach(function(k) {
+            if (text.toLowerCase().indexOf(k.toLowerCase()) !== -1) {
+                findings.push(k);
+            }
+        });
+
+        var note = readVal(/Note\s*:\s*(.{0,140})/i);
+
+        var html = '';
+        if (metrics.length) {
+            html += '<div class="mb-1"><span class="fw-semibold text-dark">ECG Metrics:</span></div>';
+            metrics.forEach(function(v) {
+                html += '<div class="small text-muted ms-1">- ' + $('<div>').text(v).html() + '</div>';
+            });
+        }
+        if (findings.length) {
+            html += '<div class="mt-1 mb-1"><span class="fw-semibold text-dark">Findings:</span></div>';
+            findings.forEach(function(v) {
+                html += '<div class="small text-muted ms-1">- ' + $('<div>').text(v).html() + '</div>';
+            });
+        }
+        if (note) {
+            html += '<div class="mt-1"><span class="fw-semibold text-dark">Note:</span> <span class="text-muted">' + $('<div>').text(note).html() + '</span></div>';
+        }
+
+        if (html !== '') {
+            return html;
+        }
+
+        // Fallback split for noisy ECG OCR blocks without consistent separators.
+        var broken = text
+            .replace(/(Vent\.?\s*Rate\s*\(?BPM\)?)/ig, '\n$1')
+            .replace(/(ECG\s*Analysis\s*Result\s*[:>]*)/ig, '\n$1')
+            .replace(/(PR\s*Int\.?\s*\(?ms\)?)/ig, '\n$1')
+            .replace(/(P\/QRS\/T\s*Int\.?\s*\(?ms\)?)/ig, '\n$1')
+            .replace(/(QT\/QTe?\s*Int\s*\(?ms\)?)/ig, '\n$1')
+            .replace(/(P\/QRS\/T\s*Axis\s*\(?Deg\)?\.?)/ig, '\n$1')
+            .replace(/(RVI?\/SVS?\s*Amp\.?\s*\(?mV\)?)/ig, '\n$1')
+            .replace(/(RV5\/SV1\s*Amp\s*\(?mV\)?)/ig, '\n$1')
+            .replace(/(Note\s*:)/ig, '\n$1')
+            .replace(/(ST\s*LEVEL\s*\(?mV\)?)/ig, '\n$1');
+
+        var lines = broken.split('\n').map(function(x) {
+            return x.trim();
+        }).filter(function(x) {
+            return x.length > 0;
+        });
+
+        return lines.slice(0, 14).map(function(line) {
+            return '<div class="small text-muted mb-1">' + $('<div>').text(line).html() + '</div>';
+        }).join('');
+    }
+
     function formatAiReportHtml(report) {
         report = (report || '').toString().trim();
         if (!report) {
@@ -3175,6 +3253,10 @@
         }
 
         var normalized = report.replace(/\s+/g, ' ').replace(/\s*\|\s*/g, '|').trim();
+        if (/\becg\b|vent\.?\s*rate|p\/qrs\/t\s*int|qt\/qte?\s*int/i.test(normalized)) {
+            return formatEcgReportHtml(normalized);
+        }
+
         var pieces = normalized.split('|').map(function(p) {
             return p.trim();
         }).filter(function(p) {
