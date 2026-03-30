@@ -1379,6 +1379,10 @@
     }
 
     function initComplaintsSpeech() {
+        // Show checking state while server availability is probed
+        var $micBtn = $('#btn_complaints_mic');
+        $micBtn.prop('disabled', true).text('…');
+
         var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRecognition) {
             complaintsSpeechRecognition = new SpeechRecognition();
@@ -1423,14 +1427,27 @@
             };
         }
 
-        if (complaintsSpeechRecognition) {
-            setComplaintsMicMode('browser', 'Complaints Mic is ready (browser mode for local language).');
-        } else {
-            setComplaintsMicMode('off', 'Complaints Mic unavailable in this browser.');
-        }
+        // Check server STT availability first; fallback to browser, then off
+        checkComplaintsSttServer().then(function(serverUp) {
+            if (serverUp) {
+                setComplaintsMicMode('server', 'Complaints Mic ready (server STT).');
+            } else if (complaintsSpeechRecognition) {
+                setComplaintsMicMode('browser', 'Complaints Mic ready (browser mode).');
+            } else {
+                setComplaintsMicMode('off', 'Complaints Mic unavailable in this browser.');
+            }
+        }).catch(function() {
+            if (complaintsSpeechRecognition) {
+                setComplaintsMicMode('browser', 'Complaints Mic ready (browser mode).');
+            } else {
+                setComplaintsMicMode('off', 'Complaints Mic unavailable in this browser.');
+            }
+        });
 
         $('#btn_complaints_mic').on('click', function() {
-            if (complaintsMicMode === 'browser') {
+            if (complaintsMicMode === 'server') {
+                startComplaintsServerStt();
+            } else if (complaintsMicMode === 'browser') {
                 startComplaintsBrowserStt();
             }
         });
