@@ -747,6 +747,7 @@
                             <div class="row g-2 mb-2">
                                 <div class="col-md-8 d-flex align-items-center gap-2">
                                     <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_open_rx_group_modal">Rx Group</button>
+                                    <button type="button" class="btn btn-outline-success btn-sm" id="btn_create_rx_group_modal" title="Create new Rx-Group">+ Rx-Group</button>
                                     <span class="small text-muted" id="rx_group_selected_name">No Rx-Group selected</span>
                                 </div>
                                 <div class="col-md-4 text-md-end small text-muted">
@@ -948,6 +949,46 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Rx-Group Modal -->
+    <div class="modal fade" id="rxGroupCreateModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-md">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Create Rx-Group</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-2">
+                        <label class="form-label fw-semibold">Rx-Group Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control form-control-sm" id="crgc_name" maxlength="150" placeholder="e.g. Fever Basic">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Complaints</label>
+                        <input type="text" class="form-control form-control-sm" id="crgc_complaints" maxlength="1000">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Diagnosis</label>
+                        <input type="text" class="form-control form-control-sm" id="crgc_diagnosis" maxlength="1000">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Investigation</label>
+                        <input type="text" class="form-control form-control-sm" id="crgc_investigation" maxlength="1000">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Finding Examinations</label>
+                        <input type="text" class="form-control form-control-sm" id="crgc_finding" maxlength="1000">
+                    </div>
+                    <div class="small text-danger" id="crgc_msg" style="display:none;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="btn_crgc_save">Save Rx-Group</button>
+                    <button type="button" class="btn btn-success btn-sm" id="btn_crgc_save_apply">Save &amp; Apply</button>
                 </div>
             </div>
         </div>
@@ -4194,6 +4235,77 @@
             var modalInst = bootstrap.Modal.getOrCreateInstance(modalEl);
             modalInst.show();
         } catch (e) {}
+    });
+
+    // ---- Create Rx-Group from consult page ----
+    function openCreateRxGroupModal() {
+        // Pre-fill from current consult fields if available
+        var complaints = ($('#complaints').val() || '').trim();
+        var diagnosis = ($('#diagnosis').val() || '').trim();
+        $('#crgc_name').val('');
+        $('#crgc_complaints').val(complaints);
+        $('#crgc_diagnosis').val(diagnosis);
+        $('#crgc_investigation').val('');
+        $('#crgc_finding').val('');
+        $('#crgc_msg').hide().text('');
+        try {
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('rxGroupCreateModal')).show();
+        } catch (e) {}
+    }
+
+    function saveCreateRxGroup(andApply) {
+        var name = ($('#crgc_name').val() || '').trim();
+        if (!name) {
+            $('#crgc_msg').text('Rx-Group Name is required.').show();
+            return;
+        }
+        $('#crgc_msg').hide();
+        $('#btn_crgc_save,#btn_crgc_save_apply').prop('disabled', true);
+
+        var payload = {
+            id: 0,
+            rx_group_name: name,
+            complaints: ($('#crgc_complaints').val() || '').trim(),
+            diagnosis: ($('#crgc_diagnosis').val() || '').trim(),
+            investigation: ($('#crgc_investigation').val() || '').trim(),
+            finding_examinations: ($('#crgc_finding').val() || '').trim()
+        };
+
+        apiPost('<?= base_url('Opd_prescription/rx_group_save') ?>', payload, function(data) {
+            $('#btn_crgc_save,#btn_crgc_save_apply').prop('disabled', false);
+            if (parseInt(data.update || '0', 10) !== 1) {
+                $('#crgc_msg').text(data.error_text || 'Unable to save Rx-Group.').show();
+                return;
+            }
+            var newId = parseInt(data.insertid || '0', 10);
+            var newName = name;
+
+            // Refresh catalog cache so new group appears in selector
+            loadRxGroupCatalog();
+
+            // Close modal
+            try {
+                bootstrap.Modal.getInstance(document.getElementById('rxGroupCreateModal')).hide();
+            } catch (e) {}
+
+            $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text('Rx-Group "' + newName + '" created.');
+
+            if (andApply && newId > 0) {
+                applyRxGroupToSession(newId, newName);
+            }
+        });
+    }
+
+    $('#btn_create_rx_group_modal').on('click', function() {
+        openCreateRxGroupModal();
+    });
+
+    $('#btn_crgc_save').on('click', function() {
+        saveCreateRxGroup(false);
+    });
+
+    $('#btn_crgc_save_apply').on('click', function() {
+        saveCreateRxGroup(true);
     });
 
     $('#rx_group_search').on('input', function() {
