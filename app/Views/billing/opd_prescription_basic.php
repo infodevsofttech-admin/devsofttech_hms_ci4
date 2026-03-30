@@ -762,13 +762,19 @@
                                     <input type="text" class="form-control" id="med_type" placeholder="Type">
                                 </div>
                                 <div class="col-md-2">
-                                    <input type="text" class="form-control" id="med_dosage" placeholder="Dose">
+                                    <select class="form-select" id="med_dosage">
+                                        <option value="">Dose</option>
+                                    </select>
                                 </div>
                                 <div class="col-md-2">
-                                    <input type="text" class="form-control" id="med_when" placeholder="When">
+                                    <select class="form-select" id="med_when">
+                                        <option value="">When</option>
+                                    </select>
                                 </div>
                                 <div class="col-md-2">
-                                    <input type="text" class="form-control" id="med_freq" placeholder="Freq">
+                                    <select class="form-select" id="med_freq">
+                                        <option value="">Freq</option>
+                                    </select>
                                 </div>
                             </div>
                             <div class="row g-2 mb-3">
@@ -778,7 +784,12 @@
                                 <div class="col-md-2">
                                     <input type="text" class="form-control" id="med_qty" placeholder="Qty">
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-2">
+                                    <select class="form-select" id="med_where">
+                                        <option value="">Where</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
                                     <input type="text" class="form-control" id="med_remark" placeholder="Remark">
                                 </div>
                                 <div class="col-md-2 d-grid gap-2">
@@ -817,10 +828,10 @@
                                 <table class="table table-bordered table-sm rx-list-table" id="tbl_medicine">
                                     <thead>
                                         <tr>
-                                            <th>Medicine</th><th>Type</th><th>Dose</th><th>When</th><th>Freq</th><th>Days</th><th>Qty</th><th>Remark</th><th width="170">Action</th>
+                                            <th>Medicine</th><th>Type</th><th>Dose</th><th>When</th><th>Freq</th><th>Where</th><th>Days</th><th>Qty</th><th>Remark</th><th width="170">Action</th>
                                         </tr>
                                     </thead>
-                                    <tbody><tr><td colspan="9" class="text-muted">No medicine added</td></tr></tbody>
+                                    <tbody><tr><td colspan="10" class="text-muted">No medicine added</td></tr></tbody>
                                 </table>
                             </div>
                         </div>
@@ -987,6 +998,7 @@
     var investigationBatchActive = false;
     var activeMedicineScope = 'active';
     var medicineSuggestRows = [];
+    var medicineDoseMasterCache = { dose: [], when: [], freq: [], where: [] };
     var investigationProfiles = {
         cardiac: ['ECG', 'Lipid Profile', 'CBC'],
         viral_infection: ['CBC', 'LFT', 'KFT']
@@ -1021,6 +1033,84 @@
             updateCsrf(data);
             cb(data || {});
         }, 'json');
+    }
+
+    function renderMedicineMasterSelectOptions($select, rows, placeholder) {
+        var html = '<option value="">' + $('<div>').text(placeholder || 'Select').html() + '</option>';
+        (rows || []).forEach(function(row) {
+            var id = (row && row.id !== undefined) ? String(row.id) : '';
+            var label = (row && row.label !== undefined) ? String(row.label) : '';
+            if (!id || !label) {
+                return;
+            }
+            html += '<option value="' + $('<div>').text(id).html() + '">' + $('<div>').text(label).html() + '</option>';
+        });
+        $select.html(html);
+    }
+
+    function ensureMedicineMasterOption($select, value) {
+        value = (value || '').toString().trim();
+        if (!value) {
+            return;
+        }
+
+        if ($select.find('option[value="' + value.replace(/"/g, '&quot;') + '"]').length) {
+            return;
+        }
+
+        $select.append('<option value="' + $('<div>').text(value).html() + '">' + $('<div>').text(value + ' (Current)').html() + '</option>');
+    }
+
+    function setMedicineSelectByLabel(selectId, labelText) {
+        var $sel = $('#' + selectId);
+        if (!$sel.length) {
+            return;
+        }
+
+        var probe = (labelText || '').toString().trim().toLowerCase();
+        if (!probe) {
+            $sel.val('').trigger('change');
+            return;
+        }
+
+        var matchedVal = '';
+        $sel.find('option').each(function() {
+            var txt = ($(this).text() || '').toString().trim().toLowerCase();
+            if (!txt) {
+                return;
+            }
+            if (txt === probe || txt.indexOf(probe) !== -1) {
+                matchedVal = ($(this).val() || '').toString();
+                return false;
+            }
+        });
+
+        if (!matchedVal) {
+            ensureMedicineMasterOption($sel, labelText);
+            matchedVal = labelText;
+        }
+
+        $sel.val(matchedVal).trigger('change');
+    }
+
+    function loadMedicineDoseMasters(done) {
+        apiGet('<?= base_url('Opd_prescription/rx_group_dose_masters') ?>', function(data) {
+            medicineDoseMasterCache = {
+                dose: (data && data.dose) ? data.dose : [],
+                when: (data && data.when) ? data.when : [],
+                freq: (data && data.freq) ? data.freq : [],
+                where: (data && data.where) ? data.where : []
+            };
+
+            renderMedicineMasterSelectOptions($('#med_dosage'), medicineDoseMasterCache.dose, 'Dose');
+            renderMedicineMasterSelectOptions($('#med_when'), medicineDoseMasterCache.when, 'When');
+            renderMedicineMasterSelectOptions($('#med_freq'), medicineDoseMasterCache.freq, 'Freq');
+            renderMedicineMasterSelectOptions($('#med_where'), medicineDoseMasterCache.where, 'Where');
+
+            if (typeof done === 'function') {
+                done();
+            }
+        });
     }
 
     function getCsrfPair() {
@@ -3731,6 +3821,7 @@
     refreshCustomProfileSelect();
     loadInvestigationShortcutsFromLegacy();
     initInvestigationPicker();
+    loadMedicineDoseMasters();
     $('#advise_investigation_notes').val($('#investigation').val() || '');
 
     $(document).on('click', '.btn-del-invest', function() {
@@ -3744,7 +3835,7 @@
         var $tb = $('#tbl_medicine tbody');
         $tb.empty();
         if (!rows || rows.length === 0) {
-            $tb.html('<tr><td colspan="9" class="text-muted">No medicine added</td></tr>');
+            $tb.html('<tr><td colspan="10" class="text-muted">No medicine added</td></tr>');
             return;
         }
         function esc(v) {
@@ -3755,17 +3846,19 @@
             var dosageText = row.dosage_label || row.dosage || '';
             var whenText = row.dosage_when_label || row.dosage_when || '';
             var freqText = row.dosage_freq_label || row.dosage_freq || '';
+            var whereText = row.dosage_where_label || row.dosage_where || '';
             $tb.append('<tr>' +
                 '<td>' + esc(row.med_name) + '</td>' +
                 '<td>' + esc(row.med_type) + '</td>' +
                 '<td>' + esc(dosageText) + '</td>' +
                 '<td>' + esc(whenText) + '</td>' +
                 '<td>' + esc(freqText) + '</td>' +
+                '<td>' + esc(whereText) + '</td>' +
                 '<td>' + esc(row.no_of_days) + '</td>' +
                 '<td>' + esc(row.qty) + '</td>' +
                 '<td>' + esc(row.remark) + '</td>' +
                 '<td>' +
-                    '<button type="button" class="btn btn-sm btn-outline-primary btn-edit-med me-1" data-id="' + rowId + '" data-name="' + esc(row.med_name) + '" data-type="' + esc(row.med_type) + '" data-dose="' + esc(row.dosage) + '" data-when="' + esc(row.dosage_when) + '" data-freq="' + esc(row.dosage_freq) + '" data-days="' + esc(row.no_of_days) + '" data-qty="' + esc(row.qty) + '" data-remark="' + esc(row.remark) + '">Edit</button>' +
+                    '<button type="button" class="btn btn-sm btn-outline-primary btn-edit-med me-1" data-id="' + rowId + '" data-name="' + esc(row.med_name) + '" data-type="' + esc(row.med_type) + '" data-dose="' + esc(row.dosage) + '" data-when="' + esc(row.dosage_when) + '" data-freq="' + esc(row.dosage_freq) + '" data-where="' + esc(row.dosage_where) + '" data-days="' + esc(row.no_of_days) + '" data-qty="' + esc(row.qty) + '" data-remark="' + esc(row.remark) + '">Edit</button>' +
                     '<button type="button" class="btn btn-sm btn-danger btn-del-med" data-id="' + rowId + '">Remove</button>' +
                 '</td>' +
             '</tr>');
@@ -3773,7 +3866,8 @@
     }
 
     function clearMedicineForm(resetEdit) {
-        $('#med_name,#med_type,#med_dosage,#med_when,#med_freq,#med_days,#med_qty,#med_remark').val('');
+        $('#med_name,#med_type,#med_days,#med_qty,#med_remark').val('');
+        $('#med_dosage,#med_when,#med_freq,#med_where').val('');
         $('#med_name').removeData('med-id');
         $('#substitute_box').hide();
         $('#substitute_rows').empty();
@@ -3791,9 +3885,14 @@
         $('#med_name').val(row.name || '');
         $('#med_name').removeData('med-id');
         $('#med_type').val(row.type || '');
-        $('#med_dosage').val(row.dose || '');
-        $('#med_when').val(row.when || '');
-        $('#med_freq').val(row.freq || '');
+        ensureMedicineMasterOption($('#med_dosage'), row.dose || '');
+        ensureMedicineMasterOption($('#med_when'), row.when || '');
+        ensureMedicineMasterOption($('#med_freq'), row.freq || '');
+        ensureMedicineMasterOption($('#med_where'), row.where || '');
+        $('#med_dosage').val((row.dose || '').toString());
+        $('#med_when').val((row.when || '').toString());
+        $('#med_freq').val((row.freq || '').toString());
+        $('#med_where').val((row.where || '').toString());
         $('#med_days').val(row.days || '');
         $('#med_qty').val(row.qty || '');
         $('#med_remark').val(row.remark || '');
@@ -4246,6 +4345,7 @@
                 dosage: $('#med_dosage').val(),
                 dosage_when: $('#med_when').val(),
                 dosage_freq: $('#med_freq').val(),
+                dosage_where: $('#med_where').val(),
                 no_of_days: $('#med_days').val(),
                 qty: $('#med_qty').val(),
                 remark: $('#med_remark').val()
@@ -4276,6 +4376,7 @@
             dose: $(this).data('dose') || '',
             when: $(this).data('when') || '',
             freq: $(this).data('freq') || '',
+            where: $(this).data('where') || '',
             days: $(this).data('days') || '',
             qty: $(this).data('qty') || '',
             remark: $(this).data('remark') || ''
@@ -4329,7 +4430,13 @@
         if (!target || !$('#' + target).length) {
             return;
         }
-        $('#' + target).val(value).trigger('change').focus();
+        var $target = $('#' + target);
+        if ($target.is('select')) {
+            setMedicineSelectByLabel(target, value);
+            $target.focus();
+            return;
+        }
+        $target.val(value).trigger('change').focus();
     });
 
     $(document).on('click', '.btn-substitute-use', function() {
@@ -4375,6 +4482,7 @@
                 dosage: $('#med_dosage').val(),
                 dosage_when: $('#med_when').val(),
                 dosage_freq: $('#med_freq').val(),
+                dosage_where: $('#med_where').val(),
                 no_of_days: $('#med_days').val(),
                 qty: $('#med_qty').val(),
                 remark: $('#med_remark').val()

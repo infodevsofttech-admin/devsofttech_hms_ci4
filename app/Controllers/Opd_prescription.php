@@ -3921,11 +3921,13 @@ class Opd_prescription extends BaseController
         $doseMap = $this->getDoseMasterLabelMap('opd_dose_shed', ['dose_shed_id', 'id'], ['dose_show_sign', 'dose_sign', 'dose_sign_desc', 'name']);
         $whenMap = $this->getDoseMasterLabelMap('opd_dose_when', ['dose_when_id', 'id'], ['dose_sign', 'dose_sign_desc', 'name']);
         $freqMap = $this->getDoseMasterLabelMap('opd_dose_frequency', ['dose_freq_id', 'id'], ['dose_sign', 'dose_sign_desc', 'name']);
+        $whereMap = $this->getDoseMasterLabelMap('opd_dose_where', ['dose_where_id', 'id'], ['dose_sign', 'dose_sign_desc', 'name']);
 
         foreach ($rows as &$row) {
             $row['dosage_label'] = $this->resolveDoseMasterLabel($row['dosage'] ?? '', $doseMap);
             $row['dosage_when_label'] = $this->resolveDoseMasterLabel($row['dosage_when'] ?? '', $whenMap);
             $row['dosage_freq_label'] = $this->resolveDoseMasterLabel($row['dosage_freq'] ?? '', $freqMap);
+            $row['dosage_where_label'] = $this->resolveDoseMasterLabel($row['dosage_where'] ?? '', $whereMap);
         }
         unset($row);
 
@@ -3984,6 +3986,9 @@ class Opd_prescription extends BaseController
         }
         if (in_array('dosage_freq', $fields, true)) {
             $insert['dosage_freq'] = trim((string) $this->request->getPost('dosage_freq'));
+        }
+        if (in_array('dosage_where', $fields, true)) {
+            $insert['dosage_where'] = trim((string) $this->request->getPost('dosage_where'));
         }
         if (in_array('no_of_days', $fields, true)) {
             $insert['no_of_days'] = trim((string) $this->request->getPost('no_of_days'));
@@ -4180,6 +4185,7 @@ class Opd_prescription extends BaseController
             'dosage' => trim((string) $this->request->getPost('dosage')),
             'dosage_when' => trim((string) $this->request->getPost('dosage_when')),
             'dosage_freq' => trim((string) $this->request->getPost('dosage_freq')),
+            'dosage_where' => trim((string) $this->request->getPost('dosage_where')),
             'no_of_days' => trim((string) $this->request->getPost('no_of_days')),
             'qty' => trim((string) $this->request->getPost('qty')),
             'remark' => strtoupper(trim((string) $this->request->getPost('remark'))),
