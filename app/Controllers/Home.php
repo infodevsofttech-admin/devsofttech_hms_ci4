@@ -236,6 +236,16 @@ class Home extends BaseController
         ]);
     }
 
+    public function speechTest()
+    {
+        $authRedirect = $this->ensureAuthenticated();
+        if ($authRedirect !== null) {
+            return $authRedirect;
+        }
+
+        return view('tools/speech_test');
+    }
+
     public function myProfileSave()
     {
         $authRedirect = $this->ensureAuthenticated();

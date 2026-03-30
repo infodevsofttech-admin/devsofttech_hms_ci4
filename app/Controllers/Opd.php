@@ -1745,14 +1745,21 @@ class Opd extends BaseController
             $i = 0;
             foreach ($rxMeds as $med) {
                 $i++;
-                $name = trim((string) ($med['drug_name'] ?? $med['medicine_name'] ?? $med['item_name'] ?? ''));
-                $dose = trim((string) ($med['drug_dose'] ?? $med['dose'] ?? ''));
-                $freq = trim((string) ($med['drug_freq'] ?? $med['frequency'] ?? ''));
-                $days = trim((string) ($med['drug_day'] ?? $med['days'] ?? ''));
-                $inst = trim((string) ($med['drug_instruction'] ?? $med['instruction'] ?? ''));
+                $name = trim((string) ($med['med_name'] ?? $med['drug_name'] ?? $med['medicine_name'] ?? $med['item_name'] ?? ''));
+                $generic = trim((string) ($med['genericname'] ?? ($med['generic_name'] ?? ($med['salt_name'] ?? ''))));
+                $dose = trim((string) ($med['dosage_label'] ?? $med['dosage'] ?? $med['drug_dose'] ?? $med['dose'] ?? ''));
+                $freq = trim((string) ($med['dosage_freq_label'] ?? $med['dosage_freq'] ?? $med['drug_freq'] ?? $med['frequency'] ?? ''));
+                $days = trim((string) ($med['no_of_days'] ?? $med['drug_day'] ?? $med['days'] ?? ''));
+                $when = trim((string) ($med['dosage_when_label'] ?? $med['dosage_when'] ?? ''));
+                $remark = trim((string) ($med['remark'] ?? ''));
+                $inst = trim(($when !== '' ? $when : '') . ($remark !== '' ? ($when !== '' ? ' | ' : '') . $remark : ''));
+                $nameHtml = esc($name);
+                if ($generic !== '') {
+                    $nameHtml .= '<div style="font-size:10px;color:#444;">Salt/Generic: ' . esc($generic) . '</div>';
+                }
                 $medicalHtml .= '<tr>'
                     . '<td>' . $i . '</td>'
-                    . '<td>' . esc($name) . '</td>'
+                    . '<td>' . $nameHtml . '</td>'
                     . '<td>' . esc(trim($dose . ' ' . $freq)) . '</td>'
                     . '<td>' . esc($days) . '</td>'
                     . '<td>' . esc($inst) . '</td>'
@@ -1783,6 +1790,26 @@ class Opd extends BaseController
                 }
             }
             $rxAdvice = implode(', ', $parts);
+        }
+
+        $complaintText = (string) ($rx['complaints'] ?? '');
+        $diagnosisText = (string) (($rx['Provisional_diagnosis'] ?? '') !== '' ? ($rx['Provisional_diagnosis'] ?? '') : ($rx['diagnosis'] ?? ''));
+        $complaintLocal = $this->translateToLocalPatientText($complaintText);
+        $diagnosisLocal = $this->translateToLocalPatientText($diagnosisText);
+        $investigationLocal = $this->translateToLocalPatientText($rxInvestigation);
+        $rxAdviceLocal = $this->translateToLocalPatientText($rxAdvice);
+
+        if (strtolower(trim($complaintLocal)) === strtolower(trim($complaintText))) {
+            $complaintLocal = '';
+        }
+        if (strtolower(trim($diagnosisLocal)) === strtolower(trim($diagnosisText))) {
+            $diagnosisLocal = '';
+        }
+        if (strtolower(trim($investigationLocal)) === strtolower(trim($rxInvestigation))) {
+            $investigationLocal = '';
+        }
+        if (strtolower(trim($rxAdviceLocal)) === strtolower(trim($rxAdvice))) {
+            $rxAdviceLocal = '';
         }
 
         $bp = trim((string) ($rx['bp'] ?? ''));
@@ -1856,10 +1883,13 @@ class Opd extends BaseController
             'total_no_visit' => $totalNoVisit,
             'last_opdvisit_date' => $lastVisitText,
             'str_opd_book_date' => $bookTime,
-            'Complaint' => (string) ($rx['complaints'] ?? ''),
-            'diagnosis' => (string) (($rx['Provisional_diagnosis'] ?? '') !== '' ? ($rx['Provisional_diagnosis'] ?? '') : ($rx['diagnosis'] ?? '')),
+            'Complaint' => $complaintText,
+            'Complaint_local' => $complaintLocal,
+            'diagnosis' => $diagnosisText,
+            'diagnosis_local' => $diagnosisLocal,
             'Provisional_diagnosis' => (string) ($rx['Provisional_diagnosis'] ?? ''),
             'investigation' => $rxInvestigation,
+            'investigation_local' => $investigationLocal,
             'medical' => $medicalHtml,
             'doctor' => '<p style="text-align:right;">Dr. ' . esc((string) ($opd->doc_name ?? '')) . '</p>',
             'top_content' => '',
@@ -1867,6 +1897,7 @@ class Opd extends BaseController
             'Finding_Examinations' => (string) ($rx['Finding_Examinations'] ?? ''),
             'Prescriber_Remarks' => (string) ($rx['Prescriber_Remarks'] ?? ''),
             'advice' => $rxAdvice,
+            'advice_local' => $rxAdviceLocal,
             'next_visit' => (string) ($rx['next_visit'] ?? ''),
             'refer_to' => (string) ($rx['refer_to'] ?? ''),
             'painscale' => '',
@@ -1875,6 +1906,69 @@ class Opd extends BaseController
             'Addiction' => '',
             'Complication' => '',
         ];
+    }
+
+    private function translateToLocalPatientText(string $input): string
+    {
+        $text = trim($input);
+        if ($text === '') {
+            return '';
+        }
+
+        $map = [
+            'before food' => 'भोजन से पहले',
+            'after food' => 'भोजन के बाद',
+            'after breakfast' => 'नाश्ते के बाद',
+            'before breakfast' => 'नाश्ते से पहले',
+            'after lunch' => 'दोपहर के भोजन के बाद',
+            'before lunch' => 'दोपहर के भोजन से पहले',
+            'after dinner' => 'रात के भोजन के बाद',
+            'before dinner' => 'रात के भोजन से पहले',
+            'morning' => 'सुबह',
+            'afternoon' => 'दोपहर',
+            'evening' => 'शाम',
+            'night' => 'रात',
+            'once daily' => 'दिन में एक बार',
+            'twice daily' => 'दिन में दो बार',
+            'thrice daily' => 'दिन में तीन बार',
+            'daily' => 'रोज',
+            'weekly' => 'साप्ताहिक',
+            'for' => 'के लिए',
+            'days' => 'दिन',
+            'day' => 'दिन',
+            'tab' => 'टैबलेट',
+            'cap' => 'कैप्सूल',
+            'syp' => 'सिरप',
+            'inj' => 'इंजेक्शन',
+            'apply' => 'लगाएं',
+            'continue' => 'जारी रखें',
+            'rest' => 'आराम करें',
+            'hydrate' => 'पर्याप्त पानी लें',
+            'avoid oily food' => 'तैलीय भोजन से बचें',
+            'avoid spicy food' => 'मसालेदार भोजन से बचें',
+            'follow up' => 'फॉलो-अप करें',
+            'review' => 'पुनः जांच',
+            'advice' => 'सलाह',
+            'investigation' => 'जांच',
+            'diagnosis' => 'निदान',
+            'fever' => 'बुखार',
+            'cough' => 'खांसी',
+            'cold' => 'जुकाम',
+            'headache' => 'सिर दर्द',
+            'abdominal pain' => 'पेट दर्द',
+        ];
+
+        uksort($map, static function ($a, $b) {
+            return strlen((string) $b) <=> strlen((string) $a);
+        });
+
+        $translated = $text;
+        foreach ($map as $en => $local) {
+            $translated = preg_replace('/\b' . preg_quote($en, '/') . '\b/i', $local, $translated) ?? $translated;
+        }
+
+        $translated = preg_replace('/\s+/', ' ', trim($translated)) ?? trim($translated);
+        return $translated;
     }
 
     /**
@@ -2221,6 +2315,11 @@ class Opd extends BaseController
         $tokens['doctor_sign_html'] = nl2br((string) ($data['opd_master'][0]->doc_sign ?? ''));
         $tokens['content'] = (string) ($tokens['content'] ?? '');
 
+        $adviceLocal = trim((string) ($tokens['advice_local'] ?? ''));
+        $tokens['advice_local_line'] = $adviceLocal !== ''
+            ? ('<br><strong>सलाह:</strong> ' . $adviceLocal)
+            : '';
+
         return $tokens;
     }
 
@@ -2499,6 +2598,115 @@ class Opd extends BaseController
                     $medBuilder->orderBy('id', 'ASC');
                 }
                 $data['rx_medicines'] = $medBuilder->get()->getResultArray();
+
+                if (!empty($data['rx_medicines'])) {
+                    $mapDose = [];
+                    $mapWhen = [];
+                    $mapFreq = [];
+                    $medGenericMap = [];
+                    $missingGenericMedIds = [];
+
+                    if ($this->db->tableExists('opd_dose_shed')) {
+                        $f = $this->db->getFieldNames('opd_dose_shed');
+                        $idF = $this->resolveFirstField($f, ['dose_shed_id', 'id']);
+                        $labelF = $this->resolveFirstField($f, ['dose_show_sign', 'dose_sign', 'dose_sign_desc', 'name']);
+                        if ($idF !== null && $labelF !== null) {
+                            $rows = $this->db->table('opd_dose_shed')->select($idF . ' as id,' . $labelF . ' as label')->where($labelF . ' !=', '')->get()->getResultArray();
+                            foreach ($rows as $r) {
+                                $id = trim((string) ($r['id'] ?? ''));
+                                $label = trim((string) ($r['label'] ?? ''));
+                                if ($id !== '' && $label !== '') {
+                                    $mapDose[$id] = $label;
+                                }
+                            }
+                        }
+                    }
+
+                    if ($this->db->tableExists('opd_dose_when')) {
+                        $f = $this->db->getFieldNames('opd_dose_when');
+                        $idF = $this->resolveFirstField($f, ['dose_when_id', 'id']);
+                        $labelF = $this->resolveFirstField($f, ['dose_sign', 'dose_sign_desc', 'name']);
+                        if ($idF !== null && $labelF !== null) {
+                            $rows = $this->db->table('opd_dose_when')->select($idF . ' as id,' . $labelF . ' as label')->where($labelF . ' !=', '')->get()->getResultArray();
+                            foreach ($rows as $r) {
+                                $id = trim((string) ($r['id'] ?? ''));
+                                $label = trim((string) ($r['label'] ?? ''));
+                                if ($id !== '' && $label !== '') {
+                                    $mapWhen[$id] = $label;
+                                }
+                            }
+                        }
+                    }
+
+                    if ($this->db->tableExists('opd_dose_frequency')) {
+                        $f = $this->db->getFieldNames('opd_dose_frequency');
+                        $idF = $this->resolveFirstField($f, ['dose_freq_id', 'id']);
+                        $labelF = $this->resolveFirstField($f, ['dose_sign', 'dose_sign_desc', 'name']);
+                        if ($idF !== null && $labelF !== null) {
+                            $rows = $this->db->table('opd_dose_frequency')->select($idF . ' as id,' . $labelF . ' as label')->where($labelF . ' !=', '')->get()->getResultArray();
+                            foreach ($rows as $r) {
+                                $id = trim((string) ($r['id'] ?? ''));
+                                $label = trim((string) ($r['label'] ?? ''));
+                                if ($id !== '' && $label !== '') {
+                                    $mapFreq[$id] = $label;
+                                }
+                            }
+                        }
+                    }
+
+                    foreach ($data['rx_medicines'] as &$medRow) {
+                        $doseRaw = trim((string) ($medRow['dosage'] ?? ''));
+                        $whenRaw = trim((string) ($medRow['dosage_when'] ?? ''));
+                        $freqRaw = trim((string) ($medRow['dosage_freq'] ?? ''));
+                        $medRow['dosage_label'] = ($doseRaw !== '' && isset($mapDose[$doseRaw])) ? $mapDose[$doseRaw] : $doseRaw;
+                        $medRow['dosage_when_label'] = ($whenRaw !== '' && isset($mapWhen[$whenRaw])) ? $mapWhen[$whenRaw] : $whenRaw;
+                        $medRow['dosage_freq_label'] = ($freqRaw !== '' && isset($mapFreq[$freqRaw])) ? $mapFreq[$freqRaw] : $freqRaw;
+
+                        $genericInline = trim((string) ($medRow['genericname'] ?? ($medRow['salt_name'] ?? '')));
+                        if ($genericInline === '') {
+                            $medId = (int) ($medRow['med_id'] ?? 0);
+                            if ($medId > 0) {
+                                $missingGenericMedIds[$medId] = true;
+                            }
+                        }
+                    }
+                    unset($medRow);
+
+                    if (!empty($missingGenericMedIds) && $this->db->tableExists('opd_med_master')) {
+                        $masterFields = $this->db->getFieldNames('opd_med_master');
+                        $masterIdField = $this->resolveFirstField($masterFields, ['id']);
+                        $masterGenericField = $this->resolveFirstField($masterFields, ['genericname', 'generic_name']);
+                        $masterSaltField = $this->resolveFirstField($masterFields, ['salt_name', 'sal_name', 'salt', 'saltname']);
+                        $labelField = $masterSaltField ?? $masterGenericField;
+
+                        if ($masterIdField !== null && $labelField !== null) {
+                            $rows = $this->db->table('opd_med_master')
+                                ->select($masterIdField . ' as med_id,' . $labelField . ' as generic_fallback')
+                                ->whereIn($masterIdField, array_map('intval', array_keys($missingGenericMedIds)))
+                                ->get()
+                                ->getResultArray();
+
+                            foreach ($rows as $r) {
+                                $id = (int) ($r['med_id'] ?? 0);
+                                $label = trim((string) ($r['generic_fallback'] ?? ''));
+                                if ($id > 0 && $label !== '') {
+                                    $medGenericMap[$id] = $label;
+                                }
+                            }
+                        }
+                    }
+
+                    foreach ($data['rx_medicines'] as &$medRow) {
+                        $genericInline = trim((string) ($medRow['genericname'] ?? ($medRow['salt_name'] ?? '')));
+                        if ($genericInline === '') {
+                            $fallback = $medGenericMap[(int) ($medRow['med_id'] ?? 0)] ?? '';
+                            if ($fallback !== '') {
+                                $medRow['genericname'] = $fallback;
+                            }
+                        }
+                    }
+                    unset($medRow);
+                }
             } else {
                 $data['rx_medicines'] = [];
             }

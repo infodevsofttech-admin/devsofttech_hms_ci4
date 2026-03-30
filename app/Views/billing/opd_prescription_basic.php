@@ -58,6 +58,20 @@
         }
         .rx-save-status {
             font-size: .875rem;
+            display: flex;
+            align-items: center;
+            gap: .4rem;
+            min-width: 0;
+            max-width: 320px;
+            white-space: nowrap;
+        }
+        #rx_status_text {
+            display: inline-block;
+            min-width: 0;
+            max-width: 240px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
         .rx-tab-btn.active {
             background: #0d6efd;
@@ -122,6 +136,56 @@
         .rx-ai-btn {
             float: right;
             margin-top: -2px;
+        }
+        .rx-label-actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .5rem;
+            flex-wrap: wrap;
+            margin-bottom: .25rem;
+        }
+        .rx-label-actions .rx-label-title {
+            font-weight: 600;
+            color: #344054;
+        }
+        .rx-complaint-actions {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+        }
+        .rx-complaint-actions .rx-ai-btn {
+            float: none;
+            margin-top: 0;
+        }
+        .btn-complaints-rewrite {
+            border-color: #2b6cb0;
+            color: #2b6cb0;
+            background: #eef6ff;
+        }
+        .btn-complaints-rewrite:hover {
+            background: #2b6cb0;
+            color: #fff;
+        }
+        .btn-complaints-mic {
+            border-color: #13795b;
+            color: #13795b;
+            background: #ecfdf3;
+            min-width: 120px;
+        }
+        .btn-medical-stt {
+            border-color: #0f766e;
+            color: #0f766e;
+            background: #ecfeff;
+            min-width: 120px;
+        }
+        .btn-medical-stt:hover {
+            background: #0f766e;
+            color: #fff;
+        }
+        .btn-complaints-mic:hover {
+            background: #13795b;
+            color: #fff;
         }
         .rx-scan-banner {
             display: none;
@@ -222,8 +286,6 @@
                         <li><button type="button" class="dropdown-item text-warning" id="btn_print2">Print Rx With OPD Head LetterHead</button></li>
                     </ul>
                 </div>
-                <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_toggle_fhir_history" title="Show/Hide FHIR Export History">📄 FHIR History</button>
-                <a href="javascript:load_form('<?= base_url('Opd/invoice') ?>/<?= esc($opd_id) ?>','OPD Invoice');" class="btn btn-secondary btn-sm">Back to Invoice</a>
             </div>
         </div>
         <div id="rx_scan_banner" class="rx-scan-banner"></div>
@@ -499,18 +561,19 @@
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Complaints
-                                    <button type="button" class="btn btn-outline-primary btn-sm rx-ai-btn btn-ai-rewrite" data-target="complaints" data-mode="hinglish_to_english">Hinglish -> English</button>
+                                    <button type="button" class="btn btn-outline-primary btn-sm rx-ai-btn btn-ai-rewrite btn-complaints-rewrite" data-target="complaints" data-mode="hinglish_to_english" title="Convert Hinglish text to English">↔ Hinglish → English</button>
+                                    <button type="button" class="btn btn-outline-success btn-sm rx-ai-btn" id="btn_complaints_mic" title="Speech to text for complaints">Mic</button>
                                 </label>
                                 <textarea class="form-control rx-field" id="complaints" rows="4" maxlength="4000"><?= esc($opd_prescription[0]->complaints ?? '') ?></textarea>
+                                <div id="complaints_interim_preview" style="display:none;font-size:.8rem;color:#6c757d;padding:2px 4px;font-style:italic;"></div>
                                 <div class="rx-counter" id="counter_complaints">0/4000</div>
                             </div>
 
                             <div class="mb-3">
                                 <label class="form-label">Examination
                                 </label>
-                                <div class="small text-muted mb-1">AI Assist is optional. Use it only if you want cleaner clinical wording; manual typing works as usual.</div>
                                 <div class="d-flex flex-wrap gap-1 mb-1">
-                                    <button type="button" class="btn btn-outline-primary btn-sm btn-ai-rewrite" data-target="finding_examinations" data-mode="finding">AI Assist</button>
+                                    <button type="button" class="btn btn-sm btn-medical-stt" data-target="finding_examinations" data-label="🎙 Med Mic">🎙 Med Mic</button>
                                     <button type="button" class="btn btn-outline-secondary btn-sm btn-field-past" data-section="finding_examinations" data-target="finding_examinations">Past Data</button>
                                     <button type="button" class="btn btn-outline-secondary btn-sm btn-template-load" data-section="finding_examinations" data-target="finding_examinations">Load Template</button>
                                     <button type="button" class="btn btn-outline-secondary btn-sm btn-template-save" data-section="finding_examinations" data-target="finding_examinations">Save as Template</button>
@@ -524,7 +587,7 @@
                                 <label class="form-label">Diagnosis
                                 </label>
                                 <div class="d-flex flex-wrap gap-1 mb-1">
-                                    <button type="button" class="btn btn-outline-primary btn-sm btn-ai-rewrite" data-target="diagnosis" data-mode="diagnosis">AI Assist</button>
+                                    <button type="button" class="btn btn-sm btn-medical-stt" data-target="diagnosis" data-label="🎙 Med Mic">🎙 Med Mic</button>
                                     <button type="button" class="btn btn-outline-secondary btn-sm btn-field-past" data-section="diagnosis" data-target="diagnosis">Past Data</button>
                                     <button type="button" class="btn btn-outline-secondary btn-sm btn-template-load" data-section="diagnosis" data-target="diagnosis">Load Template</button>
                                     <button type="button" class="btn btn-outline-secondary btn-sm btn-template-save" data-section="diagnosis" data-target="diagnosis">Save as Template</button>
@@ -538,7 +601,7 @@
                                 <label class="form-label">Provisional Diagnosis
                                 </label>
                                 <div class="d-flex flex-wrap gap-1 mb-1">
-                                    <button type="button" class="btn btn-outline-primary btn-sm btn-ai-rewrite" data-target="provisional_diagnosis" data-mode="diagnosis">AI Assist</button>
+                                    <button type="button" class="btn btn-sm btn-medical-stt" data-target="provisional_diagnosis" data-label="🎙 Med Mic">🎙 Med Mic</button>
                                     <button type="button" class="btn btn-outline-secondary btn-sm btn-field-past" data-section="provisional_diagnosis" data-target="provisional_diagnosis">Past Data</button>
                                     <button type="button" class="btn btn-outline-secondary btn-sm btn-template-load" data-section="provisional_diagnosis" data-target="provisional_diagnosis">Load Template</button>
                                     <button type="button" class="btn btn-outline-secondary btn-sm btn-template-save" data-section="provisional_diagnosis" data-target="provisional_diagnosis">Save as Template</button>
@@ -552,7 +615,6 @@
                                 <label class="form-label">Prescription
                                 </label>
                                 <div class="d-flex flex-wrap gap-1 mb-1">
-                                    <button type="button" class="btn btn-outline-primary btn-sm btn-ai-rewrite" data-target="prescriber_remarks" data-mode="autotype">AI Assist</button>
                                     <button type="button" class="btn btn-outline-secondary btn-sm btn-field-past" data-section="prescriber_remarks" data-target="prescriber_remarks">Past Data</button>
                                     <button type="button" class="btn btn-outline-secondary btn-sm btn-template-load" data-section="prescriber_remarks" data-target="prescriber_remarks">Load Template</button>
                                     <button type="button" class="btn btn-outline-secondary btn-sm btn-template-save" data-section="prescriber_remarks" data-target="prescriber_remarks">Save as Template</button>
@@ -572,7 +634,6 @@
                             <div class="mb-3">
                                 <label class="form-label"><strong>Advice Add</strong></label>
                                 <div class="d-flex flex-wrap gap-1 mb-1">
-                                    <button type="button" class="btn btn-outline-primary btn-sm btn-ai-rewrite" data-target="advice" data-mode="autotype">AI Assist</button>
                                     <button type="button" class="btn btn-outline-secondary btn-sm btn-field-past" data-section="advice" data-target="advice">Past Data</button>
                                     <button type="button" class="btn btn-outline-secondary btn-sm btn-template-load" data-section="advice" data-target="advice">Load Template</button>
                                     <button type="button" class="btn btn-outline-secondary btn-sm btn-template-save" data-section="advice" data-target="advice">Save as Template</button>
@@ -717,6 +778,7 @@
                                 </div>
                                 <div class="col-md-2 d-grid gap-2">
                                     <button type="button" class="btn btn-primary" id="btn_add_medicine">Add</button>
+                                    <button type="button" class="btn btn-outline-danger" id="btn_clear_medicine">Remove All</button>
                                     <button type="button" class="btn btn-outline-secondary" id="btn_cancel_medicine_edit" style="display:none;">Cancel</button>
                                 </div>
                             </div>
@@ -777,6 +839,8 @@
                     <div class="d-flex flex-wrap gap-1 mb-2" id="rx_template_suggest_box">
                         <span class="text-muted small">No suggestion available.</span>
                     </div>
+                    <label class="form-label">Search Template</label>
+                    <input type="text" class="form-control form-control-sm mb-2" id="rx_template_search" placeholder="Search by name or content...">
                     <label class="form-label">Select Template</label>
                     <select class="form-select form-select-sm" id="rx_template_select"></select>
                     <label class="form-label mt-2">Apply Mode</label>
@@ -883,6 +947,20 @@
     var latestLocalAssist = null;
     var complaintSuggestions = [];
     var selectedComplaints = [];
+    var complaintsMicMode = 'off';
+    var complaintsSpeechRecognition = null;
+    var complaintsMicActive = false;
+    var complaintsMediaRecorder = null;
+    var complaintsMediaStream = null;
+    var complaintsMediaChunks = [];
+    var complaintsBaseText = '';
+    var medicalSttTarget = '';
+    var medicalSttRecorder = null;
+    var medicalSttStream = null;
+    var medicalSttChunks = [];
+    var medicalSttActive = false;
+    var complaintsSttServerHealthUrl = 'http://139.59.13.39:8000/health';
+    var complaintsSttServerTranscribeUrl = 'http://139.59.13.39:8000/stt/transcribe';
     var draftKey = 'opd_rx_draft_' + ($('#opd_id').val() || '0');
     var templateLoadState = { target: '', section: '', rows: [] };
     var templateSaveState = { section: '', text: '', scope: 'doctor' };
@@ -894,6 +972,7 @@
     var invCustomProfileKey = 'opd_inv_custom_profiles';
     var legacyInvestigationProfiles = {};
     var legacyInvestigationProfileList = [];
+    var investigationBatchActive = false;
     var activeMedicineScope = 'active';
     var medicineSuggestRows = [];
     var investigationProfiles = {
@@ -948,6 +1027,421 @@
         if (input) {
             input.value = data.csrfHash;
         }
+    }
+
+    function setComplaintsMicMode(mode, note) {
+        complaintsMicMode = mode;
+        var $btn = $('#btn_complaints_mic');
+        if (!$btn.length) {
+            return;
+        }
+
+        $btn.removeClass('btn-outline-success btn-outline-primary btn-outline-secondary btn-danger');
+
+        if (mode === 'server') {
+            $btn.addClass('btn-outline-success').prop('disabled', false).text('🎙 Server Mic');
+        } else if (mode === 'browser') {
+            $btn.addClass('btn-outline-primary').prop('disabled', false).text('🎤 Browser Mic');
+        } else {
+            $btn.addClass('btn-outline-secondary').prop('disabled', true).text('⏸ Mic Off');
+        }
+
+        if (note) {
+            $('.jsError').removeClass('text-danger text-success').addClass('text-muted').text(note);
+        }
+    }
+
+    function setComplaintsMicListening(listening) {
+        var $btn = $('#btn_complaints_mic');
+        if (!$btn.length) {
+            return;
+        }
+
+        complaintsMicActive = listening;
+        if (listening) {
+            $btn.removeClass('btn-outline-success btn-outline-primary btn-outline-secondary').addClass('btn-danger').text('⏹ Stop Mic');
+        } else {
+            setComplaintsMicMode(complaintsMicMode);
+        }
+    }
+
+    function appendTranscriptToComplaints(text) {
+        var transcript = (text || '').toString().trim();
+        if (!transcript) {
+            return;
+        }
+
+        var current = ($('#complaints').val() || '').toString().trim();
+        var nextVal = current ? (current + '\n' + transcript) : transcript;
+        $('#complaints').val(nextVal);
+        refreshCounters();
+        markDirty('Speech text added in complaints');
+        scheduleAutoSave();
+    }
+
+    function appendTranscriptToField(targetId, text) {
+        var transcript = (text || '').toString().trim();
+        if (!transcript || !targetId || !$('#' + targetId).length) {
+            return;
+        }
+
+        var current = ($('#' + targetId).val() || '').toString().trim();
+        var nextVal = current ? (current + '\n' + transcript) : transcript;
+        $('#' + targetId).val(nextVal);
+        refreshCounters();
+        markDirty('Medical speech text added');
+        scheduleAutoSave();
+    }
+
+    function getMedicalContextForField(targetId) {
+        if (targetId === 'finding_examinations') {
+            return 'examination findings';
+        }
+        if (targetId === 'diagnosis') {
+            return 'diagnosis notes';
+        }
+        if (targetId === 'provisional_diagnosis') {
+            return 'provisional diagnosis notes';
+        }
+        return 'clinical notes';
+    }
+
+    function setMedicalMicButtonState(activeTarget) {
+        $('.btn-medical-stt').each(function() {
+            var $btn = $(this);
+            var target = ($btn.data('target') || '').toString();
+            var baseText = ($btn.data('label') || '🎙 Med Mic').toString();
+
+            $btn.removeClass('btn-danger').addClass('btn-medical-stt').prop('disabled', false).text(baseText);
+
+            if (activeTarget && target === activeTarget) {
+                $btn.removeClass('btn-medical-stt').addClass('btn-danger').text('⏹ Stop Mic');
+            }
+        });
+    }
+
+    function stopMedicalSttStream() {
+        if (medicalSttStream && medicalSttStream.getTracks) {
+            medicalSttStream.getTracks().forEach(function(track) {
+                track.stop();
+            });
+        }
+        medicalSttStream = null;
+        medicalSttRecorder = null;
+        medicalSttChunks = [];
+    }
+
+    function sendMedicalAudioToServer(audioBlob, targetId) {
+        var formData = new FormData();
+        formData.append('audio', audioBlob, (targetId || 'clinical') + '.webm');
+        formData.append('lang', 'en-IN');
+        formData.append('medical_context', getMedicalContextForField(targetId));
+
+        return fetch(complaintsSttServerTranscribeUrl, {
+            method: 'POST',
+            mode: 'cors',
+            body: formData
+        }).then(function(response) {
+            if (!response.ok) {
+                return response.json().catch(function() {
+                    return {};
+                }).then(function(payload) {
+                    var err = new Error(payload.detail || ('Server response: ' + response.status));
+                    err.statusCode = response.status;
+                    throw err;
+                });
+            }
+            return response.json();
+        }).then(function(payload) {
+            var text = String((payload && (payload.text || payload.transcript || payload.result)) || '').trim();
+            if (!text) {
+                throw new Error('Empty transcript from server');
+            }
+            return text;
+        });
+    }
+
+    function startMedicalServerStt(targetId) {
+        if (!targetId || !$('#' + targetId).length) {
+            return;
+        }
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
+            $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Medical speech is not available in this browser.');
+            return;
+        }
+
+        if (medicalSttActive && medicalSttRecorder) {
+            if (medicalSttTarget === targetId) {
+                medicalSttRecorder.stop();
+                $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text('Processing medical transcript...');
+                return;
+            }
+            $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Medical mic is already recording another field. Stop it first.');
+            return;
+        }
+
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
+            medicalSttTarget = targetId;
+            medicalSttStream = stream;
+            medicalSttRecorder = new MediaRecorder(stream);
+            medicalSttChunks = [];
+
+            medicalSttRecorder.ondataavailable = function(event) {
+                if (event.data && event.data.size > 0) {
+                    medicalSttChunks.push(event.data);
+                }
+            };
+
+            medicalSttRecorder.onstop = function() {
+                var blob = new Blob(medicalSttChunks, {
+                    type: (medicalSttRecorder && medicalSttRecorder.mimeType) ? medicalSttRecorder.mimeType : 'audio/webm'
+                });
+                var targetForTranscript = medicalSttTarget;
+
+                stopMedicalSttStream();
+                medicalSttActive = false;
+                medicalSttTarget = '';
+                setMedicalMicButtonState('');
+
+                sendMedicalAudioToServer(blob, targetForTranscript).then(function(transcript) {
+                    appendTranscriptToField(targetForTranscript, transcript);
+                    $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text('Medical speech text added.');
+                }).catch(function(error) {
+                    if (error && error.statusCode && error.statusCode >= 400 && error.statusCode < 500) {
+                        $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Medical speech input error: ' + (error.message || 'Invalid request'));
+                        return;
+                    }
+                    $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Medical speech server unavailable. Please try again.');
+                });
+            };
+
+            medicalSttActive = true;
+            setMedicalMicButtonState(targetId);
+            $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text('Recording medical speech... click same Mic to stop.');
+            medicalSttRecorder.start();
+        }).catch(function() {
+            medicalSttActive = false;
+            medicalSttTarget = '';
+            setMedicalMicButtonState('');
+            $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Microphone permission denied for medical speech.');
+        });
+    }
+
+    function checkComplaintsSttServer() {
+        if (!window.fetch || !window.AbortController) {
+            return Promise.resolve(false);
+        }
+
+        var controller = new AbortController();
+        var timeoutId = window.setTimeout(function() {
+            controller.abort();
+        }, 3500);
+
+        return fetch(complaintsSttServerHealthUrl, {
+            method: 'GET',
+            mode: 'cors',
+            signal: controller.signal
+        }).then(function(response) {
+            return !!(response && response.ok);
+        }).catch(function() {
+            return false;
+        }).finally(function() {
+            window.clearTimeout(timeoutId);
+        });
+    }
+
+    function sendComplaintsAudioToServer(audioBlob) {
+        var formData = new FormData();
+        formData.append('audio', audioBlob, 'complaints.webm');
+        formData.append('lang', 'en-IN');
+        formData.append('medical_context', (selectedComplaints || []).join(', '));
+
+        return fetch(complaintsSttServerTranscribeUrl, {
+            method: 'POST',
+            mode: 'cors',
+            body: formData
+        }).then(function(response) {
+            if (!response.ok) {
+                return response.json().catch(function() {
+                    return {};
+                }).then(function(payload) {
+                    var err = new Error(payload.detail || ('Server response: ' + response.status));
+                    err.statusCode = response.status;
+                    throw err;
+                });
+            }
+            return response.json();
+        }).then(function(payload) {
+            var text = String((payload && (payload.text || payload.transcript || payload.result)) || '').trim();
+            if (!text) {
+                throw new Error('Empty transcript from server');
+            }
+            return text;
+        });
+    }
+
+    function stopComplaintsMediaStream() {
+        if (complaintsMediaStream && complaintsMediaStream.getTracks) {
+            complaintsMediaStream.getTracks().forEach(function(track) {
+                track.stop();
+            });
+        }
+        complaintsMediaStream = null;
+        complaintsMediaRecorder = null;
+        complaintsMediaChunks = [];
+    }
+
+    function startComplaintsBrowserStt() {
+        if (!complaintsSpeechRecognition) {
+            $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Browser speech recognition is not available.');
+            return;
+        }
+
+        if (complaintsMicActive) {
+            complaintsSpeechRecognition.stop();
+            return;
+        }
+
+        setComplaintsMicListening(true);
+        $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text('Listening complaints (browser mode)...');
+
+        try {
+            complaintsSpeechRecognition.start();
+        } catch (e) {
+            setComplaintsMicListening(false);
+            $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Could not start browser speech recognition.');
+        }
+    }
+
+    function startComplaintsServerStt() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
+            if (complaintsSpeechRecognition) {
+                setComplaintsMicMode('browser', 'Server recording is unavailable. Switched to browser mode.');
+                startComplaintsBrowserStt();
+                return;
+            }
+            setComplaintsMicMode('off', 'Speech is not available in this browser.');
+            return;
+        }
+
+        if (complaintsMicActive && complaintsMediaRecorder) {
+            complaintsMediaRecorder.stop();
+            $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text('Processing server transcript...');
+            return;
+        }
+
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
+            complaintsMediaStream = stream;
+            complaintsMediaRecorder = new MediaRecorder(stream);
+            complaintsMediaChunks = [];
+
+            complaintsMediaRecorder.ondataavailable = function(event) {
+                if (event.data && event.data.size > 0) {
+                    complaintsMediaChunks.push(event.data);
+                }
+            };
+
+            complaintsMediaRecorder.onstop = function() {
+                var blob = new Blob(complaintsMediaChunks, {
+                    type: (complaintsMediaRecorder && complaintsMediaRecorder.mimeType) ? complaintsMediaRecorder.mimeType : 'audio/webm'
+                });
+
+                stopComplaintsMediaStream();
+                setComplaintsMicListening(false);
+
+                sendComplaintsAudioToServer(blob).then(function(transcript) {
+                    appendTranscriptToComplaints(transcript);
+                    $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text('Complaints speech text added.');
+                }).catch(function(error) {
+                    if (error && error.statusCode && error.statusCode >= 400 && error.statusCode < 500) {
+                        $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Speech input error: ' + (error.message || 'Invalid request'));
+                        return;
+                    }
+                    if (complaintsSpeechRecognition) {
+                        setComplaintsMicMode('browser', 'Server STT unavailable. Switched to browser mode.');
+                    } else {
+                        setComplaintsMicMode('off', 'Server STT unavailable and browser speech not supported.');
+                    }
+                });
+            };
+
+            setComplaintsMicListening(true);
+            $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text('Recording complaints... click Mic again to stop.');
+            complaintsMediaRecorder.start();
+        }).catch(function() {
+            if (complaintsSpeechRecognition) {
+                setComplaintsMicMode('browser', 'Microphone permission failed for server mode. Switched to browser mode.');
+            } else {
+                setComplaintsMicMode('off', 'Microphone permission denied.');
+            }
+        });
+    }
+
+    function initComplaintsSpeech() {
+        var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (SpeechRecognition) {
+            complaintsSpeechRecognition = new SpeechRecognition();
+            complaintsSpeechRecognition.lang = 'en-IN';
+            complaintsSpeechRecognition.interimResults = true;
+            complaintsSpeechRecognition.continuous = false;
+
+            complaintsSpeechRecognition.onresult = function(event) {
+                var interimTranscript = '';
+                var finalTranscript = '';
+                for (var i = event.resultIndex; i < event.results.length; i++) {
+                    var t = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) {
+                        finalTranscript += t;
+                    } else {
+                        interimTranscript += t;
+                    }
+                }
+
+                if (interimTranscript) {
+                    // Show interim as a non-destructive preview below the textarea
+                    $('#complaints_interim_preview').text('🎤 ' + interimTranscript).show();
+                }
+
+                if (finalTranscript.trim()) {
+                    // Final: clear preview, append once to the base text
+                    $('#complaints_interim_preview').hide().text('');
+                    appendTranscriptToComplaints(finalTranscript.trim());
+                    complaintsBaseText = ($('#complaints').val() || '').toString().trim();
+                }
+            };
+
+            complaintsSpeechRecognition.onerror = function(event) {
+                setComplaintsMicListening(false);
+                $('#complaints_interim_preview').hide().text('');
+                $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Browser speech error: ' + (event.error || 'unknown'));
+            };
+
+            complaintsSpeechRecognition.onend = function() {
+                setComplaintsMicListening(false);
+                $('#complaints_interim_preview').hide().text('');
+            };
+        }
+
+        if (complaintsSpeechRecognition) {
+            setComplaintsMicMode('browser', 'Complaints Mic is ready (browser mode for local language).');
+        } else {
+            setComplaintsMicMode('off', 'Complaints Mic unavailable in this browser.');
+        }
+
+        $('#btn_complaints_mic').on('click', function() {
+            if (complaintsMicMode === 'browser') {
+                startComplaintsBrowserStt();
+            }
+        });
+    }
+
+    function initMedicalSpeechButtons() {
+        setMedicalMicButtonState('');
+        $(document).on('click', '.btn-medical-stt', function() {
+            var targetId = ($(this).data('target') || '').toString();
+            startMedicalServerStt(targetId);
+        });
     }
 
     function getCustomInvestigationProfiles() {
@@ -1104,6 +1598,7 @@
     function setStatus(type, message) {
         var $badge = $('#rx_status_badge');
         var $text = $('#rx_status_text');
+        var statusMessage = (message || '').toString();
         $badge.removeClass('bg-secondary bg-warning bg-success bg-danger');
 
         if (type === 'saved') {
@@ -1118,7 +1613,7 @@
             $badge.addClass('bg-secondary').text('Not Saved');
         }
 
-        $text.text(message || '');
+        $text.text(statusMessage).attr('title', statusMessage);
     }
 
     function updateScanBanner() {
@@ -1879,6 +2374,40 @@
         });
     }
 
+    function renderTemplateSelectOptions(searchQuery) {
+        var list = Array.isArray(templateLoadState.rows) ? templateLoadState.rows : [];
+        var query = (searchQuery || '').toString().trim().toLowerCase();
+        var $sel = $('#rx_template_select');
+        $sel.empty();
+
+        var added = 0;
+        list.forEach(function(row, idx) {
+            var name = (row.template_name || ('Template ' + (idx + 1))).toString();
+            var src = parseInt(row.doc_id || '0', 10) === 0 ? '[Master] ' : '[My] ';
+            var previewText = (row.template_text || '').toString();
+            var haystack = (name + ' ' + previewText + ' ' + src).toLowerCase();
+            if (query && haystack.indexOf(query) === -1) {
+                return;
+            }
+            $sel.append('<option value="' + idx + '">' + $('<div>').text(src + name).html() + '</option>');
+            added++;
+        });
+
+        if (!added) {
+            $sel.append('<option value="">No templates match search</option>');
+            $('#rx_template_preview').val('');
+            return;
+        }
+
+        var firstVal = ($sel.find('option:first').val() || '').toString();
+        var firstIdx = parseInt(firstVal, 10);
+        if (!isNaN(firstIdx) && firstIdx >= 0) {
+            $sel.val(String(firstIdx));
+            var firstRow = list[firstIdx] || {};
+            $('#rx_template_preview').val(firstRow.template_text || '');
+        }
+    }
+
     $(document).on('click', '.btn-template-load', function() {
         var target = ($(this).data('target') || '').toString();
         var section = ($(this).data('section') || '').toString();
@@ -1896,21 +2425,13 @@
 
             var rankedRows = rankTemplateRows(rows, target);
             templateLoadState = { target: target, section: section, rows: rankedRows };
-            var $sel = $('#rx_template_select');
-            $sel.empty();
-            rankedRows.forEach(function(row, idx) {
-                var name = row.template_name || ('Template ' + (idx + 1));
-                var src = parseInt(row.doc_id || '0', 10) === 0 ? '[Master] ' : '[My] ';
-                $sel.append('<option value="' + idx + '">' + $('<div>').text(src + name).html() + '</option>');
-            });
+            $('#rx_template_search').val('');
+            renderTemplateSelectOptions('');
 
             renderTemplateQuickSuggestions(rankedRows);
 
             var existingText = ($('#' + target).val() || '').toString().trim();
             $('#rx_template_apply_mode').val(existingText ? 'append' : 'replace');
-
-            var firstText = (rankedRows[0] && rankedRows[0].template_text) ? rankedRows[0].template_text : '';
-            $('#rx_template_preview').val(firstText);
 
             if (window.bootstrap && window.bootstrap.Modal) {
                 window.bootstrap.Modal.getOrCreateInstance(document.getElementById('rxTemplateModal')).show();
@@ -1921,9 +2442,17 @@
     });
 
     $('#rx_template_select').on('change', function() {
-        var idx = parseInt($(this).val() || '0', 10);
+        var idx = parseInt($(this).val() || '-1', 10);
+        if (isNaN(idx) || idx < 0) {
+            $('#rx_template_preview').val('');
+            return;
+        }
         var row = (templateLoadState.rows || [])[idx] || {};
         $('#rx_template_preview').val(row.template_text || '');
+    });
+
+    $('#rx_template_search').on('input', function() {
+        renderTemplateSelectOptions($(this).val() || '');
     });
 
     $('#btn_apply_template_choice').on('click', function() {
@@ -1975,6 +2504,10 @@
         var idx = parseInt($(this).data('idx') || '0', 10);
         if (idx < 0) {
             return;
+        }
+        if (!$('#rx_template_select option[value="' + idx + '"]').length) {
+            $('#rx_template_search').val('');
+            renderTemplateSelectOptions('');
         }
         $('#rx_template_select').val(String(idx)).trigger('change');
     });
@@ -2255,6 +2788,8 @@
     refreshCounters();
     setStatus('normal', 'No local changes');
     renderComplaintChips();
+    initComplaintsSpeech();
+    initMedicalSpeechButtons();
     setTimeout(loadPatientScanHistory, 50);
 
     $(document).on('click', '.btn-ai-rewrite', function() {
@@ -2620,6 +3155,10 @@
         return map;
     }
 
+    function normalizeInvestigationKey(name) {
+        return (name || '').toString().trim().toLowerCase();
+    }
+
     function addInvestigationEntry(name, code, done) {
         name = (name || '').trim();
         code = (code || '').trim();
@@ -2669,10 +3208,23 @@
             return;
         }
 
+        if (investigationBatchActive) {
+            $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Please wait, previous profile is still being added.');
+            return;
+        }
+
         var existing = getExistingInvestigationNames();
+        var localSeen = {};
         var queue = rows.filter(function(row) {
-            var key = ((row && row.name) ? row.name : '').toString().trim().toLowerCase();
-            return key && !existing[key];
+            var key = normalizeInvestigationKey((row && row.name) ? row.name : '');
+            if (!key) {
+                return false;
+            }
+            if (existing[key] || localSeen[key]) {
+                return false;
+            }
+            localSeen[key] = true;
+            return true;
         });
 
         if (!queue.length) {
@@ -2680,19 +3232,26 @@
             return;
         }
 
+        investigationBatchActive = true;
+
         var idx = 0;
         var added = 0;
         function next() {
             if (idx >= queue.length) {
+                investigationBatchActive = false;
                 loadInvestigationList();
                 $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text(added + ' test(s) added.');
                 markDirty('Investigation shortcuts applied');
                 return;
             }
             var row = queue[idx++] || {};
+            var key = normalizeInvestigationKey(row.name || '');
             addInvestigationEntry((row.name || '').toString(), (row.code || '').toString(), function(ok) {
                 if (ok) {
                     added++;
+                    if (key) {
+                        existing[key] = true;
+                    }
                 }
                 next();
             });
@@ -2754,6 +3313,13 @@
         }
 
         if (!name) {
+            return;
+        }
+
+        var existing = getExistingInvestigationNames();
+        var key = normalizeInvestigationKey(name);
+        if (key && existing[key]) {
+            $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('This investigation is already added.');
             return;
         }
 
@@ -2916,12 +3482,15 @@
         }
         rows.forEach(function(row) {
             var rowId = parseInt(row.id || 0, 10);
+            var dosageText = row.dosage_label || row.dosage || '';
+            var whenText = row.dosage_when_label || row.dosage_when || '';
+            var freqText = row.dosage_freq_label || row.dosage_freq || '';
             $tb.append('<tr>' +
                 '<td>' + esc(row.med_name) + '</td>' +
                 '<td>' + esc(row.med_type) + '</td>' +
-                '<td>' + esc(row.dosage) + '</td>' +
-                '<td>' + esc(row.dosage_when) + '</td>' +
-                '<td>' + esc(row.dosage_freq) + '</td>' +
+                '<td>' + esc(dosageText) + '</td>' +
+                '<td>' + esc(whenText) + '</td>' +
+                '<td>' + esc(freqText) + '</td>' +
                 '<td>' + esc(row.no_of_days) + '</td>' +
                 '<td>' + esc(row.qty) + '</td>' +
                 '<td>' + esc(row.remark) + '</td>' +
@@ -3453,6 +4022,37 @@
         });
     });
 
+    $('#btn_clear_medicine').on('click', function() {
+        var ids = [];
+        $('#tbl_medicine tbody .btn-del-med').each(function() {
+            var id = parseInt($(this).data('id') || '0', 10);
+            if (id > 0) {
+                ids.push(id);
+            }
+        });
+
+        if (!ids.length) {
+            return;
+        }
+
+        var idx = 0;
+        function removeNext() {
+            if (idx >= ids.length) {
+                clearMedicineForm(true);
+                loadMedicineList();
+                $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text('All medicines removed.');
+                markDirty('Medicine list cleared');
+                return;
+            }
+
+            var id = ids[idx++];
+            apiPost('<?= base_url('Opd_prescription/medicine_remove') ?>/' + id, {}, function() {
+                removeNext();
+            });
+        }
+        removeNext();
+    });
+
     $(document).on('click', '.med-chip', function() {
         var target = $(this).data('target');
         var value = $(this).data('value') || '';
@@ -3640,7 +4240,7 @@
     });
 
     if (localStorage.getItem(draftKey)) {
-        setStatus('dirty', 'Draft available (click Restore Draft)');
+        setStatus('dirty', 'Draft available');
     }
 
     loadAdviceList();
