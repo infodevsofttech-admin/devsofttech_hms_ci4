@@ -60,6 +60,8 @@
 
 <script>
 (function() {
+    var evtNs = '.rxGroupWorkspace';
+
     function getCsrfPair() {
         var input = document.querySelector('input[name="<?= csrf_token() ?>"]');
         if (!input) {
@@ -198,24 +200,25 @@
         });
     }
 
-    $(document).on('click', '.btn-rx-edit', function() {
+    // This view is loaded multiple times via AJAX; ensure only one set of handlers is active.
+    $(document).off('click' + evtNs, '.btn-rx-edit').on('click' + evtNs, '.btn-rx-edit', function() {
         loadOne($(this).data('id') || 0);
     });
 
-    $('#btn_new_rx_group').on('click', function() {
+    $(document).off('click' + evtNs, '#btn_new_rx_group').on('click' + evtNs, '#btn_new_rx_group', function() {
         clearForm();
         setMsg('normal', 'New Rx-Group mode');
     });
 
-    $('#btn_save_rx_group').on('click', function() {
+    $(document).off('click' + evtNs, '#btn_save_rx_group').on('click' + evtNs, '#btn_save_rx_group', function() {
         saveRxGroup(false);
     });
 
-    $('#btn_save_new_rx_group').on('click', function() {
+    $(document).off('click' + evtNs, '#btn_save_new_rx_group').on('click' + evtNs, '#btn_save_new_rx_group', function() {
         saveRxGroup(true);
     });
 
-    $('#btn_open_opd_medicine').on('click', function() {
+    $(document).off('click' + evtNs, '#btn_open_opd_medicine').on('click' + evtNs, '#btn_open_opd_medicine', function() {
         var rxId = parseInt($('#rx_id').val() || '0', 10);
         if (rxId <= 0) {
             setMsg('err', 'Save or select Rx-Group first, then add medicines.');
