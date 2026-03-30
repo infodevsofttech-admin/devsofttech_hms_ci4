@@ -4584,16 +4584,61 @@ class Opd extends BaseController
 
         $docIntelText = $this->extractTextWithAzureDocumentIntelligence($filePath);
         if ($docIntelText !== '') {
-            return preg_replace('/\s+/', ' ', trim($docIntelText)) ?: trim($docIntelText);
+            $clean = $this->sanitizeExtractedScanText($docIntelText, $scanType);
+            return $clean !== '' ? $clean : (preg_replace('/\s+/', ' ', trim($docIntelText)) ?: trim($docIntelText));
         }
 
         $azurePrompt = 'Read and extract all visible clinical text from this ' . strtoupper($scanType) . ' medical image. Return plain text only. If unclear, return best readable lines.';
         $azureText = $this->callAzureOpenAiVision($filePath, $mimeType, $azurePrompt, 1800, false);
         if ($azureText !== '') {
-            return preg_replace('/\s+/', ' ', trim($azureText)) ?: trim($azureText);
+            $clean = $this->sanitizeExtractedScanText($azureText, $scanType);
+            return $clean !== '' ? $clean : (preg_replace('/\s+/', ' ', trim($azureText)) ?: trim($azureText));
         }
 
         return null;
+    }
+
+    /**
+     * Clean OCR output so OPD UI stores readable clinical text only.
+     */
+    private function sanitizeExtractedScanText(string $text, string $scanType): string
+    {
+        $text = trim($text);
+        if ($text === '') {
+            return '';
+        }
+
+        // Remove control and non-ASCII characters that usually come from OCR noise.
+        $text = preg_replace('/[^\x09\x0A\x0D\x20-\x7E]/', ' ', $text) ?? $text;
+
+        // Drop repeated-char junk words like "ffffff".
+        $text = preg_replace('/\b([A-Za-z])\1{4,}\b/', ' ', $text) ?? $text;
+
+        // Collapse very long repeated words into one token.
+        $text = preg_replace('/\b([A-Za-z]{2,})\b(?:\s+\1\b){2,}/i', '$1', $text) ?? $text;
+
+        $isEcg = strtolower(trim($scanType)) === 'ecg' || stripos($text, 'ecg') !== false;
+        if ($isEcg) {
+            // Common OCR fixes for ECG templates.
+            $replacements = [
+                '/\bKECG\b/i' => 'ECG',
+                '/\bUniconfirmed\b/i' => 'Unconfirmed',
+                '/\bavt\b/i' => 'aVL',
+                '/\baVR\b/i' => 'aVR',
+                '/\baVF\b/i' => 'aVF',
+                '/\baVL\b/i' => 'aVL',
+                '/\bVT\b/' => 'V1',
+            ];
+
+            foreach ($replacements as $pattern => $replacement) {
+                $text = preg_replace($pattern, $replacement, $text) ?? $text;
+            }
+        }
+
+        // Normalize whitespace for compact storage/response.
+        $text = preg_replace('/\s+/', ' ', trim($text)) ?? trim($text);
+
+        return $text;
     }
 
     /**
