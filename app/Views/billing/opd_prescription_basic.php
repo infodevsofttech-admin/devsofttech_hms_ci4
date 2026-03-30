@@ -956,34 +956,75 @@
 
     <!-- Create Rx-Group Modal -->
     <div class="modal fade" id="rxGroupCreateModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-md">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Create Rx-Group</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="mb-2">
-                        <label class="form-label fw-semibold">Rx-Group Name <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control form-control-sm" id="crgc_name" maxlength="150" placeholder="e.g. Fever Basic">
+                    <div class="row g-3">
+                        <!-- Left: Group info -->
+                        <div class="col-md-5">
+                            <div class="fw-semibold mb-2">Group Info</div>
+                            <div class="mb-2">
+                                <label class="form-label">Rx-Group Name <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control form-control-sm" id="crgc_name" maxlength="150" placeholder="e.g. Fever Basic">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">Complaints</label>
+                                <input type="text" class="form-control form-control-sm" id="crgc_complaints" maxlength="1000">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">Diagnosis</label>
+                                <input type="text" class="form-control form-control-sm" id="crgc_diagnosis" maxlength="1000">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">Investigation</label>
+                                <input type="text" class="form-control form-control-sm" id="crgc_investigation" maxlength="1000">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">Finding Examinations</label>
+                                <input type="text" class="form-control form-control-sm" id="crgc_finding" maxlength="1000">
+                            </div>
+                        </div>
+                        <!-- Right: Add medicine -->
+                        <div class="col-md-7">
+                            <div class="fw-semibold mb-2">Add Medicines</div>
+                            <div class="mb-2">
+                                <input type="text" class="form-control form-control-sm" id="crgc_med_name" list="crgc_med_suggest" placeholder="Medicine name">
+                                <datalist id="crgc_med_suggest"></datalist>
+                            </div>
+                            <div class="mb-2">
+                                <input type="text" class="form-control form-control-sm" id="crgc_med_type" placeholder="Type (TAB/CAP/SYR...)">
+                            </div>
+                            <div class="row g-1 mb-2">
+                                <div class="col-4"><select class="form-select form-select-sm" id="crgc_med_dose"><option value="">Dose</option></select></div>
+                                <div class="col-4"><select class="form-select form-select-sm" id="crgc_med_when"><option value="">When</option></select></div>
+                                <div class="col-4"><select class="form-select form-select-sm" id="crgc_med_freq"><option value="">Freq</option></select></div>
+                            </div>
+                            <div class="row g-1 mb-2">
+                                <div class="col-3"><input type="text" class="form-control form-control-sm" id="crgc_med_days" placeholder="Days"></div>
+                                <div class="col-3"><input type="text" class="form-control form-control-sm" id="crgc_med_qty" placeholder="Qty"></div>
+                                <div class="col-6"><select class="form-select form-select-sm" id="crgc_med_where"><option value="">Where</option></select></div>
+                            </div>
+                            <div class="mb-2">
+                                <input type="text" class="form-control form-control-sm" id="crgc_med_remark" placeholder="Remark">
+                            </div>
+                            <button type="button" class="btn btn-primary btn-sm" id="btn_crgc_add_med">+ Add Medicine</button>
+                        </div>
                     </div>
-                    <div class="mb-2">
-                        <label class="form-label">Complaints</label>
-                        <input type="text" class="form-control form-control-sm" id="crgc_complaints" maxlength="1000">
+                    <!-- Medicine list -->
+                    <div class="mt-3" id="crgc_med_list_wrap" style="display:none;">
+                        <div class="fw-semibold mb-1">Medicines to Add <span class="badge bg-secondary" id="crgc_med_count">0</span></div>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered mb-0" id="crgc_med_table">
+                                <thead><tr><th>Medicine</th><th>Type</th><th>Dose</th><th>When</th><th>Freq</th><th>Days</th><th>Where</th><th width="60"></th></tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
                     </div>
-                    <div class="mb-2">
-                        <label class="form-label">Diagnosis</label>
-                        <input type="text" class="form-control form-control-sm" id="crgc_diagnosis" maxlength="1000">
-                    </div>
-                    <div class="mb-2">
-                        <label class="form-label">Investigation</label>
-                        <input type="text" class="form-control form-control-sm" id="crgc_investigation" maxlength="1000">
-                    </div>
-                    <div class="mb-2">
-                        <label class="form-label">Finding Examinations</label>
-                        <input type="text" class="form-control form-control-sm" id="crgc_finding" maxlength="1000">
-                    </div>
-                    <div class="small text-danger" id="crgc_msg" style="display:none;"></div>
+                    <div class="small text-danger mt-2" id="crgc_msg" style="display:none;"></div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
@@ -4238,8 +4279,61 @@
     });
 
     // ---- Create Rx-Group from consult page ----
+    var crgcMedicineList = [];
+    var crgcMedSuggestRows = [];
+
+    function populateCrgcDoseMasters() {
+        var cache = medicineDoseMasterCache || { dose: [], when: [], freq: [], where: [] };
+        function fill(selectId, rows, placeholder) {
+            var $sel = $('#' + selectId);
+            $sel.html('<option value="">' + placeholder + '</option>');
+            (rows || []).forEach(function(r) {
+                var val = (r.dose_sign || r.dose_sign_desc || r.name || '').toString().trim();
+                var label = (r.dose_sign_desc || r.dose_sign || r.name || '').toString().trim();
+                if (val) {
+                    $sel.append('<option value="' + $('<div>').text(val).html() + '">' + $('<div>').text(label).html() + '</option>');
+                }
+            });
+        }
+        fill('crgc_med_dose', cache.dose, 'Dose');
+        fill('crgc_med_when', cache.when, 'When');
+        fill('crgc_med_freq', cache.freq, 'Freq');
+        fill('crgc_med_where', cache.where, 'Where');
+    }
+
+    function renderCrgcMedicineTable() {
+        var $tbody = $('#crgc_med_table tbody');
+        $tbody.empty();
+        if (!crgcMedicineList.length) {
+            $('#crgc_med_list_wrap').hide();
+            $('#crgc_med_count').text('0');
+            return;
+        }
+        $('#crgc_med_list_wrap').show();
+        $('#crgc_med_count').text(crgcMedicineList.length);
+        crgcMedicineList.forEach(function(m, idx) {
+            $tbody.append('<tr>'
+                + '<td>' + $('<div>').text(m.med_name).html() + '</td>'
+                + '<td>' + $('<div>').text(m.med_type).html() + '</td>'
+                + '<td>' + $('<div>').text(m.dosage).html() + '</td>'
+                + '<td>' + $('<div>').text(m.dosage_when).html() + '</td>'
+                + '<td>' + $('<div>').text(m.dosage_freq).html() + '</td>'
+                + '<td>' + $('<div>').text(m.no_of_days).html() + '</td>'
+                + '<td>' + $('<div>').text(m.dosage_where).html() + '</td>'
+                + '<td><button type="button" class="btn btn-danger btn-sm py-0 px-1 crgc-med-remove" data-idx="' + idx + '">✕</button></td>'
+                + '</tr>');
+        });
+    }
+
+    function clearCrgcMedForm() {
+        $('#crgc_med_name').val('').removeData('med-id').removeData('med-type');
+        $('#crgc_med_type,#crgc_med_days,#crgc_med_qty,#crgc_med_remark').val('');
+        $('#crgc_med_dose,#crgc_med_when,#crgc_med_freq,#crgc_med_where').val('');
+        $('#crgc_med_suggest').html('');
+        crgcMedSuggestRows = [];
+    }
+
     function openCreateRxGroupModal() {
-        // Pre-fill from current consult fields if available
         var complaints = ($('#complaints').val() || '').trim();
         var diagnosis = ($('#diagnosis').val() || '').trim();
         $('#crgc_name').val('');
@@ -4248,9 +4342,109 @@
         $('#crgc_investigation').val('');
         $('#crgc_finding').val('');
         $('#crgc_msg').hide().text('');
+        crgcMedicineList = [];
+        clearCrgcMedForm();
+        renderCrgcMedicineTable();
+        populateCrgcDoseMasters();
         try {
             bootstrap.Modal.getOrCreateInstance(document.getElementById('rxGroupCreateModal')).show();
         } catch (e) {}
+    }
+
+    // Medicine name autocomplete inside create modal
+    $('#crgc_med_name').on('input', function() {
+        var q = ($(this).val() || '').trim();
+        if (q.length < 2) {
+            crgcMedSuggestRows = [];
+            $('#crgc_med_suggest').html('');
+            return;
+        }
+        apiGet('<?= base_url('Opd_prescription/medicine_search') ?>?q=' + encodeURIComponent(q) + '&scope=active', function(data) {
+            crgcMedSuggestRows = data.rows || [];
+            var html = '';
+            crgcMedSuggestRows.forEach(function(row) {
+                html += '<option value="' + $('<div>').text(row.med_name || '').html() + '"'  
+                    + ' data-type="' + $('<div>').text(row.med_type || '').html() + '"></option>';
+            });
+            $('#crgc_med_suggest').html(html);
+
+            // Auto-fill type if exact name match (Chrome fires input on datalist pick)
+            var currentVal = ($('#crgc_med_name').val() || '').trim().toUpperCase();
+            for (var i = 0; i < crgcMedSuggestRows.length; i++) {
+                if ((crgcMedSuggestRows[i].med_name || '').trim().toUpperCase() === currentVal) {
+                    $('#crgc_med_type').val(crgcMedSuggestRows[i].med_type || '');
+                    $('#crgc_med_name').data('med-id', parseInt(crgcMedSuggestRows[i].id || 0, 10));
+                    break;
+                }
+            }
+        });
+    });
+
+    $('#crgc_med_name').on('change', function() {
+        var val = ($(this).val() || '').trim().toUpperCase();
+        for (var i = 0; i < crgcMedSuggestRows.length; i++) {
+            if ((crgcMedSuggestRows[i].med_name || '').trim().toUpperCase() === val) {
+                $('#crgc_med_type').val(crgcMedSuggestRows[i].med_type || '');
+                $('#crgc_med_name').data('med-id', parseInt(crgcMedSuggestRows[i].id || 0, 10));
+                break;
+            }
+        }
+    });
+
+    $('#btn_crgc_add_med').on('click', function() {
+        var medName = ($('#crgc_med_name').val() || '').trim();
+        if (!medName) {
+            $('#crgc_med_name').focus();
+            return;
+        }
+        crgcMedicineList.push({
+            med_id: parseInt($('#crgc_med_name').data('med-id') || 0, 10),
+            med_name: medName,
+            med_type: ($('#crgc_med_type').val() || '').trim(),
+            genericname: '',
+            dosage: ($('#crgc_med_dose').val() || '').trim(),
+            dosage_when: ($('#crgc_med_when').val() || '').trim(),
+            dosage_freq: ($('#crgc_med_freq').val() || '').trim(),
+            dosage_where: ($('#crgc_med_where').val() || '').trim(),
+            no_of_days: ($('#crgc_med_days').val() || '').trim(),
+            qty: ($('#crgc_med_qty').val() || '').trim(),
+            remark: ($('#crgc_med_remark').val() || '').trim()
+        });
+        renderCrgcMedicineTable();
+        clearCrgcMedForm();
+        $('#crgc_med_name').focus();
+    });
+
+    $(document).on('click', '.crgc-med-remove', function() {
+        var idx = parseInt($(this).data('idx') || '0', 10);
+        crgcMedicineList.splice(idx, 1);
+        renderCrgcMedicineTable();
+    });
+
+    function saveCrgcMedicines(rxId, medicines, done) {
+        if (!medicines.length) {
+            done();
+            return;
+        }
+        var med = medicines[0];
+        var rest = medicines.slice(1);
+        var payload = {
+            item_id: 0,
+            med_id: med.med_id || 0,
+            med_name: med.med_name,
+            med_type: med.med_type,
+            genericname: med.genericname || '',
+            dosage: med.dosage,
+            dosage_when: med.dosage_when,
+            dosage_freq: med.dosage_freq,
+            no_of_days: med.no_of_days,
+            qty: med.qty,
+            dosage_where: med.dosage_where,
+            remark: med.remark
+        };
+        apiPost('<?= base_url('Opd_prescription/rx_group_medicine_save') ?>/' + rxId, payload, function() {
+            saveCrgcMedicines(rxId, rest, done);
+        });
     }
 
     function saveCreateRxGroup(andApply) {
@@ -4272,27 +4466,27 @@
         };
 
         apiPost('<?= base_url('Opd_prescription/rx_group_save') ?>', payload, function(data) {
-            $('#btn_crgc_save,#btn_crgc_save_apply').prop('disabled', false);
             if (parseInt(data.update || '0', 10) !== 1) {
+                $('#btn_crgc_save,#btn_crgc_save_apply').prop('disabled', false);
                 $('#crgc_msg').text(data.error_text || 'Unable to save Rx-Group.').show();
                 return;
             }
             var newId = parseInt(data.insertid || '0', 10);
             var newName = name;
+            var medicinesToSave = crgcMedicineList.slice();
 
-            // Refresh catalog cache so new group appears in selector
-            loadRxGroupCatalog();
-
-            // Close modal
-            try {
-                bootstrap.Modal.getInstance(document.getElementById('rxGroupCreateModal')).hide();
-            } catch (e) {}
-
-            $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text('Rx-Group "' + newName + '" created.');
-
-            if (andApply && newId > 0) {
-                applyRxGroupToSession(newId, newName);
-            }
+            saveCrgcMedicines(newId, medicinesToSave, function() {
+                $('#btn_crgc_save,#btn_crgc_save_apply').prop('disabled', false);
+                loadRxGroupCatalog();
+                try {
+                    bootstrap.Modal.getInstance(document.getElementById('rxGroupCreateModal')).hide();
+                } catch (e) {}
+                var msgPart = medicinesToSave.length > 0 ? ' with ' + medicinesToSave.length + ' medicine(s).' : '.';
+                $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text('Rx-Group "' + newName + '" created' + msgPart);
+                if (andApply && newId > 0) {
+                    applyRxGroupToSession(newId, newName);
+                }
+            });
         });
     }
 
