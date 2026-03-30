@@ -246,6 +246,90 @@ class Home extends BaseController
         return view('tools/speech_test');
     }
 
+    /**
+     * Server-side proxy for the STT service.
+     * Forwards audio from HTTPS clients to the HTTP STT server,
+     * avoiding browser mixed-content blocks.
+     */
+    public function sttProxy()
+    {
+        $authRedirect = $this->ensureAuthenticated();
+        if ($authRedirect !== null) {
+            return $this->response->setStatusCode(401)->setJSON(['error' => 'Unauthorized']);
+        }
+
+        $file = $this->request->getFile('audio');
+        if ($file === null || ! $file->isValid()) {
+            return $this->response->setStatusCode(400)->setJSON(['error' => 'No valid audio file received']);
+        }
+
+        $lang    = (string) ($this->request->getPost('lang') ?? 'en-IN');
+        $context = (string) ($this->request->getPost('medical_context') ?? '');
+
+        $sttUrl = 'http://139.59.13.39:8000/stt/transcribe';
+
+        $tmpPath = $file->getTempName();
+        $mime    = $file->getMimeType() ?: 'audio/webm';
+        $name    = $file->getName() ?: 'audio.webm';
+
+        $ch = curl_init($sttUrl);
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 30,
+            CURLOPT_POSTFIELDS     => [
+                'audio'           => new \CURLFile($tmpPath, $mime, $name),
+                'lang'            => $lang,
+                'medical_context' => $context,
+            ],
+        ]);
+
+        $body = curl_exec($ch);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr  = curl_error($ch);
+        curl_close($ch);
+
+        if ($body === false || $curlErr !== '') {
+            return $this->response->setStatusCode(502)
+                ->setJSON(['error' => 'STT server unreachable', 'detail' => $curlErr]);
+        }
+
+        $decoded = json_decode($body, true);
+        if ($decoded === null) {
+            return $this->response->setStatusCode(502)
+                ->setJSON(['error' => 'Invalid response from STT server']);
+        }
+
+        return $this->response->setStatusCode($httpCode > 0 ? $httpCode : 200)
+            ->setContentType('application/json')
+            ->setBody($body);
+    }
+
+    /**
+     * Proxy health check — pings the STT server and returns its status.
+     * Lets the browser check availability over HTTPS without mixed-content issues.
+     */
+    public function sttProxyHealth()
+    {
+        $authRedirect = $this->ensureAuthenticated();
+        if ($authRedirect !== null) {
+            return $this->response->setStatusCode(401)->setJSON(['ok' => false]);
+        }
+
+        $ch = curl_init('http://139.59.13.39:8000/health');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 4,
+            CURLOPT_NOBODY         => false,
+        ]);
+        $body     = curl_exec($ch);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        $ok = ($body !== false && $httpCode >= 200 && $httpCode < 300);
+        return $this->response->setStatusCode(200)->setJSON(['ok' => $ok]);
+    }
+
     public function myProfileSave()
     {
         $authRedirect = $this->ensureAuthenticated();

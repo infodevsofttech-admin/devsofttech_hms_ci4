@@ -959,8 +959,10 @@
     var medicalSttStream = null;
     var medicalSttChunks = [];
     var medicalSttActive = false;
-    var complaintsSttServerHealthUrl = 'http://139.59.13.39:8000/health';
-    var complaintsSttServerTranscribeUrl = 'http://139.59.13.39:8000/stt/transcribe';
+    // Use server-side proxy when page is HTTPS (avoids mixed-content block)
+    var _onHttps = (window.location.protocol === 'https:');
+    var complaintsSttServerHealthUrl    = _onHttps ? '<?= base_url('stt-proxy/health') ?>' : 'http://139.59.13.39:8000/health';
+    var complaintsSttServerTranscribeUrl = _onHttps ? '<?= base_url('stt-proxy') ?>'        : 'http://139.59.13.39:8000/stt/transcribe';
     var draftKey = 'opd_rx_draft_' + ($('#opd_id').val() || '0');
     var templateLoadState = { target: '', section: '', rows: [] };
     var templateSaveState = { section: '', text: '', scope: 'doctor' };
@@ -1244,7 +1246,15 @@
             mode: 'cors',
             signal: controller.signal
         }).then(function(response) {
-            return !!(response && response.ok);
+            if (!response || !response.ok) {
+                return false;
+            }
+            // Proxy returns {ok: bool}; direct server returns 200 with any body
+            return response.json().then(function(data) {
+                return data && data.ok !== false;
+            }).catch(function() {
+                return true; // direct server: 200 with non-JSON body is fine
+            });
         }).catch(function() {
             return false;
         }).finally(function() {

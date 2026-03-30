@@ -10,6 +10,8 @@ $routes->get('dashboard', 'Home::dashboard');
 $routes->get('my-profile', 'Home::myProfile');
 $routes->post('my-profile/save', 'Home::myProfileSave');
 $routes->get('speech-test', 'Home::speechTest');
+$routes->post('stt-proxy', 'Home::sttProxy');
+$routes->get('stt-proxy/health', 'Home::sttProxyHealth');
 
 // Pharmacy (Medical) - phase 1
 $routes->get('Medical', 'Medical::index');
