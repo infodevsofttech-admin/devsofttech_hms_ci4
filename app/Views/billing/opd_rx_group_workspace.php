@@ -9,7 +9,7 @@
                 <div class="card-body p-0">
                     <div class="table-responsive">
                         <table class="table table-sm table-bordered mb-0" id="tbl_rx_group">
-                            <thead><tr><th>Rx-Group Name</th><th width="150">Access</th><th width="90">Action</th></tr></thead>
+                            <thead><tr><th>Rx-Group Name</th><th width="150">Access</th><th width="90">Action</th><th width="80"></th></tr></thead>
                             <tbody><tr><td colspan="3" class="text-muted">No data</td></tr></tbody>
                         </table>
                     </div>
@@ -168,6 +168,7 @@
                     + '<td>' + nameHtml + '</td>'
                     + '<td>' + accessHtml + '</td>'
                     + '<td><button type="button" class="btn btn-sm btn-primary btn-rx-edit" data-id="' + (row.id || 0) + '">Edit</button></td>'
+                    + '<td><button type="button" class="btn btn-sm btn-danger btn-rx-delete" data-id="' + (row.id || 0) + '" data-name="' + $('<div>').text(row.rx_group_name || '').html() + '">Delete</button></td>'
                     + '</tr>');
             });
         });
@@ -203,6 +204,23 @@
     // This view is loaded multiple times via AJAX; ensure only one set of handlers is active.
     $(document).off('click' + evtNs, '.btn-rx-edit').on('click' + evtNs, '.btn-rx-edit', function() {
         loadOne($(this).data('id') || 0);
+    });
+
+    $(document).off('click' + evtNs, '.btn-rx-delete').on('click' + evtNs, '.btn-rx-delete', function() {
+        var id = parseInt($(this).data('id') || '0', 10);
+        var name = ($(this).data('name') || '').toString();
+        if (id <= 0) { return; }
+        if (!window.confirm('Delete Rx-Group "' + name + '" and all its medicines? This cannot be undone.')) { return; }
+        apiPost('<?= base_url('Opd_prescription/rx_group_delete') ?>/' + id, {}, function(data) {
+            if ((data.update || 0) != 1) {
+                setMsg('err', data.error_text || 'Unable to delete Rx-Group');
+                return;
+            }
+            var currentId = parseInt($('#rx_id').val() || '0', 10);
+            if (currentId === id) { clearForm(); }
+            setMsg('ok', 'Rx-Group "' + name + '" deleted.');
+            loadList();
+        });
     });
 
     $(document).off('click' + evtNs, '#btn_new_rx_group').on('click' + evtNs, '#btn_new_rx_group', function() {

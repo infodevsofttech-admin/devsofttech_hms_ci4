@@ -555,6 +555,7 @@ $routes->get('Opd_prescription/rx_group_medicine_list/(:num)', 'Opd_prescription
 $routes->get('Opd_prescription/rx_group_medicine_get/(:num)', 'Opd_prescription::rx_group_medicine_get/$1');
 $routes->post('Opd_prescription/rx_group_medicine_save/(:num)', 'Opd_prescription::rx_group_medicine_save/$1');
 $routes->post('Opd_prescription/rx_group_medicine_remove/(:num)', 'Opd_prescription::rx_group_medicine_remove/$1');
+$routes->post('Opd_prescription/rx_group_delete/(:num)', 'Opd_prescription::rx_group_delete/$1');
 $routes->get('Opd_prescription/rx_group_medicine_suggest', 'Opd_prescription::rx_group_medicine_suggest');
 $routes->get('Opd_prescription/rx_group_generic_suggest', 'Opd_prescription::rx_group_generic_suggest');
 $routes->get('Opd_prescription/rx_group_dose_masters', 'Opd_prescription::rx_group_dose_masters');

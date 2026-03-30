@@ -1778,6 +1778,41 @@ class Opd_prescription extends BaseController
         return $this->response->setJSON(['update' => 1, 'error_text' => 'Rx group medicine removed']);
     }
 
+    public function rx_group_delete(int $rxId)
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $rxId = max(0, $rxId);
+        if ($rxId <= 0) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid Rx-Group ID']);
+        }
+
+        if (! $this->db->tableExists('opd_prescription_template')) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Rx group table not found']);
+        }
+
+        // Delete linked medicines first
+        $medTable = $this->findExistingTable(['opd_prescrption_prescribed_template', 'opd_prescription_prescribed_template']);
+        if ($medTable !== null) {
+            $medFields = $this->db->getFieldNames($medTable);
+            $fkField = $this->resolveFirstField($medFields, ['opd_prescription_template_id', 'rx_group_id', 'template_id']);
+            if ($fkField !== null) {
+                $this->db->table($medTable)->where($fkField, $rxId)->delete();
+            }
+        }
+
+        $this->db->table('opd_prescription_template')->where('id', $rxId)->delete();
+
+        return $this->response->setJSON([
+            'update'   => 1,
+            'error_text' => 'Rx-Group deleted',
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
     public function rx_group_medicine_suggest()
     {
         $q = trim((string) $this->request->getGet('q'));
