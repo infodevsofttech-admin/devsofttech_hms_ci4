@@ -12,7 +12,8 @@ use Mpdf\Mpdf;
 class Opd extends BaseController
 {
     private const OPD_PAPER_SETTING_KEY = 'OPD_PAPER_PRINT_SETTINGS';
-    private const OPD_PAPER_SETTING_KEY_PREFIX = 'OPD_PAPER_PRINT_SETTINGS__';
+    private const OPD_PAPER_SETTING_KEY_PREFIX = 'OPD_PAPER_PS__';
+    private const OPD_PAPER_SETTING_KEY_PREFIX_LEGACY = 'OPD_PAPER_PRINT_SETTINGS__';
     private const OPD_TEMPLATE_KEY_PREFIX = 'OPD_PRINT_TEMPLATE__';
 
     /**
@@ -202,9 +203,9 @@ class Opd extends BaseController
             return;
         }
 
-        $oldKey = $this->getOpdPaperSettingStorageKey($oldName);
         $newKey = $this->getOpdPaperSettingStorageKey($newName);
-        if ($oldKey === $newKey) {
+        $oldKeys = $this->getOpdPaperSettingCandidateKeys($oldName);
+        if (empty($oldKeys)) {
             return;
         }
 
@@ -214,13 +215,41 @@ class Opd extends BaseController
             ->get(1)
             ->getRowArray();
 
+        // If target key exists, just clean old aliases.
         if (! empty($existsNew['id'])) {
+            foreach ($oldKeys as $oldKey) {
+                if ($oldKey === $newKey) {
+                    continue;
+                }
+                $this->db->table('hospital_setting')->where('s_name', $oldKey)->delete();
+            }
+
             return;
         }
 
-        $this->db->table('hospital_setting')
-            ->where('s_name', $oldKey)
-            ->update(['s_name' => $newKey]);
+        foreach ($oldKeys as $oldKey) {
+            if ($oldKey === $newKey) {
+                continue;
+            }
+
+            $row = $this->db->table('hospital_setting')
+                ->select('id,s_value')
+                ->where('s_name', $oldKey)
+                ->get(1)
+                ->getRowArray();
+
+            if (empty($row)) {
+                continue;
+            }
+
+            $this->db->table('hospital_setting')->insert([
+                's_name' => $newKey,
+                's_value' => (string) ($row['s_value'] ?? ''),
+            ]);
+
+            $this->db->table('hospital_setting')->where('id', (int) ($row['id'] ?? 0))->delete();
+            break;
+        }
     }
 
     public function print_template_delete()
@@ -260,10 +289,10 @@ class Opd extends BaseController
             return;
         }
 
-        $key = $this->getOpdPaperSettingStorageKey($templateName);
-        $this->db->table('hospital_setting')
-            ->where('s_name', $key)
-            ->delete();
+        $keys = $this->getOpdPaperSettingCandidateKeys($templateName);
+        foreach ($keys as $key) {
+            $this->db->table('hospital_setting')->where('s_name', $key)->delete();
+        }
     }
 
     private function normalizeOpdTemplateId(string $templateId): string
@@ -2091,7 +2120,25 @@ class Opd extends BaseController
             return self::OPD_PAPER_SETTING_KEY;
         }
 
-        return self::OPD_PAPER_SETTING_KEY_PREFIX . $templateName;
+        // Keep key short to avoid s_name length failures in legacy schemas.
+        return self::OPD_PAPER_SETTING_KEY_PREFIX . substr(md5($templateName), 0, 20);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function getOpdPaperSettingCandidateKeys(string $templateName = ''): array
+    {
+        $templateName = $this->normalizeOpdTemplateId($templateName);
+        if ($templateName === '') {
+            return [self::OPD_PAPER_SETTING_KEY];
+        }
+
+        $newKey = $this->getOpdPaperSettingStorageKey($templateName);
+        $legacyKey = self::OPD_PAPER_SETTING_KEY_PREFIX_LEGACY . $templateName;
+
+        $keys = [$newKey, $legacyKey];
+        return array_values(array_unique($keys));
     }
 
     private function readOpdPaperSettingPayloadByKey(string $storageKey): string
@@ -2130,7 +2177,14 @@ class Opd extends BaseController
         ];
 
         $storageKey = $this->getOpdPaperSettingStorageKey($templateName);
-        $raw = $this->readOpdPaperSettingPayloadByKey($storageKey);
+        $raw = '';
+        foreach ($this->getOpdPaperSettingCandidateKeys($templateName) as $candidateKey) {
+            $raw = $this->readOpdPaperSettingPayloadByKey($candidateKey);
+            if ($raw !== '') {
+                break;
+            }
+        }
+
         if ($raw === '' && $storageKey !== self::OPD_PAPER_SETTING_KEY) {
             // Backward compatibility with legacy global settings.
             $raw = $this->readOpdPaperSettingPayloadByKey(self::OPD_PAPER_SETTING_KEY);
@@ -2230,13 +2284,15 @@ class Opd extends BaseController
             return false;
         }
 
-        $storageKey = $this->getOpdPaperSettingStorageKey($templateName);
+        $deleted = false;
+        foreach ($this->getOpdPaperSettingCandidateKeys($templateName) as $storageKey) {
+            $ok = (bool) $this->db->table('hospital_setting')
+                ->where('s_name', $storageKey)
+                ->delete();
+            $deleted = $deleted || $ok;
+        }
 
-        $ok = $this->db->table('hospital_setting')
-            ->where('s_name', $storageKey)
-            ->delete();
-
-        return (bool) $ok;
+        return $deleted;
     }
 
     private function normalizeOpdPrintMarginCm($value, float $default): float
