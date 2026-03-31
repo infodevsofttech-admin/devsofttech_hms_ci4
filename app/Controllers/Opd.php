@@ -1821,8 +1821,25 @@ class Opd extends BaseController
             $rxAdvice = implode(', ', $parts);
         }
 
-        $complaintText = (string) ($rx['complaints'] ?? '');
-        $diagnosisText = (string) (($rx['Provisional_diagnosis'] ?? '') !== '' ? ($rx['Provisional_diagnosis'] ?? '') : ($rx['diagnosis'] ?? ''));
+        $rxRead = static function (array $row, array $keys): string {
+            foreach ($keys as $key) {
+                if (array_key_exists($key, $row)) {
+                    $value = trim((string) ($row[$key] ?? ''));
+                    if ($value !== '') {
+                        return $value;
+                    }
+                }
+            }
+
+            return '';
+        };
+
+        $complaintText = $rxRead($rx, ['complaints', 'Complaint']);
+        $provisionalDiagnosisText = $rxRead($rx, ['Provisional_diagnosis', 'provisional_diagnosis']);
+        $diagnosisText = $provisionalDiagnosisText !== ''
+            ? $provisionalDiagnosisText
+            : $rxRead($rx, ['diagnosis', 'Diagnosis']);
+        $findingExaminationsText = $rxRead($rx, ['Finding_Examinations', 'finding_examinations']);
         $complaintLocal = $this->translateToLocalPatientText($complaintText);
         $diagnosisLocal = $this->translateToLocalPatientText($diagnosisText);
         $investigationLocal = $this->translateToLocalPatientText($rxInvestigation);
@@ -1913,17 +1930,22 @@ class Opd extends BaseController
             'last_opdvisit_date' => $lastVisitText,
             'str_opd_book_date' => $bookTime,
             'Complaint' => $complaintText,
+            'complaint' => $complaintText,
+            'complaints' => $complaintText,
             'Complaint_local' => $complaintLocal,
             'diagnosis' => $diagnosisText,
+            'Diagnosis' => $diagnosisText,
             'diagnosis_local' => $diagnosisLocal,
-            'Provisional_diagnosis' => (string) ($rx['Provisional_diagnosis'] ?? ''),
+            'Provisional_diagnosis' => $provisionalDiagnosisText,
+            'provisional_diagnosis' => $provisionalDiagnosisText,
             'investigation' => $rxInvestigation,
             'investigation_local' => $investigationLocal,
             'medical' => $medicalHtml,
             'doctor' => '<p style="text-align:right;">Dr. ' . esc((string) ($opd->doc_name ?? '')) . '</p>',
             'top_content' => '',
             'vital_content' => implode(' | ', $vitals),
-            'Finding_Examinations' => (string) ($rx['Finding_Examinations'] ?? ''),
+            'Finding_Examinations' => $findingExaminationsText,
+            'finding_examinations' => $findingExaminationsText,
             'Prescriber_Remarks' => (string) ($rx['Prescriber_Remarks'] ?? ''),
             'advice' => $rxAdvice,
             'advice_local' => $rxAdviceLocal,
