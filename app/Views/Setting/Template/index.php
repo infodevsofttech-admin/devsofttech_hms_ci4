@@ -7,17 +7,27 @@ $canCt = $user && method_exists($user, 'can') ? $user->can('template.ct') : fals
 $canMri = $user && method_exists($user, 'can') ? $user->can('template.mri') : false;
 $canEcho = $user && method_exists($user, 'can') ? $user->can('template.echo') : false;
 $canDischarge = $user && method_exists($user, 'can') ? $user->can('template.discharge') : false;
-$canOpdPrintTemplate = $user && method_exists($user, 'can') ? $user->can('billing.opd.edit') : false;
-$canDiagnosisPrintTemplate = $canPathology || $canUltrasound || $canXray || $canCt || $canMri || $canEcho;
-$canDoctorDocumentPrintTemplate = $user && method_exists($user, 'can')
-    ? ($user->can('doctor_work.template_workspace.access') || $user->can('doctor_work.access') || $user->can('template.pathology'))
+$canOpdPrintTemplate = $user && method_exists($user, 'can')
+    ? ($user->can('template.opd_print') || $user->can('billing.opd.edit'))
     : false;
+$canPathologyPrintTemplate = $user && method_exists($user, 'can')
+    ? ($user->can('template.pathology_print') || $user->can('template.pathology'))
+    : false;
+$canDiagnosisPrintTemplate = $user && method_exists($user, 'can')
+    ? ($user->can('template.diagnosis_print') || $canPathology || $canUltrasound || $canXray || $canCt || $canMri || $canEcho)
+    : ($canPathology || $canUltrasound || $canXray || $canCt || $canMri || $canEcho);
+$canDoctorDocumentPrintTemplate = $user && method_exists($user, 'can')
+    ? ($user->can('template.document_print') || $user->can('doctor_work.template_workspace.access') || $user->can('doctor_work.access') || $user->can('template.pathology'))
+    : false;
+$canIpdDocumentMaster = $user && method_exists($user, 'can')
+    ? ($user->can('template.ipd_document') || $user->can('template.discharge'))
+    : $canDischarge;
 
 if (! $canOpdPrintTemplate && $user && method_exists($user, 'inGroup')) {
     $canOpdPrintTemplate = $user->inGroup('OPDEdit', 'admin', 'superadmin', 'developer');
 }
 
-$hasTemplateAccess = $canPathology || $canUltrasound || $canXray || $canCt || $canMri || $canEcho || $canDischarge || $canDoctorDocumentPrintTemplate;
+$hasTemplateAccess = $canPathology || $canUltrasound || $canXray || $canCt || $canMri || $canEcho || $canDischarge || $canOpdPrintTemplate || $canPathologyPrintTemplate || $canDiagnosisPrintTemplate || $canDoctorDocumentPrintTemplate || $canIpdDocumentMaster;
 ?>
 <section class="content">
     <div class="pagetitle">
@@ -206,6 +216,9 @@ $hasTemplateAccess = $canPathology || $canUltrasound || $canXray || $canCt || $c
                     <span>IPD Discharge Template</span>
                 </a>
             </div>
+        <?php } ?>
+
+        <?php if ($canIpdDocumentMaster) { ?>
             <div class="col-6 col-md-2 col-lg-2">
                 <a class="admin-tile" href="javascript:load_form_div('<?= base_url('setting/template/ipd_document_templates') ?>','maindiv','IPD Document Master');">
                     <span class="tile-icon"><i class="bi bi-file-earmark-richtext"></i></span>
@@ -215,7 +228,7 @@ $hasTemplateAccess = $canPathology || $canUltrasound || $canXray || $canCt || $c
         <?php } ?>
 
         <?php if ($canDiagnosisPrintTemplate) { ?>
-            <?php if ($canPathology) { ?>
+            <?php if ($canPathologyPrintTemplate) { ?>
                 <div class="col-6 col-md-2 col-lg-2">
                     <a class="admin-tile" href="javascript:load_form_div('<?= base_url('setting/template/diagnosis_print_settings/5') ?>','maindiv','Pathology Print Template');">
                         <span class="tile-icon"><i class="bi bi-printer"></i></span>

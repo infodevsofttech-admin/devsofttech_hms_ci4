@@ -124,6 +124,11 @@ class AuthGroups extends ShieldAuthGroups
         'template.mri'        => 'Can access MRI templates',
         'template.echo'       => 'Can access ECHO templates',
         'template.discharge'  => 'Can access IPD discharge templates',
+        'template.opd_print'  => 'Can access OPD print templates',
+        'template.pathology_print' => 'Can access pathology print templates',
+        'template.diagnosis_print' => 'Can access diagnosis print templates',
+        'template.document_print' => 'Can access document print templates',
+        'template.ipd_document' => 'Can access IPD document master templates',
     ];
 
     /**

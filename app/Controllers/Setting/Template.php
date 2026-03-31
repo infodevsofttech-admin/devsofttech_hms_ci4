@@ -16,6 +16,11 @@ class Template extends BaseController
         'template.mri',
         'template.echo',
         'template.discharge',
+        'template.opd_print',
+        'template.pathology_print',
+        'template.diagnosis_print',
+        'template.document_print',
+        'template.ipd_document',
     ];
 
     public function __construct()
@@ -715,7 +720,11 @@ HTML;
 
     public function diagnosis_print_settings(int $modality = 3)
     {
-        if ($resp = $this->requireAnyPermission(['template.pathology', 'template.ultrasound', 'template.xray', 'template.ct', 'template.mri', 'template.echo'])) {
+        if ($resp = $this->requireAnyPermission([
+            'template.diagnosis_print',
+            'template.pathology_print',
+            'template.pathology', 'template.ultrasound', 'template.xray', 'template.ct', 'template.mri', 'template.echo',
+        ])) {
             return $resp;
         }
 
@@ -978,7 +987,10 @@ HTML;
 
     public function document_print_settings()
     {
-        if ($resp = $this->requireAnyPermission(['doctor_work.template_workspace.access', 'doctor_work.access', 'template.pathology'])) {
+        if ($resp = $this->requireAnyPermission([
+            'template.document_print',
+            'doctor_work.template_workspace.access', 'doctor_work.access', 'template.pathology',
+        ])) {
             return $resp;
         }
 
@@ -1608,7 +1620,7 @@ HTML,
 
     public function ipd_document_templates()
     {
-        if ($resp = $this->requireAnyPermission(['template.discharge'])) {
+        if ($resp = $this->requireAnyPermission(['template.ipd_document', 'template.discharge'])) {
             return $resp;
         }
 
@@ -1674,7 +1686,7 @@ HTML,
 
     public function ipd_document_template_delete(int $id)
     {
-        if ($resp = $this->requireAnyPermission(['template.discharge'])) {
+        if ($resp = $this->requireAnyPermission(['template.ipd_document', 'template.discharge'])) {
             return $resp;
         }
 

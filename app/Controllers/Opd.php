@@ -41,7 +41,7 @@ class Opd extends BaseController
             return false;
         }
 
-        if (method_exists($user, 'can') && $user->can('billing.opd.edit')) {
+        if (method_exists($user, 'can') && ($user->can('template.opd_print') || $user->can('billing.opd.edit'))) {
             return true;
         }
 
