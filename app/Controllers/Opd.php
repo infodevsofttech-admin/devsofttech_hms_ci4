@@ -2178,9 +2178,13 @@ class Opd extends BaseController
 
         $storageKey = $this->getOpdPaperSettingStorageKey($templateName);
         $raw = '';
-        foreach ($this->getOpdPaperSettingCandidateKeys($templateName) as $candidateKey) {
+        $candidateKeys = $this->getOpdPaperSettingCandidateKeys($templateName);
+        error_log('[OPD_PAPER_READ_DEBUG] Template: ' . $templateName . ' | CandidateKeys: ' . implode(', ', $candidateKeys));
+        
+        foreach ($candidateKeys as $candidateKey) {
             $raw = $this->readOpdPaperSettingPayloadByKey($candidateKey);
             if ($raw !== '') {
+                error_log('[OPD_PAPER_READ_DEBUG] Found data in key: ' . $candidateKey . ' | PayloadLen: ' . strlen($raw));
                 break;
             }
         }
@@ -2188,13 +2192,18 @@ class Opd extends BaseController
         if ($raw === '' && $storageKey !== self::OPD_PAPER_SETTING_KEY) {
             // Backward compatibility with legacy global settings.
             $raw = $this->readOpdPaperSettingPayloadByKey(self::OPD_PAPER_SETTING_KEY);
+            if ($raw !== '') {
+                error_log('[OPD_PAPER_READ_DEBUG] Fell back to global key | PayloadLen: ' . strlen($raw));
+            }
         }
         if ($raw === '') {
+            error_log('[OPD_PAPER_READ_DEBUG] No data found, using defaults');
             return $defaults;
         }
 
         $decoded = json_decode($raw, true);
         if (! is_array($decoded)) {
+            error_log('[OPD_PAPER_READ_DEBUG] JSON decode failed');
             return $defaults;
         }
 
@@ -2216,6 +2225,9 @@ class Opd extends BaseController
         }
 
         $storageKey = $this->getOpdPaperSettingStorageKey($templateName);
+        
+        // Debug logging - to be removed after testing
+        error_log('[OPD_PAPER_SAVE_DEBUG] Template: ' . $templateName . ' | StorageKey: ' . $storageKey . ' | PayloadLen: ' . strlen($payload));
 
         $this->ensureHospitalSettingValueCanStoreLargePayload();
 
@@ -2231,10 +2243,13 @@ class Opd extends BaseController
                 ->update(['s_value' => $payload]);
 
             if (! $ok) {
+                error_log('[OPD_PAPER_SAVE_DEBUG] UPDATE failed for key: ' . $storageKey);
                 return false;
             }
 
-            return $this->isOpdPaperSettingPayloadPersisted($payload, $storageKey);
+            $persisted = $this->isOpdPaperSettingPayloadPersisted($payload, $storageKey);
+            error_log('[OPD_PAPER_SAVE_DEBUG] UPDATE done, persisted check: ' . ($persisted ? 'true' : 'false'));
+            return $persisted;
         }
 
         $ok = $this->db->table('hospital_setting')->insert([
@@ -2243,10 +2258,13 @@ class Opd extends BaseController
         ]);
 
         if (! $ok) {
+            error_log('[OPD_PAPER_SAVE_DEBUG] INSERT failed for key: ' . $storageKey);
             return false;
         }
 
-        return $this->isOpdPaperSettingPayloadPersisted($payload, $storageKey);
+        $persisted = $this->isOpdPaperSettingPayloadPersisted($payload, $storageKey);
+        error_log('[OPD_PAPER_SAVE_DEBUG] INSERT done, persisted check: ' . ($persisted ? 'true' : 'false'));
+        return $persisted;
     }
 
     private function ensureHospitalSettingValueCanStoreLargePayload(): void
