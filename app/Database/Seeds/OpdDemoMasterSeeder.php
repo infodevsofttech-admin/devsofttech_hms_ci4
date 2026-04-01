@@ -13,6 +13,7 @@ class OpdDemoMasterSeeder extends Seeder
         $this->seedOpdMedicineMaster();
         $this->seedRxGroupTemplate();
         $this->call(ClinicalTemplateWorkspaceSeeder::class);
+        $this->call(InvestigationMasterSeeder::class);
     }
 
     private function seedMedCompany(): void
