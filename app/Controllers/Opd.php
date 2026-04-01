@@ -1767,6 +1767,84 @@ class Opd extends BaseController
         $bookTime = (string) ($opd->apointment_date ?? '');
 
         $rxMeds = is_array($data['rx_medicines'] ?? null) ? $data['rx_medicines'] : [];
+
+        // ── Build Hindi lookup maps from opd_dose_* master tables ──────────────
+        // opd_dose_frequency : dose_sign → dose_sign_hindi  (day-type freq: Daily, Weekly…)
+        // opd_dose_shed      : dose_show_sign → dose_show_desc  (schedule abbrev: QD, BID, AC…)
+        // opd_dose_when      : dose_sign → dose_sign_hindi  (timing: EMPTY STOMACH, ONCE A DAY…)
+        $doseFreqHindiMap = [];
+        $doseShedHindiMap = [];
+        $doseWhenHindiMap = [];
+
+        if ($this->db->tableExists('opd_dose_frequency')) {
+            $rows = $this->db->table('opd_dose_frequency')
+                ->select('dose_sign, dose_sign_hindi')->get()->getResultArray();
+            foreach ($rows as $r) {
+                $k = strtolower(trim((string) ($r['dose_sign'] ?? '')));
+                $v = trim((string) ($r['dose_sign_hindi'] ?? ''));
+                if ($k !== '' && $v !== '') {
+                    $doseFreqHindiMap[$k] = $v;
+                }
+            }
+        }
+        if (empty($doseFreqHindiMap)) {
+            $doseFreqHindiMap = [
+                'daily' => 'रोज', 'alternate day' => 'वैकल्पिक दिन', 'weekly' => 'हर हफ़्ते',
+                'weekly twice' => 'हफ़्ते दो बार में', 'weekly thrice' => 'हफ़्ते में तीन बार',
+                'fort night' => '2 हफ़्ते में', 'monthly' => 'महीने के',
+                'mon' => 'सोमवार', 'tue' => 'मंगलवार', 'wed' => 'बुधवार',
+                'thu' => 'गुरुवार', 'fri' => 'शुक्रवार', 'sat' => 'शनिवार', 'sun' => 'रविवार',
+            ];
+        }
+
+        if ($this->db->tableExists('opd_dose_shed')) {
+            $rows = $this->db->table('opd_dose_shed')
+                ->select('dose_show_sign, dose_show_desc')->get()->getResultArray();
+            foreach ($rows as $r) {
+                $k = strtolower(trim((string) ($r['dose_show_sign'] ?? '')));
+                $v = trim((string) ($r['dose_show_desc'] ?? ''));
+                if ($k !== '' && $v !== '' && $v !== '-') {
+                    $doseShedHindiMap[$k] = $v;
+                }
+            }
+        }
+        if (empty($doseShedHindiMap)) {
+            $doseShedHindiMap = [
+                'q (every)' => 'प्रत्येक', 'qd (everday)' => 'प्रतिदिन',
+                'qod (alternate day)' => 'हर एक दिन छोड़कर', 'qh (every hour)' => 'हर घंटे',
+                'sos (as when required)' => 'जरूरत पड़ने पर', 'ac (before meal)' => 'भोजन से पहले',
+                'pc (after meal)' => 'भोजन के बाद', 'bid (two time a day)' => 'दिन में दो बार',
+                'tid (three time a day)' => 'दिन में तीन बार', 'qid (four time a day)' => 'दिन में चार बार',
+                'od (one time a day)' => 'हर सुबह नाश्ते के बाद', 'bt (at sleep)' => 'सोते समय',
+                'bbf (before breakfast)' => 'नाश्ते से पहले', 'hs (after dinner)' => 'रात को भोजन के बाद',
+                'bl (before lunch)' => 'रात को भोजन से पहले', 'al (after lunch)' => 'रात को भोजन से पहले',
+                'tw (two time a week)' => 'हफ्ते में दो बार', 'qam (every morning)' => 'हर सुबह',
+                'qpm (every night)' => 'हर रात', 'q4h (every four hour)' => 'हर चार घंटों में',
+                'prn (as per need)' => 'जरूरत के मुताबिक',
+            ];
+        }
+
+        if ($this->db->tableExists('opd_dose_when')) {
+            $rows = $this->db->table('opd_dose_when')
+                ->select('dose_sign, dose_sign_hindi')->get()->getResultArray();
+            foreach ($rows as $r) {
+                $k = strtolower(trim((string) ($r['dose_sign'] ?? '')));
+                $v = trim((string) ($r['dose_sign_hindi'] ?? ''));
+                if ($k !== '' && $v !== '') {
+                    $doseWhenHindiMap[$k] = $v;
+                }
+            }
+        }
+        if (empty($doseWhenHindiMap)) {
+            $doseWhenHindiMap = [
+                'empty stomach' => 'सुबह खाली पेट', 'once a day' => 'दिन में एक बार',
+                'once a week' => 'सप्ताह मेँ एक बार', 'once a fiften day' => 'पन्द्रह दिन में एक बार',
+                'only now' => 'केवल अभी',
+                'morning 8 unit--- evening 5 unit' => 'सुबह 8 यूनिट------- शाम 5 यूनिट',
+            ];
+        }
+        // ───────────────────────────────────────────────────────────────────────
+
         $medicalHtml = '';
         if (!empty($rxMeds)) {
             $medicalHtml .= '<table width="100%" style="border-collapse:collapse;font-size:12px;">';
@@ -1774,23 +1852,36 @@ class Opd extends BaseController
             $i = 0;
             foreach ($rxMeds as $med) {
                 $i++;
-                $name = trim((string) ($med['med_name'] ?? $med['drug_name'] ?? $med['medicine_name'] ?? $med['item_name'] ?? ''));
-                $generic = trim((string) ($med['genericname'] ?? ($med['generic_name'] ?? ($med['salt_name'] ?? ''))));
-                $dose = trim((string) ($med['dosage_label'] ?? $med['dosage'] ?? $med['drug_dose'] ?? $med['dose'] ?? ''));
-                $freq = trim((string) ($med['dosage_freq_label'] ?? $med['dosage_freq'] ?? $med['drug_freq'] ?? $med['frequency'] ?? ''));
-                $days = trim((string) ($med['no_of_days'] ?? $med['drug_day'] ?? $med['days'] ?? ''));
-                $when = trim((string) ($med['dosage_when_label'] ?? $med['dosage_when'] ?? ''));
-                $remark = trim((string) ($med['remark'] ?? ''));
-                $inst = trim(($when !== '' ? $when : '') . ($remark !== '' ? ($when !== '' ? ' | ' : '') . $remark : ''));
+                $name    = trim((string) ($med['med_name'] ?? $med['drug_name'] ?? $med['medicine_name'] ?? $med['item_name'] ?? ''));
+                $generic = trim((string) ($med['genericname'] ?? $med['generic_name'] ?? $med['salt_name'] ?? ''));
+                $dose    = trim((string) ($med['dosage_label'] ?? $med['dosage'] ?? $med['drug_dose'] ?? $med['dose'] ?? ''));
+                $freq    = trim((string) ($med['dosage_freq_label'] ?? $med['dosage_freq'] ?? $med['drug_freq'] ?? $med['frequency'] ?? ''));
+                $days    = trim((string) ($med['no_of_days'] ?? $med['drug_day'] ?? $med['days'] ?? ''));
+                $when    = trim((string) ($med['dosage_when_label'] ?? $med['dosage_when'] ?? ''));
+                $remark  = trim((string) ($med['remark'] ?? ''));
+                $inst    = trim(($when !== '' ? $when : '') . ($remark !== '' ? ($when !== '' ? ' | ' : '') . $remark : ''));
                 $doseFreqText = trim($dose . ' ' . $freq);
-                $doseFreqLocal = $this->translateToLocalPatientText($doseFreqText);
-                if (strtolower(trim($doseFreqLocal)) === strtolower(trim($doseFreqText))) {
-                    $doseFreqLocal = '';
+
+                // Hindi for freq/schedule: opd_dose_shed > opd_dose_frequency > generic fallback
+                $freqKey      = strtolower($freq);
+                $doseFreqLocal = $doseShedHindiMap[$freqKey] ?? $doseFreqHindiMap[$freqKey] ?? '';
+                if ($doseFreqLocal === '' && $doseFreqText !== '') {
+                    $fallback = $this->translateToLocalPatientText($doseFreqText);
+                    if (strtolower($fallback) !== strtolower($doseFreqText)) {
+                        $doseFreqLocal = $fallback;
+                    }
                 }
-                $instLocal = $this->translateToLocalPatientText($inst);
-                if (strtolower(trim($instLocal)) === strtolower(trim($inst))) {
-                    $instLocal = '';
+
+                // Hindi for when/timing: opd_dose_when > opd_dose_shed > generic fallback
+                $whenKey  = strtolower($when);
+                $instLocal = $doseWhenHindiMap[$whenKey] ?? $doseShedHindiMap[$whenKey] ?? '';
+                if ($instLocal === '' && $when !== '') {
+                    $fallback = $this->translateToLocalPatientText($when);
+                    if (strtolower($fallback) !== strtolower($when)) {
+                        $instLocal = $fallback;
+                    }
                 }
+
                 $nameHtml = esc($name);
                 if ($generic !== '') {
                     $nameHtml .= '<div style="font-size:10px;color:#444;">Salt/Generic: ' . esc($generic) . '</div>';
