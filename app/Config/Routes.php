@@ -601,6 +601,12 @@ $routes->get('Opd_prescription/opd_invest_master_get/(:num)', 'Opd_prescription:
 $routes->post('Opd_prescription/opd_invest_master_save', 'Opd_prescription::opd_invest_master_save');
 $routes->post('Opd_prescription/opd_invest_master_remove/(:num)', 'Opd_prescription::opd_invest_master_remove/$1');
 $routes->post('Opd_prescription/opd_invest_master_toggle_fav/(:num)', 'Opd_prescription::opd_invest_master_toggle_fav/$1');
+$routes->get('Opd_prescription/opd_invest_profile_master', 'Opd_prescription::opd_invest_profile_master', ['filter' => 'permission:doctor_work.medicine.manage,doctor_work.access']);
+$routes->get('Opd_prescription/opd_invest_profile_master_list', 'Opd_prescription::opd_invest_profile_master_list');
+$routes->get('Opd_prescription/opd_invest_profile_master_data', 'Opd_prescription::opd_invest_profile_master_data');
+$routes->get('Opd_prescription/opd_invest_profile_master_get/(:num)', 'Opd_prescription::opd_invest_profile_master_get/$1');
+$routes->post('Opd_prescription/opd_invest_profile_master_save', 'Opd_prescription::opd_invest_profile_master_save');
+$routes->post('Opd_prescription/opd_invest_profile_master_remove/(:num)', 'Opd_prescription::opd_invest_profile_master_remove/$1');
 
 $routes->get('Opd_prescription/medicine_search', 'Opd_prescription::medicine_search');
 $routes->get('Opd_prescription/medicine_substitutes', 'Opd_prescription::medicine_substitutes');

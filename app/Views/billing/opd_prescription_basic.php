@@ -711,9 +711,9 @@
                                 <div class="d-flex flex-wrap gap-2 align-items-center" id="inv_profile_chip_wrap">
                                     <button type="button" class="btn btn-outline-primary btn-sm inv-profile-chip" data-profile="cardiac">Cardiac Profile</button>
                                     <button type="button" class="btn btn-outline-success btn-sm inv-profile-chip" data-profile="viral_infection">Viral Infection</button>
-                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_create_inv_profile">Create Profile</button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_create_inv_profile">Profile Master</button>
                                     <select class="form-select form-select-sm" id="inv_custom_profile_select" style="max-width:260px;">
-                                        <option value="">Load custom profile...</option>
+                                        <option value="">Load profile...</option>
                                     </select>
                                     <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_apply_custom_inv_profile">Apply</button>
                                 </div>
@@ -1876,37 +1876,25 @@
     }
 
     function refreshCustomProfileSelect() {
-        var rows = getCustomInvestigationProfiles();
         var $sel = $('#inv_custom_profile_select');
         if (!$sel.length) {
             return;
         }
         $sel.html('<option value="">Load profile...</option>');
 
-        if (legacyInvestigationProfileList.length) {
-            $sel.append('<optgroup label="Old HMS Profiles"></optgroup>');
-            var $legacyGroup = $sel.find('optgroup[label="Old HMS Profiles"]');
-            legacyInvestigationProfileList.forEach(function(row) {
-                var key = (row && row.key) ? row.key : '';
-                var name = (row && row.name) ? row.name : '';
-                if (!key || !name) {
-                    return;
-                }
-                $legacyGroup.append('<option value="legacy:' + $('<div>').text(key).html() + '">' + $('<div>').text(name).html() + '</option>');
-            });
-        }
-
-        if (rows.length) {
-            $sel.append('<optgroup label="Custom Profiles"></optgroup>');
-            var $customGroup = $sel.find('optgroup[label="Custom Profiles"]');
-            rows.forEach(function(row, idx) {
-                $customGroup.append('<option value="custom:' + idx + '">' + $('<div>').text(row.name || ('Profile ' + (idx + 1))).html() + '</option>');
-            });
+        if (!legacyInvestigationProfileList.length) {
             return;
         }
 
-        rows.forEach(function(row, idx) {
-            $sel.append('<option value="custom:' + idx + '">' + $('<div>').text(row.name || ('Profile ' + (idx + 1))).html() + '</option>');
+        $sel.append('<optgroup label="Master Profiles"></optgroup>');
+        var $group = $sel.find('optgroup[label="Master Profiles"]');
+        legacyInvestigationProfileList.forEach(function(row) {
+            var key = (row && row.key) ? row.key : '';
+            var name = (row && row.name) ? row.name : '';
+            if (!key || !name) {
+                return;
+            }
+            $group.append('<option value="legacy:' + $('<div>').text(key).html() + '">' + $('<div>').text(name).html() + '</option>');
         });
     }
 
@@ -4052,13 +4040,11 @@
     });
 
     $('#btn_create_inv_profile').on('click', function() {
-        $('#inv_profile_name').val('');
-        $('#inv_profile_tests').val('');
-        if (window.bootstrap && window.bootstrap.Modal) {
-            window.bootstrap.Modal.getOrCreateInstance(document.getElementById('invProfileModal')).show();
-        } else {
-            $('#invProfileModal').show();
+        if (typeof window.load_form === 'function') {
+            window.load_form('<?= base_url('Opd_prescription/opd_invest_profile_master') ?>', 'Investigation Profile Master');
+            return;
         }
+        window.location.href = '<?= base_url('Opd_prescription/opd_invest_profile_master') ?>';
     });
 
     $('#btn_save_inv_profile').on('click', function() {
@@ -4095,25 +4081,14 @@
             var legacyKey = selected.substring(7);
             var legacyRows = legacyInvestigationProfiles[legacyKey] || [];
             if (!legacyRows.length) {
-                $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Selected old HMS profile has no tests.');
+                $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Selected profile has no tests.');
                 return;
             }
             batchAddInvestigationRows(legacyRows);
             return;
         }
 
-        if (selected.indexOf('custom:') !== 0) {
-            $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Invalid profile selection.');
-            return;
-        }
-
-        var idx = parseInt(selected.substring(7), 10);
-        var rows = getCustomInvestigationProfiles();
-        if (isNaN(idx) || idx < 0 || idx >= rows.length) {
-            $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Selected custom profile is not available.');
-            return;
-        }
-        batchAddInvestigations(rows[idx].tests || []);
+        $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Invalid profile selection.');
     });
 
     $('#advise_investigation_notes').on('input', function() {

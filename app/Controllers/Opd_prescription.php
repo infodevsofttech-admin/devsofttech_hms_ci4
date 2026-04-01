@@ -3286,6 +3286,218 @@ class Opd_prescription extends BaseController
         ]);
     }
 
+    public function opd_invest_profile_master()
+    {
+        return view('billing/opd_invest_profile_master_workspace');
+    }
+
+    public function opd_invest_profile_master_list()
+    {
+        if (! $this->db->tableExists('invprofiles') || ! $this->db->tableExists('invtprofiles') || ! $this->db->tableExists('investigation')) {
+            return $this->response->setJSON(['rows' => []]);
+        }
+
+        $pFields = $this->db->getFieldNames('invprofiles');
+        $jFields = $this->db->getFieldNames('invtprofiles');
+        $iFields = $this->db->getFieldNames('investigation');
+
+        $pCode = $this->resolveFirstField($pFields, ['Code', 'code', 'id']);
+        $pName = $this->resolveFirstField($pFields, ['Name', 'name']);
+        $jProfileCode = $this->resolveFirstField($jFields, ['ProfileCode', 'profile_code']);
+        $jInvestCode = $this->resolveFirstField($jFields, ['InvestigationCode', 'investigation_code']);
+        $jPrintOrder = $this->resolveFirstField($jFields, ['printOrder', 'print_order', 'id']);
+        $iCode = $this->resolveFirstField($iFields, ['Code', 'code']);
+        $iName = $this->resolveFirstField($iFields, ['Name', 'name']);
+
+        if ($pCode === null || $pName === null || $jProfileCode === null || $jInvestCode === null || $iCode === null || $iName === null) {
+            return $this->response->setJSON(['rows' => []]);
+        }
+
+        $filter = trim((string) $this->request->getGet('filter'));
+
+        $sql = 'SELECT '
+            . 'p.`' . $pCode . '` AS profile_code, '
+            . 'p.`' . $pName . '` AS profile_name, '
+            . 'i.`' . $iCode . '` AS investigation_code, '
+            . 'i.`' . $iName . '` AS investigation_name '
+            . 'FROM `invprofiles` p '
+            . 'LEFT JOIN `invtprofiles` j ON p.`' . $pCode . '` = j.`' . $jProfileCode . '` '
+            . 'LEFT JOIN `investigation` i ON i.`' . $iCode . '` = j.`' . $jInvestCode . '` ';
+
+        $params = [];
+        if ($filter !== '') {
+            $sql .= 'WHERE p.`' . $pName . '` LIKE ? OR i.`' . $iName . '` LIKE ? ';
+            $params[] = '%' . $filter . '%';
+            $params[] = '%' . $filter . '%';
+        }
+        $sql .= 'ORDER BY p.`' . $pName . '` ASC';
+        if ($jPrintOrder !== null) {
+            $sql .= ', j.`' . $jPrintOrder . '` ASC';
+        }
+
+        $rows = $this->db->query($sql, $params)->getResultArray();
+        $map = [];
+        foreach ($rows as $row) {
+            $profileCode = (int) ($row['profile_code'] ?? 0);
+            $profileName = trim((string) ($row['profile_name'] ?? ''));
+            if ($profileCode <= 0 || $profileName === '') {
+                continue;
+            }
+            if (! isset($map[$profileCode])) {
+                $map[$profileCode] = [
+                    'profile_code' => $profileCode,
+                    'profile_name' => $profileName,
+                    'tests' => [],
+                ];
+            }
+            $testCode = trim((string) ($row['investigation_code'] ?? ''));
+            $testName = trim((string) ($row['investigation_name'] ?? ''));
+            if ($testCode !== '' && $testName !== '') {
+                $map[$profileCode]['tests'][] = [
+                    'code' => $testCode,
+                    'name' => $testName,
+                ];
+            }
+        }
+
+        return $this->response->setJSON(['rows' => array_values($map)]);
+    }
+
+    public function opd_invest_profile_master_data()
+    {
+        $rows = $this->opd_invest_profile_master_list()->getJSON(true);
+        $list = $rows['rows'] ?? [];
+        $draw = (int) $this->request->getGet('draw');
+        $start = max(0, (int) $this->request->getGet('start'));
+        $length = (int) $this->request->getGet('length');
+        if ($length <= 0) {
+            $length = 25;
+        }
+
+        $paged = array_slice($list, $start, $length);
+        foreach ($paged as &$row) {
+            $row['test_count'] = count($row['tests'] ?? []);
+            $row['test_names'] = implode(', ', array_map(static function ($item) {
+                return (string) ($item['name'] ?? '');
+            }, $row['tests'] ?? []));
+        }
+        unset($row);
+
+        return $this->response->setJSON([
+            'draw' => $draw,
+            'recordsTotal' => count($list),
+            'recordsFiltered' => count($list),
+            'data' => $paged,
+        ]);
+    }
+
+    public function opd_invest_profile_master_get(int $profileCode)
+    {
+        $response = $this->opd_invest_profile_master_list()->getJSON(true);
+        $rows = $response['rows'] ?? [];
+        foreach ($rows as $row) {
+            if ((int) ($row['profile_code'] ?? 0) === $profileCode) {
+                return $this->response->setJSON([
+                    'update' => 1,
+                    'row' => $row,
+                    'csrfName' => csrf_token(),
+                    'csrfHash' => csrf_hash(),
+                ]);
+            }
+        }
+
+        return $this->response->setJSON(['update' => 0, 'error_text' => 'Profile not found']);
+    }
+
+    public function opd_invest_profile_master_save()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0]);
+        }
+        if (! $this->db->tableExists('invprofiles') || ! $this->db->tableExists('invtprofiles') || ! $this->db->tableExists('investigation')) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Profile tables not found']);
+        }
+
+        $profileCode = (int) $this->request->getPost('profile_code');
+        $profileName = trim((string) $this->request->getPost('profile_name'));
+        $investigationCodes = array_values(array_filter(array_map('intval', explode(',', (string) $this->request->getPost('investigation_codes')))));
+
+        if ($profileName === '') {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Profile name is required']);
+        }
+        if (empty($investigationCodes)) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Select at least one investigation']);
+        }
+
+        $pFields = $this->db->getFieldNames('invprofiles');
+        $jFields = $this->db->getFieldNames('invtprofiles');
+        $pCode = $this->resolveFirstField($pFields, ['Code', 'code', 'id']);
+        $pName = $this->resolveFirstField($pFields, ['Name', 'name']);
+        $jProfileCode = $this->resolveFirstField($jFields, ['ProfileCode', 'profile_code']);
+        $jInvestCode = $this->resolveFirstField($jFields, ['InvestigationCode', 'investigation_code']);
+        $jPrintOrder = $this->resolveFirstField($jFields, ['printOrder', 'print_order', 'id']);
+        if ($pCode === null || $pName === null || $jProfileCode === null || $jInvestCode === null) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid profile table structure']);
+        }
+
+        if ($profileCode > 0) {
+            $this->db->table('invprofiles')->where($pCode, $profileCode)->update([$pName => $profileName]);
+            $savedCode = $profileCode;
+            $this->db->table('invtprofiles')->where($jProfileCode, $savedCode)->delete();
+        } else {
+            $this->db->table('invprofiles')->insert([$pName => $profileName]);
+            $savedCode = (int) $this->db->insertID();
+        }
+
+        $order = 1;
+        foreach ($investigationCodes as $code) {
+            $joinRow = [
+                $jProfileCode => $savedCode,
+                $jInvestCode => $code,
+            ];
+            if ($jPrintOrder !== null) {
+                $joinRow[$jPrintOrder] = $order;
+            }
+            $this->db->table('invtprofiles')->insert($joinRow);
+            $order++;
+        }
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'insertid' => $savedCode,
+            'error_text' => $profileCode > 0 ? 'Profile updated' : 'Profile added',
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
+    public function opd_invest_profile_master_remove(int $profileCode)
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0]);
+        }
+        if (! $this->db->tableExists('invprofiles') || ! $this->db->tableExists('invtprofiles')) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Profile tables not found']);
+        }
+
+        $pFields = $this->db->getFieldNames('invprofiles');
+        $jFields = $this->db->getFieldNames('invtprofiles');
+        $pCode = $this->resolveFirstField($pFields, ['Code', 'code', 'id']);
+        $jProfileCode = $this->resolveFirstField($jFields, ['ProfileCode', 'profile_code']);
+        if ($pCode === null || $jProfileCode === null) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid profile table structure']);
+        }
+
+        $this->db->table('invtprofiles')->where($jProfileCode, $profileCode)->delete();
+        $this->db->table('invprofiles')->where($pCode, $profileCode)->delete();
+        return $this->response->setJSON([
+            'update' => 1,
+            'error_text' => 'Profile deleted',
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
 
     public function opd_medicince_duplicate_report()
