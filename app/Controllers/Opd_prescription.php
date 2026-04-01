@@ -4198,6 +4198,24 @@ class Opd_prescription extends BaseController
         $code = trim((string) $this->request->getPost('investigation_code'));
         $name = trim((string) $this->request->getPost('investigation_name'));
 
+        // Profile chips may send only investigation name; resolve code from master to avoid unique-key collisions.
+        if ($code === '' && $name !== '' && $this->db->tableExists('investigation')) {
+            $invFields = $this->db->getFieldNames('investigation');
+            $invCodeField = $this->resolveFirstField($invFields, ['Code', 'code']);
+            $invNameField = $this->resolveFirstField($invFields, ['Name', 'name']);
+            if ($invCodeField !== null && $invNameField !== null) {
+                $resolved = $this->db->table('investigation')
+                    ->select($invCodeField . ' as code')
+                    ->where($invNameField, $name)
+                    ->limit(1)
+                    ->get()
+                    ->getRowArray();
+                if (! empty($resolved['code'])) {
+                    $code = trim((string) $resolved['code']);
+                }
+            }
+        }
+
         if ($opdId <= 0 || ($code === '' && $name === '')) {
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Investigation is required']);
         }
@@ -4227,7 +4245,44 @@ class Opd_prescription extends BaseController
             $insert['investigation_name'] = $name;
         }
 
-        $this->db->table($table)->insert($insert);
+        $builder = $this->db->table($table);
+        if (in_array('opd_pre_id', $fields, true)) {
+            $builder->where('opd_pre_id', $sessionId);
+        } elseif (in_array('opd_id', $fields, true)) {
+            $builder->where('opd_id', $opdId);
+        }
+        if ($code !== '' && in_array('investigation_code', $fields, true)) {
+            $builder->where('investigation_code', $code);
+        } elseif ($name !== '' && in_array('investigation_name', $fields, true)) {
+            $builder->where('investigation_name', $name);
+        }
+        $already = $builder->get(1)->getRowArray();
+        if (! empty($already)) {
+            return $this->response->setJSON([
+                'update' => 1,
+                'opd_session_id' => $sessionId,
+                'error_text' => 'Investigation already added',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        try {
+            $this->db->table($table)->insert($insert);
+        } catch (\Throwable $e) {
+            $msg = strtolower($e->getMessage());
+            if (strpos($msg, 'duplicate entry') !== false) {
+                return $this->response->setJSON([
+                    'update' => 1,
+                    'opd_session_id' => $sessionId,
+                    'error_text' => 'Investigation already added',
+                    'csrfName' => csrf_token(),
+                    'csrfHash' => csrf_hash(),
+                ]);
+            }
+            throw $e;
+        }
+
         $insertId = (int) $this->db->insertID();
         $this->auditClinicalUpdate('opd_prescription_investigation', 'added', $insertId, null, $insert);
         return $this->response->setJSON([
