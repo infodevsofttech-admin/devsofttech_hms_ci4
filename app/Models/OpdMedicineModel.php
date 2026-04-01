@@ -22,8 +22,51 @@ class OpdMedicineModel
     public function normalizeMedicineName(string $name): string
     {
         $name = trim($name);
+
+        // Collapse all whitespace to single space
         $name = preg_replace('/\s+/', ' ', $name) ?? $name;
-        return mb_strtolower($name);
+
+        $name = mb_strtolower($name);
+
+        // Remove space between number and dosage unit: "8 mg" → "8mg", "10 mcg" → "10mcg"
+        // Covers: mg, mcg, iu, ml, g, kg, mmol, meq, units, tab, cap, drops, inj, puff
+        $name = preg_replace(
+            '/(\d)\s*(mcg|mmol|meq|units|drops|puffs|inj|tab|cap|ml|mg|iu|kg|g)\b/i',
+            '$1$2',
+            $name
+        ) ?? $name;
+
+        // Strip trailing dosage unit+number suffixes and all-trailing units
+        // e.g. "zerodol th max 8mg" → "zerodol th max 8mg" → kept as-is but normalized
+
+        // Collapse any double-spaces introduced
+        $name = preg_replace('/\s{2,}/', ' ', $name) ?? $name;
+
+        return trim($name);
+    }
+
+    /**
+     * Compute a fuzzy key used for duplicate grouping.
+     * Removes all dosage numbers and units so that "8mg", "8 mg", "8" all produce
+     * the same key for the same base name.
+     */
+    public function normalizeMedicineNameFuzzy(string $name): string
+    {
+        $name = $this->normalizeMedicineName($name);
+
+        // Remove standalone numbers and dosage unit combos (e.g. "8mg", "10 mcg", "500")
+        $name = preg_replace(
+            '/\b\d+\.?\d*\s*(mcg|mmol|meq|units|drops|puffs|inj|tab|cap|ml|mg|iu|kg|g)?\b/i',
+            ' ',
+            $name
+        ) ?? $name;
+
+        // Remove punctuation
+        $name = preg_replace('/[\/\-\(\)\[\]\.]+/', ' ', $name) ?? $name;
+
+        $name = preg_replace('/\s{2,}/', ' ', $name) ?? $name;
+
+        return trim($name);
     }
 
     public function findDuplicateByName(string $itemName, int $excludeId = 0): ?array
@@ -38,7 +81,7 @@ class OpdMedicineModel
             ->get()
             ->getResultArray();
 
-        $needle = $this->normalizeMedicineName($itemName);
+        $needle = $this->normalizeMedicineNameFuzzy($itemName);
         if ($needle === '') {
             return null;
         }
@@ -49,7 +92,7 @@ class OpdMedicineModel
                 continue;
             }
 
-            $current = $this->normalizeMedicineName((string) ($row['item_name'] ?? ''));
+            $current = $this->normalizeMedicineNameFuzzy((string) ($row['item_name'] ?? ''));
             if ($current !== '' && $current === $needle) {
                 return $row;
             }
@@ -72,7 +115,7 @@ class OpdMedicineModel
 
         $groups = [];
         foreach ($rows as $row) {
-            $norm = $this->normalizeMedicineName((string) ($row['item_name'] ?? ''));
+            $norm = $this->normalizeMedicineNameFuzzy((string) ($row['item_name'] ?? ''));
             if ($norm === '') {
                 continue;
             }
