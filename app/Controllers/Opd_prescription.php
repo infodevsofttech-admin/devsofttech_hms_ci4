@@ -3291,10 +3291,10 @@ class Opd_prescription extends BaseController
         return view('billing/opd_invest_profile_master_workspace');
     }
 
-    public function opd_invest_profile_master_list()
+    private function buildInvestigationProfileRows(string $filter = ''): array
     {
         if (! $this->db->tableExists('invprofiles') || ! $this->db->tableExists('invtprofiles') || ! $this->db->tableExists('investigation')) {
-            return $this->response->setJSON(['rows' => []]);
+            return [];
         }
 
         $pFields = $this->db->getFieldNames('invprofiles');
@@ -3310,10 +3310,8 @@ class Opd_prescription extends BaseController
         $iName = $this->resolveFirstField($iFields, ['Name', 'name']);
 
         if ($pCode === null || $pName === null || $jProfileCode === null || $jInvestCode === null || $iCode === null || $iName === null) {
-            return $this->response->setJSON(['rows' => []]);
+            return [];
         }
-
-        $filter = trim((string) $this->request->getGet('filter'));
 
         $sql = 'SELECT '
             . 'p.`' . $pCode . '` AS profile_code, '
@@ -3360,13 +3358,20 @@ class Opd_prescription extends BaseController
             }
         }
 
-        return $this->response->setJSON(['rows' => array_values($map)]);
+        return array_values($map);
+    }
+
+    public function opd_invest_profile_master_list()
+    {
+        $filter = trim((string) $this->request->getGet('filter'));
+
+        return $this->response->setJSON(['rows' => $this->buildInvestigationProfileRows($filter)]);
     }
 
     public function opd_invest_profile_master_data()
     {
-        $rows = $this->opd_invest_profile_master_list()->getJSON(true);
-        $list = $rows['rows'] ?? [];
+        $filter = trim((string) $this->request->getGet('filter'));
+        $list = $this->buildInvestigationProfileRows($filter);
         $draw = (int) $this->request->getGet('draw');
         $start = max(0, (int) $this->request->getGet('start'));
         $length = (int) $this->request->getGet('length');
@@ -3393,8 +3398,7 @@ class Opd_prescription extends BaseController
 
     public function opd_invest_profile_master_get(int $profileCode)
     {
-        $response = $this->opd_invest_profile_master_list()->getJSON(true);
-        $rows = $response['rows'] ?? [];
+        $rows = $this->buildInvestigationProfileRows();
         foreach ($rows as $row) {
             if ((int) ($row['profile_code'] ?? 0) === $profileCode) {
                 return $this->response->setJSON([
