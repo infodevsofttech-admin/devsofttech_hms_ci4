@@ -3694,6 +3694,13 @@ class Opd_prescription extends BaseController
         $idField = in_array('id', $fields, true) ? 'id' : null;
         $nameField = in_array('item_name', $fields, true) ? 'item_name' : null;
         $formField = in_array('formulation', $fields, true) ? 'formulation' : null;
+        $dosageField = $this->resolveFirstField($fields, ['dosage']);
+        $whenField = $this->resolveFirstField($fields, ['dosage_when']);
+        $freqField = $this->resolveFirstField($fields, ['dosage_freq']);
+        $whereField = $this->resolveFirstField($fields, ['dosage_where']);
+        $daysField = $this->resolveFirstField($fields, ['no_of_days']);
+        $qtyField = $this->resolveFirstField($fields, ['qty']);
+        $remarkField = $this->resolveFirstField($fields, ['remark']);
 
         if ($idField === null || $nameField === null) {
             return $this->response->setJSON(['rows' => []]);
@@ -3702,6 +3709,27 @@ class Opd_prescription extends BaseController
         $select = $idField . ' as id,' . $nameField . ' as med_name';
         if ($formField !== null) {
             $select .= ',' . $formField . ' as med_type';
+        }
+        if ($dosageField !== null) {
+            $select .= ',' . $dosageField . ' as dosage';
+        }
+        if ($whenField !== null) {
+            $select .= ',' . $whenField . ' as dosage_when';
+        }
+        if ($freqField !== null) {
+            $select .= ',' . $freqField . ' as dosage_freq';
+        }
+        if ($whereField !== null) {
+            $select .= ',' . $whereField . ' as dosage_where';
+        }
+        if ($daysField !== null) {
+            $select .= ',' . $daysField . ' as no_of_days';
+        }
+        if ($qtyField !== null) {
+            $select .= ',' . $qtyField . ' as qty';
+        }
+        if ($remarkField !== null) {
+            $select .= ',' . $remarkField . ' as remark';
         }
 
         $builder = $this->db->table($table)->select($select);
@@ -4056,6 +4084,15 @@ class Opd_prescription extends BaseController
         $this->auditClinicalUpdate('opd_prescription_medicine', 'added', $insertId, null, $insert);
         if ($medId > 0) {
             $this->trackMedicineUsage($medId);
+            $this->syncMedicineMasterDefaults($medId, [
+                'dosage' => $insert['dosage'] ?? '',
+                'dosage_when' => $insert['dosage_when'] ?? '',
+                'dosage_freq' => $insert['dosage_freq'] ?? '',
+                'dosage_where' => $insert['dosage_where'] ?? '',
+                'no_of_days' => $insert['no_of_days'] ?? '',
+                'qty' => $insert['qty'] ?? '',
+                'remark' => $insert['remark'] ?? '',
+            ]);
         }
 
         return $this->response->setJSON([
@@ -4128,6 +4165,58 @@ class Opd_prescription extends BaseController
             'use_count' => 1,
             'last_used_at' => date('Y-m-d H:i:s'),
         ]);
+    }
+
+    /**
+     * Persist last-used dosage defaults back to master for quick reuse in consult form.
+     *
+     * @param array<string, mixed> $defaults
+     */
+    private function syncMedicineMasterDefaults(int $medId, array $defaults): void
+    {
+        if ($medId <= 0) {
+            return;
+        }
+
+        $table = $this->findExistingTable(['opd_med_master']);
+        if ($table === null) {
+            return;
+        }
+
+        $fields = $this->db->getFieldNames($table);
+        if (! in_array('id', $fields, true)) {
+            return;
+        }
+
+        $fieldMap = [
+            'dosage' => $this->resolveFirstField($fields, ['dosage']),
+            'dosage_when' => $this->resolveFirstField($fields, ['dosage_when']),
+            'dosage_freq' => $this->resolveFirstField($fields, ['dosage_freq']),
+            'dosage_where' => $this->resolveFirstField($fields, ['dosage_where']),
+            'no_of_days' => $this->resolveFirstField($fields, ['no_of_days']),
+            'qty' => $this->resolveFirstField($fields, ['qty']),
+            'remark' => $this->resolveFirstField($fields, ['remark']),
+        ];
+
+        $update = [];
+        foreach ($fieldMap as $payloadKey => $dbField) {
+            if ($dbField === null) {
+                continue;
+            }
+
+            $value = trim((string) ($defaults[$payloadKey] ?? ''));
+            if ($value === '') {
+                continue;
+            }
+
+            $update[$dbField] = $value;
+        }
+
+        if (empty($update)) {
+            return;
+        }
+
+        $this->db->table($table)->where('id', $medId)->update($update);
     }
 
     /**
@@ -4259,6 +4348,24 @@ class Opd_prescription extends BaseController
 
         $this->db->table($table)->where('id', $id)->update($update);
         $this->clinicalAuditTrail->logChangedFields('opd_prescription_medicine', $id, $current, array_replace($current, $update), $this->getCurrentUserId());
+
+        $masterMedId = (int) ($current['med_id'] ?? 0);
+        if ($masterMedId <= 0) {
+            $masterMedId = $this->resolveMedicineMasterIdByName((string) ($update['med_name'] ?? $current['med_name'] ?? ''));
+        }
+        if ($masterMedId > 0) {
+            $merged = array_replace($current, $update);
+            $this->trackMedicineUsage($masterMedId);
+            $this->syncMedicineMasterDefaults($masterMedId, [
+                'dosage' => $merged['dosage'] ?? '',
+                'dosage_when' => $merged['dosage_when'] ?? '',
+                'dosage_freq' => $merged['dosage_freq'] ?? '',
+                'dosage_where' => $merged['dosage_where'] ?? '',
+                'no_of_days' => $merged['no_of_days'] ?? '',
+                'qty' => $merged['qty'] ?? '',
+                'remark' => $merged['remark'] ?? '',
+            ]);
+        }
 
         return $this->response->setJSON([
             'update' => 1,

@@ -5,15 +5,6 @@
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <strong>List of Medicine</strong>
                     <div class="d-flex gap-2">
-                        <select class="form-select form-select-sm" id="med_master_scope" style="width:150px;">
-                            <option value="active" selected>Recently Used</option>
-                            <option value="all">All Medicines</option>
-                            <option value="favorite">My Favorites</option>
-                        </select>
-                        <label class="form-check-label small d-flex align-items-center gap-1">
-                            <input type="checkbox" class="form-check-input mt-0" id="med_show_all_toggle">
-                            Show All
-                        </label>
                         <button type="button" class="btn btn-outline-secondary btn-sm med-filter" data-filter="all">All</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm med-filter" data-filter="generic_issue">Generic/Salt Issue</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm med-filter" data-filter="generic_same_name">Generic=Name</button>
@@ -125,8 +116,6 @@
 <script>
 (function() {
     var activeListFilter = 'all';
-    var activeMasterScope = 'active';
-    var showAllMedicines = false;
     var companySuggestTimer = null;
     var medMasterDataTable = null;
 
@@ -301,12 +290,6 @@
         if (activeListFilter !== 'all') {
             query.push('filter=' + encodeURIComponent(activeListFilter));
         }
-        if (activeMasterScope !== 'all') {
-            query.push('scope=' + encodeURIComponent(activeMasterScope));
-        }
-        if (showAllMedicines) {
-            query.push('show_all=1');
-        }
         if (query.length) {
             url += '?' + query.join('&');
         }
@@ -327,10 +310,6 @@
                     setMsg('normal', 'No record found where Generic/Salt is same as Medicine Name.');
                 } else if (activeListFilter === 'company_blank') {
                     setMsg('normal', 'No record found with blank Company Name.');
-                } else if (activeMasterScope === 'favorite') {
-                    setMsg('normal', 'No favorite medicines found.');
-                } else if (activeMasterScope === 'active') {
-                    setMsg('normal', 'No recently used medicines found.');
                 }
                 return;
             }
@@ -546,16 +525,6 @@
         loadList();
     });
 
-    $('#med_master_scope').on('change', function() {
-        activeMasterScope = String($(this).val() || 'all');
-        loadList();
-    });
-
-    $('#med_show_all_toggle').on('change', function() {
-        showAllMedicines = !!$(this).is(':checked');
-        loadList();
-    });
-
     $('#btn_med_ai_details').on('click', function() {
         var itemName = ($('#med_item_name').val() || '').trim();
         if (!itemName) {
@@ -642,8 +611,6 @@
     });
 
     applyFilterButtonState();
-    $('#med_master_scope').val(activeMasterScope);
-    $('#med_show_all_toggle').prop('checked', false);
     loadList();
     loadDuplicateReport();
     loadCompanySuggestions('');

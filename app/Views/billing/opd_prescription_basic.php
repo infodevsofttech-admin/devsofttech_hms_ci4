@@ -4728,6 +4728,41 @@
         var medName = (rowData.med_name || '').toString().trim();
         if (medName) { $('#med_name').val(medName); }
         $('#med_type').val((rowData.med_type || '').toString());
+
+        var dosage = (rowData.dosage || '').toString().trim();
+        var whenValue = (rowData.dosage_when || '').toString().trim();
+        var freqValue = (rowData.dosage_freq || '').toString().trim();
+        var whereValue = (rowData.dosage_where || '').toString().trim();
+        var daysValue = (rowData.no_of_days || '').toString().trim();
+        var qtyValue = (rowData.qty || '').toString().trim();
+        var remarkValue = (rowData.remark || '').toString().trim();
+
+        if (dosage) {
+            ensureMedicineMasterOption($('#med_dosage'), dosage);
+            $('#med_dosage').val(dosage).trigger('change');
+        }
+        if (whenValue) {
+            ensureMedicineMasterOption($('#med_when'), whenValue);
+            $('#med_when').val(whenValue).trigger('change');
+        }
+        if (freqValue) {
+            ensureMedicineMasterOption($('#med_freq'), freqValue);
+            $('#med_freq').val(freqValue).trigger('change');
+        }
+        if (whereValue) {
+            ensureMedicineMasterOption($('#med_where'), whereValue);
+            $('#med_where').val(whereValue).trigger('change');
+        }
+        if (daysValue) {
+            $('#med_days').val(daysValue);
+        }
+        if (qtyValue) {
+            $('#med_qty').val(qtyValue);
+        }
+        if (remarkValue) {
+            $('#med_remark').val(remarkValue);
+        }
+
         var medId = parseInt(rowData.id || 0, 10);
         var isFav = parseInt(rowData.is_favorite || 0, 10) === 1;
         if (medId > 0) {
@@ -4758,6 +4793,13 @@
                     + 'data-name="' + $('<div>').text(row.med_name || '').html() + '" '
                     + 'data-id="' + parseInt(row.id || 0, 10) + '" '
                     + 'data-type="' + $('<div>').text(row.med_type || '').html() + '" '
+                    + 'data-dosage="' + $('<div>').text(row.dosage || '').html() + '" '
+                    + 'data-dosage-when="' + $('<div>').text(row.dosage_when || '').html() + '" '
+                    + 'data-dosage-freq="' + $('<div>').text(row.dosage_freq || '').html() + '" '
+                    + 'data-dosage-where="' + $('<div>').text(row.dosage_where || '').html() + '" '
+                    + 'data-no-of-days="' + $('<div>').text(row.no_of_days || '').html() + '" '
+                    + 'data-qty="' + $('<div>').text(row.qty || '').html() + '" '
+                    + 'data-remark="' + $('<div>').text(row.remark || '').html() + '" '
                     + 'data-fav="' + parseInt(row.is_favorite || 0, 10) + '"></option>';
             });
             $('#medicine_suggest').html(html);
