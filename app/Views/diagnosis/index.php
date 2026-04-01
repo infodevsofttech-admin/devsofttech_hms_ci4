@@ -93,5 +93,19 @@
                 </a>
             </div>
         </div>
+
+        <!-- Echo -->
+        <div class="col-xxl-2 col-md-4 col-sm-6 mb-4">
+            <div class="card">
+                <a href="javascript:load_form('<?= base_url('diagnosis/echo') ?>','Echo');" class="text-decoration-none">
+                    <div class="card-body text-center" style="min-height: 200px; display: flex; flex-direction: column; justify-content: center;">
+                        <div class="mb-3">
+                            <i class="bi bi-heart-pulse" style="font-size: 3rem; color: #0ea5e9;"></i>
+                        </div>
+                        <h5 class="card-title mb-0">Echo</h5>
+                    </div>
+                </a>
+            </div>
+        </div>
     </div>
 </section>

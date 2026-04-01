@@ -63,6 +63,11 @@ class Diagnosis extends BaseController
         return $this->labPath(4);
     }
 
+    public function echo()
+    {
+        return $this->labPath(6);
+    }
+
     public function labMaster()
     {
         return $this->index();

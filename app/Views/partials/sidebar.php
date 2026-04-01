@@ -348,6 +348,12 @@ if (! $canDiagnosis && $user && method_exists($user, 'inGroup')) {
                 <span>Ultrasound</span>
             </a>
         </li>
+        <li class="nav-item">
+            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('diagnosis/echo') ?>','Echo')">
+                <i class="bi bi-heart-pulse"></i>
+                <span>Echo</span>
+            </a>
+        </li>
     <?php } ?>
     <li class="nav-heading">Admin & Settings</li>
     <li class="nav-item">

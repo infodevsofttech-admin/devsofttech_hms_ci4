@@ -757,6 +757,7 @@ $routes->get('diagnosis', 'Diagnosis::index', ['filter' => 'permission:diagnosis
 $routes->get('diagnosis/pathology', 'Diagnosis::pathology', ['filter' => 'permission:diagnosis.access']);
 $routes->get('diagnosis/biopsy', 'Diagnosis::biopsy', ['filter' => 'permission:diagnosis.access']);
 $routes->get('diagnosis/ultrasound', 'Diagnosis::ultrasound', ['filter' => 'permission:diagnosis.access']);
+$routes->get('diagnosis/echo', 'Diagnosis::echo', ['filter' => 'permission:diagnosis.access']);
 $routes->get('diagnosis/xray', 'Diagnosis::xray', ['filter' => 'permission:diagnosis.access']);
 $routes->get('diagnosis/mri', 'Diagnosis::mri', ['filter' => 'permission:diagnosis.access']);
 $routes->get('diagnosis/ctscan', 'Diagnosis::ctscan', ['filter' => 'permission:diagnosis.access']);
