@@ -240,6 +240,13 @@ if (! $canDiagnosis && $user && method_exists($user, 'inGroup')) {
         </li>
         <li class="nav-item">
             <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Opd_prescription/opd_advice') ?>','OPD Advice Master')">
+                <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Opd_prescription/opd_invest_master') ?>','Investigation Master')">
+                    <i class="bi bi-clipboard2-pulse"></i>
+                    <span>Investigation Master</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Opd_prescription/opd_advice') ?>','OPD Advice Master')">
                 <i class="bi bi-chat-left-text"></i>
                 <span>OPD Advice Master</span>
             </a>

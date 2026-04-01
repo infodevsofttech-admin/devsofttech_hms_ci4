@@ -3043,6 +3043,235 @@ class Opd_prescription extends BaseController
         return $this->response->setJSON(['update' => 1, 'error_text' => 'Advice removed']);
     }
 
+    // ─── Investigation Master CRUD ─────────────────────────────────────────
+
+    public function opd_invest_master()
+    {
+        $doctorModel = new \App\Models\DoctorModel($this->db);
+        return view('billing/opd_invest_master_workspace', [
+            'initial_inv_id' => 0,
+            'med_specs'      => $doctorModel->getMedSpecs(),
+        ]);
+    }
+
+    public function opd_invest_master_specs()
+    {
+        $specs = [];
+        if ($this->db->tableExists('med_spec')) {
+            $specs = $this->db->table('med_spec')
+                ->select('id, SpecName')
+                ->orderBy('SpecName', 'ASC')
+                ->get()->getResultArray();
+        }
+        return $this->response->setJSON(['specs' => $specs]);
+    }
+
+    public function opd_invest_master_data()
+    {
+        if (! $this->db->tableExists('investigation')) {
+            return $this->response->setJSON(['draw' => 1, 'recordsTotal' => 0, 'recordsFiltered' => 0, 'data' => []]);
+        }
+
+        $fields    = $this->db->getFieldNames('investigation');
+        $codeField = $this->resolveFirstField($fields, ['Code', 'code']);
+        $nameField = $this->resolveFirstField($fields, ['Name', 'name']);
+        if ($codeField === null || $nameField === null) {
+            return $this->response->setJSON(['draw' => 1, 'recordsTotal' => 0, 'recordsFiltered' => 0, 'data' => []]);
+        }
+
+        $filter  = trim((string) $this->request->getGet('filter'));
+        $specId  = (int) $this->request->getGet('spec_id');
+        $favOnly = (int) $this->request->getGet('fav_only');
+        $draw    = (int) $this->request->getGet('draw');
+        $start   = max(0, (int) $this->request->getGet('start'));
+        $length  = (int) $this->request->getGet('length');
+        if ($length <= 0) {
+            $length = 25;
+        }
+
+        $selectCols = 'id, ' . $codeField . ' as code, ' . $nameField . ' as name';
+        foreach (['short_name', 'is_favourite', 'spec_ids', 'category_name'] as $f) {
+            if (in_array($f, $fields, true)) {
+                $selectCols .= ', ' . $f;
+            }
+        }
+
+        $applyFilters = function ($b) use ($filter, $favOnly, $specId, $fields, $nameField, $codeField) {
+            if ($filter !== '') {
+                $b->groupStart()
+                    ->like($nameField, $filter)
+                    ->orLike($codeField, $filter);
+                if (in_array('short_name', $fields, true)) {
+                    $b->orLike('short_name', $filter);
+                }
+                $b->groupEnd();
+            }
+            if ($favOnly && in_array('is_favourite', $fields, true)) {
+                $b->where('is_favourite', 1);
+            }
+            if ($specId > 0 && in_array('spec_ids', $fields, true)) {
+                $b->where("FIND_IN_SET({$specId}, spec_ids) > 0", null, false);
+            }
+        };
+
+        $total = $this->db->table('investigation')->countAllResults();
+
+        $countBuilder = $this->db->table('investigation');
+        $applyFilters($countBuilder);
+        $filtered = $countBuilder->countAllResults();
+
+        $builder = $this->db->table('investigation')->select($selectCols);
+        $applyFilters($builder);
+        if (in_array('is_favourite', $fields, true)) {
+            $builder->orderBy('is_favourite', 'DESC');
+        }
+        $builder->orderBy($nameField, 'ASC');
+        $builder->limit($length, $start);
+        $rows = $builder->get()->getResultArray();
+
+        return $this->response->setJSON([
+            'draw'            => $draw,
+            'recordsTotal'    => $total,
+            'recordsFiltered' => $filtered,
+            'data'            => $rows,
+        ]);
+    }
+
+    public function opd_invest_master_get(int $invId)
+    {
+        if ($invId <= 0 || ! $this->db->tableExists('investigation')) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Not found']);
+        }
+
+        $fields    = $this->db->getFieldNames('investigation');
+        $codeField = $this->resolveFirstField($fields, ['Code', 'code']);
+        $nameField = $this->resolveFirstField($fields, ['Name', 'name']);
+
+        $row = $this->db->table('investigation')->where('id', $invId)->limit(1)->get()->getRowArray();
+        if (! $row) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Not found']);
+        }
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'row'    => [
+                'id'            => (int) ($row['id'] ?? 0),
+                'code'          => (string) ($row[$codeField ?? 'code'] ?? ''),
+                'name'          => (string) ($row[$nameField ?? 'name'] ?? ''),
+                'short_name'    => (string) ($row['short_name'] ?? ''),
+                'category_name' => (string) ($row['category_name'] ?? ''),
+                'is_favourite'  => (int) ($row['is_favourite'] ?? 0),
+                'spec_ids'      => (string) ($row['spec_ids'] ?? ''),
+            ],
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
+    public function opd_invest_master_save()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0]);
+        }
+        if (! $this->db->tableExists('investigation')) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Investigation table not found']);
+        }
+
+        $id   = (int) $this->request->getPost('id');
+        $name = trim((string) $this->request->getPost('name'));
+        if ($name === '') {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Investigation name is required']);
+        }
+
+        $fields    = $this->db->getFieldNames('investigation');
+        $codeField = $this->resolveFirstField($fields, ['Code', 'code']);
+        $nameField = $this->resolveFirstField($fields, ['Name', 'name']);
+        if ($codeField === null || $nameField === null) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid table structure']);
+        }
+
+        $code = trim((string) $this->request->getPost('code'));
+        if ($code === '') {
+            $code = strtoupper(preg_replace('/[^A-Z0-9]/i', '', substr($name, 0, 8))) . rand(100, 999);
+        }
+
+        $data = [
+            $nameField => $name,
+            $codeField => $code,
+        ];
+        foreach (['short_name', 'category_name', 'spec_ids'] as $f) {
+            if (in_array($f, $fields, true)) {
+                $data[$f] = trim((string) $this->request->getPost($f));
+            }
+        }
+        if (in_array('is_favourite', $fields, true)) {
+            $data['is_favourite'] = ((int) $this->request->getPost('is_favourite')) ? 1 : 0;
+        }
+
+        if ($id > 0) {
+            $this->db->table('investigation')->where('id', $id)->update($data);
+            $savedId = $id;
+            $message = 'Investigation updated';
+        } else {
+            $this->db->table('investigation')->insert($data);
+            $savedId = (int) $this->db->insertID();
+            $message = 'Investigation added';
+        }
+
+        return $this->response->setJSON([
+            'update'     => 1,
+            'insertid'   => $savedId,
+            'error_text' => $message,
+            'csrfName'   => csrf_token(),
+            'csrfHash'   => csrf_hash(),
+        ]);
+    }
+
+    public function opd_invest_master_remove(int $invId)
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0]);
+        }
+        if ($invId <= 0 || ! $this->db->tableExists('investigation')) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Not found']);
+        }
+        $this->db->table('investigation')->where('id', $invId)->delete();
+        return $this->response->setJSON([
+            'update'     => 1,
+            'error_text' => 'Investigation deleted',
+            'csrfName'   => csrf_token(),
+            'csrfHash'   => csrf_hash(),
+        ]);
+    }
+
+    public function opd_invest_master_toggle_fav(int $invId)
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0]);
+        }
+        if ($invId <= 0 || ! $this->db->tableExists('investigation')) {
+            return $this->response->setJSON(['update' => 0]);
+        }
+        $fields = $this->db->getFieldNames('investigation');
+        if (! in_array('is_favourite', $fields, true)) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Run database migration first']);
+        }
+        $row = $this->db->table('investigation')->where('id', $invId)->limit(1)->get()->getRowArray();
+        if (! $row) {
+            return $this->response->setJSON(['update' => 0]);
+        }
+        $newVal = ((int) ($row['is_favourite'] ?? 0)) === 1 ? 0 : 1;
+        $this->db->table('investigation')->where('id', $invId)->update(['is_favourite' => $newVal]);
+        return $this->response->setJSON([
+            'update'       => 1,
+            'is_favourite' => $newVal,
+            'csrfName'     => csrf_token(),
+            'csrfHash'     => csrf_hash(),
+        ]);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+
     public function opd_medicince_duplicate_report()
     {
         $medicineModel = new OpdMedicineModel($this->db);
@@ -3534,29 +3763,59 @@ class Opd_prescription extends BaseController
 
     public function investigation_search()
     {
-        $q = trim((string) $this->request->getGet('q'));
-        if ($q === '' || !$this->db->tableExists('investigation')) {
+        $q       = trim((string) $this->request->getGet('q'));
+        $favOnly = (int) $this->request->getGet('fav_only');
+        $specId  = (int) $this->request->getGet('spec_id');
+
+        if (! $this->db->tableExists('investigation')) {
             return $this->response->setJSON(['rows' => []]);
         }
 
-        $fields = $this->db->getFieldNames('investigation');
-        $codeField = in_array('Code', $fields, true) ? 'Code' : (in_array('code', $fields, true) ? 'code' : null);
-        $nameField = in_array('Name', $fields, true) ? 'Name' : (in_array('name', $fields, true) ? 'name' : null);
+        $fields     = $this->db->getFieldNames('investigation');
+        $codeField  = in_array('Code', $fields, true) ? 'Code' : (in_array('code', $fields, true) ? 'code' : null);
+        $nameField  = in_array('Name', $fields, true) ? 'Name' : (in_array('name', $fields, true) ? 'name' : null);
         $shortField = in_array('short_name', $fields, true) ? 'short_name' : null;
+        $hasFav     = in_array('is_favourite', $fields, true);
+        $hasSpec    = in_array('spec_ids', $fields, true);
 
         if ($codeField === null || $nameField === null) {
             return $this->response->setJSON(['rows' => []]);
         }
 
-        $builder = $this->db->table('investigation')->select($codeField . ' as code,' . $nameField . ' as name');
-        $builder->groupStart()->like($nameField, $q);
-        if ($shortField !== null) {
-            $builder->orLike($shortField, $q);
+        // When no search term but fav/spec filter applied, still return results
+        if ($q === '' && $favOnly === 0 && $specId === 0) {
+            return $this->response->setJSON(['rows' => []]);
         }
-        $builder->groupEnd();
+
+        $selectCols = $codeField . ' as code, ' . $nameField . ' as name';
+        if ($hasFav) {
+            $selectCols .= ', is_favourite';
+        }
+
+        $builder = $this->db->table('investigation')->select($selectCols);
+
+        if ($q !== '') {
+            $builder->groupStart()->like($nameField, $q);
+            if ($shortField !== null) {
+                $builder->orLike($shortField, $q);
+            }
+            $builder->groupEnd();
+        }
+
+        if ($favOnly && $hasFav) {
+            $builder->where('is_favourite', 1);
+        }
+
+        if ($specId > 0 && $hasSpec) {
+            $builder->where("FIND_IN_SET({$specId}, spec_ids) > 0", null, false);
+        }
+
+        if ($hasFav) {
+            $builder->orderBy('is_favourite', 'DESC');
+        }
         $builder->orderBy('LOWER(' . $this->db->protectIdentifiers($nameField) . ')', 'ASC', false);
 
-        $rows = $builder->limit(20)->get()->getResultArray();
+        $rows = $builder->limit(40)->get()->getResultArray();
         return $this->response->setJSON(['rows' => $rows]);
     }
 

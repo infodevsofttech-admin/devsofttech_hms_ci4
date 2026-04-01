@@ -724,8 +724,17 @@
                                     <select class="form-select" id="investigation_name_select2" style="width:100%;">
                                         <option value="">Search investigation...</option>
                                     </select>
-                                    <input type="text" class="form-control d-none mt-2" id="investigation_name" list="investigation_suggest" placeholder="Type investigation name">
-                                    <datalist id="investigation_suggest"></datalist>
+                                        <div class="d-flex flex-wrap gap-1 mt-1 align-items-center" id="inv_quick_filter_bar">
+                                            <button type="button" class="btn btn-outline-warning btn-sm px-2 py-0" id="btn_inv_fav_toggle" title="Search favourites only">
+                                                <i class="bi bi-star"></i> Fav
+                                            </button>
+                                            <select id="inv_spec_filter" class="form-select form-select-sm py-0" style="max-width:160px;height:26px;">
+                                                <option value="0">All Specs</option>
+                                            </select>
+                                            <span class="small text-muted" id="inv_filter_hint" style="display:none;">Filter active — type anything to search</span>
+                                        </div>
+                                        <input type="text" class="form-control d-none mt-2" id="investigation_name" list="investigation_suggest" placeholder="Type investigation name">
+                                        <datalist id="investigation_suggest"></datalist>
                                 </div>
                                 <div class="col-md-2 d-grid gap-1">
                                     <button type="button" class="btn btn-primary" id="btn_add_investigation">Add</button>
@@ -2003,6 +2012,98 @@
 
         $fallback.removeClass('d-none');
     }
+        var invFavOnly = false;
+        var invSpecId  = 0;
+
+        function loadInvSpecDropdown() {
+            $.get('<?= base_url('Opd_prescription/opd_invest_master_specs') ?>', function(data) {
+                var specs = (data && data.specs) ? data.specs : [];
+                var $sel = $('#inv_spec_filter');
+                $sel.find('option:not(:first)').remove();
+                specs.forEach(function(sp) {
+                    $sel.append($('<option>').val(sp.id).text(sp.SpecName));
+                });
+            }, 'json');
+        }
+
+        function updateInvFilterHint() {
+            var active = invFavOnly || invSpecId > 0;
+            $('#inv_filter_hint').toggle(active);
+            $('#btn_inv_fav_toggle').toggleClass('btn-warning', invFavOnly).toggleClass('btn-outline-warning', !invFavOnly);
+        }
+        var invFavOnly = false;
+        var invSpecId  = 0;
+
+        function loadInvSpecDropdown() {
+            $.get('<?= base_url('Opd_prescription/opd_invest_master_specs') ?>', function(data) {
+                var specs = (data && data.specs) ? data.specs : [];
+                var $sel = $('#inv_spec_filter');
+                $sel.find('option:not(:first)').remove();
+                specs.forEach(function(sp) {
+                    $sel.append($('<option>').val(sp.id).text(sp.SpecName));
+                });
+            }, 'json');
+        }
+
+        function updateInvFilterHint() {
+            var active = invFavOnly || invSpecId > 0;
+            $('#inv_filter_hint').toggle(active);
+            $('#btn_inv_fav_toggle')
+                .toggleClass('btn-warning', invFavOnly)
+                .toggleClass('btn-outline-warning', !invFavOnly)
+                .find('i').toggleClass('bi-star-fill', invFavOnly).toggleClass('bi-star', !invFavOnly);
+        }
+
+        function initInvestigationPicker() {
+            var $select = $('#investigation_name_select2');
+            var $fallback = $('#investigation_name');
+
+            if (!$select.length) {
+                return;
+            }
+
+            if ($.fn && $.fn.select2) {
+                $select.select2({
+                    width: '100%',
+                    placeholder: 'Search investigation...',
+                    allowClear: true,
+                    ajax: {
+                        delay: 250,
+                        transport: function(params, success, failure) {
+                            var term = (params.data && params.data.term) ? params.data.term : '';
+                            $.ajax({
+                                url: '<?= base_url('Opd_prescription/investigation_search') ?>',
+                                dataType: 'json',
+                                data: { q: term, fav_only: invFavOnly ? 1 : 0, spec_id: invSpecId },
+                                success: success,
+                                error: failure
+                            });
+                        },
+                        processResults: function(data) {
+                            var rows = (data && data.rows) ? data.rows : [];
+                            return {
+                                results: rows.map(function(row) {
+                                    var name = (row.name || '').toString();
+                                    var code = (row.code || '').toString();
+                                    var isFav = parseInt(row.is_favourite || 0) === 1;
+                                    var label = (isFav ? '★ ' : '') + name + (code ? ' [' + code + ']' : '');
+                                    return {
+                                        id: name + (code ? ' [' + code + ']' : ''),
+                                        text: label,
+                                        name: name,
+                                        code: code
+                                    };
+                                })
+                            };
+                        }
+                    }
+                });
+                $fallback.addClass('d-none');
+                return;
+            }
+
+            $fallback.removeClass('d-none');
+        }
 
     function setStatus(type, message) {
         var $badge = $('#rx_status_badge');
@@ -4024,7 +4125,26 @@
     refreshCustomProfileSelect();
     loadInvestigationShortcutsFromLegacy();
     initInvestigationPicker();
-    loadMedicineDoseMasters();
+        loadInvSpecDropdown();
+
+        $('#btn_inv_fav_toggle').on('click', function() {
+            invFavOnly = !invFavOnly;
+            updateInvFilterHint();
+            // Trigger Select2 to re-search with current term
+            if ($.fn && $.fn.select2 && $('#investigation_name_select2').length) {
+                $('#investigation_name_select2').trigger('input.select2');
+            }
+        });
+
+        $('#inv_spec_filter').on('change', function() {
+            invSpecId = parseInt($(this).val() || '0', 10);
+            updateInvFilterHint();
+            if ($.fn && $.fn.select2 && $('#investigation_name_select2').length) {
+                $('#investigation_name_select2').trigger('input.select2');
+            }
+        });
+
+        loadMedicineDoseMasters();
     $('#advise_investigation_notes').val($('#investigation').val() || '');
 
     $(document).on('click', '.btn-del-invest', function() {
