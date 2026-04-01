@@ -1862,9 +1862,26 @@ class Opd extends BaseController
                 $inst    = trim(($when !== '' ? $when : '') . ($remark !== '' ? ($when !== '' ? ' | ' : '') . $remark : ''));
                 $doseFreqText = trim($dose . ' ' . $freq);
 
-                // Hindi for freq/schedule: opd_dose_shed > opd_dose_frequency > generic fallback
+                // Hindi for freq/schedule: opd_dose_shed > opd_dose_frequency > prefix match > generic fallback
                 $freqKey      = strtolower($freq);
                 $doseFreqLocal = $doseShedHindiMap[$freqKey] ?? $doseFreqHindiMap[$freqKey] ?? '';
+                if ($doseFreqLocal === '') {
+                    // Prefix match: "od (one time a day) daily" should match key "od (one time a day)"
+                    foreach ($doseShedHindiMap as $_k => $_v) {
+                        if ($_k !== '' && (str_starts_with($freqKey, $_k . ' ') || str_starts_with($freqKey, $_k . '('))) {
+                            $doseFreqLocal = $_v;
+                            break;
+                        }
+                    }
+                }
+                if ($doseFreqLocal === '') {
+                    foreach ($doseFreqHindiMap as $_k => $_v) {
+                        if ($_k !== '' && str_starts_with($freqKey, $_k . ' ')) {
+                            $doseFreqLocal = $_v;
+                            break;
+                        }
+                    }
+                }
                 if ($doseFreqLocal === '' && $doseFreqText !== '') {
                     $fallback = $this->translateToLocalPatientText($doseFreqText);
                     if (strtolower($fallback) !== strtolower($doseFreqText)) {
@@ -1872,9 +1889,17 @@ class Opd extends BaseController
                     }
                 }
 
-                // Hindi for when/timing: opd_dose_when > opd_dose_shed > generic fallback
+                // Hindi for when/timing: opd_dose_when > opd_dose_shed > prefix match > generic fallback
                 $whenKey  = strtolower($when);
                 $instLocal = $doseWhenHindiMap[$whenKey] ?? $doseShedHindiMap[$whenKey] ?? '';
+                if ($instLocal === '') {
+                    foreach ($doseWhenHindiMap as $_k => $_v) {
+                        if ($_k !== '' && str_starts_with($whenKey, $_k . ' ')) {
+                            $instLocal = $_v;
+                            break;
+                        }
+                    }
+                }
                 if ($instLocal === '' && $when !== '') {
                     $fallback = $this->translateToLocalPatientText($when);
                     if (strtolower($fallback) !== strtolower($when)) {
@@ -1884,17 +1909,17 @@ class Opd extends BaseController
 
                 $nameHtml = esc($name);
                 if ($generic !== '') {
-                    $nameHtml .= '<div style="font-size:10px;color:#444;">Salt/Generic: ' . esc($generic) . '</div>';
+                    $nameHtml .= '<div style="font-size:11px;color:#444;">Salt/Generic: ' . esc($generic) . '</div>';
                 }
                 $medicalHtml .= '<tr>'
                     . '<td>' . $i . '</td>'
                     . '<td>' . $nameHtml . '</td>'
                     . '<td>' . esc($doseFreqText)
-                    . ($doseFreqLocal !== '' ? ('<div style="font-size:10px;color:#444;line-height:1.3;">' . esc($doseFreqLocal) . '</div>') : '')
+                    . ($doseFreqLocal !== '' ? ('<div style="font-size:11px;color:#444;line-height:1.4;" lang="hi">' . esc($doseFreqLocal) . '</div>') : '')
                     . '</td>'
                     . '<td>' . esc($days) . '</td>'
                     . '<td>' . esc($inst)
-                    . ($instLocal !== '' ? ('<div style="font-size:10px;color:#444;line-height:1.3;">' . esc($instLocal) . '</div>') : '')
+                    . ($instLocal !== '' ? ('<div style="font-size:11px;color:#444;line-height:1.4;" lang="hi">' . esc($instLocal) . '</div>') : '')
                     . '</td>'
                     . '</tr>';
             }
@@ -2094,11 +2119,36 @@ class Opd extends BaseController
             'afternoon' => 'दोपहर',
             'evening' => 'शाम',
             'night' => 'रात',
+            // Dose schedules (longer phrases first for uksort)
+            'one time a day' => 'दिन में एक बार',
+            'two times a day' => 'दिन में दो बार',
+            'three times a day' => 'दिन में तीन बार',
+            'four times a day' => 'दिन में चार बार',
+            'twice a day' => 'दिन में दो बार',
+            'thrice a day' => 'दिन में तीन बार',
             'once daily' => 'दिन में एक बार',
             'twice daily' => 'दिन में दो बार',
             'thrice daily' => 'दिन में तीन बार',
+            'at bed time' => 'सोते समय',
+            'at sleep' => 'सोते समय',
+            'at bedtime' => 'सोते समय',
+            'with food' => 'भोजन के साथ',
+            'with water' => 'पानी के साथ',
+            'with milk' => 'दूध के साथ',
+            'empty stomach' => 'खाली पेट',
+            'before meal' => 'भोजन से पहले',
+            'after meal' => 'भोजन के बाद',
+            'as required' => 'जरूरत पड़ने पर',
+            'as needed' => 'जरूरत पड़ने पर',
+            'when required' => 'जरूरत पड़ने पर',
+            'every 4 hours' => 'हर 4 घंटे',
+            'every 6 hours' => 'हर 6 घंटे',
+            'every 8 hours' => 'हर 8 घंटे',
+            'every 12 hours' => 'हर 12 घंटे',
             'daily' => 'रोज',
             'weekly' => 'साप्ताहिक',
+            'monthly' => 'मासिक',
+            'alternate day' => 'एक दिन छोड़कर',
             'for' => 'के लिए',
             'days' => 'दिन',
             'day' => 'दिन',
