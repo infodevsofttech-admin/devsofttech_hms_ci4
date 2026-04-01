@@ -100,6 +100,39 @@
                         <datalist id="med_company_suggestions"></datalist>
                     </div>
 
+                    <hr class="my-2">
+                    <div class="small fw-semibold text-muted mb-1">Prescription Defaults <span class="text-info">(auto-fills on consult form)</span></div>
+                    <div class="row g-1 mb-2">
+                        <div class="col-6">
+                            <label class="form-label form-label-sm mb-0">Dose</label>
+                            <input type="text" id="med_default_dosage" class="form-control form-control-sm" placeholder="e.g. 1-0-1">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label form-label-sm mb-0">When</label>
+                            <input type="text" id="med_default_when" class="form-control form-control-sm" placeholder="e.g. AC">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label form-label-sm mb-0">Frequency</label>
+                            <input type="text" id="med_default_freq" class="form-control form-control-sm" placeholder="e.g. TDS">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label form-label-sm mb-0">Route</label>
+                            <input type="text" id="med_default_where" class="form-control form-control-sm" placeholder="e.g. ORAL">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label form-label-sm mb-0">Days</label>
+                            <input type="text" id="med_default_days" class="form-control form-control-sm" placeholder="e.g. 5">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label form-label-sm mb-0">Qty</label>
+                            <input type="text" id="med_default_qty" class="form-control form-control-sm" placeholder="e.g. 15">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label form-label-sm mb-0">Remark</label>
+                            <input type="text" id="med_default_remark" class="form-control form-control-sm" placeholder="">
+                        </div>
+                    </div>
+
                     <div class="d-flex gap-2">
                         <button type="button" class="btn btn-primary btn-sm" id="btn_med_save">Update</button>
                         <button type="button" class="btn btn-outline-info btn-sm" id="btn_med_ai_details">Use AI</button>
@@ -224,6 +257,7 @@
     function clearForm() {
         $('#med_id').val('0');
         $('#med_item_name,#med_formulation,#med_genericname,#med_salt_name,#med_dosage_restriction,#med_company_name').val('');
+        $('#med_default_dosage,#med_default_when,#med_default_freq,#med_default_where,#med_default_days,#med_default_qty,#med_default_remark').val('');
     }
 
     function buildMedicinePayload() {
@@ -234,7 +268,14 @@
             genericname: ($('#med_genericname').val() || '').trim(),
             salt_name: ($('#med_salt_name').val() || '').trim(),
             dosage_restriction: ($('#med_dosage_restriction').val() || '').trim(),
-            company_name: ($('#med_company_name').val() || '').trim()
+            company_name: ($('#med_company_name').val() || '').trim(),
+            dosage: ($('#med_default_dosage').val() || '').trim(),
+            dosage_when: ($('#med_default_when').val() || '').trim(),
+            dosage_freq: ($('#med_default_freq').val() || '').trim(),
+            dosage_where: ($('#med_default_where').val() || '').trim(),
+            no_of_days: ($('#med_default_days').val() || '').trim(),
+            qty: ($('#med_default_qty').val() || '').trim(),
+            remark: ($('#med_default_remark').val() || '').trim()
         };
     }
 
@@ -268,6 +309,13 @@
         $('#med_salt_name').val(row.salt_name || row.sal_name || row.salt || row.saltname || '');
         $('#med_dosage_restriction').val(row.dosage_restriction || row.dose_restriction || row.restriction_note || row.restriction || '');
         $('#med_company_name').val(row.company_name || '');
+        $('#med_default_dosage').val(row.dosage || '');
+        $('#med_default_when').val(row.dosage_when || '');
+        $('#med_default_freq').val(row.dosage_freq || '');
+        $('#med_default_where').val(row.dosage_where || '');
+        $('#med_default_days').val(row.no_of_days || '');
+        $('#med_default_qty').val(row.qty || '');
+        $('#med_default_remark').val(row.remark || '');
     }
 
     function loadOne(medId) {

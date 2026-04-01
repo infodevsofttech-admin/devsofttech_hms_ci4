@@ -482,21 +482,19 @@
                                     <div class="col-md-12">
                                         <div class="border rounded p-2">
                                             <h6 class="mb-2">Drug Allergy / ADR (NABH)</h6>
-                                            <div class="small text-danger mb-2">Required: Drug Allergy Status is mandatory. If status is Known, Drug Allergy Details are mandatory.</div>
                                             <div class="row g-2">
                                                 <div class="col-md-4">
-                                                    <label class="form-label mb-1">Drug Allergy Status <span class="text-danger">*</span></label>
+                                                    <label class="form-label mb-1">Drug Allergy Status</label>
                                                     <?php $allergyStatus = strtolower(trim((string) ($opd_prescription[0]->drug_allergy_status ?? ''))); ?>
                                                     <select class="form-select form-select-sm rx-instant" id="drug_allergy_status">
-                                                        <option value="">Select status</option>
+                                                        <option value="Allergies Not Known" <?= ($allergyStatus === '' || in_array($allergyStatus, ['allergies not known', 'not known'], true)) ? 'selected' : '' ?>>Allergies Not Known</option>
                                                         <option value="Known" <?= $allergyStatus === 'known' ? 'selected' : '' ?>>Known</option>
-                                                        <option value="Allergies Not Known" <?= in_array($allergyStatus, ['allergies not known', 'not known'], true) ? 'selected' : '' ?>>Allergies Not Known</option>
                                                         <option value="No Known Drug Allergy" <?= in_array($allergyStatus, ['no known drug allergy', 'none'], true) ? 'selected' : '' ?>>No Known Drug Allergy</option>
                                                     </select>
                                                     <div id="drug_allergy_status_error" class="invalid-feedback d-block" style="display:none;"></div>
                                                 </div>
                                                 <div class="col-md-8">
-                                                    <label class="form-label mb-1">Drug Allergy Details <span class="text-danger">*</span> <span class="small text-muted">(when status = Known)</span></label>
+                                                    <label class="form-label mb-1">Drug Allergy Details <span class="small text-muted">(when status = Known)</span></label>
                                                     <input type="text" class="form-control form-control-sm rx-instant" id="drug_allergy_details" placeholder="e.g. Penicillin rash, NSAID gastritis" value="<?= esc($opd_prescription[0]->drug_allergy_details ?? '') ?>">
                                                     <div id="drug_allergy_details_error" class="invalid-feedback d-block" style="display:none;"></div>
                                                 </div>
@@ -2275,14 +2273,11 @@
         var allergyStatusNorm = allergyStatus.toLowerCase().replace(/\s+/g, ' ');
 
         if (allergyStatus === '') {
-            var msgStatus = 'Drug Allergy Status is required as per NABH documentation.';
-            setStatus('error', 'Drug Allergy Status is required');
-            $('.jsError').removeClass('text-muted text-success').addClass('text-danger').text(msgStatus);
-            markNabhFieldError('#drug_allergy_status', msgStatus);
-            if (typeof done === 'function') {
-                done(false, { update: 0, error_text: msgStatus });
+            allergyStatus = 'Allergies Not Known';
+            allergyStatusNorm = 'allergies not known';
+            if ($('#drug_allergy_status').length) {
+                $('#drug_allergy_status').val('Allergies Not Known');
             }
-            return;
         }
 
         if ((allergyStatusNorm === 'known' || allergyStatusNorm === 'yes' || allergyStatusNorm === 'present') && allergyDetails === '') {

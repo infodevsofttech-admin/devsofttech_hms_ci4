@@ -2278,6 +2278,12 @@ class Opd_prescription extends BaseController
             $data[$restrictionField] = trim((string) $this->request->getPost('dosage_restriction'));
         }
 
+        foreach (['dosage', 'dosage_when', 'dosage_freq', 'dosage_where', 'no_of_days', 'qty', 'remark'] as $dosageField) {
+            if (in_array($dosageField, $fields, true)) {
+                $data[$dosageField] = trim((string) $this->request->getPost($dosageField));
+            }
+        }
+
         if ($id > 0) {
             $this->db->table($table)->where('id', $id)->update($data);
             $savedId = $id;

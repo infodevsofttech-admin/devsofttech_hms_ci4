@@ -749,20 +749,18 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                     <div class="col-md-12">
                                         <div class="border rounded p-2">
                                             <h6 class="mb-2">Drug Allergy / ADR (NABH)</h6>
-                                            <div class="small text-danger mb-2">Required: Drug Allergy Status is mandatory. If status is Known, Drug Allergy Details are mandatory.</div>
                                             <div class="row g-2">
                                                 <div class="col-md-4">
-                                                    <label class="form-label mb-1">Drug Allergy Status <span class="text-danger">*</span></label>
+                                                    <label class="form-label mb-1">Drug Allergy Status</label>
                                                     <select class="form-select form-select-sm" id="drug_allergy_status" name="drug_allergy_status">
-                                                        <option value="">Select status</option>
+                                                        <option value="Allergies Not Known" <?= ($allergyStatusUnknown || (!$allergyStatusKnown && !$allergyStatusNoKnown)) ? 'selected' : '' ?>>Allergies Not Known</option>
                                                         <option value="Known" <?= $allergyStatusKnown ? 'selected' : '' ?>>Known</option>
-                                                        <option value="Allergies Not Known" <?= $allergyStatusUnknown ? 'selected' : '' ?>>Allergies Not Known</option>
                                                         <option value="No Known Drug Allergy" <?= $allergyStatusNoKnown ? 'selected' : '' ?>>No Known Drug Allergy</option>
                                                     </select>
                                                     <div id="drug_allergy_status_error" class="invalid-feedback d-block" style="display:none;"></div>
                                                 </div>
                                                 <div class="col-md-8">
-                                                    <label class="form-label mb-1">Drug Allergy Details <span class="text-danger">*</span> <span class="small text-muted">(when status = Known)</span></label>
+                                                    <label class="form-label mb-1">Drug Allergy Details <span class="small text-muted">(when status = Known)</span></label>
                                                     <input type="text" class="form-control form-control-sm" id="drug_allergy_details" name="drug_allergy_details" value="<?= esc($drugAllergyDetails) ?>" placeholder="e.g. Penicillin rash, NSAID gastritis">
                                                     <div id="drug_allergy_details_error" class="invalid-feedback d-block" style="display:none;"></div>
                                                 </div>
@@ -3476,8 +3474,8 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
             var status = (statusEl.value || '').trim();
             var details = detailsEl ? (detailsEl.value || '').trim() : '';
             if (status === '') {
-                markNabhFieldError(form, '#drug_allergy_status', 'Drug Allergy Status is required as per NABH documentation.');
-                return false;
+                statusEl.value = 'Allergies Not Known';
+                status = 'Allergies Not Known';
             }
             if (status.toLowerCase() === 'known' && details === '') {
                 markNabhFieldError(form, '#drug_allergy_details', 'Drug Allergy Details are required when Drug Allergy Status is Known.');
