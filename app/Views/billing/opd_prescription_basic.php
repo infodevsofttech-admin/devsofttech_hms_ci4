@@ -799,12 +799,7 @@
                                     <button type="button" class="btn btn-outline-secondary" id="btn_cancel_medicine_edit" style="display:none;">Cancel</button>
                                 </div>
                             </div>
-                            <div class="d-flex flex-wrap gap-2 mb-2">
-                                <button type="button" class="btn btn-outline-primary btn-sm med-scope-btn active" data-scope="active">Active</button>
-                                <button type="button" class="btn btn-outline-primary btn-sm med-scope-btn" data-scope="favorite">Favorites</button>
-                                <button type="button" class="btn btn-outline-primary btn-sm med-scope-btn" data-scope="all">All</button>
-                                <small class="text-muted align-self-center">Search shows most-used medicines first.</small>
-                            </div>
+
                             <div class="border rounded p-2 mb-3" id="substitute_box" style="display:none;">
                                 <div class="d-flex justify-content-between align-items-center mb-1">
                                     <strong class="small">Substitute Medicines</strong>
@@ -1083,7 +1078,7 @@
     var legacyInvestigationProfiles = {};
     var legacyInvestigationProfileList = [];
     var investigationBatchActive = false;
-    var activeMedicineScope = 'active';
+    var activeMedicineScope = 'all';
     var medicineSuggestRows = [];
     var medicineDoseMasterCache = { dose: [], when: [], freq: [], where: [] };
     var investigationProfiles = {
@@ -4570,7 +4565,7 @@
             $('#crgc_med_suggest').html('');
             return;
         }
-        apiGet('<?= base_url('Opd_prescription/medicine_search') ?>?q=' + encodeURIComponent(q) + '&scope=active', function(data) {
+        apiGet('<?= base_url('Opd_prescription/medicine_search') ?>?q=' + encodeURIComponent(q) + '&scope=all', function(data) {
             crgcMedSuggestRows = data.rows || [];
             var html = '';
             crgcMedSuggestRows.forEach(function(row) {
@@ -4838,16 +4833,7 @@
         $('#med_name').closest('.col-md-4').append('<button type="button" class="btn btn-sm btn-outline-warning mt-1" id="btn_toggle_med_favorite" style="display:none;">☆</button>');
     }
 
-    $(document).on('click', '.med-scope-btn', function() {
-        activeMedicineScope = ($(this).data('scope') || 'active').toString();
-        $('.med-scope-btn').removeClass('active');
-        $(this).addClass('active');
 
-        var currentVal = ($('#med_name').val() || '').trim();
-        if (currentVal.length >= 2) {
-            $('#med_name').trigger('input');
-        }
-    });
 
     $('#btn_toggle_med_favorite').on('click', function() {
         var medId = parseInt($(this).data('med-id') || '0', 10);
