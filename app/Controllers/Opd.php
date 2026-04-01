@@ -1809,18 +1809,29 @@ class Opd extends BaseController
             }
         }
         if (empty($doseShedHindiMap)) {
+            // Fallback mirrors opd_dose_shed table (dose_show_sign → dose_show_desc)
             $doseShedHindiMap = [
-                'q (every)' => 'प्रत्येक', 'qd (everday)' => 'प्रतिदिन',
-                'qod (alternate day)' => 'हर एक दिन छोड़कर', 'qh (every hour)' => 'हर घंटे',
-                'sos (as when required)' => 'जरूरत पड़ने पर', 'ac (before meal)' => 'भोजन से पहले',
-                'pc (after meal)' => 'भोजन के बाद', 'bid (two time a day)' => 'दिन में दो बार',
-                'tid (three time a day)' => 'दिन में तीन बार', 'qid (four time a day)' => 'दिन में चार बार',
-                'od (one time a day)' => 'हर सुबह नाश्ते के बाद', 'bt (at sleep)' => 'सोते समय',
-                'bbf (before breakfast)' => 'नाश्ते से पहले', 'hs (after dinner)' => 'रात को भोजन के बाद',
-                'bl (before lunch)' => 'रात को भोजन से पहले', 'al (after lunch)' => 'रात को भोजन से पहले',
-                'tw (two time a week)' => 'हफ्ते में दो बार', 'qam (every morning)' => 'हर सुबह',
-                'qpm (every night)' => 'हर रात', 'q4h (every four hour)' => 'हर चार घंटों में',
-                'prn (as per need)' => 'जरूरत के मुताबिक',
+                'q (every)'              => 'प्रत्येक',
+                'qd (everday)'           => 'प्रतिदिन',
+                'qod (alternate day)'    => 'हर एक दिन छोड़कर',
+                'qh (every hour)'        => 'हर घंटे',
+                'sos (as when required)' => 'जरूरत पड़ने पर',
+                'ac (before meal)'       => 'भोजन से पहले',
+                'pc (after meal)'        => 'भोजन के बाद',
+                'bid (two time a day)'   => 'दिन में दो बार',
+                'tid (three time a day)' => 'दिन में तीन बार',
+                'qid (four time a day)'  => 'दिन में चार बार',
+                'od (one time a day)'    => 'हर सुबह नाश्ते के बाद',
+                'bt (at sleep)'          => 'सोते समय',
+                'bbf (before breakfast)' => 'नाश्ते से पहले',
+                'hs (after dinner)'      => 'रात को भोजन के बाद',
+                'bl (before lunch)'      => 'रात को भोजन से पहले',
+                'al (after lunch)'       => 'रात को भोजन से पहले',
+                'tw (two time a week)'   => 'हफ्ते में दो बार',
+                'qam (every morning)'    => 'हर सुबह',
+                'qpm (every night)'      => 'हर रात',
+                'q4h (every four hour)'  => 'हर चार घंटों में',
+                'prn (as per need)'      => 'जरूरत के मुताबिक',
             ];
         }
 
@@ -1862,25 +1873,16 @@ class Opd extends BaseController
                 $inst    = trim(($when !== '' ? $when : '') . ($remark !== '' ? ($when !== '' ? ' | ' : '') . $remark : ''));
                 $doseFreqText = trim($dose . ' ' . $freq);
 
-                // Hindi for freq/schedule: opd_dose_shed > opd_dose_frequency > prefix match > generic fallback
-                $freqKey      = strtolower($freq);
+                // Hindi for freq/schedule:
+                // 1) exact match against doseShedHindiMap (DB: opd_dose_shed)
+                // 2) extract "ABBR (SIGN)" part up to closing ')' — handles "OD (ONE TIME A DAY) Daily"
+                // 3) exact match in doseFreqHindiMap (DB: opd_dose_frequency)
+                // 4) translated fallback
+                $freqKey      = strtolower(trim($freq));
                 $doseFreqLocal = $doseShedHindiMap[$freqKey] ?? $doseFreqHindiMap[$freqKey] ?? '';
-                if ($doseFreqLocal === '') {
-                    // Prefix match: "od (one time a day) daily" should match key "od (one time a day)"
-                    foreach ($doseShedHindiMap as $_k => $_v) {
-                        if ($_k !== '' && (str_starts_with($freqKey, $_k . ' ') || str_starts_with($freqKey, $_k . '('))) {
-                            $doseFreqLocal = $_v;
-                            break;
-                        }
-                    }
-                }
-                if ($doseFreqLocal === '') {
-                    foreach ($doseFreqHindiMap as $_k => $_v) {
-                        if ($_k !== '' && str_starts_with($freqKey, $_k . ' ')) {
-                            $doseFreqLocal = $_v;
-                            break;
-                        }
-                    }
+                if ($doseFreqLocal === '' && preg_match('/^(.+?\))/u', $freq, $_m) === 1) {
+                    $signKey = strtolower(trim($_m[1]));
+                    $doseFreqLocal = $doseShedHindiMap[$signKey] ?? '';
                 }
                 if ($doseFreqLocal === '' && $doseFreqText !== '') {
                     $fallback = $this->translateToLocalPatientText($doseFreqText);
@@ -1889,16 +1891,12 @@ class Opd extends BaseController
                     }
                 }
 
-                // Hindi for when/timing: opd_dose_when > opd_dose_shed > prefix match > generic fallback
-                $whenKey  = strtolower($when);
+                // Hindi for when/timing (opd_dose_when → opd_dose_shed → fallback)
+                $whenKey  = strtolower(trim($when));
                 $instLocal = $doseWhenHindiMap[$whenKey] ?? $doseShedHindiMap[$whenKey] ?? '';
-                if ($instLocal === '') {
-                    foreach ($doseWhenHindiMap as $_k => $_v) {
-                        if ($_k !== '' && str_starts_with($whenKey, $_k . ' ')) {
-                            $instLocal = $_v;
-                            break;
-                        }
-                    }
+                if ($instLocal === '' && preg_match('/^(.+?\))/u', $when, $_m) === 1) {
+                    $signKey = strtolower(trim($_m[1]));
+                    $instLocal = $doseWhenHindiMap[$signKey] ?? $doseShedHindiMap[$signKey] ?? '';
                 }
                 if ($instLocal === '' && $when !== '') {
                     $fallback = $this->translateToLocalPatientText($when);
