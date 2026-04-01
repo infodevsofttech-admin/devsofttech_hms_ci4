@@ -87,8 +87,8 @@
                         <input type="text" id="med_genericname" class="form-control form-control-sm" placeholder="Generic Name">
                     </div>
                     <div class="mb-2">
-                        <label class="form-label">Salt Name</label>
-                        <input type="text" id="med_salt_name" class="form-control form-control-sm" placeholder="Salt Name">
+                        <label class="form-label">Substitute <small class="text-muted">(other brand names with same composition)</small></label>
+                        <input type="text" id="med_salt_name" class="form-control form-control-sm" placeholder="e.g. Brand A, Brand B, Brand C">
                     </div>
                     <div class="mb-2">
                         <label class="form-label">Dosage Restriction</label>
