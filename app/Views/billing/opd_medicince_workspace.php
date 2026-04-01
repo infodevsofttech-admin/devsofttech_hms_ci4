@@ -285,62 +285,10 @@
     }
 
     function loadList() {
-        var url = '<?= base_url('Opd_prescription/opd_medicince_data') ?>';
-        var query = [];
-        if (activeListFilter !== 'all') {
-            query.push('filter=' + encodeURIComponent(activeListFilter));
+        initMedMasterDataTable();
+        if (medMasterDataTable) {
+            medMasterDataTable.ajax.reload(null, true);
         }
-        if (query.length) {
-            url += '?' + query.join('&');
-        }
-
-        apiGet(url, function(data) {
-            var rows = (data && data.rows) ? data.rows : [];
-            var $tb = $('#tbl_med_master tbody');
-            $tb.empty();
-            if (!rows.length) {
-                $tb.html('<tr><td colspan="9" class="text-muted">No medicine found</td></tr>');
-                if ($.fn.dataTable.isDataTable('#tbl_med_master')) {
-                    $('#tbl_med_master').DataTable().clear().destroy();
-                    medMasterDataTable = null;
-                }
-                if (activeListFilter === 'generic_issue') {
-                    setMsg('normal', 'No record found with Generic/Salt issue.');
-                } else if (activeListFilter === 'generic_same_name') {
-                    setMsg('normal', 'No record found where Generic/Salt is same as Medicine Name.');
-                } else if (activeListFilter === 'company_blank') {
-                    setMsg('normal', 'No record found with blank Company Name.');
-                }
-                return;
-            }
-
-            rows.forEach(function(row) {
-                var medId = parseInt(row.id || 0, 10);
-                var isFav = parseInt(row.is_favorite || 0, 10) === 1;
-                var favBtn = '<button type="button" class="btn btn-sm ' + (isFav ? 'btn-warning' : 'btn-outline-warning') + ' btn-med-fav" data-id="' + medId + '">' + (isFav ? '★' : '☆') + '</button>';
-                $tb.append('<tr id="med_row_' + (row.id || 0) + '">' 
-                    + '<td>' + (row.id || 0) + '</td>'
-                    + '<td>' + favBtn + '</td>'
-                    + '<td>' + $('<div>').text(row.item_name || '').html() + '</td>'
-                    + '<td>' + parseInt(row.use_count || 0, 10) + '</td>'
-                    + '<td>' + $('<div>').text(row.last_used_at || '').html() + '</td>'
-                    + '<td>' + $('<div>').text(row.genericname || '').html() + '</td>'
-                    + '<td>' + $('<div>').text(row.company_name || '').html() + '</td>'
-                    + '<td><button type="button" class="btn btn-sm btn-outline-primary btn-med-edit" data-id="' + (row.id || 0) + '">Edit</button></td>'
-                    + '<td><button type="button" class="btn btn-sm btn-outline-danger btn-med-remove" data-id="' + (row.id || 0) + '">Remove</button></td>'
-                    + '</tr>');
-            });
-
-            initMedMasterDataTable();
-
-            if (activeListFilter === 'generic_issue') {
-                setMsg('normal', rows.length + ' record(s) with unclear Generic/Salt data.');
-            } else if (activeListFilter === 'generic_same_name') {
-                setMsg('normal', rows.length + ' record(s) where Generic/Salt matches Medicine Name.');
-            } else if (activeListFilter === 'company_blank') {
-                setMsg('normal', rows.length + ' record(s) with blank/unclear Company Name.');
-            }
-        });
     }
 
     function initMedMasterDataTable() {
@@ -348,21 +296,124 @@
             return;
         }
 
-        if ($.fn.dataTable.isDataTable('#tbl_med_master')) {
-            $('#tbl_med_master').DataTable().clear().destroy();
-            medMasterDataTable = null;
+        if (medMasterDataTable) {
+            return;
+        }
+
+        function esc(value) {
+            return $('<div>').text(value || '').html();
         }
 
         medMasterDataTable = $('#tbl_med_master').DataTable({
+            processing: true,
+            serverSide: true,
             paging: true,
             searching: true,
             ordering: true,
             info: true,
             pageLength: 25,
+            ajax: {
+                url: '<?= base_url('Opd_prescription/opd_medicince_data') ?>',
+                type: 'GET',
+                data: function(d) {
+                    d.filter = activeListFilter;
+                    d.scope = 'all';
+                    d.show_all = 1;
+                },
+                dataSrc: function(json) {
+                    var total = parseInt((json && json.recordsFiltered) || 0, 10);
+                    if (!total) {
+                        if (activeListFilter === 'generic_issue') {
+                            setMsg('normal', 'No record found with Generic/Salt issue.');
+                        } else if (activeListFilter === 'generic_same_name') {
+                            setMsg('normal', 'No record found where Generic/Salt is same as Medicine Name.');
+                        } else if (activeListFilter === 'company_blank') {
+                            setMsg('normal', 'No record found with blank Company Name.');
+                        } else {
+                            setMsg('normal', 'No medicine found.');
+                        }
+                    } else if (activeListFilter === 'generic_issue') {
+                        setMsg('normal', total + ' record(s) with unclear Generic/Salt data.');
+                    } else if (activeListFilter === 'generic_same_name') {
+                        setMsg('normal', total + ' record(s) where Generic/Salt matches Medicine Name.');
+                    } else if (activeListFilter === 'company_blank') {
+                        setMsg('normal', total + ' record(s) with blank/unclear Company Name.');
+                    } else {
+                        setMsg('normal', '');
+                    }
+                    return (json && json.data) ? json.data : [];
+                },
+                error: function() {
+                    setMsg('err', 'Unable to load medicine list. Try Refresh.');
+                }
+            },
             order: [[3, 'desc'], [2, 'asc']],
+            columns: [
+                {
+                    data: 'id',
+                    render: function(data) {
+                        return parseInt(data || 0, 10);
+                    }
+                },
+                {
+                    data: 'is_favorite',
+                    render: function(data, type, row) {
+                        var medId = parseInt((row && row.id) || 0, 10);
+                        var isFav = parseInt(data || 0, 10) === 1;
+                        return '<button type="button" class="btn btn-sm ' + (isFav ? 'btn-warning' : 'btn-outline-warning') + ' btn-med-fav" data-id="' + medId + '">' + (isFav ? '★' : '☆') + '</button>';
+                    }
+                },
+                {
+                    data: 'item_name',
+                    render: function(data) {
+                        return esc(data);
+                    }
+                },
+                {
+                    data: 'use_count',
+                    render: function(data) {
+                        return parseInt(data || 0, 10);
+                    }
+                },
+                {
+                    data: 'last_used_at',
+                    render: function(data) {
+                        return esc(data);
+                    }
+                },
+                {
+                    data: 'genericname',
+                    render: function(data) {
+                        return esc(data);
+                    }
+                },
+                {
+                    data: 'company_name',
+                    render: function(data) {
+                        return esc(data);
+                    }
+                },
+                {
+                    data: 'id',
+                    render: function(data) {
+                        var medId = parseInt(data || 0, 10);
+                        return '<button type="button" class="btn btn-sm btn-outline-primary btn-med-edit" data-id="' + medId + '">Edit</button>';
+                    }
+                },
+                {
+                    data: 'id',
+                    render: function(data) {
+                        var medId = parseInt(data || 0, 10);
+                        return '<button type="button" class="btn btn-sm btn-outline-danger btn-med-remove" data-id="' + medId + '">Remove</button>';
+                    }
+                }
+            ],
             columnDefs: [
                 { orderable: false, targets: [1, 7, 8] },
             ],
+            language: {
+                emptyTable: 'No medicine found'
+            }
         });
     }
 

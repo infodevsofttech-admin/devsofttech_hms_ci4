@@ -1936,6 +1936,89 @@ class Opd_prescription extends BaseController
             $scope = 'all';
         }
 
+        $query = $this->request->getGet();
+        $isDataTableRequest = is_array($query) && array_key_exists('draw', $query);
+        if ($isDataTableRequest) {
+            $draw = max(1, (int) ($query['draw'] ?? 1));
+            $start = max(0, (int) ($query['start'] ?? 0));
+            $length = (int) ($query['length'] ?? 25);
+            if ($length < 1 || $length > 500) {
+                $length = 25;
+            }
+
+            $searchValue = '';
+            if (isset($query['search']) && is_array($query['search'])) {
+                $searchValue = trim((string) ($query['search']['value'] ?? ''));
+            }
+
+            $orderField = 'use_count';
+            $orderDir = 'desc';
+            $allowedOrderFields = ['id', 'item_name', 'use_count', 'last_used_at', 'genericname', 'company_name'];
+            if (isset($query['order'][0]) && is_array($query['order'][0])) {
+                $orderColIndex = (int) ($query['order'][0]['column'] ?? -1);
+                $orderDirCandidate = strtolower(trim((string) ($query['order'][0]['dir'] ?? 'desc')));
+                if (in_array($orderDirCandidate, ['asc', 'desc'], true)) {
+                    $orderDir = $orderDirCandidate;
+                }
+
+                if ($orderColIndex >= 0 && isset($query['columns'][$orderColIndex]) && is_array($query['columns'][$orderColIndex])) {
+                    $candidate = trim((string) ($query['columns'][$orderColIndex]['data'] ?? ''));
+                    if (in_array($candidate, $allowedOrderFields, true)) {
+                        $orderField = $candidate;
+                    }
+                }
+            }
+
+            $rows = $this->getOpdMedicineRows($filter, $scope, $showAll);
+            $recordsTotal = count($rows);
+
+            if ($searchValue !== '') {
+                $needle = mb_strtolower($searchValue);
+                $rows = array_values(array_filter($rows, static function (array $row) use ($needle): bool {
+                    $haystack = [
+                        (string) ($row['id'] ?? ''),
+                        (string) ($row['item_name'] ?? ''),
+                        (string) ($row['genericname'] ?? ''),
+                        (string) ($row['company_name'] ?? ''),
+                        (string) ($row['last_used_at'] ?? ''),
+                    ];
+                    foreach ($haystack as $value) {
+                        if (mb_stripos($value, $needle) !== false) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }));
+            }
+
+            $recordsFiltered = count($rows);
+
+            usort($rows, static function (array $a, array $b) use ($orderField, $orderDir): int {
+                $numericFields = ['id', 'use_count'];
+                if (in_array($orderField, $numericFields, true)) {
+                    $cmp = ((int) ($a[$orderField] ?? 0)) <=> ((int) ($b[$orderField] ?? 0));
+                } else {
+                    $cmp = strcasecmp((string) ($a[$orderField] ?? ''), (string) ($b[$orderField] ?? ''));
+                }
+
+                if ($cmp === 0) {
+                    $cmp = strcasecmp((string) ($a['item_name'] ?? ''), (string) ($b['item_name'] ?? ''));
+                }
+
+                return $orderDir === 'desc' ? -$cmp : $cmp;
+            });
+
+            $pageRows = array_slice($rows, $start, $length);
+
+            return $this->response->setJSON([
+                'draw' => $draw,
+                'recordsTotal' => $recordsTotal,
+                'recordsFiltered' => $recordsFiltered,
+                'data' => $pageRows,
+                'active_filter' => $filter,
+            ]);
+        }
+
         return $this->response->setJSON([
             'rows' => $this->getOpdMedicineRows($filter, $scope, $showAll),
             'active_filter' => $filter,
