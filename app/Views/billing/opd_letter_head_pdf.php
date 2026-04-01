@@ -117,6 +117,26 @@ $toLocalText = static function (string $input): string {
         'hydrate' => 'पर्याप्त पानी लें',
         'avoid oily food' => 'तैलीय भोजन से बचें',
         'follow up' => 'फॉलो-अप करें',
+        'review warning signs' => 'चेतावनी के संकेतों पर ध्यान दें',
+        'warning signs' => 'चेतावनी के संकेत',
+        'if symptoms persist' => 'यदि लक्षण बने रहें',
+        'if symptoms worsen' => 'यदि लक्षण बिगड़ें',
+        'follow-up' => 'फॉलो-अप',
+        'bed rest' => 'बिस्तर पर आराम',
+        'light diet' => 'हल्का भोजन',
+        'plenty of water' => 'पर्याप्त पानी पियें',
+        'plenty of fluids' => 'पर्याप्त तरल पदार्थ',
+        'drink water' => 'पानी पियें',
+        'avoid cold' => 'ठंड से बचें',
+        'no smoking' => 'धूम्रपान न करें',
+        'avoid alcohol' => 'शराब से बचें',
+        'take medicine regularly' => 'नियमित दवाई लें',
+        'low salt diet' => 'कम नमक का भोजन',
+        'low sugar diet' => 'कम चीनी का भोजन',
+        'exercise regularly' => 'नियमित व्यायाम करें',
+        'avoid stress' => 'तनाव से बचें',
+        'wear mask' => 'मास्क पहनें',
+        'wash hands' => 'हाथ धोएं',
         'review' => 'पुनः जांच',
     ];
 
@@ -137,7 +157,7 @@ $toLocalText = static function (string $input): string {
     <meta charset="utf-8">
     <title>OPD Consult Note</title>
     <style>
-        body { font-family: freeserif, dejavusans, sans-serif; font-size: 10.5px; color: #111; }
+        body { font-family: dejavusans, sans-serif; font-size: 11px; color: #111; line-height: 1.5; }
         .wrap { width: 100%; margin-top: <?= (int) $topSpacerMm ?>mm; }
         .top-head { width: 100%; border-bottom: 1px solid #666; padding-bottom: 5px; margin-bottom: 8px; }
         .top-head td { vertical-align: top; }
@@ -154,7 +174,7 @@ $toLocalText = static function (string $input): string {
         .rx-table th { text-align: left; border-bottom: 1px solid #444; font-size: 11px; padding: 2px 3px; }
         .rx-table td { border-bottom: 1px solid #bbb; padding: 2px 3px; vertical-align: top; }
         .sub-line { font-size: 9.5px; color: #444; margin-top: 1px; }
-        .local-line { font-size: 9.5px; color: #111; margin-top: 1px; }
+        .local-line { font-size: 11px; color: #111; margin-top: 2px; }
         .small-gap { margin-top: 8px; }
         .signature { margin-top: 28px; text-align: right; }
         .signature .name { font-size: 15px; font-weight: 700; }
@@ -364,16 +384,20 @@ $toLocalText = static function (string $input): string {
         ?>
         <?php if (!empty($adviceLine)) : ?>
             <?php $adviceEng = implode(' | ', $adviceLine); ?>
-            <div class="section-line"><span class="label">Advice :</span> <?= esc($adviceEng) ?></div>
             <?php if (!empty($adviceLocalLine)) : ?>
-                <div class="section-line local-line" lang="hi"><span class="label">सलाह :</span> <?= esc(implode(' | ', $adviceLocalLine)) ?></div>
+                <div class="section-line" lang="hi"><span class="label">सलाह :</span> <?= esc(implode(' | ', $adviceLocalLine)) ?></div>
+                <div style="font-size:9.5px; color:#666; margin-top:1px;">(Advice: <?= esc($adviceEng) ?>)</div>
+            <?php else : ?>
+                <div class="section-line"><span class="label">सलाह (Advice) :</span> <?= esc($adviceEng) ?></div>
             <?php endif; ?>
         <?php endif; ?>
     <?php elseif (!empty($rx['advice'] ?? '')) : ?>
         <?php $adviceEng = (string) ($rx['advice'] ?? ''); $adviceLocal = $toLocalText($adviceEng); ?>
-        <div class="section-line"><span class="label">Advice :</span> <?= nl2br(esc($adviceEng)) ?></div>
         <?php if ($adviceLocal !== '' && strtolower($adviceLocal) !== strtolower(trim($adviceEng))) : ?>
-            <div class="section-line local-line" lang="hi"><span class="label">सलाह :</span> <?= nl2br(esc($adviceLocal)) ?></div>
+            <div class="section-line" lang="hi"><span class="label">सलाह :</span> <?= nl2br(esc($adviceLocal)) ?></div>
+            <div style="font-size:9.5px; color:#666; margin-top:1px;">(Advice: <?= nl2br(esc($adviceEng)) ?>)</div>
+        <?php else : ?>
+            <div class="section-line"><span class="label">सलाह (Advice) :</span> <?= nl2br(esc($adviceEng)) ?></div>
         <?php endif; ?>
     <?php endif; ?>
 

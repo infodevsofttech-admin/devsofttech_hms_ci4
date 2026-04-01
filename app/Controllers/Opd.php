@@ -1429,7 +1429,7 @@ class Opd extends BaseController
                 'margin_bottom'    => 5,
                 'margin_header'    => 5,
                 'margin_footer'    => 5,
-                'default_font'     => 'freeserif',
+                'default_font'     => 'dejavusans',
                 'autoScriptToLang' => true,
                 'autoLangToFont'   => true,
                 'tempDir'          => WRITEPATH . 'cache',
@@ -1539,7 +1539,7 @@ class Opd extends BaseController
             'margin_bottom' => $marginBottom,
             'margin_header' => $marginHeader,
             'margin_footer' => $marginFooter,
-            'default_font' => 'freeserif',
+            'default_font' => 'dejavusans',
             'autoScriptToLang' => true,
             'autoLangToFont' => true,
             'tempDir' => WRITEPATH . 'cache',
@@ -2518,7 +2518,7 @@ class Opd extends BaseController
         $tokens['advice_raw'] = (string) ($tokens['advice'] ?? '');
         $tokens['next_visit_raw'] = (string) ($tokens['next_visit'] ?? '');
 
-        $tokens['vital_content'] = $formatBlock('Vitals', (string) ($tokens['vital_content'] ?? ''), true);
+        $tokens['vital_content'] = $formatBlock('Vitals', (string) ($tokens['vital_content'] ?? ''), false);
         $tokens['Complaint'] = $formatBlock('Complaint', (string) ($tokens['Complaint_raw'] ?? ''));
         $tokens['complaint'] = $tokens['Complaint'];
         $tokens['diagnosis'] = $formatBlock('Diagnosis', (string) ($tokens['diagnosis_raw'] ?? ''));
@@ -2529,7 +2529,22 @@ class Opd extends BaseController
         $tokens['finding_examinations'] = $tokens['Finding_Examinations'];
         $tokens['investigation'] = $formatBlock('Investigation Advised', (string) ($tokens['investigation_raw'] ?? ''));
         $tokens['Prescriber_Remarks'] = $formatBlock('Remarks', (string) ($tokens['Prescriber_Remarks_raw'] ?? ''));
-        $tokens['advice'] = $formatBlock('Advice', (string) ($tokens['advice_raw'] ?? ''));
+        $adviceRaw = trim((string) ($tokens['advice_raw'] ?? ''));
+        $adviceLocalText = trim((string) ($tokens['advice_local'] ?? ''));
+        if ($adviceRaw !== '') {
+            $advLabelHtml = '<span style="font-weight:700;font-size:13px;line-height:1.35;">सलाह (Advice) :</span>';
+            $adviceHtml = '<div style="margin-bottom:4px;">';
+            if ($adviceLocalText !== '') {
+                $adviceHtml .= $advLabelHtml . ' <span lang="hi">' . $adviceLocalText . '</span>';
+                $adviceHtml .= '<div style="font-size:10px;color:#666;margin-top:1px;">(Advice: ' . $adviceRaw . ')</div>';
+            } else {
+                $adviceHtml .= $advLabelHtml . ' ' . $adviceRaw;
+            }
+            $adviceHtml .= '</div>';
+            $tokens['advice'] = $adviceHtml;
+        } else {
+            $tokens['advice'] = '';
+        }
         $tokens['next_visit'] = $formatBlock('Next Visit', (string) ($tokens['next_visit_raw'] ?? ''));
 
         $medicalHtml = trim((string) ($tokens['medical'] ?? ''));
