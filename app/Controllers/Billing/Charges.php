@@ -841,6 +841,43 @@ class Charges extends BaseController
             ]);
         }
 
+        if ($mode === 5) {
+            // Cash return — patient overpaid (negative pending amount)
+            $returnAmount = $paidAmount - $netAmount;
+            if ($returnAmount <= 0) {
+                return $this->response->setJSON([
+                    'update' => 0,
+                    'error_text' => 'No overpayment to return.',
+                    'csrfName' => csrf_token(),
+                    'csrfHash' => csrf_hash(),
+                ]);
+            }
+
+            $paydata = [
+                'payment_mode'   => (int) ($invoice['payment_mode'] ?? 1),
+                'payof_type'     => '2',
+                'payof_id'       => $invId,
+                'payof_code'     => $invoice['invoice_code'] ?? '',
+                'credit_debit'   => '1',
+                'amount'         => $returnAmount,
+                'payment_date'   => date('Y-m-d H:i:s'),
+                'remark'         => 'Cash Return - Overpayment after item removal',
+                'update_by'      => $userNameInfo . ' [' . $userId . ']',
+                'update_by_id'   => $userId,
+                'insert_code'    => $spid,
+            ];
+
+            $paymentModel->insertPayment($paydata);
+            $invoiceModel->updateInvoiceFinal($invId);
+
+            return $this->response->setJSON([
+                'update'      => 1,
+                'showcontent' => 'Cash Return',
+                'csrfName'    => csrf_token(),
+                'csrfHash'    => csrf_hash(),
+            ]);
+        }
+
         return $this->response->setJSON([
             'update' => 0,
             'error_text' => 'Invalid payment request',

@@ -32,92 +32,92 @@
 <section class="invoice">
   <div class="card">
     <div class="card-body p-3">
-  <div class="row invoice-info mb-3">
-  <div class="col-sm-6 invoice-col">
-    To
-    <address>
-    <strong><?= esc($patient_master[0]->p_fname ?? '') ?></strong><br>
-    <?= esc($patient_master[0]->p_relative ?? '') ?>  : <?= esc($patient_master[0]->p_rname ?? '') ?><br>
-    Gender : <?= esc($patient_master[0]->xgender ?? '') ?><br>
-    Age : <?= esc($patient_master[0]->age ?? '') ?><br>
-    Phone No : <?= esc($patient_master[0]->mphone1 ?? '') ?>
-    </address>
-  </div>
-  <div class="col-sm-6 invoice-col">
-    <b>Invoice #<?= esc($invoice_master[0]->invoice_code ?? '') ?></b><br>
-    <?php if (($invoice_master[0]->insurance_id ?? 0) > 1) : ?>
-      <strong> Ins. Comp. :</strong><?= esc($insurance[0]->ins_company_name ?? '') ?><br>
-      <?php if (($invoice_master[0]->insurance_case_id ?? 0) > 0 && count($case_master) > 0) : ?>
-        <strong> Org.Case No. :</strong><?= esc($case_master[0]->case_id_code ?? '') ?><br>
-      <?php endif; ?>
-    <?php endif; ?>
-    <b>Date :</b> <?= esc($invoice_master[0]->inv_date ?? '') ?><br>
-    <b>Patient ID :</b> <?= esc($patient_master[0]->p_code ?? '') ?><br>
-    <b>Refer By :</b> <?= esc($invoice_master[0]->refer_by_other ?? '') ?><br>
-    <input type="hidden" value="<?= esc($invoice_master[0]->id ?? 0) ?>" id="invoice_id" name="invoice_id" />
-  </div>
-  </div>
+      <div class="row invoice-info mb-3">
+        <div class="col-sm-6 invoice-col">
+          To
+          <address>
+          <strong><?= esc($patient_master[0]->p_fname ?? '') ?></strong><br>
+          <?= esc($patient_master[0]->p_relative ?? '') ?>  : <?= esc($patient_master[0]->p_rname ?? '') ?><br>
+          Gender : <?= esc($patient_master[0]->xgender ?? '') ?><br>
+          Age : <?= esc($patient_master[0]->age ?? '') ?><br>
+          Phone No : <?= esc($patient_master[0]->mphone1 ?? '') ?>
+          </address>
+        </div>
+        <div class="col-sm-6 invoice-col">
+          <b>Invoice #<?= esc($invoice_master[0]->invoice_code ?? '') ?></b><br>
+          <?php if (($invoice_master[0]->insurance_id ?? 0) > 1) : ?>
+            <strong> Ins. Comp. :</strong><?= esc($insurance[0]->ins_company_name ?? '') ?><br>
+            <?php if (($invoice_master[0]->insurance_case_id ?? 0) > 0 && count($case_master) > 0) : ?>
+              <strong> Org.Case No. :</strong><?= esc($case_master[0]->case_id_code ?? '') ?><br>
+            <?php endif; ?>
+          <?php endif; ?>
+          <b>Date :</b> <?= esc($invoice_master[0]->inv_date ?? '') ?><br>
+          <b>Patient ID :</b> <?= esc($patient_master[0]->p_code ?? '') ?><br>
+          <b>Refer By :</b> <?= esc($invoice_master[0]->refer_by_other ?? '') ?><br>
+          <input type="hidden" value="<?= esc($invoice_master[0]->id ?? 0) ?>" id="invoice_id" name="invoice_id" />
+        </div>
+      </div>
 
-  <div class="row">
-  <div class="col-md-12">
-    <table class="table table-striped table-responsive mb-0">
-    <tr>
-      <th style="width: 10px">#</th>
-      <th>Charges Group</th>
-      <th>Charge Name</th>
-      <th>Rate</th>
-      <th>Qty</th>
-      <th>Amount</th>
-      <th></th>
-    </tr>
-    <?php $srno = 1; foreach ($invoiceDetails as $row) : ?>
-      <tr>
-        <td><?= $srno ?></td>
-        <td><?= esc($row->group_desc ?? '') ?></td>
-        <td><?= esc($row->item_name ?? '') ?></td>
-        <td><?= esc($row->item_rate ?? '') ?></td>
-        <td><?= esc($row->item_qty ?? '') ?></td>
-        <td><?= esc($row->item_amount ?? '') ?></td>
-        <td></td>
-      </tr>
-    <?php $srno++; endforeach; ?>
-    <tr>
-      <th style="width: 10px">#</th>
-      <th></th>
-      <th></th>
-      <th></th>
-      <th>Gross Total</th>
-      <th><?= esc($invoice_master[0]->total_amount ?? '') ?></th>
-      <th></th>
-    </tr>
-    <?php if (($invoice_master[0]->payment_status ?? 0) == 0) : ?>
-      <tr>
-        <th style="width: 10px">#</th>
-        <th>Deduction</th>
-        <th colspan=3><input class="form-control" name="input_dis_desc" id="input_dis_desc" placeholder="Ded. Desc." value="<?= esc($invoice_master[0]->discount_desc ?? '') ?>" type="text" /></th>
-        <th><input style="width: 100px" class="form-control" name="input_dis_amt" id="input_dis_amt" placeholder="Amount" value="<?= esc($invoice_master[0]->discount_amount ?? '') ?>" type="text" /></th>
-        <th><button type="button" class="btn btn-primary" id="btn_update_ded">Update</button></th>
-      </tr>
-    <?php else : ?>
-      <tr>
-        <th style="width: 10px">#</th>
-        <th>Deduction</th>
-        <th colspan=3><?= esc($invoice_master[0]->discount_desc ?? '') ?></th>
-        <th><?= esc($invoice_master[0]->discount_amount ?? '') ?></th>
-        <th></th>
-      </tr>
-    <?php endif; ?>
-    <tr>
-      <th style="width: 10px">#</th>
-      <th colspan="2"></th>
-      <th></th>
-      <th>Net Amount</th>
-      <th><?= esc($invoice_master[0]->net_amount ?? '') ?></th>
-      <th></th>
-    </tr>
-    </table>
-  </div>
-  </div>
+      <div class="row">
+        <div class="col-md-12">
+          <table class="table table-striped table-responsive mb-0">
+            <tr>
+              <th style="width: 10px">#</th>
+              <th>Charges Group</th>
+              <th>Charge Name</th>
+              <th>Rate</th>
+              <th>Qty</th>
+              <th>Amount</th>
+              <th></th>
+            </tr>
+            <?php $srno = 1; foreach ($invoiceDetails as $row) : ?>
+              <tr>
+                <td><?= $srno ?></td>
+                <td><?= esc($row->group_desc ?? '') ?></td>
+                <td><?= esc($row->item_name ?? '') ?></td>
+                <td><?= esc($row->item_rate ?? '') ?></td>
+                <td><?= esc($row->item_qty ?? '') ?></td>
+                <td><?= esc($row->item_amount ?? '') ?></td>
+                <td></td>
+              </tr>
+            <?php $srno++; endforeach; ?>
+            <tr>
+              <th style="width: 10px">#</th>
+              <th></th>
+              <th></th>
+              <th></th>
+              <th>Gross Total</th>
+              <th><?= esc($invoice_master[0]->total_amount ?? '') ?></th>
+              <th></th>
+            </tr>
+            <?php if (($invoice_master[0]->payment_status ?? 0) == 0) : ?>
+              <tr>
+                <th style="width: 10px">#</th>
+                <th>Deduction</th>
+                <th colspan=3><input class="form-control" name="input_dis_desc" id="input_dis_desc" placeholder="Ded. Desc." value="<?= esc($invoice_master[0]->discount_desc ?? '') ?>" type="text" /></th>
+                <th><input style="width: 100px" class="form-control" name="input_dis_amt" id="input_dis_amt" placeholder="Amount" value="<?= esc($invoice_master[0]->discount_amount ?? '') ?>" type="text" /></th>
+                <th><button type="button" class="btn btn-primary" id="btn_update_ded">Update</button></th>
+              </tr>
+            <?php else : ?>
+              <tr>
+                <th style="width: 10px">#</th>
+                <th>Deduction</th>
+                <th colspan=3><?= esc($invoice_master[0]->discount_desc ?? '') ?></th>
+                <th><?= esc($invoice_master[0]->discount_amount ?? '') ?></th>
+                <th></th>
+              </tr>
+            <?php endif; ?>
+            <tr>
+              <th style="width: 10px">#</th>
+              <th colspan="2"></th>
+              <th></th>
+              <th>Net Amount</th>
+              <th><?= esc($invoice_master[0]->net_amount ?? '') ?></th>
+              <th></th>
+            </tr>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 </section>
@@ -139,7 +139,7 @@
   </div>
 </div>
 
-<?php if (($invoice_master[0]->payment_status ?? 0) == 0 && $canChargePay) : ?>
+<?php if ($canChargePay && (($pending_amount ?? 0) > 0 || (($pending_amount ?? 0) == 0 && ((int) ($invoice_master[0]->payment_status ?? 0) === 0))) ) : ?>
   <div class="card">
     <div class="card-body p-3">
   <div class="row mt-2">
@@ -316,24 +316,32 @@
               <th style="width: 10px">#</th>
               <th>Deduction</th>
               <th colspan=3>
-                <input class="form-control" name="input_corr_desc" id="input_corr_desc" placeholder="Correction Desc." value="<?= esc($invoice_master[0]->correction_remark ?? '') ?>" type="text" />
+                <input class="form-control" name="input_dis_desc" id="input_dis_desc" placeholder="Deduction Desc." value="<?= esc($invoice_master[0]->discount_desc ?? '') ?>" type="text" />
               </th>
               <th>
-                <input style="width: 100px" class="form-control" name="input_corr_amt" id="input_corr_amt" placeholder="Amount" value="<?= esc($invoice_master[0]->correction_amount ?? '') ?>" type="text" />
+                <input style="width: 100px" class="form-control" name="input_dis_amt" id="input_dis_amt" placeholder="Amount" value="<?= esc($invoice_master[0]->discount_amount ?? '') ?>" type="text" />
               </th>
-              <th>
-                <div class="form-check">
-                  <input class="form-check-input" type="radio" name="optionsRadios_crdr" id="corr_return" value="1" checked>
-                  <label class="form-check-label" for="corr_return">Return</label>
-                </div>
-                <div class="form-check">
-                  <input class="form-check-input" type="radio" name="optionsRadios_crdr" id="corr_add" value="0">
-                  <label class="form-check-label" for="corr_add">Add</label>
-                </div>
-              </th>
-              <th><button type="button" class="btn btn-primary" id="btn_update_corr">Update Correction</button></th>
+              <th><button type="button" class="btn btn-primary" id="btn_update_ded">Update Discount</button></th>
             </tr>
           </table>
+        </div>
+      <?php endif; ?>
+
+      <?php if ($canChargePay && ($pending_amount ?? 0) < 0 && in_array((int) ($invoice_master[0]->payment_mode ?? 0), [1, 2], true)) : ?>
+        <hr />
+        <div class="alert alert-warning mb-2">
+          <strong>Overpayment:</strong>
+          Amount Received: <strong>Rs. <?= number_format((float) ($paid_amount ?? 0), 2) ?></strong> &nbsp;|&nbsp;
+          Net Amount: <strong>Rs. <?= number_format((float) ($invoice_master[0]->net_amount ?? 0), 2) ?></strong> &nbsp;|&nbsp;
+          Return Amount Due: <strong>Rs. <?= number_format(abs((float) ($pending_amount ?? 0)), 2) ?></strong>
+        </div>
+        <div class="row g-2 align-items-center">
+          <div class="col-md-auto">
+            <button type="button" class="btn btn-warning" id="btn_return_cash">
+              Process Cash Return - Rs. <?= number_format(abs((float) ($pending_amount ?? 0)), 2) ?>
+            </button>
+          </div>
+          <div class="col-md-auto jsReturnError text-danger"></div>
         </div>
       <?php endif; ?>
     </div>
@@ -531,6 +539,27 @@ $(document).ready(function(){
         load_form('<?= base_url('billing/charges/show') ?>/' + $('#invoice_id').val());
       }
     }, 'json');
+  });
+  $('#btn_return_cash').click(function() {
+    var csrf = getCsrfPair();
+    var spid = $('#spid').val();
+    if (confirm('Are you sure you want to process a cash return to the patient?')) {
+      $('#btn_return_cash').prop('disabled', true);
+      $.post('<?= base_url('billing/charges/confirm-payment') ?>', {
+        "mode": "5",
+        "inv_id": $('#invoice_id').val(),
+        "spid": spid,
+        [csrf.name]: csrf.value
+      }, function(data) {
+        updateCsrf(data);
+        if (data.update == 0) {
+          $('div.jsReturnError').html(data.error_text);
+          $('#btn_return_cash').prop('disabled', false);
+        } else {
+          load_form('<?= base_url('billing/charges/show') ?>/' + $('#invoice_id').val());
+        }
+      }, 'json');
+    }
   });
 })();
 </script>

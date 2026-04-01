@@ -60,11 +60,22 @@ class InvoiceModel
         $row['update_by'] = $userName;
         $row['update_action'] = '1';
 
-        if (! $this->db->table('invoice_item_update')->insert($row)) {
-            return false;
+        if ($this->db->tableExists('invoice_item_update')) {
+            $auditTableFields = $this->db->getFieldNames('invoice_item_update');
+            if (! empty($auditTableFields)) {
+                $row = array_intersect_key($row, array_flip($auditTableFields));
+            }
+
+            if (! $this->db->table('invoice_item_update')->insert($row)) {
+                return false;
+            }
         }
 
         $this->db->table('invoice_item')->where('id', $id)->delete();
+        if ($this->db->affectedRows() < 1) {
+            return false;
+        }
+
         $this->recalculateInvoice((int) $row['inv_master_id']);
 
         return true;
@@ -135,10 +146,19 @@ class InvoiceModel
             ->getRowArray();
         $paidAmount = (float) ($paidRow['paid_amount'] ?? 0);
 
+        $correctionCrdr = (int) ($invoice['correction_crdr'] ?? 1);
         $netAmount = $grossTotal - $discountAmount;
-        $netAmount += $correctionAmount;
+        if ($correctionAmount > 0) {
+            if ($correctionCrdr === 0) {
+                $netAmount += $correctionAmount;  // Add-type correction increases net
+            } else {
+                $netAmount -= $correctionAmount;  // Return-type correction reduces net
+            }
+        }
         $balanceAmount = $netAmount - $paidAmount;
         $paymentPart = ($balanceAmount > 0 && $paidAmount > 0) ? 1 : 0;
+        $paymentMode = (int) ($invoice['payment_mode'] ?? 0);
+        $paymentStatus = ($paymentMode === 3 || $paymentMode === 4) ? 1 : ($balanceAmount <= 0 ? 1 : 0);
 
         $this->db->table('invoice_master')
             ->where('id', $invoiceId)
@@ -148,6 +168,7 @@ class InvoiceModel
                 'payment_part_received' => $paidAmount,
                 'payment_part_balance' => $balanceAmount,
                 'payment_part' => $paymentPart,
+                'payment_status' => $paymentStatus,
             ]);
 
         if ($insuranceCaseId > 0) {

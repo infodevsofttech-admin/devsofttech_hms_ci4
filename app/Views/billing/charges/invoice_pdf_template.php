@@ -24,7 +24,7 @@ if ($hospitalNameLen > 42) {
 $invoiceCode = (string) ($invoice->invoice_code ?? '');
 $invoiceDate = (string) ($invoice->inv_date ?? '');
 $printedOn = date('d-m-Y h:i:s A');
-$invoiceStatus = ((int) ($invoice->invoice_status ?? 0) === 1) ? 'Paid' : (((int) ($invoice->invoice_status ?? 0) === 2) ? 'Cancelled' : 'Pending');
+$invoiceStatus = ((int) ($invoice->invoice_status ?? 0) === 2) ? 'Cancelled' : (((int) ($invoice->payment_status ?? 0) === 1) ? 'Paid' : 'Pending');
 $currencyPrefix = 'Rs.';
 $grossAmount = (float) ($invoice->total_amount ?? 0);
 $discount = (float) ($invoice->discount_amount ?? 0);
@@ -57,6 +57,9 @@ $qrParts = [
 ];
 $qrContent = implode(' | ', array_filter($qrParts, static fn ($v) => trim((string) $v) !== ''));
 $qrPackageAvailable = class_exists('\\Mpdf\\QrCode\\QrCode');
+
+$paidAmountPrint = (float) ($invoice->payment_part_received ?? 0);
+$balanceAmountPrint = (float) ($invoice->payment_part_balance ?? ($netAmount - $paidAmountPrint));
 
 /**
  * Convert numbers to words (basic implementation for Indian system)
@@ -250,7 +253,11 @@ if (!function_exists('convertNumberToWords')) {
         <tr>
             <td class="totals-left">
                 <div class="payment-details">
-                    <div><span class="label">Amount received:</span> <?= esc($currencyPrefix) ?> <?= number_format(0, 2) ?> | <span class="label">Balance Amount:</span> <?= esc($currencyPrefix) ?> <?= number_format($netAmount, 2) ?> | <span class="label">Net Amount:</span> <?= esc($currencyPrefix) ?> <?= number_format($netAmount, 2) ?></div>
+                    <?php if ($balanceAmountPrint < 0) : ?>
+                    <div><span class="label">Amount received:</span> <?= esc($currencyPrefix) ?> <?= number_format($paidAmountPrint, 2) ?> | <span class="label" style="color:#c00;">Return Amount:</span> <span style="color:#c00;"><?= esc($currencyPrefix) ?> <?= number_format(abs($balanceAmountPrint), 2) ?></span> | <span class="label">Net Amount:</span> <?= esc($currencyPrefix) ?> <?= number_format($netAmount, 2) ?></div>
+                    <?php else : ?>
+                    <div><span class="label">Amount received:</span> <?= esc($currencyPrefix) ?> <?= number_format($paidAmountPrint, 2) ?> | <span class="label">Balance Amount:</span> <?= esc($currencyPrefix) ?> <?= number_format($balanceAmountPrint, 2) ?> | <span class="label">Net Amount:</span> <?= esc($currencyPrefix) ?> <?= number_format($netAmount, 2) ?></div>
+                    <?php endif; ?>
                     <div style="margin-top:6px;"><span class="amount-words">Amount in Words: </span><?php 
                         $amountInWords = convertNumberToWords((int)$netAmount);
                         echo esc($amountInWords) . ' Only';
