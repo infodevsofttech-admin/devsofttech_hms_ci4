@@ -3930,6 +3930,7 @@ class Opd_prescription extends BaseController
         $sessionId = (int) $this->request->getPost('opd_session_id');
         $adviceText = trim((string) $this->request->getPost('advice_text'));
         $adviceId = (int) $this->request->getPost('advice_id');
+        $adviceHindi = trim((string) $this->request->getPost('advice_hindi'));
 
         if ($opdId <= 0 || $adviceText === '') {
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Advice text is required']);
@@ -3946,6 +3947,33 @@ class Opd_prescription extends BaseController
         }
 
         $fields = $this->db->getFieldNames($table);
+
+        if ($adviceHindi === '' && $this->db->tableExists('opd_advice')) {
+            $masterFields = $this->db->getFieldNames('opd_advice');
+            $masterIdField = $this->resolveFirstField($masterFields, ['id', 'advice_id']);
+            $masterAdviceField = $this->resolveFirstField($masterFields, ['advice', 'advice_txt', 'advice_text']);
+            $masterHindiField = $this->resolveFirstField($masterFields, ['advice_hindi', 'advice_local', 'hindi_advice', 'advice_hin']);
+
+            if ($masterAdviceField !== null && $masterHindiField !== null) {
+                $masterBuilder = $this->db->table('opd_advice')
+                    ->select($masterAdviceField . ' as advice_text, ' . $masterHindiField . ' as advice_hindi'
+                        . ($masterIdField !== null ? (', ' . $masterIdField . ' as advice_id') : ''));
+
+                if ($masterIdField !== null && $adviceId > 0) {
+                    $masterBuilder->where($masterIdField, $adviceId);
+                } else {
+                    $normalizedAdviceText = preg_replace('/\s+/', ' ', $adviceText) ?? $adviceText;
+                    $masterBuilder->groupStart()
+                        ->where($masterAdviceField, $adviceText)
+                        ->orWhere($masterAdviceField, $normalizedAdviceText)
+                        ->groupEnd();
+                }
+
+                $masterRow = $masterBuilder->get(1)->getRowArray() ?? [];
+                $adviceHindi = trim((string) ($masterRow['advice_hindi'] ?? ''));
+            }
+        }
+
         $insert = [];
         if (in_array('opd_id', $fields, true)) {
             $insert['opd_id'] = $opdId;
@@ -3960,6 +3988,13 @@ class Opd_prescription extends BaseController
             $insert['advice_txt'] = $adviceText;
         } elseif (in_array('advice', $fields, true)) {
             $insert['advice'] = $adviceText;
+        }
+        if ($adviceHindi !== '') {
+            if (in_array('advice_txt_hindi', $fields, true)) {
+                $insert['advice_txt_hindi'] = $adviceHindi;
+            } elseif (in_array('advice_hindi', $fields, true)) {
+                $insert['advice_hindi'] = $adviceHindi;
+            }
         }
 
         $this->db->table($table)->insert($insert);

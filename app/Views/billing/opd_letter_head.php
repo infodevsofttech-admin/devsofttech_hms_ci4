@@ -225,7 +225,10 @@
                 <tbody>
                     <?php foreach (($rx_advices ?? []) as $adv) : ?>
                         <tr>
-                            <td><?= esc((string) ($adv['advice_txt'] ?? ($adv['advice'] ?? ''))) ?></td>
+                            <td>
+                                <?php $advLocal = trim((string) ($adv['advice_hindi'] ?? ($adv['advice_txt_hindi'] ?? ''))); ?>
+                                <?= esc($advLocal !== '' ? $advLocal : (string) ($adv['advice_txt'] ?? ($adv['advice'] ?? ''))) ?>
+                            </td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>

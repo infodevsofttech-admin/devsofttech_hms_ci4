@@ -397,7 +397,7 @@ $toLocalText = static function (string $input): string {
                 }
                 $adviceLine[] = $t;
 
-                $localStored = trim((string) ($adv['advice_hindi'] ?? ''));
+                $localStored = trim((string) ($adv['advice_hindi'] ?? ($adv['advice_txt_hindi'] ?? '')));
                 if ($localStored !== '') {
                     $adviceLocalLine[] = $localStored;
                 } else {

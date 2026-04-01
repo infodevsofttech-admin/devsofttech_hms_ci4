@@ -1950,15 +1950,25 @@ class Opd extends BaseController
         }
 
         $rxAdvice = $rxRead($rx, ['advice', 'Advice', 'prescription_advice', 'advice_notes', 'advice_note']);
+        $rxAdviceLocal = '';
         if ($rxAdvice === '' && !empty($data['rx_advices']) && is_array($data['rx_advices'])) {
             $parts = [];
+            $partsLocal = [];
             foreach ($data['rx_advices'] as $adv) {
                 $txt = trim((string) ($adv['advice_txt'] ?? $adv['advice'] ?? ''));
                 if ($txt !== '') {
                     $parts[] = $txt;
                 }
+
+                $localTxt = trim((string) ($adv['advice_hindi'] ?? ($adv['advice_txt_hindi'] ?? '')));
+                if ($localTxt !== '') {
+                    $partsLocal[] = $localTxt;
+                }
             }
             $rxAdvice = implode(', ', $parts);
+            if (!empty($partsLocal)) {
+                $rxAdviceLocal = implode(' | ', $partsLocal);
+            }
         }
 
         $complaintText = $rxRead($rx, ['complaints', 'Complaint', 'complaint', 'chief_complaint', 'chief_complaints']);
@@ -1981,7 +1991,9 @@ class Opd extends BaseController
         $complaintLocal = $this->translateToLocalPatientText($complaintText);
         $diagnosisLocal = $this->translateToLocalPatientText($diagnosisText);
         $investigationLocal = $this->translateToLocalPatientText($rxInvestigation);
-        $rxAdviceLocal = $this->translateToLocalPatientText($rxAdvice);
+        if ($rxAdviceLocal === '') {
+            $rxAdviceLocal = $this->translateToLocalPatientText($rxAdvice);
+        }
 
         if (strtolower(trim($complaintLocal)) === strtolower(trim($complaintText))) {
             $complaintLocal = '';
@@ -3202,8 +3214,9 @@ class Opd extends BaseController
                 }
 
                 foreach ($data['rx_advices'] as $idx => $advRow) {
-                    $currentHindi = trim((string) ($advRow['advice_hindi'] ?? ''));
+                    $currentHindi = trim((string) ($advRow['advice_hindi'] ?? ($advRow['advice_txt_hindi'] ?? '')));
                     if ($currentHindi !== '') {
+                        $data['rx_advices'][$idx]['advice_hindi'] = $currentHindi;
                         continue;
                     }
 
