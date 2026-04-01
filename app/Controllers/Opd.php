@@ -1782,6 +1782,15 @@ class Opd extends BaseController
                 $when = trim((string) ($med['dosage_when_label'] ?? $med['dosage_when'] ?? ''));
                 $remark = trim((string) ($med['remark'] ?? ''));
                 $inst = trim(($when !== '' ? $when : '') . ($remark !== '' ? ($when !== '' ? ' | ' : '') . $remark : ''));
+                $doseFreqText = trim($dose . ' ' . $freq);
+                $doseFreqLocal = $this->translateToLocalPatientText($doseFreqText);
+                if (strtolower(trim($doseFreqLocal)) === strtolower(trim($doseFreqText))) {
+                    $doseFreqLocal = '';
+                }
+                $instLocal = $this->translateToLocalPatientText($inst);
+                if (strtolower(trim($instLocal)) === strtolower(trim($inst))) {
+                    $instLocal = '';
+                }
                 $nameHtml = esc($name);
                 if ($generic !== '') {
                     $nameHtml .= '<div style="font-size:10px;color:#444;">Salt/Generic: ' . esc($generic) . '</div>';
@@ -1789,36 +1798,16 @@ class Opd extends BaseController
                 $medicalHtml .= '<tr>'
                     . '<td>' . $i . '</td>'
                     . '<td>' . $nameHtml . '</td>'
-                    . '<td>' . esc(trim($dose . ' ' . $freq)) . '</td>'
+                    . '<td>' . esc($doseFreqText)
+                    . ($doseFreqLocal !== '' ? ('<div style="font-size:10px;color:#444;line-height:1.3;">' . esc($doseFreqLocal) . '</div>') : '')
+                    . '</td>'
                     . '<td>' . esc($days) . '</td>'
-                    . '<td>' . esc($inst) . '</td>'
+                    . '<td>' . esc($inst)
+                    . ($instLocal !== '' ? ('<div style="font-size:10px;color:#444;line-height:1.3;">' . esc($instLocal) . '</div>') : '')
+                    . '</td>'
                     . '</tr>';
             }
             $medicalHtml .= '</table>';
-        }
-
-        $rxInvestigation = trim((string) ($rx['investigation'] ?? ''));
-        if ($rxInvestigation === '' && !empty($data['rx_investigations']) && is_array($data['rx_investigations'])) {
-            $parts = [];
-            foreach ($data['rx_investigations'] as $inv) {
-                $txt = trim((string) ($inv['investigation_name'] ?? $inv['investigation'] ?? ''));
-                if ($txt !== '') {
-                    $parts[] = $txt;
-                }
-            }
-            $rxInvestigation = implode(', ', $parts);
-        }
-
-        $rxAdvice = trim((string) ($rx['advice'] ?? ''));
-        if ($rxAdvice === '' && !empty($data['rx_advices']) && is_array($data['rx_advices'])) {
-            $parts = [];
-            foreach ($data['rx_advices'] as $adv) {
-                $txt = trim((string) ($adv['advice_txt'] ?? $adv['advice'] ?? ''));
-                if ($txt !== '') {
-                    $parts[] = $txt;
-                }
-            }
-            $rxAdvice = implode(', ', $parts);
         }
 
         $rxRead = static function (array $row, array $keys): string {
@@ -1834,12 +1823,47 @@ class Opd extends BaseController
             return '';
         };
 
-        $complaintText = $rxRead($rx, ['complaints', 'Complaint']);
-        $provisionalDiagnosisText = $rxRead($rx, ['Provisional_diagnosis', 'provisional_diagnosis']);
+        $rxInvestigation = $rxRead($rx, ['investigation', 'Investigations', 'investigations', 'Investigation']);
+        if ($rxInvestigation === '' && !empty($data['rx_investigations']) && is_array($data['rx_investigations'])) {
+            $parts = [];
+            foreach ($data['rx_investigations'] as $inv) {
+                $txt = trim((string) ($inv['investigation_name'] ?? $inv['investigation'] ?? ''));
+                if ($txt !== '') {
+                    $parts[] = $txt;
+                }
+            }
+            $rxInvestigation = implode(', ', $parts);
+        }
+
+        $rxAdvice = $rxRead($rx, ['advice', 'Advice', 'prescription_advice', 'advice_notes', 'advice_note']);
+        if ($rxAdvice === '' && !empty($data['rx_advices']) && is_array($data['rx_advices'])) {
+            $parts = [];
+            foreach ($data['rx_advices'] as $adv) {
+                $txt = trim((string) ($adv['advice_txt'] ?? $adv['advice'] ?? ''));
+                if ($txt !== '') {
+                    $parts[] = $txt;
+                }
+            }
+            $rxAdvice = implode(', ', $parts);
+        }
+
+        $complaintText = $rxRead($rx, ['complaints', 'Complaint', 'complaint', 'chief_complaint', 'chief_complaints']);
+        if ($complaintText === '') {
+            $complaintText = trim((string) ($opd->complaints ?? ($opd->complaint ?? '')));
+        }
+
+        $provisionalDiagnosisText = $rxRead($rx, ['Provisional_diagnosis', 'provisional_diagnosis', 'provisional_diagnosis_text']);
         $diagnosisText = $provisionalDiagnosisText !== ''
             ? $provisionalDiagnosisText
-            : $rxRead($rx, ['diagnosis', 'Diagnosis']);
-        $findingExaminationsText = $rxRead($rx, ['Finding_Examinations', 'finding_examinations']);
+            : $rxRead($rx, ['diagnosis', 'Diagnosis', 'final_diagnosis', 'dx']);
+
+        if ($diagnosisText === '') {
+            $diagnosisText = implode(', ', is_array($data['selected_morbidities'] ?? null) ? ($data['selected_morbidities'] ?? []) : []);
+        }
+
+        $findingExaminationsText = $rxRead($rx, ['Finding_Examinations', 'finding_examinations', 'finding', 'findings', 'examination']);
+        $prescriberRemarksText = $rxRead($rx, ['Prescriber_Remarks', 'prescriber_remarks', 'remarks', 'remark', 'doctor_note']);
+        $nextVisitText = $rxRead($rx, ['next_visit', 'next_visit_date', 'follow_up', 'followup', 'review_after']);
         $complaintLocal = $this->translateToLocalPatientText($complaintText);
         $diagnosisLocal = $this->translateToLocalPatientText($diagnosisText);
         $investigationLocal = $this->translateToLocalPatientText($rxInvestigation);
@@ -1946,10 +1970,10 @@ class Opd extends BaseController
             'vital_content' => implode(' | ', $vitals),
             'Finding_Examinations' => $findingExaminationsText,
             'finding_examinations' => $findingExaminationsText,
-            'Prescriber_Remarks' => (string) ($rx['Prescriber_Remarks'] ?? ''),
+            'Prescriber_Remarks' => $prescriberRemarksText,
             'advice' => $rxAdvice,
             'advice_local' => $rxAdviceLocal,
-            'next_visit' => (string) ($rx['next_visit'] ?? ''),
+            'next_visit' => $nextVisitText,
             'refer_to' => (string) ($rx['refer_to'] ?? ''),
             'painscale' => '',
             'painscale_img' => '',
@@ -2364,6 +2388,93 @@ class Opd extends BaseController
                 $tokens[(string) $key] = (string) $value;
             }
         }
+
+        // Add case-insensitive token aliases for legacy template compatibility.
+        foreach ($tokens as $key => $value) {
+            $lower = strtolower((string) $key);
+            if (! array_key_exists($lower, $tokens)) {
+                $tokens[$lower] = $value;
+            }
+
+            $ucfirst = ucfirst($lower);
+            if (! array_key_exists($ucfirst, $tokens)) {
+                $tokens[$ucfirst] = $value;
+            }
+        }
+
+        $formatBlock = static function (string $label, string $value, bool $lineBreakAfterLabel = false): string {
+            $value = trim($value);
+            if ($value === '') {
+                return '';
+            }
+
+            $headingHtml = '<span style="font-weight:700;font-size:13px;line-height:1.35;">' . $label . ' :</span>';
+
+            if ($lineBreakAfterLabel) {
+                return '<div style="margin-bottom:4px;">' . $headingHtml . '<br/>' . $value . '</div>';
+            }
+
+            return '<div style="margin-bottom:4px;">' . $headingHtml . ' ' . $value . '</div>';
+        };
+
+        $tokens['vital_content_raw'] = (string) ($tokens['vital_content'] ?? '');
+        $tokens['Complaint_raw'] = (string) ($tokens['Complaint'] ?? '');
+        $tokens['diagnosis_raw'] = (string) ($tokens['diagnosis'] ?? '');
+        $tokens['Provisional_diagnosis_raw'] = (string) ($tokens['Provisional_diagnosis'] ?? '');
+        $tokens['Finding_Examinations_raw'] = (string) ($tokens['Finding_Examinations'] ?? '');
+        $tokens['investigation_raw'] = (string) ($tokens['investigation'] ?? '');
+        $tokens['Prescriber_Remarks_raw'] = (string) ($tokens['Prescriber_Remarks'] ?? '');
+        $tokens['advice_raw'] = (string) ($tokens['advice'] ?? '');
+        $tokens['next_visit_raw'] = (string) ($tokens['next_visit'] ?? '');
+
+        $tokens['vital_content'] = $formatBlock('Vitals', (string) ($tokens['vital_content'] ?? ''), true);
+        $tokens['Complaint'] = $formatBlock('Complaint', (string) ($tokens['Complaint_raw'] ?? ''));
+        $tokens['complaint'] = $tokens['Complaint'];
+        $tokens['diagnosis'] = $formatBlock('Diagnosis', (string) ($tokens['diagnosis_raw'] ?? ''));
+        $tokens['Diagnosis'] = $tokens['diagnosis'];
+        $tokens['Provisional_diagnosis'] = $formatBlock('Provisional Diagnosis', (string) ($tokens['Provisional_diagnosis_raw'] ?? ''));
+        $tokens['provisional_diagnosis'] = $tokens['Provisional_diagnosis'];
+        $tokens['Finding_Examinations'] = $formatBlock('Finding / Examination', (string) ($tokens['Finding_Examinations_raw'] ?? ''));
+        $tokens['finding_examinations'] = $tokens['Finding_Examinations'];
+        $tokens['investigation'] = $formatBlock('Investigation Advised', (string) ($tokens['investigation_raw'] ?? ''));
+        $tokens['Prescriber_Remarks'] = $formatBlock('Remarks', (string) ($tokens['Prescriber_Remarks_raw'] ?? ''));
+        $tokens['advice'] = $formatBlock('Advice', (string) ($tokens['advice_raw'] ?? ''));
+        $tokens['next_visit'] = $formatBlock('Next Visit', (string) ($tokens['next_visit_raw'] ?? ''));
+
+        $medicalHtml = trim((string) ($tokens['medical'] ?? ''));
+        $tokens['Rx'] = $medicalHtml !== ''
+            ? '<div style="margin:8px 0 6px 0;"><div style="font-weight:700;font-size:24px;line-height:1.2;margin-bottom:8px;">Rx :</div>' . $medicalHtml . '</div>'
+            : '';
+        $tokens['rx'] = $tokens['Rx'];
+
+        $tokens['VitalsBlock'] = (string) ($tokens['vital_content'] ?? '');
+        $tokens['ComplaintBlock'] = (string) ($tokens['Complaint'] ?? '');
+        $tokens['DiagnosisBlock'] = (string) ($tokens['diagnosis'] ?? '');
+        $tokens['ProvisionalDiagnosisBlock'] = (string) ($tokens['Provisional_diagnosis'] ?? '');
+        $tokens['FindingBlock'] = (string) ($tokens['Finding_Examinations'] ?? '');
+        $tokens['InvestigationBlock'] = (string) ($tokens['investigation'] ?? '');
+        $tokens['RemarksBlock'] = (string) ($tokens['Prescriber_Remarks'] ?? '');
+        $tokens['AdviceBlock'] = (string) ($tokens['advice'] ?? '');
+        $tokens['NextVisitBlock'] = (string) ($tokens['next_visit'] ?? '');
+
+        $tokens['RxTable'] = $medicalHtml;
+        $tokens['rx_table'] = $medicalHtml;
+
+        $fullBlocks = array_values(array_filter([
+            (string) ($tokens['VitalsBlock'] ?? ''),
+            (string) ($tokens['ComplaintBlock'] ?? ''),
+            (string) ($tokens['DiagnosisBlock'] ?? ''),
+            (string) ($tokens['ProvisionalDiagnosisBlock'] ?? ''),
+            (string) ($tokens['FindingBlock'] ?? ''),
+            (string) ($tokens['Rx'] ?? ''),
+            (string) ($tokens['InvestigationBlock'] ?? ''),
+            (string) ($tokens['RemarksBlock'] ?? ''),
+            (string) ($tokens['AdviceBlock'] ?? ''),
+            (string) ($tokens['NextVisitBlock'] ?? ''),
+        ], static fn ($value): bool => trim((string) $value) !== ''));
+
+        $tokens['RxFullBlock'] = implode("\n", $fullBlocks);
+        $tokens['rx_full_block'] = $tokens['RxFullBlock'];
 
         // Load hospital settings from database
         $hName = $this->readSettingValueFromDb('H_Name');
