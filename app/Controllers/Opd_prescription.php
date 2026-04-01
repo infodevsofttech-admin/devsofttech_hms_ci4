@@ -3073,9 +3073,10 @@ class Opd_prescription extends BaseController
         }
 
         $fields    = $this->db->getFieldNames('investigation');
+        $keyField  = $this->resolveFirstField($fields, ['id', 'Code', 'code']);
         $codeField = $this->resolveFirstField($fields, ['Code', 'code']);
         $nameField = $this->resolveFirstField($fields, ['Name', 'name']);
-        if ($codeField === null || $nameField === null) {
+        if ($keyField === null || $codeField === null || $nameField === null) {
             return $this->response->setJSON(['draw' => 1, 'recordsTotal' => 0, 'recordsFiltered' => 0, 'data' => []]);
         }
 
@@ -3089,7 +3090,7 @@ class Opd_prescription extends BaseController
             $length = 25;
         }
 
-        $selectCols = 'id, ' . $codeField . ' as code, ' . $nameField . ' as name';
+        $selectCols = $keyField . ' as id, ' . $codeField . ' as code, ' . $nameField . ' as name';
         foreach (['short_name', 'is_favourite', 'spec_ids', 'category_name'] as $f) {
             if (in_array($f, $fields, true)) {
                 $selectCols .= ', ' . $f;
@@ -3144,10 +3145,15 @@ class Opd_prescription extends BaseController
         }
 
         $fields    = $this->db->getFieldNames('investigation');
+        $keyField  = $this->resolveFirstField($fields, ['id', 'Code', 'code']);
         $codeField = $this->resolveFirstField($fields, ['Code', 'code']);
         $nameField = $this->resolveFirstField($fields, ['Name', 'name']);
 
-        $row = $this->db->table('investigation')->where('id', $invId)->limit(1)->get()->getRowArray();
+        if ($keyField === null || $codeField === null || $nameField === null) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid table structure']);
+        }
+
+        $row = $this->db->table('investigation')->where($keyField, $invId)->limit(1)->get()->getRowArray();
         if (! $row) {
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Not found']);
         }
@@ -3155,7 +3161,7 @@ class Opd_prescription extends BaseController
         return $this->response->setJSON([
             'update' => 1,
             'row'    => [
-                'id'            => (int) ($row['id'] ?? 0),
+                'id'            => (int) ($row[$keyField] ?? 0),
                 'code'          => (string) ($row[$codeField ?? 'code'] ?? ''),
                 'name'          => (string) ($row[$nameField ?? 'name'] ?? ''),
                 'short_name'    => (string) ($row['short_name'] ?? ''),
@@ -3184,9 +3190,10 @@ class Opd_prescription extends BaseController
         }
 
         $fields    = $this->db->getFieldNames('investigation');
+        $keyField  = $this->resolveFirstField($fields, ['id', 'Code', 'code']);
         $codeField = $this->resolveFirstField($fields, ['Code', 'code']);
         $nameField = $this->resolveFirstField($fields, ['Name', 'name']);
-        if ($codeField === null || $nameField === null) {
+        if ($keyField === null || $codeField === null || $nameField === null) {
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid table structure']);
         }
 
@@ -3209,7 +3216,7 @@ class Opd_prescription extends BaseController
         }
 
         if ($id > 0) {
-            $this->db->table('investigation')->where('id', $id)->update($data);
+            $this->db->table('investigation')->where($keyField, $id)->update($data);
             $savedId = $id;
             $message = 'Investigation updated';
         } else {
@@ -3235,7 +3242,12 @@ class Opd_prescription extends BaseController
         if ($invId <= 0 || ! $this->db->tableExists('investigation')) {
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Not found']);
         }
-        $this->db->table('investigation')->where('id', $invId)->delete();
+        $fields = $this->db->getFieldNames('investigation');
+        $keyField = $this->resolveFirstField($fields, ['id', 'Code', 'code']);
+        if ($keyField === null) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid key field']);
+        }
+        $this->db->table('investigation')->where($keyField, $invId)->delete();
         return $this->response->setJSON([
             'update'     => 1,
             'error_text' => 'Investigation deleted',
@@ -3253,15 +3265,19 @@ class Opd_prescription extends BaseController
             return $this->response->setJSON(['update' => 0]);
         }
         $fields = $this->db->getFieldNames('investigation');
+        $keyField = $this->resolveFirstField($fields, ['id', 'Code', 'code']);
+        if ($keyField === null) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid key field']);
+        }
         if (! in_array('is_favourite', $fields, true)) {
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Run database migration first']);
         }
-        $row = $this->db->table('investigation')->where('id', $invId)->limit(1)->get()->getRowArray();
+        $row = $this->db->table('investigation')->where($keyField, $invId)->limit(1)->get()->getRowArray();
         if (! $row) {
             return $this->response->setJSON(['update' => 0]);
         }
         $newVal = ((int) ($row['is_favourite'] ?? 0)) === 1 ? 0 : 1;
-        $this->db->table('investigation')->where('id', $invId)->update(['is_favourite' => $newVal]);
+        $this->db->table('investigation')->where($keyField, $invId)->update(['is_favourite' => $newVal]);
         return $this->response->setJSON([
             'update'       => 1,
             'is_favourite' => $newVal,
