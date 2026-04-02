@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>HMS Software Help Guide</title>
+    <link href="assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #f5f7fb; color: #1f2937; }
+        .wrap { max-width: 980px; margin: 24px auto; }
+        .card { border: 1px solid #dbe3ee; }
+        h1, h2 { color: #0f3d7a; }
+        .toc a { text-decoration: none; }
+        .toc a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+<div class="container wrap">
+    <div class="card shadow-sm">
+        <div class="card-body p-4 p-md-5">
+            <h1 class="mb-3">HMS Software Help Guide</h1>
+            <p class="text-muted">Version 1.0 | Last updated: 2026-04-02</p>
+
+            <h2 class="h4 mt-4">Contents</h2>
+            <ul class="toc">
+                <li><a href="#getting-started">Getting Started</a></li>
+                <li><a href="#roles">User Roles and Access</a></li>
+                <li><a href="#daily-flow">Daily Operation Flow</a></li>
+                <li><a href="#billing">Billing and Cash Flow</a></li>
+                <li><a href="#diagnosis">Diagnosis and Reports</a></li>
+                <li><a href="#stock">Hospital Stock Module</a></li>
+                <li><a href="#admin">Admin and Configuration</a></li>
+                <li><a href="#security">Security and Compliance</a></li>
+                <li><a href="#backup">Backup and Maintenance</a></li>
+                <li><a href="#troubleshooting">Troubleshooting</a></li>
+            </ul>
+
+            <h2 id="getting-started" class="h4 mt-4">1. Getting Started</h2>
+            <ol>
+                <li>Login with your assigned user ID.</li>
+                <li>Use the left sidebar to open modules.</li>
+                <li>Use Dashboard for daily status.</li>
+                <li>Use My Profile to verify your name and login details.</li>
+            </ol>
+
+            <h2 id="roles" class="h4 mt-4">2. User Roles and Access</h2>
+            <p>Access is permission-based. Typical groups include Admin, Billing users, Diagnosis users, and Stock roles (Stock Manager, Department Head, Storekeeper). If you see "Access denied", contact administrator to assign correct permission.</p>
+
+            <h2 id="daily-flow" class="h4 mt-4">3. Daily Operation Flow</h2>
+            <ol>
+                <li>Patient registration and OPD/IPD workflow.</li>
+                <li>Charge posting and invoice generation.</li>
+                <li>Payment collection and receipt.</li>
+                <li>Lab/radiology processing and report verification.</li>
+                <li>Inventory issue/receipt for consumables and medicines.</li>
+            </ol>
+
+            <h2 id="billing" class="h4 mt-4">4. Billing and Cash Flow</h2>
+            <ul>
+                <li>Use Billing -> Patient List for patient-level work.</li>
+                <li>Use OPD Invoice and Charges Invoice to post/collect payments.</li>
+                <li>Use IPD Billing for admitted patients, package and discharge flow.</li>
+                <li>Use Payment Request and Refund Request for controlled approvals.</li>
+                <li>Use report screens for daily reconciliation.</li>
+            </ul>
+
+            <h2 id="diagnosis" class="h4 mt-4">5. Diagnosis and Reports</h2>
+            <ul>
+                <li>Diagnosis module supports pathology and imaging workflows.</li>
+                <li>Draft findings before final verification.</li>
+                <li>Use print templates for standardized report output.</li>
+                <li>Use audit trails and verification states for NABH-style controls.</li>
+            </ul>
+
+            <h2 id="stock" class="h4 mt-4">6. Hospital Stock Module</h2>
+            <ol>
+                <li>Item Masters: category, item, supplier setup.</li>
+                <li>Indent & Issue: departments raise request, approver approves, storekeeper issues.</li>
+                <li>Purchase: create PO and receive stock.</li>
+                <li>Dashboard: expiry risk, short stock, new requests, daily-use status.</li>
+                <li>Reports: consumption, monthly issue, near-expiry, low/reorder alerts.</li>
+            </ol>
+            <p>Key item fields: purchase unit, issue unit, issue-per-purchase ratio, min/reorder levels, expiry date, and store location.</p>
+
+            <h2 id="admin" class="h4 mt-4">7. Admin and Configuration</h2>
+            <ul>
+                <li>User management, password reset, and permission mapping.</li>
+                <li>Doctor/refer/master settings.</li>
+                <li>Template management for reports and print formats.</li>
+                <li>Bed management and hospital stock settings.</li>
+            </ul>
+
+            <h2 id="security" class="h4 mt-4">8. Security and Compliance</h2>
+            <ul>
+                <li>Use personal login only; do not share credentials.</li>
+                <li>Keep audit remarks clear for financial and clinical edits.</li>
+                <li>Follow organization policy for health data privacy.</li>
+            </ul>
+
+            <h2 id="backup" class="h4 mt-4">9. Backup and Maintenance</h2>
+            <ul>
+                <li>Take scheduled database backups.</li>
+                <li>Archive monthly reports.</li>
+                <li>Apply migrations in controlled deployment steps.</li>
+                <li>Validate writable folder permissions after server changes.</li>
+            </ul>
+
+            <h2 id="troubleshooting" class="h4 mt-4">10. Troubleshooting</h2>
+            <ul>
+                <li>Access denied: verify group permissions.</li>
+                <li>Form not loading: check session status and route URL.</li>
+                <li>Wrong stock: verify conversion fields and ledger actions.</li>
+                <li>Print mismatch: verify template and print setting configuration.</li>
+            </ul>
+
+            <div class="mt-4 text-muted small">For legal terms, see <a href="software-use-license.html">Software Use License</a>.</div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

@@ -129,3 +129,8 @@ _modules/*
 
 public/uploads/*
 !public/uploads/.gitkeep
+
+# Always allow branding assets to be committed when present
+!public/assets/
+!public/assets/img/
+!public/assets/img/**

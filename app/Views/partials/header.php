@@ -50,6 +50,12 @@
                 $serverDisplayTime = $serverNow->format('d-m-Y h:i A') . ' (' . $serverTimeZoneLabel . ')';
             ?>
             <ul class="d-flex align-items-center">
+                <li class="nav-item pe-3 d-flex align-items-center text-nowrap">
+                    <a class="text-decoration-none" href="<?= base_url('help.html') ?>" target="_blank" rel="noopener">
+                        <i class="bi bi-question-circle me-1"></i>
+                        <span>Help</span>
+                    </a>
+                </li>
                 <li class="nav-item pe-3 d-none d-md-flex align-items-center text-nowrap" title="Server time">
                     <i class="bi bi-clock me-1"></i>
                     <span id="header-server-datetime"

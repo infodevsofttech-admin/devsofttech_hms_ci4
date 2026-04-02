@@ -1,5 +1,11 @@
 # CodeIgniter 4 Application Starter
 
+## Project Documents
+
+- Complete software help guide: docs/HOSPITAL_STOCK_HELP.md
+- Software use license: SOFTWARE_USE_LICENSE.md
+- Open-source notice: OPEN_SOURCE_NOTICE.md
+
 ## What is CodeIgniter?
 
 CodeIgniter is a PHP full-stack web framework that is light, fast, flexible and secure.

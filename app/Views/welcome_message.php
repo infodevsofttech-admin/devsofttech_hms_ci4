@@ -10,7 +10,8 @@
     <meta content="" name="description">
     <meta content="" name="keywords">
 
-    <link href="<?= base_url('assets/img/favicon.png') ?>" rel="icon">
+    <link href="<?= base_url('assets/img/logo.ico') ?>" rel="icon" type="image/x-icon">
+    <link href="<?= base_url('assets/img/favicon.png') ?>" rel="alternate icon" type="image/png">
     <link href="<?= base_url('assets/img/apple-touch-icon.png') ?>" rel="apple-touch-icon">
 
     <link href="https://fonts.gstatic.com" rel="preconnect">
@@ -58,7 +59,9 @@
 
     <footer id="footer" class="footer">
         <div class="copyright">
-            &copy; 2017 - 2026 <strong><span>E-Atria</span></strong>. All Rights Reserved | Version: <?= esc($footerVersion) ?>
+            &copy; 2017 - 2026 <strong><span><a href="https://www.e-atria.in" target="_blank" rel="noopener">E-Atria</a></span></strong>. All Rights Reserved |
+            <a href="<?= base_url('software-use-license.html') ?>" target="_blank" rel="noopener">Software Use License</a> |
+            Version: <?= esc($footerVersion) ?>
         </div>
     </footer>
     <div id="wait"
