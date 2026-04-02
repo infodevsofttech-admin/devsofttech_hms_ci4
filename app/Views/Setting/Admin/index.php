@@ -104,6 +104,12 @@
                 <span>Bed Management</span>
             </a>
         </div>
+        <div class="col-6 col-md-2 col-lg-2">
+            <a class="admin-tile" href="javascript:load_form_div('<?= base_url('setting/admin/hospital-stock') ?>','maindiv','Hospital Stock Management');">
+                <i class="bi bi-box-seam"></i>
+                <span>Hospital Stock</span>
+            </a>
+        </div>
     </div>
     <hr/>
     <div class="row mt-4">

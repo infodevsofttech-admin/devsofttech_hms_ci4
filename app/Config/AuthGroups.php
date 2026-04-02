@@ -53,6 +53,18 @@ class AuthGroups extends ShieldAuthGroups
             'title'       => 'Developer',
             'description' => 'Site programmers.',
         ],
+        'stock_manager' => [
+            'title'       => 'Stock Manager',
+            'description' => 'Manages stock masters, approvals, and procurement.',
+        ],
+        'department_head' => [
+            'title'       => 'Department Head',
+            'description' => 'Creates and tracks departmental stock indents.',
+        ],
+        'storekeeper' => [
+            'title'       => 'Storekeeper',
+            'description' => 'Handles item issuance and stock receiving operations.',
+        ],
         'user' => [
             'title'       => 'User',
             'description' => 'General users of the site. Often customers.',
@@ -129,6 +141,13 @@ class AuthGroups extends ShieldAuthGroups
         'template.diagnosis_print' => 'Can access diagnosis print templates',
         'template.document_print' => 'Can access document print templates',
         'template.ipd_document' => 'Can access IPD document master templates',
+        'hospital_stock.access' => 'Can access hospital stock module',
+        'hospital_stock.master.manage' => 'Can manage hospital stock masters (category/item/supplier)',
+        'hospital_stock.indent.create' => 'Can create stock indents',
+        'hospital_stock.indent.approve' => 'Can approve stock indents',
+        'hospital_stock.issue' => 'Can issue stock against approved indents',
+        'hospital_stock.purchase.manage' => 'Can create/receive purchase orders',
+        'hospital_stock.report.view' => 'Can view stock reports and alerts',
     ];
 
     /**
@@ -150,6 +169,7 @@ class AuthGroups extends ShieldAuthGroups
             'doctor_work.*',
             'pharmacy.*',
             'template.*',
+            'hospital_stock.*',
         ],
         'admin' => [
             'admin.access',
@@ -163,6 +183,7 @@ class AuthGroups extends ShieldAuthGroups
             'doctor_work.*',
             'pharmacy.*',
             'template.*',
+            'hospital_stock.*',
         ],
         'developer' => [
             'admin.access',
@@ -176,6 +197,25 @@ class AuthGroups extends ShieldAuthGroups
             'doctor_work.*',
             'pharmacy.*',
             'template.*',
+            'hospital_stock.*',
+        ],
+        'stock_manager' => [
+            'hospital_stock.access',
+            'hospital_stock.master.manage',
+            'hospital_stock.indent.approve',
+            'hospital_stock.purchase.manage',
+            'hospital_stock.report.view',
+        ],
+        'department_head' => [
+            'hospital_stock.access',
+            'hospital_stock.indent.create',
+            'hospital_stock.report.view',
+        ],
+        'storekeeper' => [
+            'hospital_stock.access',
+            'hospital_stock.issue',
+            'hospital_stock.purchase.manage',
+            'hospital_stock.report.view',
         ],
         'user' => [],
         'beta' => [

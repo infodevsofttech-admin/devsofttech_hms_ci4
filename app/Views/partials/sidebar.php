@@ -113,6 +113,12 @@ if (! $canDiagnosis && $user && method_exists($user, 'inGroup')) {
             <span>Bed Status</span>
         </a>
     </li>
+    <li class="nav-item">
+        <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('setting/admin/hospital-stock') ?>','Hospital Stock Management');">
+            <i class="bi bi-box-seam"></i>
+            <span>Hospital Stock</span>
+        </a>
+    </li>
     <?php if ($canBilling) { ?>
         
     <li class="nav-heading">Billing</li>
