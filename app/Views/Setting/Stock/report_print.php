@@ -3,6 +3,8 @@
 <head>
     <meta charset="utf-8">
     <title><?= esc((string) ($title ?? 'Report')) ?></title>
+    <link href="<?= base_url('assets/img/logo.ico') ?>" rel="icon" type="image/x-icon">
+    <link href="<?= base_url('assets/img/favicon.png') ?>" rel="alternate icon" type="image/png">
     <style>
         body { font-family: Arial, sans-serif; color: #1f2937; margin: 20px; }
         h2 { margin: 0 0 4px 0; font-size: 22px; }
