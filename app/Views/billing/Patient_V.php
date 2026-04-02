@@ -169,7 +169,7 @@
 
                                                     <select class="form-select" name="input_blood_group" id="input_blood_group">
                                                         <?php foreach ($blood_group as $row) { ?>
-                                                            <option value="<?= $row->blood_group ?>"><?= $row->blood_group ?></option>
+	                                                            <option value="<?= $row->blood_group ?>" <?= strcasecmp((string) $row->blood_group, 'Not Define') === 0 ? 'selected' : '' ?>><?= $row->blood_group ?></option>
                                                         <?php } ?>
                                                     </select>
                                                 </div>

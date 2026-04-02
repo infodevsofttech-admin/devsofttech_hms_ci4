@@ -75,6 +75,11 @@ class Patient extends BaseController
 				->with('error', $errorText);
 		}
 
+		$bloodGroup = trim((string) $this->request->getPost('input_blood_group'));
+		if ($bloodGroup === '') {
+			$bloodGroup = 'Not Define';
+		}
+
 		$data = [
 			'mphone1' => $this->request->getPost('input_mphone1'),
 			'p_fname' => strtoupper((string) $this->request->getPost('input_name')),
@@ -87,7 +92,7 @@ class Patient extends BaseController
 			'title' => $this->request->getPost('cbo_title'),
 			'p_relative' => $this->request->getPost('cbo_relation'),
 			'p_rname' => strtoupper((string) $this->request->getPost('input_relative_name')),
-			'blood_group' => strtoupper((string) $this->request->getPost('input_blood_group')),
+			'blood_group' => strtoupper($bloodGroup),
 			'udai' => strtoupper((string) $this->request->getPost('input_udai')),
 			'estimate_dob' => $estimate_dob,
 		];
