@@ -1,4 +1,4 @@
-<?php
+?php
 
 namespace App\Controllers\Setting;
 
@@ -318,71 +318,118 @@ class BedManagement extends BaseController
 
     public function bedStatus(): string
     {
-        $departments = [(object) ['iId' => 0, 'vName' => 'All Department']];
-        if ($this->db->tableExists('hc_department')) {
-            $departments = array_merge(
-                $departments,
-                $this->db->table('hc_department')->orderBy('vName', 'ASC')->get()->getResult()
-            );
-        }
+        // ── Stats counters ────────────────────────────────────────────────
+        $stats = [
+            'total'       => 0,
+            'available'   => 0,
+            'occupied'    => 0,
+            'reserved'    => 0,
+            'maintenance' => 0,
+            'cleaning'    => 0,
+            'blocked'     => 0,
+        ];
+        $floors = [];   // [floorNo => [wardId => ['ward_name'=>…,'beds'=>[…],'count'=>[…]]]]
+        $wards  = [];   // [wardId => wardName]  for the filter dropdown
 
-        $wards = $this->db->table('ward_master')
-            ->select('id, ward_name, department_id')
-            ->orderBy('ward_name', 'ASC')
-            ->get()
-            ->getResult();
+        if ($this->db->tableExists('bed_master') && $this->db->tableExists('ward_master')) {
+            $builder = $this->db->table('bed_master b')
+                ->select('b.id as bed_id, b.bed_number, b.bed_code, b.bed_status, b.current_ipd_id')
+                ->select('b.has_oxygen, b.has_monitor, b.has_ventilator, b.is_isolation_bed')
+                ->select('w.id as ward_id, w.ward_name, w.floor_number, w.ward_type')
+                ->join('ward_master w', 'w.id = b.ward_id', 'left')
+                ->where('b.status', 'active')
+                ->orderBy('w.floor_number', 'ASC')
+                ->orderBy('w.ward_name', 'ASC')
+                ->orderBy('b.bed_number', 'ASC');
 
-        $builder = $this->db->table('ipd_master i')
-            ->select('i.id as ipd_id, i.ipd_code, i.register_date, i.p_id')
-            ->where('i.ipd_status', 0)
-            ->orderBy('i.id', 'DESC');
+            if ($this->db->tableExists('ipd_master')) {
+                $builder
+                    ->select('i.id as ipd_id, i.ipd_code, i.register_date, i.r_doc_name')
+                    ->join('ipd_master i', 'i.id = b.current_ipd_id AND i.ipd_status = 0', 'left', false);
 
-        if ($this->db->tableExists('patient_master')) {
-            $builder->select('p.p_code, p.p_fname, p.p_lname, p.mphone1, p.mphone2')
-                ->join('patient_master p', 'p.id = i.p_id', 'left');
-        }
-
-        if ($this->db->tableExists('bed_assignment_history')) {
-            $builder->join(
-                '(select max(id) as id, ipd_id from bed_assignment_history group by ipd_id) bah_latest',
-                'bah_latest.ipd_id = i.id',
-                'left',
-                false
-            )->join('bed_assignment_history bah', 'bah.id = bah_latest.id', 'left');
-
-            if ($this->db->tableExists('bed_master')) {
-                $builder->join('bed_master b', 'b.id = bah.bed_id', 'left');
+                if ($this->db->tableExists('patient_master')) {
+                    $builder
+                        ->select('p.p_code, p.p_fname, p.p_lname')
+                        ->join('patient_master p', 'p.id = i.p_id', 'left');
+                }
             }
-            if ($this->db->tableExists('ward_master')) {
-                $builder->join('ward_master w', 'w.id = bah.ward_id', 'left');
+
+            $today = new \DateTime();
+
+            foreach ($builder->get()->getResult() as $row) {
+                $floorNo = (int) ($row->floor_number ?? 0);
+                $wardId  = (int) ($row->ward_id ?? 0);
+                $status  = (string) ($row->bed_status ?? 'available');
+
+                $stats['total']++;
+                if (array_key_exists($status, $stats)) {
+                    $stats[$status]++;
+                } elseif (strpos($status, 'maintenance') !== false) {
+                    $stats['maintenance']++;
+                }
+
+                // Days since admission
+                $daysAdmitted = null;
+                if (! empty($row->register_date)) {
+                    try {
+                        $admitDate    = new \DateTime((string) $row->register_date);
+                        $daysAdmitted = (int) $today->diff($admitDate)->days;
+                    } catch (\Throwable $e) {
+                        $daysAdmitted = null;
+                    }
+                }
+
+                $patientName = trim(((string) ($row->p_fname ?? '')) . ' ' . ((string) ($row->p_lname ?? '')));
+
+                // Initialise floor / ward buckets
+                if (! isset($floors[$floorNo])) {
+                    $floors[$floorNo] = [];
+                }
+                if (! isset($floors[$floorNo][$wardId])) {
+                    $floors[$floorNo][$wardId] = [
+                        'ward_name' => (string) ($row->ward_name ?? 'Unknown Ward'),
+                        'ward_type' => (string) ($row->ward_type ?? ''),
+                        'beds'      => [],
+                        'count'     => ['total' => 0, 'available' => 0, 'occupied' => 0],
+                    ];
+                    $wards[$wardId] = (string) ($row->ward_name ?? 'Unknown Ward');
+                }
+
+                $floors[$floorNo][$wardId]['beds'][] = [
+                    'bed_id'         => (int) ($row->bed_id ?? 0),
+                    'bed_number'     => (string) ($row->bed_number !== '' && $row->bed_number !== null
+                                            ? $row->bed_number : ($row->bed_code ?? '-')),
+                    'bed_code'       => (string) ($row->bed_code ?? ''),
+                    'bed_status'     => $status,
+                    'patient_name'   => $patientName,
+                    'patient_code'   => (string) ($row->p_code ?? ''),
+                    'doctor_name'    => trim((string) ($row->r_doc_name ?? '')),
+                    'ipd_code'       => (string) ($row->ipd_code ?? ''),
+                    'admit_date'     => (string) ($row->register_date ?? ''),
+                    'days_admitted'  => $daysAdmitted,
+                    'has_oxygen'     => (bool) ($row->has_oxygen ?? false),
+                    'has_monitor'    => (bool) ($row->has_monitor ?? false),
+                    'has_ventilator' => (bool) ($row->has_ventilator ?? false),
+                    'is_isolation'   => (bool) ($row->is_isolation_bed ?? false),
+                ];
+
+                $floors[$floorNo][$wardId]['count']['total']++;
+                if ($status === 'available') {
+                    $floors[$floorNo][$wardId]['count']['available']++;
+                } elseif ($status === 'occupied') {
+                    $floors[$floorNo][$wardId]['count']['occupied']++;
+                }
             }
-        } else {
-            if ($this->db->tableExists('bed_master')) {
-                $builder->join('bed_master b', 'b.current_ipd_id = i.id', 'left');
-            }
-            if ($this->db->tableExists('ward_master')) {
-                $builder->join('ward_master w', 'w.id = b.ward_id', 'left');
-            }
+
+            ksort($floors);
         }
-
-        $builder->select('b.bed_number, b.bed_code, w.id as ward_id, w.ward_name, w.department_id');
-
-        if ($this->db->tableExists('hc_department')) {
-            $builder->select('d.vName as department_name')
-                ->join('hc_department d', 'd.iId = w.department_id', 'left');
-        } else {
-            $builder->select('"All Department" as department_name', false);
-        }
-
-        $rows = $builder->get()->getResult();
 
         return view('Setting/Bed/bed_status_list', [
-            'rows' => $rows,
-            'departments' => $departments,
-            'wards' => $wards,
+            'floors' => $floors,
+            'stats'  => $stats,
+            'wards'  => $wards,
         ]);
     }
-
     public function categories(): string
     {
         $model = new BedCategoryModel();
