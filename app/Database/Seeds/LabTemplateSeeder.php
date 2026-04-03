@@ -43,8 +43,9 @@ class LabTemplateSeeder extends Seeder
     {
         $sqlDir = __DIR__ . DIRECTORY_SEPARATOR . 'LabOemData' . DIRECTORY_SEPARATOR;
 
+        $this->db->query('SET @OLD_SQL_MODE = @@SESSION.sql_mode');
         $this->db->query('SET FOREIGN_KEY_CHECKS = 0');
-        $this->db->query('SET SQL_MODE = ""');          // silence STRICT for legacy MyISAM data
+        $this->db->query('SET SESSION SQL_MODE = "NO_AUTO_VALUE_ON_ZERO"');
 
         foreach (self::SQL_FILES as $file) {
             $path = $sqlDir . $file;
@@ -80,7 +81,7 @@ class LabTemplateSeeder extends Seeder
         }
 
         $this->db->query('SET FOREIGN_KEY_CHECKS = 1');
-        $this->db->query('SET SQL_MODE = DEFAULT');
+        $this->db->query('SET SESSION SQL_MODE = @OLD_SQL_MODE');
 
         CLI::write('Lab template seeder complete.', 'green');
     }
