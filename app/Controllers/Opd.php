@@ -2689,6 +2689,16 @@ class Opd extends BaseController
         $tokens['print_time'] = date('d-m-Y H:i:s');
         $tokens['current_date'] = date('d-m-Y');
         $tokens['doctor_name'] = trim((string) ($tokens['doctor_name'] ?? (($data['opd_master'][0]->doc_name ?? '') ?? '')));
+
+        $shortDescriptionRaw = trim((string) ($tokens['short_description'] ?? ''));
+        $shortDescriptionHtml = $shortDescriptionRaw !== ''
+            ? nl2br(htmlspecialchars($shortDescriptionRaw, ENT_QUOTES, 'UTF-8'))
+            : '';
+        $tokens['short_description_raw'] = $shortDescriptionRaw;
+        $tokens['doctor_short_description_raw'] = $shortDescriptionRaw;
+        $tokens['short_description'] = $shortDescriptionHtml;
+        $tokens['doctor_short_description'] = $shortDescriptionHtml;
+
         $tokens['doctor_sign_html'] = nl2br((string) ($data['opd_master'][0]->doc_sign ?? ''));
         $tokens['content'] = (string) ($tokens['content'] ?? '');
 
