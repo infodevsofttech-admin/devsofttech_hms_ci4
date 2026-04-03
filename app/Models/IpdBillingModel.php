@@ -125,7 +125,6 @@ class IpdBillingModel extends Model
             ->where('o.id', null)
             ->where("i.register_date >=", $start)
             ->where("i.register_date <=", $end)
-            ->groupBy('p.id,ipd_doc_list.doc_list')
             ->orderBy('i.id');
 
         return $builder->get()->getResult();
