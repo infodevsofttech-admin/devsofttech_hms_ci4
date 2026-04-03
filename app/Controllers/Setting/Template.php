@@ -159,9 +159,10 @@ HTML;
             return $resp;
         }
 
-        $sql = "select g.RepoGrp, r.Title, r.mstRepoKey
+        $sql = "select COALESCE(g.RepoGrp, 'Unassigned') as RepoGrp, r.Title, r.mstRepoKey
             from lab_repo r
-            join lab_rgroups g on r.GrpKey = g.mstRGrpKey";
+            left join lab_rgroups g on r.GrpKey = g.mstRGrpKey
+            order by r.mstRepoKey asc";
         $query = $this->db->query($sql);
         $data['labReport_master'] = $query->getResult();
 
