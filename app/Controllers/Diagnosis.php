@@ -113,7 +113,7 @@ class Diagnosis extends BaseController
                 p.dob, p.age, p.age_in_month, p.estimate_dob,
                 GROUP_CONCAT(CONCAT_WS(';', i.item_name, i.item_name, i.id, 
                     check_item_request(m.id, i.id)) SEPARATOR '#') as data_array,
-                r.daily_sr_no, r.lab_test_no
+                MAX(r.daily_sr_no) as daily_sr_no, MAX(r.lab_test_no) as lab_test_no
                 FROM invoice_item i
                 INNER JOIN invoice_master m ON m.id = i.inv_master_id
                 INNER JOIN hc_item_type y ON i.item_type = y.itype_id
@@ -132,7 +132,7 @@ class Diagnosis extends BaseController
                 p.dob, p.age, p.age_in_month, p.estimate_dob,
                 GROUP_CONCAT(CONCAT_WS(';', i.item_name, i.item_name, i.id, 
                     check_item_request(m.id, i.id)) SEPARATOR '#') as data_array,
-                r.daily_sr_no, r.lab_test_no
+                MAX(r.daily_sr_no) as daily_sr_no, MAX(r.lab_test_no) as lab_test_no
                 FROM invoice_item i
                 INNER JOIN invoice_master m ON m.id = i.inv_master_id
                 INNER JOIN hc_item_type y ON i.item_type = y.itype_id
@@ -182,7 +182,7 @@ class Diagnosis extends BaseController
                 p.dob, p.age, p.age_in_month, p.estimate_dob,
                 GROUP_CONCAT(CONCAT_WS(';', i.item_name, i.item_name, i.id, 
                     check_item_request(m.id, i.id)) SEPARATOR '#') as data_array,
-                r.daily_sr_no, r.lab_test_no
+                MAX(r.daily_sr_no) as daily_sr_no, MAX(r.lab_test_no) as lab_test_no
                 FROM invoice_item i
                 INNER JOIN invoice_master m ON m.id = i.inv_master_id
                 INNER JOIN hc_item_type y ON i.item_type = y.itype_id
@@ -202,7 +202,7 @@ class Diagnosis extends BaseController
                 p.dob, p.age, p.age_in_month, p.estimate_dob,
                 GROUP_CONCAT(CONCAT_WS(';', i.item_name, i.item_name, i.id, 
                     check_item_request(m.id, i.id)) SEPARATOR '#') as data_array,
-                r.daily_sr_no, r.lab_test_no
+                MAX(r.daily_sr_no) as daily_sr_no, MAX(r.lab_test_no) as lab_test_no
                 FROM invoice_item i
                 INNER JOIN invoice_master m ON m.id = i.inv_master_id
                 INNER JOIN hc_item_type y ON i.item_type = y.itype_id
@@ -245,7 +245,7 @@ class Diagnosis extends BaseController
                 p.dob, p.age, p.age_in_month, p.estimate_dob,
                 GROUP_CONCAT(CONCAT_WS(';', i.item_name, i.item_name, i.id, 
                     check_item_request(m.id, i.id)) SEPARATOR '#') as data_array,
-                r.daily_sr_no, r.lab_test_no
+                MAX(r.daily_sr_no) as daily_sr_no, MAX(r.lab_test_no) as lab_test_no
                 FROM invoice_item i
                 INNER JOIN invoice_master m ON m.id = i.inv_master_id
                 INNER JOIN hc_item_type y ON i.item_type = y.itype_id
@@ -265,7 +265,7 @@ class Diagnosis extends BaseController
                 p.dob, p.age, p.age_in_month, p.estimate_dob,
                 GROUP_CONCAT(CONCAT_WS(';', i.item_name, i.item_name, i.id, 
                     check_item_request(m.id, i.id)) SEPARATOR '#') as data_array,
-                r.daily_sr_no, r.lab_test_no
+                MAX(r.daily_sr_no) as daily_sr_no, MAX(r.lab_test_no) as lab_test_no
                 FROM invoice_item i
                 INNER JOIN invoice_master m ON m.id = i.inv_master_id
                 INNER JOIN hc_item_type y ON i.item_type = y.itype_id
