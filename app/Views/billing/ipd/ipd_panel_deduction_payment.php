@@ -99,7 +99,7 @@
                 }
 
                 if (data.ipd_id && data.payid) {
-                    load_report_div('<?= site_url('billing/ipd/payment/receipt') ?>/' + data.ipd_id + '/' + data.payid, 'payModal_ded-bodyc');
+                    load_form_div('<?= site_url('billing/ipd/payment/receipt') ?>/' + data.ipd_id + '/' + data.payid, 'payModal_ded-bodyc');
                 }
             }, 'json');
         });
@@ -125,7 +125,7 @@
                 }
 
                 if (data.ipd_id && data.payid) {
-                    load_report_div('<?= site_url('billing/ipd/payment/receipt') ?>/' + data.ipd_id + '/' + data.payid, 'payModal_ded-bodyc');
+                    load_form_div('<?= site_url('billing/ipd/payment/receipt') ?>/' + data.ipd_id + '/' + data.payid, 'payModal_ded-bodyc');
                 }
             }, 'json');
         });

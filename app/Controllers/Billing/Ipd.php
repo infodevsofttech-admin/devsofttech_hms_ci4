@@ -2053,11 +2053,13 @@ class Ipd extends BaseController
             return $permission;
         }
 
-        $payment = $this->db->table('payment_history')
-            ->select("*,date_format(payment_date,'%d-%m-%Y %h:%i %p') as payment_date_str,if(credit_debit=0,'','Return') as Amount_str", false)
-            ->where('payof_type', 4)
-            ->where('payof_id', $ipdId)
-            ->where('id', $payId)
+        $payment = $this->db->table('payment_history p')
+            ->select("p.*,date_format(p.payment_date,'%d-%m-%Y %h:%i %p') as payment_date_str,if(p.credit_debit=0,'','Return') as Amount_str,s.pay_type,b.bank_name", false)
+            ->join('hospital_bank_payment_source s', 's.id = p.pay_bank_id', 'left')
+            ->join('hospital_bank b', 'b.id = s.bank_id', 'left')
+            ->where('p.payof_type', 4)
+            ->where('p.payof_id', $ipdId)
+            ->where('p.id', $payId)
             ->get()
             ->getResult();
 
@@ -2083,6 +2085,79 @@ class Ipd extends BaseController
             'ipd_id' => $ipdId,
             'payid' => $payId,
         ]);
+    }
+
+    public function pdfPaymentReceipt(int $ipdId, int $payId)
+    {
+        $permission = $this->requireAnyPermission([
+            'billing.access',
+            'billing.ipd.invoice',
+        ]);
+        if ($permission) {
+            return $permission;
+        }
+
+        $payment = $this->db->table('payment_history p')
+            ->select("p.*,date_format(p.payment_date,'%d-%m-%Y %h:%i %p') as payment_date_str,if(p.credit_debit=0,'','Return') as Amount_str,s.pay_type,b.bank_name", false)
+            ->join('hospital_bank_payment_source s', 's.id = p.pay_bank_id', 'left')
+            ->join('hospital_bank b', 'b.id = s.bank_id', 'left')
+            ->where('p.payof_type', 4)
+            ->where('p.payof_id', $ipdId)
+            ->where('p.id', $payId)
+            ->get()
+            ->getResult();
+
+        $ipdMaster = $this->db->table('ipd_master')
+            ->where('id', $ipdId)
+            ->get()
+            ->getResult();
+
+        if (empty($ipdMaster)) {
+            return $this->response->setStatusCode(404)->setBody('IPD not found');
+        }
+
+        $patient = $this->db->table('patient_master')
+            ->select("*,if(gender=1,'Male','Female') as xgender", false)
+            ->where('id', $ipdMaster[0]->p_id)
+            ->get()
+            ->getResult();
+
+        $html = view('billing/ipd/ipd_payment_receipt_pdf', [
+            'ipd_payment' => $payment,
+            'ipd_master' => $ipdMaster,
+            'patient_master' => $patient,
+            'ipd_id' => $ipdId,
+            'payid' => $payId,
+        ]);
+
+        $mpdfTempDir = WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'mpdf';
+        if (! is_dir($mpdfTempDir)) {
+            mkdir($mpdfTempDir, 0755, true);
+        }
+
+        $mpdf = new Mpdf([
+            'tempDir' => $mpdfTempDir,
+            'format'  => 'A4',
+        ]);
+
+        $hospitalName = defined('H_Name') ? (string) constant('H_Name') : '';
+        if ($hospitalName !== '') {
+            $mpdf->SetWatermarkText($hospitalName);
+            $mpdf->showWatermarkText = false;
+        }
+
+        // Strip BOM and sanitize to valid UTF-8 before passing to mPDF
+        $html = ltrim($html, "\xEF\xBB\xBF");
+        $html = mb_convert_encoding($html, 'UTF-8', 'UTF-8');
+
+        $mpdf->WriteHTML($html);
+
+        $fileName = 'IPD_Payment_Receipt_' . $payId . '_' . date('YmdHis') . '.pdf';
+
+        return $this->response
+            ->setHeader('Content-Type', 'application/pdf')
+            ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
+            ->setBody($mpdf->Output($fileName, 'S'));
     }
 
     private function parseDateRange(string $range): array

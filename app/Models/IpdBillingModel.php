@@ -604,8 +604,7 @@ class IpdBillingModel extends Model
     public function getPayments(int $ipdId): array
     {
         return $this->db->table('payment_history')
-            ->select("*,date_format(payment_date,'%d-%M-%Y') as pay_date_str,")
-            ->select("concat(if(payment_mode=1,'Cash','BANK'),if(credit_debit=0,'','-Return')) as pay_mode", false)
+            ->select("*,date_format(payment_date,'%d-%M-%Y') as pay_date_str,concat(if(payment_mode=1,'Cash','Bank'),if(credit_debit=0,'','-Return')) as pay_mode", false)
             ->where('payof_type', 4)
             ->where('payof_id', $ipdId)
             ->orderBy('id', 'DESC')

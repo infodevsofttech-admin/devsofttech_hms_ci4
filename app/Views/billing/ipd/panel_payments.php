@@ -12,6 +12,7 @@
                                 <th>Date</th>
                                 <th class="text-end">Amount</th>
                                 <th>Mode</th>
+                                <th>Print</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -24,11 +25,16 @@
                                         <td><?= esc($row->pay_date_str ?? '') ?></td>
                                         <td class="text-end"><?= esc($row->amount ?? '') ?></td>
                                         <td><?= esc($row->pay_mode ?? '') ?></td>
+                                        <td>
+                                            <a href="<?= site_url('billing/ipd/payment/pdf-receipt/' . (int)($ipd_info->id ?? 0) . '/' . (int)($row->id ?? 0)) ?>" target="_blank" class="btn btn-sm btn-outline-primary" title="Print Receipt">
+                                                <i class="bi bi-printer"></i>
+                                            </a>
+                                        </td>
                                     </tr>
                                 <?php endforeach; ?>
                             <?php else : ?>
                                 <tr>
-                                    <td colspan="5" class="text-center text-muted">No payments found.</td>
+                                    <td colspan="6" class="text-center text-muted">No payments found.</td>
                                 </tr>
                             <?php endif; ?>
                         </tbody>

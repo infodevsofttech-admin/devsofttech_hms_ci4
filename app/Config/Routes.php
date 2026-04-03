@@ -379,6 +379,7 @@ $routes->group('billing', function($routes) {
     $routes->post('ipd/payment/deduct', 'Billing\\Ipd::deductPayment');
     $routes->post('ipd/payment/tpa', 'Billing\\Ipd::tpaPayment');
     $routes->get('ipd/payment/receipt/(:num)/(:num)', 'Billing\\Ipd::ipdCashPrintPdf/$1/$2');
+    $routes->get('ipd/payment/pdf-receipt/(:num)/(:num)', 'Billing\\Ipd::pdfPaymentReceipt/$1/$2');
     $routes->get('ipd/cash-balance', 'Billing\\Ipd::cashBalance');
     $routes->get('ipd/cash-balance/report', 'Billing\\Ipd::cashBalanceReport');
     $routes->get('ipd/cash-balance/export', 'Billing\\Ipd::cashBalanceExport');
