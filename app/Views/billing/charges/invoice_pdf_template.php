@@ -60,6 +60,7 @@ $qrPackageAvailable = class_exists('\\Mpdf\\QrCode\\QrCode');
 
 $paidAmountPrint = (float) ($invoice->payment_part_received ?? 0);
 $balanceAmountPrint = (float) ($invoice->payment_part_balance ?? ($netAmount - $paidAmountPrint));
+$paymentHistory = $payment_history_details ?? [];
 
 /**
  * Convert numbers to words (basic implementation for Indian system)
@@ -262,6 +263,19 @@ if (!function_exists('convertNumberToWords')) {
                         $amountInWords = convertNumberToWords((int)$netAmount);
                         echo esc($amountInWords) . ' Only';
                     ?></div>
+                    <?php
+                        $pmodeInner = (int) ($invoice->payment_mode ?? 0);
+                        if ($pmodeInner === 3) : ?>
+                    <div style="margin-top:4px;"><span class="label">Payment Details:</span> <strong>Credit to IPD</strong></div>
+                    <?php elseif ($pmodeInner === 4) : ?>
+                    <div style="margin-top:4px;"><span class="label">Payment Details:</span> <strong>Credit to Organisation</strong></div>
+                    <?php elseif (!empty($paymentHistory)) : ?>
+                    <div style="margin-top:4px;"><span class="label">Payment Receipts:</span>
+                        <?php foreach ($paymentHistory as $ph) : ?>
+                        <span><?= esc((string) ($ph->Payment_type_str ?? '')) ?> — <?= esc($currencyPrefix) ?> <?= esc(number_format((float) ($ph->amount ?? 0), 2)) ?></span>&nbsp;
+                        <?php endforeach; ?>
+                    </div>
+                    <?php endif; ?>
                 </div>
             </td>
             <td class="totals-right">
