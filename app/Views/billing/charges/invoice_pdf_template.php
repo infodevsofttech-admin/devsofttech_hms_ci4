@@ -272,7 +272,7 @@ if (!function_exists('convertNumberToWords')) {
                     <?php elseif (!empty($paymentHistory)) : ?>
                     <div style="margin-top:4px;"><span class="label">Payment Receipts:</span>
                         <?php foreach ($paymentHistory as $ph) : ?>
-                        <span><?= esc((string) ($ph->Payment_type_str ?? '')) ?> — <?= esc($currencyPrefix) ?> <?= esc(number_format((float) ($ph->amount ?? 0), 2)) ?></span>&nbsp;
+                        <span>#<?= esc((string) ($ph->id ?? '')) ?> <?= esc((string) ($ph->Payment_type_str ?? '')) ?> — <?= esc($currencyPrefix) ?> <?= esc(number_format((float) ($ph->amount ?? 0), 2)) ?><?php $pd = (string) ($ph->payment_date ?? ''); if ($pd && $pd !== '0000-00-00 00:00:00') { echo ' (' . esc(date('d-m-Y', strtotime($pd))) . ')'; } ?></span>&nbsp;
                         <?php endforeach; ?>
                     </div>
                     <?php endif; ?>
