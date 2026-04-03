@@ -161,6 +161,7 @@ HTML;
 
         $sql = "select COALESCE(g.RepoGrp, 'Unassigned') as RepoGrp, r.Title, r.mstRepoKey
             from lab_repo r
+            join (select distinct mstRepoKey from lab_repotests) t on t.mstRepoKey = r.mstRepoKey
             left join lab_rgroups g on r.GrpKey = g.mstRGrpKey
             order by r.mstRepoKey asc";
         $query = $this->db->query($sql);
