@@ -774,7 +774,20 @@ class Diagnosis extends BaseController
                 JOIN lab_repotests s ON d.mstTestKey = s.mstTestKey AND i.lab_repo_id = s.mstRepoKey
                 LEFT JOIN lab_tests_option o ON d.mstTestKey = o.mstTestKey
                 WHERE i.lab_request_id = ?
-                GROUP BY d.mstTestKey
+                GROUP BY
+                    d.mstTestKey,
+                    d.Test,
+                    d.TestID,
+                    d.Result,
+                    d.Formula,
+                    d.VRule,
+                    d.VMsg,
+                    d.Unit,
+                    d.FixedNormals,
+                    i.lab_test_value,
+                    i.lab_test_remark,
+                    i.id,
+                    s.EOrder
                 ORDER BY s.EOrder";
 
             $labRequestItems = $this->db->query($itemsSql, [$labReqId])->getResult();
