@@ -519,3 +519,85 @@ Date: 2026-02-26
 - Continue with print parity fine tuning (spacing/font/line layout) against old HMS PDFs.
 - Optional polish: persist Rx-Group scope (`Active/Favorites/All`) per user session/profile.
 
+---
+
+Date: 2026-04-03
+
+## Incident Note: CBC Template Missing on Remote (`Lab_Admin/report_list`)
+
+### Symptom
+- On local, query returns CBC template:
+  - `SELECT mstRepoKey, Title FROM lab_repo WHERE Title LIKE '%CBC%';` -> 1 row
+- On remote, same query initially returned 0 rows.
+- Pathology template list also showed mixed/non-pathology items in some states.
+
+### Root Cause
+1. Seed data in `app/Database/Seeds/LabOemData/03_lab_repo.sql` contains:
+   - row with `mstRepoKey = 0` (`Manual`)
+   - row with `mstRepoKey = 1` (`COMPLETE BLOOD COUNT (CBC)`)
+2. During remote seeding, session SQL mode did not enforce `NO_AUTO_VALUE_ON_ZERO`.
+3. MySQL treated insert key `0` as auto-increment, effectively consuming key `1`.
+4. CBC row (`mstRepoKey=1`) then got skipped due to `INSERT IGNORE` key collision.
+5. Result: remote `lab_repo` missing CBC despite seed file being correct.
+
+### Permanent Code Fixes Applied
+
+1. Seeder SQL mode fix (critical)
+- File: `app/Database/Seeds/LabTemplateSeeder.php`
+- Change:
+  - Save old SQL mode: `SET @OLD_SQL_MODE = @@SESSION.sql_mode`
+  - Set session mode for seed: `SET SESSION SQL_MODE = "NO_AUTO_VALUE_ON_ZERO"`
+  - Restore old mode after seed.
+- Purpose: preserve explicit key `0`, prevent `0 -> 1` collision and CBC skip.
+
+2. One-shot remote repair command
+- File: `app/Commands/RefreshLabTemplates.php`
+- Command: `php spark oem:refresh-lab-templates`
+- Behavior:
+  - Truncates template tables only: `lab_repotests`, `lab_tests_option`, `lab_tests`, `lab_repo`, `lab_rgroups`, `radiology_ultrasound_template`
+  - Does **not** truncate `hc_items`
+  - Runs `LabTemplateSeeder`
+  - Verifies CBC exists post-refresh.
+
+3. Report list robustness (pathology list behavior)
+- File: `app/Controllers/Setting/Template.php`
+- `report_list()` adjusted to avoid hard dependency on `hc_items` existence while still applying safer filtering logic.
+
+### Recovery Runbook (Remote)
+
+1. Pull latest code:
+```bash
+git pull
+```
+
+2. Rebuild templates safely:
+```bash
+php spark oem:refresh-lab-templates
+```
+
+3. Verify CBC exists:
+```sql
+SELECT mstRepoKey, Title FROM lab_repo WHERE Title LIKE '%CBC%';
+```
+
+4. Verify charge mapping (optional):
+```sql
+SELECT r.mstRepoKey, r.Title, r.charge_id, i.itype
+FROM lab_repo r
+LEFT JOIN hc_items i ON i.id = r.charge_id
+WHERE r.Title LIKE '%CBC%';
+```
+
+5. Open pathology template list:
+- URL: `/Lab_Admin/report_list`
+
+### Expected Post-Fix State
+- CBC row present in `lab_repo` (`mstRepoKey=1`).
+- Pathology list loads expected templates.
+- No manual MySQL global SQL mode change required.
+
+### Commits Related to This Incident
+- `259ea13` Diagnosis query `ONLY_FULL_GROUP_BY` fix (`edit-test-data`).
+- `721f374` / `d9e4d50` / `ab4b9a3` / `9d2f91e` pathology report-list hardening iterations.
+- `46a22f6` definitive seed-mode + refresh command fix.
+
