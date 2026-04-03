@@ -2165,12 +2165,34 @@ class Ipd extends BaseController
         $start = date('Y-m-d');
         $end = $start;
 
-        if ($range !== '') {
-            $parts = explode('S', $range);
-            if (count($parts) === 2) {
-                $start = $parts[0];
-                $end = $parts[1];
+        $range = trim(urldecode($range));
+        if ($range === '') {
+            return [$start, $end];
+        }
+
+        // Preferred format from UI: YYYY-MM-DDSYYYY-MM-DD
+        if (strpos($range, 'S') !== false) {
+            $parts = explode('S', $range, 2);
+            $startCandidate = trim((string) ($parts[0] ?? ''));
+            $endCandidate = trim((string) ($parts[1] ?? ''));
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $startCandidate) === 1
+                && preg_match('/^\d{4}-\d{2}-\d{2}$/', $endCandidate) === 1
+            ) {
+                return [$startCandidate, $endCandidate];
             }
+        }
+
+        // Fallback: extract first two ISO dates from any incoming range string.
+        $dates = [];
+        if (preg_match_all('/\d{4}-\d{2}-\d{2}/', $range, $matches) > 0) {
+            $dates = $matches[0] ?? [];
+        }
+
+        if (count($dates) >= 2) {
+            return [(string) $dates[0], (string) $dates[1]];
+        }
+        if (count($dates) === 1) {
+            return [(string) $dates[0], (string) $dates[0]];
         }
 
         return [$start, $end];

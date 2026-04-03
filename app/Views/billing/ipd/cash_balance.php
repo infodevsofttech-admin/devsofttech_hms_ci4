@@ -116,14 +116,31 @@
             fallbackRangeToday();
         }
 
+        function getSelectedRangeValue() {
+            var picker = $('#reportrange').data('daterangepicker');
+            if (picker && picker.startDate && picker.endDate) {
+                var value = picker.startDate.format('YYYY-MM-DD') + 'S' + picker.endDate.format('YYYY-MM-DD');
+                $('#ipd_date_range').val(value);
+                return value;
+            }
+
+            var fallback = ($('#ipd_date_range').val() || '').toString().trim();
+            if (fallback === '') {
+                fallbackRangeToday();
+                fallback = ($('#ipd_date_range').val() || '').toString().trim();
+            }
+
+            return fallback;
+        }
+
         $('#showreport1').click(function() {
-            var range = $('#ipd_date_range').val();
+            var range = getSelectedRangeValue();
             var url = '<?= base_url('billing/ipd/cash-balance/report') ?>?range=' + encodeURIComponent(range);
             load_form_div(url, 'show_report');
         });
 
         $('#showreportexport').click(function() {
-            var range = $('#ipd_date_range').val();
+            var range = getSelectedRangeValue();
             var url = '<?= base_url('billing/ipd/cash-balance/export') ?>?range=' + encodeURIComponent(range);
             window.open(url, '_blank');
         });
