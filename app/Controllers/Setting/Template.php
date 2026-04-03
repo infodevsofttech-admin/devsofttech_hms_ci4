@@ -160,8 +160,8 @@ HTML;
         }
 
         $sql = "select g.RepoGrp, r.Title, r.mstRepoKey
-            from (lab_repo r join lab_rgroups g on r.GrpKey=g.mstRGrpKey)
-            join hc_items i on r.charge_id=i.id and i.itype in (5,6)";
+            from lab_repo r
+            join lab_rgroups g on r.GrpKey = g.mstRGrpKey";
         $query = $this->db->query($sql);
         $data['labReport_master'] = $query->getResult();
 
