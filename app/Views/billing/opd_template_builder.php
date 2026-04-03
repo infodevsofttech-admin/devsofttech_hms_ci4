@@ -154,7 +154,7 @@ $paperCustomHeight = (string) ($paperSettings['custom_height_mm'] ?? '297');
                         <strong>Available variables:</strong><br>
                         Hospital: {{H_Name}}, {{H_address_1}}, {{H_address_2}}, {{H_phone_No}}, {{H_Email}}, {{H_logo}}<br>
                         Patient/OPD: {{pName}}, {{age_sex}}, {{phoneno}}, {{uhid_no}}, {{opd_no}}, {{opd_date}}<br>
-                        Medical: {{Complaint}}, {{diagnosis}}, {{medical}}, {{advice}}, {{doctor_name}}, {{doctor_sign_html}}<br>
+                        Medical: {{Complaint}}, {{diagnosis}}, {{medical}}, {{advice}}, {{doctor_name}}, {{short_description}}, {{doctor_short_description}}, {{doctor_sign_html}}<br>
                         Dates: {{print_time}}, {{current_date}}<br>
                         Margins (cm): {{MarginTop}}, {{MarginBottom}}, {{MarginLeft}}, {{MarginRight}}, {{MarginHeader}}, {{MarginFooter}}
                     </div>

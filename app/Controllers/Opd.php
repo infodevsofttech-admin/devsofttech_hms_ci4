@@ -87,6 +87,7 @@ class Opd extends BaseController
 
         $placeholders = [
             'hospital_name', 'hospital_address', 'hospital_phone', 'hospital_email', 'doctor_name', 'print_time',
+            'short_description', 'doctor_short_description',
             'pName', 'pRelative', 'age_sex', 'phoneno', 'p_address', 'uhid_no', 'opd_sr_no', 'opd_no',
             'opd_date', 'exp_date', 'SpecName', 'opd_fee_desc', 'total_no_visit', 'last_opdvisit_date', 'str_opd_book_date',
             'Complaint', 'diagnosis', 'Provisional_diagnosis', 'Finding_Examinations', 'medical', 'investigation',
@@ -1757,6 +1758,7 @@ class Opd extends BaseController
         $expDateText = $expDate !== '' ? ('<b>Valid Upto : </b>' . esc($expDate)) : '';
 
         $specName = trim((string) ($doctor->SpecName ?? $opd->doc_spec ?? ''));
+        $doctorShortDescription = trim((string) ($doctor->doc_sign ?? $opd->doc_sign ?? ''));
         $opdFeeDesc = trim((string) (($opd->opd_fee_amount ?? '') . ' ' . ($opd->opd_fee_desc ?? '')));
         $totalNoVisit = (string) ($opd->no_visit ?? '');
         $lastVisitText = '';
@@ -2075,6 +2077,8 @@ class Opd extends BaseController
             'opd_date' => $opdDate,
             'exp_date' => $expDateText,
             'SpecName' => $specName,
+            'short_description' => $doctorShortDescription,
+            'doctor_short_description' => $doctorShortDescription,
             'opd_fee_desc' => $opdFeeDesc,
             'total_no_visit' => $totalNoVisit,
             'last_opdvisit_date' => $lastVisitText,
