@@ -156,8 +156,8 @@ if ($ageLabel === '') {
 
             <?php if ($isPathologyFlow): ?>
                 <div class="card mt-3">
-                    <div class="card-header bg-warning text-white">
-                        <h5 class="card-title mb-0" style="padding-top: 0px;padding-bottom: 0px;">Report Operations</h5>
+                    <div class="card-header bg-warning" style="color: #fff !important;">
+                        <h5 class="card-title mb-0" style="padding-top: 0px;padding-bottom: 0px; color: #fff !important;">Report Operations</h5>
                     </div>
                     <div class="card-body" style="padding-top: 12px;">
                         <div class="row g-2">
