@@ -48,6 +48,9 @@ if ($ageLabel === '') {
     letter-spacing: 0.2px;
     font-weight: 700;
 }
+.diagnosis-ui .card-header .card-title {
+    color: #fff !important;
+}
 .diagnosis-ui .table > tbody > tr > th {
     white-space: nowrap;
     width: 32%;
