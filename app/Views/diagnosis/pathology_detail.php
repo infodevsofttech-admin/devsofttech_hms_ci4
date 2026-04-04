@@ -82,7 +82,7 @@ if ($ageLabel === '') {
         <div class="col-lg-6">
             <div class="card profile-card">
                 <div class="card-header bg-primary text-white">
-                    <h5 class="card-title mb-0" style="padding-top: 0px;padding-bottom: 0px;">Person Profile</h5>
+                    <h5 class="card-title mb-0" style="padding-top: 0px;padding-bottom: 0px; color: #fff !important;">Person Profile</h5>
                 </div>
                 <div class="card-body" style="padding-top: 12px;">
                     <?php if (!empty($invoice)): ?>
@@ -121,7 +121,7 @@ if ($ageLabel === '') {
 
             <div class="card mt-3 diag-panel" id="labTimingCard">
                 <div class="card-header bg-info text-white">
-                    <h5 class="card-title mb-0" style="padding-top: 0px;padding-bottom: 0px;"><?= esc($timingCardTitle) ?></h5>
+                    <h5 class="card-title mb-0" style="padding-top: 0px;padding-bottom: 0px; color: #fff !important;"><?= esc($timingCardTitle) ?></h5>
                 </div>
                 <div class="card-body" id="labTimingCardBody" style="padding-top: 12px;">
                     <form id="labTimingForm" class="row g-3">
@@ -160,7 +160,7 @@ if ($ageLabel === '') {
             <?php if ($isPathologyFlow): ?>
                 <div class="card mt-3">
                     <div class="card-header bg-primary text-white">
-                        <h5 class="card-title mb-0" style="padding-top: 0px;padding-bottom: 0px;">Report Operations</h5>
+                        <h5 class="card-title mb-0" style="padding-top: 0px;padding-bottom: 0px; color: #fff !important;">Report Operations</h5>
                     </div>
                     <div class="card-body" style="padding-top: 12px;">
                         <div class="row g-2">
@@ -213,7 +213,7 @@ if ($ageLabel === '') {
         <div class="col-lg-6">
             <div class="card mb-3 diag-panel" id="testListCard">
                 <div class="card-header bg-success text-white">
-                    <h5 class="card-title mb-0" style="padding-top: 0px;padding-bottom: 0px;">Test List : [Invoice Code : <?= esc((string) ($invoice->invoice_code ?? '')) ?>]</h5>
+                    <h5 class="card-title mb-0" style="padding-top: 0px;padding-bottom: 0px; color: #fff !important;">Test List : [Invoice Code : <?= esc((string) ($invoice->invoice_code ?? '')) ?>]</h5>
                 </div>
                 <div class="card-body" id="testListCardBody" style="padding-top: 12px;">
                     <div class="text-center">
