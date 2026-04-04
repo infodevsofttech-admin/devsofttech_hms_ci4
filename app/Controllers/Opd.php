@@ -2990,6 +2990,11 @@ class Opd extends BaseController
                     $mapDose = [];
                     $mapWhen = [];
                     $mapFreq = [];
+                    $mapWhere = [];
+                    $mapDoseLocal = [];
+                    $mapWhenLocal = [];
+                    $mapFreqLocal = [];
+                    $mapWhereLocal = [];
                     $medGenericMap = [];
                     $missingGenericMedIds = [];
 
@@ -2997,13 +3002,22 @@ class Opd extends BaseController
                         $f = $this->db->getFieldNames('opd_dose_shed');
                         $idF = $this->resolveFirstField($f, ['dose_shed_id', 'id']);
                         $labelF = $this->resolveFirstField($f, ['dose_show_sign', 'dose_sign', 'dose_sign_desc', 'name']);
+                        $localLabelF = $this->resolveFirstField($f, ['dose_show_desc', 'dose_sign_hindi', 'dose_sign_desc']);
                         if ($idF !== null && $labelF !== null) {
-                            $rows = $this->db->table('opd_dose_shed')->select($idF . ' as id,' . $labelF . ' as label')->where($labelF . ' !=', '')->get()->getResultArray();
+                            $select = [$idF . ' as id', $labelF . ' as label'];
+                            if ($localLabelF !== null && $localLabelF !== $labelF) {
+                                $select[] = $localLabelF . ' as local_label';
+                            }
+                            $rows = $this->db->table('opd_dose_shed')->select(implode(',', $select))->where($labelF . ' !=', '')->get()->getResultArray();
                             foreach ($rows as $r) {
                                 $id = trim((string) ($r['id'] ?? ''));
                                 $label = trim((string) ($r['label'] ?? ''));
                                 if ($id !== '' && $label !== '') {
                                     $mapDose[$id] = $label;
+                                }
+                                $localLabel = trim((string) ($r['local_label'] ?? ''));
+                                if ($id !== '' && $localLabel !== '') {
+                                    $mapDoseLocal[$id] = $localLabel;
                                 }
                             }
                         }
@@ -3013,13 +3027,22 @@ class Opd extends BaseController
                         $f = $this->db->getFieldNames('opd_dose_when');
                         $idF = $this->resolveFirstField($f, ['dose_when_id', 'id']);
                         $labelF = $this->resolveFirstField($f, ['dose_sign', 'dose_sign_desc', 'name']);
+                        $localLabelF = $this->resolveFirstField($f, ['dose_sign_hindi', 'dose_sign_desc']);
                         if ($idF !== null && $labelF !== null) {
-                            $rows = $this->db->table('opd_dose_when')->select($idF . ' as id,' . $labelF . ' as label')->where($labelF . ' !=', '')->get()->getResultArray();
+                            $select = [$idF . ' as id', $labelF . ' as label'];
+                            if ($localLabelF !== null && $localLabelF !== $labelF) {
+                                $select[] = $localLabelF . ' as local_label';
+                            }
+                            $rows = $this->db->table('opd_dose_when')->select(implode(',', $select))->where($labelF . ' !=', '')->get()->getResultArray();
                             foreach ($rows as $r) {
                                 $id = trim((string) ($r['id'] ?? ''));
                                 $label = trim((string) ($r['label'] ?? ''));
                                 if ($id !== '' && $label !== '') {
                                     $mapWhen[$id] = $label;
+                                }
+                                $localLabel = trim((string) ($r['local_label'] ?? ''));
+                                if ($id !== '' && $localLabel !== '') {
+                                    $mapWhenLocal[$id] = $localLabel;
                                 }
                             }
                         }
@@ -3029,13 +3052,47 @@ class Opd extends BaseController
                         $f = $this->db->getFieldNames('opd_dose_frequency');
                         $idF = $this->resolveFirstField($f, ['dose_freq_id', 'id']);
                         $labelF = $this->resolveFirstField($f, ['dose_sign', 'dose_sign_desc', 'name']);
+                        $localLabelF = $this->resolveFirstField($f, ['dose_sign_hindi', 'dose_sign_desc']);
                         if ($idF !== null && $labelF !== null) {
-                            $rows = $this->db->table('opd_dose_frequency')->select($idF . ' as id,' . $labelF . ' as label')->where($labelF . ' !=', '')->get()->getResultArray();
+                            $select = [$idF . ' as id', $labelF . ' as label'];
+                            if ($localLabelF !== null && $localLabelF !== $labelF) {
+                                $select[] = $localLabelF . ' as local_label';
+                            }
+                            $rows = $this->db->table('opd_dose_frequency')->select(implode(',', $select))->where($labelF . ' !=', '')->get()->getResultArray();
                             foreach ($rows as $r) {
                                 $id = trim((string) ($r['id'] ?? ''));
                                 $label = trim((string) ($r['label'] ?? ''));
                                 if ($id !== '' && $label !== '') {
                                     $mapFreq[$id] = $label;
+                                }
+                                $localLabel = trim((string) ($r['local_label'] ?? ''));
+                                if ($id !== '' && $localLabel !== '') {
+                                    $mapFreqLocal[$id] = $localLabel;
+                                }
+                            }
+                        }
+                    }
+
+                    if ($this->db->tableExists('opd_dose_where')) {
+                        $f = $this->db->getFieldNames('opd_dose_where');
+                        $idF = $this->resolveFirstField($f, ['dose_where_id', 'id']);
+                        $labelF = $this->resolveFirstField($f, ['dose_sign', 'dose_sign_desc', 'name']);
+                        $localLabelF = $this->resolveFirstField($f, ['dose_sign_hindi', 'dose_sign_desc']);
+                        if ($idF !== null && $labelF !== null) {
+                            $select = [$idF . ' as id', $labelF . ' as label'];
+                            if ($localLabelF !== null && $localLabelF !== $labelF) {
+                                $select[] = $localLabelF . ' as local_label';
+                            }
+                            $rows = $this->db->table('opd_dose_where')->select(implode(',', $select))->where($labelF . ' !=', '')->get()->getResultArray();
+                            foreach ($rows as $r) {
+                                $id = trim((string) ($r['id'] ?? ''));
+                                $label = trim((string) ($r['label'] ?? ''));
+                                if ($id !== '' && $label !== '') {
+                                    $mapWhere[$id] = $label;
+                                }
+                                $localLabel = trim((string) ($r['local_label'] ?? ''));
+                                if ($id !== '' && $localLabel !== '') {
+                                    $mapWhereLocal[$id] = $localLabel;
                                 }
                             }
                         }
@@ -3045,9 +3102,15 @@ class Opd extends BaseController
                         $doseRaw = trim((string) ($medRow['dosage'] ?? ''));
                         $whenRaw = trim((string) ($medRow['dosage_when'] ?? ''));
                         $freqRaw = trim((string) ($medRow['dosage_freq'] ?? ''));
-                        $medRow['dosage_label'] = ($doseRaw !== '' && isset($mapDose[$doseRaw])) ? $mapDose[$doseRaw] : $doseRaw;
-                        $medRow['dosage_when_label'] = ($whenRaw !== '' && isset($mapWhen[$whenRaw])) ? $mapWhen[$whenRaw] : $whenRaw;
-                        $medRow['dosage_freq_label'] = ($freqRaw !== '' && isset($mapFreq[$freqRaw])) ? $mapFreq[$freqRaw] : $freqRaw;
+                        $whereRaw = trim((string) ($medRow['dosage_where'] ?? ''));
+                        $medRow['dosage_label'] = ($doseRaw !== '' && $doseRaw !== '0' && isset($mapDose[$doseRaw])) ? $mapDose[$doseRaw] : ($doseRaw === '0' ? '' : $doseRaw);
+                        $medRow['dosage_when_label'] = ($whenRaw !== '' && $whenRaw !== '0' && isset($mapWhen[$whenRaw])) ? $mapWhen[$whenRaw] : ($whenRaw === '0' ? '' : $whenRaw);
+                        $medRow['dosage_freq_label'] = ($freqRaw !== '' && $freqRaw !== '0' && isset($mapFreq[$freqRaw])) ? $mapFreq[$freqRaw] : ($freqRaw === '0' ? '' : $freqRaw);
+                        $medRow['dosage_where_label'] = ($whereRaw !== '' && $whereRaw !== '0' && isset($mapWhere[$whereRaw])) ? $mapWhere[$whereRaw] : ($whereRaw === '0' ? '' : $whereRaw);
+                        $medRow['dosage_local_label'] = ($doseRaw !== '' && $doseRaw !== '0' && isset($mapDoseLocal[$doseRaw])) ? $mapDoseLocal[$doseRaw] : '';
+                        $medRow['dosage_when_local_label'] = ($whenRaw !== '' && $whenRaw !== '0' && isset($mapWhenLocal[$whenRaw])) ? $mapWhenLocal[$whenRaw] : '';
+                        $medRow['dosage_freq_local_label'] = ($freqRaw !== '' && $freqRaw !== '0' && isset($mapFreqLocal[$freqRaw])) ? $mapFreqLocal[$freqRaw] : '';
+                        $medRow['dosage_where_local_label'] = ($whereRaw !== '' && $whereRaw !== '0' && isset($mapWhereLocal[$whereRaw])) ? $mapWhereLocal[$whereRaw] : '';
 
                         $genericInline = trim((string) ($medRow['genericname'] ?? ($medRow['salt_name'] ?? '')));
                         if ($genericInline === '') {

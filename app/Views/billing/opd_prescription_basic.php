@@ -761,49 +761,62 @@
                                     Select group and preview medicines before add.
                                 </div>
                             </div>
-                            <div class="row g-2 mb-2">
-                                <div class="col-md-4">
-                                    <input type="text" class="form-control" id="med_name" list="medicine_suggest" placeholder="Medicine name">
-                                    <datalist id="medicine_suggest"></datalist>
+                            <div class="border rounded p-3 mb-3 bg-light-subtle">
+                                <div class="row g-3 align-items-end mb-2">
+                                    <div class="col-md-8">
+                                        <label class="form-label fw-semibold mb-1">Prescribed:</label>
+                                        <input type="text" class="form-control" id="med_name" list="medicine_suggest" placeholder="Search / enter medicine name">
+                                        <datalist id="medicine_suggest"></datalist>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-semibold mb-1">Type</label>
+                                        <input type="text" class="form-control" id="med_type" placeholder="TAB,CAP,SYR,INJ">
+                                    </div>
                                 </div>
-                                <div class="col-md-2">
-                                    <input type="text" class="form-control" id="med_type" placeholder="Type">
+                                <div class="row g-3 align-items-end mb-2">
+                                    <div class="col-md-3">
+                                        <label class="form-label fw-semibold mb-1">Dose:</label>
+                                        <select class="form-select" id="med_dosage">
+                                            <option value="">Select dose</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label fw-semibold mb-1">When:</label>
+                                        <select class="form-select" id="med_when">
+                                            <option value="">Select when</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label fw-semibold mb-1">Frequency:</label>
+                                        <select class="form-select" id="med_freq">
+                                            <option value="">Select frequency</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-semibold mb-1">Duration:</label>
+                                        <input type="text" class="form-control" id="med_days" placeholder="e.g. 5 days / 1 month / 3 doses">
+                                    </div>
                                 </div>
-                                <div class="col-md-2">
-                                    <select class="form-select" id="med_dosage">
-                                        <option value="">Dose</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-2">
-                                    <select class="form-select" id="med_when">
-                                        <option value="">When</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-2">
-                                    <select class="form-select" id="med_freq">
-                                        <option value="">Freq</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="row g-2 mb-3">
-                                <div class="col-md-2">
-                                    <input type="text" class="form-control" id="med_days" placeholder="Days">
-                                </div>
-                                <div class="col-md-2">
-                                    <input type="text" class="form-control" id="med_qty" placeholder="Qty">
-                                </div>
-                                <div class="col-md-2">
-                                    <select class="form-select" id="med_where">
-                                        <option value="">Where</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-4">
-                                    <input type="text" class="form-control" id="med_remark" placeholder="Remark">
-                                </div>
-                                <div class="col-md-2 d-grid gap-2">
-                                    <button type="button" class="btn btn-primary" id="btn_add_medicine">Add</button>
-                                    <button type="button" class="btn btn-outline-danger" id="btn_clear_medicine">Remove All</button>
-                                    <button type="button" class="btn btn-outline-secondary" id="btn_cancel_medicine_edit" style="display:none;">Cancel</button>
+                                <div class="row g-3 align-items-end">
+                                    <div class="col-md-3">
+                                        <label class="form-label fw-semibold mb-1">Where:</label>
+                                        <select class="form-select" id="med_where">
+                                            <option value="">Body place</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label fw-semibold mb-1">Qty:</label>
+                                        <input type="text" class="form-control" id="med_qty" placeholder="Qty">
+                                    </div>
+                                    <div class="col-md-5">
+                                        <label class="form-label fw-semibold mb-1">Medicine Advice:</label>
+                                        <input type="text" class="form-control" id="med_remark" placeholder="Instruction / medicine advice">
+                                    </div>
+                                    <div class="col-md-2 d-grid gap-2">
+                                        <button type="button" class="btn btn-primary" id="btn_add_medicine">+ADD / Update</button>
+                                        <button type="button" class="btn btn-outline-danger" id="btn_clear_medicine">Remove All</button>
+                                        <button type="button" class="btn btn-outline-secondary" id="btn_cancel_medicine_edit" style="display:none;">Cancel</button>
+                                    </div>
                                 </div>
                             </div>
 
@@ -831,7 +844,7 @@
                                 <table class="table table-bordered table-sm rx-list-table" id="tbl_medicine">
                                     <thead>
                                         <tr>
-                                            <th>Medicine</th><th>Type</th><th>Dose</th><th>When</th><th>Freq</th><th>Where</th><th>Days</th><th>Qty</th><th>Remark</th><th width="170">Action</th>
+                                            <th>Medicine</th><th>Type</th><th>Dose</th><th>When</th><th>Frequency</th><th>Where</th><th>Duration</th><th>Qty</th><th>Medicine Advice</th><th width="170">Action</th>
                                         </tr>
                                     </thead>
                                     <tbody><tr><td colspan="10" class="text-muted">No medicine added</td></tr></tbody>
@@ -1129,17 +1142,18 @@
         (rows || []).forEach(function(row) {
             var id = (row && row.id !== undefined) ? String(row.id) : '';
             var label = (row && row.label !== undefined) ? String(row.label) : '';
+            var localLabel = (row && row.local_label !== undefined) ? String(row.local_label) : '';
             if (!id || !label) {
                 return;
             }
-            html += '<option value="' + $('<div>').text(id).html() + '">' + $('<div>').text(label).html() + '</option>';
+            html += '<option value="' + $('<div>').text(id).html() + '"' + (localLabel ? ' data-local-label="' + $('<div>').text(localLabel).html() + '"' : '') + '>' + $('<div>').text(label).html() + '</option>';
         });
         $select.html(html);
     }
 
     function ensureMedicineMasterOption($select, value) {
         value = (value || '').toString().trim();
-        if (!value) {
+        if (!value || value === '0') {
             return;
         }
 
@@ -4825,18 +4839,26 @@
         if (dosage) {
             ensureMedicineMasterOption($('#med_dosage'), dosage);
             $('#med_dosage').val(dosage).trigger('change');
+        } else {
+            $('#med_dosage').val('').trigger('change');
         }
         if (whenValue) {
             ensureMedicineMasterOption($('#med_when'), whenValue);
             $('#med_when').val(whenValue).trigger('change');
+        } else {
+            $('#med_when').val('').trigger('change');
         }
         if (freqValue) {
             ensureMedicineMasterOption($('#med_freq'), freqValue);
             $('#med_freq').val(freqValue).trigger('change');
+        } else {
+            $('#med_freq').val('').trigger('change');
         }
         if (whereValue) {
             ensureMedicineMasterOption($('#med_where'), whereValue);
             $('#med_where').val(whereValue).trigger('change');
+        } else {
+            $('#med_where').val('').trigger('change');
         }
         if (daysValue) {
             $('#med_days').val(daysValue);

@@ -512,6 +512,97 @@ Date: 2026-02-26
 - `app/Controllers/Opd_prescription.php`
 - `app/Config/Routes.php`
 
+---
+
+## ABDM Identity Storage — Phase 1 (Paused)
+
+Date: 2026-04-04
+Status: **PAUSED** — Endpoint server (Gateway) development in progress separately.
+Resume after: Gateway API is ready and endpoint URLs are confirmed.
+
+### Reference Repository
+**ABDM Gateway / Endpoint Server:**
+> https://github.com/infodevsofttech-admin/HMS-ABDM-Gateway.git
+
+All ABDM API calls (ABHA creation, HPR lookup, HFR registration, token exchange) will be proxied through this gateway. HMS CI4 will call the gateway's REST endpoints rather than ABDM sandbox/production directly.
+
+---
+
+### What Was Completed (Phase 1 — Local Identity Storage)
+
+All work below is merged/committed in the HMS CI4 working directory. No gateway calls yet — only local DB storage of ABDM identifiers.
+
+#### 1. Migration — `app/Database/Migrations/2026-04-04-000036_AddAbdmIdentityFields.php`
+- Adds `abha_id VARCHAR(30) NULL` to `patient_master` (safe check; backfills from legacy cols: `abha_no` → `abha` → `abha_address`)
+- Adds `hpr_id VARCHAR(40) NULL` to `doctor_master` (safe check)
+- Private helpers `tableExists()` / `getColumns()` use raw `SHOW TABLES LIKE` / `SHOW COLUMNS FROM` (CI4 Migration `$db` does not expose `tableExists()` directly)
+- **ACTION REQUIRED: Run `php spark migrate` when resuming**
+
+#### 2. Patient ABHA ID — `app/Controllers/Patient.php`
+- `create()` + `update()` capture `input_abha_id` (POST), validate 14 digits, write to detected column
+- New endpoint `update_abha()` — AJAX quick-update for patient profile page
+- Helper methods: `isValidAbhaId()`, `applyPatientAbhaFieldValues()`, `resolvePatientAbhaIdField()`
+- Column resolution priority: `abha_id` → `abha_no` → `abha` → `abha_address`
+
+#### 3. Patient Views
+- `app/Views/billing/Patient_V.php` — ABHA ID input in New Patient tab (14-digit masked)
+- `app/Views/billing/Person_profile_V.php` — ABHA ID display + quick-update button with JS handler → POST `billing/patient/update_abha`
+- `app/Views/billing/Person_Edit_V.php` — ABHA ID editable field in full edit form
+
+#### 4. Doctor HPR ID — `app/Controllers/Setting/Doctor.php`
+- `store()` + `updateRecord()` capture `input_hpr_id`, validate format, write to detected column
+- Helper methods: `resolveDoctorHprField()`, `isValidHprId()`
+- Column resolution priority: `hpr_id` → `hpr_no` → `hpr_number`
+- Validation regex: `/^[A-Z0-9\/-]{6,40}$/`
+
+#### 5. Doctor Views
+- `app/Views/Setting/Doctor/Doctor_V.php` — HPR ID input in create form
+- `app/Views/Setting/Doctor/Doctor_profile_V.php` — HPR ID prefilled input in profile/edit form
+
+#### 6. Hospital HFR ID — `app/Controllers/Setting/HospitalProfile.php`
+- `index()` reads `H_HFR_ID` from `hospital_setting` key-value store
+- `save()` validates HFR format, upserts `H_HFR_ID`
+- `reset()` deletes `H_HFR_ID` entry
+- View: `app/Views/Setting/Admin/hospital_profile.php` — HFR ID input field; wired to save FormData and reset JS
+
+#### 7. Routes — `app/Config/Routes.php`
+- Added: `$routes->post('patient/update_abha', 'Patient::update_abha');`
+
+---
+
+### What Remains — Phase 2 (After Gateway Is Ready)
+
+These tasks depend on the Gateway API (https://github.com/infodevsofttech-admin/HMS-ABDM-Gateway.git) being operational.
+
+| # | Task | Notes |
+|---|------|-------|
+| 1 | **ABHA Creation/Linking flow** | Call gateway to create/link ABHA from Patient form; store returned 14-digit ABHA in `abha_id` |
+| 2 | **ABHA OTP Verification flow** | Gateway handles ABDM OTP; HMS shows verify modal; on success update patient record |
+| 3 | **HPR Lookup/Verify for Doctors** | Call gateway HPR search by doctor name/reg-no; store verified HPR ID |
+| 4 | **HFR Registration status** | Call gateway to check/register hospital in HFR; store `H_HFR_ID` |
+| 5 | **Token management** | Gateway handles ABDM access tokens; HMS only sends UID + secret; no token stored in HMS DB |
+| 6 | **Surface ABHA/HPR/HFR in Pathlab/Radiology print templates** | Add to diagnosis data arrays from joined master tables; expose as `{{abha_id}}`, `{{hpr_id}}`, `{{hfr_id}}` placeholders |
+| 7 | **Patient search by ABHA ID** | Extend `Patient::search()` to include `abha_id` alongside `udai` and `mphone1` |
+| 8 | **Snapshot HPR at lab report sign time** | Add `signed_hpr_id` column to lab invoice header; store at signing for immutable audit trail |
+| 9 | **ABHA QR Code on OPD/IPD/Billing printouts** | Generate QR from ABHA ID; embed in print views |
+
+---
+
+### Pathlab / Radiology — Confirmed No Separate Storage Needed
+- `Diagnosis.php` already JOINs `patient_master` (18+ JOIN references) → inherits `abha_id`
+- `Diagnosis.php` reads `hospital_setting` via `readSetting()` → inherits `H_HFR_ID`
+- Doctor name on reports traces back to `doctor_master` → inherits `hpr_id`
+- **Exception:** Only if immutable audit snapshot is required at sign time (Phase 2, Task 8 above)
+
+---
+
+### Gateway Integration Notes (To Be Confirmed)
+- Gateway base URL: to be confirmed from https://github.com/infodevsofttech-admin/HMS-ABDM-Gateway.git
+- Expected auth: shared secret / API key between HMS and Gateway (not ABDM tokens directly)
+- HMS will POST patient/doctor data to Gateway; Gateway returns ABDM response
+- All ABDM sandbox vs. production switching should be configured at Gateway level, not in HMS
+- HMS Config key to add when ready: `ABDM_GATEWAY_BASE_URL`, `ABDM_GATEWAY_KEY` in `.env`
+
 ### Validation status
 - VS Code diagnostics reported no errors in modified files after final patches.
 

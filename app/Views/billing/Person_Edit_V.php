@@ -10,6 +10,7 @@
 </div>
 <?php
     $user = auth()->user();
+    $patientAbhaId = (string) ($data[0]->abha_id ?? $data[0]->abha_no ?? $data[0]->abha ?? $data[0]->abha_address ?? '');
     $isAdmin = is_object($user) && method_exists($user, 'inGroup') ? $user->inGroup('admin') : false;
     if ($data[0]->p_edit == 1 || $isAdmin) {
         $readonly = '';
@@ -80,6 +81,14 @@
                                 <input class="form-control input-sm" name="input_Aadhar" id="input_Aadhar"
                                     value="<?=$data[0]->udai ?>" placeholder="Aadhar Number" type="text"
                                     autocomplete="off">
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label>ABHA ID</label>
+                                <input class="form-control input-sm" name="input_abha_id" id="input_abha_id"
+                                    value="<?= esc($patientAbhaId) ?>" placeholder="14-digit ABHA ID" type="text"
+                                    autocomplete="off" maxlength="14">
                             </div>
                         </div>
                         <div class="col-md-2">

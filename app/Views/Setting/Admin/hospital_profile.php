@@ -28,6 +28,10 @@
                 <input type="text" class="form-control" id="hospital_email" value="<?= esc($hospital_email ?? '') ?>" placeholder="hospital@example.com">
             </div>
             <div class="col-md-6">
+                <label class="form-label">Hospital HFR ID</label>
+                <input type="text" class="form-control" id="hospital_hfr_id" value="<?= esc($hospital_hfr_id ?? '') ?>" placeholder="ABDM HFR ID">
+            </div>
+            <div class="col-md-6">
                 <label class="form-label">Version / Update ID</label>
                 <input type="text" class="form-control" id="footer_version" value="<?= esc($footer_version ?? '') ?>" placeholder="e.g. 2026.03.27.01">
                 <div class="form-text">Shown in the footer so live deployments can be verified without code changes.</div>
@@ -147,6 +151,7 @@
         fd.append('hospital_address_2', ($('#hospital_address_2').val() || '').trim());
         fd.append('hospital_phone', ($('#hospital_phone').val() || '').trim());
         fd.append('hospital_email', ($('#hospital_email').val() || '').trim());
+        fd.append('hospital_hfr_id', ($('#hospital_hfr_id').val() || '').trim());
         fd.append('footer_version', ($('#footer_version').val() || '').trim());
         fd.append('pharmacy_name', ($('#pharmacy_name').val() || '').trim());
         fd.append('pharmacy_address', ($('#pharmacy_address').val() || '').trim());
@@ -261,6 +266,7 @@
             $('#hospital_address_2').val('');
             $('#hospital_phone').val('');
             $('#hospital_email').val('');
+            $('#hospital_hfr_id').val('');
             $('#footer_version').val('');
             $('#pharmacy_name').val('');
             $('#pharmacy_address').val('');

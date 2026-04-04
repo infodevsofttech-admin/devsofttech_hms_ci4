@@ -67,6 +67,10 @@
                     <input class="form-control" name="input_doc_reg_no" placeholder="NMC/MCI Registration No." type="text" value="<?= esc($formData['input_doc_reg_no'] ?? '') ?>">
                 </div>
                 <div class="col-md-4">
+                    <label class="form-label">HPR ID</label>
+                    <input class="form-control" name="input_hpr_id" placeholder="ABDM HPR ID" type="text" value="<?= esc($formData['input_hpr_id'] ?? '') ?>">
+                </div>
+                <div class="col-md-4">
                     <label class="form-label">Date of Birth</label>
                     <input class="form-control" name="datepicker_dob" type="date" value="<?= esc($doctorDobValue) ?>">
                 </div>

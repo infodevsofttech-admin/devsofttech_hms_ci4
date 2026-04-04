@@ -330,13 +330,52 @@ $toLocalText = static function (string $input): string {
             <?php foreach (($rx_medicines ?? []) as $idx => $med) : ?>
                 <?php
                 $dosage = trim((string) ($med['dosage'] ?? ''));
+                if ($dosage === '0') {
+                    $dosage = '';
+                }
                 $when = trim((string) ($med['dosage_when'] ?? ''));
+                if ($when === '0') {
+                    $when = '';
+                }
                 $freq = trim((string) ($med['dosage_freq'] ?? ''));
+                if ($freq === '0') {
+                    $freq = '';
+                }
+                $where = trim((string) ($med['dosage_where_label'] ?? ($med['dosage_where_str'] ?? ($med['dosage_where'] ?? ''))));
+                if ($where === '0') {
+                    $where = '';
+                }
                 $doseText = trim($dosage . ($freq !== '' ? ' / ' . $freq : ''));
                 $genericText = trim((string) ($med['genericname'] ?? ($med['generic_name'] ?? ($med['salt_name'] ?? ''))));
-                $instruction = trim(($when !== '' ? $when : '') . ((trim((string) ($med['remark'] ?? '')) !== '') ? (' | ' . trim((string) ($med['remark'] ?? ''))) : ''));
-                $doseLocal = $toLocalText(trim($doseText . ($when !== '' ? ' ' . $when : '')));
-                $instructionLocal = $toLocalText($instruction);
+                $instructionParts = [];
+                if ($when !== '') {
+                    $instructionParts[] = $when;
+                }
+                if ($where !== '') {
+                    $instructionParts[] = 'Where: ' . $where;
+                }
+                if (trim((string) ($med['remark'] ?? '')) !== '') {
+                    $instructionParts[] = trim((string) ($med['remark'] ?? ''));
+                }
+                $instruction = trim(implode(' | ', $instructionParts));
+                $doseLocalParts = array_filter([
+                    trim((string) ($med['dosage_local_label'] ?? '')),
+                    trim((string) ($med['dosage_when_local_label'] ?? '')),
+                    trim((string) ($med['dosage_freq_local_label'] ?? '')),
+                ]);
+                $instructionLocalParts = [];
+                $whereLocal = trim((string) ($med['dosage_where_local_label'] ?? ''));
+                if ($whereLocal !== '') {
+                    $instructionLocalParts[] = $whereLocal;
+                }
+                if ($instruction !== '') {
+                    $translatedInstruction = $toLocalText($instruction);
+                    if ($translatedInstruction !== '' && strtolower($translatedInstruction) !== strtolower($instruction)) {
+                        $instructionLocalParts[] = $translatedInstruction;
+                    }
+                }
+                $doseLocal = !empty($doseLocalParts) ? implode(' ', $doseLocalParts) : $toLocalText(trim($doseText . ($when !== '' ? ' ' . $when : '')));
+                $instructionLocal = !empty($instructionLocalParts) ? implode(' | ', array_values(array_unique($instructionLocalParts))) : $toLocalText($instruction);
                 ?>
                 <tr>
                     <td><?= esc((string) ($idx + 1)) ?></td>

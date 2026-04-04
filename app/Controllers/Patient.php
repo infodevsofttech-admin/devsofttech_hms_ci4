@@ -38,6 +38,7 @@ class Patient extends BaseController
     public function create()
 	{
 		$isAjax = $this->request->isAJAX();
+		$abhaId = trim((string) $this->request->getPost('input_abha_id'));
 
 		$chk_age = $this->request->getPost('chk_age');
 		$age_month = (string) $this->request->getPost('input_age_month');
@@ -75,6 +76,19 @@ class Patient extends BaseController
 				->with('error', $errorText);
 		}
 
+		if ($abhaId !== '' && ! $this->isValidAbhaId($abhaId)) {
+			if ($isAjax) {
+				return $this->response->setJSON([
+					'insertid' => 0,
+					'error_text' => 'ABHA ID must be a 14-digit number.',
+				]);
+			}
+
+			return redirect()->to(base_url('billing/patient'))
+				->withInput()
+				->with('error', 'ABHA ID must be a 14-digit number.');
+		}
+
 		$bloodGroup = trim((string) $this->request->getPost('input_blood_group'));
 		if ($bloodGroup === '') {
 			$bloodGroup = 'Not Define';
@@ -96,6 +110,7 @@ class Patient extends BaseController
 			'udai' => strtoupper((string) $this->request->getPost('input_udai')),
 			'estimate_dob' => $estimate_dob,
 		];
+		$this->applyPatientAbhaFieldValues($data, $abhaId);
 
 		if ($chk_age === 'on') {
 			$data['age'] = $age_year;
@@ -383,6 +398,7 @@ class Patient extends BaseController
 		}
 
 		$chk_age = $this->request->getPost('chk_age');
+		$abhaId = trim((string) $this->request->getPost('input_abha_id'));
 		$age_month = (string) $this->request->getPost('input_age_month');
 		$age_year = (string) $this->request->getPost('input_age_year');
 
@@ -410,6 +426,13 @@ class Patient extends BaseController
 			]);
 		}
 
+		if ($abhaId !== '' && ! $this->isValidAbhaId($abhaId)) {
+			return $this->response->setJSON([
+				'update' => 0,
+				'error_text' => 'ABHA ID must be a 14-digit number.',
+			]);
+		}
+
 		$data = [
 			'mphone1' => $this->request->getPost('input_mphone1'),
 			'p_fname' => strtoupper((string) $this->request->getPost('input_name')),
@@ -427,6 +450,7 @@ class Patient extends BaseController
 			'estimate_dob' => $estimate_dob,
 			'blood_group' => $this->request->getPost('input_blood_group'),
 		];
+		$this->applyPatientAbhaFieldValues($data, $abhaId);
 
 		if ($chk_age === 'on') {
 			$data['age'] = $age_year;
@@ -462,6 +486,42 @@ class Patient extends BaseController
 
 		$patientModel = new PatientModel();
 		$patientModel->updatePatient(['udai' => $udai], $pid);
+
+		return $this->response->setJSON([
+			'update' => 1,
+			'showcontent' => 'Data Saved successfully',
+		]);
+	}
+
+	public function update_abha()
+	{
+		if (!$this->request->isAJAX()) {
+			return $this->response
+				->setStatusCode(400)
+				->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
+		}
+
+		$pid = (int) $this->request->getPost('p_id');
+		$abhaId = trim((string) $this->request->getPost('abha_id'));
+
+		if ($abhaId !== '' && ! $this->isValidAbhaId($abhaId)) {
+			return $this->response->setJSON([
+				'update' => 0,
+				'error_text' => 'ABHA ID must be a 14-digit number.',
+			]);
+		}
+
+		$data = [];
+		$this->applyPatientAbhaFieldValues($data, $abhaId);
+		if ($data === []) {
+			return $this->response->setJSON([
+				'update' => 0,
+				'error_text' => 'ABHA field not found in patient master.',
+			]);
+		}
+
+		$patientModel = new PatientModel();
+		$patientModel->updatePatient($data, $pid);
 
 		return $this->response->setJSON([
 			'update' => 1,
@@ -968,6 +1028,39 @@ class Patient extends BaseController
 
 			$builder->insert(['name' => $name]);
 		}
+	}
+
+	private function applyPatientAbhaFieldValues(array &$data, string $abhaId): void
+	{
+		$targetField = $this->resolvePatientAbhaIdField();
+		if ($targetField !== null) {
+			$data[$targetField] = $abhaId;
+		}
+	}
+
+	private function resolvePatientAbhaIdField(): ?string
+	{
+		if (! $this->db->tableExists('patient_master')) {
+			return null;
+		}
+
+		$fields = $this->db->getFieldNames('patient_master') ?? [];
+		foreach (['abha_id', 'abha_no', 'abha'] as $field) {
+			if (in_array($field, $fields, true)) {
+				return $field;
+			}
+		}
+
+		if (in_array('abha_address', $fields, true)) {
+			return 'abha_address';
+		}
+
+		return null;
+	}
+
+	private function isValidAbhaId(string $value): bool
+	{
+		return preg_match('/^\d{14}$/', $value) === 1;
 	}
 
 

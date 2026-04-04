@@ -55,10 +55,28 @@ class Doctor extends BaseController
 
         $doctorModel = new DoctorModel();
         $regField = $this->resolveDoctorRegField();
+        $hprField = $this->resolveDoctorHprField();
         $shortDescription = trim((string) $this->request->getPost('txt_doc_sign'));
         $regInput = trim((string) $this->request->getPost('input_doc_reg_no'));
+        $hprInput = strtoupper(trim((string) $this->request->getPost('input_hpr_id')));
         if ($regInput === '' && $shortDescription !== '') {
             $regInput = $this->extractRegNoFromText($shortDescription);
+        }
+
+        if ($hprInput !== '' && ! $this->isValidHprId($hprInput)) {
+            $errors = ['HPR ID format is invalid. Use alphanumeric characters with / or -'];
+            if ($this->request->isAJAX()) {
+                $templateContext = $this->getDoctorTemplateContext();
+                return view('Setting/Doctor/Doctor_V', [
+                    'errors' => $errors,
+                    'formData' => $this->request->getPost(),
+                    'template_options' => $templateContext['options'],
+                    'opd_print_template_options' => $templateContext['opd_print_options'],
+                    'template_fields' => $templateContext['fields'],
+                ]);
+            }
+
+            return redirect()->back()->withInput()->with('errors', $errors);
         }
 
         $data = [
@@ -90,6 +108,9 @@ class Doctor extends BaseController
 
         if ($regField !== null) {
             $data[$regField] = $regInput;
+        }
+        if ($hprField !== null) {
+            $data[$hprField] = $hprInput;
         }
 
         $insertId = $doctorModel->insert($data);
@@ -141,10 +162,20 @@ class Doctor extends BaseController
         $doctorModel = new DoctorModel();
         $docId = (int) $this->request->getPost('doc_id');
         $regField = $this->resolveDoctorRegField();
+        $hprField = $this->resolveDoctorHprField();
         $shortDescription = trim((string) $this->request->getPost('txt_doc_sign'));
         $regInput = trim((string) $this->request->getPost('input_doc_reg_no'));
+        $hprInput = strtoupper(trim((string) $this->request->getPost('input_hpr_id')));
         if ($regInput === '' && $shortDescription !== '') {
             $regInput = $this->extractRegNoFromText($shortDescription);
+        }
+
+        if ($hprInput !== '' && ! $this->isValidHprId($hprInput)) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'showcontent' => '',
+                'error_text' => 'HPR ID format is invalid. Use alphanumeric characters with / or -',
+            ]);
         }
 
         $data = [
@@ -176,6 +207,9 @@ class Doctor extends BaseController
 
         if ($regField !== null) {
             $data[$regField] = $regInput;
+        }
+        if ($hprField !== null) {
+            $data[$hprField] = $hprInput;
         }
 
         $updated = $doctorModel->updateDoctor($data, $docId);
@@ -540,6 +574,27 @@ class Doctor extends BaseController
         }
 
         return null;
+    }
+
+    private function resolveDoctorHprField(): ?string
+    {
+        if (! $this->db->tableExists('doctor_master')) {
+            return null;
+        }
+
+        $fields = $this->db->getFieldNames('doctor_master');
+        foreach (['hpr_id', 'hpr_no', 'hpr_number'] as $field) {
+            if (in_array($field, $fields, true)) {
+                return $field;
+            }
+        }
+
+        return null;
+    }
+
+    private function isValidHprId(string $value): bool
+    {
+        return preg_match('/^[A-Z0-9\/-]{6,40}$/', $value) === 1;
     }
 
     private function extractRegNoFromText(string $text): string

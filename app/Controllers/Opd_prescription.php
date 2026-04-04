@@ -4733,6 +4733,8 @@ class Opd_prescription extends BaseController
             $insert['remark'] = strtoupper(trim((string) $this->request->getPost('remark')));
         }
 
+        $this->applyDoseMasterStringFields($insert, $fields);
+
         $user = auth()->user();
         if (in_array('update_by', $fields, true)) {
             $userLabel = $user ? ($user->username ?? $user->email ?? 'User') : 'User';
@@ -4990,6 +4992,8 @@ class Opd_prescription extends BaseController
                 $update[$field] = $value;
             }
         }
+
+        $this->applyDoseMasterStringFields($update, $fields);
 
         if (empty($update)) {
             return $this->response->setJSON(['update' => 0, 'error_text' => 'No editable fields found']);
@@ -5372,15 +5376,43 @@ class Opd_prescription extends BaseController
 
         $fields = $this->db->getFieldNames($table);
         $idField = $this->resolveFirstField($fields, $idCandidates);
-        $labelField = $this->resolveFirstField($fields, $labelCandidates);
-        if ($idField === null || $labelField === null) {
+        if ($idField === null) {
             return [];
         }
 
+        $labelField = null;
+        $secondaryLabelField = null;
+        $localLabelField = null;
+
+        if ($table === 'opd_dose_shed') {
+            $labelField = $this->resolveFirstField($fields, ['dose_show_sign', 'dose_sign', 'dose_sign_desc', 'name']);
+            $localLabelField = $this->resolveFirstField($fields, ['dose_show_desc', 'dose_sign_hindi', 'dose_sign_desc']);
+        } else {
+            $labelField = $this->resolveFirstField($fields, ['dose_sign', 'dose_sign_desc', 'name']);
+            $secondaryLabelField = $this->resolveFirstField($fields, ['dose_sign_desc', 'name']);
+            $localLabelField = $this->resolveFirstField($fields, ['dose_sign_hindi', 'dose_sign_desc']);
+        }
+
+        if ($labelField === null) {
+            $labelField = $this->resolveFirstField($fields, $labelCandidates);
+        }
+
+        if ($labelField === null) {
+            return [];
+        }
+
+        $select = [$idField . ' as id', $labelField . ' as label'];
+        if ($secondaryLabelField !== null && $secondaryLabelField !== $labelField) {
+            $select[] = $secondaryLabelField . ' as secondary_label';
+        }
+        if ($localLabelField !== null && $localLabelField !== $labelField) {
+            $select[] = $localLabelField . ' as local_label';
+        }
+
         return $this->db->table($table)
-            ->select($idField . ' as id,' . $labelField . ' as label')
+            ->select(implode(',', $select))
             ->where($labelField . ' !=', '')
-            ->orderBy($labelField, 'ASC')
+            ->orderBy($idField, 'ASC')
             ->get()
             ->getResultArray();
     }
@@ -5396,7 +5428,27 @@ class Opd_prescription extends BaseController
         foreach ($rows as $row) {
             $id = trim((string) ($row['id'] ?? ''));
             $label = trim((string) ($row['label'] ?? ''));
-            if ($id === '' || $label === '') {
+            if ($id === '' || $id === '0' || $label === '') {
+                continue;
+            }
+            $map[$id] = $label;
+        }
+
+        return $map;
+    }
+
+    private function getDoseMasterLocalLabelMap(string $table, array $idCandidates, array $labelCandidates): array
+    {
+        $rows = $this->getDoseMasterRows($table, $idCandidates, $labelCandidates);
+        if (empty($rows)) {
+            return [];
+        }
+
+        $map = [];
+        foreach ($rows as $row) {
+            $id = trim((string) ($row['id'] ?? ''));
+            $label = trim((string) ($row['local_label'] ?? ($row['secondary_label'] ?? '')));
+            if ($id === '' || $id === '0' || $label === '') {
                 continue;
             }
             $map[$id] = $label;
@@ -5408,11 +5460,33 @@ class Opd_prescription extends BaseController
     private function resolveDoseMasterLabel($value, array $map): string
     {
         $raw = trim((string) $value);
-        if ($raw === '') {
+        if ($raw === '' || $raw === '0') {
             return '';
         }
 
         return $map[$raw] ?? $raw;
+    }
+
+    private function applyDoseMasterStringFields(array &$payload, array $fields): void
+    {
+        $doseMap = $this->getDoseMasterLabelMap('opd_dose_shed', ['dose_shed_id', 'id'], ['dose_show_sign', 'dose_sign', 'dose_sign_desc', 'name']);
+        $whenMap = $this->getDoseMasterLabelMap('opd_dose_when', ['dose_when_id', 'id'], ['dose_sign', 'dose_sign_desc', 'name']);
+        $freqMap = $this->getDoseMasterLabelMap('opd_dose_frequency', ['dose_freq_id', 'id'], ['dose_sign', 'dose_sign_desc', 'name']);
+        $whereMap = $this->getDoseMasterLabelMap('opd_dose_where', ['dose_where_id', 'id'], ['dose_sign', 'dose_sign_desc', 'name']);
+
+        $stringFields = [
+            'dosage_str' => $this->resolveDoseMasterLabel($payload['dosage'] ?? '', $doseMap),
+            'dosage_when_str' => $this->resolveDoseMasterLabel($payload['dosage_when'] ?? '', $whenMap),
+            'dosage_freq_str' => $this->resolveDoseMasterLabel($payload['dosage_freq'] ?? '', $freqMap),
+            'dosage_where_str' => $this->resolveDoseMasterLabel($payload['dosage_where'] ?? '', $whereMap),
+        ];
+
+        foreach ($stringFields as $field => $value) {
+            if ($value === '' || ! in_array($field, $fields, true)) {
+                continue;
+            }
+            $payload[$field] = $value;
+        }
     }
 
     private function hydrateNabhPrescriptionFields(array $row, string $remarks): array

@@ -41,6 +41,14 @@
                                             </div>
                                             <div class="col-md-3">
                                                 <div class="form-group">
+                                                    <label class="form-label">ABHA ID</label>
+                                                    <input class="form-control" name="input_abha_id" id="input_abha_id"
+                                                        placeholder="14-digit ABHA ID" type="text" autocomplete="off"
+                                                        maxlength="14" data-inputmask='"mask": "99999999999999"' data-mask>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <div class="form-group">
                                                     <label class="form-label">Phone Number</label>
                                                     <input class="form-control" name="input_mphone1" id="input_mphone1"
                                                         placeholder="Phone Number" type="text" autocomplete="off" required

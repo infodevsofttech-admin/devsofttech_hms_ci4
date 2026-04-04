@@ -1,5 +1,6 @@
 <?php
 $doctorRegNo = '';
+$doctorHprId = '';
 if (!empty($data) && !empty($data[0])) {
     foreach (['nmc_reg_no', 'mci_reg_no', 'registration_no', 'reg_no', 'doctor_reg_no', 'doc_reg_no', 'council_reg_no'] as $regField) {
         if (isset($data[0]->{$regField}) && trim((string) $data[0]->{$regField}) !== '') {
@@ -17,6 +18,13 @@ if (!empty($data) && !empty($data[0])) {
                     $doctorRegNo = trim((string) $matches[1]);
                 }
             }
+        }
+    }
+
+    foreach (['hpr_id', 'hpr_no', 'hpr_number'] as $hprField) {
+        if (isset($data[0]->{$hprField}) && trim((string) $data[0]->{$hprField}) !== '') {
+            $doctorHprId = trim((string) $data[0]->{$hprField});
+            break;
         }
     }
 }
@@ -80,6 +88,10 @@ if (!empty($data) && !empty($data[0]) && !empty($data[0]->dob)) {
                     <div class="col-md-3">
                         <label class="form-label">Doctor Registration No.</label>
                         <input class="form-control" name="input_doc_reg_no" placeholder="NMC/MCI Registration No." type="text" value="<?= esc($doctorRegNo) ?>">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">HPR ID</label>
+                        <input class="form-control" name="input_hpr_id" placeholder="ABDM HPR ID" type="text" value="<?= esc($doctorHprId) ?>">
                     </div>
                     <div class="col-md-3">
                         <label class="form-label">Date of Birth</label>

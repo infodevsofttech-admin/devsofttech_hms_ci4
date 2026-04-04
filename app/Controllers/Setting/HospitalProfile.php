@@ -23,6 +23,7 @@ class HospitalProfile extends BaseController
             'hospital_address_2' => $this->readSettingValue('H_address_2'),
             'hospital_phone' => $this->readSettingValue('H_phone_No'),
             'hospital_email' => $this->readSettingValue('H_Email'),
+            'hospital_hfr_id' => $this->readSettingValue('H_HFR_ID'),
             'footer_version' => $this->readSettingValue('HMS_UPDATE_ID') !== ''
                 ? $this->readSettingValue('HMS_UPDATE_ID')
                 : hms_default_version_id(),
@@ -56,6 +57,7 @@ class HospitalProfile extends BaseController
         $address2 = trim((string) $this->request->getPost('hospital_address_2'));
         $phone = trim((string) $this->request->getPost('hospital_phone'));
         $email = trim((string) $this->request->getPost('hospital_email'));
+        $hfrId = strtoupper(trim((string) $this->request->getPost('hospital_hfr_id')));
         $footerVersion = trim((string) $this->request->getPost('footer_version'));
 
         $pharmacyName = trim((string) $this->request->getPost('pharmacy_name'));
@@ -67,6 +69,15 @@ class HospitalProfile extends BaseController
             return $this->response->setJSON([
                 'update' => 0,
                 'error_text' => 'Hospital name and address are required.',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        if ($hfrId !== '' && preg_match('/^[A-Z0-9\/-]{6,40}$/', $hfrId) !== 1) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'HFR ID format is invalid. Use alphanumeric characters with / or -',
                 'csrfName' => csrf_token(),
                 'csrfHash' => csrf_hash(),
             ]);
@@ -86,6 +97,9 @@ class HospitalProfile extends BaseController
             $savedCount++;
         }
         if ($this->upsertSettingValue('H_Email', $email)) {
+            $savedCount++;
+        }
+        if ($this->upsertSettingValue('H_HFR_ID', $hfrId)) {
             $savedCount++;
         }
         if ($this->upsertSettingValue('HMS_UPDATE_ID', $footerVersion)) {
@@ -204,6 +218,7 @@ class HospitalProfile extends BaseController
             'H_address_2',
             'H_phone_No',
             'H_Email',
+            'H_HFR_ID',
             'HMS_UPDATE_ID',
             'H_logo',
             'H_Med_Name',

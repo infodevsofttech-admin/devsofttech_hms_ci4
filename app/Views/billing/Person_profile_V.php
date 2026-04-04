@@ -14,6 +14,9 @@
     <form role="form" class="form1">
         <?= csrf_field() ?>
         <?php
+            $patientAbhaId = (string) ($data[0]->abha_id ?? $data[0]->abha_no ?? $data[0]->abha ?? $data[0]->abha_address ?? '');
+        ?>
+        <?php
             $user = auth()->user();
             $canEditOpd = is_object($user) && method_exists($user, 'can') ? $user->can('billing.opd.edit') : false;
             $canChargeEdit = is_object($user) && method_exists($user, 'can') ? $user->can('billing.charges.edit') : false;
@@ -105,6 +108,10 @@
                                     <div class="col-lg-9 col-md-8"><?=$data[0]->udai?></div>
                                 </div>
                                 <div class="row">
+                                    <div class="col-lg-3 col-md-4 label">ABHA ID</div>
+                                    <div class="col-lg-9 col-md-8"><?= esc($patientAbhaId) ?></div>
+                                </div>
+                                <div class="row">
                                     <div class="col-lg-3 col-md-4 label">Phone</div>
                                     <div class="col-lg-9 col-md-8"><?=$data[0]->mphone1?></div>
                                 </div>
@@ -128,6 +135,13 @@
                                         <div class="input-group input-group-sm">
                                             <input class="form-control" type="text" name="input_Aadhar" id="input_Aadhar" value="<?=$data[0]->udai ?>">
                                             <button type="button" id="btn_update_aadhar" class="btn btn-info">Update</button>
+                                        </div>
+                                    </div>
+                                    <div class="col-lg-6">
+                                        <label class="form-label">ABHA ID</label>
+                                        <div class="input-group input-group-sm">
+                                            <input class="form-control" type="text" name="input_abha_id" id="input_abha_id" value="<?= esc($patientAbhaId) ?>" maxlength="14">
+                                            <button type="button" id="btn_update_abha" class="btn btn-info">Update</button>
                                         </div>
                                     </div>
                                     <div class="col-lg-6">
@@ -276,6 +290,28 @@ $(document).ready(function() {
             $.post('<?= base_url('billing/patient/update_aadhar') ?>', {
                 "p_id": p_id,
                 "udai": udai,
+                [csrf_name]: csrf_value
+            }, function(data) {
+                load_form('<?= base_url('billing/patient/person_record') ?>/' + p_id);
+            });
+        }
+    });
+
+    $('#btn_update_abha').click(function() {
+        var p_id = $('#p_id').val();
+        var abha_id = ($('#input_abha_id').val() || '').trim();
+        var csrf_name = '<?= csrf_token() ?>';
+        var csrf_value = $('input[name="<?= csrf_token() ?>"]').first().val() || '<?= csrf_hash() ?>';
+
+        if (abha_id !== '' && !/^\d{14}$/.test(abha_id)) {
+            alert('ABHA ID must be a 14-digit number.');
+            return;
+        }
+
+        if (confirm("Are you sure Update ABHA ID.")) {
+            $.post('<?= base_url('billing/patient/update_abha') ?>', {
+                "p_id": p_id,
+                "abha_id": abha_id,
                 [csrf_name]: csrf_value
             }, function(data) {
                 load_form('<?= base_url('billing/patient/person_record') ?>/' + p_id);

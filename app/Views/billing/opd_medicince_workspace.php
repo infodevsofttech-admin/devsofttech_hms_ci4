@@ -105,19 +105,27 @@
                     <div class="row g-1 mb-2">
                         <div class="col-6">
                             <label class="form-label form-label-sm mb-0">Dose</label>
-                            <input type="text" id="med_default_dosage" class="form-control form-control-sm" placeholder="e.g. 1-0-1">
+                            <select id="med_default_dosage" class="form-select form-select-sm">
+                                <option value="">Select dose</option>
+                            </select>
                         </div>
                         <div class="col-6">
                             <label class="form-label form-label-sm mb-0">When</label>
-                            <input type="text" id="med_default_when" class="form-control form-control-sm" placeholder="e.g. AC">
+                            <select id="med_default_when" class="form-select form-select-sm">
+                                <option value="">Select when</option>
+                            </select>
                         </div>
                         <div class="col-6">
                             <label class="form-label form-label-sm mb-0">Frequency</label>
-                            <input type="text" id="med_default_freq" class="form-control form-control-sm" placeholder="e.g. TDS">
+                            <select id="med_default_freq" class="form-select form-select-sm">
+                                <option value="">Select frequency</option>
+                            </select>
                         </div>
                         <div class="col-6">
                             <label class="form-label form-label-sm mb-0">Route</label>
-                            <input type="text" id="med_default_where" class="form-control form-control-sm" placeholder="e.g. ORAL">
+                            <select id="med_default_where" class="form-select form-select-sm">
+                                <option value="">Select route</option>
+                            </select>
                         </div>
                         <div class="col-4">
                             <label class="form-label form-label-sm mb-0">Days</label>
@@ -151,6 +159,7 @@
     var activeListFilter = 'all';
     var companySuggestTimer = null;
     var medMasterDataTable = null;
+    var defaultDoseMasterCache = { dose: [], when: [], freq: [], where: [] };
 
     function showToast(message, type) {
         var toastId = 'med_toast_' + Date.now();
@@ -257,7 +266,93 @@
     function clearForm() {
         $('#med_id').val('0');
         $('#med_item_name,#med_formulation,#med_genericname,#med_salt_name,#med_dosage_restriction,#med_company_name').val('');
-        $('#med_default_dosage,#med_default_when,#med_default_freq,#med_default_where,#med_default_days,#med_default_qty,#med_default_remark').val('');
+        $('#med_default_days,#med_default_qty,#med_default_remark').val('');
+        $('#med_default_dosage,#med_default_when,#med_default_freq,#med_default_where').val('');
+    }
+
+    function renderDefaultMasterSelect($select, rows, placeholder) {
+        var html = '<option value="">' + $('<div>').text(placeholder || 'Select').html() + '</option>';
+        (rows || []).forEach(function(row) {
+            var id = (row && row.id !== undefined) ? String(row.id) : '';
+            var label = (row && row.label !== undefined) ? String(row.label) : '';
+            var desc = (row && row.secondary_label !== undefined) ? String(row.secondary_label) : '';
+            if (!id || !label || id === '0') {
+                return;
+            }
+            var text = label;
+            if (desc && desc.toLowerCase() !== label.toLowerCase()) {
+                text += ' - ' + desc;
+            }
+            html += '<option value="' + $('<div>').text(id).html() + '">' + $('<div>').text(text).html() + '</option>';
+        });
+        $select.html(html);
+    }
+
+    function ensureDefaultMasterOption($select, value) {
+        value = (value || '').toString().trim();
+        if (!value || value === '0') {
+            return;
+        }
+        var safeValue = value.replace(/"/g, '&quot;');
+        if ($select.find('option[value="' + safeValue + '"]').length) {
+            return;
+        }
+        $select.append('<option value="' + $('<div>').text(value).html() + '">' + $('<div>').text(value + ' (Current)').html() + '</option>');
+    }
+
+    function setDefaultMasterValue($select, value) {
+        var raw = (value || '').toString().trim();
+        if (!raw || raw === '0') {
+            $select.val('');
+            return;
+        }
+
+        ensureDefaultMasterOption($select, raw);
+        if ($select.find('option[value="' + raw.replace(/"/g, '&quot;') + '"]').length) {
+            $select.val(raw);
+            return;
+        }
+
+        var probe = raw.toLowerCase();
+        var matchedVal = '';
+        $select.find('option').each(function() {
+            var txt = ($(this).text() || '').toString().trim().toLowerCase();
+            if (!txt) {
+                return;
+            }
+            if (txt === probe || txt.indexOf(probe) !== -1) {
+                matchedVal = ($(this).val() || '').toString();
+                return false;
+            }
+        });
+
+        if (matchedVal) {
+            $select.val(matchedVal);
+            return;
+        }
+
+        ensureDefaultMasterOption($select, raw);
+        $select.val(raw);
+    }
+
+    function loadDefaultDoseMasters(done) {
+        apiGet('<?= base_url('Opd_prescription/rx_group_dose_masters') ?>', function(data) {
+            defaultDoseMasterCache = {
+                dose: (data && data.dose) ? data.dose : [],
+                when: (data && data.when) ? data.when : [],
+                freq: (data && data.freq) ? data.freq : [],
+                where: (data && data.where) ? data.where : []
+            };
+
+            renderDefaultMasterSelect($('#med_default_dosage'), defaultDoseMasterCache.dose, 'Select dose');
+            renderDefaultMasterSelect($('#med_default_when'), defaultDoseMasterCache.when, 'Select when');
+            renderDefaultMasterSelect($('#med_default_freq'), defaultDoseMasterCache.freq, 'Select frequency');
+            renderDefaultMasterSelect($('#med_default_where'), defaultDoseMasterCache.where, 'Select route');
+
+            if (typeof done === 'function') {
+                done();
+            }
+        });
     }
 
     function buildMedicinePayload() {
@@ -309,10 +404,10 @@
         $('#med_salt_name').val(row.salt_name || row.sal_name || row.salt || row.saltname || '');
         $('#med_dosage_restriction').val(row.dosage_restriction || row.dose_restriction || row.restriction_note || row.restriction || '');
         $('#med_company_name').val(row.company_name || '');
-        $('#med_default_dosage').val(row.dosage || '');
-        $('#med_default_when').val(row.dosage_when || '');
-        $('#med_default_freq').val(row.dosage_freq || '');
-        $('#med_default_where').val(row.dosage_where || '');
+        setDefaultMasterValue($('#med_default_dosage'), row.dosage || '');
+        setDefaultMasterValue($('#med_default_when'), row.dosage_when || '');
+        setDefaultMasterValue($('#med_default_freq'), row.dosage_freq || '');
+        setDefaultMasterValue($('#med_default_where'), row.dosage_where || '');
         $('#med_default_days').val(row.no_of_days || '');
         $('#med_default_qty').val(row.qty || '');
         $('#med_default_remark').val(row.remark || '');
@@ -713,9 +808,11 @@
     loadList();
     loadDuplicateReport();
     loadCompanySuggestions('');
-    var initialMedId = parseInt($('#med_id').val() || '0', 10);
-    if (initialMedId > 0) {
-        loadOne(initialMedId);
-    }
+    loadDefaultDoseMasters(function() {
+        var initialMedId = parseInt($('#med_id').val() || '0', 10);
+        if (initialMedId > 0) {
+            loadOne(initialMedId);
+        }
+    });
 })();
 </script>

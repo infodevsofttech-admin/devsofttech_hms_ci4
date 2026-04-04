@@ -402,6 +402,7 @@ $routes->group('billing', function($routes) {
     $routes->get('patient/get_name', 'Patient::get_name');
     $routes->post('patient/update', 'Patient::update');
     $routes->post('patient/update_aadhar', 'Patient::update_aadhar');
+    $routes->post('patient/update_abha', 'Patient::update_abha');
     $routes->post('patient/update_card', 'Patient::update_card');
     $routes->get('case/newcase/(:num)/(:num)', 'Billing\\CaseMaster::newcase/$1/$2');
     $routes->get('case/newcase/(:num)/(:num)/(:num)', 'Billing\\CaseMaster::newcase/$1/$2/$3');
