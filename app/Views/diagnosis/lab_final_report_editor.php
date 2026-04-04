@@ -158,6 +158,11 @@ $editReason = trim((string) ($edit_reason ?? ''));
                 const invoiceId = document.getElementById('invoice_id') ? document.getElementById('invoice_id').value : '';
                 const labType = document.getElementById('lab_type') ? document.getElementById('lab_type').value : '';
 
+                if (typeof load_form_div === 'function' && invoiceId && labType) {
+                    load_form_div(baseUrl + 'diagnosis/select-lab-invoice/' + invoiceId + '/' + labType, 'searchresult', 'Diagnosis');
+                    return;
+                }
+
                 if (typeof load_form === 'function' && invoiceId && labType) {
                     load_form(baseUrl + 'diagnosis/select-lab-invoice/' + invoiceId + '/' + labType, 'Diagnosis');
                     return;

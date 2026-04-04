@@ -1,6 +1,6 @@
 <div class="card">
-    <div class="card-body">
-        <h5 class="card-title">Diagnosis Report List</h5>
+    <div class="card-body" style="padding-top: 12px;">
+        <h5 class="card-title" style="padding-top: 0px;padding-bottom: 0px;">Diagnosis Report List</h5>
         
         <?php if (empty($labreport_preprocess)): ?>
             <div class="alert alert-info alert-dismissible fade show" role="alert">
@@ -89,7 +89,7 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="radiologyLabel">Radiology Report</h5>
+                <h5 class="modal-title" id="radiologyLabel" style="padding-top: 0px;padding-bottom: 0px;">Radiology Report</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
@@ -105,6 +105,6 @@
 function show_record(inv_id) {
     var labType = document.getElementById('lab_type') ? document.getElementById('lab_type').value : 1;
     var url = '<?= base_url('diagnosis/select-lab-invoice') ?>/' + inv_id + '/' + labType;
-    load_form(url, 'Radiology Invoice Details');
+    load_form_div(url, 'searchresult', 'Radiology Invoice Details');
 }
 </script>

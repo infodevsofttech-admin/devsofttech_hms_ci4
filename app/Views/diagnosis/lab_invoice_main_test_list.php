@@ -6,6 +6,11 @@ $currentLabType = (int) ($lab_type ?? $labType ?? 0);
 $isRadiologyFlow = !in_array($currentLabType, [5, 30], true);
 $flowTitle = $isRadiologyFlow ? 'Imaging Worklist' : 'Pathology Worklist';
 $statusPendingLabel = $isRadiologyFlow ? 'Report Pending' : 'Data Pending';
+$samplePendingLabel = $isRadiologyFlow ? 'Scan Pending' : 'Sample Collection Pending';
+$sampleActionLabel = $isRadiologyFlow ? 'Start Scan' : 'Sample Collection';
+$sampleActionIcon = $isRadiologyFlow ? 'bi-camera-reels' : 'bi-flask';
+$testNoPlaceholder = $isRadiologyFlow ? 'Imaging Test No.' : 'Lab Test No.';
+$updateTestNoLabel = $isRadiologyFlow ? 'Update Test No.' : 'Update Lab No.';
 $printTemplates = $print_templates ?? [];
 
 if (!empty($lab_invoice_request) && count($lab_invoice_request) > 0) {
@@ -49,9 +54,9 @@ if (!empty($lab_invoice_request) && count($lab_invoice_request) > 0) {
     <div class="col-md-5 col-sm-6">
         <div class="input-group input-group-sm">
             <input type="hidden" id="lab_req_id" name="lab_req_id" value="<?php echo htmlspecialchars($labReqId); ?>">
-            <input type="text" class="form-control" id="inputLabNo" name="inputLabNo" placeholder="Lab Test No." 
+            <input type="text" class="form-control" id="inputLabNo" name="inputLabNo" placeholder="<?php echo htmlspecialchars($testNoPlaceholder); ?>" 
                 value="<?php echo htmlspecialchars($labTestNo); ?>">
-            <button type="button" class="btn btn-info" onclick="updateLabNo()">Update Lab No.</button>
+            <button type="button" class="btn btn-info" onclick="updateLabNo()"><?php echo htmlspecialchars($updateTestNoLabel); ?></button>
         </div>
     </div>
 </div>
@@ -66,7 +71,7 @@ if (!empty($lab_invoice_request) && count($lab_invoice_request) > 0) {
                 <div class="fw-semibold"><?php echo htmlspecialchars($test->item_name ?? ''); ?></div>
 
                 <?php if (empty($test->check_sample) || $test->check_sample < 1): ?>
-                    <span class="badge bg-danger">Sample Collection Pending</span>
+                    <span class="badge bg-danger"><?php echo htmlspecialchars($samplePendingLabel); ?></span>
                 <?php else: ?>
                     <?php if ($status === 0): ?>
                         <span class="badge bg-warning text-dark"><?php echo htmlspecialchars($statusPendingLabel); ?></span>
@@ -81,7 +86,7 @@ if (!empty($lab_invoice_request) && count($lab_invoice_request) > 0) {
             <?php if (empty($test->check_sample) || $test->check_sample < 1): ?>
                 <button type="button" class="btn btn-danger btn-sm"
                     onclick="updateSampleCollection(<?php echo htmlspecialchars($test->test_id ?? '0'); ?>, '<?php echo htmlspecialchars($test->item_name ?? ''); ?>')">
-                    <i class="bi bi-flask"></i> Sample Collection
+                    <i class="bi <?php echo htmlspecialchars($sampleActionIcon); ?>"></i> <?php echo htmlspecialchars($sampleActionLabel); ?>
                 </button>
             <?php else: ?>
                 <div class="d-flex flex-wrap align-items-center gap-3 mb-2">

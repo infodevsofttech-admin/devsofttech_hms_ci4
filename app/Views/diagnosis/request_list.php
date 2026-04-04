@@ -1,59 +1,43 @@
 <input type="hidden" id="lab_type" name="lab_type" value="<?= esc($lab_type) ?>" />
 
-<div class="pagetitle">
-    <h1><?= esc($lab_type_name) ?></h1>
-    <nav>
-        <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="<?= base_url('dashboard') ?>">Home</a></li>
-            <li class="breadcrumb-item"><a href="javascript:load_form('<?= base_url('diagnosis') ?>','Diagnosis');">Diagnosis</a></li>
-            <li class="breadcrumb-item active"><?= esc($lab_type_name) ?></li>
-        </ol>
-    </nav>
-</div>
+<style>
+.diag-search-strip .card-body {
+    padding: 12px;
+}
+.diag-search-strip .input-group .btn {
+    min-width: 132px;
+}
+</style>
 
 <section class="section">
-    <div class="card">
+    <div class="card diag-search-strip">
         <div class="card-body">
-            <h5 class="card-title">Search</h5>
-            
-            <div class="row g-3">
-                <div class="col-md-3">
+            <div class="row g-2 align-items-center">
+                <div class="col-md-4">
                     <div class="input-group">
-                        <input class="form-control" type="text" id="txtsearch" name="txtsearch" placeholder="Invoice / UHID / Phone">
+                        <input class="form-control" type="text" id="txtsearch" name="txtsearch" placeholder="Invoice Last 6 digit ,UHID,Phone No.">
                         <button type="button" class="btn btn-primary" id="btn_search">
-                            <i class="bi bi-search"></i> Search
+                            Search Invoice
                         </button>
                     </div>
                 </div>
-                
-                <div class="col-md-3">
+
+                <div class="col-md-4">
                     <div class="input-group">
                         <input class="form-control" type="text" id="txtsearch_srno" name="txtsearch_srno" placeholder="Daily Serial No.">
                         <button type="button" class="btn btn-info" id="btn_srno">
-                            <i class="bi bi-search"></i> Sr. No.
+                            Search by Sr. No.
                         </button>
                     </div>
                 </div>
-                
-                <div class="col-md-3">
+
+                <div class="col-md-4">
                     <div class="input-group">
                         <input class="form-control" type="text" id="txtsearch_labno" name="txtsearch_labno" placeholder="Lab No.">
                         <button type="button" class="btn btn-success" id="btn_labno">
-                            <i class="bi bi-search"></i> Lab No.
+                            Search By Lab No.
                         </button>
                     </div>
-                </div>
-                
-                <div class="col-md-3">
-                    <?php if ($lab_type == 5): ?>
-                        <a href="javascript:void(0);" class="btn btn-secondary">
-                            <i class="bi bi-file-earmark-text"></i> Template
-                        </a>
-                    <?php else: ?>
-                        <a href="javascript:void(0);" class="btn btn-secondary">
-                            <i class="bi bi-file-earmark-text"></i> Template
-                        </a>
-                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -200,7 +184,10 @@ $(document).ready(function() {
     window.selectPathoology = function(invoiceId) {
         var labType = $('#lab_type').val();
         var url = '<?= base_url('diagnosis/select-lab-invoice') ?>/' + invoiceId + '/' + labType;
-        load_form(url, 'Pathology Invoice Details');
+        load_form_div(url, 'searchresult', 'Pathology Invoice Details');
     };
+
+    // Keep old HMS behavior: load recent items immediately.
+    performSearch();
 });
 </script>
