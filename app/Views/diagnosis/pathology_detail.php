@@ -7,11 +7,27 @@ $flowTypeLabel = $isPathologyFlow ? 'Lab' : 'Imaging';
 $timingTitle = $isPathologyFlow ? 'Lab Timing Information' : 'Imaging Workflow Timing';
 $testListTitle = $isPathologyFlow ? 'Test List' : 'Imaging Study List';
 $collectedTimeLabel = $isPathologyFlow ? 'Sample Collection Time' : 'Request Collection Time';
+$timingCardTitle = $isPathologyFlow ? 'Lab Collection and Report Time' : 'Imaging Start and Report Time';
 $isImagingFlow = !$isPathologyFlow;
 $printTemplates = $print_templates ?? [];
+$patientName = trim((string) ($invoice->p_fname ?? ''));
+$relativeName = trim((string) ($invoice->p_relative ?? $invoice->relative_name ?? ''));
+$relativePersonName = trim((string) ($invoice->p_rname ?? ''));
+$relativeLabel = $relativeName !== '' && $relativePersonName !== '' ? $relativeName . ' ' . $relativePersonName : ($relativePersonName !== '' ? $relativePersonName : '');
+$patientCode = (string) ($invoice->p_code ?? 'N/A');
+$rawGender = (string) ($invoice->gender ?? '');
+$genderMap = ['1' => 'Male', '2' => 'Female', 'M' => 'Male', 'F' => 'Female', 'Male' => 'Male', 'Female' => 'Female'];
+$genderLabel = $genderMap[$rawGender] ?? ($rawGender !== '' ? $rawGender : 'N/A');
+$ageLabel = trim((string) ($invoice->age ?? ''));
+if ($ageLabel === '') {
+    if (!empty($invoice->age_in_month) && (int) $invoice->age_in_month > 0) {
+        $ageLabel = (int) $invoice->age_in_month . ' Month';
+    } else {
+        $ageLabel = 'N/A';
+    }
+}
 ?>
 
-<?php if ($isImagingFlow): ?>
 <style>
 .diagnosis-ui {
     background: linear-gradient(180deg, #f7f9fd 0%, #eef3f9 100%);
@@ -51,87 +67,47 @@ $printTemplates = $print_templates ?? [];
     filter: invert(1);
 }
 </style>
-<?php endif; ?>
 
-<div class="pagetitle">
-    <h1><?= esc($currentLabTypeName) ?> - <?= esc($flowTypeLabel) ?> Invoice Details</h1>
-    <nav>
-        <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="javascript:load_form('<?= base_url('diagnosis') ?>','Diagnosis');">Diagnosis</a></li>
-            <li class="breadcrumb-item"><a href="javascript:load_form('<?= base_url('diagnosis/' . $currentLabRoute) ?>','<?= esc($currentLabTypeName) ?>');"><?= esc($currentLabTypeName) ?></a></li>
-            <li class="breadcrumb-item active">Invoice #<?php echo htmlspecialchars($invoice->invoice_code ?? ''); ?></li>
-        </ol>
-    </nav>
-</div>
+<section class="section diagnosis-ui">
+    <div class="mb-3">
+        <h2 class="mb-0"><?= esc($patientName !== '' ? $patientName : 'Patient') ?>
+            <small class="text-primary fs-5 ms-2"><?= esc($patientCode) ?></small>
+        </h2>
+    </div>
 
-<section class="section<?= $isImagingFlow ? ' diagnosis-ui' : '' ?>">
     <div class="row">
-        <!-- Person Profile Card -->
-        <div class="col-lg-4">
+        <div class="col-lg-6">
             <div class="card profile-card">
                 <div class="card-header bg-primary text-white">
-                    <h5 class="card-title mb-0">Person Profile</h5>
+                    <h5 class="card-title mb-0" style="padding-top: 0px;padding-bottom: 0px;">Person Profile</h5>
                 </div>
-                <div class="card-body">
+                <div class="card-body" style="padding-top: 12px;">
                     <?php if (!empty($invoice)): ?>
-                    <table class="table table-sm">
-                        <tbody>
-                            <tr>
-                                <th>Patient Name:</th>
-                                <td><?php echo htmlspecialchars($invoice->p_fname . ' ' . ($invoice->p_rname ?? '')); ?></td>
-                            </tr>
-                            <tr>
-                                <th>Patient Code:</th>
-                                <td><?php echo htmlspecialchars($invoice->p_code ?? 'N/A'); ?></td>
-                            </tr>
-                            <tr>
-                                <th>Gender:</th>
-                                <td><?php echo htmlspecialchars($invoice->gender ?? 'N/A'); ?></td>
-                            </tr>
-                            <tr>
-                                <th>Age:</th>
-                                <td>
-                                    <?php 
-                                    if (!empty($invoice->age_in_month) && intval($invoice->age_in_month) > 0) {
-                                        echo htmlspecialchars($invoice->age_in_month . ' months');
-                                    } elseif (!empty($invoice->age)) {
-                                        echo htmlspecialchars($invoice->age . ' years');
-                                    } else {
-                                        echo 'N/A';
-                                    }
-                                    ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th>Aadhar:</th>
-                                <td><?php echo htmlspecialchars($invoice->udai ?? 'N/A'); ?></td>
-                            </tr>
-                            <tr>
-                                <th>Phone:</th>
-                                <td><?php echo htmlspecialchars($invoice->phone_number ?? 'N/A'); ?></td>
-                            </tr>
-                            <tr>
-                                <th>Email:</th>
-                                <td><?php echo htmlspecialchars($invoice->email ?? 'N/A'); ?></td>
-                            </tr>
-                            <tr>
-                                <th>Address:</th>
-                                <td>
-                                    <?php 
-                                    $address = [];
-                                    if (!empty($invoice->address_line1)) $address[] = $invoice->address_line1;
-                                    if (!empty($invoice->city)) $address[] = $invoice->city;
-                                    if (!empty($invoice->state)) $address[] = $invoice->state;
-                                    echo htmlspecialchars(implode(', ', $address) ?: 'N/A');
-                                    ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th>Invoice Date:</th>
-                                <td><?php echo htmlspecialchars(date('d-m-Y', strtotime($invoice->inv_date ?? ''))); ?></td>
-                            </tr>
-                        </tbody>
-                    </table>
+                        <div class="row g-2 small">
+                            <div class="col-md-12"><strong>Name :</strong> <?= esc($patientName !== '' ? $patientName : 'N/A') ?></div>
+                            <?php if ($relativeLabel !== ''): ?>
+                            <div class="col-md-12 text-muted"><?= esc($relativeLabel) ?></div>
+                            <?php endif; ?>
+                            <div class="col-md-6"><strong>Phone Number :</strong> <?= esc((string) ($invoice->phone_number ?? 'N/A')) ?></div>
+                            <div class="col-md-6"><strong>Email :</strong> <?= esc((string) ($invoice->email ?? 'N/A')) ?></div>
+                            <div class="col-md-6"><strong>Gender :</strong> <?= esc($genderLabel) ?> / <strong>Age :</strong> <?= esc($ageLabel) ?></div>
+                            <div class="col-md-6"><strong>Aadhar No. :</strong> <?= esc((string) ($invoice->udai ?? 'N/A')) ?></div>
+                            <div class="col-md-12">
+                                <?php
+                                $address = [];
+                                if (!empty($invoice->address_line1)) {
+                                    $address[] = $invoice->address_line1;
+                                }
+                                if (!empty($invoice->city)) {
+                                    $address[] = $invoice->city;
+                                }
+                                if (!empty($invoice->state)) {
+                                    $address[] = $invoice->state;
+                                }
+                                ?>
+                                <strong>Address :</strong> <?= esc(implode(', ', $address) ?: 'N/A') ?>
+                            </div>
+                        </div>
                     <?php else: ?>
                     <div class="alert alert-warning" role="alert">
                         No patient information found.
@@ -139,37 +115,33 @@ $printTemplates = $print_templates ?? [];
                     <?php endif; ?>
                 </div>
             </div>
-        </div>
 
-        <!-- Lab Timing & Tests Section -->
-        <div class="col-lg-8">
-            <!-- Lab Timing Card -->
-            <div class="card mb-3 diag-panel" id="labTimingCard">
+            <div class="card mt-3 diag-panel" id="labTimingCard">
                 <div class="card-header bg-info text-white">
-                    <h5 class="card-title mb-0"><?= esc($timingTitle) ?></h5>
+                    <h5 class="card-title mb-0" style="padding-top: 0px;padding-bottom: 0px;"><?= esc($timingCardTitle) ?></h5>
                 </div>
-                <div class="card-body" id="labTimingCardBody">
+                <div class="card-body" id="labTimingCardBody" style="padding-top: 12px;">
                     <form id="labTimingForm" class="row g-3">
                         <input type="hidden" id="invoiceId" value="<?php echo htmlspecialchars($invoice->inv_id ?? $invoice->id ?? '0'); ?>">
                         <input type="hidden" id="labType" value="<?php echo htmlspecialchars($lab_type ?? '5'); ?>">
 
                         <div class="col-md-6">
                             <label for="collectedTime" class="form-label"><?= esc($collectedTimeLabel) ?></label>
-                            <input type="datetime-local" class="form-control" id="collectedTime" 
-                                value="<?php 
-                                    if (!empty($lab_invoice->collected_time)) {
-                                        echo htmlspecialchars(date('Y-m-d\TH:i', strtotime($lab_invoice->collected_time)));
-                                    }
+                            <input type="datetime-local" class="form-control" id="collectedTime"
+                                value="<?php
+                                if (!empty($lab_invoice->collected_time)) {
+                                    echo htmlspecialchars(date('Y-m-d\TH:i', strtotime($lab_invoice->collected_time)));
+                                }
                                 ?>">
                         </div>
 
                         <div class="col-md-6">
                             <label for="reportedTime" class="form-label">Report Time</label>
                             <input type="datetime-local" class="form-control" id="reportedTime"
-                                value="<?php 
-                                    if (!empty($lab_invoice->reported_time)) {
-                                        echo htmlspecialchars(date('Y-m-d\TH:i', strtotime($lab_invoice->reported_time)));
-                                    }
+                                value="<?php
+                                if (!empty($lab_invoice->reported_time)) {
+                                    echo htmlspecialchars(date('Y-m-d\TH:i', strtotime($lab_invoice->reported_time)));
+                                }
                                 ?>">
                         </div>
 
@@ -182,31 +154,12 @@ $printTemplates = $print_templates ?? [];
                 </div>
             </div>
 
-            <!-- Test List Card -->
-            <div class="card diag-panel" id="testListCard">
-                <div class="card-header bg-success text-white">
-                    <h5 class="card-title mb-0"><?= esc($testListTitle) ?></h5>
-                </div>
-                <div class="card-body" id="testListCardBody">
-                    <div class="text-center">
-                        <div class="spinner-border" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <?php if ($isPathologyFlow): ?>
-        <!-- Report Actions Card -->
-        <div class="row mt-3">
-            <div class="col-12">
-                <div class="card">
+            <?php if ($isPathologyFlow): ?>
+                <div class="card mt-3">
                     <div class="card-header bg-warning text-dark">
-                        <h5 class="card-title mb-0">Report Operations</h5>
+                        <h5 class="card-title mb-0" style="padding-top: 0px;padding-bottom: 0px;">Report Operations</h5>
                     </div>
-                    <div class="card-body">
+                    <div class="card-body" style="padding-top: 12px;">
                         <div class="row g-2">
                             <div class="col-auto">
                                 <button type="button" class="btn btn-primary" id="compileBtn" onclick="compileReport()">
@@ -251,9 +204,25 @@ $printTemplates = $print_templates ?? [];
                         </div>
                     </div>
                 </div>
+            <?php endif; ?>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card mb-3 diag-panel" id="testListCard">
+                <div class="card-header bg-success text-white">
+                    <h5 class="card-title mb-0" style="padding-top: 0px;padding-bottom: 0px;">Test List : [Invoice Code : <?= esc((string) ($invoice->invoice_code ?? '')) ?>]</h5>
+                </div>
+                <div class="card-body" id="testListCardBody" style="padding-top: 12px;">
+                    <div class="text-center">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
-    <?php endif; ?>
+    </div>
+
 </section>
 
 <!-- Modal for Sample Collection Update -->
@@ -683,8 +652,8 @@ function createReportXray(reqId, testName) {
     })
     .then(response => response.text())
     .then(html => {
-        // Load full-page editor using load_form
-        load_form(baseUrl + 'diagnosis/open-report-editor/' + reqId, testName + ' - Report Editor');
+        // Keep search header visible by loading editor inside searchresult.
+        load_form_div(baseUrl + 'diagnosis/open-report-editor/' + reqId, 'searchresult', testName + ' - Report Editor');
     })
     .catch(error => {
         console.error('createReportXray error:', error);
@@ -1165,7 +1134,7 @@ function openReportEditor(reqId, testName) {
     }
 
     const editorUrl = baseUrl + 'diagnosis/open-report-editor/' + reqId + '?edit_reason=' + encodeURIComponent(cleanReason);
-    load_form(editorUrl, (testName || 'Radiology') + ' - Report Editor');
+    load_form_div(editorUrl, 'searchresult', (testName || 'Radiology') + ' - Report Editor');
 }
 
 function toggleTestDetails(reqId) {
