@@ -1083,8 +1083,11 @@ class Diagnosis extends BaseController
             return '<div class="alert alert-danger">Report not found</div>';
         }
 
+        $pmFields       = $this->db->getFieldNames('patient_master') ?? [];
+        $abhaColsPm     = array_filter(['abha_id', 'abha_no', 'abha_address', 'abha'], fn ($c) => in_array($c, $pmFields, true));
+        $abhaSelectPm   = $abhaColsPm ? (', ' . implode(', ', $abhaColsPm)) : '';
         $patientRow = $this->db->table('patient_master')
-            ->select('gender, age, age_in, age_in_month, dob, abha_id, abha_no, abha_address, abha')
+            ->select('gender, age, age_in, age_in_month, dob' . $abhaSelectPm)
             ->where('id', (int) ($reportRow->patient_id ?? 0))
             ->get()
             ->getRow();
