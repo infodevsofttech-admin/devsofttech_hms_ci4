@@ -168,6 +168,33 @@ Generate encryption key:
 php spark key:generate
 ```
 
+### ABDM via Eka.care (existing routes, provider switch)
+
+This project keeps the same ABDM controller routes and queue events, and can switch
+the queue dispatcher to Eka for ABDM/NHCX integrations.
+
+Add these keys in `.env`:
+
+```dotenv
+ABDM_SYNC_PROVIDER = eka
+EKA_BASE_URL = https://api.eka.care
+EKA_BEARER_TOKEN = your-token
+# Optional alternatives
+# EKA_API_KEY = your-api-key
+# EKA_CLIENT_ID = your-client-id
+# EKA_EVENT_ENDPOINTS_JSON = {"abdm.abha.validate":"/your/path"}
+# EKA_WEBHOOK_SECRET = shared-secret-for-callback-signature
+```
+
+Then process queue normally:
+
+```bash
+php spark bridge:sync
+```
+
+If `EKA_WEBHOOK_SECRET` is set, callback endpoints require a valid HMAC-SHA256 signature
+in `X-Eka-Signature`, `X-Signature`, or `X-Hub-Signature-256`.
+
 ---
 
 ## 5. Database Setup

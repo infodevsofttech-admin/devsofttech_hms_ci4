@@ -3,6 +3,8 @@
 namespace App\Controllers\Billing;
 
 use App\Controllers\BaseController;
+use App\Libraries\AbdmWorkTaskService;
+use App\Libraries\BridgeSyncService;
 use App\Models\BedAssignmentHistoryModel;
 use App\Models\ItemIpdModel;
 use App\Models\IpdBillingModel;
@@ -280,6 +282,8 @@ class Ipd extends BaseController
                     ->where('id', $caseId)
                     ->update(['ipd_id' => $insertId]);
             }
+
+            $this->enqueueIpdAdmissionSync((int) $insertId, 'ipd.admission.created');
         }
 
         return $this->response->setJSON([
@@ -582,6 +586,8 @@ class Ipd extends BaseController
         if (! $this->db->transStatus()) {
             return $this->response->setStatusCode(500)->setJSON(['update' => 0, 'message' => 'Unable to update admission details']);
         }
+
+        $this->enqueueIpdAdmissionSync($ipdId, 'ipd.admission.updated');
 
         $freshPanelData = $this->ipdModel->getIpdPanelInfo($ipdId);
         $admissionData = $this->buildAdmissionTabData($freshPanelData, $ipdId);
@@ -2652,6 +2658,88 @@ class Ipd extends BaseController
         $this->db->table('nursing_ipd_charges')->insert($data);
 
         return (int) $this->db->insertID();
+    }
+
+    private function enqueueIpdAdmissionSync(int $ipdId, string $eventType): void
+    {
+        if ($ipdId <= 0 || ! $this->db->tableExists('ipd_master')) {
+            return;
+        }
+
+        $ipdRow = $this->db->table('ipd_master')->where('id', $ipdId)->get(1)->getRowArray();
+        if (empty($ipdRow)) {
+            return;
+        }
+
+        $patientId = (int) ($ipdRow['p_id'] ?? 0);
+        $patientRow = [];
+        if ($patientId > 0 && $this->db->tableExists('patient_master')) {
+            $patientRow = $this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray() ?? [];
+        }
+
+        $abhaId = '';
+        foreach (['abha_id', 'abha_no', 'abha_address', 'abha'] as $field) {
+            if (trim((string) ($patientRow[$field] ?? '')) !== '') {
+                $abhaId = trim((string) ($patientRow[$field] ?? ''));
+                break;
+            }
+        }
+
+        $doctorIds = [];
+        if ($this->db->tableExists('ipd_doctor')) {
+            $doctorRows = $this->db->table('ipd_doctor')
+                ->select('doc_id')
+                ->where('ipd_id', $ipdId)
+                ->orderBy('id', 'ASC')
+                ->get()
+                ->getResultArray();
+            foreach ($doctorRows as $doctorRow) {
+                $docId = (int) ($doctorRow['doc_id'] ?? 0);
+                if ($docId > 0) {
+                    $doctorIds[$docId] = $docId;
+                }
+            }
+        }
+
+        $payload = [
+            'ipd_id' => $ipdId,
+            'ipd_code' => trim((string) ($ipdRow['ipd_code'] ?? '')),
+            'patient_id' => $patientId,
+            'patient_name' => trim((string) ($patientRow['p_fname'] ?? $ipdRow['P_name'] ?? '')),
+            'abha_id' => $abhaId,
+            'register_date' => trim((string) ($ipdRow['register_date'] ?? '')),
+            'reg_time' => trim((string) ($ipdRow['reg_time'] ?? '')),
+            'discharge_date' => trim((string) ($ipdRow['discharge_date'] ?? '')),
+            'discharge_time' => trim((string) ($ipdRow['discharge_time'] ?? '')),
+            'dept_id' => (int) ($ipdRow['dept_id'] ?? 0),
+            'doctor_ids' => array_values($doctorIds),
+            'updated_at' => date('Y-m-d H:i:s'),
+        ];
+
+        try {
+            $bridgeSync = new BridgeSyncService();
+            $bridgeSync->enqueue($eventType, $payload, 'ipd', (string) $ipdId);
+        } catch (\Throwable $e) {
+            // Do not block IPD admission workflows if queue service is unavailable.
+        }
+
+        if ($eventType === 'ipd.admission.created' && preg_match('/^\d{14}$/', $abhaId) === 1) {
+            $taskService = new AbdmWorkTaskService();
+            $taskService->createOrRefreshTask(
+                'ipd_admission_publish',
+                'ipd',
+                'ipd',
+                (string) $ipdId,
+                $patientId,
+                trim((string) ($patientRow['p_fname'] ?? $ipdRow['P_name'] ?? '')),
+                $abhaId,
+                'submit',
+                [
+                    'ipd_id' => $ipdId,
+                    'trigger' => 'ipd.admission.created',
+                ]
+            );
+        }
     }
 
     private function syncNursingChargesToInvoice(int $ipdId): void

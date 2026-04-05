@@ -86,13 +86,60 @@ class Opd extends BaseController
         $content = $this->readOpdTemplateContentByName($name);
 
         $placeholders = [
-            'hospital_name', 'hospital_address', 'hospital_phone', 'hospital_email', 'doctor_name', 'print_time',
+            // Hospital
+            'hospital_name', 'hospital_address', 'hospital_phone', 'hospital_email',
+            'H_Name', 'H_address_1', 'H_address_2', 'H_phone_No', 'H_Email', 'H_logo',
+            // Doctor
+            'doctor_name', 'doctor_full_name', 'doctor_title',
+            'doctor_reg_no', 'doctor_registration',
+            'doctor_phone', 'doctor_email', 'doctor_address',
+            'doctor_specialization', 'SpecName',
             'short_description', 'doctor_short_description',
-            'pName', 'pRelative', 'age_sex', 'phoneno', 'p_address', 'uhid_no', 'opd_sr_no', 'opd_no',
-            'opd_date', 'exp_date', 'SpecName', 'opd_fee_desc', 'total_no_visit', 'last_opdvisit_date', 'str_opd_book_date',
-            'Complaint', 'diagnosis', 'Provisional_diagnosis', 'Finding_Examinations', 'medical', 'investigation',
-            'Prescriber_Remarks', 'advice', 'next_visit', 'refer_to', 'vital_content', 'painscale_img',
-            'hospital_section', 'patient_section', 'content_section',
+            'doctor_sign_html',
+            // Print metadata
+            'print_time', 'current_date',
+            // Patient
+            'pName', 'pRelative', 'age_sex', 'phoneno', 'p_address',
+            'uhid_no', 'opd_sr_no', 'opd_no', 'opd_date', 'exp_date',
+            'opd_fee_desc', 'total_no_visit', 'last_opdvisit_date', 'str_opd_book_date',
+            // General Examination (raw values)
+            'bp', 'bp_diastolic', 'pulse', 'temp', 'spo2', 'rr_min',
+            'height', 'weight', 'waist',
+            'pallor', 'icterus', 'cyanosis', 'clubbing', 'edema',
+            // General Examination (formatted blocks)
+            'vital_content',        // BP/Pulse/Temp/SpO2/RR/Ht/Wt/Waist formatted
+            'vital_content_extra',  // Pallor/Icterus/Cyanosis/Clubbing/Edema
+            'vital_content_full',   // All vitals + extra combined
+            'general_examination',  // Alias of vital_content_full
+            // Pain scale
+            'pain_value',           // 0-4
+            'pain_label',           // e.g. "Mild Pain"
+            'pain_scale',           // Formatted block: Pain Scale : Mild Pain
+            // Complication & Addiction
+            'Complication', 'complication',   // Formatted block of checked flags
+            'Addiction', 'addiction',           // Formatted block of checked flags
+            // Drug allergy / NABH
+            'drug_allergy_status', 'drug_allergy_details',
+            'adr_history', 'current_medications',
+            'drug_allergy_block',         // Formatted: Drug Allergy : status — details
+            'adr_history_block',          // Formatted: ADR History : ...
+            'current_medications_block',  // Formatted: Current Medications : ...
+            // Women related
+            'women_lmp', 'women_last_baby', 'women_pregnancy_related', 'women_related_problems',
+            'women_block',   // Formatted: Women Related : LMP | Last Baby | ...
+            // Co-morbidities
+            'morbidities',        // Raw comma-separated list
+            'morbidities_block',  // Formatted: Co-Morbidities : Diabetes, HTn, ...
+            // Clinical content
+            'painscale_img',
+            'Complaint', 'diagnosis', 'Provisional_diagnosis', 'Finding_Examinations',
+            'medical', 'investigation', 'Prescriber_Remarks', 'advice', 'next_visit', 'refer_to',
+            // Composed blocks
+            'Rx', 'RxTable', 'RxFullBlock',
+            'VitalsBlock', 'ComplaintBlock', 'DiagnosisBlock', 'InvestigationBlock',
+            'RemarksBlock', 'AdviceBlock', 'NextVisitBlock',
+            // Legacy layout sections
+            'hospital_section', 'patient_section', 'content_section', 'content',
         ];
 
         return view('billing/opd_template_builder', [
@@ -1402,7 +1449,16 @@ class Opd extends BaseController
         } else {
             $customHtml = '';
             if ($templateKey !== '') {
+                // 1) Try DB-stored template first
                 $customHtml = $this->readStoredOpdTemplateContent($templateKey);
+
+                // 2) Fall back to filesystem HTML file in opd_templates/
+                if ($customHtml === '') {
+                    $fsPath = APPPATH . 'Views/billing/opd_templates/' . $templateKey . '.html';
+                    if (is_file($fsPath)) {
+                        $customHtml = (string) file_get_contents($fsPath);
+                    }
+                }
             }
 
             if ($customHtml !== '') {
@@ -1869,23 +1925,49 @@ class Opd extends BaseController
                 $generic = trim((string) ($med['genericname'] ?? $med['generic_name'] ?? $med['salt_name'] ?? ''));
                 $dose    = trim((string) ($med['dosage_label'] ?? $med['dosage'] ?? $med['drug_dose'] ?? $med['dose'] ?? ''));
                 $freq    = trim((string) ($med['dosage_freq_label'] ?? $med['dosage_freq'] ?? $med['drug_freq'] ?? $med['frequency'] ?? ''));
+                $doseLocalRaw = trim((string) ($med['dosage_local_label'] ?? $med['dosage_local'] ?? ''));
+                $freqLocalRaw = trim((string) ($med['dosage_freq_local_label'] ?? $med['dosage_freq_local'] ?? ''));
                 $days    = trim((string) ($med['no_of_days'] ?? $med['drug_day'] ?? $med['days'] ?? ''));
                 $when    = trim((string) ($med['dosage_when_label'] ?? $med['dosage_when'] ?? ''));
                 $remark  = trim((string) ($med['remark'] ?? ''));
                 $inst    = trim(($when !== '' ? $when : '') . ($remark !== '' ? ($when !== '' ? ' | ' : '') . $remark : ''));
                 $doseFreqText = trim($dose . ' ' . $freq);
 
-                // Hindi for freq/schedule:
-                // 1) exact match against doseShedHindiMap (DB: opd_dose_shed)
-                // 2) extract "ABBR (SIGN)" part up to closing ')' — handles "OD (ONE TIME A DAY) Daily"
-                // 3) exact match in doseFreqHindiMap (DB: opd_dose_frequency)
-                // 4) translated fallback
-                $freqKey      = strtolower(trim($freq));
-                $doseFreqLocal = $doseShedHindiMap[$freqKey] ?? $doseFreqHindiMap[$freqKey] ?? '';
-                if ($doseFreqLocal === '' && preg_match('/^(.+?\))/u', $freq, $_m) === 1) {
-                    $signKey = strtolower(trim($_m[1]));
-                    $doseFreqLocal = $doseShedHindiMap[$signKey] ?? '';
+                // Hindi for dose + frequency:
+                // Prefer pre-resolved local labels from buildOpdLetterPrintData(), then resolve via maps.
+                $doseLocal = $doseLocalRaw;
+                if ($doseLocal === '' && $dose !== '') {
+                    $doseKey = strtolower(trim($dose));
+                    $doseLocal = $doseShedHindiMap[$doseKey] ?? '';
+                    if ($doseLocal === '' && preg_match('/^(.+?\))/u', $dose, $_m) === 1) {
+                        $doseSignKey = strtolower(trim($_m[1]));
+                        $doseLocal = $doseShedHindiMap[$doseSignKey] ?? '';
+                    }
+                    if ($doseLocal === '') {
+                        $doseFallback = $this->translateToLocalPatientText($dose);
+                        if (strtolower($doseFallback) !== strtolower($dose)) {
+                            $doseLocal = $doseFallback;
+                        }
+                    }
                 }
+
+                $freqLocal = $freqLocalRaw;
+                if ($freqLocal === '' && $freq !== '') {
+                    $freqKey = strtolower(trim($freq));
+                    $freqLocal = $doseShedHindiMap[$freqKey] ?? $doseFreqHindiMap[$freqKey] ?? '';
+                    if ($freqLocal === '' && preg_match('/^(.+?\))/u', $freq, $_m) === 1) {
+                        $signKey = strtolower(trim($_m[1]));
+                        $freqLocal = $doseShedHindiMap[$signKey] ?? '';
+                    }
+                    if ($freqLocal === '') {
+                        $freqFallback = $this->translateToLocalPatientText($freq);
+                        if (strtolower($freqFallback) !== strtolower($freq)) {
+                            $freqLocal = $freqFallback;
+                        }
+                    }
+                }
+
+                $doseFreqLocal = trim($doseLocal . (($doseLocal !== '' && $freqLocal !== '') ? ' ' : '') . $freqLocal);
                 if ($doseFreqLocal === '' && $doseFreqText !== '') {
                     $fallback = $this->translateToLocalPatientText($doseFreqText);
                     if (strtolower($fallback) !== strtolower($doseFreqText)) {
@@ -2015,6 +2097,15 @@ class Opd extends BaseController
         $pulse = trim((string) ($rx['pulse'] ?? ''));
         $temp = trim((string) ($rx['temp'] ?? ''));
         $spo2 = trim((string) ($rx['spo2'] ?? ''));
+        $rrMin = trim((string) ($rx['rr_min'] ?? ''));
+        $height = trim((string) ($rx['height'] ?? ''));
+        $weight = trim((string) ($rx['weight'] ?? ''));
+        $waist = trim((string) ($rx['waist'] ?? ''));
+        $pallor = trim((string) ($rx['pallor'] ?? ''));
+        $icterus = trim((string) ($rx['icterus'] ?? $rx['Icterus'] ?? ''));
+        $cyanosis = trim((string) ($rx['cyanosis'] ?? ''));
+        $clubbing = trim((string) ($rx['clubbing'] ?? ''));
+        $edema = trim((string) ($rx['edema'] ?? ''));
 
         $vitals = [];
         if ($bp !== '') {
@@ -2029,6 +2120,54 @@ class Opd extends BaseController
         if ($spo2 !== '') {
             $vitals[] = 'SpO2: ' . $spo2;
         }
+        if ($rrMin !== '') {
+            $vitals[] = 'RR: ' . $rrMin . '/min';
+        }
+        if ($height !== '') {
+            $vitals[] = 'Ht: ' . $height;
+        }
+        if ($weight !== '') {
+            $vitals[] = 'Wt: ' . $weight;
+        }
+        if ($waist !== '') {
+            $vitals[] = 'Waist: ' . $waist;
+        }
+
+        // ── Pain scale ──────────────────────────────────────────────────────
+        $painValue = trim((string) ($rx['pain_value'] ?? ''));
+        $painLabels = ['0' => 'No Pain', '1' => 'Mild Pain', '2' => 'Moderate', '3' => 'Intense', '4' => 'Worst Pain Possible'];
+        $painLabel = $painValue !== '' ? ($painLabels[$painValue] ?? '') : '';
+
+        // ── Complication flags ───────────────────────────────────────────────
+        $complicationFlags = [];
+        if (!empty($rx['pregnancy'])) { $complicationFlags[] = 'Pregnancy'; }
+        if (!empty($rx['lactation'])) { $complicationFlags[] = 'Lactation'; }
+        if (!empty($rx['liver_insufficiency'])) { $complicationFlags[] = 'Liver Insufficiency'; }
+        if (!empty($rx['renal_insufficiency'])) { $complicationFlags[] = 'Renal Insufficiency'; }
+        if (!empty($rx['pulmonary_insufficiency'])) { $complicationFlags[] = 'Pulmonary Insufficiency'; }
+        if (!empty($rx['corona_suspected'])) { $complicationFlags[] = 'Corona Suspected'; }
+        if (!empty($rx['dengue'])) { $complicationFlags[] = 'Dengue'; }
+        $complicationText = implode(', ', $complicationFlags);
+
+        // ── Addiction flags (from patient_master or rx) ──────────────────────
+        $pRowCopy = $data['patient_master'][0] ?? null;
+        $addictionFlags = [];
+        if (!empty($rx['is_smoking'] ?? $pRowCopy->is_smoking ?? 0)) { $addictionFlags[] = 'Smoking'; }
+        if (!empty($rx['is_alcohol'] ?? $pRowCopy->is_alcohol ?? 0)) { $addictionFlags[] = 'Alcohol'; }
+        if (!empty($rx['is_drug_abuse'] ?? $pRowCopy->is_drug_abuse ?? 0)) { $addictionFlags[] = 'Drug Abuse'; }
+        $addictionText = implode(', ', $addictionFlags);
+
+        // ── Drug allergy / NABH ──────────────────────────────────────────────
+        $drugAllergyStatus  = trim((string) ($rx['drug_allergy_status']  ?? ''));
+        $drugAllergyDetails = trim((string) ($rx['drug_allergy_details'] ?? ''));
+        $adrHistory         = trim((string) ($rx['adr_history']          ?? ''));
+        $currentMedications = trim((string) ($rx['current_medications']  ?? ''));
+
+        // ── Women related ────────────────────────────────────────────────────
+        $womenLmp              = trim((string) ($rx['women_lmp']              ?? ''));
+        $womenLastBaby         = trim((string) ($rx['women_last_baby']        ?? ''));
+        $womenPregnancyRelated = trim((string) ($rx['women_pregnancy_related'] ?? ''));
+        $womenRelatedProblems  = trim((string) ($rx['women_related_problems'] ?? ''));
 
         $printContent = '<table width="100%" border="0" style="font-size:10pt;">'
             . '<tr>'
@@ -2098,6 +2237,41 @@ class Opd extends BaseController
             'doctor' => '<p style="text-align:right;">Dr. ' . esc((string) ($opd->doc_name ?? '')) . '</p>',
             'top_content' => '',
             'vital_content' => implode(' | ', $vitals),
+            'vital_content_extra' => implode(' | ', array_filter([
+                $pallor !== '' ? 'Pallor: ' . $pallor : '',
+                $icterus !== '' ? 'Icterus: ' . $icterus : '',
+                $cyanosis !== '' ? 'Cyanosis: ' . $cyanosis : '',
+                $clubbing !== '' ? 'Clubbing: ' . $clubbing : '',
+                $edema !== '' ? 'Edema: ' . $edema : '',
+            ], static fn ($v): bool => $v !== '')),
+            'height' => $height,
+            'weight' => $weight,
+            'waist' => $waist,
+            'rr_min' => $rrMin,
+            'pallor' => $pallor,
+            'icterus' => $icterus,
+            'cyanosis' => $cyanosis,
+            'clubbing' => $clubbing,
+            'edema' => $edema,
+            'bp' => $bp,
+            'bp_diastolic' => $diastolic,
+            'pulse' => $pulse,
+            'temp' => $temp,
+            'spo2' => $spo2,
+            'pain_value' => $painValue,
+            'pain_label' => $painLabel,
+            'Complication' => $complicationText,
+            'complication' => $complicationText,
+            'Addiction' => $addictionText,
+            'addiction' => $addictionText,
+            'drug_allergy_status' => $drugAllergyStatus,
+            'drug_allergy_details' => $drugAllergyDetails,
+            'adr_history' => $adrHistory,
+            'current_medications' => $currentMedications,
+            'women_lmp' => $womenLmp,
+            'women_last_baby' => $womenLastBaby,
+            'women_pregnancy_related' => $womenPregnancyRelated,
+            'women_related_problems' => $womenRelatedProblems,
             'Finding_Examinations' => $findingExaminationsText,
             'finding_examinations' => $findingExaminationsText,
             'Prescriber_Remarks' => $prescriberRemarksText,
@@ -2105,11 +2279,9 @@ class Opd extends BaseController
             'advice_local' => $rxAdviceLocal,
             'next_visit' => $nextVisitText,
             'refer_to' => (string) ($rx['refer_to'] ?? ''),
-            'painscale' => '',
+            'painscale' => $painLabel,
             'painscale_img' => '',
             'morbidities' => implode(', ', is_array($data['selected_morbidities'] ?? null) ? ($data['selected_morbidities'] ?? []) : []),
-            'Addiction' => '',
-            'Complication' => '',
         ];
     }
 
@@ -2611,6 +2783,51 @@ class Opd extends BaseController
         }
         $tokens['next_visit'] = $formatBlock('Next Visit', (string) ($tokens['next_visit_raw'] ?? ''));
 
+        // ── General Examination extras (formatted) ────────────────────────────
+        $vitalRaw = (string) ($tokens['vital_content_raw'] ?? '');
+        $vitalExtraRaw = trim((string) ($tokens['vital_content_extra'] ?? ''));
+        $vitalFull = trim($vitalRaw . ($vitalExtraRaw !== '' ? ' | ' . $vitalExtraRaw : ''));
+        $tokens['vital_content_full'] = $formatBlock('Vitals', $vitalFull);
+        $tokens['general_examination'] = $tokens['vital_content_full'];
+
+        // ── Pain scale (formatted) ────────────────────────────────────────────
+        $painLabel = trim((string) ($tokens['pain_label'] ?? ''));
+        $tokens['pain_scale'] = $painLabel !== '' ? $formatBlock('Pain Scale', $painLabel) : '';
+
+        // ── Complication & Addiction (formatted) ──────────────────────────────
+        $tokens['Complication'] = $formatBlock('Complication', (string) ($tokens['complication'] ?? ''));
+        $tokens['complication'] = $tokens['Complication'];
+        $tokens['Addiction'] = $formatBlock('Addiction', (string) ($tokens['addiction'] ?? ''));
+        $tokens['addiction'] = $tokens['Addiction'];
+
+        // ── Drug allergy / NABH (formatted) ──────────────────────────────────
+        $allergyStatus  = trim((string) ($tokens['drug_allergy_status']  ?? ''));
+        $allergyDetails = trim((string) ($tokens['drug_allergy_details'] ?? ''));
+        $adrHistory     = trim((string) ($tokens['adr_history']          ?? ''));
+        $currentMeds    = trim((string) ($tokens['current_medications']  ?? ''));
+
+        $allergyBlock = $allergyStatus !== '' ? esc($allergyStatus) : '';
+        if ($allergyDetails !== '') {
+            $allergyBlock .= ($allergyBlock !== '' ? ' — ' : '') . esc($allergyDetails);
+        }
+        $tokens['drug_allergy_block'] = $allergyBlock !== '' ? $formatBlock('Drug Allergy', $allergyBlock) : '';
+        $tokens['adr_history_block'] = $adrHistory !== '' ? $formatBlock('ADR History', esc($adrHistory)) : '';
+        $tokens['current_medications_block'] = $currentMeds !== '' ? $formatBlock('Current Medications', esc($currentMeds)) : '';
+
+        // ── Women related (formatted) ─────────────────────────────────────────
+        $womenParts = [];
+        $womenLmpRaw = trim((string) ($tokens['women_lmp'] ?? ''));
+        if ($womenLmpRaw !== '') { $womenParts[] = 'LMP: ' . esc($womenLmpRaw) . ' days ago'; }
+        $womenLastBabyRaw = trim((string) ($tokens['women_last_baby'] ?? ''));
+        if ($womenLastBabyRaw !== '') { $womenParts[] = 'Last Baby: ' . esc($womenLastBabyRaw); }
+        $womenPregRaw = trim((string) ($tokens['women_pregnancy_related'] ?? ''));
+        if ($womenPregRaw !== '') { $womenParts[] = esc($womenPregRaw); }
+        $womenBlock = implode(' | ', $womenParts);
+        $tokens['women_block'] = $womenBlock !== '' ? $formatBlock('Women Related', $womenBlock) : '';
+
+        // ── Morbidities (formatted) ───────────────────────────────────────────
+        $tokens['morbidities_block'] = $formatBlock('Co-Morbidities', (string) ($tokens['morbidities'] ?? ''));
+
         $medicalHtml = trim((string) ($tokens['medical'] ?? ''));
         $tokens['Rx'] = $medicalHtml !== ''
             ? '<div style="margin:8px 0 6px 0;"><div style="font-weight:700;font-size:24px;line-height:1.2;margin-bottom:8px;">Rx :</div>' . $medicalHtml . '</div>'
@@ -2706,6 +2923,49 @@ class Opd extends BaseController
         $tokens['advice_local_line'] = $adviceLocal !== ''
             ? ('<br><strong>सलाह:</strong> ' . $adviceLocal)
             : '';
+
+        // ── Doctor master tokens ──────────────────────────────────────────────
+        $docRow = $data['doctor_master'][0] ?? null;
+        $docTitle      = trim((string) ($docRow->p_title ?? 'Dr.'));
+        $docFname      = trim((string) ($docRow->p_fname ?? ''));
+        $docMname      = trim((string) ($docRow->p_mname ?? ''));
+        $docLname      = trim((string) ($docRow->p_lname ?? ''));
+        $docFullName   = trim(trim($docTitle . ' ' . $docFname . ' ' . $docMname) . ' ' . $docLname);
+        $docRegNo      = trim((string) ($docRow->doctor_reg_no ?? ''));
+        $docPhone      = trim((string) ($docRow->mphone1 ?? ''));
+        $docEmail      = trim((string) ($docRow->email1 ?? ''));
+        $docSpec       = trim((string) ($docRow->SpecName ?? $tokens['SpecName'] ?? ''));
+        $docAdd1       = trim((string) ($docRow->add1 ?? ''));
+        $docAdd2       = trim((string) ($docRow->add2 ?? ''));
+        $docCity       = trim((string) ($docRow->city ?? ''));
+        $docAddress    = trim(trim($docAdd1 . ', ' . $docAdd2, ', ') . (($docCity !== '') ? ', ' . $docCity : ''), ', ');
+
+        $tokens['doctor_title']          = esc($docTitle);
+        $tokens['doctor_full_name']      = esc($docFullName);
+        $tokens['doctor_reg_no']         = esc($docRegNo);
+        $tokens['doctor_registration']   = esc($docRegNo);
+        $tokens['doctor_phone']          = esc($docPhone);
+        $tokens['doctor_email']          = esc($docEmail);
+        $tokens['doctor_specialization'] = esc($docSpec);
+        $tokens['doctor_address']        = esc($docAddress);
+        // ─────────────────────────────────────────────────────────────────────
+
+        // ── Composed section tokens (available in flat/custom templates too) ─
+        // hospital_section : hospital name + address + phone/email block
+        $hospitalSectionParts = array_filter([
+            $hName !== '' ? '<strong>' . esc($hName) . '</strong>' : '',
+            trim($hAddress1 . ', ' . $hAddress2, ', ') !== '' ? esc(trim($hAddress1 . ', ' . $hAddress2, ', ')) : '',
+            $hPhone !== '' ? 'Ph: ' . esc($hPhone) : '',
+            $hEmail !== '' ? 'Email: ' . esc($hEmail) : '',
+        ], static fn ($v): bool => $v !== '');
+        $tokens['hospital_section'] = implode('<br>', $hospitalSectionParts);
+
+        // patient_section : reuse the existing patient info table ({{content}})
+        $tokens['patient_section'] = (string) ($tokens['content'] ?? '');
+
+        // content_section : all clinical blocks combined (same as {{RxFullBlock}})
+        $tokens['content_section'] = (string) ($tokens['RxFullBlock'] ?? '');
+        // ─────────────────────────────────────────────────────────────────────
 
         return $tokens;
     }

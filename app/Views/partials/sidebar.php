@@ -286,6 +286,14 @@ if (! $canDiagnosis && $user && method_exists($user, 'inGroup')) {
         </li>
     <?php } ?>
 
+    <li class="nav-heading">ABDM</li>
+    <li class="nav-item">
+        <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('AbdmTaskBoard') ?>','ABDM Task Board')">
+            <i class="bi bi-shield-check"></i>
+            <span>ABDM Task Board</span>
+        </a>
+    </li>
+
     <li class="nav-heading">Reports</li>
     
     <li class="nav-item">

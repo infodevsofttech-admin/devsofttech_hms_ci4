@@ -388,6 +388,7 @@ $routes->group('billing', function($routes) {
     $routes->post('patient/create', 'Patient::create');
     $routes->post('patient/search', 'Patient::search');
     $routes->post('patient/search_adv', 'Patient::search_adv');
+    $routes->post('patient/abha_fetch_profile', 'Patient::abha_fetch_profile');
     $routes->get('patient/person_record/(:num)', 'Patient::person_record/$1');
     $routes->get('patient/person_record/(:num)/(:num)', 'Patient::person_record/$1/$2');
     $routes->get('patient/show_cards/(:num)', 'Patient::show_cards/$1');
@@ -501,6 +502,20 @@ $routes->get('Opd_prescription/Prescription/(:num)', 'Opd_prescription::Prescrip
 $routes->get('Opd_prescription/opd_prescription_print/(:num)/(:num)', 'Opd_prescription::opd_prescription_print/$1/$2');
 $routes->get('Opd_prescription/opd_prescription_print/(:num)/(:num)/(:num)', 'Opd_prescription::opd_prescription_print/$1/$2/$3');
 $routes->post('Opd_prescription/opd_prescription_save', 'Opd_prescription::opd_prescription_save');
+$routes->post('AbdmGateway/abha_validate', 'AbdmGateway::abhaValidate');
+$routes->post('AbdmGateway/scan_share_lookup', 'AbdmGateway::scanShareLookup');
+$routes->post('AbdmGateway/consent_request', 'AbdmGateway::consentRequest');
+$routes->post('AbdmGateway/consent_callback', 'AbdmGateway::consentCallback');
+$routes->post('AbdmGateway/share_prescription_bundle', 'AbdmGateway::sharePrescriptionBundle');
+$routes->post('AbdmGateway/share_ipd_discharge_bundle', 'AbdmGateway::shareIpdDischargeBundle');
+$routes->post('AbdmGateway/share_diagnosis_report_bundle', 'AbdmGateway::shareDiagnosisReportBundle');
+$routes->post('AbdmGateway/nhcx_claim_create', 'AbdmGateway::nhcxClaimCreate');
+$routes->post('AbdmGateway/nhcx_claim_status_request', 'AbdmGateway::nhcxClaimStatusRequest');
+$routes->post('AbdmGateway/nhcx_claim_status_callback', 'AbdmGateway::nhcxClaimStatusCallback');
+$routes->get('AbdmTaskBoard', 'AbdmTaskBoard::index');
+$routes->get('AbdmTaskBoard/list', 'AbdmTaskBoard::list');
+$routes->post('AbdmTaskBoard/perform_action', 'AbdmTaskBoard::performAction');
+$routes->post('AbdmTaskBoard/mark_status', 'AbdmTaskBoard::markStatus');
 $routes->get('Opd_prescription/fhir_bundle/(:num)', 'Opd_prescription::fhir_bundle/$1');
 $routes->get('Opd_prescription/fhir_bundle/(:num)/(:num)', 'Opd_prescription::fhir_bundle/$1/$2');
 $routes->get('Opd_prescription/fhir_bundle_history/(:num)', 'Opd_prescription::fhir_bundle_history/$1');

@@ -67,3 +67,32 @@
 #--------------------------------------------------------------------
 
 # logger.threshold = 4
+
+#--------------------------------------------------------------------
+# ABDM / EKA CONNECTOR
+#--------------------------------------------------------------------
+
+# Use "eka" to route ABDM/NHCX queue events to Eka, "bridge" to keep legacy bridge route.
+# ABDM_SYNC_PROVIDER = eka
+
+# Optional global override for all queue events.
+# BRIDGE_SYNC_PROVIDER = bridge
+
+# Legacy bridge endpoint settings.
+# BRIDGE_SYNC_URL =
+# BRIDGE_SYNC_TOKEN =
+# BRIDGE_SOURCE_CODE =
+
+# Eka dispatch settings.
+# EKA_BASE_URL = https://api.eka.care
+# EKA_BEARER_TOKEN =
+# EKA_API_KEY =
+# EKA_CLIENT_ID =
+
+# Optional JSON map to override default event->path mapping.
+# Example: {"abdm.abha.validate":"/user-app/abdm-connect/abha/verify"}
+# EKA_EVENT_ENDPOINTS_JSON =
+
+# Webhook signature verification secret for callback endpoints.
+# If empty, signature validation is skipped.
+# EKA_WEBHOOK_SECRET =

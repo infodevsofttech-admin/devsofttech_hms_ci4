@@ -168,6 +168,95 @@ class FhirR4Builder
 
     /**
      * @param array<string, mixed> $patient
+     * @param array<string, mixed> $encounter
+     * @param array<string, mixed> $claim
+     *
+     * @return array<string, mixed>
+     */
+    public function buildClaimBundle(array $patient, array $encounter, array $claim): array
+    {
+        $issuedAt = Time::now('Asia/Kolkata')->toDateTimeString();
+        $patientRef = 'Patient/' . (string) ($patient['id'] ?? 'unknown');
+        $encounterRef = 'Encounter/' . (string) ($encounter['id'] ?? 'unknown');
+
+        $claimId = (string) ($claim['id'] ?? ('claim-' . time()));
+        $items = is_array($claim['items'] ?? null) ? ($claim['items'] ?? []) : [];
+
+        $claimItems = [];
+        foreach ($items as $index => $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+
+            $claimItems[] = [
+                'sequence' => $index + 1,
+                'productOrService' => [
+                    'text' => (string) ($item['name'] ?? $item['description'] ?? ''),
+                ],
+                'quantity' => [
+                    'value' => (float) ($item['qty'] ?? 1),
+                ],
+                'unitPrice' => [
+                    'value' => (float) ($item['unit_price'] ?? 0),
+                    'currency' => (string) ($item['currency'] ?? 'INR'),
+                ],
+                'net' => [
+                    'value' => (float) ($item['amount'] ?? 0),
+                    'currency' => (string) ($item['currency'] ?? 'INR'),
+                ],
+            ];
+        }
+
+        $claimResource = [
+            'resourceType' => 'Claim',
+            'id' => $claimId,
+            'status' => (string) ($claim['status'] ?? 'active'),
+            'use' => (string) ($claim['use'] ?? 'claim'),
+            'type' => [
+                'text' => (string) ($claim['type'] ?? 'institutional'),
+            ],
+            'patient' => ['reference' => $patientRef],
+            'created' => $issuedAt,
+            'provider' => [
+                'display' => (string) ($claim['provider'] ?? ''),
+            ],
+            'insurer' => [
+                'display' => (string) ($claim['insurer'] ?? ''),
+            ],
+            'priority' => [
+                'text' => (string) ($claim['priority'] ?? 'normal'),
+            ],
+            'item' => $claimItems,
+            'total' => [
+                'value' => (float) ($claim['total'] ?? 0),
+                'currency' => (string) ($claim['currency'] ?? 'INR'),
+            ],
+            'encounter' => [[
+                'reference' => $encounterRef,
+            ]],
+        ];
+
+        return [
+            'resourceType' => 'Bundle',
+            'type' => 'collection',
+            'timestamp' => $issuedAt,
+            'entry' => [[
+                'resource' => $this->buildPatientResource($patient),
+            ], [
+                'resource' => [
+                    'resourceType' => 'Encounter',
+                    'id' => (string) ($encounter['id'] ?? 'unknown'),
+                    'status' => (string) ($encounter['status'] ?? 'finished'),
+                    'subject' => ['reference' => $patientRef],
+                ],
+            ], [
+                'resource' => $claimResource,
+            ]],
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $patient
      *
      * @return array<string, mixed>
      */

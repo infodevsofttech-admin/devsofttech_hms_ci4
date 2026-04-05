@@ -22,6 +22,18 @@ if ($person) {
     ));
 }
 
+$patientId = (int) ($person->id ?? $person->p_id ?? 0);
+$patientAbha = '';
+if ($person) {
+    $patientAbha = trim((string) (
+        $person->abha_id
+        ?? $person->abha_no
+        ?? $person->abha_address
+        ?? $person->abha
+        ?? ''
+    ));
+}
+
 $age = '';
 if ($person) {
     $age = get_age_1($person->dob ?? null, $person->age ?? '', $person->age_in_month ?? '', $person->estimate_dob ?? '');
@@ -614,6 +626,41 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
 
                     <div class="discharge-side-actions">
                         <button type="button" class="btn btn-primary btn-sm" id="btn_preview_side" onclick="openDischargePreview('<?= site_url('Ipd_discharge/preview_discharge_report/' . $ipdId . '?regen=1') ?>', 'Discharge Preview');">Preview</button>
+                    </div>
+
+                    <div class="card mt-2 border-primary-subtle" id="ipd_abdm_panel">
+                        <div class="card-header py-1"><strong>ABDM Sandbox Actions</strong></div>
+                        <div class="card-body p-2">
+                            <div class="mb-2">
+                                <label class="form-label mb-1 small">ABHA Address/ID</label>
+                                <input type="text" class="form-control form-control-sm" id="ipd_abha_address" value="<?= esc($patientAbha) ?>" maxlength="32" placeholder="Enter ABHA Address">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label mb-1 small">QR Payload (Scan &amp; Share)</label>
+                                <input type="text" class="form-control form-control-sm" id="ipd_abdm_qr_payload" placeholder="Paste scanned QR payload">
+                            </div>
+                            <div class="d-flex flex-wrap gap-1 mb-2">
+                                <button type="button" class="btn btn-outline-primary btn-sm" id="btn_ipd_abdm_scan_lookup">Scan Lookup</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_ipd_abdm_validate_abha">Validate ABHA</button>
+                            </div>
+                            <div class="row g-1 mb-2">
+                                <div class="col-6">
+                                    <input type="text" class="form-control form-control-sm" id="ipd_abdm_purpose_code" placeholder="Purpose (CAREMGT)">
+                                </div>
+                                <div class="col-6">
+                                    <input type="datetime-local" class="form-control form-control-sm" id="ipd_abdm_consent_expires_at">
+                                </div>
+                            </div>
+                            <div class="d-flex flex-wrap gap-1 mb-2">
+                                <button type="button" class="btn btn-outline-success btn-sm" id="btn_ipd_abdm_consent_request">Request Consent</button>
+                                <button type="button" class="btn btn-outline-warning btn-sm" id="btn_ipd_abdm_share_discharge">Share Discharge</button>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label mb-1 small">Consent Handle</label>
+                                <input type="text" class="form-control form-control-sm" id="ipd_abdm_consent_handle" placeholder="Auto-filled after consent request">
+                            </div>
+                            <div class="small text-muted" id="ipd_abdm_action_status">Ready</div>
+                        </div>
                     </div>
                     </div>
                 </div>
@@ -3858,6 +3905,131 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
             }
         }, { passive: true, capture: true });
         syncNavOnScroll();
+
+        // ─── ABDM Sandbox Actions (IPD Discharge) ─────────────────────────────
+        (function initIpdAbdmActions() {
+            var csrfName  = '<?= csrf_token() ?>';
+            var csrfHash  = '<?= csrf_hash() ?>';
+            var ipdId     = <?= (int) $ipdId ?>;
+            var patientId = <?= (int) $patientId ?>;
+
+            function setStatus(msg, isError) {
+                var el = document.getElementById('ipd_abdm_action_status');
+                if (!el) { return; }
+                el.textContent = msg;
+                el.style.color = isError ? '#dc3545' : '#6c757d';
+            }
+
+            function abdmPost(url, payload, onSuccess) {
+                setStatus('Sending…');
+                var data = Object.assign({}, payload);
+                data[csrfName] = csrfHash;
+                $.ajax({
+                    url: url,
+                    type: 'POST',
+                    data: data,
+                    dataType: 'json'
+                }).done(function(resp) {
+                    // refresh CSRF token if returned
+                    if (resp && resp.csrf_hash) { csrfHash = resp.csrf_hash; }
+                    if (resp && resp.csrf_token) { csrfName = resp.csrf_token; }
+                    onSuccess(resp);
+                }).fail(function(xhr) {
+                    setStatus('Request failed: ' + xhr.status + ' ' + xhr.statusText, true);
+                });
+            }
+
+            // Scan & Share Lookup
+            var btnScan = document.getElementById('btn_ipd_abdm_scan_lookup');
+            if (btnScan) {
+                btnScan.addEventListener('click', function() {
+                    var qrPayload = (document.getElementById('ipd_abdm_qr_payload') || {}).value || '';
+                    if (!qrPayload.trim()) { setStatus('Enter QR payload first.', true); return; }
+                    abdmPost('<?= base_url('AbdmGateway/scan_share_lookup') ?>', {
+                        qr_payload: qrPayload,
+                        patient_id: patientId
+                    }, function(resp) {
+                        if (resp && resp.abha_address) {
+                            var addr = document.getElementById('ipd_abha_address');
+                            if (addr) { addr.value = resp.abha_address; }
+                        }
+                        setStatus(resp && resp.message ? resp.message : 'Lookup done.');
+                    });
+                });
+            }
+
+            // Validate ABHA
+            var btnVal = document.getElementById('btn_ipd_abdm_validate_abha');
+            if (btnVal) {
+                btnVal.addEventListener('click', function() {
+                    var abhaAddr = (document.getElementById('ipd_abha_address') || {}).value || '';
+                    if (!abhaAddr.trim()) { setStatus('Enter ABHA Address first.', true); return; }
+                    abdmPost('<?= base_url('AbdmGateway/abha_validate') ?>', {
+                        abha_address: abhaAddr,
+                        patient_id:   patientId
+                    }, function(resp) {
+                        setStatus(resp && resp.message ? resp.message : (resp && resp.ok ? 'ABHA valid.' : 'Validation failed.'), !(resp && resp.ok));
+                    });
+                });
+            }
+
+            // Request Consent
+            var btnConsent = document.getElementById('btn_ipd_abdm_consent_request');
+            if (btnConsent) {
+                btnConsent.addEventListener('click', function() {
+                    var abhaAddr   = (document.getElementById('ipd_abha_address') || {}).value || '';
+                    var purpose    = (document.getElementById('ipd_abdm_purpose_code') || {}).value || 'CAREMGT';
+                    var expiresAt  = (document.getElementById('ipd_abdm_consent_expires_at') || {}).value || '';
+                    if (!abhaAddr.trim()) { setStatus('Enter ABHA Address first.', true); return; }
+                    abdmPost('<?= base_url('AbdmGateway/consent_request') ?>', {
+                        abha_address: abhaAddr,
+                        patient_id:   patientId,
+                        purpose_code: purpose,
+                        expires_at:   expiresAt
+                    }, function(resp) {
+                        if (resp && resp.consent_handle) {
+                            var ch = document.getElementById('ipd_abdm_consent_handle');
+                            if (ch) { ch.value = resp.consent_handle; }
+                        }
+                        setStatus(resp && resp.message ? resp.message : (resp && resp.ok ? 'Consent requested.' : 'Consent request failed.'), !(resp && resp.ok));
+                    });
+                });
+            }
+
+            // Share Discharge FHIR Bundle
+            var btnShare = document.getElementById('btn_ipd_abdm_share_discharge');
+            if (btnShare) {
+                btnShare.addEventListener('click', function() {
+                    var abhaAddr      = (document.getElementById('ipd_abha_address') || {}).value || '';
+                    var consentHandle = (document.getElementById('ipd_abdm_consent_handle') || {}).value || '';
+                    if (!abhaAddr.trim()) { setStatus('Enter ABHA Address first.', true); return; }
+                    abdmPost('<?= base_url('AbdmGateway/share_ipd_discharge_bundle') ?>', {
+                        ipd_id:         ipdId,
+                        patient_id:     patientId,
+                        abha_id:        abhaAddr,
+                        consent_handle: consentHandle
+                    }, function(resp) {
+                        if (resp && resp.consent_handle) {
+                            var ch = document.getElementById('ipd_abdm_consent_handle');
+                            if (ch && !ch.value) { ch.value = resp.consent_handle; }
+                        }
+                        setStatus(resp && resp.status ? ('Queued: ' + resp.status) : (resp && resp.message ? resp.message : 'Share request sent.'), !(resp && (resp.ok || resp.queue_id)));
+                    });
+                });
+            }
+
+            // Set default consent expiry to +30 days
+            (function setDefaultExpiry() {
+                var el = document.getElementById('ipd_abdm_consent_expires_at');
+                if (!el || el.value) { return; }
+                var d = new Date();
+                d.setDate(d.getDate() + 30);
+                var iso = d.toISOString().slice(0, 16);
+                el.value = iso;
+            })();
+        })();
+        // ─── end ABDM Sandbox Actions ──────────────────────────────────────────
+
     })();
     </script>
 </section>

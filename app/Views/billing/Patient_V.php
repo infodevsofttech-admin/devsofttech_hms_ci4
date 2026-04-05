@@ -280,6 +280,51 @@
             });
         });
 
+        $('#input_abha_id').on('change blur', function() {
+            var abhaId = ($(this).val() || '').toString().trim();
+            if (!/^\d{14}$/.test(abhaId)) {
+                return;
+            }
+
+            $.post('<?= base_url('patient/abha_fetch_profile') ?>', {
+                abha_id: abhaId,
+                '<?= csrf_token() ?>': $('input[name="<?= csrf_token() ?>"]').val()
+            }, function(resp) {
+                if (!resp || resp.ok != 1 || !resp.profile) {
+                    return;
+                }
+
+                var p = resp.profile || {};
+                if (p.name && !$('#input_name').val()) {
+                    $('#input_name').val(p.name);
+                }
+                if (p.mobile && !$('#input_mphone1').val()) {
+                    $('#input_mphone1').val(p.mobile);
+                }
+                if (p.city && !$('#input_city').val()) {
+                    $('#input_city').val(p.city);
+                }
+                if (p.state && !$('#input_state').val()) {
+                    $('#input_state').val(p.state);
+                }
+                if (p.dob && !$('#datepicker_dob').val()) {
+                    $('#datepicker_dob').val(p.dob);
+                    if ($('#chk_age').is(':checked')) {
+                        $('#chk_age').prop('checked', false).trigger('click');
+                    }
+                }
+
+                if (p.gender) {
+                    var g = (p.gender + '').toLowerCase();
+                    if (g === '1' || g === 'male' || g === 'm') {
+                        $('#options_gender1').prop('checked', true);
+                    } else if (g === '2' || g === 'female' || g === 'f') {
+                        $('#options_gender2').prop('checked', true);
+                    }
+                }
+            }, 'json');
+        });
+
         $("#input_city").autocomplete({
             source: "<?= base_url('billing/patient/city') ?>",
             minLength: 3,

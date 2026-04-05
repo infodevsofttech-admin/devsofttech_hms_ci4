@@ -3,6 +3,7 @@
 namespace App\Controllers;
 
 use App\Controllers\BaseController;
+use App\Libraries\AbdmWorkTaskService;
 use App\Libraries\BridgeSyncService;
 use App\Models\OpdMedicineModel;
 use CodeIgniter\I18n\Time;
@@ -7712,6 +7713,8 @@ OPD SNAPSHOT JSON: " . $payload;
 
     public function opd_prescription_print(int $opdId, int $opdSessionId, int $printType = 0)
     {
+        $this->createOpdPrescriptionWorkTask($opdId, $opdSessionId);
+
         $printConfig = $this->resolvePrescriptionLayoutByDoctorField($opdId, $printType);
         $layoutMode = (string) ($printConfig['layout'] ?? 'content_only');
         $templateKey = (string) ($printConfig['template'] ?? '');
@@ -7785,5 +7788,55 @@ OPD SNAPSHOT JSON: " . $payload;
         }
 
         return ['layout' => $fallback, 'template' => ''];
+    }
+
+    private function createOpdPrescriptionWorkTask(int $opdId, int $opdSessionId): void
+    {
+        if ($opdId <= 0 || ! $this->db->tableExists('opd_master') || ! $this->db->tableExists('patient_master')) {
+            return;
+        }
+
+        $opdRow = $this->db->table('opd_master')->select('opd_id,p_id')->where('opd_id', $opdId)->get(1)->getRowArray();
+        if (empty($opdRow)) {
+            return;
+        }
+
+        $patientId = (int) ($opdRow['p_id'] ?? 0);
+        if ($patientId <= 0) {
+            return;
+        }
+
+        $patient = $this->db->table('patient_master')
+            ->select('p_fname,abha_id,abha_no,abha_address,abha')
+            ->where('id', $patientId)
+            ->get(1)
+            ->getRowArray();
+
+        $abhaId = trim((string) ($patient['abha_id'] ?? $patient['abha_no'] ?? $patient['abha_address'] ?? $patient['abha'] ?? ''));
+        if (! $this->isValidAbhaNumber($abhaId)) {
+            return;
+        }
+
+        $taskService = new AbdmWorkTaskService();
+        $taskService->createOrRefreshTask(
+            'opd_prescription_publish',
+            'opd_prescription',
+            'opd',
+            (string) $opdId,
+            $patientId,
+            trim((string) ($patient['p_fname'] ?? '')),
+            $abhaId,
+            'submit',
+            [
+                'opd_id' => $opdId,
+                'opd_session_id' => $opdSessionId,
+                'trigger' => 'opd.prescription.printed',
+            ]
+        );
+    }
+
+    private function isValidAbhaNumber(string $abhaId): bool
+    {
+        return preg_match('/^\d{14}$/', trim($abhaId)) === 1;
     }
 }

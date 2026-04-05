@@ -308,6 +308,48 @@
                             value="<?= esc($patient_master[0]->abha_address ?? $patient_master[0]->abha ?? '') ?>"
                             placeholder="Enter ABHA Address">
                     </div>
+                    <div class="card mt-2 border-primary-subtle">
+                        <div class="card-header py-1"><strong>ABDM Sandbox Actions</strong></div>
+                        <div class="card-body p-2">
+                            <div class="mb-2">
+                                <label class="form-label mb-1 small">QR Payload (Scan &amp; Share)</label>
+                                <input type="text" class="form-control form-control-sm" id="abdm_qr_payload" placeholder="Paste scanned QR payload">
+                            </div>
+                            <div class="d-flex flex-wrap gap-1 mb-2">
+                                <button type="button" class="btn btn-outline-primary btn-sm" id="btn_abdm_scan_lookup">Scan Lookup</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_abdm_validate_abha">Validate ABHA</button>
+                            </div>
+
+                            <div class="row g-1 mb-2">
+                                <div class="col-6">
+                                    <input type="text" class="form-control form-control-sm" id="abdm_purpose_code" placeholder="Purpose (ex: CAREMGT)">
+                                </div>
+                                <div class="col-6">
+                                    <input type="datetime-local" class="form-control form-control-sm" id="abdm_consent_expires_at">
+                                </div>
+                            </div>
+                            <div class="d-flex flex-wrap gap-1 mb-2">
+                                <button type="button" class="btn btn-outline-success btn-sm" id="btn_abdm_consent_request">Request Consent</button>
+                                <button type="button" class="btn btn-outline-warning btn-sm" id="btn_abdm_share_fhir">Share FHIR</button>
+                            </div>
+
+                            <div class="mb-2">
+                                <label class="form-label mb-1 small">Consent Handle</label>
+                                <input type="text" class="form-control form-control-sm" id="abdm_consent_handle" placeholder="Auto-filled after consent request">
+                            </div>
+
+                            <div class="row g-1 mb-2">
+                                <div class="col-7">
+                                    <input type="number" min="1" class="form-control form-control-sm" id="abdm_claim_document_id" placeholder="Claim Document ID">
+                                </div>
+                                <div class="col-5">
+                                    <button type="button" class="btn btn-outline-dark btn-sm w-100" id="btn_abdm_claim_status">Claim Status</button>
+                                </div>
+                            </div>
+
+                            <div class="small text-muted" id="abdm_action_status">Ready</div>
+                        </div>
+                    </div>
                     <div><strong>OPD:</strong> <?= esc($opd_master[0]->opd_code ?? '') ?></div>
                     <div><strong>Date:</strong> <?= esc($opd_master[0]->apointment_date ?? '') ?></div>
                     <div><strong>Doctor:</strong> <?= esc($opd_master[0]->doc_name ?? '') ?></div>
@@ -1105,6 +1147,30 @@
         cardiac: ['ECG', 'Lipid Profile', 'CBC'],
         viral_infection: ['CBC', 'LFT', 'KFT']
     };
+    var patientId = <?= (int) ($patient_master[0]->id ?? 0) ?>;
+
+    function setAbdmStatus(msg, level) {
+        var $box = $('#abdm_action_status');
+        if (!$box.length) {
+            return;
+        }
+        level = (level || 'muted').toString();
+        $box.removeClass('text-muted text-success text-danger text-warning');
+        if (level === 'success') {
+            $box.addClass('text-success');
+        } else if (level === 'danger') {
+            $box.addClass('text-danger');
+        } else if (level === 'warning') {
+            $box.addClass('text-warning');
+        } else {
+            $box.addClass('text-muted');
+        }
+        $box.text(msg || 'Ready');
+    }
+
+    function abdmCurrentAbha() {
+        return ($('#abha_address').val() || '').toString().trim();
+    }
 
     function alignPanelOrderToExample() {
         var $medicine = $('#panel_medicine');
@@ -3388,6 +3454,109 @@
         updateScanBanner();
         markDirty('Editing in progress');
         scheduleAutoSave();
+    });
+
+    $('#btn_abdm_scan_lookup').on('click', function() {
+        var qrPayload = ($('#abdm_qr_payload').val() || '').toString().trim();
+        if (!qrPayload) {
+            setAbdmStatus('Paste QR payload first.', 'warning');
+            return;
+        }
+        setAbdmStatus('Queuing Scan & Share lookup...', 'muted');
+        apiPost('<?= base_url('AbdmGateway/scan_share_lookup') ?>', {
+            qr_payload: qrPayload
+        }, function(data) {
+            if (data.ok != 1) {
+                setAbdmStatus(data.error_text || 'Scan lookup failed.', 'danger');
+                return;
+            }
+            if (data.abha_id_hint) {
+                $('#abha_address').val(data.abha_id_hint).trigger('input');
+            }
+            setAbdmStatus('Scan lookup queued. Queue ID: ' + (data.queue_id || '-'), 'success');
+        });
+    });
+
+    $('#btn_abdm_validate_abha').on('click', function() {
+        var abha = abdmCurrentAbha();
+        if (!abha) {
+            setAbdmStatus('Enter ABHA first.', 'warning');
+            return;
+        }
+        setAbdmStatus('Queuing ABHA validation...', 'muted');
+        apiPost('<?= base_url('AbdmGateway/abha_validate') ?>', {
+            abha_id: abha
+        }, function(data) {
+            if (data.ok != 1) {
+                setAbdmStatus(data.error_text || 'ABHA validation queue failed.', 'danger');
+                return;
+            }
+            setAbdmStatus('ABHA validation queued. Queue ID: ' + (data.queue_id || '-'), 'success');
+        });
+    });
+
+    $('#btn_abdm_consent_request').on('click', function() {
+        var abha = abdmCurrentAbha();
+        if (!abha) {
+            setAbdmStatus('Enter ABHA first.', 'warning');
+            return;
+        }
+        setAbdmStatus('Requesting consent...', 'muted');
+        apiPost('<?= base_url('AbdmGateway/consent_request') ?>', {
+            patient_id: patientId,
+            abha_id: abha,
+            purpose_code: ($('#abdm_purpose_code').val() || '').toString().trim(),
+            expires_at: ($('#abdm_consent_expires_at').val() || '').toString().trim().replace('T', ' ')
+        }, function(data) {
+            if (data.ok != 1) {
+                setAbdmStatus(data.error_text || 'Consent request failed.', 'danger');
+                return;
+            }
+            if (data.consent_handle) {
+                $('#abdm_consent_handle').val(data.consent_handle);
+            }
+            setAbdmStatus('Consent requested. Handle: ' + (data.consent_handle || '-'), 'success');
+        });
+    });
+
+    $('#btn_abdm_share_fhir').on('click', function() {
+        var abha = abdmCurrentAbha();
+        if (!abha) {
+            setAbdmStatus('Enter ABHA first.', 'warning');
+            return;
+        }
+        setAbdmStatus('Checking consent and queuing FHIR share...', 'muted');
+        apiPost('<?= base_url('AbdmGateway/share_prescription_bundle') ?>', {
+            opd_id: ($('#opd_id').val() || '0').toString(),
+            opd_session_id: ($('#opd_session_id').val() || '0').toString(),
+            patient_id: patientId,
+            abha_id: abha,
+            consent_handle: ($('#abdm_consent_handle').val() || '').toString().trim()
+        }, function(data) {
+            if (data.ok != 1) {
+                setAbdmStatus(data.error_text || 'FHIR share queue failed.', 'danger');
+                return;
+            }
+            setAbdmStatus('FHIR share queued. Queue ID: ' + (data.queue_id || '-'), 'success');
+        });
+    });
+
+    $('#btn_abdm_claim_status').on('click', function() {
+        var docId = parseInt(($('#abdm_claim_document_id').val() || '0').toString(), 10) || 0;
+        if (docId <= 0) {
+            setAbdmStatus('Enter Claim Document ID first.', 'warning');
+            return;
+        }
+        setAbdmStatus('Queuing claim status request...', 'muted');
+        apiPost('<?= base_url('AbdmGateway/nhcx_claim_status_request') ?>', {
+            document_id: docId
+        }, function(data) {
+            if (data.ok != 1) {
+                setAbdmStatus(data.error_text || 'Claim status queue failed.', 'danger');
+                return;
+            }
+            setAbdmStatus('Claim status queued. Queue ID: ' + (data.queue_id || '-'), 'success');
+        });
     });
 
     $('.rx-instant, #pregnancy, #lactation, #liver_insufficiency, #renal_insufficiency, #pulmonary_insufficiency, #corona_suspected, #dengue, #is_smoking, #is_alcohol, #is_drug_abuse, input[name="morbidities"], input[name="options-pain"]').on('input change', function() {

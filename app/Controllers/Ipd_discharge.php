@@ -3,6 +3,8 @@
 namespace App\Controllers;
 
 use App\Controllers\BaseController;
+use App\Libraries\AbdmWorkTaskService;
+use App\Libraries\BridgeSyncService;
 use App\Models\IpdBillingModel;
 use Mpdf\Mpdf;
 use Mpdf\Output\Destination;
@@ -3296,6 +3298,10 @@ class Ipd_discharge extends BaseController
                     $savedAny = $this->upsertByIpd('ipd_discharge_drug_food_interaction', $ipdId, $legacyData) || $savedAny;
                 }
 
+                if ($savedAny) {
+                    $this->enqueueIpdDischargeSync($ipdId, $patientId, 'dietary_autosave');
+                }
+
                 return $this->response->setJSON([
                     'update' => $savedAny ? 1 : 0,
                     'error_text' => $savedAny ? 'Dietary advice saved.' : 'Unable to save dietary advice.',
@@ -4165,6 +4171,10 @@ class Ipd_discharge extends BaseController
                 $noticeType = 'warning';
             }
 
+            if ($savedAny) {
+                $this->enqueueIpdDischargeSync($ipdId, $patientId, $action);
+            }
+
             $ajaxMode = strtolower(trim((string) ($this->request->getPost('ajax_mode') ?? '')));
             if ($ajaxMode === 'json') {
                 return $this->response->setJSON([
@@ -4415,6 +4425,8 @@ class Ipd_discharge extends BaseController
         $renderedHtml = (string) ($templatePack['rendered_html'] ?? $content);
         $templateName = (string) ($templatePack['selected_template_name'] ?? 'Discharge Template');
 
+        $this->createIpdDischargeWorkTask($ipdId, $panelData);
+
         try {
             $patient = $panelData['person_info'] ?? null;
             $ipd = $panelData['ipd_info'] ?? null;
@@ -4476,6 +4488,47 @@ class Ipd_discharge extends BaseController
             'print_type' => $printType,
             'print_mode' => 'standard',
         ]);
+    }
+
+    private function createIpdDischargeWorkTask(int $ipdId, array $panelData): void
+    {
+        $person = $panelData['person_info'] ?? null;
+        if (! $person) {
+            return;
+        }
+
+        $patientId = (int) ($person->id ?? $person->p_id ?? 0);
+        if ($patientId <= 0) {
+            return;
+        }
+
+        $abhaId = trim((string) (
+            $person->abha_id
+            ?? $person->abha_no
+            ?? $person->abha_address
+            ?? $person->abha
+            ?? ''
+        ));
+
+        if (preg_match('/^\d{14}$/', $abhaId) !== 1) {
+            return;
+        }
+
+        $taskService = new AbdmWorkTaskService();
+        $taskService->createOrRefreshTask(
+            'ipd_discharge_publish',
+            'ipd_discharge',
+            'ipd',
+            (string) $ipdId,
+            $patientId,
+            trim((string) ($person->p_fname ?? '')),
+            $abhaId,
+            'submit',
+            [
+                'ipd_id' => $ipdId,
+                'trigger' => 'ipd.discharge.printed',
+            ]
+        );
     }
 
     private function buildDischargePdfHtml(array $panelData, string $renderedContent, bool $withHeader, string $templateName): string
@@ -4540,5 +4593,66 @@ class Ipd_discharge extends BaseController
     public function show_file3(int $ipdId)
     {
         return $this->show_discharge($ipdId, 3);
+    }
+
+    private function enqueueIpdDischargeSync(int $ipdId, int $patientId, string $action): void
+    {
+        if ($ipdId <= 0) {
+            return;
+        }
+
+        $ipdRow = $this->db->tableExists('ipd_master')
+            ? ($this->db->table('ipd_master')->where('id', $ipdId)->get(1)->getRowArray() ?? [])
+            : [];
+
+        if ($patientId <= 0) {
+            $patientId = (int) ($ipdRow['p_id'] ?? 0);
+        }
+
+        $patientRow = [];
+        if ($patientId > 0 && $this->db->tableExists('patient_master')) {
+            $patientRow = $this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray() ?? [];
+        }
+
+        $abhaId = '';
+        foreach (['abha_id', 'abha_no', 'abha_address', 'abha'] as $field) {
+            $candidate = trim((string) ($patientRow[$field] ?? ''));
+            if ($candidate !== '') {
+                $abhaId = $candidate;
+                break;
+            }
+        }
+
+        $dischargeContent = '';
+        if ($this->db->tableExists('ipd_discharge') && $this->db->fieldExists('content', 'ipd_discharge')) {
+            $dischargeRow = $this->db->table('ipd_discharge')
+                ->select('content')
+                ->where('ipd_id', $ipdId)
+                ->orderBy('id', 'DESC')
+                ->get(1)
+                ->getRowArray();
+            $dischargeContent = trim((string) ($dischargeRow['content'] ?? ''));
+        }
+
+        $payload = [
+            'ipd_id' => $ipdId,
+            'patient_id' => $patientId,
+            'ipd_code' => trim((string) ($ipdRow['ipd_code'] ?? '')),
+            'patient_name' => trim((string) ($patientRow['p_fname'] ?? $ipdRow['P_name'] ?? '')),
+            'abha_id' => $abhaId,
+            'action' => trim($action) !== '' ? trim($action) : 'save_main',
+            'discharge_date' => trim((string) ($ipdRow['discharge_date'] ?? '')),
+            'discharge_time' => trim((string) ($ipdRow['discharge_time'] ?? '')),
+            'discharge_status' => trim((string) ($ipdRow['discarge_patient_status'] ?? '')),
+            'summary_html' => $dischargeContent,
+            'updated_at' => date('Y-m-d H:i:s'),
+        ];
+
+        try {
+            $bridgeSync = new BridgeSyncService();
+            $bridgeSync->enqueue('ipd.discharge.updated', $payload, 'ipd_discharge', (string) $ipdId);
+        } catch (\Throwable $e) {
+            // Do not block discharge workflows if queue service is unavailable.
+        }
     }
 }

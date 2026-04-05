@@ -130,6 +130,36 @@ $editReason = trim((string) ($edit_reason ?? ''));
                         <?php endforeach; ?>
                         <div id="no_templates_msg" style="display:none; color:#888; padding:6px;">No templates found</div>
                     </div>
+
+                    <hr class="my-3">
+
+                    <div class="card border-primary-subtle">
+                        <div class="card-header py-1"><strong>ABDM – Share Report</strong></div>
+                        <div class="card-body p-2">
+                            <div class="mb-2">
+                                <label class="form-label mb-1 small">ABHA Address/ID</label>
+                                <input type="text" class="form-control form-control-sm" id="diag_abha_address" value="<?= esc($report->patient_abha ?? '') ?>" placeholder="Patient ABHA">
+                            </div>
+                            <div class="row g-1 mb-2">
+                                <div class="col-7">
+                                    <input type="text" class="form-control form-control-sm" id="diag_abdm_purpose_code" value="CAREMGT" placeholder="Purpose (CAREMGT)">
+                                </div>
+                                <div class="col-5">
+                                    <input type="datetime-local" class="form-control form-control-sm" id="diag_abdm_consent_expires_at">
+                                </div>
+                            </div>
+                            <div class="d-flex flex-wrap gap-1 mb-2">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_diag_abdm_validate_abha">Validate ABHA</button>
+                                <button type="button" class="btn btn-outline-success btn-sm" id="btn_diag_abdm_consent_request">Request Consent</button>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label mb-1 small">Consent Handle</label>
+                                <input type="text" class="form-control form-control-sm" id="diag_abdm_consent_handle" placeholder="Auto-filled after consent">
+                            </div>
+                            <button type="button" class="btn btn-outline-warning btn-sm w-100 mb-2" id="btn_diag_abdm_share_report">Share Report (FHIR)</button>
+                            <div class="small text-muted" id="diag_abdm_action_status">Ready</div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -413,6 +443,97 @@ $editReason = trim((string) ($edit_reason ?? ''));
                     if (inst) inst.hide();
                 }
             }
+
+            // ─── ABDM Lab/Radiology Report Share ──────────────────────────────
+            (function initDiagAbdmActions() {
+                var csrfName  = '<?= csrf_token() ?>';
+                var csrfHash  = '<?= csrf_hash() ?>';
+                var labReqId  = <?= (int) ($report->id ?? 0) ?>;
+                var patientId = <?= (int) ($report->patient_id ?? 0) ?>;
+
+                function setStatus(msg, isError) {
+                    var el = document.getElementById('diag_abdm_action_status');
+                    if (!el) { return; }
+                    el.textContent = msg;
+                    el.style.color = isError ? '#dc3545' : '#6c757d';
+                }
+
+                function abdmPost(url, payload, onSuccess) {
+                    setStatus('Sending…');
+                    var data = Object.assign({}, payload);
+                    data[csrfName] = csrfHash;
+                    fetch(url, {
+                        method: 'POST',
+                        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams(data).toString()
+                    })
+                    .then(function(r) { return r.json(); })
+                    .then(function(resp) {
+                        if (resp && resp.csrf_hash)  { csrfHash = resp.csrf_hash; }
+                        if (resp && resp.csrf_token) { csrfName = resp.csrf_token; }
+                        onSuccess(resp);
+                    })
+                    .catch(function(e) { setStatus('Request failed: ' + e.message, true); });
+                }
+
+                var btnValidate = document.getElementById('btn_diag_abdm_validate_abha');
+                if (btnValidate) {
+                    btnValidate.addEventListener('click', function() {
+                        var abha = (document.getElementById('diag_abha_address') || {}).value || '';
+                        if (!abha.trim()) { setStatus('Enter ABHA Address first.', true); return; }
+                        abdmPost(baseUrl + 'AbdmGateway/abha_validate', { abha_address: abha, patient_id: patientId }, function(resp) {
+                            setStatus(resp && resp.message ? resp.message : (resp && resp.ok ? 'ABHA valid.' : 'Validation failed.'), !(resp && resp.ok));
+                        });
+                    });
+                }
+
+                var btnConsent = document.getElementById('btn_diag_abdm_consent_request');
+                if (btnConsent) {
+                    btnConsent.addEventListener('click', function() {
+                        var abha    = (document.getElementById('diag_abha_address') || {}).value || '';
+                        var purpose = (document.getElementById('diag_abdm_purpose_code') || {}).value || 'CAREMGT';
+                        var expires = (document.getElementById('diag_abdm_consent_expires_at') || {}).value || '';
+                        if (!abha.trim()) { setStatus('Enter ABHA Address first.', true); return; }
+                        abdmPost(baseUrl + 'AbdmGateway/consent_request', {
+                            abha_address: abha, patient_id: patientId, purpose_code: purpose, expires_at: expires
+                        }, function(resp) {
+                            if (resp && resp.consent_handle) {
+                                var ch = document.getElementById('diag_abdm_consent_handle');
+                                if (ch) { ch.value = resp.consent_handle; }
+                            }
+                            setStatus(resp && resp.message ? resp.message : (resp && resp.ok ? 'Consent requested.' : 'Consent request failed.'), !(resp && resp.ok));
+                        });
+                    });
+                }
+
+                var btnShare = document.getElementById('btn_diag_abdm_share_report');
+                if (btnShare) {
+                    btnShare.addEventListener('click', function() {
+                        var abha    = (document.getElementById('diag_abha_address') || {}).value || '';
+                        var ch      = (document.getElementById('diag_abdm_consent_handle') || {}).value || '';
+                        if (!abha.trim()) { setStatus('Enter ABHA Address first.', true); return; }
+                        abdmPost(baseUrl + 'AbdmGateway/share_diagnosis_report_bundle', {
+                            lab_req_id: labReqId, patient_id: patientId, abha_id: abha, consent_handle: ch
+                        }, function(resp) {
+                            if (resp && resp.consent_handle) {
+                                var chEl = document.getElementById('diag_abdm_consent_handle');
+                                if (chEl && !chEl.value) { chEl.value = resp.consent_handle; }
+                            }
+                            setStatus(resp && resp.status ? ('Queued: ' + resp.status) : (resp && resp.message ? resp.message : 'Share request sent.'), !(resp && (resp.ok || resp.queue_id)));
+                        });
+                    });
+                }
+
+                // Default consent expiry +30 days
+                (function() {
+                    var el = document.getElementById('diag_abdm_consent_expires_at');
+                    if (!el || el.value) { return; }
+                    var d = new Date(); d.setDate(d.getDate() + 30);
+                    el.value = d.toISOString().slice(0, 16);
+                })();
+            })();
+            // ─── end ABDM ─────────────────────────────────────────────────────
+
             </script>
         <?php endif; ?>
     </div>

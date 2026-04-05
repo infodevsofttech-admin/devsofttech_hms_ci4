@@ -172,7 +172,18 @@
                             $('#main').html('Request timed out. Please try again.');
                             return;
                         }
-                        $('#main').html('Error loading content.');
+                        var details = 'Error loading content.';
+                        if (jqXHR && jqXHR.status) {
+                            details += ' [HTTP ' + jqXHR.status + ']';
+                        }
+                        var raw = (jqXHR && jqXHR.responseText) ? String(jqXHR.responseText) : '';
+                        if (raw !== '') {
+                            raw = raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+                            if (raw !== '') {
+                                details += '<br><small>' + raw.substring(0, 220) + '</small>';
+                            }
+                        }
+                        $('#main').html(details);
                     });
             };
 
@@ -204,7 +215,18 @@
                             $("#" + xdiv).html('Request timed out. Please try again.');
                             return;
                         }
-                        $("#" + xdiv).html('Error loading content.');
+                        var details = 'Error loading content.';
+                        if (jqXHR && jqXHR.status) {
+                            details += ' [HTTP ' + jqXHR.status + ']';
+                        }
+                        var raw = (jqXHR && jqXHR.responseText) ? String(jqXHR.responseText) : '';
+                        if (raw !== '') {
+                            raw = raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+                            if (raw !== '') {
+                                details += '<br><small>' + raw.substring(0, 220) + '</small>';
+                            }
+                        }
+                        $("#" + xdiv).html(details);
                     });
             };
         })();

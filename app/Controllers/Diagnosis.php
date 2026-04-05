@@ -3,6 +3,8 @@
 namespace App\Controllers;
 
 use App\Controllers\BaseController;
+use App\Libraries\AbdmWorkTaskService;
+use App\Libraries\BridgeSyncService;
 use CodeIgniter\I18n\Time;
 use Exception;
 use Mpdf\HTMLParserMode;
@@ -1082,10 +1084,15 @@ class Diagnosis extends BaseController
         }
 
         $patientRow = $this->db->table('patient_master')
-            ->select('gender, age, age_in, age_in_month, dob')
+            ->select('gender, age, age_in, age_in_month, dob, abha_id, abha_no, abha_address, abha')
             ->where('id', (int) ($reportRow->patient_id ?? 0))
             ->get()
             ->getRow();
+
+        $reportRow->patient_abha = '';
+        if ($patientRow) {
+            $reportRow->patient_abha = trim((string) ($patientRow->abha_id ?? $patientRow->abha_no ?? $patientRow->abha_address ?? $patientRow->abha ?? ''));
+        }
 
         $genderRaw = (int) ($patientRow->gender ?? 0);
         $reportRow->gender_text = $genderRaw === 1 ? 'Male' : ($genderRaw === 2 ? 'Female' : '-');
@@ -1227,6 +1234,8 @@ class Diagnosis extends BaseController
                 ]);
             }
 
+            $this->enqueueLabReportSync($labReqId, 'radiology.report.updated');
+
             return $this->response->setJSON(['status' => 'success', 'message' => 'Saved']);
         } catch (\Throwable $e) {
             return $this->response->setJSON(['status' => 'error', 'message' => $e->getMessage()]);
@@ -1303,6 +1312,8 @@ class Diagnosis extends BaseController
                 ]);
             }
 
+            $this->enqueueLabReportSync($labReqId, 'lab.report.updated');
+
             return $this->response->setJSON(['status' => 'success', 'message' => 'Saved']);
         } catch (\Throwable $e) {
             return $this->response->setJSON(['status' => 'error', 'message' => $e->getMessage()]);
@@ -1326,6 +1337,8 @@ class Diagnosis extends BaseController
                     'confirm_by' => $userName,
                     'status' => 2,
                 ]);
+
+            $this->enqueueLabReportSync($labReqId, 'lab.report.confirmed');
 
             return $this->response->setJSON(['status' => 'success', 'message' => 'Verified and Ready for Print']);
         } catch (\Throwable $e) {
@@ -3802,5 +3815,91 @@ class Diagnosis extends BaseController
     public function selectLabRadiology($invoiceId, $labType)
     {
         return $this->selectLabInvoicePath((int) $invoiceId, (int) $labType);
+    }
+
+    private function enqueueLabReportSync(int $labReqId, string $eventType): void
+    {
+        try {
+            if (! $this->db->tableExists('bridge_sync_queue')) {
+                return;
+            }
+
+            $labReq = $this->db->table('lab_request')
+                ->select('id, patient_id, patient_name, lab_type, charge_id, status, reported_time')
+                ->where('id', $labReqId)
+                ->get(1)
+                ->getRow();
+
+            if (! $labReq) {
+                return;
+            }
+
+            $patientId = (int) ($labReq->patient_id ?? 0);
+            $abhaId    = '';
+
+            if ($patientId > 0) {
+                $patientFields = $this->db->getFieldNames('patient_master') ?? [];
+                $abhaColumns = [];
+                foreach (['abha_id', 'abha_no', 'abha_address', 'abha'] as $field) {
+                    if (in_array($field, $patientFields, true)) {
+                        $abhaColumns[] = $field;
+                    }
+                }
+
+                $patient = null;
+                if (! empty($abhaColumns)) {
+                    $patient = $this->db->table('patient_master')
+                        ->select(implode(',', $abhaColumns))
+                        ->where('id', $patientId)
+                        ->get(1)
+                        ->getRow();
+                }
+
+                if ($patient) {
+                    $abhaId = trim((string) ($patient->abha_id ?? $patient->abha_no ?? $patient->abha_address ?? $patient->abha ?? ''));
+                }
+            }
+
+            $payload = [
+                'lab_req_id'    => $labReqId,
+                'patient_id'    => $patientId,
+                'patient_name'  => (string) ($labReq->patient_name ?? ''),
+                'abha_id'       => $abhaId,
+                'lab_type'      => (int) ($labReq->lab_type ?? 0),
+                'invoice_id'    => (int) ($labReq->charge_id ?? 0),
+                'report_status' => (int) ($labReq->status ?? 0),
+                'reported_time' => (string) ($labReq->reported_time ?? ''),
+                'updated_at'    => date('Y-m-d H:i:s'),
+            ];
+
+            $bridgeSync = new BridgeSyncService();
+            $bridgeSync->enqueue($eventType, $payload, 'lab_request', (string) $labReqId);
+
+            // Create ABDM work tasks for verified/finalized reports so staff can submit them.
+            if ((int) ($labReq->status ?? 0) >= 2 && preg_match('/^\d{14}$/', $abhaId) === 1) {
+                $taskType = $this->isRadiologyType((int) ($labReq->lab_type ?? 0))
+                    ? 'radiology_report_publish'
+                    : 'lab_report_publish';
+
+                $taskService = new AbdmWorkTaskService();
+                $taskService->createOrRefreshTask(
+                    $taskType,
+                    'diagnosis',
+                    'lab_request',
+                    (string) $labReqId,
+                    $patientId,
+                    (string) ($labReq->patient_name ?? ''),
+                    $abhaId,
+                    'submit',
+                    [
+                        'lab_type' => (int) ($labReq->lab_type ?? 0),
+                        'invoice_id' => (int) ($labReq->charge_id ?? 0),
+                        'trigger' => $eventType,
+                    ]
+                );
+            }
+        } catch (\Throwable $e) {
+            log_message('error', '[ABDM] enqueueLabReportSync failed for lab_req ' . $labReqId . ': ' . $e->getMessage());
+        }
     }
 }

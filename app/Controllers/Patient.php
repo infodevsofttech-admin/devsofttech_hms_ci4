@@ -3,6 +3,8 @@
 namespace App\Controllers;
 
 use App\Controllers\BaseController;
+use App\Libraries\AbdmWorkTaskService;
+use App\Libraries\BridgeSyncService;
 use App\Models\BloodGroupModel;
 use App\Models\PatientModel;
 
@@ -139,6 +141,9 @@ class Patient extends BaseController
 			(string) $this->request->getPost('input_relative_name'),
 		]);
 
+		$this->enqueuePatientAbhaSync($insertId, $data, 'patient.created');
+		$this->createPatientAbdmWorkTask($insertId, $data, $abhaId);
+
 		// Check Multiple UHID
 		$relativeName = trim(strtoupper((string) $this->request->getPost('input_relative_name')));
 		$patientName = trim(strtoupper((string) $this->request->getPost('input_name')));
@@ -218,6 +223,56 @@ class Patient extends BaseController
 		}
 
 		return view('billing/search_adv_data', ['search_result' => $searchResult]);
+	}
+
+	public function abha_fetch_profile()
+	{
+		if (! $this->request->isAJAX()) {
+			return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+		}
+
+		$abhaId = trim((string) $this->request->getPost('abha_id'));
+		if (! $this->isValidAbhaId($abhaId)) {
+			return $this->response->setJSON(['ok' => 0, 'error_text' => 'ABHA ID must be a 14-digit number']);
+		}
+
+		$profile = [];
+		$abhaField = $this->resolvePatientAbhaIdField();
+		if ($abhaField !== null) {
+			$row = $this->db->table('patient_master')
+				->select('id,p_fname,gender,dob,mphone1,city,state')
+				->where($abhaField, $abhaId)
+				->get(1)
+				->getRowArray();
+
+			if (! empty($row)) {
+				$profile = [
+					'name' => (string) ($row['p_fname'] ?? ''),
+					'gender' => (string) ($row['gender'] ?? ''),
+					'dob' => (string) ($row['dob'] ?? ''),
+					'mobile' => (string) ($row['mphone1'] ?? ''),
+					'city' => (string) ($row['city'] ?? ''),
+					'state' => (string) ($row['state'] ?? ''),
+				];
+			}
+		}
+
+		$queueId = null;
+		try {
+			$bridge = new BridgeSyncService();
+			$queueId = $bridge->enqueue('abdm.abha.profile.fetch.requested', [
+				'abha_id' => $abhaId,
+				'requested_at' => date('Y-m-d H:i:s'),
+			], 'abha', $abhaId);
+		} catch (\Throwable $e) {
+		}
+
+		return $this->response->setJSON([
+			'ok' => 1,
+			'queue_id' => $queueId,
+			'profile' => $profile,
+			'source' => ! empty($profile) ? 'local_cache' : 'abdm_queue',
+		]);
 	}
 
 	public function search()
@@ -467,6 +522,8 @@ class Patient extends BaseController
 			(string) $this->request->getPost('input_relative_name'),
 		]);
 
+		$this->enqueuePatientAbhaSync($pid, $data, 'patient.updated');
+
 		return $this->response->setJSON([
 			'update' => 1,
 			'showcontent' => 'Data Saved successfully',
@@ -522,6 +579,7 @@ class Patient extends BaseController
 
 		$patientModel = new PatientModel();
 		$patientModel->updatePatient($data, $pid);
+		$this->enqueuePatientAbhaSync($pid, $data, 'patient.abha.updated');
 
 		return $this->response->setJSON([
 			'update' => 1,
@@ -1061,6 +1119,71 @@ class Patient extends BaseController
 	private function isValidAbhaId(string $value): bool
 	{
 		return preg_match('/^\d{14}$/', $value) === 1;
+	}
+
+	/**
+	 * @param array<string, mixed> $patientData
+	 */
+	private function enqueuePatientAbhaSync(int $patientId, array $patientData, string $eventType): void
+	{
+		if ($patientId <= 0) {
+			return;
+		}
+
+		$abhaField = $this->resolvePatientAbhaIdField();
+		$abhaId = $abhaField !== null ? trim((string) ($patientData[$abhaField] ?? '')) : '';
+
+		$payload = [
+			'patient_id' => $patientId,
+			'abha_id' => $abhaId,
+			'name' => trim((string) ($patientData['p_fname'] ?? '')),
+			'mobile' => trim((string) ($patientData['mphone1'] ?? '')),
+			'gender' => trim((string) ($patientData['gender'] ?? '')),
+			'dob' => trim((string) ($patientData['dob'] ?? '')),
+			'city' => trim((string) ($patientData['city'] ?? '')),
+			'state' => trim((string) ($patientData['state'] ?? '')),
+		];
+
+		try {
+			$bridgeSync = new BridgeSyncService();
+			$bridgeSync->enqueue(
+				$eventType,
+				$payload,
+				'patient',
+				(string) $patientId
+			);
+		} catch (\Throwable $e) {
+			// Do not block patient workflows if queue service is unavailable.
+		}
+	}
+
+	/**
+	 * @param array<string, mixed> $patientData
+	 */
+	private function createPatientAbdmWorkTask(int $patientId, array $patientData, string $abhaId): void
+	{
+		if ($patientId <= 0) {
+			return;
+		}
+
+		$taskService = new AbdmWorkTaskService();
+		$patientName = trim((string) ($patientData['p_fname'] ?? ''));
+		$actionMode = $abhaId !== '' ? 'update_abha' : 'create_abha';
+		$taskType = $abhaId !== '' ? 'patient_abha_update' : 'patient_abha_create';
+
+		$taskService->createOrRefreshTask(
+			$taskType,
+			'patient_registration',
+			'patient',
+			(string) $patientId,
+			$patientId,
+			$patientName,
+			$abhaId,
+			$actionMode,
+			[
+				'trigger' => 'patient.created',
+			]
+		);
 	}
 
 
