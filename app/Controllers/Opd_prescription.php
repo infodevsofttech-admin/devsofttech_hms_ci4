@@ -7806,8 +7806,11 @@ OPD SNAPSHOT JSON: " . $payload;
             return;
         }
 
+        $pmFields    = $this->db->getFieldNames('patient_master') ?? [];
+        $abhaCols    = array_filter(['abha_id', 'abha_no', 'abha_address', 'abha'], fn ($c) => in_array($c, $pmFields, true));
+        $abhaSelect  = $abhaCols ? (', ' . implode(', ', $abhaCols)) : '';
         $patient = $this->db->table('patient_master')
-            ->select('p_fname,abha_id,abha_no,abha_address,abha')
+            ->select('p_fname' . $abhaSelect)
             ->where('id', $patientId)
             ->get(1)
             ->getRowArray();
