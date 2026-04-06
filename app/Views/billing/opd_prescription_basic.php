@@ -5187,12 +5187,15 @@
                     $('#opd_session_id').val(data.opd_session_id || sid);
                     clearMedicineForm(true);
                     loadMedicineList();
+                    $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text(data.error_text || 'Medicine saved.');
                     // Keep typing flow fast: move cursor back to medicine field.
                     setTimeout(function() {
                         var $medName = $('#med_name');
                         $medName.trigger('focus');
                         $medName.trigger('select');
                     }, 20);
+                } else {
+                    $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text(data.error_text || 'Unable to save medicine.');
                 }
             });
         });

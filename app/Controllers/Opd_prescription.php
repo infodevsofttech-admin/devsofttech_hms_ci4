@@ -4694,8 +4694,15 @@ class Opd_prescription extends BaseController
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Unable to create prescription session']);
         }
 
+        $masterInfo = [
+            'med_id' => 0,
+            'is_new' => false,
+            'details_updated' => false,
+            'details_source' => '',
+        ];
         if ($medId <= 0) {
-            $medId = $this->resolveMedicineMasterIdByName($medName);
+            $masterInfo = $this->ensureMedicineMasterRecordFromConsult($medName, $medType);
+            $medId = (int) ($masterInfo['med_id'] ?? 0);
         }
 
         $fields = $this->db->getFieldNames($table);
@@ -4768,13 +4775,161 @@ class Opd_prescription extends BaseController
             ]);
         }
 
+        $message = 'Medicine added';
+        if (! empty($masterInfo['is_new'])) {
+            $message .= ' | New medicine saved in OPD master';
+        }
+        if (! empty($masterInfo['details_updated'])) {
+            $src = trim((string) ($masterInfo['details_source'] ?? 'AI/local'));
+            if ($src === '') {
+                $src = 'AI/local';
+            }
+            $message .= ' | Master details updated (' . $src . ')';
+        }
+
         return $this->response->setJSON([
             'update' => 1,
             'opd_session_id' => $sessionId,
-            'error_text' => 'Medicine added',
+            'new_master_medicine' => ! empty($masterInfo['is_new']) ? 1 : 0,
+            'master_details_updated' => ! empty($masterInfo['details_updated']) ? 1 : 0,
+            'master_details_source' => (string) ($masterInfo['details_source'] ?? ''),
+            'error_text' => $message,
             'csrfName' => csrf_token(),
             'csrfHash' => csrf_hash(),
         ]);
+    }
+
+    /**
+     * @return array{med_id:int,is_new:bool,details_updated:bool,details_source:string}
+     */
+    private function ensureMedicineMasterRecordFromConsult(string $medName, string $medType = ''): array
+    {
+        $medName = trim($medName);
+        $medType = trim($medType);
+        if ($medName === '') {
+            return ['med_id' => 0, 'is_new' => false, 'details_updated' => false, 'details_source' => ''];
+        }
+
+        $table = $this->findExistingTable(['opd_med_master']);
+        if ($table === null) {
+            return ['med_id' => 0, 'is_new' => false, 'details_updated' => false, 'details_source' => ''];
+        }
+
+        $fields = $this->db->getFieldNames($table);
+        if (! in_array('id', $fields, true)) {
+            return ['med_id' => 0, 'is_new' => false, 'details_updated' => false, 'details_source' => ''];
+        }
+
+        $medId = $this->resolveMedicineMasterIdByName($medName);
+        $isNew = false;
+
+        if ($medId <= 0) {
+            $insert = [];
+            if (in_array('item_name', $fields, true)) {
+                $insert['item_name'] = strtoupper($medName);
+            } elseif (in_array('med_name', $fields, true)) {
+                $insert['med_name'] = strtoupper($medName);
+            }
+
+            if (in_array('formulation', $fields, true) && $medType !== '') {
+                $insert['formulation'] = $medType;
+            }
+
+            if (! empty($insert)) {
+                $this->db->table($table)->insert($insert);
+                $medId = (int) $this->db->insertID();
+                $isNew = $medId > 0;
+            }
+        }
+
+        if ($medId <= 0) {
+            return ['med_id' => 0, 'is_new' => false, 'details_updated' => false, 'details_source' => ''];
+        }
+
+        $detailsUpdated = false;
+        $detailsSource = '';
+
+        $genericField = $this->resolveFirstField($fields, ['genericname', 'generic_name']);
+        $saltField = $this->resolveFirstField($fields, ['salt_name', 'sal_name', 'salt', 'saltname']);
+        $restrictionField = $this->resolveFirstField($fields, ['dosage_restriction', 'dose_restriction', 'restriction_note', 'restriction']);
+
+        $row = $this->db->table($table)->where('id', $medId)->get(1)->getRowArray() ?? [];
+        $hasDetails = false;
+        if ($genericField !== null && trim((string) ($row[$genericField] ?? '')) !== '') {
+            $hasDetails = true;
+        }
+        if ($saltField !== null && trim((string) ($row[$saltField] ?? '')) !== '') {
+            $hasDetails = true;
+        }
+        if ($restrictionField !== null && trim((string) ($row[$restrictionField] ?? '')) !== '') {
+            $hasDetails = true;
+        }
+
+        if (! $hasDetails && ($genericField !== null || $saltField !== null || $restrictionField !== null)) {
+            $details = $this->lookupMedicineDetailsFromMaster($medName, $medType);
+            if (($details['genericname'] ?? '') !== '' || ($details['salt_name'] ?? '') !== '' || ($details['dosage_restriction'] ?? '') !== '') {
+                $detailsSource = 'local-master';
+            }
+
+            if (($details['genericname'] ?? '') === '' && ($details['salt_name'] ?? '') === '' && ($details['dosage_restriction'] ?? '') === '') {
+                $aiServerDetails = $this->fetchMedicineDetailsFromAiServer($medName, $medType);
+                if (($aiServerDetails['genericname'] ?? '') !== '' || ($aiServerDetails['salt_name'] ?? '') !== '' || ($aiServerDetails['dosage_restriction'] ?? '') !== '') {
+                    $details = $aiServerDetails;
+                    $detailsSource = 'ai-server';
+                }
+            }
+
+            if (($details['genericname'] ?? '') === '' && ($details['salt_name'] ?? '') === '' && ($details['dosage_restriction'] ?? '') === '') {
+                $fallback = $this->inferMedicineDetailsFromBrandName($medName, $medType);
+                if (($fallback['genericname'] ?? '') !== '' || ($fallback['salt_name'] ?? '') !== '' || ($fallback['dosage_restriction'] ?? '') !== '') {
+                    $details = $fallback;
+                    $detailsSource = 'brand-fallback';
+                }
+            }
+
+            if (($details['genericname'] ?? '') === '' && ($details['salt_name'] ?? '') === '' && ($details['dosage_restriction'] ?? '') === '') {
+                $prompt = "You are a medicine data enrichment assistant for OPD master data in India.\n"
+                    . "Medicine Name: {$medName}\n"
+                    . "Formulation: {$medType}\n"
+                    . "Return ONLY valid JSON with keys: genericname, salt_name, dosage_restriction, caution_note.";
+                $aiText = $this->generateClinicalTextWithAi($prompt, 240);
+                $parsed = $aiText ? $this->parseJsonFromAiResponse($aiText) : null;
+                if (is_array($parsed)) {
+                    $details = [
+                        'genericname' => trim((string) ($parsed['genericname'] ?? '')),
+                        'salt_name' => trim((string) ($parsed['salt_name'] ?? '')),
+                        'dosage_restriction' => trim((string) ($parsed['dosage_restriction'] ?? '')),
+                        'caution_note' => trim((string) ($parsed['caution_note'] ?? '')),
+                    ];
+                    if (($details['genericname'] ?? '') !== '' || ($details['salt_name'] ?? '') !== '' || ($details['dosage_restriction'] ?? '') !== '') {
+                        $detailsSource = 'ai';
+                    }
+                }
+            }
+
+            $update = [];
+            if ($genericField !== null && trim((string) ($details['genericname'] ?? '')) !== '') {
+                $update[$genericField] = trim((string) ($details['genericname'] ?? ''));
+            }
+            if ($saltField !== null && trim((string) ($details['salt_name'] ?? '')) !== '') {
+                $update[$saltField] = trim((string) ($details['salt_name'] ?? ''));
+            }
+            if ($restrictionField !== null && trim((string) ($details['dosage_restriction'] ?? '')) !== '') {
+                $update[$restrictionField] = trim((string) ($details['dosage_restriction'] ?? ''));
+            }
+
+            if (! empty($update)) {
+                $this->db->table($table)->where('id', $medId)->update($update);
+                $detailsUpdated = true;
+            }
+        }
+
+        return [
+            'med_id' => $medId,
+            'is_new' => $isNew,
+            'details_updated' => $detailsUpdated,
+            'details_source' => $detailsSource,
+        ];
     }
 
     private function resolveMedicineMasterIdByName(string $medName): int
@@ -5004,6 +5159,23 @@ class Opd_prescription extends BaseController
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Medicine name is required']);
         }
 
+        $masterInfo = [
+            'med_id' => 0,
+            'is_new' => false,
+            'details_updated' => false,
+            'details_source' => '',
+        ];
+        $resolvedMedName = trim((string) ($update['med_name'] ?? $current['med_name'] ?? ''));
+        $resolvedMedType = trim((string) ($update['med_type'] ?? $current['med_type'] ?? ''));
+        $resolvedMedId = (int) ($current['med_id'] ?? 0);
+        if ($resolvedMedId <= 0) {
+            $masterInfo = $this->ensureMedicineMasterRecordFromConsult($resolvedMedName, $resolvedMedType);
+            $resolvedMedId = (int) ($masterInfo['med_id'] ?? 0);
+        }
+        if ($resolvedMedId > 0 && in_array('med_id', $fields, true)) {
+            $update['med_id'] = $resolvedMedId;
+        }
+
         $candidate = array_replace($current, $update);
         $sessionId = (int) ($candidate['opd_pre_id'] ?? 0);
         if ($sessionId > 0 && $this->isDuplicateMedicineRow($table, $fields, $sessionId, $candidate, $id)) {
@@ -5024,7 +5196,7 @@ class Opd_prescription extends BaseController
         $this->db->table($table)->where('id', $id)->update($update);
         $this->clinicalAuditTrail->logChangedFields('opd_prescription_medicine', $id, $current, array_replace($current, $update), $this->getCurrentUserId());
 
-        $masterMedId = (int) ($current['med_id'] ?? 0);
+        $masterMedId = (int) ($update['med_id'] ?? $current['med_id'] ?? 0);
         if ($masterMedId <= 0) {
             $masterMedId = $this->resolveMedicineMasterIdByName((string) ($update['med_name'] ?? $current['med_name'] ?? ''));
         }
@@ -5042,9 +5214,24 @@ class Opd_prescription extends BaseController
             ]);
         }
 
+        $message = 'Medicine updated';
+        if (! empty($masterInfo['is_new'])) {
+            $message .= ' | New medicine saved in OPD master';
+        }
+        if (! empty($masterInfo['details_updated'])) {
+            $src = trim((string) ($masterInfo['details_source'] ?? 'AI/local'));
+            if ($src === '') {
+                $src = 'AI/local';
+            }
+            $message .= ' | Master details updated (' . $src . ')';
+        }
+
         return $this->response->setJSON([
             'update' => 1,
-            'error_text' => 'Medicine updated',
+            'new_master_medicine' => ! empty($masterInfo['is_new']) ? 1 : 0,
+            'master_details_updated' => ! empty($masterInfo['details_updated']) ? 1 : 0,
+            'master_details_source' => (string) ($masterInfo['details_source'] ?? ''),
+            'error_text' => $message,
             'csrfName' => csrf_token(),
             'csrfHash' => csrf_hash(),
         ]);
