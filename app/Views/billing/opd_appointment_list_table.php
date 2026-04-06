@@ -22,18 +22,20 @@ if ($authUser) {
         <tbody>
         <?php if (!empty($rows)) : ?>
             <?php foreach ($rows as $row) : ?>
-                <tr data-opd-id="<?= esc((int) ($row->opd_id ?? 0)) ?>" data-has-vitals="<?= esc((int) ($row->has_vitals ?? 0)) ?>">
+                <tr data-opd-id="<?= esc((int) ($row->opd_id ?? 0)) ?>" data-has-vitals="<?= esc((int) ($row->has_vitals ?? 0)) ?>" data-has-prescription="<?= esc((int) ($row->has_prescription ?? 0)) ?>">
                     <td><?= esc($row->opd_code ?? '') ?></td>
                     <td><?= esc(($row->P_name ?? '') . ' { ' . ($row->p_rname ?? '') . ' }') ?></td>
-                    <?php if (!empty($showQueue)) : ?><td><?= esc((int) ($row->queue_no ?? 0)) ?></td><?php endif; ?>
+                    <?php if (!empty($showQueue)) : ?><td><?= (int) ($row->has_prescription ?? 0) === 1 ? esc((int) ($row->queue_no ?? 0)) : '-' ?></td><?php endif; ?>
                     <td><?= esc($row->p_code ?? '') ?></td>
                     <td><?= esc($row->opd_type ?? '') ?> / Amt: <?= esc($row->opd_fee_amount ?? '') ?></td>
                     <td>
                         <?php $hasVitals = isset($row->has_vitals) && (int) $row->has_vitals === 1; ?>
                         <?php $isBookedTab = ($tabType ?? '') === 'booking'; ?>
+                        <?php $isWaitingTab = ($tabType ?? '') === 'waiting'; ?>
                         <?php $isConfirmedForQueue = (int) ($row->is_confirmed_for_queue ?? 0) === 1; ?>
+                        <?php $hasPrescription = (int) ($row->has_prescription ?? 0) === 1; ?>
 
-                        <?php if ($isBookedTab) : ?>
+                        <?php if (! $hasPrescription) : ?>
                             <?php if ($isConfirmedForQueue) : ?>
                                 <button type="button" class="btn btn-outline-success btn-sm btn-opd-create-queue" data-opdid="<?= esc((int) ($row->opd_id ?? 0)) ?>" title="Queue">
                                     Queue
@@ -43,7 +45,9 @@ if ($authUser) {
                                     Go For Payment
                                 </a>
                             <?php endif; ?>
-                        <?php else : ?>
+                        <?php endif; ?>
+
+                        <?php if ($hasPrescription) : ?>
                             <?php if ($canOpenPrescription) : ?>
                                 <a class="btn btn-outline-primary btn-sm" title="Consult" href="javascript:load_form('/Opd_prescription/Prescription/<?= esc((int) ($row->opd_id ?? 0)) ?>','Consult');">
                                     Consult
@@ -61,8 +65,19 @@ if ($authUser) {
                             <button type="button" class="btn btn-outline-dark btn-sm btn-opd-scan-list" title="Scan Document List" data-opdid="<?= esc((int) ($row->opd_id ?? 0)) ?>">
                                 Scan Doc List
                             </button>
+                        <?php elseif ($isWaitingTab) : ?>
+                            <button type="button" class="btn btn-outline-info btn-sm btn-opd-scan" title="Scan" data-opdid="<?= esc((int) ($row->opd_id ?? 0)) ?>">
+                                Scan
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm btn-opd-scan" title="Upload Scan" data-opdid="<?= esc((int) ($row->opd_id ?? 0)) ?>">
+                                Upload
+                            </button>
+                            <button type="button" class="btn btn-outline-dark btn-sm btn-opd-scan-list" title="Scan Document List" data-opdid="<?= esc((int) ($row->opd_id ?? 0)) ?>">
+                                Scan Doc List
+                            </button>
                         <?php endif; ?>
-                        <?php if (($tabType ?? '') === 'waiting') : ?>
+
+                        <?php if (($tabType ?? '') === 'waiting' && $hasPrescription) : ?>
                             <button type="button" class="btn btn-outline-success btn-sm btn-opd-status" data-opd-id="<?= esc((int) ($row->opd_id ?? 0)) ?>" data-opd-status="2" title="Visit Done">
                                 Visit Done
                             </button>
