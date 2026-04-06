@@ -197,6 +197,58 @@
         });
     });
 
+    $(document).off('click.opdscanlistopen', '.btn-opd-scan-list').on('click.opdscanlistopen', '.btn-opd-scan-list', function() {
+        // Open modal with slide-by-slide scan document list for this OPD.
+        var opdid = parseInt($(this).data('opdid') || '0', 10);
+        if (!opdid || !modalObj) {
+            return;
+        }
+
+        $('#testentryLabel').text('Scan Document List');
+        $('#testentry-bodyc').html('<div class="text-muted">Loading...</div>');
+        modalObj.show();
+
+        $.post('/Opd/opd_file_list/' + opdid, {}, function(html) {
+            $('#testentry-bodyc').html(html || '<div class="text-danger">No scan documents found.</div>');
+        }).fail(function() {
+            $('#testentry-bodyc').html('<div class="text-danger">Unable to load scan document list.</div>');
+        });
+    });
+
+    window.deleteOpdScanFromList = function(fileId, opdid) {
+        // Delete only allowed for current-date uploads; server enforces this rule.
+        if (!fileId || !opdid) {
+            return;
+        }
+        if (!window.confirm('Delete this scan document?')) {
+            return;
+        }
+
+        var csrf = getCsrfPair();
+        var payload = {};
+        payload[csrf.name] = csrf.value;
+
+        $.post('/Opd/opd_file_delete/' + fileId, payload, function(resp) {
+            if (resp && resp.csrfName && resp.csrfHash) {
+                updateCsrf(resp);
+            }
+
+            if (!resp || parseInt(resp.update || 0, 10) !== 1) {
+                var msg = (resp && resp.error_text) ? resp.error_text : 'Unable to delete document.';
+                $('#testentry-bodyc').prepend('<div class="alert alert-danger py-1 mb-2">' + $('<div>').text(msg).html() + '</div>');
+                return;
+            }
+
+            $.post('/Opd/opd_file_list/' + opdid, {}, function(html) {
+                $('#testentry-bodyc').html(html || '<div class="text-muted">No scan documents found.</div>');
+            }).fail(function() {
+                $('#testentry-bodyc').prepend('<div class="alert alert-danger py-1 mb-2">Unable to refresh scan list.</div>');
+            });
+        }, 'json').fail(function() {
+            $('#testentry-bodyc').prepend('<div class="alert alert-danger py-1 mb-2">Unable to delete document.</div>');
+        });
+    };
+
     $(document).off('click.opdstatus', '.btn-opd-status').on('click.opdstatus', '.btn-opd-status', function() {
         var opdId = $(this).data('opd-id');
         var opdStatus = $(this).data('opd-status');

@@ -44,9 +44,9 @@ if ($authUser) {
                         <button type="button" class="btn btn-outline-secondary btn-sm btn-opd-scan" title="Upload Scan" data-opdid="<?= esc((int) ($row->opd_id ?? 0)) ?>">
                             Upload
                         </button>
-                        <a class="btn btn-outline-dark btn-sm" title="Profile" href="javascript:load_form('/billing/patient/person_record/<?= esc((int) ($row->id ?? 0)) ?>/0','Patient Profile');">
-                            Profile
-                        </a>
+                        <button type="button" class="btn btn-outline-dark btn-sm btn-opd-scan-list" title="Scan Document List" data-opdid="<?= esc((int) ($row->opd_id ?? 0)) ?>">
+                            Scan Doc List
+                        </button>
                         <?php if (($tabType ?? '') === 'waiting') : ?>
                             <button type="button" class="btn btn-outline-success btn-sm btn-opd-status" data-opd-id="<?= esc((int) ($row->opd_id ?? 0)) ?>" data-opd-status="2" title="Visit Done">
                                 Visit Done

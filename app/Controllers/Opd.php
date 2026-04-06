@@ -1924,6 +1924,30 @@ class Opd extends BaseController
             foreach ($rxMeds as $med) {
                 $i++;
                 $name    = trim((string) ($med['med_name'] ?? $med['drug_name'] ?? $med['medicine_name'] ?? $med['item_name'] ?? ''));
+                $formulationRaw = trim((string) ($med['formulation'] ?? $med['dosage_form'] ?? $med['form'] ?? $med['medicine_form'] ?? ''));
+                $formulationPrefixMap = [
+                    'tablet' => 'Tab',
+                    'tab' => 'Tab',
+                    'capsule' => 'Cap',
+                    'cap' => 'Cap',
+                    'syrup' => 'Syp',
+                    'syp' => 'Syp',
+                    'injection' => 'Inj',
+                    'inj' => 'Inj',
+                    'drop' => 'Drop',
+                    'drops' => 'Drops',
+                    'cream' => 'Cream',
+                    'ointment' => 'Oint',
+                    'gel' => 'Gel',
+                    'lotion' => 'Lotion',
+                    'powder' => 'Powder',
+                    'sachet' => 'Sachet',
+                ];
+                $formulationKey = strtolower($formulationRaw);
+                $formulationPrefix = $formulationPrefixMap[$formulationKey] ?? $formulationRaw;
+                if ($formulationPrefix !== '' && $name !== '' && preg_match('/^' . preg_quote($formulationPrefix, '/') . '\b/i', $name) !== 1) {
+                    $name = trim($formulationPrefix . ' ' . $name);
+                }
                 $generic = trim((string) ($med['genericname'] ?? $med['generic_name'] ?? $med['salt_name'] ?? ''));
                 $dose    = trim((string) ($med['dosage_label'] ?? $med['dosage'] ?? $med['drug_dose'] ?? $med['dose'] ?? ''));
                 $freq    = trim((string) ($med['dosage_freq_label'] ?? $med['dosage_freq'] ?? $med['drug_freq'] ?? $med['frequency'] ?? ''));
@@ -3257,7 +3281,9 @@ class Opd extends BaseController
                     $mapFreqLocal = [];
                     $mapWhereLocal = [];
                     $medGenericMap = [];
+                    $medFormulationMap = [];
                     $missingGenericMedIds = [];
+                    $missingFormulationMedIds = [];
 
                     if ($this->db->tableExists('opd_dose_shed')) {
                         $f = $this->db->getFieldNames('opd_dose_shed');
@@ -3380,20 +3406,40 @@ class Opd extends BaseController
                                 $missingGenericMedIds[$medId] = true;
                             }
                         }
+
+                        $formulationInline = trim((string) ($medRow['formulation'] ?? ($medRow['dosage_form'] ?? '')));
+                        if ($formulationInline === '') {
+                            $medId = (int) ($medRow['med_id'] ?? 0);
+                            if ($medId > 0) {
+                                $missingFormulationMedIds[$medId] = true;
+                            }
+                        }
                     }
                     unset($medRow);
 
-                    if (!empty($missingGenericMedIds) && $this->db->tableExists('opd_med_master')) {
+                    if ((!empty($missingGenericMedIds) || !empty($missingFormulationMedIds)) && $this->db->tableExists('opd_med_master')) {
                         $masterFields = $this->db->getFieldNames('opd_med_master');
                         $masterIdField = $this->resolveFirstField($masterFields, ['id']);
                         $masterGenericField = $this->resolveFirstField($masterFields, ['genericname', 'generic_name']);
                         $masterSaltField = $this->resolveFirstField($masterFields, ['salt_name', 'sal_name', 'salt', 'saltname']);
+                        $masterFormulationField = $this->resolveFirstField($masterFields, ['formulation', 'dosage_form', 'form']);
                         $labelField = $masterSaltField ?? $masterGenericField;
+                        $select = [];
+                        if ($masterIdField !== null) {
+                            $select[] = $masterIdField . ' as med_id';
+                        }
+                        if ($labelField !== null) {
+                            $select[] = $labelField . ' as generic_fallback';
+                        }
+                        if ($masterFormulationField !== null) {
+                            $select[] = $masterFormulationField . ' as formulation_fallback';
+                        }
 
-                        if ($masterIdField !== null && $labelField !== null) {
+                        if ($masterIdField !== null && !empty($select)) {
+                            $neededIds = array_unique(array_map('intval', array_merge(array_keys($missingGenericMedIds), array_keys($missingFormulationMedIds))));
                             $rows = $this->db->table('opd_med_master')
-                                ->select($masterIdField . ' as med_id,' . $labelField . ' as generic_fallback')
-                                ->whereIn($masterIdField, array_map('intval', array_keys($missingGenericMedIds)))
+                                ->select(implode(',', $select))
+                                ->whereIn($masterIdField, $neededIds)
                                 ->get()
                                 ->getResultArray();
 
@@ -3402,6 +3448,10 @@ class Opd extends BaseController
                                 $label = trim((string) ($r['generic_fallback'] ?? ''));
                                 if ($id > 0 && $label !== '') {
                                     $medGenericMap[$id] = $label;
+                                }
+                                $formulation = trim((string) ($r['formulation_fallback'] ?? ''));
+                                if ($id > 0 && $formulation !== '') {
+                                    $medFormulationMap[$id] = $formulation;
                                 }
                             }
                         }
@@ -3413,6 +3463,14 @@ class Opd extends BaseController
                             $fallback = $medGenericMap[(int) ($medRow['med_id'] ?? 0)] ?? '';
                             if ($fallback !== '') {
                                 $medRow['genericname'] = $fallback;
+                            }
+                        }
+
+                        $formulationInline = trim((string) ($medRow['formulation'] ?? ($medRow['dosage_form'] ?? '')));
+                        if ($formulationInline === '') {
+                            $formulationFallback = $medFormulationMap[(int) ($medRow['med_id'] ?? 0)] ?? '';
+                            if ($formulationFallback !== '') {
+                                $medRow['formulation'] = $formulationFallback;
                             }
                         }
                     }
@@ -4193,6 +4251,61 @@ class Opd extends BaseController
         return view('billing/opd_scan_last_list', ['opd_file_list' => $list]);
     }
 
+    public function opd_file_list(int $opdid)
+    {
+        if (! $this->db->tableExists('file_upload_data')) {
+            return $this->response->setBody('<div class="text-muted">No scan table found.</div>');
+        }
+
+        $fields = $this->db->getFieldNames('file_upload_data');
+        $safeSelect = ['id', 'full_path', 'file_ext', 'insert_date'];
+        if (in_array('show_type', $fields, true)) {
+            $safeSelect[] = 'show_type';
+        }
+
+        $rows = $this->db->table('file_upload_data')
+            ->select(implode(',', $safeSelect))
+            ->where('opd_id', (int) $opdid)
+            ->where('show_type', 0)
+            ->orderBy('id', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        $today = date('Y-m-d');
+        $slides = [];
+        foreach ($rows as $row) {
+            $rawPath = (string) ($row['full_path'] ?? '');
+            $normalizedPath = str_replace('\\', '/', $rawPath);
+            $publicPath = $normalizedPath;
+            $uploadPos = strpos($normalizedPath, '/uploads/');
+            if ($uploadPos !== false) {
+                $publicPath = substr($normalizedPath, $uploadPos);
+            }
+
+            $ext = strtolower((string) ($row['file_ext'] ?? pathinfo($publicPath, PATHINFO_EXTENSION)));
+            if ($ext !== '' && $ext[0] === '.') {
+                $ext = substr($ext, 1);
+            }
+
+            $insertDate = (string) ($row['insert_date'] ?? '');
+            $insertYmd = $insertDate !== '' ? date('Y-m-d', strtotime($insertDate)) : '';
+            $canDeleteToday = $insertYmd === $today;
+
+            $slides[] = [
+                'id' => (int) ($row['id'] ?? 0),
+                'path' => $publicPath,
+                'is_pdf' => $ext === 'pdf',
+                'insert_date' => $insertDate !== '' ? date('d-m-Y H:i', strtotime($insertDate)) : '',
+                'can_delete_today' => $canDeleteToday ? 1 : 0,
+            ];
+        }
+
+        return view('billing/opd_scan_carousel_list', [
+            'opdid' => (int) $opdid,
+            'slides' => $slides,
+        ]);
+    }
+
     public function scan_ai_assist()
     {
         if (! $this->request->isAJAX()) {
@@ -4317,6 +4430,59 @@ class Opd extends BaseController
         $this->db->table('file_upload_data')->where('id', $fileId)->update($update);
 
         return $this->opd_file_last_list((int) ($row['opd_id'] ?? 0));
+    }
+
+    public function opd_file_delete(int $fileId)
+    {
+        if (! $this->db->tableExists('file_upload_data')) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'File table not found',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $row = $this->db->table('file_upload_data')
+            ->select('id,opd_id,full_path,insert_date')
+            ->where('id', $fileId)
+            ->get(1)
+            ->getRowArray();
+
+        if (empty($row)) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'File not found',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $insertDate = (string) ($row['insert_date'] ?? '');
+        $isToday = $insertDate !== '' && date('Y-m-d', strtotime($insertDate)) === date('Y-m-d');
+        if (! $isToday) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Delete allowed only for current date uploads',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $fullPath = (string) ($row['full_path'] ?? '');
+        if ($fullPath !== '' && is_file($fullPath)) {
+            @unlink($fullPath);
+        }
+
+        $this->db->table('file_upload_data')->where('id', (int) $fileId)->delete();
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'opd_id' => (int) ($row['opd_id'] ?? 0),
+            'error_text' => 'Scan deleted',
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
     }
 
     private function insertOpdFileUploadRecord(string $fullPath, string $publicPath, int $pid, int $opdid, int $caseId, string $uploadBy, int $uploadById, string $mimeType = 'image/jpeg', int $isImageFile = 1, string $fileExt = '.jpg'): int
