@@ -84,6 +84,22 @@ class Opd extends BaseController
         }
 
         $content = $this->readOpdTemplateContentByName($name);
+        $paperSettings = $this->getOpdPaperPrintSetting($name);
+
+        // Backward compatibility: if paper settings are blank but full template content exists,
+        // derive editable paper/header/footer blocks from the saved template HTML.
+        if (trim((string) ($paperSettings['paper_html_content'] ?? '')) === '' && trim($content) !== '') {
+            $derived = $this->derivePaperBlocksFromTemplateHtml($content);
+            if (trim((string) ($paperSettings['header_html'] ?? '')) === '') {
+                $paperSettings['header_html'] = (string) ($derived['header_html'] ?? '');
+            }
+            if (trim((string) ($paperSettings['footer_html'] ?? '')) === '') {
+                $paperSettings['footer_html'] = (string) ($derived['footer_html'] ?? '');
+            }
+            if (trim((string) ($paperSettings['paper_html_content'] ?? '')) === '') {
+                $paperSettings['paper_html_content'] = (string) ($derived['paper_html_content'] ?? '');
+            }
+        }
 
         $placeholders = [
             // Hospital
@@ -147,8 +163,65 @@ class Opd extends BaseController
             'template_content' => $content,
             'template_names' => $templateNames,
             'placeholders' => $placeholders,
-            'paper_settings' => $this->getOpdPaperPrintSetting($name),
+            'paper_settings' => $paperSettings,
         ]);
+    }
+
+    /**
+     * Extract header/footer/body editor blocks from a full OPD template HTML payload.
+     *
+     * @return array<string,string>
+     */
+    private function derivePaperBlocksFromTemplateHtml(string $templateHtml): array
+    {
+        $html = str_replace(["\r\n", "\r"], "\n", (string) $templateHtml);
+
+        $headerHtml = '';
+        $footerHtml = '';
+
+        if (preg_match('/<htmlpageheader\b[^>]*name\s*=\s*["\']myHeader["\'][^>]*>([\s\S]*?)<\/htmlpageheader>/i', $html, $m) === 1) {
+            $headerHtml = trim((string) ($m[1] ?? ''));
+            $html = str_replace((string) ($m[0] ?? ''), '', $html);
+        }
+
+        if (preg_match('/<htmlpagefooter\b[^>]*name\s*=\s*["\']myFooter["\'][^>]*>([\s\S]*?)<\/htmlpagefooter>/i', $html, $m) === 1) {
+            $footerHtml = trim((string) ($m[1] ?? ''));
+            $html = str_replace((string) ($m[0] ?? ''), '', $html);
+        }
+
+        // Remove style blocks that only define @page print settings.
+        $html = (string) preg_replace('/<style\b[^>]*>[\s\S]*?@page[\s\S]*?<\/style>/i', '', $html);
+
+        // Remove standalone named header/footer references if present.
+        $html = (string) preg_replace('/^\s*header\s*:\s*html_myHeader\s*;\s*$/im', '', $html);
+        $html = (string) preg_replace('/^\s*footer\s*:\s*html_myFooter\s*;\s*$/im', '', $html);
+
+        $bodyHtml = trim($html);
+
+        return [
+            'header_html' => $headerHtml,
+            'footer_html' => $footerHtml,
+            'paper_html_content' => $bodyHtml,
+        ];
+    }
+
+    /**
+     * Keep OPD paper settings in sync with saved full template HTML.
+     */
+    private function syncOpdPaperSettingsFromTemplateContent(string $templateName, string $templateHtml): bool
+    {
+        if (trim($templateName) === '') {
+            return false;
+        }
+
+        $settings = $this->getOpdPaperPrintSetting($templateName);
+        $derived = $this->derivePaperBlocksFromTemplateHtml($templateHtml);
+
+        $settings['header_html'] = (string) ($derived['header_html'] ?? '');
+        $settings['footer_html'] = (string) ($derived['footer_html'] ?? '');
+        $settings['paper_html_content'] = (string) ($derived['paper_html_content'] ?? '');
+
+        return $this->saveOpdPaperPrintSetting($settings, $templateName);
     }
 
     /**
@@ -199,11 +272,22 @@ class Opd extends BaseController
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Unable to save template']);
         }
 
+        $paperSynced = true;
+        if ($section === 'full') {
+            $paperSynced = $this->syncOpdPaperSettingsFromTemplateContent($name, $content);
+        }
+
+        $noticeText = 'Template saved';
+        if ($section === 'full' && ! $paperSynced) {
+            $noticeText = 'Template saved (paper settings sync failed)';
+        }
+
         return $this->response->setJSON([
             'update' => 1,
-            'error_text' => 'Template saved',
+            'error_text' => $noticeText,
             'section' => $section,
             'name' => $name,
+            'paper_synced' => $paperSynced ? 1 : 0,
             'csrfName' => csrf_token(),
             'csrfHash' => csrf_hash(),
         ]);
@@ -2146,25 +2230,26 @@ class Opd extends BaseController
                 $name    = trim((string) ($med['med_name'] ?? $med['drug_name'] ?? $med['medicine_name'] ?? $med['item_name'] ?? ''));
                 $formulationRaw = trim((string) ($med['formulation'] ?? $med['dosage_form'] ?? $med['form'] ?? $med['medicine_form'] ?? ''));
                 $formulationPrefixMap = [
-                    'tablet' => 'Tab',
-                    'tab' => 'Tab',
-                    'capsule' => 'Cap',
-                    'cap' => 'Cap',
-                    'syrup' => 'Syp',
-                    'syp' => 'Syp',
-                    'injection' => 'Inj',
-                    'inj' => 'Inj',
-                    'drop' => 'Drop',
-                    'drops' => 'Drops',
-                    'cream' => 'Cream',
-                    'ointment' => 'Oint',
-                    'gel' => 'Gel',
-                    'lotion' => 'Lotion',
-                    'powder' => 'Powder',
-                    'sachet' => 'Sachet',
+                    'tablet' => 'TAB',
+                    'tab' => 'TAB',
+                    'capsule' => 'CAP',
+                    'cap' => 'CAP',
+                    'syrup' => 'SYP',
+                    'syp' => 'SYP',
+                    'injection' => 'INJ',
+                    'inj' => 'INJ',
+                    'drop' => 'DROP',
+                    'drops' => 'DROPS',
+                    'cream' => 'CREAM',
+                    'ointment' => 'OINT',
+                    'gel' => 'GEL',
+                    'lotion' => 'LOTION',
+                    'powder' => 'POWDER',
+                    'sachet' => 'SACHET',
                 ];
                 $formulationKey = strtolower($formulationRaw);
                 $formulationPrefix = $formulationPrefixMap[$formulationKey] ?? $formulationRaw;
+                $formulationPrefix = strtoupper(trim((string) $formulationPrefix));
                 if ($formulationPrefix !== '' && $name !== '' && preg_match('/^' . preg_quote($formulationPrefix, '/') . '\b/i', $name) !== 1) {
                     $name = trim($formulationPrefix . ' ' . $name);
                 }
