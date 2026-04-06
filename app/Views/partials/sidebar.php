@@ -115,6 +115,64 @@ if ($user && method_exists($user, 'can')) {
 if (! $canDiagnosis && $user && method_exists($user, 'inGroup')) {
     $canDiagnosis = $user->inGroup('superadmin', 'admin', 'developer');
 }
+
+$canAbdm = false;
+if ($user && method_exists($user, 'can')) {
+    $canAbdm = $user->can('abdm.access')
+        || $user->can('abdm.taskboard.access')
+        || $user->can('abdm.gateway.use')
+        || $user->can('abdm.*');
+}
+
+if (! $canAbdm && $user && method_exists($user, 'inGroup')) {
+    $canAbdm = $user->inGroup('superadmin', 'admin', 'developer');
+}
+
+$canBedStatus = false;
+if ($user && method_exists($user, 'can')) {
+    $canBedStatus = $user->can('settings.bed_status.view')
+        || $user->can('admin.settings')
+        || $user->can('admin.access');
+}
+
+if (! $canBedStatus && $user && method_exists($user, 'inGroup')) {
+    $canBedStatus = $user->inGroup('superadmin', 'admin', 'developer');
+}
+
+$canReports = false;
+if ($user && method_exists($user, 'can')) {
+    $canReports = $user->can('reports.access')
+        || $user->can('reports.collection.view')
+        || $user->can('reports.insurance_credit.view')
+        || $user->can('reports.nabh_audit.view')
+        || $user->can('diagnosis.report.view')
+        || $user->can('diagnosis.access');
+}
+
+if (! $canReports && $user && method_exists($user, 'inGroup')) {
+    $canReports = $user->inGroup('superadmin', 'admin', 'developer');
+}
+
+$canAdminPanel = false;
+if ($user && method_exists($user, 'can')) {
+    $canAdminPanel = $user->can('admin.access')
+        || $user->can('admin.settings');
+}
+
+if (! $canAdminPanel && $user && method_exists($user, 'inGroup')) {
+    $canAdminPanel = $user->inGroup('superadmin', 'admin', 'developer');
+}
+
+$canChargesSettings = false;
+if ($user && method_exists($user, 'can')) {
+    $canChargesSettings = $user->can('settings.charges.access')
+        || $user->can('admin.settings')
+        || $user->can('admin.access');
+}
+
+if (! $canChargesSettings && $user && method_exists($user, 'inGroup')) {
+    $canChargesSettings = $user->inGroup('superadmin', 'admin', 'developer');
+}
 ?>
 <ul class="sidebar-nav" id="sidebar-nav">
     <li class="nav-item">
@@ -123,12 +181,14 @@ if (! $canDiagnosis && $user && method_exists($user, 'inGroup')) {
             <span>Dashboard</span>
         </a>
     </li>
-    <li class="nav-item">
-        <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('setting/admin/bed-status') ?>','Bed Status');">
-            <i class="bi bi-geo-alt"></i>
-            <span>Bed Status</span>
-        </a>
-    </li>
+    <?php if ($canBedStatus) { ?>
+        <li class="nav-item">
+            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('setting/admin/bed-status') ?>','Bed Status');">
+                <i class="bi bi-geo-alt"></i>
+                <span>Bed Status</span>
+            </a>
+        </li>
+    <?php } ?>
     <?php if ($canBilling) { ?>
         
     <li class="nav-heading">Billing</li>
@@ -226,13 +286,15 @@ if (! $canDiagnosis && $user && method_exists($user, 'inGroup')) {
             </a>
         </li>
     <?php } ?>
-    <li class="nav-heading">In-Patient & Nursing Care</li>
-    <li class="nav-item">
-        <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('/ipd/patient') ?>','IPD Patient List')">
-            <i class="bi bi-person-vcard"></i>
-            <span>IPD Patient List</span>
-        </a>
-    </li>
+    <?php if ($canIpdBilling) { ?>
+        <li class="nav-heading">In-Patient & Nursing Care</li>
+        <li class="nav-item">
+            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('/ipd/patient') ?>','IPD Patient List')">
+                <i class="bi bi-person-vcard"></i>
+                <span>IPD Patient List</span>
+            </a>
+        </li>
+    <?php } ?>
     
     <?php if ($canDoctorWork) { ?>
         <li class="nav-heading">Doctor's Work</li>
@@ -305,42 +367,46 @@ if (! $canDiagnosis && $user && method_exists($user, 'inGroup')) {
         </li>
     <?php } ?>
 
-    <li class="nav-heading">ABDM</li>
-    <li class="nav-item">
-        <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('AbdmTaskBoard') ?>','ABDM Task Board')">
-            <i class="bi bi-shield-check"></i>
-            <span>ABDM Task Board</span>
-        </a>
-    </li>
-
-    <li class="nav-heading">Reports</li>
-    
-    <li class="nav-item">
-        <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Report/collection_report') ?>','Collection Report')">
-            <i class="bi bi-graph-up"></i>
-            <span>Collection Report</span>
-        </a>
-    </li>
-    <?php if ($canDiagnosis) { ?>
+    <?php if ($canAbdm) { ?>
+        <li class="nav-heading">ABDM</li>
         <li class="nav-item">
-            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Report/diagnosis_report') ?>','Diagnosis Report')">
-                <i class="bi bi-activity"></i>
-                <span>Diagnosis Report</span>
+            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('AbdmTaskBoard') ?>','ABDM Task Board')">
+                <i class="bi bi-shield-check"></i>
+                <span>ABDM Task Board</span>
             </a>
         </li>
     <?php } ?>
-    <li class="nav-item">
-        <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Report/insurance_credit_main') ?>','Insurance Credit')">
-            <i class="bi bi-file-medical"></i>
-            <span>Insurance Credit </span>
-        </a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Report/nabh_audit_report') ?>','NABH Audit Report')">
-            <i class="bi bi-clipboard2-check"></i>
-            <span>NABH Audit Report</span>
-        </a>
-    </li>
+
+    <?php if ($canReports) { ?>
+        <li class="nav-heading">Reports</li>
+
+        <li class="nav-item">
+            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Report/collection_report') ?>','Collection Report')">
+                <i class="bi bi-graph-up"></i>
+                <span>Collection Report</span>
+            </a>
+        </li>
+        <?php if ($canDiagnosis) { ?>
+            <li class="nav-item">
+                <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Report/diagnosis_report') ?>','Diagnosis Report')">
+                    <i class="bi bi-activity"></i>
+                    <span>Diagnosis Report</span>
+                </a>
+            </li>
+        <?php } ?>
+        <li class="nav-item">
+            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Report/insurance_credit_main') ?>','Insurance Credit')">
+                <i class="bi bi-file-medical"></i>
+                <span>Insurance Credit </span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Report/nabh_audit_report') ?>','NABH Audit Report')">
+                <i class="bi bi-clipboard2-check"></i>
+                <span>NABH Audit Report</span>
+            </a>
+        </li>
+    <?php } ?>
     
     
     <?php if ($canDiagnosis) { ?>
@@ -388,26 +454,32 @@ if (! $canDiagnosis && $user && method_exists($user, 'inGroup')) {
             </a>
         </li>
     <?php } ?>
-    <li class="nav-heading">Admin & Settings</li>
-    <li class="nav-item">
-        <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('setting/admin') ?>','Admin Panel')">
-            <i class="bi bi-gear"></i>
-            <span>Admin</span>
-        </a>
-    </li>
-    <?php if ($canTemplate) { ?>
-        <li class="nav-item">
-            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('setting/template') ?>','Template')">
-                <i class="bi bi-palette"></i>
-                <span>Template</span>
-            </a>
-        </li>
+    <?php if ($canAdminPanel || $canTemplate || $canChargesSettings) { ?>
+        <li class="nav-heading">Admin & Settings</li>
+        <?php if ($canAdminPanel) { ?>
+            <li class="nav-item">
+                <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('setting/admin') ?>','Admin Panel')">
+                    <i class="bi bi-gear"></i>
+                    <span>Admin</span>
+                </a>
+            </li>
+        <?php } ?>
+        <?php if ($canTemplate) { ?>
+            <li class="nav-item">
+                <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('setting/template') ?>','Template')">
+                    <i class="bi bi-palette"></i>
+                    <span>Template</span>
+                </a>
+            </li>
+        <?php } ?>
+        <?php if ($canChargesSettings) { ?>
+            <li class="nav-item">
+                <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('setting/charges') ?>','Charges')">
+                    <i class="bi bi-tags"></i>
+                    <span>Charges</span>
+                </a>
+            </li>
+        <?php } ?>
     <?php } ?>
-    <li class="nav-item">
-        <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('setting/charges') ?>','Charges')">
-            <i class="bi bi-tags"></i>
-            <span>Charges</span>
-        </a>
-    </li>
 
 </ul>
