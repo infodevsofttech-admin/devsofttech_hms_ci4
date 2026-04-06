@@ -56,6 +56,22 @@ if (! $canPharmacy && $user && method_exists($user, 'inGroup')) {
     $canPharmacy = $user->inGroup('superadmin', 'admin', 'developer');
 }
 
+$canHospitalStock = false;
+if ($user && method_exists($user, 'can')) {
+    $canHospitalStock = $user->can('hospital_stock.access')
+        || $user->can('hospital_stock.master.manage')
+        || $user->can('hospital_stock.indent.create')
+        || $user->can('hospital_stock.indent.approve')
+        || $user->can('hospital_stock.issue')
+        || $user->can('hospital_stock.purchase.manage')
+        || $user->can('hospital_stock.report.view')
+        || $user->can('hospital_stock.*');
+}
+
+if (! $canHospitalStock && $user && method_exists($user, 'inGroup')) {
+    $canHospitalStock = $user->inGroup('superadmin', 'admin', 'developer', 'stock_manager', 'stock_requester', 'stock_issuer');
+}
+
 $canFinance = false;
 if ($user && method_exists($user, 'can')) {
     $canFinance = $user->can('finance.access')
@@ -111,12 +127,6 @@ if (! $canDiagnosis && $user && method_exists($user, 'inGroup')) {
         <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('setting/admin/bed-status') ?>','Bed Status');">
             <i class="bi bi-geo-alt"></i>
             <span>Bed Status</span>
-        </a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('setting/admin/hospital-stock') ?>','Hospital Stock Management');">
-            <i class="bi bi-box-seam"></i>
-            <span>Hospital Stock</span>
         </a>
     </li>
     <?php if ($canBilling) { ?>
@@ -193,7 +203,7 @@ if (! $canDiagnosis && $user && method_exists($user, 'inGroup')) {
         </li>
         <li class="nav-item">
             <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Finance/cashbook') ?>','Cash Collection & Disbursement SOP')">
-                <i class="bi bi-cash-stack"></i>
+                <i class="bi bi-cash-coin"></i>
                 <span>Cash & Disbursement SOP</span>
             </a>
         </li>
@@ -282,6 +292,15 @@ if (! $canDiagnosis && $user && method_exists($user, 'inGroup')) {
             <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Medical') ?>','Medical Store')">
                 <i class="bi bi-capsule-pill"></i>
                 <span>Pharmacy</span>
+            </a>
+        </li>
+    <?php } ?>
+    <?php if ($canHospitalStock) { ?>
+        <li class="nav-heading">Hospital Stock</li>
+        <li class="nav-item">
+            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('setting/admin/hospital-stock') ?>','Hospital Stock Management');">
+                <i class="bi bi-box-seam"></i>
+                <span>Hospital Stock</span>
             </a>
         </li>
     <?php } ?>
