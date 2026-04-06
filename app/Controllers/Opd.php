@@ -2061,9 +2061,7 @@ class Opd extends BaseController
         }
 
         $provisionalDiagnosisText = $rxRead($rx, ['Provisional_diagnosis', 'provisional_diagnosis', 'provisional_diagnosis_text']);
-        $diagnosisText = $provisionalDiagnosisText !== ''
-            ? $provisionalDiagnosisText
-            : $rxRead($rx, ['diagnosis', 'Diagnosis', 'final_diagnosis', 'dx']);
+        $diagnosisText = $rxRead($rx, ['diagnosis', 'Diagnosis', 'final_diagnosis', 'dx']);
 
         if ($diagnosisText === '') {
             $diagnosisText = implode(', ', is_array($data['selected_morbidities'] ?? null) ? ($data['selected_morbidities'] ?? []) : []);
