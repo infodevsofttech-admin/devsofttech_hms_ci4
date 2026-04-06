@@ -746,15 +746,12 @@
                             </div>
 
                             <div class="d-flex flex-wrap gap-2 mb-2">
-                                <button type="button" class="btn btn-outline-secondary btn-sm rx-next-visit-chip" data-value="3 Days">3 Days</button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm rx-next-visit-chip" data-value="4 Days">4 Days</button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm rx-next-visit-chip" data-value="5 Days">5 Days</button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm rx-next-visit-chip" data-value="1 Week">1 Week</button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm rx-next-visit-chip" data-value="10 Days">10 Days</button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm rx-next-visit-chip" data-value="15 Days">15 Days</button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm rx-next-visit-chip" data-value="20 Days">20 Days</button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm rx-next-visit-chip" data-value="1 Month">1 Month</button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm rx-next-visit-chip" data-value="2 Months">2 Months</button>
+                                <?php $nextVisitOptions = is_array($next_visit_options ?? null) ? $next_visit_options : []; ?>
+                                <?php foreach ($nextVisitOptions as $nextVisitOpt) : ?>
+                                    <?php $nextVisitValue = trim((string) ($nextVisitOpt['value'] ?? '')); ?>
+                                    <?php if ($nextVisitValue === '') { continue; } ?>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm rx-next-visit-chip" data-value="<?= esc($nextVisitValue) ?>"><?= esc($nextVisitValue) ?></button>
+                                <?php endforeach; ?>
                             </div>
                         </div>
 

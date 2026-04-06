@@ -110,12 +110,95 @@ class Opd_prescription extends BaseController
             'opd_master' => $opdMaster,
             'patient_master' => $patient,
             'opd_prescription' => $prescription,
+            'next_visit_options' => $this->getNextVisitOptions(date('Y-m-d')),
             'addiction_flags' => $this->getPatientAddictionFlags($patientId),
             'co_morbidities' => $this->getCoMorbiditiesWithSelection($patientId),
             'co_morbidities_prefilled_from_history' => $this->hasHistoricalCoMorbiditySelection($patientId),
             'history_alerts' => $this->buildPatientHistoryAlerts((int) ($opdRow->p_id ?? 0), $opdId),
             'left_remarks' => $this->fetchPatientRemarks((int) ($opdRow->p_id ?? 0), 8),
         ]);
+    }
+
+    /**
+     * @return array<int, array{desc:string,days:int,date:string,value:string}>
+     */
+    private function getNextVisitOptions(string $baseDate): array
+    {
+        $fallbackDays = [3, 4, 5, 7, 10, 15, 20, 30, 60];
+        $fallbackDesc = [
+            3 => '3 Days',
+            4 => '4 Days',
+            5 => '5 Days',
+            7 => '1 Week',
+            10 => '10 Days',
+            15 => '15 Days',
+            20 => '20 days',
+            30 => '1 Month',
+            60 => '2 Months',
+        ];
+
+        $baseTs = strtotime($baseDate);
+        if ($baseTs === false) {
+            $baseTs = strtotime(date('Y-m-d'));
+        }
+
+        $rows = [];
+        if ($this->db->tableExists('opd_nextvisit')) {
+            $fields = $this->db->getFieldNames('opd_nextvisit') ?? [];
+            $descField = $this->resolveFirstField($fields, ['next_visit_desc', 'visit_desc', 'description', 'nextvisit_desc', 'name']);
+            $daysField = $this->resolveFirstField($fields, ['no_of_days', 'days', 'day_count']);
+
+            if ($descField !== null && $daysField !== null) {
+                $builder = $this->db->table('opd_nextvisit')
+                    ->select($descField . ' as visit_desc,' . $daysField . ' as no_of_days');
+
+                if (in_array('status', $fields, true)) {
+                    $builder->where('status', 1);
+                }
+
+                $rows = $builder
+                    ->orderBy($daysField, 'ASC')
+                    ->get()
+                    ->getResultArray();
+            }
+        }
+
+        $options = [];
+        if (! empty($rows)) {
+            foreach ($rows as $row) {
+                $days = (int) ($row['no_of_days'] ?? 0);
+                $desc = trim((string) ($row['visit_desc'] ?? ''));
+                if ($days <= 0 || $desc === '') {
+                    continue;
+                }
+
+                $visitDate = date('d-m-Y', strtotime('+' . $days . ' day', $baseTs));
+                $value = $desc . ' (' . $visitDate . ')';
+
+                $options[] = [
+                    'desc' => $desc,
+                    'days' => $days,
+                    'date' => $visitDate,
+                    'value' => $value,
+                ];
+            }
+        }
+
+        if (empty($options)) {
+            foreach ($fallbackDays as $days) {
+                $desc = (string) ($fallbackDesc[$days] ?? ($days . ' Days'));
+                $visitDate = date('d-m-Y', strtotime('+' . $days . ' day', $baseTs));
+                $value = $desc . ' (' . $visitDate . ')';
+                $options[] = [
+                    'desc' => $desc,
+                    'days' => $days,
+                    'date' => $visitDate,
+                    'value' => $value,
+                ];
+            }
+        }
+
+        return $options;
     }
 
     public function vitals_get(int $opdId)
