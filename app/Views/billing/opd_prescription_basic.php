@@ -219,6 +219,11 @@
             overflow-y: auto;
             padding-right: .15rem;
         }
+        .rx-old-prescribed-list {
+            max-height: 560px;
+            overflow-y: auto;
+            padding-right: .15rem;
+        }
         .rx-history-image-wrap {
             width: 84px;
             flex: 0 0 84px;
@@ -259,6 +264,7 @@
     <form class="form1">
         <?= csrf_field() ?>
         <input type="hidden" id="opd_id" value="<?= esc($opd_id) ?>">
+        <input type="hidden" id="patient_id" value="<?= esc($patient_master[0]->id ?? 0) ?>">
         <input type="hidden" id="opd_session_id" value="<?= esc($opd_prescription[0]->id ?? 0) ?>">
 
         <div class="rx-sticky-actions d-flex justify-content-between align-items-center">
@@ -392,6 +398,15 @@
                         <?php } else { ?>
                             <div class="text-muted">No remarks available.</div>
                         <?php } ?>
+                    </div>
+                </div>
+                <div class="card mt-3" id="old_prescribed_card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <strong>Old Prescription</strong>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_reload_old_prescribed">Reload</button>
+                    </div>
+                    <div class="card-body p-2 rx-old-prescribed-list" id="old_prescribed">
+                        <div class="text-muted">Loading old prescriptions...</div>
                     </div>
                 </div>
                 <div class="card mt-3" id="ai_full_draft_preview_card" style="display:none;">
@@ -5430,6 +5445,26 @@
         processNext(0);
     });
 
+    function loadOldPrescribedPanel() {
+        var patientId = parseInt($('#patient_id').val() || '0', 10);
+        var opdId = parseInt($('#opd_id').val() || '0', 10);
+        if (patientId <= 0 || opdId <= 0) {
+            $('#old_prescribed').html('<div class="text-muted">Old prescription not available.</div>');
+            return;
+        }
+
+        $('#old_prescribed').html('<div class="text-muted">Loading old prescriptions...</div>');
+        $.get('<?= base_url('Opd_prescription/show_old_Prescribed') ?>/' + patientId + '/' + opdId, function(html) {
+            $('#old_prescribed').html(html || '<div class="text-muted">No old prescriptions found.</div>');
+        }).fail(function() {
+            $('#old_prescribed').html('<div class="text-danger">Unable to load old prescriptions.</div>');
+        });
+    }
+
+    $('#btn_reload_old_prescribed').on('click', function() {
+        loadOldPrescribedPanel();
+    });
+
     if (localStorage.getItem(draftKey)) {
         setStatus('dirty', 'Draft available');
     }
@@ -5437,6 +5472,7 @@
     loadAdviceList();
     loadInvestigationList();
     loadMedicineList();
+    loadOldPrescribedPanel();
     loadRxGroupCatalog();
     updateScanBanner();
 })();

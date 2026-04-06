@@ -5207,37 +5207,86 @@ class Opd_prescription extends BaseController
             ->getResultArray();
 
         if (empty($rows)) {
-            return $this->response->setBody('<p class="text-muted">No old prescriptions found.</p>');
+            return $this->response->setBody('<p class="text-muted mb-0">No old prescriptions found.</p>');
         }
 
         $medicineTable = $this->findExistingTable(['opd_prescrption_prescribed', 'opd_prescription_prescribed']);
-        $html = '<div class="accordion" id="oldRxAccordion">';
-        foreach ($rows as $index => $row) {
-            $rxLines = [];
-            if ($medicineTable !== null && !empty($row['session_id'])) {
+        if ($medicineTable === null) {
+            return $this->response->setBody('<p class="text-muted mb-0">Old medicine table not found.</p>');
+        }
+
+        $html = '<div class="old-rx-list">';
+        foreach ($rows as $row) {
+            $sessionId = (int) ($row['session_id'] ?? 0);
+            $dateLabel = ! empty($row['apointment_date']) ? date('d/m/Y', strtotime((string) $row['apointment_date'])) : '';
+
+            $medRows = [];
+            if ($sessionId > 0) {
                 $medRows = $this->db->table($medicineTable)
-                    ->select('med_type,med_name,dosage,dosage_when,dosage_freq,no_of_days,qty,remark')
-                    ->where('opd_pre_id', (int) $row['session_id'])
+                    ->select('id,med_id,med_type,med_name,dosage,dosage_when,dosage_freq,no_of_days,qty,remark')
+                    ->where('opd_pre_id', $sessionId)
                     ->orderBy('id', 'ASC')
                     ->get()
                     ->getResultArray();
-                foreach ($medRows as $med) {
-                    $rxLines[] = esc(trim((string) ($med['med_type'] ?? ''))) . ' ' . esc(trim((string) ($med['med_name'] ?? ''))) . ' | '
-                        . esc(trim((string) ($med['dosage'] ?? ''))) . ' '
-                        . esc(trim((string) ($med['dosage_when'] ?? ''))) . ' '
-                        . esc(trim((string) ($med['dosage_freq'] ?? ''))) . ' '
-                        . esc(trim((string) ($med['no_of_days'] ?? '')));
-                }
             }
 
-            $dateLabel = !empty($row['apointment_date']) ? date('d-m-Y', strtotime((string) $row['apointment_date'])) : '';
-            $html .= '<div class="card mb-2">'
-                . '<div class="card-header"><strong>' . esc((string) ($row['opd_code'] ?? $row['opd_id'])) . '</strong> <small class="text-muted ms-2">' . esc($dateLabel) . '</small></div>'
-                . '<div class="card-body">'
-                . '<div><strong>Complaints:</strong> ' . esc((string) ($row['complaints'] ?? '')) . '</div>'
-                . '<div><strong>Diagnosis:</strong> ' . esc((string) ($row['diagnosis'] ?? '')) . '</div>'
-                . '<div><strong>Rx:</strong><br>' . (empty($rxLines) ? '<span class="text-muted">No medicine rows</span>' : implode('<br>', $rxLines)) . '</div>'
-                . '</div></div>';
+            $html .= '<div class="card mb-2 old-rx-card">';
+            $html .= '<div class="card-header py-2 d-flex justify-content-between align-items-center">';
+            $html .= '<div>';
+            $html .= '<strong>OPD: ' . esc((string) ($row['opd_code'] ?? $row['opd_id'])) . '</strong>';
+            if ($dateLabel !== '') {
+                $html .= '<span class="text-muted ms-2">' . esc($dateLabel) . '</span>';
+            }
+            $html .= '</div>';
+            $html .= '<button type="button" class="btn btn-sm btn-outline-primary btn-old-rx-add-all">+ All</button>';
+            $html .= '</div>';
+
+            $html .= '<div class="card-body py-2">';
+            $html .= '<div class="small mb-1"><strong>Complaint:</strong> ' . esc((string) ($row['complaints'] ?? '')) . '</div>';
+            $html .= '<div class="small mb-2"><strong>Diagnosis:</strong> ' . esc((string) ($row['diagnosis'] ?? '')) . '</div>';
+
+            if (empty($medRows)) {
+                $html .= '<div class="text-muted small">No medicine row found.</div>';
+            } else {
+                $html .= '<table class="table table-sm table-bordered mb-0">';
+                $html .= '<thead><tr><th>Prescribed</th><th style="width:95px;">Dose</th><th style="width:58px;">+</th></tr></thead><tbody>';
+
+                foreach ($medRows as $med) {
+                    $medType = trim((string) ($med['med_type'] ?? ''));
+                    $medName = trim((string) ($med['med_name'] ?? ''));
+                    $medLabel = trim($medType . ' ' . $medName);
+                    $doseLabel = trim(
+                        trim((string) ($med['dosage'] ?? '')) . ' '
+                        . trim((string) ($med['dosage_when'] ?? '')) . ' '
+                        . trim((string) ($med['dosage_freq'] ?? ''))
+                    );
+                    if ($doseLabel === '') {
+                        $doseLabel = '-';
+                    }
+
+                    $html .= '<tr>';
+                    $html .= '<td>' . esc($medLabel !== '' ? $medLabel : '-') . '</td>';
+                    $html .= '<td class="small">' . esc($doseLabel) . '</td>';
+                    $html .= '<td class="text-center">'
+                        . '<button type="button" class="btn btn-sm btn-outline-success btn-old-rx-add-one"'
+                        . ' data-med-id="' . esc((string) ($med['med_id'] ?? 0), 'attr') . '"'
+                        . ' data-med-name="' . esc($medName, 'attr') . '"'
+                        . ' data-med-type="' . esc($medType, 'attr') . '"'
+                        . ' data-dosage="' . esc((string) ($med['dosage'] ?? ''), 'attr') . '"'
+                        . ' data-dosage-when="' . esc((string) ($med['dosage_when'] ?? ''), 'attr') . '"'
+                        . ' data-dosage-freq="' . esc((string) ($med['dosage_freq'] ?? ''), 'attr') . '"'
+                        . ' data-no-of-days="' . esc((string) ($med['no_of_days'] ?? ''), 'attr') . '"'
+                        . ' data-qty="' . esc((string) ($med['qty'] ?? ''), 'attr') . '"'
+                        . ' data-remark="' . esc((string) ($med['remark'] ?? ''), 'attr') . '">Add</button>'
+                        . '</td>';
+                    $html .= '</tr>';
+                }
+
+                $html .= '</tbody></table>';
+            }
+
+            $html .= '</div>';
+            $html .= '</div>';
         }
         $html .= '</div>';
 
