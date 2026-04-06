@@ -1817,9 +1817,11 @@ class Opd extends BaseController
         $doctorShortDescription = trim((string) ($doctor->doc_sign ?? $opd->doc_sign ?? ''));
         $opdFeeDesc = trim((string) (($opd->opd_fee_amount ?? '') . ' ' . ($opd->opd_fee_desc ?? '')));
         $totalNoVisit = (string) ($opd->no_visit ?? '');
+        $lastVisitDate = '';
         $lastVisitText = '';
         if (!empty($data['old_opd'][0]->str_apointment_date ?? '')) {
-            $lastVisitText = 'Last Visit : ' . (string) $data['old_opd'][0]->str_apointment_date;
+            $lastVisitDate = (string) $data['old_opd'][0]->str_apointment_date;
+            $lastVisitText = 'Last Visit : ' . $lastVisitDate;
         }
 
         $bookTime = (string) ($opd->apointment_date ?? '');
@@ -2218,7 +2220,7 @@ class Opd extends BaseController
             'doctor_short_description' => $doctorShortDescription,
             'opd_fee_desc' => $opdFeeDesc,
             'total_no_visit' => $totalNoVisit,
-            'last_opdvisit_date' => $lastVisitText,
+            'last_opdvisit_date' => $lastVisitDate,
             'str_opd_book_date' => $bookTime,
             'Complaint' => $complaintText,
             'complaint' => $complaintText,
@@ -3116,7 +3118,8 @@ class Opd extends BaseController
             $pRow->age = get_age_1($pRow->dob ?? null, $pRow->age ?? '', $pRow->age_in_month ?? '', $pRow->estimate_dob ?? '', $opdRow->apointment_date ?? null);
         }
 
-        $sql = "select *,date_format(date_add(apointment_date,interval " . $noOpdDays . " day),'%d-%m-%Y') as opd_Exp_Date
+        $sql = "select *,date_format(apointment_date,'%d-%m-%Y') as str_apointment_date,
+            date_format(date_add(apointment_date,interval " . $noOpdDays . " day),'%d-%m-%Y') as opd_Exp_Date
             from opd_master where p_id=" . (int) $opdRow->p_id . " and opd_id < " . (int) $opdId . " order by opd_id desc limit 1";
         $query = $this->db->query($sql);
         $data['old_opd'] = $query->getResult();
