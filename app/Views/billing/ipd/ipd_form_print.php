@@ -29,7 +29,7 @@ if ($admitDate === '') {
     <meta charset="utf-8">
     <style>
         body {
-            font-family: DejaVu Sans, sans-serif;
+            font-family: FreeSerif, DejaVu Sans, Nirmala UI, Mangal, sans-serif;
             font-size: 11px;
             color: #111;
             line-height: 1.35;

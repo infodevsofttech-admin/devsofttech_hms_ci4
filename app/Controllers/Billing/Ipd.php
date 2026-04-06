@@ -876,6 +876,9 @@ class Ipd extends BaseController
             'margin_bottom' => 8,
             'margin_left' => 8,
             'margin_right' => 8,
+            'default_font' => 'freeserif',
+            'autoScriptToLang' => true,
+            'autoLangToFont' => true,
         ];
 
         if (in_array($formNo, [10, 11], true)) {
@@ -2352,7 +2355,12 @@ class Ipd extends BaseController
             '{{CURRENT_DATETIME}}' => esc((string) ($data['generated_at'] ?? date('d-m-Y h:i A'))),
         ];
 
-        return strtr($templateHtml, $replacements);
+        $html = strtr($templateHtml, $replacements);
+
+        // Force a Unicode-capable fallback stack so Devanagari text renders in mPDF.
+        $fontStyle = '<style>body,table,td,th,p,span,div{font-family:freeserif,dejavusans,sans-serif !important;}</style>';
+
+        return $fontStyle . $html;
     }
 
     private function calculateCashBalanceTotals(array $rows): array
