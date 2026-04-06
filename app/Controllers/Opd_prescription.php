@@ -4863,9 +4863,9 @@ class Opd_prescription extends BaseController
             $message .= ' | New medicine saved in OPD master';
         }
         if (! empty($masterInfo['details_updated'])) {
-            $src = trim((string) ($masterInfo['details_source'] ?? 'AI/local'));
+            $src = trim((string) ($masterInfo['details_source'] ?? 'master'));
             if ($src === '') {
-                $src = 'AI/local';
+                $src = 'master';
             }
             $message .= ' | Master details updated (' . $src . ')';
         }
@@ -4955,38 +4955,10 @@ class Opd_prescription extends BaseController
             }
 
             if (($details['genericname'] ?? '') === '' && ($details['salt_name'] ?? '') === '' && ($details['dosage_restriction'] ?? '') === '') {
-                $aiServerDetails = $this->fetchMedicineDetailsFromAiServer($medName, $medType);
-                if (($aiServerDetails['genericname'] ?? '') !== '' || ($aiServerDetails['salt_name'] ?? '') !== '' || ($aiServerDetails['dosage_restriction'] ?? '') !== '') {
-                    $details = $aiServerDetails;
-                    $detailsSource = 'ai-server';
-                }
-            }
-
-            if (($details['genericname'] ?? '') === '' && ($details['salt_name'] ?? '') === '' && ($details['dosage_restriction'] ?? '') === '') {
                 $fallback = $this->inferMedicineDetailsFromBrandName($medName, $medType);
                 if (($fallback['genericname'] ?? '') !== '' || ($fallback['salt_name'] ?? '') !== '' || ($fallback['dosage_restriction'] ?? '') !== '') {
                     $details = $fallback;
                     $detailsSource = 'brand-fallback';
-                }
-            }
-
-            if (($details['genericname'] ?? '') === '' && ($details['salt_name'] ?? '') === '' && ($details['dosage_restriction'] ?? '') === '') {
-                $prompt = "You are a medicine data enrichment assistant for OPD master data in India.\n"
-                    . "Medicine Name: {$medName}\n"
-                    . "Formulation: {$medType}\n"
-                    . "Return ONLY valid JSON with keys: genericname, salt_name, dosage_restriction, caution_note.";
-                $aiText = $this->generateClinicalTextWithAi($prompt, 240);
-                $parsed = $aiText ? $this->parseJsonFromAiResponse($aiText) : null;
-                if (is_array($parsed)) {
-                    $details = [
-                        'genericname' => trim((string) ($parsed['genericname'] ?? '')),
-                        'salt_name' => trim((string) ($parsed['salt_name'] ?? '')),
-                        'dosage_restriction' => trim((string) ($parsed['dosage_restriction'] ?? '')),
-                        'caution_note' => trim((string) ($parsed['caution_note'] ?? '')),
-                    ];
-                    if (($details['genericname'] ?? '') !== '' || ($details['salt_name'] ?? '') !== '' || ($details['dosage_restriction'] ?? '') !== '') {
-                        $detailsSource = 'ai';
-                    }
                 }
             }
 
@@ -5302,9 +5274,9 @@ class Opd_prescription extends BaseController
             $message .= ' | New medicine saved in OPD master';
         }
         if (! empty($masterInfo['details_updated'])) {
-            $src = trim((string) ($masterInfo['details_source'] ?? 'AI/local'));
+            $src = trim((string) ($masterInfo['details_source'] ?? 'master'));
             if ($src === '') {
-                $src = 'AI/local';
+                $src = 'master';
             }
             $message .= ' | Master details updated (' . $src . ')';
         }
