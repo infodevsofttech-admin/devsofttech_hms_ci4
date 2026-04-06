@@ -811,8 +811,17 @@ class Opd extends BaseController
 
         $sql = "select o.opd_id,o.opd_code,o.opd_no,o.opd_status,
                 p.id,p.p_code,p.p_fname as P_name,p.p_rname,
-                o.opd_fee_desc,o.opd_fee_amount,o.payment_status,
-                if(o.payment_mode=4,'Credit to ECHS',if(o.payment_mode=1,'Cash','Pending')) as opd_type,
+            o.opd_fee_desc,o.opd_fee_amount,o.payment_status,o.opd_fee_type,
+            coalesce(o.running_opd,0) as running_opd,
+            o.confirm_pay_opd,
+            (case
+                when (coalesce(o.running_opd,0)=1 or o.opd_fee_type=3 or upper(coalesce(o.opd_fee_desc,'')) like '%RUNNING%') then 'Running'
+                when o.payment_mode=4 then 'Credit to ECHS'
+                when o.payment_status=1 and o.payment_mode=0 then 'No Cost'
+                when o.payment_mode=1 then 'Cash'
+                when o.payment_mode=2 then 'Bank Card'
+                else 'Pending'
+            end) as opd_type,
                 if(pr.id is null, 0, 1) as has_prescription,
                 if(
                     coalesce(trim(pr.pulse),'')<>''
@@ -842,6 +851,15 @@ class Opd extends BaseController
         foreach ($allRows as $row) {
             $status = (int) ($row->opd_status ?? 0);
             $hasPrescription = (int) ($row->has_prescription ?? 0) === 1;
+            $paymentStatus = (int) ($row->payment_status ?? 0);
+            $runningOpd = (int) ($row->running_opd ?? 0) === 1;
+            $opdFeeType = (int) ($row->opd_fee_type ?? 0);
+            $opdFeeAmount = (float) ($row->opd_fee_amount ?? 0);
+            $opdFeeDesc = strtoupper(trim((string) ($row->opd_fee_desc ?? '')));
+            $isRunningVisit = $runningOpd || $opdFeeType === 3 || str_contains($opdFeeDesc, 'RUNNING');
+            $isConfirmedZeroAmount = $isRunningVisit && $opdFeeAmount <= 0;
+            $isConfirmedForQueue = $paymentStatus === 1 || $isConfirmedZeroAmount || !empty($row->confirm_pay_opd);
+            $row->is_confirmed_for_queue = $isConfirmedForQueue ? 1 : 0;
 
             if ($status === 1 && ! $hasPrescription) {
                 $opdList0[] = $row;

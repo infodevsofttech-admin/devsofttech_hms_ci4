@@ -30,23 +30,38 @@ if ($authUser) {
                     <td><?= esc($row->opd_type ?? '') ?> / Amt: <?= esc($row->opd_fee_amount ?? '') ?></td>
                     <td>
                         <?php $hasVitals = isset($row->has_vitals) && (int) $row->has_vitals === 1; ?>
-                        <?php if ($canOpenPrescription) : ?>
-                            <a class="btn btn-outline-primary btn-sm" title="Consult" href="javascript:load_form('/Opd_prescription/Prescription/<?= esc((int) ($row->opd_id ?? 0)) ?>','Consult');">
-                                Consult
-                            </a>
+                        <?php $isBookedTab = ($tabType ?? '') === 'booking'; ?>
+                        <?php $isConfirmedForQueue = (int) ($row->is_confirmed_for_queue ?? 0) === 1; ?>
+
+                        <?php if ($isBookedTab) : ?>
+                            <?php if ($isConfirmedForQueue) : ?>
+                                <button type="button" class="btn btn-outline-success btn-sm btn-opd-create-queue" data-opdid="<?= esc((int) ($row->opd_id ?? 0)) ?>" title="Queue">
+                                    Queue
+                                </button>
+                            <?php else : ?>
+                                <a class="btn btn-outline-primary btn-sm" title="Go For Payment" href="javascript:load_form('/Opd/invoice/<?= esc((int) ($row->opd_id ?? 0)) ?>','OPD Invoice');">
+                                    Go For Payment
+                                </a>
+                            <?php endif; ?>
+                        <?php else : ?>
+                            <?php if ($canOpenPrescription) : ?>
+                                <a class="btn btn-outline-primary btn-sm" title="Consult" href="javascript:load_form('/Opd_prescription/Prescription/<?= esc((int) ($row->opd_id ?? 0)) ?>','Consult');">
+                                    Consult
+                                </a>
+                            <?php endif; ?>
+                            <button type="button" class="btn <?= $hasVitals ? 'btn-success' : 'btn-warning text-dark' ?> btn-sm btn-opd-vitals" title="<?= $hasVitals ? 'Vitals Filled' : 'Vitals' ?>" data-opdid="<?= esc((int) ($row->opd_id ?? 0)) ?>" data-patient="<?= esc(($row->P_name ?? '') . ' { ' . ($row->p_rname ?? '') . ' }') ?>">
+                                <?= $hasVitals ? 'Vitals ✓' : 'Vitals' ?>
+                            </button>
+                            <button type="button" class="btn btn-outline-info btn-sm btn-opd-scan" title="Scan" data-opdid="<?= esc((int) ($row->opd_id ?? 0)) ?>">
+                                Scan
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm btn-opd-scan" title="Upload Scan" data-opdid="<?= esc((int) ($row->opd_id ?? 0)) ?>">
+                                Upload
+                            </button>
+                            <button type="button" class="btn btn-outline-dark btn-sm btn-opd-scan-list" title="Scan Document List" data-opdid="<?= esc((int) ($row->opd_id ?? 0)) ?>">
+                                Scan Doc List
+                            </button>
                         <?php endif; ?>
-                        <button type="button" class="btn <?= $hasVitals ? 'btn-success' : 'btn-warning text-dark' ?> btn-sm btn-opd-vitals" title="<?= $hasVitals ? 'Vitals Filled' : 'Vitals' ?>" data-opdid="<?= esc((int) ($row->opd_id ?? 0)) ?>" data-patient="<?= esc(($row->P_name ?? '') . ' { ' . ($row->p_rname ?? '') . ' }') ?>">
-                            <?= $hasVitals ? 'Vitals ✓' : 'Vitals' ?>
-                        </button>
-                        <button type="button" class="btn btn-outline-info btn-sm btn-opd-scan" title="Scan" data-opdid="<?= esc((int) ($row->opd_id ?? 0)) ?>">
-                            Scan
-                        </button>
-                        <button type="button" class="btn btn-outline-secondary btn-sm btn-opd-scan" title="Upload Scan" data-opdid="<?= esc((int) ($row->opd_id ?? 0)) ?>">
-                            Upload
-                        </button>
-                        <button type="button" class="btn btn-outline-dark btn-sm btn-opd-scan-list" title="Scan Document List" data-opdid="<?= esc((int) ($row->opd_id ?? 0)) ?>">
-                            Scan Doc List
-                        </button>
                         <?php if (($tabType ?? '') === 'waiting') : ?>
                             <button type="button" class="btn btn-outline-success btn-sm btn-opd-status" data-opd-id="<?= esc((int) ($row->opd_id ?? 0)) ?>" data-opd-status="2" title="Visit Done">
                                 Visit Done

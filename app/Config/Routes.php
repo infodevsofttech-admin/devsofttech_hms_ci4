@@ -501,6 +501,7 @@ $routes->get('opd_print/opd_Cont_print/(:num)', 'Opd::opd_cont_print/$1');
 $routes->get('opd_print/opd_blank_print/(:num)', 'Opd::opd_blank_print/$1');
 
 $routes->get('Opd_prescription/Prescription/(:num)', 'Opd_prescription::Prescription/$1');
+$routes->match(['get', 'post'], 'Opd_prescription/create_opd_queue/(:num)', 'Opd_prescription::create_opd_queue/$1');
 $routes->get('Opd_prescription/opd_prescription_print/(:num)/(:num)', 'Opd_prescription::opd_prescription_print/$1/$2');
 $routes->get('Opd_prescription/opd_prescription_print/(:num)/(:num)/(:num)', 'Opd_prescription::opd_prescription_print/$1/$2/$3');
 $routes->post('Opd_prescription/opd_prescription_save', 'Opd_prescription::opd_prescription_save');

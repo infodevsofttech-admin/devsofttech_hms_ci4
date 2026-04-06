@@ -120,6 +120,10 @@
         }
     }
 
+    function reloadAppointmentList() {
+        load_form('/Opd/get_appointment_list/<?= esc((int) ($doc_id ?? 0)) ?>/<?= esc($opd_date ?? date('Y-m-d')) ?>', 'OPD Appointment List');
+    }
+
     function setVitalMessage(type, text) {
         var $msg = $('#vital_msg');
         $msg.removeClass('text-muted text-success text-danger');
@@ -257,7 +261,35 @@
         }
 
         $.post('/Opd/opd_status/' + opdId + '/' + opdStatus, {}, function() {
-            load_form('/Opd/get_appointment_list/<?= esc((int) ($doc_id ?? 0)) ?>/<?= esc($opd_date ?? date('Y-m-d')) ?>', 'OPD Appointment List');
+            reloadAppointmentList();
+        });
+    });
+
+    $(document).off('click.opdcreatequeue', '.btn-opd-create-queue').on('click.opdcreatequeue', '.btn-opd-create-queue', function() {
+        var opdId = parseInt($(this).data('opdid') || '0', 10);
+        if (!opdId) {
+            return;
+        }
+
+        var $btn = $(this);
+        $btn.prop('disabled', true).text('Queueing...');
+
+        $.post('/Opd_prescription/create_opd_queue/' + opdId, {}, function(resp) {
+            var message = (resp || '').toString().trim();
+            if (message !== 'Queue Created') {
+                window.alert(message || 'Unable to create queue');
+                $btn.prop('disabled', false).text('Queue');
+                return;
+            }
+
+            reloadAppointmentList();
+        }).fail(function(xhr) {
+            var message = 'Unable to create queue';
+            if (xhr && xhr.responseText) {
+                message = xhr.responseText;
+            }
+            window.alert(message);
+            $btn.prop('disabled', false).text('Queue');
         });
     });
 

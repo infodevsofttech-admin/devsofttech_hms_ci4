@@ -6021,6 +6021,24 @@ class Opd_prescription extends BaseController
         return (int) $this->db->insertID();
     }
 
+    public function create_opd_queue(int $opdId)
+    {
+        if (! $this->canAccessPrescription()) {
+            return $this->response->setStatusCode(403)->setBody('Access denied');
+        }
+
+        if ($opdId <= 0) {
+            return $this->response->setBody('Invalid OPD ID');
+        }
+
+        $sessionId = $this->ensurePrescriptionSession($opdId, 0);
+        if ($sessionId <= 0) {
+            return $this->response->setBody('Unable to create queue');
+        }
+
+        return $this->response->setBody('Queue Created');
+    }
+
     private function isValidAbhaAddress(string $value): bool
     {
         $validation = service('validation');
