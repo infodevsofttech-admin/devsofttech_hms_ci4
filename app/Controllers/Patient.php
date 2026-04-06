@@ -192,37 +192,62 @@ class Patient extends BaseController
 	{
 		$inputMphone1 = trim((string) $this->request->getPost('input_mphone1'));
 		$inputAadhar = trim((string) $this->request->getPost('input_udai'));
+		$inputAbhaId = trim((string) $this->request->getPost('input_abha_id'));
 		$inputRelativeName = trim((string) $this->request->getPost('input_relative_name'));
 		$inputName = trim((string) $this->request->getPost('input_name'));
+		$abhaField = $this->resolvePatientAbhaIdField();
 
 		$builder = $this->db->table('patient_master');
-		$builder->select("id, CONCAT(p_fname,'/',IF(gender=1,'M','F'),'/',p_relative,' ',p_rname) AS Sresult");
+		$builder->select("id,p_fname,p_relative,p_rname,gender,add1,city,district,state,zip,mphone1,udai,last_visit,dob,age,age_in_month,estimate_dob");
+		if ($abhaField !== null) {
+			$builder->select($abhaField . ' AS abha_id');
+		}
 
 		$hasCondition = false;
-		if ($inputMphone1 !== '') {
-			$builder->orWhere('mphone1', $inputMphone1);
-			$hasCondition = true;
-		}
+		if ($inputMphone1 !== '' || $inputAadhar !== '' || $inputAbhaId !== '' || ($inputRelativeName !== '' && $inputName !== '')) {
+			$builder->groupStart();
 
-		if ($inputAadhar !== '') {
-			$builder->orWhere('udai', $inputAadhar);
-			$hasCondition = true;
-		}
+			if ($inputMphone1 !== '') {
+				$builder->where('mphone1', $inputMphone1);
+				$hasCondition = true;
+			}
 
-		if ($inputRelativeName !== '') {
-			$builder->groupStart()
-				->where('p_rname', $inputRelativeName)
-				->where('p_fname', $inputName)
-				->groupEnd();
-			$hasCondition = true;
+			if ($inputAadhar !== '') {
+				$builder->orWhere('udai', $inputAadhar);
+				$hasCondition = true;
+			}
+
+			if ($inputAbhaId !== '' && $abhaField !== null) {
+				$builder->orWhere($abhaField, $inputAbhaId);
+				$hasCondition = true;
+			}
+
+			if ($inputRelativeName !== '' && $inputName !== '') {
+				$builder->orGroupStart()
+					->where('p_rname', trim(strtoupper($inputRelativeName)))
+					->where('p_fname', trim(strtoupper($inputName)))
+					->groupEnd();
+				$hasCondition = true;
+			}
+
+			$builder->groupEnd();
 		}
 
 		$searchResult = [];
 		if ($hasCondition) {
-			$searchResult = $builder->orderBy('id', 'DESC')->get()->getResult();
+			$searchResult = $builder->orderBy('id', 'DESC')->limit(25)->get()->getResult();
 		}
 
-		return view('billing/search_adv_data', ['search_result' => $searchResult]);
+		return view('billing/search_adv_data', [
+			'search_result' => $searchResult,
+			'filters' => [
+				'input_mphone1' => $inputMphone1,
+				'input_udai' => strtoupper($inputAadhar),
+				'input_abha_id' => $inputAbhaId,
+				'input_relative_name' => strtoupper($inputRelativeName),
+				'input_name' => strtoupper($inputName),
+			],
+		]);
 	}
 
 	public function abha_fetch_profile()

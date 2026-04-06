@@ -282,6 +282,14 @@
 
         $('#input_abha_id').on('change blur', function() {
             var abhaId = ($(this).val() || '').toString().trim();
+            if (abhaId !== '') {
+                refreshAdvancedSearchResult({
+                    input_abha_id: abhaId
+                });
+            } else {
+                $('#search_result_update').html('');
+            }
+
             if (!/^\d{14}$/.test(abhaId)) {
                 return;
             }
@@ -470,41 +478,36 @@
         };
     }
 
+    function refreshAdvancedSearchResult(payload) {
+        var csrf = getCsrfData();
+        var postData = $.extend({}, payload || {});
+        postData[csrf.name] = csrf.value;
+
+        $.post('<?= base_url('billing/patient/search_adv') ?>', postData, function(data) {
+            $('#search_result_update').html(data);
+        });
+    }
+
     function onchange_feild_number(control_button) {
         var input_mphone1 = $('#input_mphone1').val();
-        var csrf = getCsrfData();
-
-        $.post('<?= base_url('billing/patient/search_adv') ?>', {
-            "input_mphone1": input_mphone1,
-            [csrf.name]: csrf.value
-        }, function(data) {
-            $('#search_result_update').html(data);
+        refreshAdvancedSearchResult({
+            "input_mphone1": input_mphone1
         });
     }
 
     function onchange_aadhar(control_button) {
         var input_udai = $('#input_udai').val();
-        var csrf = getCsrfData();
-
-        $.post('<?= base_url('billing/patient/search_adv') ?>', {
-            "input_udai": input_udai,
-            [csrf.name]: csrf.value
-        }, function(data) {
-            $('#search_result_update').html(data);
+        refreshAdvancedSearchResult({
+            "input_udai": input_udai
         });
     }
 
     function onchange_relative_name(control_button) {
         var input_relative_name = $('#input_relative_name').val();
         var input_name = $('#input_name').val();
-        var csrf = getCsrfData();
-
-        $.post('<?= base_url('billing/patient/search_adv') ?>', {
+        refreshAdvancedSearchResult({
             "input_relative_name": input_relative_name,
-            "input_name": input_name,
-            [csrf.name]: csrf.value
-        }, function(data) {
-            $('#search_result_update').html(data);
+            "input_name": input_name
         });
 
     }

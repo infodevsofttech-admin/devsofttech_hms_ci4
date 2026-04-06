@@ -29,9 +29,10 @@
                         </div>
                         <div class="card-body p-0">
                             <table class="table table-sm mb-0">
-                                <tr><td>Booked</td><td class="text-end"><span class="badge bg-secondary\"><?= esc((int) ($row->count_booking ?? 0)) ?></span></td></tr>
-                                <tr><td>Waiting</td><td class="text-end"><span class="badge bg-primary\"><?= esc((int) ($row->count_wait ?? 0)) ?></span></td></tr>
-                                <tr><td>Visited</td><td class="text-end"><span class="badge bg-info\"><?= esc((int) ($row->count_visit ?? 0)) ?></span></td></tr>
+                                <tr><td>Booked</td><td class="text-end"><span class="badge bg-secondary"><?= esc((int) ($row->count_booking ?? 0)) ?></span></td></tr>
+                                <tr><td>Waiting</td><td class="text-end"><span class="badge bg-primary"><?= esc((int) ($row->count_wait ?? 0)) ?></span></td></tr>
+                                <tr><td>Visited</td><td class="text-end"><span class="badge bg-info"><?= esc((int) ($row->count_visit ?? 0)) ?></span></td></tr>
+                                <tr><td>Cancelled</td><td class="text-end"><span class="badge bg-warning text-dark"><?= esc((int) ($row->count_cancel ?? 0)) ?></span></td></tr>
                                 <tr><td>Total</td><td class="text-end"><span class="badge bg-danger"><?= esc($total) ?></span></td></tr>
                             </table>
                         </div>

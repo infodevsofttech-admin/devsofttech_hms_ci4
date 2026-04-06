@@ -935,6 +935,202 @@ class Opd extends BaseController
     }
 
     /**
+     * Lightweight digest endpoint for live appointment screen refresh checks.
+     */
+    public function get_appointment_digest(int $docId, string $opdDate = '')
+    {
+        if (! $this->canAccessDoctorWorkPanel()) {
+            return $this->response->setStatusCode(403)->setJSON([
+                'ok' => 0,
+                'message' => 'Access denied',
+            ]);
+        }
+
+        if ($opdDate === '') {
+            $opdDate = date('Y-m-d');
+        }
+
+        $docId = (int) $docId;
+        $opdDateSql = $this->db->escape($opdDate);
+
+        $sql = "select
+                count(*) as total_rows,
+                sum(case when o.opd_status = 1 and pr.id is null then 1 else 0 end) as count_booking,
+                sum(case when o.opd_status = 1 and pr.id is not null then 1 else 0 end) as count_wait,
+                sum(case when o.opd_status = 2 then 1 else 0 end) as count_visit,
+                sum(case when o.opd_status = 3 then 1 else 0 end) as count_cancel,
+                coalesce(
+                    bit_xor(
+                        cast(
+                            crc32(
+                                concat_ws('|',
+                                    o.opd_id,
+                                    o.opd_status,
+                                    if(pr.id is null, 0, 1),
+                                    if(
+                                        coalesce(trim(pr.pulse),'')<>''
+                                        or coalesce(trim(pr.spo2),'')<>''
+                                        or coalesce(trim(pr.bp),'')<>''
+                                        or coalesce(trim(pr.diastolic),'')<>''
+                                        or coalesce(trim(pr.temp),'')<>''
+                                        or coalesce(trim(pr.rr_min),'')<>''
+                                        or coalesce(trim(pr.height),'')<>''
+                                        or coalesce(trim(pr.weight),'')<>''
+                                        or coalesce(trim(pr.waist),'')<>'',
+                                        1,0
+                                    ),
+                                    coalesce(pr.queue_no,0),
+                                    coalesce(o.payment_status,0),
+                                    coalesce(o.confirm_pay_opd,'')
+                                )
+                            ) as unsigned
+                        )
+                    ),
+                    0
+                ) as digest_crc
+            from opd_master o
+            left join opd_prescription pr on o.opd_id = pr.opd_id
+            where o.apointment_date = " . $opdDateSql . " and o.doc_id = " . $docId;
+
+        $row = $this->db->query($sql)->getRow();
+
+        $payload = [
+            'doc_id' => $docId,
+            'opd_date' => $opdDate,
+            'total' => (int) ($row->total_rows ?? 0),
+            'booked' => (int) ($row->count_booking ?? 0),
+            'waiting' => (int) ($row->count_wait ?? 0),
+            'visited' => (int) ($row->count_visit ?? 0),
+            'cancelled' => (int) ($row->count_cancel ?? 0),
+            'crc' => (string) ($row->digest_crc ?? '0'),
+        ];
+
+        $digest = sha1(json_encode($payload));
+
+        return $this->response->setJSON([
+            'ok' => 1,
+            'digest' => $digest,
+            'payload' => $payload,
+            'server_time' => date('c'),
+        ]);
+    }
+
+    /**
+     * Live snapshot endpoint for in-place row merge on OPD appointment screen.
+     */
+    public function get_appointment_live_rows(int $docId, string $opdDate = '')
+    {
+        if (! $this->canAccessDoctorWorkPanel()) {
+            return $this->response->setStatusCode(403)->setJSON([
+                'ok' => 0,
+                'message' => 'Access denied',
+            ]);
+        }
+
+        if ($opdDate === '') {
+            $opdDate = date('Y-m-d');
+        }
+
+        $docId = (int) $docId;
+        $opdDateSql = $this->db->escape($opdDate);
+
+        $sql = "select
+                o.opd_id,
+                o.opd_status,
+                o.payment_status,
+                o.opd_fee_type,
+                o.opd_fee_amount,
+                o.opd_fee_desc,
+                coalesce(o.running_opd,0) as running_opd,
+                o.confirm_pay_opd,
+                if(pr.id is null, 0, 1) as has_prescription,
+                if(
+                    coalesce(trim(pr.pulse),'')<>''
+                    or coalesce(trim(pr.spo2),'')<>''
+                    or coalesce(trim(pr.bp),'')<>''
+                    or coalesce(trim(pr.diastolic),'')<>''
+                    or coalesce(trim(pr.temp),'')<>''
+                    or coalesce(trim(pr.rr_min),'')<>''
+                    or coalesce(trim(pr.height),'')<>''
+                    or coalesce(trim(pr.weight),'')<>''
+                    or coalesce(trim(pr.waist),'')<>'',
+                    1,0
+                ) as has_vitals,
+                coalesce(pr.queue_no,0) as queue_no
+            from opd_master o
+            left join opd_prescription pr on o.opd_id = pr.opd_id
+            where o.apointment_date = " . $opdDateSql . " and o.doc_id = " . $docId;
+
+        $rows = $this->db->query($sql)->getResult();
+
+        $normalized = [];
+        $counts = [
+            'all' => 0,
+            'booked' => 0,
+            'waiting' => 0,
+            'visited' => 0,
+            'cancelled' => 0,
+        ];
+
+        foreach ($rows as $row) {
+            $status = (int) ($row->opd_status ?? 0);
+            $hasPrescription = (int) ($row->has_prescription ?? 0) === 1;
+            $paymentStatus = (int) ($row->payment_status ?? 0);
+            $runningOpd = (int) ($row->running_opd ?? 0) === 1;
+            $opdFeeType = (int) ($row->opd_fee_type ?? 0);
+            $opdFeeAmount = (float) ($row->opd_fee_amount ?? 0);
+            $opdFeeDesc = strtoupper(trim((string) ($row->opd_fee_desc ?? '')));
+            $isRunningVisit = $runningOpd || $opdFeeType === 3 || str_contains($opdFeeDesc, 'RUNNING');
+            $isConfirmedZeroAmount = $isRunningVisit && $opdFeeAmount <= 0;
+            $isConfirmedForQueue = $paymentStatus === 1 || $isConfirmedZeroAmount || !empty($row->confirm_pay_opd);
+
+            $statusLabel = 'booked';
+            if ($status === 1 && ($hasPrescription || $isConfirmedForQueue)) {
+                $statusLabel = 'waiting';
+            } elseif ($status === 2) {
+                $statusLabel = 'visited';
+            } elseif ($status === 3) {
+                $statusLabel = 'cancelled';
+            }
+
+            $normalized[] = [
+                'opd_id' => (int) ($row->opd_id ?? 0),
+                'status' => $statusLabel,
+                'has_prescription' => $hasPrescription ? 1 : 0,
+                'has_vitals' => (int) ($row->has_vitals ?? 0),
+                'queue_no' => (int) ($row->queue_no ?? 0),
+                'is_confirmed_for_queue' => $isConfirmedForQueue ? 1 : 0,
+            ];
+
+            $counts['all']++;
+            if (array_key_exists($statusLabel, $counts)) {
+                $counts[$statusLabel]++;
+            }
+        }
+
+        usort($normalized, static function ($left, $right): int {
+            return ((int) ($left['opd_id'] ?? 0)) <=> ((int) ($right['opd_id'] ?? 0));
+        });
+
+        $digest = sha1(json_encode([
+            'doc_id' => $docId,
+            'opd_date' => $opdDate,
+            'counts' => $counts,
+            'rows' => $normalized,
+        ]));
+
+        return $this->response->setJSON([
+            'ok' => 1,
+            'digest' => $digest,
+            'doc_id' => $docId,
+            'opd_date' => $opdDate,
+            'counts' => $counts,
+            'rows' => $normalized,
+            'server_time' => date('c'),
+        ]);
+    }
+
+    /**
      * Update OPD status from queue actions.
      */
     public function opd_status(int $opdId, int $opdStatus)
@@ -3749,6 +3945,8 @@ class Opd extends BaseController
 
             $this->db->table('opd_master')->where('opd_id', $oid)->update($data);
 
+            $this->autoCreateOpdQueue($oid);
+
             return $this->response->setJSON([
                 'update' => 1,
                 'showcontent' => 'Zero Cost',
@@ -3784,6 +3982,8 @@ class Opd extends BaseController
             ];
 
             $this->db->table('opd_master')->where('opd_id', $oid)->update($data);
+
+            $this->autoCreateOpdQueue($oid);
 
             return $this->response->setJSON([
                 'update' => 1,
@@ -3832,6 +4032,8 @@ class Opd extends BaseController
 
             $this->db->table('opd_master')->where('opd_id', $oid)->update($data);
 
+            $this->autoCreateOpdQueue($oid);
+
             return $this->response->setJSON([
                 'update' => 1,
                 'showcontent' => 'Bank Card',
@@ -3852,6 +4054,8 @@ class Opd extends BaseController
 
             $this->db->table('opd_master')->where('opd_id', $oid)->update($data);
 
+            $this->autoCreateOpdQueue($oid);
+
             return $this->response->setJSON([
                 'update' => 1,
                 'showcontent' => 'Org. Case Credit',
@@ -3866,6 +4070,64 @@ class Opd extends BaseController
             'csrfName' => csrf_token(),
             'csrfHash' => csrf_hash(),
         ]);
+    }
+
+    private function autoCreateOpdQueue(int $opdId): void
+    {
+        if ($opdId <= 0 || ! $this->db->tableExists('opd_prescription')) {
+            return;
+        }
+
+        // If a queue row already exists for this OPD, do nothing.
+        $existing = $this->db->table('opd_prescription')
+            ->where('opd_id', $opdId)
+            ->get(1)
+            ->getRow();
+        if ($existing) {
+            return;
+        }
+
+        $opdRow = $this->db->table('opd_master')
+            ->where('opd_id', $opdId)
+            ->get(1)
+            ->getRow();
+        if (! $opdRow) {
+            return;
+        }
+
+        $fields = $this->db->getFieldNames('opd_prescription');
+        $insert = [];
+        if (in_array('opd_id', $fields, true)) {
+            $insert['opd_id'] = $opdId;
+        }
+        if (in_array('p_id', $fields, true)) {
+            $insert['p_id'] = (int) ($opdRow->p_id ?? 0);
+        }
+        if (in_array('doc_id', $fields, true)) {
+            $insert['doc_id'] = (int) ($opdRow->doc_id ?? 0);
+        }
+        if (in_array('date_opd_visit', $fields, true)) {
+            $insert['date_opd_visit'] = date('Y-m-d');
+        }
+        if (in_array('visit_status', $fields, true)) {
+            $insert['visit_status'] = 0;
+        }
+        if (in_array('session_id', $fields, true)) {
+            $insert['session_id'] = 0;
+        }
+        if (in_array('queue_no', $fields, true)) {
+            $maxQueue = $this->db->table('opd_prescription')
+                ->selectMax('queue_no', 'max_queue')
+                ->where('date_opd_visit', date('Y-m-d'))
+                ->where('doc_id', (int) ($opdRow->doc_id ?? 0))
+                ->get()
+                ->getRow();
+            $insert['queue_no'] = (int) ($maxQueue->max_queue ?? 0) + 1;
+        }
+
+        if (! empty($insert)) {
+            $this->db->table('opd_prescription')->insert($insert);
+        }
     }
 
     public function opd_discount_update(int $opdId)

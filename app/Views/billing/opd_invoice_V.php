@@ -13,10 +13,14 @@ if ($user) {
 $paymentHistoryRows = $payment_history_rows ?? [];
 ?>
 <section class="content-header">
-    <h1>OPD Invoice</h1>
-    <ol class="breadcrumb">
-        <li><a href="javascript:load_form('<?= base_url('billing/patient/person_record') ?>/<?= esc($opd_master[0]->p_id ?? 0) ?>/0');">Person Home</a></li>
-    </ol>
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h1 class="mb-0">OPD Invoice</h1>
+        <button type="button"
+                class="btn btn-outline-primary"
+                onclick="load_form('<?= base_url('billing/patient/person_record') ?>/<?= esc($opd_master[0]->p_id ?? 0) ?>/0','Patient Record');">
+            Person Home
+        </button>
+    </div>
 </section>
 
 <section class="invoice">
