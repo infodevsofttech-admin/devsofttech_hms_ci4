@@ -33,11 +33,11 @@
                     <label class="form-check-label" for="toggle_missing_vitals_only">Only Missing Vitals</label>
                 </div>
             </div>
-            <?= view('billing/opd_appointment_list_table', ['rows' => $opd_list_1, 'showQueue' => true, 'tabType' => 'waiting', 'opd_date' => $opd_date, 'doc_id' => $doc_id]) ?>
+            <?= view('billing/opd_appointment_list_table', ['rows' => $opd_list_1, 'showQueue' => true, 'tabType' => 'waiting', 'tableId' => 'opdWaitingTable', 'opd_date' => $opd_date, 'doc_id' => $doc_id]) ?>
             <div id="waitingNoRowsHint" class="small text-muted mt-2 d-none">All waiting patients already have vitals.</div>
         </div>
         <div class="tab-pane fade" id="tab_visited">
-            <?= view('billing/opd_appointment_list_table', ['rows' => $opd_list_2, 'showQueue' => true, 'tabType' => 'visited', 'opd_date' => $opd_date, 'doc_id' => $doc_id]) ?>
+            <?= view('billing/opd_appointment_list_table', ['rows' => $opd_list_2, 'showQueue' => true, 'tabType' => 'visited', 'tableId' => 'opdVisitedTable', 'opd_date' => $opd_date, 'doc_id' => $doc_id]) ?>
         </div>
         <div class="tab-pane fade" id="tab_cancelled">
             <?= view('billing/opd_appointment_list_table', ['rows' => $opd_list_3, 'showQueue' => true, 'tabType' => 'cancelled', 'opd_date' => $opd_date, 'doc_id' => $doc_id]) ?>
@@ -101,6 +101,8 @@
     var modalObj = modalEl ? new bootstrap.Modal(modalEl) : null;
     var vitalsModalEl = document.getElementById('vitalsModal');
     var vitalsModalObj = vitalsModalEl ? new bootstrap.Modal(vitalsModalEl) : null;
+    var waitingDataTable = null;
+    var visitedDataTable = null;
 
     function getCsrfPair() {
         var input = document.querySelector('input[name="<?= csrf_token() ?>"]');
@@ -118,6 +120,128 @@
         if (input) {
             input.value = data.csrfHash;
         }
+    }
+
+    function destroyDataTable(selector) {
+        if (!window.jQuery || !$.fn || !$.fn.DataTable || !$.fn.DataTable.isDataTable(selector)) {
+            return null;
+        }
+
+        return $(selector).DataTable().destroy();
+    }
+
+    function hasActualRows(selector) {
+        var $table = $(selector);
+        if ($table.length === 0) {
+            return false;
+        }
+
+        var $rows = $table.find('tbody tr');
+        if ($rows.length === 0) {
+            return false;
+        }
+
+        return $table.find('tbody tr td:not([colspan])').length > 0;
+    }
+
+    function registerWaitingVitalsFilter() {
+        if (!window.jQuery || !$.fn || !$.fn.dataTable) {
+            return;
+        }
+
+        if (window.opdWaitingVitalsFilter) {
+            var existingIndex = $.fn.dataTable.ext.search.indexOf(window.opdWaitingVitalsFilter);
+            if (existingIndex >= 0) {
+                $.fn.dataTable.ext.search.splice(existingIndex, 1);
+            }
+        }
+
+        window.opdWaitingVitalsFilter = function(settings, data, dataIndex) {
+            if (!settings || !settings.nTable || settings.nTable.id !== 'opdWaitingTable') {
+                return true;
+            }
+
+            if (!$('#toggle_missing_vitals_only').is(':checked')) {
+                return true;
+            }
+
+            var rowNode = settings.aoData && settings.aoData[dataIndex] ? settings.aoData[dataIndex].nTr : null;
+            if (!rowNode) {
+                return true;
+            }
+
+            if (parseInt($(rowNode).attr('data-has-prescription') || '0', 10) !== 1) {
+                return false;
+            }
+
+            return parseInt($(rowNode).attr('data-has-vitals') || '0', 10) !== 1;
+        };
+
+        $.fn.dataTable.ext.search.push(window.opdWaitingVitalsFilter);
+    }
+
+    function initializeOpdTable(selector, options) {
+        if (!window.jQuery || !$.fn || !$.fn.DataTable) {
+            return null;
+        }
+
+        destroyDataTable(selector);
+
+        if (!hasActualRows(selector)) {
+            return null;
+        }
+
+        return $(selector).DataTable($.extend({
+            paging: true,
+            lengthChange: false,
+            searching: true,
+            ordering: true,
+            info: true,
+            autoWidth: false,
+            responsive: true,
+            pageLength: 25
+        }, options || {}));
+    }
+
+    function syncWaitingHintAndBadge() {
+        var $rows = $('#tab_waiting tbody tr[data-opd-id]');
+        var missingCount = 0;
+        var visibleCount = 0;
+
+        $rows.each(function() {
+            var hasVitals = parseInt($(this).attr('data-has-vitals') || '0', 10) === 1;
+            var hasPrescription = parseInt($(this).attr('data-has-prescription') || '0', 10) === 1;
+            if (hasPrescription && !hasVitals) {
+                missingCount++;
+            }
+
+            if ($(this).is(':visible')) {
+                visibleCount++;
+            }
+        });
+
+        var $badge = $('#waitingMissingBadge');
+        $badge.text(String(missingCount));
+        $badge.toggleClass('d-none', missingCount <= 0);
+
+        $('#waitingNoRowsHint').toggleClass('d-none', !($('#toggle_missing_vitals_only').is(':checked') && $rows.length > 0 && visibleCount === 0));
+    }
+
+    function initializeOpdTables() {
+        registerWaitingVitalsFilter();
+
+        waitingDataTable = initializeOpdTable('#opdWaitingTable', {
+            order: [[2, 'asc']],
+            drawCallback: function() {
+                syncWaitingHintAndBadge();
+            }
+        });
+
+        visitedDataTable = initializeOpdTable('#opdVisitedTable', {
+            order: [[2, 'asc']]
+        });
+
+        syncWaitingHintAndBadge();
     }
 
     function reloadAppointmentList() {
@@ -152,6 +276,11 @@
 
     function applyMissingVitalsFilter() {
         // Filter waiting rows to optionally show only patients whose vitals are still missing.
+        if (waitingDataTable) {
+            waitingDataTable.draw();
+            return;
+        }
+
         var onlyMissing = $('#toggle_missing_vitals_only').is(':checked');
         var $rows = $('#tab_waiting tbody tr[data-opd-id]');
         var visibleCount = 0;
@@ -170,17 +299,7 @@
 
     function updateMissingVitalsBadge() {
         // Count waiting rows missing vitals and show badge only when count > 0.
-        var missingCount = 0;
-        $('#tab_waiting tbody tr[data-opd-id]').each(function() {
-            var hasVitals = parseInt($(this).attr('data-has-vitals') || '0', 10) === 1;
-            if (!hasVitals) {
-                missingCount++;
-            }
-        });
-
-        var $badge = $('#waitingMissingBadge');
-        $badge.text(String(missingCount));
-        $badge.toggleClass('d-none', missingCount <= 0);
+        syncWaitingHintAndBadge();
     }
 
     $(document).off('click.opdscanopen', '.btn-opd-scan').on('click.opdscanopen', '.btn-opd-scan', function() {
@@ -372,6 +491,9 @@
                     $vitalBtn.removeClass('btn-warning text-dark btn-outline-warning').addClass('btn-success');
                     $vitalBtn.attr('title', 'Vitals Filled');
                 }
+                if (waitingDataTable) {
+                    waitingDataTable.rows().invalidate().draw(false);
+                }
                 updateMissingVitalsBadge();
                 applyMissingVitalsFilter();
             }
@@ -401,6 +523,7 @@
         }
     });
 
+    initializeOpdTables();
     updateMissingVitalsBadge();
     applyMissingVitalsFilter();
 })();

@@ -8,7 +8,7 @@ if ($authUser) {
 }
 ?>
 <div class="table-responsive">
-    <table class="table table-sm table-striped align-middle mb-0">
+    <table class="table table-sm table-striped align-middle mb-0"<?= !empty($tableId) ? ' id="' . esc((string) $tableId, 'attr') . '"' : '' ?>>
         <thead>
         <tr>
             <th>OPD No.</th>
@@ -22,18 +22,17 @@ if ($authUser) {
         <tbody>
         <?php if (!empty($rows)) : ?>
             <?php foreach ($rows as $row) : ?>
-                <tr data-opd-id="<?= esc((int) ($row->opd_id ?? 0)) ?>" data-has-vitals="<?= esc((int) ($row->has_vitals ?? 0)) ?>">
+                <?php $hasVitals = isset($row->has_vitals) && (int) $row->has_vitals === 1; ?>
+                <?php $isBookedTab = ($tabType ?? '') === 'booking'; ?>
+                <?php $isConfirmedForQueue = (int) ($row->is_confirmed_for_queue ?? 0) === 1; ?>
+                <?php $hasPrescription = (int) ($row->has_prescription ?? 0) === 1; ?>
+                <tr data-opd-id="<?= esc((int) ($row->opd_id ?? 0)) ?>" data-has-vitals="<?= esc((int) ($row->has_vitals ?? 0)) ?>" data-has-prescription="<?= esc((int) ($row->has_prescription ?? 0)) ?>">
                     <td><?= esc($row->opd_code ?? '') ?></td>
                     <td><?= esc(($row->P_name ?? '') . ' { ' . ($row->p_rname ?? '') . ' }') ?></td>
-                    <?php if (!empty($showQueue)) : ?><td><?= esc((int) ($row->queue_no ?? 0)) ?></td><?php endif; ?>
+                    <?php if (!empty($showQueue)) : ?><td><?= $hasPrescription ? esc((int) ($row->queue_no ?? 0)) : '-' ?></td><?php endif; ?>
                     <td><?= esc($row->p_code ?? '') ?></td>
                     <td><?= esc($row->opd_type ?? '') ?> / Amt: <?= esc($row->opd_fee_amount ?? '') ?></td>
                     <td>
-                        <?php $hasVitals = isset($row->has_vitals) && (int) $row->has_vitals === 1; ?>
-                        <?php $isBookedTab = ($tabType ?? '') === 'booking'; ?>
-                        <?php $isConfirmedForQueue = (int) ($row->is_confirmed_for_queue ?? 0) === 1; ?>
-                        <?php $hasPrescription = (int) ($row->has_prescription ?? 0) === 1; ?>
-
                         <?php if ($isBookedTab) : ?>
                             <?php if ($isConfirmedForQueue) : ?>
                                 <button type="button" class="btn btn-outline-success btn-sm btn-opd-create-queue" data-opdid="<?= esc((int) ($row->opd_id ?? 0)) ?>" title="Queue">
@@ -45,14 +44,21 @@ if ($authUser) {
                                 </a>
                             <?php endif; ?>
                         <?php else : ?>
-                            <?php if ($canOpenPrescription) : ?>
+                            <?php if (! $hasPrescription && $isConfirmedForQueue) : ?>
+                                <button type="button" class="btn btn-outline-success btn-sm btn-opd-create-queue" data-opdid="<?= esc((int) ($row->opd_id ?? 0)) ?>" title="Queue">
+                                    Queue
+                                </button>
+                            <?php endif; ?>
+                            <?php if ($canOpenPrescription && $hasPrescription) : ?>
                                 <a class="btn btn-outline-primary btn-sm" title="Consult" href="javascript:load_form('/Opd_prescription/Prescription/<?= esc((int) ($row->opd_id ?? 0)) ?>','Consult');">
                                     Consult
                                 </a>
                             <?php endif; ?>
-                            <button type="button" class="btn <?= $hasVitals ? 'btn-success' : 'btn-warning text-dark' ?> btn-sm btn-opd-vitals" title="<?= $hasVitals ? 'Vitals Filled' : 'Vitals' ?>" data-opdid="<?= esc((int) ($row->opd_id ?? 0)) ?>" data-patient="<?= esc(($row->P_name ?? '') . ' { ' . ($row->p_rname ?? '') . ' }') ?>">
-                                <?= $hasVitals ? 'Vitals ✓' : 'Vitals' ?>
-                            </button>
+                            <?php if ($hasPrescription) : ?>
+                                <button type="button" class="btn <?= $hasVitals ? 'btn-success' : 'btn-warning text-dark' ?> btn-sm btn-opd-vitals" title="<?= $hasVitals ? 'Vitals Filled' : 'Vitals' ?>" data-opdid="<?= esc((int) ($row->opd_id ?? 0)) ?>" data-patient="<?= esc(($row->P_name ?? '') . ' { ' . ($row->p_rname ?? '') . ' }') ?>">
+                                    <?= $hasVitals ? 'Vitals ✓' : 'Vitals' ?>
+                                </button>
+                            <?php endif; ?>
                             <button type="button" class="btn btn-outline-info btn-sm btn-opd-scan" title="Scan" data-opdid="<?= esc((int) ($row->opd_id ?? 0)) ?>">
                                 Scan
                             </button>
@@ -64,7 +70,7 @@ if ($authUser) {
                             </button>
                         <?php endif; ?>
 
-                        <?php if (($tabType ?? '') === 'waiting') : ?>
+                        <?php if (($tabType ?? '') === 'waiting' && $hasPrescription) : ?>
                             <button type="button" class="btn btn-outline-success btn-sm btn-opd-status" data-opd-id="<?= esc((int) ($row->opd_id ?? 0)) ?>" data-opd-status="2" title="Visit Done">
                                 Visit Done
                             </button>

@@ -861,12 +861,12 @@ class Opd extends BaseController
             $isConfirmedForQueue = $paymentStatus === 1 || $isConfirmedZeroAmount || !empty($row->confirm_pay_opd);
             $row->is_confirmed_for_queue = $isConfirmedForQueue ? 1 : 0;
 
-            if ($status === 1 && ! $hasPrescription) {
+            if ($status === 1 && ! $hasPrescription && ! $isConfirmedForQueue) {
                 $opdList0[] = $row;
                 continue;
             }
 
-            if ($status === 1 && $hasPrescription) {
+            if ($status === 1 && ($hasPrescription || $isConfirmedForQueue)) {
                 $opdList1[] = $row;
                 continue;
             }
@@ -886,6 +886,12 @@ class Opd extends BaseController
         });
 
         usort($opdList1, static function ($left, $right): int {
+            $leftHasPrescription = (int) ($left->has_prescription ?? 0);
+            $rightHasPrescription = (int) ($right->has_prescription ?? 0);
+            if ($leftHasPrescription !== $rightHasPrescription) {
+                return $leftHasPrescription <=> $rightHasPrescription;
+            }
+
             $leftVitals = (int) ($left->has_vitals ?? 0);
             $rightVitals = (int) ($right->has_vitals ?? 0);
             if ($leftVitals !== $rightVitals) {
