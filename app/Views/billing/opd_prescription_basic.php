@@ -314,48 +314,6 @@
                             value="<?= esc($patient_master[0]->abha_address ?? $patient_master[0]->abha ?? '') ?>"
                             placeholder="Enter ABHA Address">
                     </div>
-                    <div class="card mt-2 border-primary-subtle">
-                        <div class="card-header py-1"><strong>ABDM Sandbox Actions</strong></div>
-                        <div class="card-body p-2">
-                            <div class="mb-2">
-                                <label class="form-label mb-1 small">QR Payload (Scan &amp; Share)</label>
-                                <input type="text" class="form-control form-control-sm" id="abdm_qr_payload" placeholder="Paste scanned QR payload">
-                            </div>
-                            <div class="d-flex flex-wrap gap-1 mb-2">
-                                <button type="button" class="btn btn-outline-primary btn-sm" id="btn_abdm_scan_lookup">Scan Lookup</button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_abdm_validate_abha">Validate ABHA</button>
-                            </div>
-
-                            <div class="row g-1 mb-2">
-                                <div class="col-6">
-                                    <input type="text" class="form-control form-control-sm" id="abdm_purpose_code" placeholder="Purpose (ex: CAREMGT)">
-                                </div>
-                                <div class="col-6">
-                                    <input type="datetime-local" class="form-control form-control-sm" id="abdm_consent_expires_at">
-                                </div>
-                            </div>
-                            <div class="d-flex flex-wrap gap-1 mb-2">
-                                <button type="button" class="btn btn-outline-success btn-sm" id="btn_abdm_consent_request">Request Consent</button>
-                                <button type="button" class="btn btn-outline-warning btn-sm" id="btn_abdm_share_fhir">Share FHIR</button>
-                            </div>
-
-                            <div class="mb-2">
-                                <label class="form-label mb-1 small">Consent Handle</label>
-                                <input type="text" class="form-control form-control-sm" id="abdm_consent_handle" placeholder="Auto-filled after consent request">
-                            </div>
-
-                            <div class="row g-1 mb-2">
-                                <div class="col-7">
-                                    <input type="number" min="1" class="form-control form-control-sm" id="abdm_claim_document_id" placeholder="Claim Document ID">
-                                </div>
-                                <div class="col-5">
-                                    <button type="button" class="btn btn-outline-dark btn-sm w-100" id="btn_abdm_claim_status">Claim Status</button>
-                                </div>
-                            </div>
-
-                            <div class="small text-muted" id="abdm_action_status">Ready</div>
-                        </div>
-                    </div>
                     <div><strong>OPD:</strong> <?= esc($opd_master[0]->opd_code ?? '') ?></div>
                     <div><strong>Date:</strong> <?= esc($opd_master[0]->apointment_date ?? '') ?></div>
                     <div><strong>Doctor:</strong> <?= esc($opd_master[0]->doc_name ?? '') ?></div>

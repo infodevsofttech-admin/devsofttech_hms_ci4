@@ -21,16 +21,18 @@ if ($authUser) {
         </thead>
         <tbody>
         <?php if (!empty($rows)) : ?>
-            <?php foreach ($rows as $row) : ?>
+            <?php foreach ($rows as $idx => $row) : ?>
                 <?php $hasVitals = isset($row->has_vitals) && (int) $row->has_vitals === 1; ?>
                 <?php $isBookedTab = ($tabType ?? '') === 'booking'; ?>
                 <?php $isConfirmedForQueue = (int) ($row->is_confirmed_for_queue ?? 0) === 1; ?>
                 <?php $hasPrescription = (int) ($row->has_prescription ?? 0) === 1; ?>
+                <?php $hasQueueNo = (int) ($row->queue_no ?? 0) > 0; ?>
                 <?php $showFullActions = $hasPrescription || $isConfirmedForQueue; ?>
+                <?php $serialNo = ((int) $idx) + 1; ?>
                 <tr data-opd-id="<?= esc((int) ($row->opd_id ?? 0)) ?>" data-has-vitals="<?= esc((int) ($row->has_vitals ?? 0)) ?>" data-has-prescription="<?= esc($showFullActions ? 1 : 0) ?>">
                     <td><?= esc($row->opd_code ?? '') ?></td>
                     <td><?= esc(($row->P_name ?? '') . ' { ' . ($row->p_rname ?? '') . ' }') ?></td>
-                    <?php if (!empty($showQueue)) : ?><td><?= $hasPrescription ? esc((int) ($row->queue_no ?? 0)) : '-' ?></td><?php endif; ?>
+                    <?php if (!empty($showQueue)) : ?><td><?= esc($serialNo) ?></td><?php endif; ?>
                     <td><?= esc($row->p_code ?? '') ?></td>
                     <td><?= esc($row->opd_type ?? '') ?> / Amt: <?= esc($row->opd_fee_amount ?? '') ?></td>
                     <td>
@@ -45,6 +47,11 @@ if ($authUser) {
                                 </a>
                             <?php endif; ?>
                         <?php else : ?>
+                            <?php if (!empty($showQueue) && !$hasQueueNo) : ?>
+                                <button type="button" class="btn btn-outline-success btn-sm btn-opd-create-queue" data-opdid="<?= esc((int) ($row->opd_id ?? 0)) ?>" title="Queue">
+                                    Queue
+                                </button>
+                            <?php endif; ?>
                             <?php if ($canOpenPrescription && $showFullActions) : ?>
                                 <a class="btn btn-outline-primary btn-sm" title="Consult" href="javascript:load_form('/Opd_prescription/Prescription/<?= esc((int) ($row->opd_id ?? 0)) ?>','Consult');">
                                     Consult
