@@ -845,7 +845,6 @@ class Opd extends BaseController
 
         $opdList0 = [];
         $opdList1 = [];
-        $opdListWaitingAll = [];
         $opdList2 = [];
         $opdList3 = [];
 
@@ -864,13 +863,11 @@ class Opd extends BaseController
 
             if ($status === 1 && ! $hasPrescription) {
                 $opdList0[] = $row;
-                $opdListWaitingAll[] = $row;
                 continue;
             }
 
             if ($status === 1 && $hasPrescription) {
                 $opdList1[] = $row;
-                $opdListWaitingAll[] = $row;
                 continue;
             }
 
@@ -906,36 +903,6 @@ class Opd extends BaseController
             return ((int) ($left->opd_id ?? 0)) <=> ((int) ($right->opd_id ?? 0));
         });
 
-        usort($opdListWaitingAll, static function ($left, $right): int {
-            $leftHasPrescription = (int) ($left->has_prescription ?? 0);
-            $rightHasPrescription = (int) ($right->has_prescription ?? 0);
-            if ($leftHasPrescription !== $rightHasPrescription) {
-                return $rightHasPrescription <=> $leftHasPrescription;
-            }
-
-            if ($leftHasPrescription === 1) {
-                $leftVitals = (int) ($left->has_vitals ?? 0);
-                $rightVitals = (int) ($right->has_vitals ?? 0);
-                if ($leftVitals !== $rightVitals) {
-                    return $leftVitals <=> $rightVitals;
-                }
-
-                $leftQueue = (int) ($left->queue_no ?? 0);
-                $rightQueue = (int) ($right->queue_no ?? 0);
-                if ($leftQueue !== $rightQueue) {
-                    return $leftQueue <=> $rightQueue;
-                }
-            }
-
-            $leftConfirmed = (int) ($left->is_confirmed_for_queue ?? 0);
-            $rightConfirmed = (int) ($right->is_confirmed_for_queue ?? 0);
-            if ($leftConfirmed !== $rightConfirmed) {
-                return $rightConfirmed <=> $leftConfirmed;
-            }
-
-            return ((int) ($left->opd_id ?? 0)) <=> ((int) ($right->opd_id ?? 0));
-        });
-
         usort($opdList2, static function ($left, $right): int {
             return ((int) ($left->opd_id ?? 0)) <=> ((int) ($right->opd_id ?? 0));
         });
@@ -956,7 +923,6 @@ class Opd extends BaseController
             'doc_master' => $docMaster,
             'opd_list_0' => $opdList0,
             'opd_list_1' => $opdList1,
-            'opd_list_waiting_all' => $opdListWaitingAll,
             'opd_list_2' => $opdList2,
             'opd_list_3' => $opdList3,
         ]);

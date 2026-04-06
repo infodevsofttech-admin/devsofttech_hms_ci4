@@ -33,7 +33,7 @@
                     <label class="form-check-label" for="toggle_missing_vitals_only">Only Missing Vitals</label>
                 </div>
             </div>
-            <?= view('billing/opd_appointment_list_table', ['rows' => $opd_list_waiting_all ?? $opd_list_1, 'showQueue' => true, 'tabType' => 'waiting', 'opd_date' => $opd_date, 'doc_id' => $doc_id]) ?>
+            <?= view('billing/opd_appointment_list_table', ['rows' => $opd_list_1, 'showQueue' => true, 'tabType' => 'waiting', 'opd_date' => $opd_date, 'doc_id' => $doc_id]) ?>
             <div id="waitingNoRowsHint" class="small text-muted mt-2 d-none">All waiting patients already have vitals.</div>
         </div>
         <div class="tab-pane fade" id="tab_visited">
@@ -158,8 +158,7 @@
 
         $rows.each(function() {
             var hasVitals = parseInt($(this).attr('data-has-vitals') || '0', 10) === 1;
-            var hasPrescription = parseInt($(this).attr('data-has-prescription') || '0', 10) === 1;
-            var show = !onlyMissing || (hasPrescription && !hasVitals);
+            var show = !onlyMissing || !hasVitals;
             $(this).toggle(show);
             if (show) {
                 visibleCount++;
@@ -174,8 +173,7 @@
         var missingCount = 0;
         $('#tab_waiting tbody tr[data-opd-id]').each(function() {
             var hasVitals = parseInt($(this).attr('data-has-vitals') || '0', 10) === 1;
-            var hasPrescription = parseInt($(this).attr('data-has-prescription') || '0', 10) === 1;
-            if (hasPrescription && !hasVitals) {
+            if (!hasVitals) {
                 missingCount++;
             }
         });
