@@ -1652,7 +1652,8 @@ class Opd_prescription extends BaseController
                 $masterIdField = $this->resolveFirstField($masterFields, ['id']);
                 $masterGenericField = $this->resolveFirstField($masterFields, ['genericname', 'generic_name']);
                 $masterSaltField = $this->resolveFirstField($masterFields, ['salt_name', 'sal_name', 'salt', 'saltname']);
-                $labelField = $masterSaltField ?? $masterGenericField;
+                // Prefer genericname (Generic Name) over salt_name (Substitute)
+                $labelField = $masterGenericField ?? $masterSaltField;
 
                 if ($masterIdField !== null && $labelField !== null) {
                     $medRows = $this->db->table($masterTable)
@@ -1679,13 +1680,10 @@ class Opd_prescription extends BaseController
 
         foreach ($rows as &$row) {
             if (trim((string) ($row['genericname'] ?? '')) === '') {
-                $inlineSalt = trim((string) ($row['salt_name'] ?? ''));
-                if ($inlineSalt !== '') {
-                    $row['genericname'] = $inlineSalt;
-                }
-
+                // Do NOT fall back to salt_name — that field stores Substitute (other brand names),
+                // not the generic/salt composition. Use master lookup only.
                 $fallback = $medGenericMap[(int) ($row['med_id'] ?? 0)] ?? '';
-                if (($row['genericname'] ?? '') === '' && $fallback !== '') {
+                if ($fallback !== '') {
                     $row['genericname'] = $fallback;
                 }
             }

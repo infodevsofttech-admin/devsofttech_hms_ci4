@@ -2253,7 +2253,8 @@ class Opd extends BaseController
                 if ($formulationPrefix !== '' && $name !== '' && preg_match('/^' . preg_quote($formulationPrefix, '/') . '\b/i', $name) !== 1) {
                     $name = trim($formulationPrefix . ' ' . $name);
                 }
-                $generic = trim((string) ($med['genericname'] ?? $med['generic_name'] ?? $med['salt_name'] ?? ''));
+                // salt_name is Substitute (other brand names), not Generic Name — do not use it as generic fallback
+                $generic = trim((string) ($med['genericname'] ?? $med['generic_name'] ?? ''));
                 $dose    = trim((string) ($med['dosage_label'] ?? $med['dosage'] ?? $med['drug_dose'] ?? $med['dose'] ?? ''));
                 $freq    = trim((string) ($med['dosage_freq_label'] ?? $med['dosage_freq'] ?? $med['drug_freq'] ?? $med['frequency'] ?? ''));
                 $doseLocalRaw = trim((string) ($med['dosage_local_label'] ?? $med['dosage_local'] ?? ''));
@@ -3728,7 +3729,8 @@ class Opd extends BaseController
                         $masterGenericField = $this->resolveFirstField($masterFields, ['genericname', 'generic_name']);
                         $masterSaltField = $this->resolveFirstField($masterFields, ['salt_name', 'sal_name', 'salt', 'saltname']);
                         $masterFormulationField = $this->resolveFirstField($masterFields, ['formulation', 'dosage_form', 'form']);
-                        $labelField = $masterSaltField ?? $masterGenericField;
+                        // Prefer genericname (Generic Name) over salt_name (Substitute) for "Salt/Generic" print label
+                        $labelField = $masterGenericField ?? $masterSaltField;
                         $select = [];
                         if ($masterIdField !== null) {
                             $select[] = $masterIdField . ' as med_id';
@@ -3763,7 +3765,8 @@ class Opd extends BaseController
                     }
 
                     foreach ($data['rx_medicines'] as &$medRow) {
-                        $genericInline = trim((string) ($medRow['genericname'] ?? ($medRow['salt_name'] ?? '')));
+                        // Only check genericname — do NOT fall back to salt_name (that is the Substitute field)
+                        $genericInline = trim((string) ($medRow['genericname'] ?? ''));
                         if ($genericInline === '') {
                             $fallback = $medGenericMap[(int) ($medRow['med_id'] ?? 0)] ?? '';
                             if ($fallback !== '') {
