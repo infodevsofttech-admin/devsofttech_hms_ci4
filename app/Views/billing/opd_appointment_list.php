@@ -57,9 +57,14 @@ $mergedGroups = [
                 Cancelled <span id="countBadgeCancelled" class="badge bg-danger ms-1"><?= $countCancelled ?></span>
             </button>
         </div>
-        <div class="form-check form-switch ms-auto">
-            <input class="form-check-input" type="checkbox" id="toggle_missing_vitals_only">
-            <label class="form-check-label small" for="toggle_missing_vitals_only">Only Missing Vitals</label>
+        <div class="d-flex align-items-center gap-2 ms-auto">
+            <button type="button" id="btn_manual_refresh" class="btn btn-sm btn-outline-secondary" title="Refresh list">
+                &#x21BB; Refresh
+            </button>
+            <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" id="toggle_missing_vitals_only">
+                <label class="form-check-label small" for="toggle_missing_vitals_only">Only Missing Vitals</label>
+            </div>
         </div>
     </div>
 
@@ -471,12 +476,26 @@ $mergedGroups = [
             }
 
             if (liveDigest !== String(resp.digest || '')) {
-                mergeLiveRowsOrReload();
-                return;
+                // Instead of auto-reloading, show notification on the Refresh button
+                signalRefreshAvailable();
             }
         }).always(function() {
             livePollInFlight = false;
         });
+    }
+
+    function signalRefreshAvailable() {
+        var $btn = $('#btn_manual_refresh');
+        if (!$btn.hasClass('btn-warning')) {
+            $btn.removeClass('btn-outline-secondary').addClass('btn-warning text-dark');
+            $btn.html('&#x21BB; Refresh <span class="badge bg-danger ms-1">New</span>');
+        }
+    }
+
+    function clearRefreshSignal() {
+        var $btn = $('#btn_manual_refresh');
+        $btn.removeClass('btn-warning text-dark').addClass('btn-outline-secondary');
+        $btn.html('&#x21BB; Refresh');
     }
 
     function updateQueueCell($row, queueNo) {
@@ -499,87 +518,6 @@ $mergedGroups = [
             $btn.text('Vitals');
             $btn.removeClass('btn-success').addClass('btn-warning text-dark').attr('title', 'Vitals');
         }
-    }
-
-    function mergeLiveRowsOrReload() {
-        $.getJSON(liveRowsUrl, function(resp) {
-            if (!resp || parseInt(resp.ok || 0, 10) !== 1 || !Array.isArray(resp.rows)) {
-                reloadAppointmentList();
-                return;
-            }
-
-            var $domRows = $('#opdAllTable tbody tr[data-opd-id]');
-            if ($domRows.length !== resp.rows.length) {
-                reloadAppointmentList();
-                return;
-            }
-
-            var domMap = {};
-            $domRows.each(function() {
-                var id = parseInt($(this).attr('data-opd-id') || '0', 10);
-                if (id > 0) {
-                    domMap[id] = $(this);
-                }
-            });
-
-            var requiresFullReload = false;
-
-            for (var i = 0; i < resp.rows.length; i++) {
-                var r = resp.rows[i] || {};
-                var opdId = parseInt(r.opd_id || 0, 10);
-                if (!opdId || !domMap[opdId]) {
-                    requiresFullReload = true;
-                    break;
-                }
-
-                var $row = domMap[opdId];
-                var nextStatus = (r.status || 'booked').toString().toLowerCase();
-                var prevStatus = (($row.attr('data-opd-status') || '').toLowerCase());
-
-                // Booked transitions usually change action layout significantly, keep a safe fallback.
-                if (nextStatus === 'booked' && prevStatus !== 'booked') {
-                    requiresFullReload = true;
-                    break;
-                }
-
-                $row.attr('data-opd-status', nextStatus);
-                $row.attr('data-has-prescription', parseInt(r.has_prescription || 0, 10) === 1 ? '1' : '0');
-                $row.attr('data-has-vitals', parseInt(r.has_vitals || 0, 10) === 1 ? '1' : '0');
-
-                applyStatusVisual($row, nextStatus);
-                updateQueueCell($row, r.queue_no || 0);
-
-                if (nextStatus === 'waiting') {
-                    ensureWaitingActionButtons($row, opdId);
-                } else if (nextStatus === 'visited') {
-                    $row.find('.btn-opd-create-queue').remove();
-                    var $statusBtn = $row.find('.btn-opd-status').first();
-                    if ($statusBtn.length) {
-                        $statusBtn.removeClass('btn-outline-success').addClass('btn-success').attr('data-opd-status', '2').text('Visit Done');
-                    }
-                } else if (nextStatus === 'cancelled') {
-                    $row.find('.btn-opd-status').remove();
-                    $row.find('.btn-opd-create-queue').remove();
-                }
-
-                updateVitalsButtonState($row, r.has_prescription || 0, r.has_vitals || 0);
-            }
-
-            if (requiresFullReload) {
-                reloadAppointmentList();
-                return;
-            }
-
-            if (opdDataTable) {
-                opdDataTable.rows().invalidate().draw(false);
-            }
-
-            recalcStatusCounts();
-            applyFilters();
-            liveDigest = String(resp.digest || '');
-        }).fail(function() {
-            // Keep screen usable even if live sync fails intermittently.
-        });
     }
 
     function startLiveUpdates() {
@@ -920,12 +858,18 @@ $mergedGroups = [
         });
     });
 
+    // Manual refresh button
+    $(document).off('click.opdrefresh', '#btn_manual_refresh').on('click.opdrefresh', '#btn_manual_refresh', function() {
+        clearRefreshSignal();
+        reloadAppointmentList();
+    });
+
     // Initialize
     registerOpdTableFilter();
     opdDataTable = initializeOpdTable();
     recalcStatusCounts();
     syncWaitingHintAndBadge();
-    startLiveUpdates();
+    startLiveUpdates(); // lightweight digest poll — shows "Refresh" badge instead of auto-reloading
 })();
 </script>
 

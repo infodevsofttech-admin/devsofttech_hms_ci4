@@ -4201,12 +4201,15 @@ class Opd extends BaseController
             $insert['session_id'] = 0;
         }
         if (in_array('queue_no', $fields, true)) {
-            $maxQueue = $this->db->table('opd_prescription')
-                ->selectMax('queue_no', 'max_queue')
-                ->where('date_opd_visit', date('Y-m-d'))
-                ->where('doc_id', (int) ($opdRow->doc_id ?? 0))
-                ->get()
-                ->getRow();
+            // JOIN through opd_master to guarantee per-doctor isolation
+            // (opd_prescription.doc_id may be stale on re-assignments)
+            $maxQueue = $this->db->query(
+                'SELECT COALESCE(MAX(pr.queue_no), 0) AS max_queue'
+                . ' FROM opd_prescription pr'
+                . ' INNER JOIN opd_master om ON om.opd_id = pr.opd_id'
+                . ' WHERE pr.date_opd_visit = ? AND om.doc_id = ?',
+                [date('Y-m-d'), (int) ($opdRow->doc_id ?? 0)]
+            )->getRow();
             $insert['queue_no'] = (int) ($maxQueue->max_queue ?? 0) + 1;
         }
 
