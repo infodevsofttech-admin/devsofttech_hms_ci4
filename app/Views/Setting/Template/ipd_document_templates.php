@@ -122,6 +122,7 @@ $formMap = [
 (function () {
     var form = document.getElementById('ipd_document_template_form');
     var editorFieldId = 'ipd_document_template_editor';
+    var submitBtn = form ? form.querySelector('button[type="submit"]') : null;
 
     function initEditor() {
         if (!window.CKEDITOR) {
@@ -165,8 +166,58 @@ $formMap = [
     initEditor();
 
     if (form) {
-        form.addEventListener('submit', function () {
+        form.addEventListener('submit', function (event) {
+            event.preventDefault();
             syncEditor();
+
+            var payload = '';
+            Array.prototype.forEach.call(form.elements || [], function (el) {
+                if (!el || !el.name || el.disabled) {
+                    return;
+                }
+
+                if ((el.type === 'checkbox' || el.type === 'radio') && !el.checked) {
+                    return;
+                }
+
+                var part = encodeURIComponent(el.name) + '=' + encodeURIComponent(el.value == null ? '' : String(el.value));
+                payload = payload === '' ? part : (payload + '&' + part);
+            });
+            var actionUrl = form.getAttribute('action') || window.location.href;
+            var container = document.getElementById('maindiv');
+            var prevBtnText = submitBtn ? submitBtn.textContent : '';
+
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Saving...';
+            }
+
+            fetch(actionUrl, {
+                method: 'POST',
+                body: payload,
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+                .then(function (resp) {
+                    return resp.text();
+                })
+                .then(function (html) {
+                    if (container) {
+                        container.innerHTML = html;
+                    } else {
+                        document.body.innerHTML = html;
+                    }
+                })
+                .catch(function () {
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = prevBtnText || 'Update Template';
+                    }
+                    window.alert('Unable to save template. Please try again.');
+                });
         });
     }
 })();
