@@ -1730,8 +1730,8 @@ HTML,
             $marginFooter = max(0, min(25, (float) ($this->request->getPost('margin_footer_cm') ?? 0.5)));
             $status = (int) ($this->request->getPost('status') ?? 1) === 1 ? 1 : 0;
 
-            if (! in_array($formNo, [1, 3, 5, 8, 9, 10, 11], true)) {
-                $notice = 'Invalid form number.';
+            if ($formNo <= 0) {
+                $notice = 'Form number must be a positive integer.';
                 $noticeType = 'danger';
             } elseif ($templateName === '' || trim($templateHtml) === '') {
                 $notice = 'Form number, template name and HTML are required.';

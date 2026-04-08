@@ -2,15 +2,7 @@
 $ipdId = (int) ($ipd_id ?? 0);
 $ipdCode = (string) ($ipd_info->ipd_code ?? ('IPD-' . $ipdId));
 
-$documents = [
-    ['id' => 1, 'label' => 'Print Face Form'],
-    ['id' => 5, 'label' => 'Admission Form'],
-    ['id' => 10, 'label' => 'Sticker [2 x 6]'],
-    ['id' => 11, 'label' => 'Sticker [2 x 8]'],
-    ['id' => 8, 'label' => 'Progress Notes'],
-    ['id' => 9, 'label' => 'Fluid In / Out'],
-    ['id' => 3, 'label' => 'Self Declaration Form'],
-];
+$documents = is_array($documents ?? null) ? $documents : [];
 ?>
 
 <div class="card border-0 shadow-sm">
@@ -35,6 +27,11 @@ $documents = [
                 </tr>
                 </thead>
                 <tbody>
+                <?php if (empty($documents)) : ?>
+                    <tr>
+                        <td colspan="3" class="text-center text-muted py-3">No active document template found. Add templates from Document Master.</td>
+                    </tr>
+                <?php endif; ?>
                 <?php foreach ($documents as $document) : ?>
                     <tr>
                         <td><?= (int) $document['id'] ?></td>

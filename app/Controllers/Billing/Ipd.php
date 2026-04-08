@@ -400,36 +400,50 @@ class Ipd extends BaseController
         }
 
         if ($tab === 'ipd-charges') {
-            $this->syncNursingChargesToInvoice($ipdId);
-            $panelData['ipd_charges_grouped'] = $this->ipdModel->getIpdChargesGrouped($ipdId);
-            $panelData['ipd_charges_total'] = $this->ipdModel->getIpdChargesTotal($ipdId);
-            $panelData['ipd_packages'] = $this->ipdModel->getIpdPackages($ipdId);
+            try {
+                $this->syncNursingChargesToInvoice($ipdId);
+                $panelData['ipd_charges_grouped'] = $this->ipdModel->getIpdChargesGrouped($ipdId);
+                $panelData['ipd_charges_total'] = $this->ipdModel->getIpdChargesTotal($ipdId);
+                $panelData['ipd_packages'] = $this->ipdModel->getIpdPackages($ipdId);
 
-            $caseMeta = $this->ipdModel->getIpdCaseMeta($ipdId);
-            $insCompId = (int) ($caseMeta['insurance_id'] ?? 0);
-            if ($insCompId <= 0) {
-                $insCompId = 1;
-            }
-
-            $panelData['bedside_items_by_category'] = $this->nursingBedsideItemModel->getBillableGroupedByCategory($insCompId);
-
-            $panelData['ipd_insurance_id'] = $insCompId;
-            $panelData['doc_list'] = $this->ipdModel->getIpdDoctorList();
-            $doctorIds = array_map(static fn ($doc) => (int) ($doc->id ?? 0), $panelData['doc_list']);
-            $doctorIds = array_values(array_filter($doctorIds, static fn ($id) => $id > 0));
-            $panelData['doctor_visit_fee_types'] = $this->ipdModel->getDoctorVisitFeeTypes();
-            $panelData['doctor_visit_fee_map'] = $this->ipdModel->getDoctorVisitFeeMap($doctorIds);
-            $panelData['item_types'] = $this->itemIpdModel->getItemTypes();
-
-            $itemLists = [];
-            foreach ($panelData['item_types'] as $type) {
-                $typeId = (int) ($type->itype_id ?? 0);
-                if ($typeId <= 0) {
-                    continue;
+                $caseMeta = $this->ipdModel->getIpdCaseMeta($ipdId);
+                $insCompId = (int) ($caseMeta['insurance_id'] ?? 0);
+                if ($insCompId <= 0) {
+                    $insCompId = 1;
                 }
-                $itemLists[$typeId] = $this->itemIpdModel->getItemsByTypeWithInsurance($typeId, $insCompId);
+
+                $panelData['bedside_items_by_category'] = $this->nursingBedsideItemModel->getBillableGroupedByCategory($insCompId);
+
+                $panelData['ipd_insurance_id'] = $insCompId;
+                $panelData['doc_list'] = $this->ipdModel->getIpdDoctorList();
+                $doctorIds = array_map(static fn ($doc) => (int) ($doc->id ?? 0), $panelData['doc_list']);
+                $doctorIds = array_values(array_filter($doctorIds, static fn ($id) => $id > 0));
+                $panelData['doctor_visit_fee_types'] = $this->ipdModel->getDoctorVisitFeeTypes();
+                $panelData['doctor_visit_fee_map'] = $this->ipdModel->getDoctorVisitFeeMap($doctorIds);
+                $panelData['item_types'] = $this->itemIpdModel->getItemTypes();
+
+                $itemLists = [];
+                foreach ($panelData['item_types'] as $type) {
+                    $typeId = (int) ($type->itype_id ?? 0);
+                    if ($typeId <= 0) {
+                        continue;
+                    }
+                    $itemLists[$typeId] = $this->itemIpdModel->getItemsByTypeWithInsurance($typeId, $insCompId);
+                }
+                $panelData['item_lists'] = $itemLists;
+            } catch (\Throwable $e) {
+                log_message('error', 'IPD Charges tab failed for IPD #' . $ipdId . ': ' . $e->getMessage());
+                $panelData['ipd_charges_grouped'] = [];
+                $panelData['ipd_charges_total'] = (object) ['total_amt' => 0, 'package_amt' => 0, 'patient_amt' => 0];
+                $panelData['ipd_packages'] = [];
+                $panelData['bedside_items_by_category'] = [];
+                $panelData['ipd_insurance_id'] = 0;
+                $panelData['doc_list'] = [];
+                $panelData['doctor_visit_fee_types'] = [];
+                $panelData['doctor_visit_fee_map'] = [];
+                $panelData['item_types'] = [];
+                $panelData['item_lists'] = [];
             }
-            $panelData['item_lists'] = $itemLists;
 
             return view('billing/ipd/panel_ipd_charges', $panelData);
         }
@@ -485,6 +499,7 @@ class Ipd extends BaseController
             return view('billing/ipd/panel_documents', [
                 'ipd_id' => $ipdId,
                 'ipd_info' => $panelData['ipd_info'] ?? null,
+                'documents' => $this->getAvailableIpdDocuments(),
             ]);
         }
 
@@ -847,11 +862,6 @@ class Ipd extends BaseController
         ]);
         if ($permission) {
             return $permission;
-        }
-
-        $formMeta = $this->getIpdFormMeta($formNo);
-        if ($formMeta === null) {
-            return $this->response->setStatusCode(404)->setBody('Unsupported form ID');
         }
 
         $data = $this->buildIpdPrintableFormData($ipdId, $formNo);
@@ -2246,7 +2256,7 @@ class Ipd extends BaseController
         return [$start, $end];
     }
 
-    private function getIpdFormMeta(int $formNo): ?array
+    private function getIpdFormMeta(int $formNo): array
     {
         $meta = [
             1 => ['title' => 'Face Form'],
@@ -2258,7 +2268,71 @@ class Ipd extends BaseController
             11 => ['title' => 'Sticker [2 x 8]'],
         ];
 
-        return $meta[$formNo] ?? null;
+        if (isset($meta[$formNo])) {
+            return $meta[$formNo];
+        }
+
+        $template = $this->getActiveIpdDocumentTemplate($formNo);
+        if (is_array($template) && ! empty($template['template_name'])) {
+            return ['title' => (string) $template['template_name']];
+        }
+
+        return ['title' => 'IPD Form #' . $formNo];
+    }
+
+    private function getAvailableIpdDocuments(): array
+    {
+        $default = [
+            ['id' => 1, 'label' => 'Print Face Form'],
+            ['id' => 5, 'label' => 'Admission Form'],
+            ['id' => 10, 'label' => 'Sticker [2 x 6]'],
+            ['id' => 11, 'label' => 'Sticker [2 x 8]'],
+            ['id' => 8, 'label' => 'Progress Notes'],
+            ['id' => 9, 'label' => 'Fluid In / Out'],
+            ['id' => 3, 'label' => 'Self Declaration Form'],
+        ];
+
+        if (! $this->db->tableExists('ipd_document_templates')) {
+            return $default;
+        }
+
+        $rows = $this->db->table('ipd_document_templates')
+            ->select('form_no, template_name, id')
+            ->where('status', 1)
+            ->orderBy('form_no', 'ASC')
+            ->orderBy('id', 'DESC')
+            ->get()
+            ->getResultArray();
+
+        if (empty($rows)) {
+            return $default;
+        }
+
+        $documents = [];
+        foreach ($rows as $row) {
+            $id = (int) ($row['form_no'] ?? 0);
+            if ($id <= 0 || isset($documents[$id])) {
+                continue;
+            }
+
+            $label = trim((string) ($row['template_name'] ?? ''));
+            if ($label === '') {
+                $label = (string) ($this->getIpdFormMeta($id)['title'] ?? ('IPD Form #' . $id));
+            }
+
+            $documents[$id] = [
+                'id' => $id,
+                'label' => $label,
+            ];
+        }
+
+        if (empty($documents)) {
+            return $default;
+        }
+
+        ksort($documents);
+
+        return array_values($documents);
     }
 
     private function buildIpdPrintableFormData(int $ipdId, int $formNo): ?array

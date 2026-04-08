@@ -31,6 +31,19 @@ $formMap = [
     10 => 'Sticker [2 x 6]',
     11 => 'Sticker [2 x 8]',
 ];
+
+$dynamicFormHints = [];
+foreach ($rows as $_row) {
+    $fNo = (int) ($_row['form_no'] ?? 0);
+    $tName = trim((string) ($_row['template_name'] ?? ''));
+    if ($fNo <= 0 || $tName === '') {
+        continue;
+    }
+    if (!isset($dynamicFormHints[$fNo])) {
+        $dynamicFormHints[$fNo] = $tName;
+    }
+}
+ksort($dynamicFormHints);
 ?>
 
 <section class="content">
@@ -65,12 +78,17 @@ $formMap = [
 
                 <div class="row g-2">
                     <div class="col-md-3">
-                        <label class="form-label small">Form</label>
-                        <select name="form_no" class="form-select form-select-sm" required>
-                            <?php foreach ($formMap as $id => $label): ?>
-                                <option value="<?= (int) $id ?>" <?= $formNo === (int) $id ? 'selected' : '' ?>><?= (int) $id ?> - <?= esc($label) ?></option>
+                        <label class="form-label small">Form ID</label>
+                        <input type="number" name="form_no" list="ipd_form_suggestions" class="form-control form-control-sm" value="<?= (int) $formNo ?>" min="1" step="1" required>
+                        <datalist id="ipd_form_suggestions">
+                            <?php foreach ($dynamicFormHints as $id => $label): ?>
+                                <option value="<?= (int) $id ?>"><?= (int) $id ?> - <?= esc($label) ?></option>
                             <?php endforeach; ?>
-                        </select>
+                            <?php foreach ($formMap as $id => $label): ?>
+                                <option value="<?= (int) $id ?>"><?= (int) $id ?> - <?= esc($label) ?></option>
+                            <?php endforeach; ?>
+                        </datalist>
+                        <small class="text-muted">Use any positive number (example: 12 for Treatment Chart, 13 for Vitals).</small>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label small">Template Name</label>

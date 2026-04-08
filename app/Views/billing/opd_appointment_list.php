@@ -460,6 +460,14 @@ $mergedGroups = [
     }
 
     function checkLiveUpdates() {
+        if (!document.getElementById('opdAllTable')) {
+            if (window.opdLiveMonitorTimer) {
+                clearInterval(window.opdLiveMonitorTimer);
+                window.opdLiveMonitorTimer = null;
+            }
+            return;
+        }
+
         if (livePollInFlight || shouldSkipLiveCheck()) {
             return;
         }
@@ -528,6 +536,13 @@ $mergedGroups = [
 
         checkLiveUpdates();
         window.opdLiveMonitorTimer = setInterval(checkLiveUpdates, livePollMs);
+    }
+
+    function stopLiveUpdates() {
+        if (window.opdLiveMonitorTimer) {
+            clearInterval(window.opdLiveMonitorTimer);
+            window.opdLiveMonitorTimer = null;
+        }
     }
 
     function setVitalMessage(type, text) {
@@ -862,6 +877,10 @@ $mergedGroups = [
     $(document).off('click.opdrefresh', '#btn_manual_refresh').on('click.opdrefresh', '#btn_manual_refresh', function() {
         clearRefreshSignal();
         reloadAppointmentList();
+    });
+
+    $(window).off('beforeunload.opdlive').on('beforeunload.opdlive', function() {
+        stopLiveUpdates();
     });
 
     // Initialize
