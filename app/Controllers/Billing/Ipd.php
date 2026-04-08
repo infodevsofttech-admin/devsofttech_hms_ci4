@@ -400,6 +400,17 @@ class Ipd extends BaseController
         }
 
         if ($tab === 'ipd-charges') {
+            $panelData['ipd_charges_grouped'] = $panelData['ipd_charges_grouped'] ?? [];
+            $panelData['ipd_charges_total'] = $panelData['ipd_charges_total'] ?? 0;
+            $panelData['ipd_packages'] = $panelData['ipd_packages'] ?? [];
+            $panelData['bedside_items_by_category'] = $panelData['bedside_items_by_category'] ?? [];
+            $panelData['ipd_insurance_id'] = $panelData['ipd_insurance_id'] ?? 0;
+            $panelData['doc_list'] = $panelData['doc_list'] ?? [];
+            $panelData['doctor_visit_fee_types'] = $panelData['doctor_visit_fee_types'] ?? [];
+            $panelData['doctor_visit_fee_map'] = $panelData['doctor_visit_fee_map'] ?? [];
+            $panelData['item_types'] = $panelData['item_types'] ?? [];
+            $panelData['item_lists'] = $panelData['item_lists'] ?? [];
+
             try {
                 $this->syncNursingChargesToInvoice($ipdId);
                 $panelData['ipd_charges_grouped'] = $this->ipdModel->getIpdChargesGrouped($ipdId);
@@ -445,7 +456,13 @@ class Ipd extends BaseController
                 $panelData['item_lists'] = [];
             }
 
-            return view('billing/ipd/panel_ipd_charges', $panelData);
+            try {
+                return view('billing/ipd/panel_ipd_charges', $panelData);
+            } catch (\Throwable $e) {
+                log_message('error', 'IPD Charges view render failed for IPD #' . $ipdId . ': ' . $e->getMessage());
+
+                return '<div class="alert alert-danger m-2">Unable to load IPD Charges right now. Please contact admin and check server log for IPD #' . (int) $ipdId . '.</div>';
+            }
         }
 
         if ($tab === 'package') {
