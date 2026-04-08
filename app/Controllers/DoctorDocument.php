@@ -134,6 +134,36 @@ class DoctorDocument extends BaseController
         return round($number, 2);
     }
 
+    private function hasColumn(string $table, string $column): bool
+    {
+        if (! $this->db->tableExists($table)) {
+            return false;
+        }
+
+        return $this->db->fieldExists($column, $table);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    private function filterPayloadByExistingColumns(string $table, array $payload): array
+    {
+        if (! $this->db->tableExists($table)) {
+            return [];
+        }
+
+        $fields = $this->db->getFieldNames($table) ?? [];
+        $out = [];
+        foreach ($payload as $key => $value) {
+            if (in_array($key, $fields, true)) {
+                $out[$key] = $value;
+            }
+        }
+
+        return $out;
+    }
+
     public function workspace()
     {
         if ($resp = $this->ensureAccess()) {
@@ -240,11 +270,11 @@ class DoctorDocument extends BaseController
 
         $this->ensurePrintTemplateColumns();
 
-        $rows = $this->db->table('doc_format_master')
-            ->where('active', 1)
-            ->orderBy('doc_name', 'ASC')
-            ->get()
-            ->getResultArray();
+        $builder = $this->db->table('doc_format_master');
+        if ($this->hasColumn('doc_format_master', 'active')) {
+            $builder->where('active', 1);
+        }
+        $rows = $builder->orderBy('doc_name', 'ASC')->get()->getResultArray();
 
         return view('doctor_document/doc_list', ['doc_master' => $rows]);
     }
@@ -264,13 +294,13 @@ class DoctorDocument extends BaseController
 
         $items = [];
         if ($docId > 0) {
-            $items = $this->db->table('doc_format_sub')
+            $itemBuilder = $this->db->table('doc_format_sub')
                 ->select('id as item_id,input_name,input_code,input_type,input_default_value,short_order')
-                ->where('doc_format_id', $docId)
-                ->where('active', 1)
-                ->orderBy('short_order', 'ASC')
-                ->get()
-                ->getResultArray();
+                ->where('doc_format_id', $docId);
+            if ($this->hasColumn('doc_format_sub', 'active')) {
+                $itemBuilder->where('active', 1);
+            }
+            $items = $itemBuilder->orderBy('short_order', 'ASC')->get()->getResultArray();
         }
 
         return view('doctor_document/doc_master_edit', [
@@ -307,7 +337,7 @@ class DoctorDocument extends BaseController
 
         $this->ensurePrintTemplateColumns();
 
-        $this->db->table('doc_format_master')->insert([
+        $payload = [
             'doc_name' => $name,
             'doc_desc' => $desc,
             'doc_raw_format' => $html,
@@ -321,7 +351,10 @@ class DoctorDocument extends BaseController
             'active' => 1,
             'created_at' => date('Y-m-d H:i:s'),
             'updated_at' => date('Y-m-d H:i:s'),
-        ]);
+        ];
+
+        $payload = $this->filterPayloadByExistingColumns('doc_format_master', $payload);
+        $this->db->table('doc_format_master')->insert($payload);
 
         return $this->response->setJSON([
             'insertid' => (int) $this->db->insertID(),
@@ -359,21 +392,24 @@ class DoctorDocument extends BaseController
 
         $this->ensurePrintTemplateColumns();
 
+        $payload = [
+            'doc_name' => $name,
+            'doc_desc' => $desc,
+            'doc_raw_format' => $html,
+            'default_print_type' => ($defaultPrintType === 1 ? 1 : 0),
+            'print_top_margin' => $printTopMargin,
+            'print_bottom_margin' => $printBottomMargin,
+            'print_left_margin' => $printLeftMargin,
+            'print_right_margin' => $printRightMargin,
+            'print_header_margin' => $printHeaderMargin,
+            'print_footer_margin' => $printFooterMargin,
+            'updated_at' => date('Y-m-d H:i:s'),
+        ];
+        $payload = $this->filterPayloadByExistingColumns('doc_format_master', $payload);
+
         $this->db->table('doc_format_master')
             ->where('df_id', $id)
-            ->update([
-                'doc_name' => $name,
-                'doc_desc' => $desc,
-                'doc_raw_format' => $html,
-                'default_print_type' => ($defaultPrintType === 1 ? 1 : 0),
-                'print_top_margin' => $printTopMargin,
-                'print_bottom_margin' => $printBottomMargin,
-                'print_left_margin' => $printLeftMargin,
-                'print_right_margin' => $printRightMargin,
-                'print_header_margin' => $printHeaderMargin,
-                'print_footer_margin' => $printFooterMargin,
-                'updated_at' => date('Y-m-d H:i:s'),
-            ]);
+            ->update($payload);
 
         return $this->response->setJSON([
             'update_record' => 1,
@@ -389,13 +425,13 @@ class DoctorDocument extends BaseController
             return $resp;
         }
 
-        $items = $this->db->table('doc_format_sub')
+        $builder = $this->db->table('doc_format_sub')
             ->select('id as item_id,input_name,input_code,input_type,input_default_value,short_order')
-            ->where('doc_format_id', $docId)
-            ->where('active', 1)
-            ->orderBy('short_order', 'ASC')
-            ->get()
-            ->getResultArray();
+            ->where('doc_format_id', $docId);
+        if ($this->hasColumn('doc_format_sub', 'active')) {
+            $builder->where('active', 1);
+        }
+        $items = $builder->orderBy('short_order', 'ASC')->get()->getResultArray();
 
         return view('doctor_document/doc_input_list', [
             'doc_Item_List' => $items,
@@ -443,11 +479,13 @@ class DoctorDocument extends BaseController
             return $this->response->setJSON(['insert_id' => 0, 'showcontent' => 'Required fields missing']);
         }
 
-        $exists = $this->db->table('doc_format_sub')
+        $existsBuilder = $this->db->table('doc_format_sub')
             ->where('doc_format_id', $docId)
-            ->where('input_code', $inputCode)
-            ->where('active', 1)
-            ->countAllResults();
+            ->where('input_code', $inputCode);
+        if ($this->hasColumn('doc_format_sub', 'active')) {
+            $existsBuilder->where('active', 1);
+        }
+        $exists = $existsBuilder->countAllResults();
 
         if ($exists > 0) {
             return $this->response->setJSON(['insert_id' => 0, 'showcontent' => 'Input code already exists']);
@@ -456,7 +494,7 @@ class DoctorDocument extends BaseController
         $maxOrderRow = $this->db->table('doc_format_sub')->selectMax('short_order')->where('doc_format_id', $docId)->get()->getRowArray();
         $nextOrder = (int) ($maxOrderRow['short_order'] ?? 0) + 1;
 
-        $this->db->table('doc_format_sub')->insert([
+        $payload = [
             'doc_format_id' => $docId,
             'input_name' => $inputName,
             'input_code' => $inputCode,
@@ -466,7 +504,9 @@ class DoctorDocument extends BaseController
             'active' => 1,
             'created_at' => date('Y-m-d H:i:s'),
             'updated_at' => date('Y-m-d H:i:s'),
-        ]);
+        ];
+        $payload = $this->filterPayloadByExistingColumns('doc_format_sub', $payload);
+        $this->db->table('doc_format_sub')->insert($payload);
 
         return $this->response->setJSON([
             'insert_id' => (int) $this->db->insertID(),
@@ -497,27 +537,32 @@ class DoctorDocument extends BaseController
             return $this->response->setJSON(['update_value' => 0, 'showcontent' => 'Required fields missing']);
         }
 
-        $exists = $this->db->table('doc_format_sub')
+        $existsBuilder = $this->db->table('doc_format_sub')
             ->where('doc_format_id', $docId)
             ->where('input_code', $inputCode)
-            ->where('id !=', $subId)
-            ->where('active', 1)
-            ->countAllResults();
+            ->where('id !=', $subId);
+        if ($this->hasColumn('doc_format_sub', 'active')) {
+            $existsBuilder->where('active', 1);
+        }
+        $exists = $existsBuilder->countAllResults();
 
         if ($exists > 0) {
             return $this->response->setJSON(['update_value' => 0, 'showcontent' => 'Input code already exists']);
         }
 
+        $payload = [
+            'input_name' => $inputName,
+            'input_code' => $inputCode,
+            'input_type' => $inputType !== '' ? $inputType : 'text',
+            'input_default_value' => $defaultValue,
+            'updated_at' => date('Y-m-d H:i:s'),
+        ];
+        $payload = $this->filterPayloadByExistingColumns('doc_format_sub', $payload);
+
         $this->db->table('doc_format_sub')
             ->where('id', $subId)
             ->where('doc_format_id', $docId)
-            ->update([
-                'input_name' => $inputName,
-                'input_code' => $inputCode,
-                'input_type' => $inputType !== '' ? $inputType : 'text',
-                'input_default_value' => $defaultValue,
-                'updated_at' => date('Y-m-d H:i:s'),
-            ]);
+            ->update($payload);
 
         return $this->response->setJSON([
             'update_value' => 1,
@@ -538,11 +583,11 @@ class DoctorDocument extends BaseController
             return $this->response->setStatusCode(404)->setBody('Patient not found');
         }
 
-        $docFormats = $this->db->table('doc_format_master')
-            ->where('active', 1)
-            ->orderBy('doc_name', 'ASC')
-            ->get()
-            ->getResultArray();
+        $docFormatsBuilder = $this->db->table('doc_format_master');
+        if ($this->hasColumn('doc_format_master', 'active')) {
+            $docFormatsBuilder->where('active', 1);
+        }
+        $docFormats = $docFormatsBuilder->orderBy('doc_name', 'ASC')->get()->getResultArray();
 
         $doctorList = $this->db->table('doctor_master')
             ->select('id,p_fname')
@@ -594,7 +639,7 @@ class DoctorDocument extends BaseController
 
         $issueMysql = $this->normalizeIssueDate($issueDate);
 
-        $this->db->table('patient_doc')->insert([
+        $patientDocPayload = [
             'raw_data' => $reportString,
             'doc_format_id' => $docFormatId,
             'p_id' => $patientId,
@@ -603,18 +648,20 @@ class DoctorDocument extends BaseController
             'update_pre_value' => 0,
             'created_at' => date('Y-m-d H:i:s'),
             'updated_at' => date('Y-m-d H:i:s'),
-        ]);
+        ];
+        $patientDocPayload = $this->filterPayloadByExistingColumns('patient_doc', $patientDocPayload);
+        $this->db->table('patient_doc')->insert($patientDocPayload);
         $insertId = (int) $this->db->insertID();
 
-        $inputs = $this->db->table('doc_format_sub')
-            ->where('doc_format_id', $docFormatId)
-            ->where('active', 1)
-            ->orderBy('short_order', 'ASC')
-            ->get()
-            ->getResultArray();
+        $inputBuilder = $this->db->table('doc_format_sub')
+            ->where('doc_format_id', $docFormatId);
+        if ($this->hasColumn('doc_format_sub', 'active')) {
+            $inputBuilder->where('active', 1);
+        }
+        $inputs = $inputBuilder->orderBy('short_order', 'ASC')->get()->getResultArray();
 
         foreach ($inputs as $row) {
-            $this->db->table('patient_doc_raw')->insert([
+            $patientDocRawPayload = [
                 'p_id' => $patientId,
                 'p_doc_id' => $insertId,
                 'p_doc_sub_id' => (int) ($row['id'] ?? 0),
@@ -622,7 +669,9 @@ class DoctorDocument extends BaseController
                 'update_data' => 0,
                 'created_at' => date('Y-m-d H:i:s'),
                 'updated_at' => date('Y-m-d H:i:s'),
-            ]);
+            ];
+            $patientDocRawPayload = $this->filterPayloadByExistingColumns('patient_doc_raw', $patientDocRawPayload);
+            $this->db->table('patient_doc_raw')->insert($patientDocRawPayload);
         }
 
         return $this->response->setBody((string) $insertId);
@@ -657,11 +706,13 @@ class DoctorDocument extends BaseController
 
         $reportString = $this->applyDocumentTokens((string) ($template['doc_raw_format'] ?? ''), $patient, $doctor, $issueDate);
 
-        $this->db->table('patient_doc')->where('id', $docId)->update([
+        $patientDocUpdatePayload = [
             'raw_data' => $reportString,
             'update_pre_value' => 0,
             'updated_at' => date('Y-m-d H:i:s'),
-        ]);
+        ];
+        $patientDocUpdatePayload = $this->filterPayloadByExistingColumns('patient_doc', $patientDocUpdatePayload);
+        $this->db->table('patient_doc')->where('id', $docId)->update($patientDocUpdatePayload);
 
         if ($this->request->isAJAX()) {
             return $this->Pre_Data($docId);
@@ -708,11 +759,13 @@ class DoctorDocument extends BaseController
         $testId = (int) $this->request->getPost('test_id');
         $testValue = (string) $this->request->getPost('test_value');
 
-        $this->db->table('patient_doc_raw')->where('id', $testId)->update([
+        $entryUpdatePayload = [
             'p_doc_raw_value' => $testValue,
             'update_data' => 1,
             'updated_at' => date('Y-m-d H:i:s'),
-        ]);
+        ];
+        $entryUpdatePayload = $this->filterPayloadByExistingColumns('patient_doc_raw', $entryUpdatePayload);
+        $this->db->table('patient_doc_raw')->where('id', $testId)->update($entryUpdatePayload);
 
         return $this->response->setBody($testValue);
     }
