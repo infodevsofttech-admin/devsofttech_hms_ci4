@@ -441,7 +441,20 @@ class Auth extends ShieldAuth
     public function loginRedirect(): string
     {
         $session = session();
-        $url     = $session->getTempdata('beforeLoginUrl') ?? setting('Auth.redirects')['login'];
+        $beforeLoginUrl = (string) ($session->getTempdata('beforeLoginUrl') ?? '');
+
+        // Some AJAX workspace URLs can be stored as beforeLoginUrl in production
+        // and then hijack post-login landing. Skip those and use configured default.
+        if ($beforeLoginUrl !== '') {
+            $path = (string) parse_url($beforeLoginUrl, PHP_URL_PATH);
+            $path = '/' . ltrim($path, '/');
+            if ($path === '/doctor_work/document_workspace') {
+                $beforeLoginUrl = '';
+                $session->removeTempdata('beforeLoginUrl');
+            }
+        }
+
+        $url = $beforeLoginUrl !== '' ? $beforeLoginUrl : (string) setting('Auth.redirects')['login'];
 
         return $this->getUrl($url);
     }
