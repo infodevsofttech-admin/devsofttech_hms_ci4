@@ -1026,7 +1026,11 @@ class DoctorDocument extends BaseController
         $headerRef = 'Document Ref. No.' . date('Y') . '/' . $printNo . '/' . $patientDocId;
         $content = '<table border="0" cellpadding="1" cellspacing="1" style="width:100%"><tbody><tr><td>'
             . $headerRef . '</td><td style="text-align:right">Date : ' . $issueDate . '</td></tr></tbody></table>';
-        $content .= (string) ($patientDoc['raw_data'] ?? '');
+
+        $rawData = (string) ($patientDoc['raw_data'] ?? '');
+        $rawData = str_replace(["\\r\\n", "\\n", "\\r"], "\n", $rawData);
+        $rawData = $this->resolveDocPrintTemplatePlaceholders($rawData, $patientDoc);
+        $content .= $rawData;
 
         $customHeaderHtml = $this->resolveDocPrintTemplatePlaceholders(
             (string) ($selectedPrintTemplate['header_html'] ?? ''),
