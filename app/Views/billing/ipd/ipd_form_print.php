@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 $formNo = (int) ($form_no ?? 1);
 $formMeta = is_array($form_meta ?? null) ? $form_meta : ['title' => 'IPD Form'];
 $ipd = $ipd_info ?? null;
@@ -257,6 +257,67 @@ if ($admitDate === '') {
                 <td></td>
                 <td></td>
             </tr>
+        </table>
+    <?php elseif ($formNo === 6) : ?>
+        <div class="section-title">Treatment Chart</div>
+        <table class="grid-table">
+            <tr>
+                <th style="width:10%;">S.No.</th>
+                <th style="width:18%;">Date</th>
+                <th style="width:14%;">Time</th>
+                <th>Treatment / Medication</th>
+                <th style="width:10%;">Dose</th>
+                <th style="width:10%;">Route</th>
+                <th style="width:12%;">Sign.</th>
+            </tr>
+            <?php for ($i = 1; $i <= 30; $i++) : ?>
+                <tr class="spacer-row">
+                    <td style="text-align:center;"><?= $i ?></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                </tr>
+            <?php endfor; ?>
+        </table>
+    <?php elseif ($formNo === 7) : ?>
+        <div class="section-title">Vitals Chart</div>
+        <p style="margin:0 0 6px;">
+            Name: <strong><?= esc(strtoupper($patientName)) ?></strong>
+            &nbsp;&nbsp; IPD No.: <strong><?= esc($ipdCode) ?></strong>
+            &nbsp;&nbsp; UHID: <strong><?= esc($patientCode) ?></strong>
+            &nbsp;&nbsp; Gender: <strong><?= esc($patientGender) ?></strong>
+            &nbsp;&nbsp; Age: <strong><?= esc($patientAge) ?></strong>
+        </p>
+        <table class="grid-table" style="font-size:11px;">
+            <tr>
+                <th style="text-align:center; width:6%;">SR.No.</th>
+                <th style="text-align:center; width:12%;">Date</th>
+                <th style="text-align:center; width:10%;">Time</th>
+                <th style="text-align:center; width:10%;">P.R.</th>
+                <th style="text-align:center; width:10%;">B.P.</th>
+                <th style="text-align:center; width:10%;">SPO2</th>
+                <th style="text-align:center; width:10%;">Temp.</th>
+                <th style="text-align:center; width:11%;">Resp. Rate</th>
+                <th style="text-align:center; width:10%;">R.B.S</th>
+                <th style="text-align:center; width:11%;">Sign.</th>
+            </tr>
+            <?php for ($i = 1; $i <= 30; $i++) : ?>
+                <tr class="spacer-row">
+                    <td style="text-align:center;"><?= $i ?></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                </tr>
+            <?php endfor; ?>
         </table>
     <?php endif; ?>
 <?php endif; ?>

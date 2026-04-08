@@ -2329,6 +2329,8 @@ class Ipd extends BaseController
             9 => ['title' => 'Fluid In / Out'],
             10 => ['title' => 'Sticker [2 x 6]'],
             11 => ['title' => 'Sticker [2 x 8]'],
+            6 => ['title' => 'Treatment Chart'],
+            7 => ['title' => 'Vitals Chart'],
         ];
 
         if (isset($meta[$formNo])) {
@@ -2353,6 +2355,8 @@ class Ipd extends BaseController
             ['id' => 8, 'label' => 'Progress Notes'],
             ['id' => 9, 'label' => 'Fluid In / Out'],
             ['id' => 3, 'label' => 'Self Declaration Form'],
+            ['id' => 7, 'label' => 'Vitals Chart'],
+            ['id' => 6, 'label' => 'Treatment Chart'],
         ];
 
         if (! $this->db->tableExists('ipd_document_templates')) {
