@@ -427,50 +427,80 @@ class Ipd extends BaseController
             $panelData['item_types'] = $panelData['item_types'] ?? [];
             $panelData['item_lists'] = $panelData['item_lists'] ?? [];
 
+            $insCompId = 1;
+
             try {
                 $this->syncNursingChargesToInvoice($ipdId);
+            } catch (\Throwable $e) {
+                log_message('error', 'IPD Charges sync failed for IPD #' . $ipdId . ': ' . $e->getMessage());
+            }
+
+            try {
                 $panelData['ipd_charges_grouped'] = $this->ipdModel->getIpdChargesGrouped($ipdId);
                 $panelData['ipd_charges_total'] = $this->ipdModel->getIpdChargesTotal($ipdId);
                 $panelData['ipd_packages'] = $this->ipdModel->getIpdPackages($ipdId);
+            } catch (\Throwable $e) {
+                log_message('error', 'IPD Charges core list failed for IPD #' . $ipdId . ': ' . $e->getMessage());
+            }
 
+            try {
                 $caseMeta = $this->ipdModel->getIpdCaseMeta($ipdId);
                 $insCompId = (int) ($caseMeta['insurance_id'] ?? 0);
                 if ($insCompId <= 0) {
                     $insCompId = 1;
                 }
-
-                $panelData['bedside_items_by_category'] = $this->nursingBedsideItemModel->getBillableGroupedByCategory($insCompId);
-
                 $panelData['ipd_insurance_id'] = $insCompId;
+            } catch (\Throwable $e) {
+                log_message('error', 'IPD Charges insurance meta failed for IPD #' . $ipdId . ': ' . $e->getMessage());
+                $panelData['ipd_insurance_id'] = 1;
+            }
+
+            try {
+                $panelData['bedside_items_by_category'] = $this->nursingBedsideItemModel->getBillableGroupedByCategory($insCompId);
+            } catch (\Throwable $e) {
+                log_message('error', 'IPD bedside item load failed for IPD #' . $ipdId . ': ' . $e->getMessage());
+            }
+
+            try {
                 $panelData['doc_list'] = $this->ipdModel->getIpdDoctorList();
-                $doctorIds = array_map(static fn ($doc) => (int) ($doc->id ?? 0), $panelData['doc_list']);
-                $doctorIds = array_values(array_filter($doctorIds, static fn ($id) => $id > 0));
+            } catch (\Throwable $e) {
+                log_message('error', 'IPD doctor list load failed for IPD #' . $ipdId . ': ' . $e->getMessage());
+                $panelData['doc_list'] = [];
+            }
+
+            $doctorIds = array_map(static fn ($doc) => (int) ($doc->id ?? 0), $panelData['doc_list']);
+            $doctorIds = array_values(array_filter($doctorIds, static fn ($id) => $id > 0));
+
+            try {
                 $panelData['doctor_visit_fee_types'] = $this->ipdModel->getDoctorVisitFeeTypes();
                 $panelData['doctor_visit_fee_map'] = $this->ipdModel->getDoctorVisitFeeMap($doctorIds);
-                $panelData['item_types'] = $this->itemIpdModel->getItemTypes();
-
-                $itemLists = [];
-                foreach ($panelData['item_types'] as $type) {
-                    $typeId = (int) ($type->itype_id ?? 0);
-                    if ($typeId <= 0) {
-                        continue;
-                    }
-                    $itemLists[$typeId] = $this->itemIpdModel->getItemsByTypeWithInsurance($typeId, $insCompId);
-                }
-                $panelData['item_lists'] = $itemLists;
             } catch (\Throwable $e) {
-                log_message('error', 'IPD Charges tab failed for IPD #' . $ipdId . ': ' . $e->getMessage());
-                $panelData['ipd_charges_grouped'] = [];
-                $panelData['ipd_charges_total'] = 0;
-                $panelData['ipd_packages'] = [];
-                $panelData['bedside_items_by_category'] = [];
-                $panelData['ipd_insurance_id'] = 0;
-                $panelData['doc_list'] = [];
+                log_message('error', 'IPD doctor fee load failed for IPD #' . $ipdId . ': ' . $e->getMessage());
                 $panelData['doctor_visit_fee_types'] = [];
                 $panelData['doctor_visit_fee_map'] = [];
-                $panelData['item_types'] = [];
-                $panelData['item_lists'] = [];
             }
+
+            try {
+                $panelData['item_types'] = $this->itemIpdModel->getItemTypes();
+            } catch (\Throwable $e) {
+                log_message('error', 'IPD item type load failed for IPD #' . $ipdId . ': ' . $e->getMessage());
+                $panelData['item_types'] = [];
+            }
+
+            $itemLists = [];
+            foreach ($panelData['item_types'] as $type) {
+                $typeId = (int) ($type->itype_id ?? 0);
+                if ($typeId <= 0) {
+                    continue;
+                }
+                try {
+                    $itemLists[$typeId] = $this->itemIpdModel->getItemsByTypeWithInsurance($typeId, $insCompId);
+                } catch (\Throwable $e) {
+                    log_message('error', 'IPD item list load failed for type ' . $typeId . ' (IPD #' . $ipdId . '): ' . $e->getMessage());
+                    $itemLists[$typeId] = [];
+                }
+            }
+            $panelData['item_lists'] = $itemLists;
 
             try {
                 return view('billing/ipd/panel_ipd_charges', $panelData);
