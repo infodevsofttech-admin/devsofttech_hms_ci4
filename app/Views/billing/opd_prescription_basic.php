@@ -777,7 +777,7 @@
                                 <div class="row g-3 align-items-end mb-2">
                                     <div class="col-md-8">
                                         <label class="form-label fw-semibold mb-1">Prescribed:</label>
-                                        <input type="text" class="form-control" id="med_name" list="medicine_suggest" placeholder="Search / enter medicine name">
+                                        <input type="text" class="form-control" id="med_name" list="medicine_suggest" autocomplete="off" placeholder="Search / enter medicine name">
                                         <datalist id="medicine_suggest"></datalist>
                                     </div>
                                     <div class="col-md-4">
@@ -1019,7 +1019,7 @@
                         <div class="col-md-7">
                             <div class="fw-semibold mb-2">Add Medicines</div>
                             <div class="mb-2">
-                                <input type="text" class="form-control form-control-sm" id="crgc_med_name" list="crgc_med_suggest" placeholder="Medicine name">
+                                <input type="text" class="form-control form-control-sm" id="crgc_med_name" list="crgc_med_suggest" autocomplete="off" placeholder="Medicine name">
                                 <datalist id="crgc_med_suggest"></datalist>
                             </div>
                             <div class="mb-2">
@@ -1114,6 +1114,9 @@
     var medicineSuggestRows = [];
     var medicineSearchCache = {};
     var medicineSearchCacheTtlMs = 120000;
+    var medicineSearchLocalDbKey = 'opd_medicine_search_cache_v1';
+    var medicineSearchCacheMaxEntries = 250;
+    var medicineSearchLocalDbReady = false;
     var medInputTimer = null;
     var crgcMedInputTimer = null;
     var medicineDoseMasterCache = { dose: [], when: [], freq: [], where: [] };
@@ -1181,12 +1184,77 @@
         return (scope || 'all') + '|' + (query || '').trim().toUpperCase();
     }
 
+    function pruneMedicineSearchCacheStore(nowMs) {
+        var now = nowMs || Date.now();
+        var keys = Object.keys(medicineSearchCache || {});
+        if (!keys.length) {
+            medicineSearchCache = {};
+            return;
+        }
+
+        var rows = [];
+        keys.forEach(function(k) {
+            var item = medicineSearchCache[k] || {};
+            var ts = Number(item.ts || 0);
+            if (!ts || (now - ts) > medicineSearchCacheTtlMs) {
+                return;
+            }
+            rows.push({ key: k, ts: ts, rows: Array.isArray(item.rows) ? item.rows : [] });
+        });
+
+        rows.sort(function(a, b) { return b.ts - a.ts; });
+        if (rows.length > medicineSearchCacheMaxEntries) {
+            rows = rows.slice(0, medicineSearchCacheMaxEntries);
+        }
+
+        var next = {};
+        rows.forEach(function(item) {
+            next[item.key] = { ts: item.ts, rows: item.rows };
+        });
+        medicineSearchCache = next;
+    }
+
+    function persistMedicineSearchCacheToLocalDb() {
+        try {
+            pruneMedicineSearchCacheStore(Date.now());
+            localStorage.setItem(medicineSearchLocalDbKey, JSON.stringify({
+                saved_at: Date.now(),
+                entries: medicineSearchCache
+            }));
+        } catch (e) {
+            // Ignore storage quota/private-mode failures; memory cache still works.
+        }
+    }
+
+    function ensureMedicineSearchLocalDbLoaded() {
+        if (medicineSearchLocalDbReady) {
+            return;
+        }
+        medicineSearchLocalDbReady = true;
+        try {
+            var raw = localStorage.getItem(medicineSearchLocalDbKey);
+            if (!raw) {
+                return;
+            }
+            var parsed = JSON.parse(raw);
+            var entries = parsed && parsed.entries ? parsed.entries : {};
+            if (entries && typeof entries === 'object') {
+                medicineSearchCache = entries;
+                pruneMedicineSearchCacheStore(Date.now());
+            }
+        } catch (e) {
+            medicineSearchCache = {};
+        }
+    }
+
     function fetchMedicineSuggestions(query, scope, done) {
         var q = (query || '').trim();
         if (q.length < 2) {
             done([]);
             return;
         }
+
+        ensureMedicineSearchLocalDbLoaded();
 
         var useScope = (scope || 'all').toString();
         var cacheKey = getMedicineSearchCacheKey(q, useScope);
@@ -1199,7 +1267,8 @@
 
         apiGet('<?= base_url('Opd_prescription/medicine_search') ?>?q=' + encodeURIComponent(q) + '&scope=' + encodeURIComponent(useScope) + '&limit=10', function(data) {
             var rows = (data && data.rows) ? data.rows : [];
-            medicineSearchCache[cacheKey] = { ts: now, rows: rows };
+            medicineSearchCache[cacheKey] = { ts: Date.now(), rows: rows };
+            persistMedicineSearchCacheToLocalDb();
             done(rows);
         });
     }

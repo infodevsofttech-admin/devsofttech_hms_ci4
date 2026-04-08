@@ -106,16 +106,109 @@ $columnsReady = (bool) ($columns_ready ?? false);
                 <div class="alert alert-secondary py-2 small mb-2">
                     If Header HTML is blank, default hospital header logic is used based on print mode.
                 </div>
+
+                <div class="card border-info mb-3">
+                    <div class="card-header bg-info bg-opacity-10 py-1 d-flex justify-content-between align-items-center">
+                        <span class="fw-semibold small text-info">Available Placeholders — click any to insert into focused textarea</span>
+                        <span class="text-muted small" id="doc_tpl_focus_label">Focus a textarea below first</span>
+                    </div>
+                    <div class="card-body p-2">
+                        <div class="mb-1"><span class="badge bg-secondary me-1">Hospital</span>
+                            <?php foreach ([
+                                '{{H_Name}}'           => 'Hospital Name',
+                                '{{H_address_1}}'      => 'Address Line 1',
+                                '{{H_address_2}}'      => 'Address Line 2',
+                                '{{H_phone_No}}'       => 'Phone No.',
+                                '{{H_Email}}'          => 'Email',
+                                '{{H_logo}}'           => 'Logo filename',
+                                '{{H_logo_abs}}'       => 'Logo absolute path',
+                                '{{hospital_logo_html}}' => 'Logo <img> tag',
+                            ] as $ph => $desc): ?>
+                                <button type="button" class="btn btn-outline-info btn-sm py-0 px-1 me-1 mb-1 doc-ph-btn" data-ph="<?= esc($ph) ?>" title="<?= esc($desc) ?>"><code><?= esc($ph) ?></code></button>
+                            <?php endforeach; ?>
+                        </div>
+                        <div class="mb-1"><span class="badge bg-secondary me-1">Patient / IPD</span>
+                            <?php foreach ([
+                                '{{PATIENT_NAME}}' => 'Full patient name',
+                                '{{UHID}}'         => 'Patient UHID',
+                                '{{IPD_CODE}}'     => 'IPD admission number',
+                                '{{ADMIT_DATE}}'   => 'Date of admission',
+                                '{{AGE_GENDER}}'   => 'Age & gender combined',
+                                '{{age_sex}}'      => 'Age/sex short form',
+                                '{{phoneno}}'      => 'Patient phone',
+                                '{{DOCTORS}}'      => 'Treating doctors',
+                                '{{doctor_name}}'  => 'Primary doctor name',
+                                '{{doctor_sign_html}}' => 'Doctor signature img',
+                            ] as $ph => $desc): ?>
+                                <button type="button" class="btn btn-outline-success btn-sm py-0 px-1 me-1 mb-1 doc-ph-btn" data-ph="<?= esc($ph) ?>" title="<?= esc($desc) ?>"><code><?= esc($ph) ?></code></button>
+                            <?php endforeach; ?>
+                        </div>
+                        <div class="mb-1"><span class="badge bg-secondary me-1">Date / Page</span>
+                            <?php foreach ([
+                                '{{CURRENT_DATE}}'     => 'Today\'s date',
+                                '{{CURRENT_DATETIME}}' => 'Today date + time',
+                                '{{print_time}}'       => 'Print timestamp',
+                                '{PAGENO}'             => 'mPDF: current page',
+                                '{nbpg}'               => 'mPDF: total pages',
+                            ] as $ph => $desc): ?>
+                                <button type="button" class="btn btn-outline-warning btn-sm py-0 px-1 me-1 mb-1 doc-ph-btn" data-ph="<?= esc($ph) ?>" title="<?= esc($desc) ?>"><code><?= esc($ph) ?></code></button>
+                            <?php endforeach; ?>
+                        </div>
+                        <div class="mb-0"><span class="badge bg-secondary me-1">QR / Barcode</span>
+                            <?php foreach ([
+                                '{{qr_content}}'   => 'QR raw content string',
+                                '{{qr_code_html}}' => 'QR code <img> tag',
+                            ] as $ph => $desc): ?>
+                                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1 me-1 mb-1 doc-ph-btn" data-ph="<?= esc($ph) ?>" title="<?= esc($desc) ?>"><code><?= esc($ph) ?></code></button>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="row g-2">
                     <div class="col-12">
                         <label class="form-label small">Header HTML / mPDF tags</label>
-                        <textarea class="form-control" name="header_html" rows="6" style="font-family:Consolas,Monaco,monospace;"><?= esc((string) ($row['header_html'] ?? '')) ?></textarea>
+                        <textarea class="form-control doc-ph-target" name="header_html" rows="6" style="font-family:Consolas,Monaco,monospace;"><?= esc((string) ($row['header_html'] ?? '')) ?></textarea>
                     </div>
                     <div class="col-12">
                         <label class="form-label small">Footer HTML / mPDF tags</label>
-                        <textarea class="form-control" name="footer_html" rows="4" style="font-family:Consolas,Monaco,monospace;"><?= esc((string) ($row['footer_html'] ?? '')) ?></textarea>
+                        <textarea class="form-control doc-ph-target" name="footer_html" rows="4" style="font-family:Consolas,Monaco,monospace;"><?= esc((string) ($row['footer_html'] ?? '')) ?></textarea>
                     </div>
                 </div>
+
+                <script>
+                (function () {
+                    var activeTarget = null;
+
+                    document.querySelectorAll('.doc-ph-target').forEach(function (ta) {
+                        ta.addEventListener('focus', function () {
+                            activeTarget = ta;
+                            var label = document.getElementById('doc_tpl_focus_label');
+                            if (label) {
+                                label.textContent = 'Inserting into: ' + (ta.name || ta.id || 'textarea');
+                                label.className = 'small text-success fw-semibold';
+                            }
+                        });
+                    });
+
+                    document.querySelectorAll('.doc-ph-btn').forEach(function (btn) {
+                        btn.addEventListener('click', function () {
+                            var ph = btn.getAttribute('data-ph') || '';
+                            if (!ph) { return; }
+                            if (!activeTarget) {
+                                alert('Click inside a Header or Footer textarea first, then click a placeholder.');
+                                return;
+                            }
+                            var start = activeTarget.selectionStart || 0;
+                            var end   = activeTarget.selectionEnd   || 0;
+                            var val   = activeTarget.value;
+                            activeTarget.value = val.substring(0, start) + ph + val.substring(end);
+                            activeTarget.selectionStart = activeTarget.selectionEnd = start + ph.length;
+                            activeTarget.focus();
+                        });
+                    });
+                })();
+                </script>
 
                 <div class="mt-3 d-flex gap-2">
                     <button type="submit" class="btn btn-primary btn-sm" <?= ! $columnsReady ? 'disabled' : '' ?>>Save Settings</button>
