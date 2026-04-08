@@ -1366,6 +1366,7 @@ HTML;
     private function ensureIpdDocumentTemplateTable(): void
     {
         if ($this->db->tableExists('ipd_document_templates')) {
+            $this->ensureIpdDocumentTemplateColumns();
             return;
         }
 
@@ -1373,6 +1374,18 @@ HTML;
             id INT NOT NULL AUTO_INCREMENT,
             form_no INT NOT NULL,
             template_name VARCHAR(160) NOT NULL,
+            page_size VARCHAR(16) NOT NULL DEFAULT 'A4',
+            custom_width_mm INT NOT NULL DEFAULT 210,
+            custom_height_mm INT NOT NULL DEFAULT 297,
+            page_margin_top_cm DECIMAL(5,2) NOT NULL DEFAULT 0.80,
+            page_margin_bottom_cm DECIMAL(5,2) NOT NULL DEFAULT 0.80,
+            page_margin_left_cm DECIMAL(5,2) NOT NULL DEFAULT 0.80,
+            page_margin_right_cm DECIMAL(5,2) NOT NULL DEFAULT 0.80,
+            margin_header_cm DECIMAL(5,2) NOT NULL DEFAULT 0.50,
+            margin_footer_cm DECIMAL(5,2) NOT NULL DEFAULT 0.50,
+            header_html LONGTEXT NULL,
+            footer_html LONGTEXT NULL,
+            template_css LONGTEXT NULL,
             template_html LONGTEXT NOT NULL,
             status TINYINT(1) NOT NULL DEFAULT 1,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -1383,6 +1396,40 @@ HTML;
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
         $this->db->query($sql);
+        $this->ensureIpdDocumentTemplateColumns();
+    }
+
+    private function ensureIpdDocumentTemplateColumns(): void
+    {
+        if (! $this->db->tableExists('ipd_document_templates')) {
+            return;
+        }
+
+        $columns = [
+            'page_size' => "ALTER TABLE ipd_document_templates ADD COLUMN page_size VARCHAR(16) NOT NULL DEFAULT 'A4' AFTER template_name",
+            'custom_width_mm' => "ALTER TABLE ipd_document_templates ADD COLUMN custom_width_mm INT NOT NULL DEFAULT 210 AFTER page_size",
+            'custom_height_mm' => "ALTER TABLE ipd_document_templates ADD COLUMN custom_height_mm INT NOT NULL DEFAULT 297 AFTER custom_width_mm",
+            'page_margin_top_cm' => "ALTER TABLE ipd_document_templates ADD COLUMN page_margin_top_cm DECIMAL(5,2) NOT NULL DEFAULT 0.80 AFTER custom_height_mm",
+            'page_margin_bottom_cm' => "ALTER TABLE ipd_document_templates ADD COLUMN page_margin_bottom_cm DECIMAL(5,2) NOT NULL DEFAULT 0.80 AFTER page_margin_top_cm",
+            'page_margin_left_cm' => "ALTER TABLE ipd_document_templates ADD COLUMN page_margin_left_cm DECIMAL(5,2) NOT NULL DEFAULT 0.80 AFTER page_margin_bottom_cm",
+            'page_margin_right_cm' => "ALTER TABLE ipd_document_templates ADD COLUMN page_margin_right_cm DECIMAL(5,2) NOT NULL DEFAULT 0.80 AFTER page_margin_left_cm",
+            'margin_header_cm' => "ALTER TABLE ipd_document_templates ADD COLUMN margin_header_cm DECIMAL(5,2) NOT NULL DEFAULT 0.50 AFTER page_margin_right_cm",
+            'margin_footer_cm' => "ALTER TABLE ipd_document_templates ADD COLUMN margin_footer_cm DECIMAL(5,2) NOT NULL DEFAULT 0.50 AFTER margin_header_cm",
+            'header_html' => "ALTER TABLE ipd_document_templates ADD COLUMN header_html LONGTEXT NULL AFTER margin_footer_cm",
+            'footer_html' => "ALTER TABLE ipd_document_templates ADD COLUMN footer_html LONGTEXT NULL AFTER header_html",
+            'template_css' => "ALTER TABLE ipd_document_templates ADD COLUMN template_css LONGTEXT NULL AFTER footer_html",
+        ];
+
+        foreach ($columns as $col => $sql) {
+            try {
+                $exists = $this->db->query("SHOW COLUMNS FROM ipd_document_templates LIKE '" . $col . "'")->getRowArray();
+                if (empty($exists)) {
+                    $this->db->query($sql);
+                }
+            } catch (\Throwable $e) {
+                // Keep template screen usable even if schema alter fails in restricted env.
+            }
+        }
     }
 
     private function defaultIpdDocumentTemplates(): array
@@ -1616,10 +1663,35 @@ HTML,
             $table->insert([
                 'form_no' => $formNo,
                 'template_name' => $templateName,
+                'page_size' => in_array($formNo, [10, 11], true) ? 'CUSTOM' : 'A4',
+                'custom_width_mm' => $formNo === 10 ? 51 : ($formNo === 11 ? 51 : 210),
+                'custom_height_mm' => $formNo === 10 ? 152 : ($formNo === 11 ? 203 : 297),
+                'page_margin_top_cm' => in_array($formNo, [10, 11], true) ? 0.2 : 0.8,
+                'page_margin_bottom_cm' => in_array($formNo, [10, 11], true) ? 0.2 : 0.8,
+                'page_margin_left_cm' => in_array($formNo, [10, 11], true) ? 0.2 : 0.8,
+                'page_margin_right_cm' => in_array($formNo, [10, 11], true) ? 0.2 : 0.8,
+                'margin_header_cm' => 0.5,
+                'margin_footer_cm' => 0.5,
                 'template_html' => (string) ($row['template_html'] ?? ''),
                 'status' => 1,
             ]);
         }
+
+        // Upgrade legacy sticker templates created before page-size columns existed.
+        $this->db->table('ipd_document_templates')
+            ->whereIn('form_no', [10, 11])
+            ->where('page_size', 'A4')
+            ->where('custom_width_mm', 210)
+            ->where('custom_height_mm', 297)
+            ->where('template_name LIKE', 'Legacy Sticker%')
+            ->set('page_size', 'CUSTOM')
+            ->set('custom_width_mm', 'CASE WHEN form_no=10 THEN 51 ELSE 51 END', false)
+            ->set('custom_height_mm', 'CASE WHEN form_no=10 THEN 152 ELSE 203 END', false)
+            ->set('page_margin_top_cm', 0.2)
+            ->set('page_margin_bottom_cm', 0.2)
+            ->set('page_margin_left_cm', 0.2)
+            ->set('page_margin_right_cm', 0.2)
+            ->update();
     }
 
     public function ipd_document_templates()
@@ -1638,6 +1710,24 @@ HTML,
             $formNo = (int) ($this->request->getPost('form_no') ?? 0);
             $templateName = trim((string) ($this->request->getPost('template_name') ?? ''));
             $templateHtml = (string) ($this->request->getPost('template_html') ?? '');
+            $headerHtml = (string) ($this->request->getPost('header_html') ?? '');
+            $footerHtml = (string) ($this->request->getPost('footer_html') ?? '');
+            $templateCss = (string) ($this->request->getPost('template_css') ?? '');
+            $pageSize = strtoupper(trim((string) ($this->request->getPost('page_size') ?? 'A4')));
+            if (! in_array($pageSize, ['A4', 'A4-L', 'A5', 'A6', 'LETTER', 'LEGAL', 'CUSTOM'], true)) {
+                $pageSize = 'A4';
+            }
+            $customWidthMm = (int) ($this->request->getPost('custom_width_mm') ?? 210);
+            $customHeightMm = (int) ($this->request->getPost('custom_height_mm') ?? 297);
+            $customWidthMm = max(20, min(600, $customWidthMm));
+            $customHeightMm = max(20, min(1000, $customHeightMm));
+
+            $marginTop = max(0, min(25, (float) ($this->request->getPost('page_margin_top_cm') ?? 0.8)));
+            $marginBottom = max(0, min(25, (float) ($this->request->getPost('page_margin_bottom_cm') ?? 0.8)));
+            $marginLeft = max(0, min(25, (float) ($this->request->getPost('page_margin_left_cm') ?? 0.8)));
+            $marginRight = max(0, min(25, (float) ($this->request->getPost('page_margin_right_cm') ?? 0.8)));
+            $marginHeader = max(0, min(25, (float) ($this->request->getPost('margin_header_cm') ?? 0.5)));
+            $marginFooter = max(0, min(25, (float) ($this->request->getPost('margin_footer_cm') ?? 0.5)));
             $status = (int) ($this->request->getPost('status') ?? 1) === 1 ? 1 : 0;
 
             if (! in_array($formNo, [1, 3, 5, 8, 9, 10, 11], true)) {
@@ -1651,6 +1741,18 @@ HTML,
                 $data = [
                     'form_no' => $formNo,
                     'template_name' => $templateName,
+                    'page_size' => $pageSize,
+                    'custom_width_mm' => $customWidthMm,
+                    'custom_height_mm' => $customHeightMm,
+                    'page_margin_top_cm' => $marginTop,
+                    'page_margin_bottom_cm' => $marginBottom,
+                    'page_margin_left_cm' => $marginLeft,
+                    'page_margin_right_cm' => $marginRight,
+                    'margin_header_cm' => $marginHeader,
+                    'margin_footer_cm' => $marginFooter,
+                    'header_html' => $headerHtml,
+                    'footer_html' => $footerHtml,
+                    'template_css' => $templateCss,
                     'template_html' => $templateHtml,
                     'status' => $status,
                 ];

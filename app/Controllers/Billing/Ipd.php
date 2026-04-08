@@ -861,8 +861,26 @@ class Ipd extends BaseController
 
         $html = view('billing/ipd/ipd_form_print', $data);
         $customTemplate = $this->getActiveIpdDocumentTemplate($formNo);
+        $templatePageSize = '';
+        $templateCustomWidth = 210;
+        $templateCustomHeight = 297;
+        $templateMarginTop = 0.8;
+        $templateMarginBottom = 0.8;
+        $templateMarginLeft = 0.8;
+        $templateMarginRight = 0.8;
+        $templateMarginHeader = 0.5;
+        $templateMarginFooter = 0.5;
         if ($customTemplate !== null) {
             $html = $this->renderIpdDocumentTemplateHtml($customTemplate, $data);
+            $templatePageSize = strtoupper(trim((string) ($customTemplate['page_size'] ?? '')));
+            $templateCustomWidth = (int) ($customTemplate['custom_width_mm'] ?? 210);
+            $templateCustomHeight = (int) ($customTemplate['custom_height_mm'] ?? 297);
+            $templateMarginTop = (float) ($customTemplate['page_margin_top_cm'] ?? 0.8);
+            $templateMarginBottom = (float) ($customTemplate['page_margin_bottom_cm'] ?? 0.8);
+            $templateMarginLeft = (float) ($customTemplate['page_margin_left_cm'] ?? 0.8);
+            $templateMarginRight = (float) ($customTemplate['page_margin_right_cm'] ?? 0.8);
+            $templateMarginHeader = (float) ($customTemplate['margin_header_cm'] ?? 0.5);
+            $templateMarginFooter = (float) ($customTemplate['margin_footer_cm'] ?? 0.5);
         }
 
         $mpdfTempDir = WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'mpdf';
@@ -876,12 +894,33 @@ class Ipd extends BaseController
             'margin_bottom' => 8,
             'margin_left' => 8,
             'margin_right' => 8,
+            'margin_header' => 5,
+            'margin_footer' => 5,
             'default_font' => 'freeserif',
             'autoScriptToLang' => true,
             'autoLangToFont' => true,
         ];
 
-        if (in_array($formNo, [10, 11], true)) {
+        if ($customTemplate !== null && $templatePageSize !== '') {
+            if ($templatePageSize === 'CUSTOM') {
+                $templateCustomWidth = max(20, min(600, $templateCustomWidth));
+                $templateCustomHeight = max(20, min(1000, $templateCustomHeight));
+                $mpdfConfig['format'] = [$templateCustomWidth, $templateCustomHeight];
+            } elseif ($templatePageSize === 'A4-L') {
+                $mpdfConfig['format'] = 'A4';
+                $mpdfConfig['orientation'] = 'L';
+            } else {
+                $allowedFormats = ['A4', 'A5', 'A6', 'LETTER', 'LEGAL'];
+                $mpdfConfig['format'] = in_array($templatePageSize, $allowedFormats, true) ? $templatePageSize : 'A4';
+            }
+
+            $mpdfConfig['margin_top'] = max(0, min(250, (int) round($templateMarginTop * 10)));
+            $mpdfConfig['margin_bottom'] = max(0, min(250, (int) round($templateMarginBottom * 10)));
+            $mpdfConfig['margin_left'] = max(0, min(250, (int) round($templateMarginLeft * 10)));
+            $mpdfConfig['margin_right'] = max(0, min(250, (int) round($templateMarginRight * 10)));
+            $mpdfConfig['margin_header'] = max(0, min(250, (int) round($templateMarginHeader * 10)));
+            $mpdfConfig['margin_footer'] = max(0, min(250, (int) round($templateMarginFooter * 10)));
+        } elseif (in_array($formNo, [10, 11], true)) {
             $mpdfConfig['format'] = $formNo === 10 ? [50.8, 152.4] : [50.8, 203.2];
             $mpdfConfig['margin_top'] = 2;
             $mpdfConfig['margin_bottom'] = 2;
@@ -2278,7 +2317,12 @@ class Ipd extends BaseController
         }
 
         $hospitalName = defined('H_Name') ? (string) constant('H_Name') : 'Hospital';
-        $hospitalAddress = defined('H_address_1') ? (string) constant('H_address_1') : '';
+        $hospitalAddress1 = defined('H_address_1') ? (string) constant('H_address_1') : '';
+        $hospitalAddress2 = defined('H_address_2') ? (string) constant('H_address_2') : '';
+        $hospitalAddress = trim($hospitalAddress1 . ', ' . $hospitalAddress2, ', ');
+        $hospitalPhone = defined('H_phone_No') ? (string) constant('H_phone_No') : '';
+        $hospitalEmail = defined('H_Email') ? (string) constant('H_Email') : '';
+        $hospitalLogo = defined('H_logo') ? (string) constant('H_logo') : '';
 
         return [
             'form_no' => $formNo,
@@ -2289,6 +2333,11 @@ class Ipd extends BaseController
             'insurance_name' => $insuranceName,
             'hospital_name' => $hospitalName,
             'hospital_address' => $hospitalAddress,
+            'hospital_address_1' => $hospitalAddress1,
+            'hospital_address_2' => $hospitalAddress2,
+            'hospital_phone' => $hospitalPhone,
+            'hospital_email' => $hospitalEmail,
+            'hospital_logo' => $hospitalLogo,
             'generated_at' => date('d-m-Y h:i A'),
         ];
     }
@@ -2300,7 +2349,7 @@ class Ipd extends BaseController
         }
 
         $row = $this->db->table('ipd_document_templates')
-            ->select('id, form_no, template_name, template_html')
+            ->select('id, form_no, template_name, page_size, custom_width_mm, custom_height_mm, page_margin_top_cm, page_margin_bottom_cm, page_margin_left_cm, page_margin_right_cm, margin_header_cm, margin_footer_cm, header_html, footer_html, template_css, template_html')
             ->where('form_no', $formNo)
             ->where('status', 1)
             ->orderBy('id', 'DESC')
@@ -2338,29 +2387,156 @@ class Ipd extends BaseController
             $ageGender = '-';
         }
 
+        $qrContent = trim(
+            (string) ($person->p_code ?? '')
+            . ':' . (string) ($ipd->ipd_code ?? '')
+            . ':P-' . date('Y-m-d H:i:s')
+            . ':C-' . (string) ($person->p_fname ?? '')
+        , ':');
+        $hospitalLogo = trim((string) ($data['hospital_logo'] ?? ''));
+        $hospitalLogoAbs = $hospitalLogo !== '' ? (FCPATH . 'assets/images/' . $hospitalLogo) : '';
+        $hospitalLogoHtml = $hospitalLogoAbs !== ''
+            ? '<img style="width: 75px;vertical-align: top;" src="' . esc($hospitalLogoAbs, 'attr') . '" />'
+            : '';
+        $qrCodeHtml = $qrContent !== ''
+            ? '<barcode code="' . esc($qrContent, 'attr') . '" size="0.8" type="QR" error="M" class="barcode" />'
+            : '';
+
         $replacements = [
             '{{FORM_TITLE}}' => esc((string) ($formMeta['title'] ?? 'IPD Form')),
             '{{HOSPITAL_NAME}}' => esc((string) ($data['hospital_name'] ?? 'Hospital')),
             '{{HOSPITAL_ADDRESS}}' => esc((string) ($data['hospital_address'] ?? '')),
+            '{{H_Name}}' => esc((string) ($data['hospital_name'] ?? 'Hospital')),
+            '{{H_address_1}}' => esc((string) ($data['hospital_address_1'] ?? '')),
+            '{{H_address_2}}' => esc((string) ($data['hospital_address_2'] ?? '')),
+            '{{H_phone_No}}' => esc((string) ($data['hospital_phone'] ?? '')),
+            '{{H_Email}}' => esc((string) ($data['hospital_email'] ?? '')),
+            '{{H_logo}}' => esc($hospitalLogo),
+            '{{H_logo_abs}}' => esc($hospitalLogoAbs),
+            '{{hospital_logo_html}}' => $hospitalLogoHtml,
+            '{{HOSPITAL_LOGO_HTML}}' => $hospitalLogoHtml,
             '{{PATIENT_NAME}}' => esc($patientName),
+            '{{pName}}' => esc($patientName),
             '{{AGE}}' => esc($age),
             '{{GENDER}}' => esc($gender),
             '{{AGE_GENDER}}' => esc($ageGender),
+            '{{age_sex}}' => esc($ageGender),
             '{{UHID}}' => esc((string) ($person->p_code ?? '-')),
             '{{IPD_CODE}}' => esc((string) ($ipd->ipd_code ?? '-')),
             '{{ADMIT_DATE}}' => esc((string) ($ipd->str_register_date ?? ($ipd->register_date ?? '-'))),
             '{{DOCTORS}}' => esc(! empty($doctorNames) ? implode(', ', $doctorNames) : '-'),
+            '{{doctor_name}}' => esc(! empty($doctorNames) ? implode(', ', $doctorNames) : '-'),
+            '{{doctor_sign_html}}' => '',
+            '{{phoneno}}' => esc((string) ($person->mphone1 ?? '-')),
             '{{INSURANCE_NAME}}' => esc((string) ($data['insurance_name'] ?? 'Direct')),
             '{{CURRENT_DATE}}' => esc(date('d-m-Y')),
             '{{CURRENT_DATETIME}}' => esc((string) ($data['generated_at'] ?? date('d-m-Y h:i A'))),
+            '{{print_time}}' => esc((string) ($data['generated_at'] ?? date('d-m-Y h:i A'))),
+            '{{qr_content}}' => esc($qrContent),
+            '{{QR_CONTENT}}' => esc($qrContent),
+            '{{qr_code_html}}' => $qrCodeHtml,
+            '{{QR_CODE_HTML}}' => $qrCodeHtml,
         ];
 
-        $html = strtr($templateHtml, $replacements);
+        $headerHtml = trim((string) ($templateRow['header_html'] ?? ''));
+        $footerHtml = trim((string) ($templateRow['footer_html'] ?? ''));
+        $templateCss = trim((string) ($templateRow['template_css'] ?? ''));
+
+        $bodyHtml = $this->applyIpdTemplateTokens($templateHtml, $replacements);
+        $renderedHeader = $headerHtml !== '' ? $this->applyIpdTemplateTokens($headerHtml, $replacements) : '';
+        $renderedFooter = $footerHtml !== '' ? $this->applyIpdTemplateTokens($footerHtml, $replacements) : '';
+
+        $pageTop = (float) ($templateRow['page_margin_top_cm'] ?? 0.8);
+        $pageBottom = (float) ($templateRow['page_margin_bottom_cm'] ?? 0.8);
+        $pageLeft = (float) ($templateRow['page_margin_left_cm'] ?? 0.8);
+        $pageRight = (float) ($templateRow['page_margin_right_cm'] ?? 0.8);
+        $marginHeader = (float) ($templateRow['margin_header_cm'] ?? 0.5);
+        $marginFooter = (float) ($templateRow['margin_footer_cm'] ?? 0.5);
+
+        $pageStyle = '<style>@page {'
+            . 'margin-top:' . max(0, min(25, $pageTop)) . 'cm;'
+            . 'margin-bottom:' . max(0, min(25, $pageBottom)) . 'cm;'
+            . 'margin-left:' . max(0, min(25, $pageLeft)) . 'cm;'
+            . 'margin-right:' . max(0, min(25, $pageRight)) . 'cm;'
+            . 'margin-header:' . max(0, min(25, $marginHeader)) . 'cm;'
+            . 'margin-footer:' . max(0, min(25, $marginFooter)) . 'cm;'
+            . ($renderedHeader !== '' ? 'header: html_myHeader;' : '')
+            . ($renderedFooter !== '' ? 'footer: html_myFooter;' : '')
+            . '}</style>';
+
+        $userStyle = $templateCss !== '' ? ('<style>' . $templateCss . '</style>') : '';
+
+        $headerBlock = '';
+        if ($renderedHeader !== '') {
+            $headerBlock = preg_match('/<\s*htmlpageheader\b/i', $renderedHeader)
+                ? $renderedHeader
+                : ('<htmlpageheader name="myHeader">' . $renderedHeader . '</htmlpageheader>');
+        }
+
+        $footerBlock = '';
+        if ($renderedFooter !== '') {
+            $footerBlock = preg_match('/<\s*htmlpagefooter\b/i', $renderedFooter)
+                ? $renderedFooter
+                : ('<htmlpagefooter name="myFooter">' . $renderedFooter . '</htmlpagefooter>');
+        }
+
+        $html = $pageStyle . $userStyle . $headerBlock . $footerBlock . $bodyHtml;
 
         // Force a Unicode-capable fallback stack so Devanagari text renders in mPDF.
         $fontStyle = '<style>body,table,td,th,p,span,div{font-family:freeserif,dejavusans,sans-serif !important;}</style>';
 
         return $fontStyle . $html;
+    }
+
+    /**
+     * @param array<string, string> $replacements
+     */
+    private function applyIpdTemplateTokens(string $html, array $replacements): string
+    {
+        if ($html === '') {
+            return '';
+        }
+
+        $tokenMap = [];
+        foreach ($replacements as $token => $value) {
+            $cleanToken = trim($token, '{} ');
+            if ($cleanToken === '') {
+                continue;
+            }
+
+            $tokenMap[$cleanToken] = $value;
+            $lower = strtolower($cleanToken);
+            if (! array_key_exists($lower, $tokenMap)) {
+                $tokenMap[$lower] = $value;
+            }
+            $upper = strtoupper($cleanToken);
+            if (! array_key_exists($upper, $tokenMap)) {
+                $tokenMap[$upper] = $value;
+            }
+        }
+
+        return (string) preg_replace_callback('/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/', static function (array $match) use ($tokenMap) {
+            $name = (string) ($match[1] ?? '');
+            if ($name === '') {
+                return (string) ($match[0] ?? '');
+            }
+
+            if (array_key_exists($name, $tokenMap)) {
+                return $tokenMap[$name];
+            }
+
+            $lower = strtolower($name);
+            if (array_key_exists($lower, $tokenMap)) {
+                return $tokenMap[$lower];
+            }
+
+            $upper = strtoupper($name);
+            if (array_key_exists($upper, $tokenMap)) {
+                return $tokenMap[$upper];
+            }
+
+            return (string) ($match[0] ?? '');
+        }, $html);
     }
 
     private function calculateCashBalanceTotals(array $rows): array
