@@ -4519,9 +4519,9 @@ class Opd_prescription extends BaseController
         $builder = $this->db->table($table)->select($select);
         if ($q !== '') {
             $builder->groupStart()
-                ->like($nameField, $q);
+                ->like($nameField, $q, 'after');
             if ($formField !== null) {
-                $builder->orLike($formField, $q);
+                $builder->orLike($formField, $q, 'after');
             }
             $builder->groupEnd();
         }
