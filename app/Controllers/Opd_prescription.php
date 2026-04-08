@@ -4505,7 +4505,7 @@ class Opd_prescription extends BaseController
         }
 
         $userId = (int) ($this->getCurrentUserId() ?? 0);
-        $cacheKey = 'medicine_search:v2:' . md5(json_encode([
+        $cacheKey = 'medicine_search_v2_' . md5(json_encode([
             'q' => strtoupper($q),
             'scope' => $scope,
             'user' => $userId,
