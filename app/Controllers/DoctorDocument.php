@@ -134,6 +134,59 @@ class DoctorDocument extends BaseController
         return round($number, 2);
     }
 
+    /**
+     * Replace {{PLACEHOLDER}} tokens in a custom header/footer HTML string
+     * with live hospital constants and patient data before passing to mPDF.
+     *
+     * @param array<string, mixed> $doc  Row from patient_doc join query
+     */
+    private function resolveDocPrintTemplatePlaceholders(string $html, array $doc): string
+    {
+        if ($html === '') {
+            return '';
+        }
+
+        $logoFile    = defined('H_logo') ? (string) constant('H_logo') : 'logo.png';
+        $logoAbsPath = FCPATH . 'assets/images/' . $logoFile;
+        $logoHtml    = '<img style="width:100px;vertical-align:top;" src="'
+            . base_url('assets/images/' . $logoFile) . '" />';
+
+        $age    = (string) ($doc['age']    ?? '');
+        $gender = (string) ($doc['gender'] ?? '');
+        $ageSex = trim($age . ($gender !== '' ? '/' . $gender : ''));
+
+        $drSignImg  = '';
+        $drSignFile = (string) ($doc['dr_sign'] ?? $doc['sign_image'] ?? $doc['doctor_sign'] ?? '');
+        if ($drSignFile !== '') {
+            $drSignImg = '<img style="height:40px;" src="' . base_url('assets/images/' . $drSignFile) . '" />';
+        }
+
+        $map = [
+            '{{H_Name}}'             => defined('H_Name')      ? (string) constant('H_Name')      : '',
+            '{{H_address_1}}'        => defined('H_address_1') ? (string) constant('H_address_1') : '',
+            '{{H_address_2}}'        => defined('H_address_2') ? (string) constant('H_address_2') : '',
+            '{{H_phone_No}}'         => defined('H_phone_No')  ? (string) constant('H_phone_No')  : '',
+            '{{H_Email}}'            => defined('H_Email')     ? (string) constant('H_Email')     : '',
+            '{{H_logo}}'             => $logoFile,
+            '{{H_logo_abs}}'         => $logoAbsPath,
+            '{{hospital_logo_html}}' => $logoHtml,
+            '{{PATIENT_NAME}}'       => (string) ($doc['p_fname'] ?? ''),
+            '{{pName}}'              => (string) ($doc['p_fname'] ?? ''),
+            '{{UHID}}'               => (string) ($doc['p_code']  ?? ''),
+            '{{AGE_GENDER}}'         => $ageSex,
+            '{{age_sex}}'            => $ageSex,
+            '{{phoneno}}'            => (string) ($doc['phoneno'] ?? $doc['phone_no'] ?? $doc['contact_no'] ?? ''),
+            '{{doctor_name}}'        => (string) ($doc['dr_name'] ?? ''),
+            '{{doctor_sign_html}}'   => $drSignImg,
+            '{{CURRENT_DATE}}'       => date('d-m-Y'),
+            '{{CURRENT_DATETIME}}'   => date('d-m-Y H:i'),
+            '{{print_time}}'         => date('d-m-Y H:i:s'),
+            '{{qr_content}}'         => (string) ($doc['id'] ?? ''),
+        ];
+
+        return str_replace(array_keys($map), array_values($map), $html);
+    }
+
     private function hasColumn(string $table, string $column): bool
     {
         if (! $this->db->tableExists($table)) {
@@ -975,6 +1028,15 @@ class DoctorDocument extends BaseController
             . $headerRef . '</td><td style="text-align:right">Date : ' . $issueDate . '</td></tr></tbody></table>';
         $content .= (string) ($patientDoc['raw_data'] ?? '');
 
+        $customHeaderHtml = $this->resolveDocPrintTemplatePlaceholders(
+            (string) ($selectedPrintTemplate['header_html'] ?? ''),
+            $patientDoc
+        );
+        $customFooterHtml = $this->resolveDocPrintTemplatePlaceholders(
+            (string) ($selectedPrintTemplate['footer_html'] ?? ''),
+            $patientDoc
+        );
+
         $data = [
             'content' => $content,
             'print_on_type' => $resolvedPrintType,
@@ -987,8 +1049,8 @@ class DoctorDocument extends BaseController
             'print_right_margin' => $printRightMargin,
             'print_header_margin' => $printHeaderMargin,
             'print_footer_margin' => $printFooterMargin,
-            'custom_header_html' => (string) ($selectedPrintTemplate['header_html'] ?? ''),
-            'custom_footer_html' => (string) ($selectedPrintTemplate['footer_html'] ?? ''),
+            'custom_header_html' => $customHeaderHtml,
+            'custom_footer_html' => $customFooterHtml,
         ];
 
         $mpdfTempDir = WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'mpdf';
