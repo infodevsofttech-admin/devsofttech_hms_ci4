@@ -8,6 +8,7 @@ $headerMargin = number_format((float) ($print_header_margin ?? 0.50), 2, '.', ''
 $footerMargin = number_format((float) ($print_footer_margin ?? 1.50), 2, '.', '');
 $customHeaderHtml = (string) ($custom_header_html ?? '');
 $customFooterHtml = (string) ($custom_footer_html ?? '');
+$hasSelectedPrintTemplate = ! empty($has_selected_print_template);
 ?>
 <style>
 @page {
@@ -47,7 +48,7 @@ $customFooterHtml = (string) ($custom_footer_html ?? '');
 <htmlpagefooter name="myFooter">
 <?php if (trim($customFooterHtml) !== ''): ?>
 <?= $customFooterHtml ?>
-<?php else: ?>
+<?php elseif (! $hasSelectedPrintTemplate): ?>
 <table width="100%" style="font-size:10px;">
     <tr>
         <td width="15%">Page : {PAGENO}/{nbpg}</td>

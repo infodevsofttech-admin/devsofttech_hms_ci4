@@ -1055,6 +1055,7 @@ class DoctorDocument extends BaseController
             'print_footer_margin' => $printFooterMargin,
             'custom_header_html' => $customHeaderHtml,
             'custom_footer_html' => $customFooterHtml,
+            'has_selected_print_template' => is_array($selectedPrintTemplate),
         ];
 
         $mpdfTempDir = WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'mpdf';
