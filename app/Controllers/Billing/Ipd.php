@@ -165,7 +165,14 @@ class Ipd extends BaseController
             return $permission;
         }
 
-        $panelData = $this->ipdModel->getIpdPanelInfo($ipdId);
+        try {
+            $panelData = $this->ipdModel->getIpdPanelInfo($ipdId);
+        } catch (\Throwable $e) {
+            log_message('error', 'IPD panel load failed for IPD #' . $ipdId . ': ' . $e->getMessage());
+
+            return $this->response->setStatusCode(500)->setBody('Unable to load IPD panel');
+        }
+
         if (empty($panelData)) {
             return $this->response->setStatusCode(404)->setBody('IPD not found');
         }
@@ -384,7 +391,16 @@ class Ipd extends BaseController
             return $permission;
         }
 
-        $panelData = $this->ipdModel->getIpdPanelInfo($ipdId);
+        try {
+            $panelData = $this->ipdModel->getIpdPanelInfo($ipdId);
+        } catch (\Throwable $e) {
+            log_message('error', 'IPD panel tab load failed for IPD #' . $ipdId . ' tab ' . $tab . ': ' . $e->getMessage());
+            if ($tab === 'ipd-charges') {
+                return '<div class="alert alert-danger m-2">Unable to load IPD Charges right now. Please contact admin and check server log for IPD #' . (int) $ipdId . '.</div>';
+            }
+
+            return $this->response->setStatusCode(500)->setBody('Unable to load IPD tab');
+        }
         if (empty($panelData)) {
             return $this->response->setStatusCode(404)->setBody('IPD not found');
         }
@@ -445,7 +461,7 @@ class Ipd extends BaseController
             } catch (\Throwable $e) {
                 log_message('error', 'IPD Charges tab failed for IPD #' . $ipdId . ': ' . $e->getMessage());
                 $panelData['ipd_charges_grouped'] = [];
-                $panelData['ipd_charges_total'] = (object) ['total_amt' => 0, 'package_amt' => 0, 'patient_amt' => 0];
+                $panelData['ipd_charges_total'] = 0;
                 $panelData['ipd_packages'] = [];
                 $panelData['bedside_items_by_category'] = [];
                 $panelData['ipd_insurance_id'] = 0;
