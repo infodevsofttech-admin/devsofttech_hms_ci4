@@ -1112,6 +1112,10 @@
     var investigationBatchActive = false;
     var activeMedicineScope = 'all';
     var medicineSuggestRows = [];
+    var medicineSearchCache = {};
+    var medicineSearchCacheTtlMs = 120000;
+    var medInputTimer = null;
+    var crgcMedInputTimer = null;
     var medicineDoseMasterCache = { dose: [], when: [], freq: [], where: [] };
     var investigationProfiles = {
         cardiac: ['ECG', 'Lipid Profile', 'CBC'],
@@ -1171,6 +1175,33 @@
             updateCsrf(data);
             cb(data || {});
         }, 'json');
+    }
+
+    function getMedicineSearchCacheKey(query, scope) {
+        return (scope || 'all') + '|' + (query || '').trim().toUpperCase();
+    }
+
+    function fetchMedicineSuggestions(query, scope, done) {
+        var q = (query || '').trim();
+        if (q.length < 2) {
+            done([]);
+            return;
+        }
+
+        var useScope = (scope || 'all').toString();
+        var cacheKey = getMedicineSearchCacheKey(q, useScope);
+        var now = Date.now();
+        var hit = medicineSearchCache[cacheKey];
+        if (hit && (now - (hit.ts || 0) < medicineSearchCacheTtlMs)) {
+            done(hit.rows || []);
+            return;
+        }
+
+        apiGet('<?= base_url('Opd_prescription/medicine_search') ?>?q=' + encodeURIComponent(q) + '&scope=' + encodeURIComponent(useScope) + '&limit=10', function(data) {
+            var rows = (data && data.rows) ? data.rows : [];
+            medicineSearchCache[cacheKey] = { ts: now, rows: rows };
+            done(rows);
+        });
     }
 
     function renderMedicineMasterSelectOptions($select, rows, placeholder) {
@@ -4803,13 +4834,18 @@
     // Medicine name autocomplete inside create modal
     $('#crgc_med_name').on('input', function() {
         var q = ($(this).val() || '').trim();
+        if (crgcMedInputTimer) {
+            clearTimeout(crgcMedInputTimer);
+            crgcMedInputTimer = null;
+        }
         if (q.length < 2) {
             crgcMedSuggestRows = [];
             $('#crgc_med_suggest').html('');
             return;
         }
-        apiGet('<?= base_url('Opd_prescription/medicine_search') ?>?q=' + encodeURIComponent(q) + '&scope=all', function(data) {
-            crgcMedSuggestRows = data.rows || [];
+        crgcMedInputTimer = setTimeout(function() {
+            fetchMedicineSuggestions(q, 'all', function(rows) {
+            crgcMedSuggestRows = rows || [];
             var html = '';
             crgcMedSuggestRows.forEach(function(row) {
                 html += '<option value="' + $('<div>').text(row.med_name || '').html() + '"'  
@@ -4826,7 +4862,8 @@
                     break;
                 }
             }
-        });
+            });
+        }, 180);
     });
 
     $('#crgc_med_name').on('change', function() {
@@ -5025,14 +5062,19 @@
 
     $('#med_name').on('input', function() {
         var q = ($(this).val() || '').trim();
+        if (medInputTimer) {
+            clearTimeout(medInputTimer);
+            medInputTimer = null;
+        }
         if (q.length < 2) {
             medicineSuggestRows = [];
             $('#medicine_suggest').html('');
             return;
         }
-        apiGet('<?= base_url('Opd_prescription/medicine_search') ?>?q=' + encodeURIComponent(q) + '&scope=' + encodeURIComponent(activeMedicineScope), function(data) {
+        medInputTimer = setTimeout(function() {
+        fetchMedicineSuggestions(q, activeMedicineScope, function(rows) {
             var html = '';
-            medicineSuggestRows = data.rows || [];
+            medicineSuggestRows = rows || [];
             medicineSuggestRows.forEach(function(row) {
                 html += '<option '
                     + 'value="' + $('<div>').text(row.med_name || '').html() + '" '
@@ -5060,6 +5102,7 @@
                 }
             }
         });
+        }, 180);
     });
 
     $('#med_name').on('change', function() {

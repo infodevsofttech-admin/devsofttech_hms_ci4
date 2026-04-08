@@ -2242,8 +2242,17 @@ class Opd_prescription extends BaseController
         unset($row);
 
         $userId = (int) ($this->getCurrentUserId() ?? 0);
-        $favoriteMap = $userId > 0 ? $this->getUserFavoriteMedicineIds($userId) : [];
-        $usageMap = $userId > 0 ? $this->getUserMedicineUsageMap($userId) : [];
+        $candidateIds = [];
+        foreach ($rows as $row) {
+            $medId = (int) ($row['id'] ?? 0);
+            if ($medId > 0) {
+                $candidateIds[] = $medId;
+            }
+        }
+        $candidateIds = array_values(array_unique($candidateIds));
+
+        $favoriteMap = $userId > 0 ? $this->getUserFavoriteMedicineIds($userId, $candidateIds) : [];
+        $usageMap = $userId > 0 ? $this->getUserMedicineUsageMap($userId, $candidateIds) : [];
 
         foreach ($rows as &$row) {
             $medId = (int) ($row['id'] ?? 0);
@@ -4435,8 +4444,17 @@ class Opd_prescription extends BaseController
     {
         $q = trim((string) $this->request->getGet('q'));
         $scope = strtolower(trim((string) $this->request->getGet('scope')));
+        $limit = (int) ($this->request->getGet('limit') ?? 10);
+        if ($limit <= 0) {
+            $limit = 10;
+        }
+        $limit = min(10, $limit);
         if (! in_array($scope, ['active', 'favorite', 'all'], true)) {
             $scope = 'active';
+        }
+
+        if ($q === '') {
+            return $this->response->setJSON(['rows' => []]);
         }
 
         $table = $this->findExistingTable(['opd_med_master']);
@@ -4486,6 +4504,18 @@ class Opd_prescription extends BaseController
             $select .= ',' . $remarkField . ' as remark';
         }
 
+        $userId = (int) ($this->getCurrentUserId() ?? 0);
+        $cacheKey = 'medicine_search:v2:' . md5(json_encode([
+            'q' => strtoupper($q),
+            'scope' => $scope,
+            'user' => $userId,
+            'limit' => $limit,
+        ]));
+        $cachedRows = cache($cacheKey);
+        if (is_array($cachedRows)) {
+            return $this->response->setJSON(['rows' => $cachedRows]);
+        }
+
         $builder = $this->db->table($table)->select($select);
         if ($q !== '') {
             $builder->groupStart()
@@ -4497,7 +4527,7 @@ class Opd_prescription extends BaseController
         }
 
         $rows = $builder
-            ->limit(500)
+            ->limit(120)
             ->get()
             ->getResultArray();
 
@@ -4505,7 +4535,6 @@ class Opd_prescription extends BaseController
             return $this->response->setJSON(['rows' => []]);
         }
 
-        $userId = (int) ($this->getCurrentUserId() ?? 0);
         $favoriteMap = $userId > 0 ? $this->getUserFavoriteMedicineIds($userId) : [];
         $usageMap = $userId > 0 ? $this->getUserMedicineUsageMap($userId) : [];
         $qUpper = strtoupper($q);
@@ -4572,11 +4601,13 @@ class Opd_prescription extends BaseController
             return $nameA <=> $nameB;
         });
 
-        $rows = array_slice($rows, 0, 40);
+        $rows = array_slice($rows, 0, $limit);
         foreach ($rows as &$row) {
             unset($row['_score']);
         }
         unset($row);
+
+        cache()->save($cacheKey, $rows, 120);
 
         return $this->response->setJSON(['rows' => $rows]);
     }
@@ -5105,17 +5136,22 @@ class Opd_prescription extends BaseController
     /**
      * @return array<int, bool>
      */
-    private function getUserFavoriteMedicineIds(int $userId): array
+    private function getUserFavoriteMedicineIds(int $userId, array $medIds = []): array
     {
         if ($userId <= 0 || ! $this->db->tableExists('opd_medicine_favorites')) {
             return [];
         }
 
-        $rows = $this->db->table('opd_medicine_favorites')
+        $builder = $this->db->table('opd_medicine_favorites')
             ->select('med_id')
-            ->where('user_id', $userId)
-            ->get()
-            ->getResultArray();
+            ->where('user_id', $userId);
+
+        $medIds = array_values(array_unique(array_filter(array_map('intval', $medIds), static fn (int $id): bool => $id > 0)));
+        if (! empty($medIds)) {
+            $builder->whereIn('med_id', $medIds);
+        }
+
+        $rows = $builder->get()->getResultArray();
 
         $out = [];
         foreach ($rows as $row) {
@@ -5131,17 +5167,22 @@ class Opd_prescription extends BaseController
     /**
      * @return array<int, array{use_count:int,last_used_at:string}>
      */
-    private function getUserMedicineUsageMap(int $userId): array
+    private function getUserMedicineUsageMap(int $userId, array $medIds = []): array
     {
         if ($userId <= 0 || ! $this->db->tableExists('opd_medicine_usage')) {
             return [];
         }
 
-        $rows = $this->db->table('opd_medicine_usage')
+        $builder = $this->db->table('opd_medicine_usage')
             ->select('med_id,use_count,last_used_at')
-            ->where('user_id', $userId)
-            ->get()
-            ->getResultArray();
+            ->where('user_id', $userId);
+
+        $medIds = array_values(array_unique(array_filter(array_map('intval', $medIds), static fn (int $id): bool => $id > 0)));
+        if (! empty($medIds)) {
+            $builder->whereIn('med_id', $medIds);
+        }
+
+        $rows = $builder->get()->getResultArray();
 
         $out = [];
         foreach ($rows as $row) {
