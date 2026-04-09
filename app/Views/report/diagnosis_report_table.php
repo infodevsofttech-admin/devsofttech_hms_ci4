@@ -3,6 +3,7 @@ $rows = $rows ?? [];
 $minRange = $min_range ?? '';
 $maxRange = $max_range ?? '';
 $invoiceTypeLabel = $invoice_type_label ?? 'All Types';
+$referDoctorLabel = $refer_doctor_label ?? 'All Refer Doctors';
 
 $formatIndianDateTime = static function ($value): string {
     $value = trim((string) $value);
@@ -25,6 +26,7 @@ $maxRangeDisplay = $formatIndianDateTime($maxRange);
 <div class="mb-3">
     <p><strong>Date Range:</strong> <?= esc($minRangeDisplay) ?> to <?= esc($maxRangeDisplay) ?></p>
     <p><strong>Invoice Type:</strong> <?= esc($invoiceTypeLabel) ?></p>
+    <p><strong>Refer Doctor:</strong> <?= esc($referDoctorLabel) ?></p>
 </div>
 
 <?php if (empty($rows)) : ?>

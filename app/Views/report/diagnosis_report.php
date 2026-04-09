@@ -1,5 +1,6 @@
 <?php
 $itemTypes = $item_types ?? [];
+$referDoctors = $refer_doctors ?? [];
 ?>
 <section class="content">
     <div class="card">
@@ -15,7 +16,7 @@ $itemTypes = $item_types ?? [];
                         <input type="datetime-local" class="form-control" id="report_end">
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label class="form-label">Invoice Type</label>
                     <select class="form-control" id="invoice_type" name="invoice_type">
                         <option value="0">All Types</option>
@@ -24,7 +25,16 @@ $itemTypes = $item_types ?? [];
                         <option value="3">Organization</option>
                     </select>
                 </div>
-                <div class="col-md-5">
+                <div class="col-md-3">
+                    <label class="form-label">Refer Doctor</label>
+                    <select class="form-control select2" id="refer_doctor_id" name="refer_doctor_id" data-placeholder="Select Refer Doctor">
+                        <option value="0">All Refer Doctors</option>
+                        <?php foreach ($referDoctors as $row) : ?>
+                            <option value="<?= esc($row->id ?? '') ?>"><?= esc($row->p_fname ?? '') ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-md-3">
                     <label class="form-label">Diagnosis Head</label>
                     <select class="form-control select2" id="diagnosis_id" name="diagnosis_id" multiple data-placeholder="Select Diagnosis">
                         <option value="0">All Diagnosis</option>
@@ -86,6 +96,7 @@ $itemTypes = $item_types ?? [];
             var dateRange = startVal + 'S' + endVal;
 
             var invoiceType = document.getElementById('invoice_type').value || '0';
+            var referDoctorId = document.getElementById('refer_doctor_id').value || '0';
 
             var diagnosisSelect = document.getElementById('diagnosis_id');
             var diagnosisValues = Array.prototype.filter.call(diagnosisSelect.options, function(option) {
@@ -97,7 +108,8 @@ $itemTypes = $item_types ?? [];
             var diagnosisList = diagnosisValues.length ? diagnosisValues.join('S') : '0';
 
             return '<?= base_url('Report/diagnosis_report_data') ?>/' 
-                + encodeURIComponent(dateRange) + '/' + invoiceType + '/' + diagnosisList;
+                + encodeURIComponent(dateRange) + '/' + invoiceType + '/' + diagnosisList
+                + '?refer_doctor_id=' + encodeURIComponent(referDoctorId);
         }
 
         document.getElementById('show_report').addEventListener('click', function() {

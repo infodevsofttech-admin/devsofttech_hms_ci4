@@ -698,8 +698,16 @@ class Report extends BaseController
             ->get()
             ->getResult();
 
+        $referDoctors = $this->db->table('doctor_master')
+            ->select('id, p_fname')
+            ->where('active', 1)
+            ->orderBy('p_fname', 'ASC')
+            ->get()
+            ->getResult();
+
         return view('report/diagnosis_report', [
             'item_types' => $itemTypes,
+            'refer_doctors' => $referDoctors,
         ]);
     }
 
@@ -870,8 +878,26 @@ class Report extends BaseController
         int $output = 0
     ) {
         [$minRange, $maxRange] = $this->parseDateRange($dateRange);
+        $referDoctorId = (int) ($this->request->getGet('refer_doctor_id') ?? 0);
+        $referDoctorLabel = 'All Refer Doctors';
 
         $netAmountExpr = "ROUND(IF(m.invoice_status=1, (t.item_amount - (t.item_amount * m.discount_amount / NULLIF(m.total_amount, 0))), 0), 2)";
+
+        $invoiceFields = $this->db->getFieldNames('invoice_master') ?? [];
+        $referByIdCol = $this->resolveExistingColumn($invoiceFields, ['refer_by_id', 'doctor_id', 'doc_id']);
+        $referByNameCol = $this->resolveExistingColumn($invoiceFields, ['refer_by_other', 'doc_name', 'doctor_name']);
+
+        if ($referDoctorId > 0 && $this->db->tableExists('doctor_master')) {
+            $doctorRow = $this->db->table('doctor_master')
+                ->select('p_fname')
+                ->where('id', $referDoctorId)
+                ->get()
+                ->getRow();
+
+            if ($doctorRow !== null && trim((string) ($doctorRow->p_fname ?? '')) !== '') {
+                $referDoctorLabel = (string) $doctorRow->p_fname;
+            }
+        }
 
         $builder = $this->db->table('invoice_master m');
         $builder->select('y.group_desc, t.item_name')
@@ -889,6 +915,14 @@ class Report extends BaseController
             ->where('m.invoice_status', 1)
             ->where('m.inv_date >=', $minRange)
             ->where('m.inv_date <=', $maxRange);
+
+        if ($referDoctorId > 0) {
+            if ($referByIdCol !== null) {
+                $builder->where('m.' . $referByIdCol, $referDoctorId);
+            } elseif ($referByNameCol !== null && $referDoctorLabel !== 'All Refer Doctors') {
+                $builder->where('m.' . $referByNameCol, $referDoctorLabel);
+            }
+        }
 
         // Invoice type filter
         $invoiceTypeInt = (int) $invoiceType;
@@ -922,6 +956,7 @@ class Report extends BaseController
             'min_range' => $minRange,
             'max_range' => $maxRange,
             'invoice_type_label' => $invoiceTypeLabel,
+            'refer_doctor_label' => $referDoctorLabel,
         ];
 
         $content = view('report/diagnosis_report_table', $data);
