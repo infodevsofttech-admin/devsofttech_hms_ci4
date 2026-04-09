@@ -37,6 +37,12 @@
 <h3 align="center">Org Payment Credit Receipt  : <?= esc($req_payment_order[0]->pay_id ?? '') ?></h3>
 </htmlpageheader>
 
+<htmlpagefooter name="myFooter">
+    <div style="font-size: 9px; text-align: center; color: #666; border-top: 1px solid #ccc; padding-top: 4px;">
+        Printed on <?= esc(date('d-m-Y H:i:s')) ?> | Page {PAGENO}
+    </div>
+</htmlpagefooter>
+
 <table width="100%" style="font-size: 10px;">
     <tr>
         <td width="50%" >Patient Info.<br/>
