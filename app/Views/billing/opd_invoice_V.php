@@ -503,9 +503,18 @@ $paymentHistoryRows = $payment_history_rows ?? [];
                     "opd_fee_amt": $('#input_opd_fee_amt').val(),
                     "datepicker_opddate": $('#datepicker_opddate').val(),
                     [csrf.name]: csrf.value
-                }, function() {
+                }, function(data) {
+                    updateCsrf(data);
+                    if (data && data.update == 0) {
+                        if (typeof notify === 'function') {
+                            notify('error', 'Please Attention', data.error_text || 'Unable to update OPD invoice details.');
+                        } else {
+                            $('div.jsError').html(data.error_text || 'Unable to update OPD invoice details.');
+                        }
+                        return;
+                    }
                     load_form('<?= base_url('Opd/invoice') ?>/' + $('#oid').val());
-                });
+                }, 'json');
             }
         });
     })();

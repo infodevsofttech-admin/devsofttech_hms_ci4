@@ -478,6 +478,7 @@ $routes->match(['get', 'post'], 'Opd/opd_status/(:num)/(:num)', 'Opd::opd_status
 $routes->post('Opd/showfee', 'Opd::showfee');
 $routes->post('Opd/confirm_opd', 'Opd::confirm_opd');
 $routes->post('Opd/confirm_payment', 'Opd::confirm_payment');
+$routes->post('Opd/update_doc_date/(:num)', 'Opd::update_doc_date/$1');
 $routes->post('Opd/opd_discount_update/(:num)', 'Opd::opd_discount_update/$1');
 $routes->post('Opd/opd_cancel/(:num)', 'Opd::opd_cancel/$1');
 $routes->match(['get', 'post'], 'Opd/opd_load_doc/(:num)', 'Opd::opd_load_doc/$1');

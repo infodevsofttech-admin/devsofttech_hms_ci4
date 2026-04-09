@@ -4221,6 +4221,210 @@ class Opd extends BaseController
         }
     }
 
+    private function syncOpdQueueAfterDoctorDateUpdate(int $opdId, int $doctorId, string $appointmentDate): void
+    {
+        if ($opdId <= 0 || $doctorId <= 0 || $appointmentDate === '' || ! $this->db->tableExists('opd_prescription')) {
+            return;
+        }
+
+        $queueRow = $this->db->table('opd_prescription')
+            ->where('opd_id', $opdId)
+            ->get(1)
+            ->getRowArray();
+        if (empty($queueRow)) {
+            return;
+        }
+
+        $fields = $this->db->getFieldNames('opd_prescription');
+        $update = [];
+
+        if (in_array('doc_id', $fields, true)) {
+            $update['doc_id'] = $doctorId;
+        }
+
+        if (in_array('date_opd_visit', $fields, true)) {
+            $update['date_opd_visit'] = $appointmentDate;
+        }
+
+        if (in_array('queue_no', $fields, true)) {
+            $maxQueue = $this->db->query(
+                'SELECT COALESCE(MAX(pr.queue_no), 0) AS max_queue'
+                . ' FROM opd_prescription pr'
+                . ' INNER JOIN opd_master om ON om.opd_id = pr.opd_id'
+                . ' WHERE pr.date_opd_visit = ? AND om.doc_id = ? AND pr.opd_id <> ?',
+                [$appointmentDate, $doctorId, $opdId]
+            )->getRow();
+
+            $update['queue_no'] = (int) ($maxQueue->max_queue ?? 0) + 1;
+        }
+
+        if (! empty($update)) {
+            $this->db->table('opd_prescription')->where('opd_id', $opdId)->update($update);
+        }
+    }
+
+    public function update_doc_date(int $opdId)
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'update' => 0,
+                'error_text' => 'Invalid request',
+            ]);
+        }
+
+        $opdId = (int) ($this->request->getPost('oid') ?? $opdId);
+        $doctorId = (int) $this->request->getPost('doc_name_id');
+        $grossAmount = (float) $this->request->getPost('opd_fee_amt');
+        $appointmentDateInput = trim((string) $this->request->getPost('datepicker_opddate'));
+
+        if ($opdId <= 0) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Invalid OPD ID',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        if ($doctorId <= 0) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Please select a doctor.',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        if ($appointmentDateInput === '') {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Appointment date is required.',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        if ($grossAmount < 0) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'OPD fee cannot be negative.',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $appointmentDate = str_to_MysqlDate($appointmentDateInput);
+        if ($appointmentDate === '1900-01-01') {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Invalid appointment date.',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $opdRow = $this->db->table('opd_master')->where('opd_id', $opdId)->get(1)->getRowArray();
+        if (empty($opdRow)) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'OPD not found',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $doctorInfo = $this->db->query(
+            'SELECT d.id, d.p_fname, COALESCE(GROUP_CONCAT(m.SpecName), "") AS SpecName'
+            . ' FROM doctor_master d'
+            . ' LEFT JOIN doc_spec s ON d.id = s.doc_id'
+            . ' LEFT JOIN med_spec m ON s.med_spec_id = m.id'
+            . ' WHERE d.active = 1 AND d.id = ?'
+            . ' GROUP BY d.id, d.p_fname',
+            [$doctorId]
+        )->getRowArray();
+
+        if (empty($doctorInfo)) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Selected doctor was not found.',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $user = auth()->user();
+        $userLabel = (string) ($user->username ?? $user->email ?? 'User');
+        $userId = (int) ($user->id ?? 0);
+        $userNameInfo = $userLabel . '[' . $userId . ']:T-' . date('d-m-Y H:i:s');
+
+        $discount = (float) ($opdRow['opd_discount'] ?? 0);
+        $netAmount = max(0, $grossAmount - $discount);
+
+        $dataUpdate = [
+            'doc_id' => $doctorId,
+            'doc_name' => (string) ($doctorInfo['p_fname'] ?? ''),
+            'doc_spec' => (string) ($doctorInfo['SpecName'] ?? ''),
+            'apointment_date' => $appointmentDate,
+            'opd_fee_gross_amount' => $grossAmount,
+            'opd_fee_amount' => $netAmount,
+        ];
+
+        $paymentModel = new PaymentModel();
+        $this->db->transStart();
+
+        $this->db->table('opd_master')->where('opd_id', $opdId)->update($dataUpdate);
+
+        $linkedPaymentId = (int) ($opdRow['payment_id'] ?? 0);
+        if ($linkedPaymentId > 0) {
+            $paymentHistory = $this->db->table('payment_history')
+                ->where('payof_type', 1)
+                ->where('payof_id', $opdId)
+                ->where('id', $linkedPaymentId)
+                ->get(1)
+                ->getRowArray();
+
+            if (! empty($paymentHistory)) {
+                $amountDiff = (float) ($paymentHistory['amount'] ?? 0) - $netAmount;
+                if (abs($amountDiff) > 0.00001) {
+                    $suffix = 'Update OPD Rate Difference '
+                        . number_format($amountDiff, 2, '.', '')
+                        . ' :By '
+                        . $userNameInfo;
+                    $remark = trim((string) ($paymentHistory['remark'] ?? ''));
+                    if ($remark !== '') {
+                        $remark .= ' /' . $suffix;
+                    } else {
+                        $remark = $suffix;
+                    }
+
+                    $paymentModel->updatePayment([
+                        'amount' => $netAmount,
+                        'remark' => $remark,
+                    ], (int) $paymentHistory['id']);
+                }
+            }
+        }
+
+        $this->syncOpdQueueAfterDoctorDateUpdate($opdId, $doctorId, $appointmentDate);
+
+        $this->db->transComplete();
+        if (! $this->db->transStatus()) {
+            return $this->response->setStatusCode(500)->setJSON([
+                'update' => 0,
+                'error_text' => 'Unable to update OPD invoice details.',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'showcontent' => 'Doctor/date updated',
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
     public function opd_discount_update(int $opdId)
     {
         if (!$this->request->isAJAX()) {
