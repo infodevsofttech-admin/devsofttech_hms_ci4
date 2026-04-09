@@ -36,7 +36,8 @@
         <div class="card border-primary mt-2">
             <div class="card-header py-2"><strong>AI Diagnosis Support</strong></div>
             <div class="card-body">
-                <div class="small text-muted" id="opd_scan_ai_result">AI analysis runs automatically in background after each scan/upload.</div>
+                <button type="button" id="opd_scan_ai_process_btn" class="btn btn-primary btn-sm mb-2" disabled>Process AI</button>
+                <div class="small text-muted" id="opd_scan_ai_result">Capture or upload a file, then click Process AI when needed.</div>
             </div>
         </div>
     </div>
@@ -51,11 +52,13 @@
     var $captureBtn = $('#opd_scan_capture_btn');
     var $stopBtn = $('#opd_scan_stop_btn');
     var $uploadBtn = $('#opd_scan_upload_btn');
+    var $processAiBtn = $('#opd_scan_ai_process_btn');
     var $results = $('#opd_scan_results');
     var $textBox = $('#opd_scan_text_box');
     var $aiResult = $('#opd_scan_ai_result');
     var opdid = parseInt($('#opd_scan_opdid').val() || '0', 10);
     var listPollingTimer = null;
+    var latestFileId = 0;
 
     function getCsrfPair() {
         var input = document.querySelector('input[name="<?= csrf_token() ?>"]');
@@ -114,7 +117,7 @@
 
     function renderExtractedText(text) {
         if (!text) {
-            $textBox.html('<div class="text-muted small">AI extraction is running in background. You can continue scanning other documents.</div>');
+            $textBox.html('<div class="text-muted small">AI text is not processed yet. Click Process AI to extract text.</div>');
             return;
         }
         var safe = $('<div>').text(text).html();
@@ -128,6 +131,8 @@
             return;
         }
 
+        $processAiBtn.prop('disabled', true).text('Processing...');
+
         var csrf = getCsrfPair();
         var payload = {
             file_id: fileId,
@@ -140,14 +145,26 @@
             if (data && parseInt(data.update || '0', 10) === 1) {
                 $aiResult.removeClass('text-danger').addClass('text-muted').text('AI completed for latest report.');
             } else {
-                var msg = (data && data.error_text) ? data.error_text : 'Background AI processing failed for one file.';
+                var msg = (data && data.error_text) ? data.error_text : 'AI processing failed for this file.';
                 $aiResult.removeClass('text-muted').addClass('text-danger').text(msg);
             }
+            $processAiBtn.prop('disabled', latestFileId <= 0).text('Process AI');
             loadLastList();
         }, 'json').fail(function() {
-            $aiResult.removeClass('text-muted').addClass('text-danger').text('Background AI processing failed for one file.');
+            $aiResult.removeClass('text-muted').addClass('text-danger').text('AI processing failed for this file.');
+            $processAiBtn.prop('disabled', latestFileId <= 0).text('Process AI');
             loadLastList();
         });
+    }
+
+    function processLatestAi() {
+        if (latestFileId <= 0) {
+            $aiResult.removeClass('text-muted').addClass('text-danger').text('Capture or upload a file before running AI.');
+            return;
+        }
+        $aiResult.removeClass('text-danger').addClass('text-muted').text('AI processing started...');
+        renderExtractedText('');
+        queueAiProcessing(latestFileId);
     }
 
     function startListPolling() {
@@ -189,8 +206,9 @@
                 }
 
                 renderExtractedText('');
-                $aiResult.removeClass('text-danger text-success').addClass('text-muted').text('Queued for background AI analysis...');
-                queueAiProcessing(parseInt(data.file_id || '0', 10));
+                latestFileId = parseInt(data.file_id || '0', 10);
+                $processAiBtn.prop('disabled', latestFileId <= 0).text('Process AI');
+                $aiResult.removeClass('text-danger text-success').addClass('text-muted').text('File saved. Click Process AI when you want analysis.');
                 loadLastList();
             },
             error: function() {
@@ -215,7 +233,7 @@
         }
 
         $captureBtn.prop('disabled', true);
-        $textBox.html('<div class="text-muted small">Processing scan text...</div>');
+        $textBox.html('<div class="text-muted small">Capturing and uploading file...</div>');
 
         var canvas = $canvas.get(0);
         canvas.width = video.videoWidth;
@@ -263,6 +281,7 @@
     $captureBtn.off('click.opdscan').on('click.opdscan', captureAndUpload);
     $stopBtn.off('click.opdscan').on('click.opdscan', stopCamera);
     $uploadBtn.off('click.opdscan').on('click.opdscan', uploadSelectedFile);
+    $processAiBtn.off('click.opdscan').on('click.opdscan', processLatestAi);
 
     window.removeOpdScanImage = function(fileId) {
         if (!fileId) {
