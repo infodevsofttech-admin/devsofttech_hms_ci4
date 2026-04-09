@@ -109,7 +109,7 @@ $(document).ready(function(){
             }, 'json');
         }else{
             setTimeout(enable_btn,20000);
-            alert('Amount Should be greater then Zero (0)');
+            alert('Amount should be greater than zero (0)');
         }
     });
 
@@ -138,7 +138,7 @@ $(document).ready(function(){
             }, 'json');
         }else{
             setTimeout(enable_btn,5000);
-            alert('Amount Should be greater then Zero (0)');
+            alert('Amount should be greater than zero (0)');
         }
     });
 });
