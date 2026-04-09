@@ -406,7 +406,13 @@ $mergedGroups = [
 
         $actionCell.find('.btn-opd-create-queue').remove();
 
-        if (canOpenPrescription && $actionCell.find('.btn-opd-consult-open, a[title="Consult"]').length === 0) {
+        var $consultAnchor = $actionCell.find('a[href*="/Opd_prescription/Prescription/"], a[href*="Opd_prescription/Prescription/"]');
+        if ($consultAnchor.length && $actionCell.find('.btn-opd-consult-open').length) {
+            // Keep a single Consult action when a native anchor is already present.
+            $actionCell.find('.btn-opd-consult-open').remove();
+        }
+
+        if (canOpenPrescription && $actionCell.find('.btn-opd-consult-open').length === 0 && $consultAnchor.length === 0) {
             var $consultBtn = $('<button type="button" class="btn btn-outline-primary btn-sm btn-opd-consult-open">Consult</button>');
             $consultBtn.attr('data-opdid', opdId);
             $actionCell.append($consultBtn).append(' ');
