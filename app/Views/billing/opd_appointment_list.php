@@ -325,7 +325,9 @@ $mergedGroups = [
     }
 
     function syncWaitingHintAndBadge() {
-        var $waitingRows = $('#opdAllTable tbody tr[data-opd-status="waiting"]');
+        var $waitingRows = opdDataTable
+            ? $(opdDataTable.rows({ page: 'all', search: 'none' }).nodes()).filter('[data-opd-status="waiting"]')
+            : $('#opdAllTable tbody tr[data-opd-status="waiting"]');
         var missingCount = 0;
 
         $waitingRows.each(function() {
@@ -353,7 +355,11 @@ $mergedGroups = [
             cancelled: 0
         };
 
-        $('#opdAllTable tbody tr[data-opd-id]').each(function() {
+        var $rows = opdDataTable
+            ? $(opdDataTable.rows({ page: 'all', search: 'none' }).nodes()).filter('[data-opd-id]')
+            : $('#opdAllTable tbody tr[data-opd-id]');
+
+        $rows.each(function() {
             var status = (($(this).attr('data-opd-status') || '').toLowerCase());
             counts.all += 1;
             if (Object.prototype.hasOwnProperty.call(counts, status)) {
