@@ -5,6 +5,7 @@ namespace App\Controllers;
 use App\Controllers\BaseController;
 use App\Models\InvoiceModel;
 use App\Models\PaymentModel;
+use Mpdf\Mpdf;
 
 class Invoice extends BaseController
 {
@@ -418,10 +419,9 @@ class Invoice extends BaseController
         $data['org_info'] = $orgInfo;
 
         $patientId = (int) $reqPayment[0]->patient_id;
-        $personInfo = $this->db->table('patient_master')
-            ->where('id', $patientId)
-            ->get()
-            ->getResult();
+        $personInfo = $this->db->query(
+            "select *,if(gender=1,'Male',if(gender=2,'Female','Other')) as xgender from patient_master where id=" . $patientId
+        )->getResult();
         $this->applyAge($personInfo, 'age');
         $data['person_info'] = $personInfo;
 
@@ -431,9 +431,7 @@ class Invoice extends BaseController
         $data['bank_data'] = $query->getResult();
 
         if ((int) $reqPayment[0]->payment_process > 0) {
-            $printUrl = base_url('Invoice/print_org_payment_invoice') . '/' . $reqPayment[0]->id;
-            $showcontent = 'Amount Receipt : <a href="' . $printUrl . '" target="_blank" class="btn btn-default"><i class="fa fa-print"></i> Print Payment Reciept</a> ';
-            return $this->response->setBody($showcontent);
+            return $this->response->setBody($this->buildPaymentReceiptPanel((array) $reqPayment[0]));
         }
 
         return view('Invoice/payment_req_panel', $data);
@@ -473,8 +471,7 @@ class Invoice extends BaseController
         }
 
         if ((int) $reqPayment[0]->payment_process > 0) {
-            $printUrl = base_url('Invoice/print_org_payment_invoice') . '/' . $reqPaymentId;
-            $showcontent = 'Already Done : <a href="' . $printUrl . '" target="_blank" class="btn btn-default"><i class="fa fa-print"></i> Print Invoice</a> ';
+            $showcontent = $this->buildPaymentReceiptPanel((array) $reqPayment[0]);
             return $this->response->setJSON([
                 'update' => 0,
                 'showcontent' => $showcontent,
@@ -519,8 +516,8 @@ class Invoice extends BaseController
                     'pay_id' => $insertId,
                 ]);
 
-            $printUrl = base_url('Invoice/print_org_payment_invoice') . '/' . $reqPaymentId;
-            $showcontent = 'Amount Receipt : <a href="' . $printUrl . '" target="_blank" class="btn btn-default"><i class="fa fa-print"></i> Print Invoice</a> ';
+            $updatedReq = $this->db->table('org_payment_request')->where('id', $reqPaymentId)->get()->getRowArray() ?? [];
+            $showcontent = $this->buildPaymentReceiptPanel($updatedReq);
 
             return $this->response->setJSON([
                 'update' => 1,
@@ -556,16 +553,63 @@ class Invoice extends BaseController
         $data['org_info'] = $orgInfo;
 
         $patientId = (int) $reqPayment[0]->patient_id;
-        $patientMaster = $this->db->table('patient_master')
-            ->where('id', $patientId)
-            ->get()
-            ->getResult();
+        $patientMaster = $this->db->query(
+            "select *,if(gender=1,'Male',if(gender=2,'Female','Other')) as xgender from patient_master where id=" . $patientId
+        )->getResult();
         $this->applyAge($patientMaster, 'age');
         $data['patient_master'] = $patientMaster;
 
         $data['req_payment_order'][0]->payment_date_str = date('d-m-Y H:i:s', strtotime($reqPayment[0]->payment_datetime ?? 'now'));
 
-        return view('Invoice/Invoice_org_payment', $data);
+        $htmlContent = view('Invoice/Invoice_org_payment', $data);
+
+        $mpdfTempDir = WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'mpdf';
+        if (! is_dir($mpdfTempDir)) {
+            mkdir($mpdfTempDir, 0755, true);
+        }
+
+        $mpdf = new Mpdf([
+            'tempDir' => $mpdfTempDir,
+            'format' => 'A4',
+            'margin_top' => 12,
+            'margin_bottom' => 10,
+            'margin_left' => 8,
+            'margin_right' => 8,
+        ]);
+        $mpdf->WriteHTML($htmlContent);
+
+        $fileName = 'Org_Payment_Receipt_' . (int) ($reqPayment[0]->pay_id ?? $reqId) . '.pdf';
+        return $this->response
+            ->setHeader('Content-Type', 'application/pdf')
+            ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
+            ->setBody($mpdf->Output($fileName, 'S'));
+    }
+
+    private function buildPaymentReceiptPanel(array $reqPayment): string
+    {
+        $reqId = (int) ($reqPayment['id'] ?? 0);
+        $payId = (int) ($reqPayment['pay_id'] ?? 0);
+        $amount = (float) ($reqPayment['payment_amount'] ?? 0);
+        $dateText = '';
+        if (! empty($reqPayment['payment_datetime'])) {
+            $ts = strtotime((string) $reqPayment['payment_datetime']);
+            if ($ts !== false) {
+                $dateText = date('d-m-Y H:i:s', $ts);
+            }
+        }
+
+        $printUrl = base_url('Invoice/print_org_payment_invoice') . '/' . $reqId;
+        $html = '<div class="alert alert-success mb-2"><strong>Payment Received Successfully</strong></div>';
+        $html .= '<div class="small mb-2">';
+        $html .= 'Receipt No: <strong>' . $payId . '</strong>';
+        $html .= ' | Amount: <strong>Rs. ' . number_format($amount, 2, '.', '') . '</strong>';
+        if ($dateText !== '') {
+            $html .= ' | Date: <strong>' . $dateText . '</strong>';
+        }
+        $html .= '</div>';
+        $html .= '<a href="' . $printUrl . '" target="_blank" class="btn btn-primary btn-sm"><i class="fa fa-print"></i> Print Payment Receipt (PDF)</a>';
+
+        return $html;
     }
 
     private function applyAge(array $rows, string $field = 'age'): void
