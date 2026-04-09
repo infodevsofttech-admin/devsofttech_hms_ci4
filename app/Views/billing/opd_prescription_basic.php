@@ -84,6 +84,42 @@
             margin-top: 1rem;
             padding-top: 1rem;
         }
+        .rx-consult-visibility-panel {
+            display: none;
+            border: 1px solid #dbe3f8;
+            background: #f7faff;
+            border-radius: .5rem;
+            padding: .65rem;
+            margin-bottom: .75rem;
+        }
+        .rx-consult-visibility-panel .form-check {
+            min-width: 240px;
+            margin-right: .75rem;
+            margin-bottom: .35rem;
+        }
+        .rx-foldable {
+            border: 1px solid #dbe3f8;
+            border-radius: .5rem;
+            background: #fff;
+            padding: .6rem .7rem;
+            margin-bottom: .65rem;
+        }
+        .rx-foldable .rx-fold-heading {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: .5rem;
+            margin-bottom: .5rem;
+        }
+        .rx-foldable .rx-fold-title {
+            font-weight: 600;
+            color: #334155;
+            margin: 0;
+            font-size: .92rem;
+        }
+        .rx-foldable.is-collapsed .rx-fold-body {
+            display: none;
+        }
         .rx-list-table td,
         .rx-list-table th {
             vertical-align: middle;
@@ -423,12 +459,51 @@
 
             <div class="col-lg-8 rx-right-panel">
                 <div class="card mb-3">
-                    <div class="card-header">
-                        <strong>Single Screen Consult</strong>
-                        <small class="text-muted ms-2">(Old familiar fields + AI assist)</small>
+                    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div>
+                            <strong>Single Screen Consult</strong>
+                            <small class="text-muted ms-2">(Old familiar fields + AI assist)</small>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-light text-dark border">Doctor View</span>
+                            <button type="button" class="btn btn-outline-primary btn-sm" id="btn_toggle_consult_view_settings">Customize Sections</button>
+                        </div>
                     </div>
 
                     <div class="card-body">
+                        <div id="rx_consult_visibility_panel" class="rx-consult-visibility-panel">
+                            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                                <strong class="small text-primary">Doctor Section Visibility</strong>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_reset_consult_view_settings">Reset Default</button>
+                            </div>
+                            <div class="d-flex flex-wrap">
+                                <label class="form-check">
+                                    <input class="form-check-input rx-consult-visibility-item" type="checkbox" data-rx-key="pain_scale">
+                                    <span class="form-check-label">Pain Measurement Scale</span>
+                                </label>
+                                <label class="form-check">
+                                    <input class="form-check-input rx-consult-visibility-item" type="checkbox" data-rx-key="complication">
+                                    <span class="form-check-label">Complication</span>
+                                </label>
+                                <label class="form-check">
+                                    <input class="form-check-input rx-consult-visibility-item" type="checkbox" data-rx-key="addiction">
+                                    <span class="form-check-label">Addiction (if any)</span>
+                                </label>
+                                <label class="form-check">
+                                    <input class="form-check-input rx-consult-visibility-item" type="checkbox" data-rx-key="drug_allergy">
+                                    <span class="form-check-label">Drug Allergy / ADR (NABH)</span>
+                                </label>
+                                <label class="form-check">
+                                    <input class="form-check-input rx-consult-visibility-item" type="checkbox" data-rx-key="provisional_diagnosis">
+                                    <span class="form-check-label">Provisional Diagnosis</span>
+                                </label>
+                                <label class="form-check">
+                                    <input class="form-check-input rx-consult-visibility-item" type="checkbox" data-rx-key="prescription">
+                                    <span class="form-check-label">Prescription</span>
+                                </label>
+                            </div>
+                            <div class="small text-muted">Tip: Click section collapse button to fold/unfold. Settings are saved per doctor.</div>
+                        </div>
                         <div id="panel_notes" class="rx-panel">
                             <div class="mb-3">
                                 <h6 class="mb-2">General Examination</h6>
@@ -449,7 +524,7 @@
                                     <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="edema" placeholder="Edema" value="<?= esc($opd_prescription[0]->edema ?? '') ?>"></div>
                                 </div>
                                 <div class="row g-3 mt-2">
-                                    <div class="col-md-12">
+                                    <div class="col-md-12" id="rx_sec_pain_scale">
                                         <h6 class="mb-2">Pain Measurement Scale</h6>
                                         <input type="hidden" id="pain_value" value="<?= esc($opd_prescription[0]->pain_value ?? '') ?>">
                                         <?php $painValue = (string) ($opd_prescription[0]->pain_value ?? ''); ?>
@@ -470,7 +545,7 @@
                                             <label class="btn btn-sm btn-outline-danger" for="pain_4">Worst Pain Possible</label>
                                         </div>
                                     </div>
-                                    <div class="col-md-6">
+                                    <div class="col-md-6" id="rx_sec_complication">
                                         <div class="border rounded p-2 h-100">
                                             <h6 class="mb-2">Complication</h6>
                                             <div class="small">
@@ -484,7 +559,7 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="col-md-6">
+                                    <div class="col-md-6" id="rx_sec_addiction">
                                         <div class="border rounded p-2 h-100">
                                             <h6 class="mb-2">Addiction(if any)</h6>
                                             <div class="small">
@@ -494,7 +569,7 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="col-md-12">
+                                    <div class="col-md-12" id="rx_sec_drug_allergy">
                                         <div class="border rounded p-2">
                                             <h6 class="mb-2">Drug Allergy / ADR (NABH)</h6>
                                             <div class="row g-2">
@@ -615,7 +690,7 @@
                                 <div class="rx-counter" id="counter_diagnosis">0/4000</div>
                             </div>
 
-                            <div class="mb-3">
+                            <div class="mb-3" id="rx_sec_provisional_diagnosis">
                                 <label class="form-label">Provisional Diagnosis
                                 </label>
                                 <div class="d-flex flex-wrap gap-1 mb-1">
@@ -629,7 +704,7 @@
                                 <div class="rx-counter" id="counter_provisional_diagnosis">0/4000</div>
                             </div>
 
-                            <div class="mb-3">
+                            <div class="mb-3" id="rx_sec_prescription">
                                 <label class="form-label">Prescription
                                 </label>
                                 <div class="d-flex flex-wrap gap-1 mb-1">
@@ -1125,6 +1200,152 @@
         viral_infection: ['CBC', 'LFT', 'KFT']
     };
     var patientId = <?= (int) ($patient_master[0]->id ?? 0) ?>;
+    var doctorViewId = <?= (int) ($doctorId ?? 0) ?>;
+    var consultSectionPreferenceKey = 'opd_consult_section_pref_' + doctorViewId;
+    var consultSectionMeta = [
+        { key: 'pain_scale', selector: '#rx_sec_pain_scale', title: 'Pain Measurement Scale' },
+        { key: 'complication', selector: '#rx_sec_complication', title: 'Complication' },
+        { key: 'addiction', selector: '#rx_sec_addiction', title: 'Addiction (if any)' },
+        { key: 'drug_allergy', selector: '#rx_sec_drug_allergy', title: 'Drug Allergy / ADR (NABH)' },
+        { key: 'provisional_diagnosis', selector: '#rx_sec_provisional_diagnosis', title: 'Provisional Diagnosis' },
+        { key: 'prescription', selector: '#rx_sec_prescription', title: 'Prescription' }
+    ];
+
+    function getConsultSectionDefaultPrefs() {
+        var out = {};
+        consultSectionMeta.forEach(function(meta) {
+            out[meta.key] = { visible: true, collapsed: false };
+        });
+        return out;
+    }
+
+    function loadConsultSectionPrefs() {
+        var defaults = getConsultSectionDefaultPrefs();
+        try {
+            var raw = localStorage.getItem(consultSectionPreferenceKey);
+            if (!raw) {
+                return defaults;
+            }
+            var parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed !== 'object') {
+                return defaults;
+            }
+            consultSectionMeta.forEach(function(meta) {
+                if (!parsed[meta.key] || typeof parsed[meta.key] !== 'object') {
+                    return;
+                }
+                defaults[meta.key].visible = parsed[meta.key].visible !== false;
+                defaults[meta.key].collapsed = parsed[meta.key].collapsed === true;
+            });
+            return defaults;
+        } catch (e) {
+            return defaults;
+        }
+    }
+
+    function saveConsultSectionPrefs(prefs) {
+        try {
+            localStorage.setItem(consultSectionPreferenceKey, JSON.stringify(prefs || {}));
+        } catch (e) {
+            // Ignore private mode/quota errors.
+        }
+    }
+
+    function ensureFoldableSectionShell(meta) {
+        var $sec = $(meta.selector);
+        if (!$sec.length) {
+            return;
+        }
+        if ($sec.data('foldableReady') === true) {
+            return;
+        }
+
+        $sec.addClass('rx-foldable').attr('data-rx-key', meta.key);
+
+        var titleText = meta.title;
+        var $titleCandidate = $sec.find('h6:first, label.form-label:first');
+        if ($titleCandidate.length) {
+            titleText = ($titleCandidate.first().text() || meta.title).toString().trim();
+            $titleCandidate.first().remove();
+        }
+
+        var $body = $('<div class="rx-fold-body"></div>');
+        $body.append($sec.contents());
+
+        var $heading = $('<div class="rx-fold-heading"></div>');
+        $heading.append('<p class="rx-fold-title mb-0"></p>');
+        $heading.find('.rx-fold-title').text(titleText || meta.title);
+        $heading.append('<button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 rx-fold-toggle">Fold</button>');
+
+        $sec.empty().append($heading).append($body);
+        $sec.data('foldableReady', true);
+    }
+
+    function applyConsultSectionPrefs(prefs) {
+        consultSectionMeta.forEach(function(meta) {
+            ensureFoldableSectionShell(meta);
+            var $sec = $(meta.selector);
+            if (!$sec.length) {
+                return;
+            }
+
+            var cfg = (prefs && prefs[meta.key]) ? prefs[meta.key] : { visible: true, collapsed: false };
+            var visible = cfg.visible !== false;
+            var collapsed = cfg.collapsed === true;
+
+            $sec.toggle(visible);
+            if (!visible) {
+                return;
+            }
+
+            $sec.toggleClass('is-collapsed', collapsed);
+            $sec.find('.rx-fold-toggle').first().text(collapsed ? 'Expand' : 'Fold');
+        });
+
+        $('.rx-consult-visibility-item').each(function() {
+            var key = ($(this).data('rx-key') || '').toString();
+            if (!key || !prefs[key]) {
+                return;
+            }
+            $(this).prop('checked', prefs[key].visible !== false);
+        });
+    }
+
+    function initConsultSectionDesigner() {
+        var prefs = loadConsultSectionPrefs();
+        applyConsultSectionPrefs(prefs);
+
+        $('#btn_toggle_consult_view_settings').off('click').on('click', function() {
+            $('#rx_consult_visibility_panel').stop(true, true).slideToggle(120);
+        });
+
+        $('.rx-consult-visibility-item').off('change').on('change', function() {
+            var key = ($(this).data('rx-key') || '').toString();
+            if (!key || !prefs[key]) {
+                return;
+            }
+            prefs[key].visible = $(this).is(':checked');
+            saveConsultSectionPrefs(prefs);
+            applyConsultSectionPrefs(prefs);
+        });
+
+        $(document).off('click.rxFoldToggle').on('click.rxFoldToggle', '.rx-fold-toggle', function() {
+            var $sec = $(this).closest('.rx-foldable');
+            var key = ($sec.data('rx-key') || '').toString();
+            if (!key || !prefs[key]) {
+                return;
+            }
+            prefs[key].collapsed = !prefs[key].collapsed;
+            saveConsultSectionPrefs(prefs);
+            applyConsultSectionPrefs(prefs);
+        });
+
+        $('#btn_reset_consult_view_settings').off('click').on('click', function() {
+            prefs = getConsultSectionDefaultPrefs();
+            saveConsultSectionPrefs(prefs);
+            applyConsultSectionPrefs(prefs);
+        });
+    }
 
     function setAbdmStatus(msg, level) {
         var $box = $('#abdm_action_status');
@@ -5540,6 +5761,8 @@
     $('#btn_reload_old_prescribed').on('click', function() {
         loadOldPrescribedPanel();
     });
+
+    initConsultSectionDesigner();
 
     if (localStorage.getItem(draftKey)) {
         setStatus('dirty', 'Draft available');
