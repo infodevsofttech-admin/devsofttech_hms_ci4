@@ -484,14 +484,20 @@ $mergedGroups = [
                 return;
             }
 
+            if (resp.payload) {
+                applyLiveCounts(resp.payload);
+            }
+
             if (!liveDigest) {
                 liveDigest = String(resp.digest || '');
+                // On first poll, reconcile stale server-rendered rows against fresh DB snapshot.
+                syncLiveSnapshot(false);
                 return;
             }
 
             if (liveDigest !== String(resp.digest || '')) {
-                // Instead of auto-reloading, show notification on the Refresh button
-                signalRefreshAvailable();
+                liveDigest = String(resp.digest || '');
+                syncLiveSnapshot(true);
             }
         }).always(function() {
             livePollInFlight = false;
@@ -510,6 +516,93 @@ $mergedGroups = [
         var $btn = $('#btn_manual_refresh');
         $btn.removeClass('btn-warning text-dark').addClass('btn-outline-secondary');
         $btn.html('&#x21BB; Refresh');
+    }
+
+    function applyLiveCounts(counts) {
+        if (!counts || typeof counts !== 'object') {
+            return;
+        }
+
+        $('#countBadgeAll').text(String(parseInt(counts.all || counts.total || 0, 10)));
+        $('#countBadgeBooked').text(String(parseInt(counts.booked || 0, 10)));
+        $('#countBadgeWaiting').text(String(parseInt(counts.waiting || 0, 10)));
+        $('#countBadgeVisited').text(String(parseInt(counts.visited || 0, 10)));
+        $('#countBadgeCancelled').text(String(parseInt(counts.cancelled || 0, 10)));
+    }
+
+    function applyLiveRowsSnapshot(rows) {
+        if (!Array.isArray(rows)) {
+            return;
+        }
+
+        var liveById = {};
+        rows.forEach(function(item) {
+            var id = parseInt(item.opd_id || 0, 10);
+            if (id > 0) {
+                liveById[id] = item;
+            }
+        });
+
+        $('#opdAllTable tbody tr[data-opd-id]').each(function() {
+            var $row = $(this);
+            var opdId = parseInt($row.attr('data-opd-id') || '0', 10);
+            if (!opdId || !liveById[opdId]) {
+                return;
+            }
+
+            var live = liveById[opdId];
+            var status = String(live.status || '').toLowerCase();
+            if (!status) {
+                return;
+            }
+
+            $row.attr('data-opd-status', status);
+            $row.attr('data-has-prescription', parseInt(live.has_prescription || 0, 10) === 1 ? '1' : '0');
+            $row.attr('data-has-vitals', parseInt(live.has_vitals || 0, 10) === 1 ? '1' : '0');
+
+            applyStatusVisual($row, status);
+            updateQueueCell($row, parseInt(live.queue_no || 0, 10));
+            updateVitalsButtonState($row, parseInt(live.has_prescription || 0, 10), parseInt(live.has_vitals || 0, 10));
+
+            if (status === 'waiting') {
+                ensureWaitingActionButtons($row, opdId);
+            }
+
+            if (status === 'visited') {
+                var $statusBtn = $row.find('.btn-opd-status').first();
+                if ($statusBtn.length) {
+                    $statusBtn.removeClass('btn-outline-success').addClass('btn-success');
+                    $statusBtn.attr('data-opd-status', '2').attr('title', 'Visit Done').text('Visit Done').prop('disabled', false);
+                }
+            }
+        });
+
+        if (opdDataTable) {
+            opdDataTable.rows().invalidate().draw(false);
+        }
+
+        syncWaitingHintAndBadge();
+    }
+
+    function syncLiveSnapshot(fallbackToRefreshSignal) {
+        $.getJSON(liveRowsUrl, function(snapshot) {
+            if (!snapshot || parseInt(snapshot.ok || 0, 10) !== 1) {
+                if (fallbackToRefreshSignal) {
+                    signalRefreshAvailable();
+                }
+                return;
+            }
+
+            if (snapshot.counts) {
+                applyLiveCounts(snapshot.counts);
+            }
+            applyLiveRowsSnapshot(snapshot.rows || []);
+            clearRefreshSignal();
+        }).fail(function() {
+            if (fallbackToRefreshSignal) {
+                signalRefreshAvailable();
+            }
+        });
     }
 
     function updateQueueCell($row, queueNo) {
