@@ -31,6 +31,162 @@ class Report extends BaseController
         ]);
     }
 
+    public function report_opd_total()
+    {
+        $doctors = $this->db->table('doctor_master')
+            ->select('id, p_fname')
+            ->where('active', 1)
+            ->orderBy('p_fname', 'ASC')
+            ->get()
+            ->getResult();
+
+        $feeTypes = $this->db->table('opd_master')
+            ->select('opd_fee_id, opd_fee_desc, opd_fee_amount')
+            ->where('opd_fee_id IS NOT NULL', null, false)
+            ->where('opd_fee_id >', 0)
+            ->where('opd_fee_desc IS NOT NULL', null, false)
+            ->where("TRIM(opd_fee_desc) != ''", null, false)
+            ->groupBy('opd_fee_id, opd_fee_desc, opd_fee_amount')
+            ->orderBy('opd_fee_desc', 'ASC')
+            ->orderBy('opd_fee_amount', 'ASC')
+            ->get()
+            ->getResult();
+
+        return view('report/opd_total_report', [
+            'doctors' => $doctors,
+            'fee_types' => $feeTypes,
+        ]);
+    }
+
+    public function opd_total_data(
+        string $dateRange,
+        string $doctorId = '0',
+        string $opdType = '0',
+        string $feeId = '0',
+        int $output = 0
+    ) {
+        [$minRange, $maxRange] = $this->parseDateRangeDateOnly($dateRange);
+
+        $runningExpr = "(COALESCE(o.running_opd,0)=1 OR o.opd_fee_type=3 OR UPPER(COALESCE(o.opd_fee_desc,'')) LIKE '%RUNNING%')";
+        $newExpr = "(o.opd_fee_type=1 OR UPPER(COALESCE(o.opd_fee_desc,'')) LIKE '%NEW%')";
+        $emergencyExpr = "(UPPER(COALESCE(o.opd_fee_desc,'')) LIKE '%EMERG%')";
+        $regularExpr = "(NOT {$runningExpr} AND NOT {$newExpr} AND NOT {$emergencyExpr})";
+
+        $builder = $this->db->table('opd_master o')
+            ->select("COALESCE(NULLIF(TRIM(o.doc_name),''), CONCAT('Doctor #', o.doc_id)) as doctor_name", false)
+            ->select('o.doc_id, o.opd_fee_id, o.opd_fee_desc, o.opd_fee_amount')
+            ->select('SUM(CASE WHEN o.opd_status IN (1,2) THEN 1 ELSE 0 END) as no_of_opd', false)
+            ->select("SUM(CASE WHEN o.opd_status IN (1,2) AND {$runningExpr} THEN 1 ELSE 0 END) as running_count", false)
+            ->select("SUM(CASE WHEN o.opd_status IN (1,2) AND {$regularExpr} THEN 1 ELSE 0 END) as regular_count", false)
+            ->select("SUM(CASE WHEN o.opd_status IN (1,2) AND {$newExpr} THEN 1 ELSE 0 END) as new_count", false)
+            ->select("SUM(CASE WHEN o.opd_status IN (1,2) AND {$emergencyExpr} THEN 1 ELSE 0 END) as emergency_count", false)
+            ->select('SUM(CASE WHEN o.opd_status IN (1,2) THEN o.opd_fee_amount ELSE 0 END) as total_amount', false)
+            ->where('o.apointment_date >=', $minRange)
+            ->where('o.apointment_date <=', $maxRange)
+            ->whereIn('o.opd_status', [1, 2])
+            ->where('o.payment_status', 1)
+            ->where('(o.payment_mode > 0 OR COALESCE(o.running_opd,0)=1)', null, false);
+
+        $doctorIdValue = (int) $doctorId;
+        if ($doctorIdValue > 0) {
+            $builder->where('o.doc_id', $doctorIdValue);
+        }
+
+        $feeIdValue = (int) $feeId;
+        if ($feeIdValue > 0) {
+            $builder->where('o.opd_fee_id', $feeIdValue);
+        }
+
+        $opdTypeKey = strtolower(trim((string) urldecode($opdType)));
+        if ($opdTypeKey !== '' && $opdTypeKey !== '0' && $opdTypeKey !== 'all') {
+            if ($opdTypeKey === 'running') {
+                $builder->where($runningExpr, null, false);
+            } elseif ($opdTypeKey === 'regular') {
+                $builder->where($regularExpr, null, false);
+            } elseif ($opdTypeKey === 'new') {
+                $builder->where($newExpr, null, false);
+            } elseif ($opdTypeKey === 'emergency') {
+                $builder->where($emergencyExpr, null, false);
+            }
+        }
+
+        $rows = $builder
+            ->groupBy('o.doc_id, o.doc_name, o.opd_fee_id, o.opd_fee_desc, o.opd_fee_amount')
+            ->orderBy('o.doc_name', 'ASC')
+            ->orderBy('o.opd_fee_desc', 'ASC')
+            ->orderBy('o.opd_fee_amount', 'ASC')
+            ->get()
+            ->getResult();
+
+        $summary = [
+            'no_of_opd' => 0,
+            'running_count' => 0,
+            'regular_count' => 0,
+            'new_count' => 0,
+            'emergency_count' => 0,
+            'total_amount' => 0.0,
+        ];
+
+        foreach ($rows as $row) {
+            $summary['no_of_opd'] += (int) ($row->no_of_opd ?? 0);
+            $summary['running_count'] += (int) ($row->running_count ?? 0);
+            $summary['regular_count'] += (int) ($row->regular_count ?? 0);
+            $summary['new_count'] += (int) ($row->new_count ?? 0);
+            $summary['emergency_count'] += (int) ($row->emergency_count ?? 0);
+            $summary['total_amount'] += (float) ($row->total_amount ?? 0);
+        }
+
+        $content = view('report/opd_total_report_table', [
+            'rows' => $rows,
+            'summary' => $summary,
+            'min_range' => $minRange,
+            'max_range' => $maxRange,
+        ]);
+
+        if ($output === 1) {
+            ExportExcel($content, 'OPD_Total_Report_' . date('YmdHis'));
+            return $this->response->setBody('');
+        }
+
+        if ($output === 2) {
+            $mpdfTempDir = WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'mpdf';
+            if (! is_dir($mpdfTempDir)) {
+                mkdir($mpdfTempDir, 0755, true);
+            }
+
+            $mpdf = new Mpdf([
+                'tempDir' => $mpdfTempDir,
+                'format' => 'A4-L',
+                'margin_top' => 8,
+                'margin_bottom' => 8,
+                'margin_left' => 8,
+                'margin_right' => 8,
+            ]);
+
+            $pdfHtml = '<style>'
+                . 'body{font-family:Arial,sans-serif;color:#111;font-size:12px;}'
+                . 'table{width:100%;border-collapse:collapse;}'
+                . 'th,td{border:1px solid #9aa4ad;padding:6px 8px;}'
+                . 'th{text-align:left;background:#f5f6f7;}'
+                . '.text-end{text-align:right;}'
+                . '.table-warning td,.table-warning th{background:#fff6cc !important;}'
+                . '</style>'
+                . '<h3 style="margin:0 0 10px 0;">OPD Total Report</h3>'
+                . $content;
+
+            $mpdf->WriteHTML($pdfHtml);
+
+            $fileName = 'OPD_Total_Report_' . date('Ymd_His') . '.pdf';
+
+            return $this->response
+                ->setHeader('Content-Type', 'application/pdf')
+                ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
+                ->setBody($mpdf->Output($fileName, 'S'));
+        }
+
+        return $this->response->setBody($content);
+    }
+
     public function report_total_payment_app_show(
         string $dateRange,
         string $employeeIds,
@@ -269,6 +425,26 @@ class Report extends BaseController
             $today = date('Y-m-d');
             $start = $today . ' 00:00:00';
             $end = $today . ' 23:59:59';
+        }
+
+        return [$start, $end];
+    }
+
+    private function parseDateRangeDateOnly(string $dateRange): array
+    {
+        $rangeParts = explode('S', $dateRange);
+        $startRaw = (string) ($rangeParts[0] ?? '');
+        $endRaw = (string) ($rangeParts[1] ?? '');
+
+        $startRaw = str_replace('T', ' ', $startRaw);
+        $endRaw = str_replace('T', ' ', $endRaw);
+
+        $start = substr(trim($startRaw), 0, 10);
+        $end = substr(trim($endRaw), 0, 10);
+
+        if ($start === '' || $end === '') {
+            $today = date('Y-m-d');
+            return [$today, $today];
         }
 
         return [$start, $end];

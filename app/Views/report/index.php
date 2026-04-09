@@ -14,6 +14,7 @@
                     </div>
                     <ul class="report-links">
                         <li><a href="javascript:load_form('<?= base_url('Report/collection_report') ?>','Collection Report');"><i class="bi bi-arrow-right-short"></i> Total Payment (Cash and Bank)</a></li>
+                        <li><a href="javascript:load_form('<?= base_url('Report/report_opd_total') ?>','OPD Total Report');"><i class="bi bi-arrow-right-short"></i> OPD Total Report</a></li>
                         <li><a href="javascript:load_form('<?= base_url('Report/billing_operations_report') ?>','Billing Operations Report');"><i class="bi bi-arrow-right-short"></i> Billing Operations Report</a></li>
                         <li><a href="javascript:load_form('<?= base_url('Finance/bank_deposits') ?>','Bank Deposit Register');"><i class="bi bi-arrow-right-short"></i> Bank Deposit Register</a></li>
                     </ul>
@@ -29,6 +30,7 @@
                     </div>
                     <ul class="report-links">
                         <li><a href="javascript:load_form('<?= base_url('Report/collection_report') ?>','Collection Report');"><i class="bi bi-arrow-right-short"></i> Total Payment (Cash and Bank)</a></li>
+                        <li><a href="javascript:load_form('<?= base_url('Report/report_opd_total') ?>','OPD Total Report');"><i class="bi bi-arrow-right-short"></i> OPD Total Report</a></li>
                         <li><a href="javascript:load_form('<?= base_url('Report/billing_operations_report') ?>','Billing Operations Report');"><i class="bi bi-arrow-right-short"></i> Billing Operations Report</a></li>
                         <li><a href="javascript:load_form('<?= base_url('Finance/index') ?>','Finance & Accounting');"><i class="bi bi-arrow-right-short"></i> Finance & Accounting (Phase 1)</a></li>
                         <li><a href="javascript:load_form('<?= base_url('Finance/phase2') ?>','Finance & Accounting - Phase 2');"><i class="bi bi-arrow-right-short"></i> Finance & Accounting (Phase 2)</a></li>
