@@ -927,6 +927,37 @@ class Opd extends BaseController
         $query = $this->db->query($sql);
         $allRows = $query->getResult();
 
+        // Doctor-day display queue should be contiguous (1..N), even when stored queue_no
+        // has gaps due to legacy/global sequencing from other doctors.
+        $queueRows = array_values(array_filter($allRows, static function ($row): bool {
+            return (int) ($row->queue_no ?? 0) > 0;
+        }));
+        usort($queueRows, static function ($left, $right): int {
+            $leftQueue = (int) ($left->queue_no ?? 0);
+            $rightQueue = (int) ($right->queue_no ?? 0);
+            if ($leftQueue !== $rightQueue) {
+                return $leftQueue <=> $rightQueue;
+            }
+
+            return ((int) ($left->opd_id ?? 0)) <=> ((int) ($right->opd_id ?? 0));
+        });
+
+        $displayQueueByOpdId = [];
+        $displayQueue = 1;
+        foreach ($queueRows as $queueRow) {
+            $queueOpdId = (int) ($queueRow->opd_id ?? 0);
+            if ($queueOpdId <= 0 || array_key_exists($queueOpdId, $displayQueueByOpdId)) {
+                continue;
+            }
+
+            $displayQueueByOpdId[$queueOpdId] = $displayQueue;
+            $displayQueue++;
+        }
+
+        foreach ($allRows as $row) {
+            $row->display_queue_no = (int) ($displayQueueByOpdId[(int) ($row->opd_id ?? 0)] ?? 0);
+        }
+
         $opdList0 = [];
         $opdList1 = [];
         $opdList2 = [];
@@ -1191,6 +1222,37 @@ class Opd extends BaseController
                 $counts[$statusLabel]++;
             }
         }
+
+        // Normalize queue display numbers to contiguous doctor-day sequence.
+        $queueRows = array_values(array_filter($normalized, static function (array $row): bool {
+            return (int) ($row['queue_no'] ?? 0) > 0;
+        }));
+        usort($queueRows, static function (array $left, array $right): int {
+            $leftQueue = (int) ($left['queue_no'] ?? 0);
+            $rightQueue = (int) ($right['queue_no'] ?? 0);
+            if ($leftQueue !== $rightQueue) {
+                return $leftQueue <=> $rightQueue;
+            }
+
+            return ((int) ($left['opd_id'] ?? 0)) <=> ((int) ($right['opd_id'] ?? 0));
+        });
+
+        $displayQueueByOpdId = [];
+        $displayQueue = 1;
+        foreach ($queueRows as $row) {
+            $queueOpdId = (int) ($row['opd_id'] ?? 0);
+            if ($queueOpdId <= 0 || array_key_exists($queueOpdId, $displayQueueByOpdId)) {
+                continue;
+            }
+
+            $displayQueueByOpdId[$queueOpdId] = $displayQueue;
+            $displayQueue++;
+        }
+
+        foreach ($normalized as &$row) {
+            $row['display_queue_no'] = (int) ($displayQueueByOpdId[(int) ($row['opd_id'] ?? 0)] ?? 0);
+        }
+        unset($row);
 
         usort($normalized, static function ($left, $right): int {
             return ((int) ($left['opd_id'] ?? 0)) <=> ((int) ($right['opd_id'] ?? 0));

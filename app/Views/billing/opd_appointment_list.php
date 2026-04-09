@@ -89,7 +89,7 @@ $mergedGroups = [
                     $hasVitals          = (int) ($row->has_vitals          ?? 0) === 1;
                     $hasPrescription    = (int) ($row->has_prescription    ?? 0) === 1;
                     $isConfirmedForQueue= (int) ($row->is_confirmed_for_queue ?? 0) === 1;
-                    $queueNo            = (int) ($row->queue_no ?? 0);
+                    $queueNo            = (int) (($row->display_queue_no ?? 0) ?: ($row->queue_no ?? 0));
                     $hasQueueNo         = $queueNo > 0;
                     $showFullActions    = $hasPrescription || $isConfirmedForQueue;
                     $opdId              = (int) ($row->opd_id ?? 0);
@@ -567,7 +567,7 @@ $mergedGroups = [
             $row.attr('data-has-vitals', parseInt(live.has_vitals || 0, 10) === 1 ? '1' : '0');
 
             applyStatusVisual($row, status);
-            updateQueueCell($row, parseInt(live.queue_no || 0, 10));
+            updateQueueCell($row, parseInt(live.display_queue_no || live.queue_no || 0, 10));
             updateVitalsButtonState($row, parseInt(live.has_prescription || 0, 10), parseInt(live.has_vitals || 0, 10));
 
             if (status === 'waiting') {
