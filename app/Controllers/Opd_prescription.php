@@ -3883,6 +3883,151 @@ class Opd_prescription extends BaseController
         return $this->response->setJSON(['rows' => $rows]);
     }
 
+    public function provisional_diagnosis_search()
+    {
+        if (! $this->canAccessPrescription()) {
+            return $this->response->setStatusCode(403)->setJSON(['rows' => []]);
+        }
+
+        $q = trim((string) $this->request->getGet('q'));
+        if ($q === '' || ! $this->db->tableExists('disease_master')) {
+            return $this->response->setJSON(['rows' => []]);
+        }
+
+        $fields = $this->db->getFieldNames('disease_master') ?? [];
+        $nameField = in_array('Name', $fields, true) ? 'Name' : (in_array('name', $fields, true) ? 'name' : null);
+        if ($nameField === null) {
+            return $this->response->setJSON(['rows' => []]);
+        }
+
+        $rows = $this->db->table('disease_master')
+            ->select($nameField . ' as name')
+            ->like($nameField, $q)
+            ->orderBy($nameField, 'ASC')
+            ->limit(20)
+            ->get()
+            ->getResultArray();
+
+        return $this->response->setJSON(['rows' => $rows]);
+    }
+
+    public function finding_exam_search()
+    {
+        if (! $this->canAccessPrescription()) {
+            return $this->response->setStatusCode(403)->setJSON(['rows' => []]);
+        }
+
+        $q = trim((string) $this->request->getGet('q'));
+        if ($q === '' || ! $this->db->tableExists('opd_prescription')) {
+            return $this->response->setJSON(['rows' => []]);
+        }
+
+        $rows = $this->db->table('opd_prescription')
+            ->select('Finding_Examinations as finding_examinations')
+            ->where('Finding_Examinations IS NOT NULL', null, false)
+            ->where('Finding_Examinations <>', '')
+            ->like('Finding_Examinations', $q)
+            ->groupBy('Finding_Examinations')
+            ->orderBy('id', 'DESC')
+            ->limit(20)
+            ->get()
+            ->getResultArray();
+
+        return $this->response->setJSON(['rows' => $rows]);
+    }
+
+    // Legacy-compatible wrappers used by older autocomplete clients.
+    public function get_complaints()
+    {
+        $q = trim((string) ($this->request->getGet('term') ?? ''));
+        if ($q === '' || ! $this->db->tableExists('complaints_master')) {
+            return $this->response->setJSON([]);
+        }
+
+        $rows = $this->db->table('complaints_master')
+            ->select('Name as value')
+            ->where('is_active', 1)
+            ->like('Name', $q)
+            ->orderBy('Name', 'ASC')
+            ->limit(20)
+            ->get()
+            ->getResultArray();
+
+        $out = [];
+        foreach ($rows as $row) {
+            $value = trim((string) ($row['value'] ?? ''));
+            if ($value === '') {
+                continue;
+            }
+            $out[] = ['label' => $value, 'value' => $value];
+        }
+
+        return $this->response->setJSON($out);
+    }
+
+    public function get_disease()
+    {
+        $q = trim((string) ($this->request->getGet('term') ?? ''));
+        if ($q === '' || ! $this->db->tableExists('disease_master')) {
+            return $this->response->setJSON([]);
+        }
+
+        $fields = $this->db->getFieldNames('disease_master') ?? [];
+        $nameField = in_array('Name', $fields, true) ? 'Name' : (in_array('name', $fields, true) ? 'name' : null);
+        if ($nameField === null) {
+            return $this->response->setJSON([]);
+        }
+
+        $rows = $this->db->table('disease_master')
+            ->select($nameField . ' as value')
+            ->like($nameField, $q)
+            ->orderBy($nameField, 'ASC')
+            ->limit(20)
+            ->get()
+            ->getResultArray();
+
+        $out = [];
+        foreach ($rows as $row) {
+            $value = trim((string) ($row['value'] ?? ''));
+            if ($value === '') {
+                continue;
+            }
+            $out[] = ['label' => $value, 'value' => $value];
+        }
+
+        return $this->response->setJSON($out);
+    }
+
+    public function get_finding_exam()
+    {
+        $q = trim((string) ($this->request->getGet('term') ?? ''));
+        if ($q === '' || ! $this->db->tableExists('opd_prescription')) {
+            return $this->response->setJSON([]);
+        }
+
+        $rows = $this->db->table('opd_prescription')
+            ->select('Finding_Examinations as value')
+            ->where('Finding_Examinations IS NOT NULL', null, false)
+            ->where('Finding_Examinations <>', '')
+            ->like('Finding_Examinations', $q)
+            ->groupBy('Finding_Examinations')
+            ->orderBy('id', 'DESC')
+            ->limit(20)
+            ->get()
+            ->getResultArray();
+
+        $out = [];
+        foreach ($rows as $row) {
+            $value = trim((string) ($row['value'] ?? ''));
+            if ($value === '') {
+                continue;
+            }
+            $out[] = ['label' => $value, 'value' => $value];
+        }
+
+        return $this->response->setJSON($out);
+    }
+
     public function complaints_parse()
     {
         if (! $this->request->isAJAX()) {

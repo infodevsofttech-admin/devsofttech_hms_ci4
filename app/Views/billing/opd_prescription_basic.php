@@ -1573,6 +1573,71 @@
         });
     }
 
+    function splitCommaTerms(val) {
+        return (val || '').toString().split(/,\s*/);
+    }
+
+    function extractLastCommaTerm(term) {
+        return splitCommaTerms(term).pop() || '';
+    }
+
+    function bindLegacyCommaAutocomplete(selector, endpointUrl, extractValue) {
+        var $field = $(selector);
+        if (!$field.length || !($.ui && $.ui.autocomplete)) {
+            return;
+        }
+
+        $field
+            .on('keydown', function(event) {
+                if (event.keyCode === $.ui.keyCode.TAB && $(this).autocomplete('instance') && $(this).autocomplete('instance').menu.active) {
+                    event.preventDefault();
+                }
+            })
+            .autocomplete({
+                minLength: 2,
+                source: function(request, response) {
+                    var term = extractLastCommaTerm(request.term || '').trim();
+                    if (term.length < 2) {
+                        response([]);
+                        return;
+                    }
+
+                    $.getJSON(endpointUrl, { q: term }, function(data) {
+                        var rows = (data && data.rows) ? data.rows : [];
+                        var out = [];
+                        (rows || []).forEach(function(row) {
+                            var value = '';
+                            if (typeof extractValue === 'function') {
+                                value = (extractValue(row) || '').toString().trim();
+                            } else {
+                                value = (row && (row.value || row.label || row.name || row.finding_examinations)) ? (row.value || row.label || row.name || row.finding_examinations).toString().trim() : '';
+                            }
+                            if (value) {
+                                out.push({ label: value, value: value });
+                            }
+                        });
+                        response(out);
+                    }).fail(function() {
+                        response([]);
+                    });
+                },
+                focus: function() {
+                    return false;
+                },
+                select: function(event, ui) {
+                    var terms = splitCommaTerms(this.value);
+                    terms.pop();
+                    terms.push((ui.item && ui.item.value) ? ui.item.value : '');
+                    terms.push('');
+                    this.value = terms.join(', ');
+                    markDirty('Suggestion inserted');
+                    scheduleAutoSave();
+                    refreshCounters();
+                    return false;
+                }
+            });
+    }
+
     function getCsrfPair() {
         var input = document.querySelector('input[name="<?= csrf_token() ?>"]');
         if (!input) {
@@ -5763,6 +5828,16 @@
     });
 
     initConsultSectionDesigner();
+
+    bindLegacyCommaAutocomplete('#complaints', '<?= base_url('Opd_prescription/complaints_search') ?>', function(row) {
+        return (row && row.name) ? row.name : '';
+    });
+    bindLegacyCommaAutocomplete('#provisional_diagnosis', '<?= base_url('Opd_prescription/provisional_diagnosis_search') ?>', function(row) {
+        return (row && row.name) ? row.name : '';
+    });
+    bindLegacyCommaAutocomplete('#finding_examinations', '<?= base_url('Opd_prescription/finding_exam_search') ?>', function(row) {
+        return (row && row.finding_examinations) ? row.finding_examinations : '';
+    });
 
     if (localStorage.getItem(draftKey)) {
         setStatus('dirty', 'Draft available');

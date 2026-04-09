@@ -529,6 +529,11 @@ $routes->get('Opd_prescription/fhir_bundle/(:num)/(:num)', 'Opd_prescription::fh
 $routes->get('Opd_prescription/fhir_bundle_history/(:num)', 'Opd_prescription::fhir_bundle_history/$1');
 $routes->get('Opd_prescription/fhir_bundle_history/(:num)/(:num)', 'Opd_prescription::fhir_bundle_history/$1/$2');
 $routes->get('Opd_prescription/complaints_search', 'Opd_prescription::complaints_search');
+$routes->get('Opd_prescription/provisional_diagnosis_search', 'Opd_prescription::provisional_diagnosis_search');
+$routes->get('Opd_prescription/finding_exam_search', 'Opd_prescription::finding_exam_search');
+$routes->get('Opd_prescription/get_complaints', 'Opd_prescription::get_complaints');
+$routes->get('Opd_prescription/get_disease', 'Opd_prescription::get_disease');
+$routes->get('Opd_prescription/get_finding_exam', 'Opd_prescription::get_finding_exam');
 $routes->post('Opd_prescription/complaints_parse', 'Opd_prescription::complaints_parse');
 $routes->post('Opd_prescription/complaints_ai_draft', 'Opd_prescription::complaints_ai_draft');
 $routes->post('Opd_prescription/clinical_autotype', 'Opd_prescription::clinical_autotype');
