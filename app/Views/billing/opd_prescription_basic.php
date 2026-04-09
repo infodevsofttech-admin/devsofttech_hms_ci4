@@ -467,6 +467,7 @@
                         <div class="d-flex align-items-center gap-2">
                             <span class="badge bg-light text-dark border">Doctor View</span>
                             <button type="button" class="btn btn-outline-primary btn-sm" id="btn_toggle_consult_view_settings">Customize Sections</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_manage_autotype_keywords">Manage Keywords</button>
                         </div>
                     </div>
 
@@ -949,6 +950,91 @@
         </div>
     </form>
 
+    <div class="modal fade" id="autotypeKeywordModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Manage Autotype Keywords</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="border rounded p-2 mb-3 bg-light">
+                        <div class="row g-2 align-items-end">
+                            <div class="col-md-3">
+                                <label class="form-label mb-1">Add In Section</label>
+                                <select class="form-select form-select-sm" id="autotype_keyword_add_section">
+                                    <option value="complaints">Complaints</option>
+                                    <option value="finding_examinations">Finding/Examinations</option>
+                                    <option value="provisional_diagnosis">Provisional Diagnosis</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label mb-1">Save Scope</label>
+                                <select class="form-select form-select-sm" id="autotype_keyword_add_scope">
+                                    <option value="doctor">My</option>
+                                    <option value="master">Master</option>
+                                </select>
+                            </div>
+                            <div class="col-md-5">
+                                <label class="form-label mb-1">Keyword Text</label>
+                                <input type="text" class="form-control form-control-sm" id="autotype_keyword_add_text" placeholder="Type full keyword/text...">
+                            </div>
+                            <div class="col-md-2 d-grid">
+                                <button type="button" class="btn btn-primary btn-sm" id="btn_autotype_keyword_add">Add Keyword</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-4">
+                            <label class="form-label mb-1">Section</label>
+                            <select class="form-select form-select-sm" id="autotype_keyword_filter_section">
+                                <option value="">All sections</option>
+                                <option value="complaints">Complaints</option>
+                                <option value="finding_examinations">Finding/Examinations</option>
+                                <option value="provisional_diagnosis">Provisional Diagnosis</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label mb-1">Scope</label>
+                            <select class="form-select form-select-sm" id="autotype_keyword_filter_scope">
+                                <option value="all">All</option>
+                                <option value="doctor">My Keywords</option>
+                                <option value="master">Master Keywords</option>
+                            </select>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label mb-1">Search</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control" id="autotype_keyword_filter_search" placeholder="Search keyword...">
+                                <button type="button" class="btn btn-outline-secondary" id="btn_autotype_keyword_filter_reload">Reload</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="small text-muted mb-2" id="autotype_keyword_manager_note">Showing latest keywords.</div>
+                    <div class="table-responsive border rounded">
+                        <table class="table table-sm table-striped mb-0">
+                            <thead>
+                                <tr>
+                                    <th width="140">Section</th>
+                                    <th>Keyword</th>
+                                    <th width="90">Scope</th>
+                                    <th width="110">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="autotype_keyword_manager_rows">
+                                <tr><td colspan="4" class="text-muted px-2 py-2">No keyword found.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal fade" id="rxTemplateModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-md">
             <div class="modal-content">
@@ -1200,6 +1286,12 @@
     var autotypeSuggestCacheMaxEntries = 240;
     var autotypeSuggestCacheLocalKey = 'opd_autotype_suggest_cache_v1';
     var autotypeSuggestCacheLocalReady = false;
+    var autotypeKeywordModalLoading = false;
+    var autotypeKeywordSectionLabels = {
+        complaints: 'Complaints',
+        finding_examinations: 'Finding/Examinations',
+        provisional_diagnosis: 'Provisional Diagnosis'
+    };
     var medInputTimer = null;
     var crgcMedInputTimer = null;
     var medicineDoseMasterCache = { dose: [], when: [], freq: [], where: [] };
@@ -1586,6 +1678,72 @@
         return (val || '').toString().split(/,\s*/);
     }
 
+    function getTextareaCaretCoordinates(el, caretPos) {
+        var doc = document;
+        var div = doc.createElement('div');
+        var style = window.getComputedStyle(el);
+        var propList = [
+            'boxSizing', 'width', 'height', 'overflowX', 'overflowY',
+            'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
+            'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+            'fontStyle', 'fontVariant', 'fontWeight', 'fontStretch', 'fontSize',
+            'fontSizeAdjust', 'lineHeight', 'fontFamily', 'textAlign', 'textTransform',
+            'textIndent', 'textDecoration', 'letterSpacing', 'wordSpacing'
+        ];
+
+        div.style.position = 'absolute';
+        div.style.visibility = 'hidden';
+        div.style.whiteSpace = 'pre-wrap';
+        div.style.wordWrap = 'break-word';
+        div.style.left = '-9999px';
+        propList.forEach(function(prop) {
+            div.style[prop] = style[prop];
+        });
+
+        div.textContent = el.value.substring(0, caretPos);
+        var span = doc.createElement('span');
+        span.textContent = el.value.substring(caretPos) || '.';
+        div.appendChild(span);
+        doc.body.appendChild(div);
+
+        var top = span.offsetTop - el.scrollTop;
+        var left = span.offsetLeft - el.scrollLeft;
+        doc.body.removeChild(div);
+
+        return { top: top, left: left };
+    }
+
+    function positionAutocompleteNearCaret($field) {
+        var ac = $field.autocomplete('instance');
+        if (!ac || !ac.menu || !ac.menu.element || !$field.length) {
+            return;
+        }
+
+        var el = $field.get(0);
+        if (!el || el.tagName !== 'TEXTAREA') {
+            return;
+        }
+
+        var offset = $field.offset();
+        if (!offset) {
+            return;
+        }
+
+        var caretPos = Number(el.selectionStart || 0);
+        var caret = getTextareaCaretCoordinates(el, caretPos);
+        var lineHeight = parseFloat(window.getComputedStyle(el).lineHeight || '20');
+        var menuLeft = Math.max(8, offset.left + caret.left);
+        var menuTop = Math.max(8, offset.top + caret.top + lineHeight + 6);
+
+        ac.menu.element.css({
+            position: 'absolute',
+            left: menuLeft + 'px',
+            top: menuTop + 'px',
+            minWidth: Math.max(260, Math.round($field.innerWidth() * 0.65)) + 'px',
+            zIndex: 2000
+        });
+    }
+
     function extractLastCommaTerm(term) {
         return splitCommaTerms(term).pop() || '';
     }
@@ -1668,11 +1826,14 @@
         return token;
     }
 
-    function saveAutotypeKeyword(section, keyword, done) {
-        var scope = 'doctor';
-        var useMaster = window.confirm('Save keyword to Master list for all doctors?\nChoose Cancel to save only for current doctor.');
-        if (useMaster) {
-            scope = 'master';
+    function saveAutotypeKeyword(section, keyword, done, scopeOverride) {
+        var scope = (scopeOverride || '').toString().trim().toLowerCase();
+        if (scope !== 'doctor' && scope !== 'master') {
+            scope = 'doctor';
+            var useMaster = window.confirm('Save keyword to Master list for all doctors?\nChoose Cancel to save only for current doctor.');
+            if (useMaster) {
+                scope = 'master';
+            }
         }
 
         apiPost('<?= base_url('Opd_prescription/autotype_keyword_save') ?>', {
@@ -1688,6 +1849,137 @@
                 done(data || {});
             }
         });
+    }
+
+    function autotypeKeywordApiList(params, done) {
+        $.getJSON('<?= base_url('Opd_prescription/autotype_keyword_list') ?>', params || {}, function(data) {
+            if (typeof done === 'function') {
+                done(data || {});
+            }
+        }).fail(function() {
+            if (typeof done === 'function') {
+                done({ rows: [], error_text: 'Unable to fetch keyword list.' });
+            }
+        });
+    }
+
+    function autotypeKeywordApiUpdate(id, keyword, done) {
+        apiPost('<?= base_url('Opd_prescription/autotype_keyword_update') ?>', {
+            id: id,
+            keyword: keyword
+        }, function(data) {
+            if (typeof done === 'function') {
+                done(data || {});
+            }
+        });
+    }
+
+    function autotypeKeywordApiRemove(id, done) {
+        apiPost('<?= base_url('Opd_prescription/autotype_keyword_remove') ?>', {
+            id: id
+        }, function(data) {
+            if (typeof done === 'function') {
+                done(data || {});
+            }
+        });
+    }
+
+    function renderAutotypeKeywordManagerRows(rows) {
+        var $tbody = $('#autotype_keyword_manager_rows');
+        $tbody.empty();
+
+        var list = Array.isArray(rows) ? rows : [];
+        if (!list.length) {
+            $tbody.append('<tr><td colspan="4" class="text-muted px-2 py-2">No keyword found.</td></tr>');
+            return;
+        }
+
+        list.forEach(function(row) {
+            var id = Number(row.id || 0);
+            var keyword = (row.keyword || '').toString();
+            var section = (row.section_key || '').toString();
+            var scopeLabel = (row.scope_label || row.scope || '').toString();
+            var canEdit = Number(row.can_edit || 0) === 1;
+            var canDelete = Number(row.can_delete || 0) === 1;
+
+            var $tr = $('<tr></tr>');
+            $('<td></td>').text(autotypeKeywordSectionLabels[section] || section || '-').appendTo($tr);
+            $('<td></td>').text(keyword).appendTo($tr);
+            $('<td></td>').text(scopeLabel).appendTo($tr);
+
+            var $action = $('<td></td>');
+            var $editBtn = $('<button type="button" class="btn btn-outline-primary btn-sm me-1">Edit</button>');
+            var $delBtn = $('<button type="button" class="btn btn-outline-danger btn-sm">Delete</button>');
+            $editBtn.attr('data-id', id).attr('data-keyword', keyword).addClass('btn-autotype-keyword-edit');
+            $delBtn.attr('data-id', id).attr('data-keyword', keyword).addClass('btn-autotype-keyword-delete');
+
+            if (!canEdit) {
+                $editBtn.prop('disabled', true);
+            }
+            if (!canDelete) {
+                $delBtn.prop('disabled', true);
+            }
+
+            $action.append($editBtn).append($delBtn).appendTo($tr);
+            $tbody.append($tr);
+        });
+    }
+
+    function getAutotypeKeywordFilters() {
+        return {
+            section: ($('#autotype_keyword_filter_section').val() || '').toString(),
+            scope: ($('#autotype_keyword_filter_scope').val() || 'all').toString(),
+            q: ($('#autotype_keyword_filter_search').val() || '').toString().trim()
+        };
+    }
+
+    function submitModalAutotypeKeyword() {
+        var section = ($('#autotype_keyword_add_section').val() || '').toString();
+        var scope = ($('#autotype_keyword_add_scope').val() || 'doctor').toString().toLowerCase();
+        var keyword = ($('#autotype_keyword_add_text').val() || '').toString().trim();
+
+        if (!section) {
+            $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Please select section for keyword.');
+            return;
+        }
+        if (!keyword || keyword.length < 2) {
+            $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Please type at least 2 characters in keyword text.');
+            return;
+        }
+
+        saveAutotypeKeyword(section, keyword, function(data) {
+            if (Number(data.update || 0) === 1) {
+                clearAutotypeSuggestionCaches();
+                $('#autotype_keyword_add_text').val('');
+                $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text((data.error_text || 'Keyword saved') + ': ' + keyword);
+                loadAutotypeKeywordManagerRows();
+            } else {
+                $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text(data.error_text || 'Unable to save keyword.');
+            }
+        }, scope);
+    }
+
+    function loadAutotypeKeywordManagerRows() {
+        if (autotypeKeywordModalLoading) {
+            return;
+        }
+
+        autotypeKeywordModalLoading = true;
+        $('#autotype_keyword_manager_note').text('Loading keywords...');
+        autotypeKeywordApiList(getAutotypeKeywordFilters(), function(data) {
+            autotypeKeywordModalLoading = false;
+            var rows = (data && data.rows) ? data.rows : [];
+            renderAutotypeKeywordManagerRows(rows);
+            $('#autotype_keyword_manager_note').text('Showing ' + rows.length + ' keyword(s).');
+            if (data && data.error_text) {
+                $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text(data.error_text);
+            }
+        });
+    }
+
+    function clearAutotypeSuggestionCaches() {
+        autotypeSuggestCache = {};
+        persistAutotypeSuggestCache();
     }
 
     function bindLegacyCommaAutocomplete(selector, endpointUrl, extractValue) {
@@ -1744,6 +2036,9 @@
                 focus: function() {
                     return false;
                 },
+                open: function() {
+                    positionAutocompleteNearCaret($(this));
+                },
                 select: function(event, ui) {
                     var terms = splitCommaTerms(this.value);
                     terms.pop();
@@ -1756,6 +2051,14 @@
                     return false;
                 }
             });
+
+        $field.on('keyup click focus', function() {
+            var $self = $(this);
+            var ac = $self.autocomplete('instance');
+            if (ac && ac.menu && ac.menu.element && ac.menu.element.is(':visible')) {
+                positionAutocompleteNearCaret($self);
+            }
+        });
     }
 
     function getCsrfPair() {
@@ -5963,8 +6266,99 @@
         saveAutotypeKeyword(section, keyword, function(data) {
             if (Number(data.update || 0) === 1) {
                 $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text((data.error_text || 'Keyword saved') + ': ' + keyword);
+                loadAutotypeKeywordManagerRows();
             } else {
                 $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text(data.error_text || 'Unable to save keyword.');
+            }
+        });
+    });
+
+    $('#btn_manage_autotype_keywords').on('click', function() {
+        var firstSection = ($('#autotype_keyword_filter_section').val() || 'complaints').toString();
+        if (!firstSection) {
+            firstSection = 'complaints';
+        }
+        $('#autotype_keyword_add_section').val(firstSection);
+        loadAutotypeKeywordManagerRows();
+        if (window.bootstrap && window.bootstrap.Modal) {
+            window.bootstrap.Modal.getOrCreateInstance(document.getElementById('autotypeKeywordModal')).show();
+        } else {
+            $('#autotypeKeywordModal').show();
+        }
+    });
+
+    $('#btn_autotype_keyword_add').on('click', function() {
+        submitModalAutotypeKeyword();
+    });
+
+    $('#autotype_keyword_add_text').on('keydown', function(e) {
+        if ((e.key || '').toLowerCase() === 'enter') {
+            e.preventDefault();
+            submitModalAutotypeKeyword();
+        }
+    });
+
+    $('#btn_autotype_keyword_filter_reload').on('click', function() {
+        loadAutotypeKeywordManagerRows();
+    });
+
+    $('#autotype_keyword_filter_section, #autotype_keyword_filter_scope').on('change', function() {
+        loadAutotypeKeywordManagerRows();
+    });
+
+    $('#autotype_keyword_filter_search').on('keydown', function(e) {
+        if ((e.key || '').toLowerCase() === 'enter') {
+            e.preventDefault();
+            loadAutotypeKeywordManagerRows();
+        }
+    });
+
+    $(document).on('click', '.btn-autotype-keyword-edit', function() {
+        var id = Number($(this).data('id') || 0);
+        var oldKeyword = ($(this).data('keyword') || '').toString();
+        if (id <= 0) {
+            return;
+        }
+
+        var next = window.prompt('Edit keyword', oldKeyword);
+        if (next === null) {
+            return;
+        }
+        next = next.toString().trim();
+        if (next.length < 2) {
+            $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Keyword must be at least 2 characters.');
+            return;
+        }
+
+        autotypeKeywordApiUpdate(id, next, function(data) {
+            if (Number(data.update || 0) === 1) {
+                clearAutotypeSuggestionCaches();
+                $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text(data.error_text || 'Keyword updated.');
+                loadAutotypeKeywordManagerRows();
+            } else {
+                $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text(data.error_text || 'Unable to update keyword.');
+            }
+        });
+    });
+
+    $(document).on('click', '.btn-autotype-keyword-delete', function() {
+        var id = Number($(this).data('id') || 0);
+        var keyword = ($(this).data('keyword') || '').toString();
+        if (id <= 0) {
+            return;
+        }
+
+        if (!window.confirm('Delete keyword: ' + keyword + ' ?')) {
+            return;
+        }
+
+        autotypeKeywordApiRemove(id, function(data) {
+            if (Number(data.update || 0) === 1) {
+                clearAutotypeSuggestionCaches();
+                $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text(data.error_text || 'Keyword removed.');
+                loadAutotypeKeywordManagerRows();
+            } else {
+                $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text(data.error_text || 'Unable to remove keyword.');
             }
         });
     });

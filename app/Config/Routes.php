@@ -535,6 +535,9 @@ $routes->get('Opd_prescription/get_complaints', 'Opd_prescription::get_complaint
 $routes->get('Opd_prescription/get_disease', 'Opd_prescription::get_disease');
 $routes->get('Opd_prescription/get_finding_exam', 'Opd_prescription::get_finding_exam');
 $routes->post('Opd_prescription/autotype_keyword_save', 'Opd_prescription::autotype_keyword_save');
+$routes->get('Opd_prescription/autotype_keyword_list', 'Opd_prescription::autotype_keyword_list');
+$routes->post('Opd_prescription/autotype_keyword_update', 'Opd_prescription::autotype_keyword_update');
+$routes->post('Opd_prescription/autotype_keyword_remove', 'Opd_prescription::autotype_keyword_remove');
 $routes->post('Opd_prescription/complaints_parse', 'Opd_prescription::complaints_parse');
 $routes->post('Opd_prescription/complaints_ai_draft', 'Opd_prescription::complaints_ai_draft');
 $routes->post('Opd_prescription/clinical_autotype', 'Opd_prescription::clinical_autotype');

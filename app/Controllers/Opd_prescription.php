@@ -4111,6 +4111,195 @@ class Opd_prescription extends BaseController
         ]);
     }
 
+    public function autotype_keyword_list()
+    {
+        if (! $this->canAccessPrescription()) {
+            return $this->response->setStatusCode(403)->setJSON(['rows' => []]);
+        }
+
+        $section = trim((string) $this->request->getGet('section'));
+        $scope = strtolower(trim((string) $this->request->getGet('scope')));
+        $q = trim((string) $this->request->getGet('q'));
+        $docId = max(0, (int) ($this->getCurrentUserId() ?? 0));
+        $canMaster = $this->canManageMasterKeyword();
+
+        if ($scope === '') {
+            $scope = 'all';
+        }
+
+        if (! $this->ensureAutotypeKeywordTable()) {
+            return $this->response->setJSON(['rows' => []]);
+        }
+
+        $builder = $this->db->table('opd_autotype_keyword_master')
+            ->select('id,doc_id,section_key,keyword,updated_at')
+            ->where('is_active', 1);
+
+        if ($this->isAutotypeKeywordSectionAllowed($section)) {
+            $builder->where('section_key', $section);
+        }
+
+        if ($scope === 'master') {
+            $builder->where('doc_id', 0);
+        } elseif ($scope === 'doctor') {
+            $builder->where('doc_id', $docId);
+        } else {
+            $builder->groupStart()
+                ->where('doc_id', 0)
+                ->orWhere('doc_id', $docId)
+                ->groupEnd();
+        }
+
+        if ($q !== '') {
+            $builder->like('keyword', $q);
+        }
+
+        $rows = $builder
+            ->orderBy('doc_id', 'DESC')
+            ->orderBy('updated_at', 'DESC')
+            ->orderBy('keyword', 'ASC')
+            ->limit(200)
+            ->get()
+            ->getResultArray();
+
+        $out = [];
+        foreach ($rows as $row) {
+            $id = (int) ($row['id'] ?? 0);
+            $rowDocId = (int) ($row['doc_id'] ?? 0);
+            $isMaster = $rowDocId === 0;
+            $canEdit = $isMaster ? $canMaster : ($rowDocId === $docId);
+
+            $out[] = [
+                'id' => $id,
+                'doc_id' => $rowDocId,
+                'section_key' => (string) ($row['section_key'] ?? ''),
+                'keyword' => (string) ($row['keyword'] ?? ''),
+                'scope' => $isMaster ? 'master' : 'doctor',
+                'scope_label' => $isMaster ? 'Master' : 'My',
+                'updated_at' => (string) ($row['updated_at'] ?? ''),
+                'can_edit' => $canEdit ? 1 : 0,
+                'can_delete' => $canEdit ? 1 : 0,
+            ];
+        }
+
+        return $this->response->setJSON(['rows' => $out]);
+    }
+
+    public function autotype_keyword_update()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        if (! $this->canAccessPrescription()) {
+            return $this->response->setStatusCode(403)->setJSON(['update' => 0, 'error_text' => 'Access denied']);
+        }
+
+        $id = (int) $this->request->getPost('id');
+        $keyword = trim((string) $this->request->getPost('keyword'));
+        $keyword = preg_replace('/\s+/', ' ', $keyword) ?? $keyword;
+        if ($id <= 0 || mb_strlen($keyword) < 2) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Valid keyword is required']);
+        }
+
+        if (! $this->ensureAutotypeKeywordTable()) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Keyword storage unavailable']);
+        }
+
+        $table = $this->db->table('opd_autotype_keyword_master');
+        $current = $table->where('id', $id)->where('is_active', 1)->get(1)->getRowArray();
+        if (empty($current)) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Keyword not found']);
+        }
+
+        $docId = max(0, (int) ($this->getCurrentUserId() ?? 0));
+        $rowDocId = (int) ($current['doc_id'] ?? 0);
+        if ($rowDocId === 0) {
+            if (! $this->canManageMasterKeyword()) {
+                return $this->response->setJSON(['update' => 0, 'error_text' => 'No permission to edit master keyword']);
+            }
+        } elseif ($rowDocId !== $docId) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'You can edit only your own keyword']);
+        }
+
+        $section = (string) ($current['section_key'] ?? '');
+        if (! $this->isAutotypeKeywordSectionAllowed($section)) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Unsupported section']);
+        }
+
+        $dup = $table
+            ->where('doc_id', $rowDocId)
+            ->where('section_key', $section)
+            ->where('keyword', $keyword)
+            ->where('id <>', $id)
+            ->where('is_active', 1)
+            ->get(1)
+            ->getRowArray();
+        if (! empty($dup)) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Keyword already exists in this scope']);
+        }
+
+        $table->where('id', $id)->update([
+            'keyword' => $keyword,
+            'updated_at' => date('Y-m-d H:i:s'),
+        ]);
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'error_text' => 'Keyword updated',
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
+    public function autotype_keyword_remove()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        if (! $this->canAccessPrescription()) {
+            return $this->response->setStatusCode(403)->setJSON(['update' => 0, 'error_text' => 'Access denied']);
+        }
+
+        $id = (int) $this->request->getPost('id');
+        if ($id <= 0) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Keyword id is required']);
+        }
+
+        if (! $this->ensureAutotypeKeywordTable()) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Keyword storage unavailable']);
+        }
+
+        $table = $this->db->table('opd_autotype_keyword_master');
+        $current = $table->where('id', $id)->where('is_active', 1)->get(1)->getRowArray();
+        if (empty($current)) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Keyword not found']);
+        }
+
+        $docId = max(0, (int) ($this->getCurrentUserId() ?? 0));
+        $rowDocId = (int) ($current['doc_id'] ?? 0);
+        if ($rowDocId === 0) {
+            if (! $this->canManageMasterKeyword()) {
+                return $this->response->setJSON(['update' => 0, 'error_text' => 'No permission to remove master keyword']);
+            }
+        } elseif ($rowDocId !== $docId) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'You can remove only your own keyword']);
+        }
+
+        $table->where('id', $id)->update([
+            'is_active' => 0,
+            'updated_at' => date('Y-m-d H:i:s'),
+        ]);
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'error_text' => 'Keyword removed',
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
     // Legacy-compatible wrappers used by older autocomplete clients.
     public function get_complaints()
     {
@@ -6322,13 +6511,30 @@ class Opd_prescription extends BaseController
                 is_active TINYINT NOT NULL DEFAULT 1,
                 created_at DATETIME NULL,
                 updated_at DATETIME NULL,
-                UNIQUE KEY uniq_doc_section_keyword (doc_id, section_key, keyword),
-                INDEX idx_section_keyword (section_key, keyword),
+                UNIQUE KEY uniq_doc_section_keyword (doc_id, section_key, keyword(120)),
+                INDEX idx_section_keyword (section_key, keyword(120)),
                 INDEX idx_doc_active (doc_id, is_active)
             )";
             $this->db->query($sql);
         } catch (\Throwable $e) {
-            return false;
+            // Fallback for stricter MySQL/InnoDB index length limits.
+            try {
+                $fallbackSql = "CREATE TABLE IF NOT EXISTS opd_autotype_keyword_master (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    doc_id INT NOT NULL DEFAULT 0,
+                    section_key VARCHAR(60) NOT NULL,
+                    keyword VARCHAR(180) NOT NULL,
+                    is_active TINYINT NOT NULL DEFAULT 1,
+                    created_at DATETIME NULL,
+                    updated_at DATETIME NULL,
+                    UNIQUE KEY uniq_doc_section_keyword (doc_id, section_key, keyword),
+                    INDEX idx_section_keyword (section_key, keyword),
+                    INDEX idx_doc_active (doc_id, is_active)
+                )";
+                $this->db->query($fallbackSql);
+            } catch (\Throwable $e2) {
+                return false;
+            }
         }
 
         return $this->db->tableExists('opd_autotype_keyword_master');
@@ -6387,6 +6593,16 @@ class Opd_prescription extends BaseController
         }
 
         return $out;
+    }
+
+    private function canManageMasterKeyword(): bool
+    {
+        $user = auth()->user();
+        if (! $user || ! method_exists($user, 'can')) {
+            return false;
+        }
+
+        return $user->can('doctor_work.template_workspace.access') || $user->can('doctor_work.access');
     }
 
     private function isTemplateSectionAllowed(string $section): bool
