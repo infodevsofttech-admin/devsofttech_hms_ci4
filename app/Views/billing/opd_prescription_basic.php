@@ -656,6 +656,7 @@
                                 <label class="form-label">Complaints
                                     <button type="button" class="btn btn-outline-primary btn-sm rx-ai-btn btn-ai-rewrite btn-complaints-rewrite" data-target="complaints" data-mode="hinglish_to_english" title="Convert Hinglish text to English">↔ Hinglish → English</button>
                                     <button type="button" class="btn btn-outline-success btn-sm rx-ai-btn" id="btn_complaints_mic" title="Speech to text for complaints">Mic</button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm rx-ai-btn btn-save-autotype-keyword" data-section="complaints" data-target="complaints" title="Save keyword for autocomplete">Save keyword</button>
                                 </label>
                                 <textarea class="form-control rx-field" id="complaints" rows="4" maxlength="4000"><?= esc($opd_prescription[0]->complaints ?? '') ?></textarea>
                                 <div id="complaints_interim_preview" style="display:none;font-size:.8rem;color:#6c757d;padding:2px 4px;font-style:italic;"></div>
@@ -670,6 +671,7 @@
                                     <button type="button" class="btn btn-outline-secondary btn-sm btn-field-past" data-section="finding_examinations" data-target="finding_examinations">Past Data</button>
                                     <button type="button" class="btn btn-outline-secondary btn-sm btn-template-load" data-section="finding_examinations" data-target="finding_examinations">Load Template</button>
                                     <button type="button" class="btn btn-outline-secondary btn-sm btn-template-save" data-section="finding_examinations" data-target="finding_examinations">Save as Template</button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm btn-save-autotype-keyword" data-section="finding_examinations" data-target="finding_examinations">Save keyword</button>
                                     <button type="button" class="btn btn-outline-secondary btn-sm btn-field-clear" data-target="finding_examinations">Clear</button>
                                 </div>
                                 <textarea class="form-control rx-field" id="finding_examinations" rows="4" maxlength="4000"><?= esc($opd_prescription[0]->Finding_Examinations ?? '') ?></textarea>
@@ -698,6 +700,7 @@
                                     <button type="button" class="btn btn-outline-secondary btn-sm btn-field-past" data-section="provisional_diagnosis" data-target="provisional_diagnosis">Past Data</button>
                                     <button type="button" class="btn btn-outline-secondary btn-sm btn-template-load" data-section="provisional_diagnosis" data-target="provisional_diagnosis">Load Template</button>
                                     <button type="button" class="btn btn-outline-secondary btn-sm btn-template-save" data-section="provisional_diagnosis" data-target="provisional_diagnosis">Save as Template</button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm btn-save-autotype-keyword" data-section="provisional_diagnosis" data-target="provisional_diagnosis">Save keyword</button>
                                     <button type="button" class="btn btn-outline-secondary btn-sm btn-field-clear" data-target="provisional_diagnosis">Clear</button>
                                 </div>
                                 <textarea class="form-control rx-field" id="provisional_diagnosis" rows="4" maxlength="4000"><?= esc($opd_prescription[0]->Provisional_diagnosis ?? '') ?></textarea>
@@ -1192,6 +1195,11 @@
     var medicineSearchLocalDbKey = 'opd_medicine_search_cache_v1';
     var medicineSearchCacheMaxEntries = 250;
     var medicineSearchLocalDbReady = false;
+    var autotypeSuggestCache = {};
+    var autotypeSuggestCacheTtlMs = 300000;
+    var autotypeSuggestCacheMaxEntries = 240;
+    var autotypeSuggestCacheLocalKey = 'opd_autotype_suggest_cache_v1';
+    var autotypeSuggestCacheLocalReady = false;
     var medInputTimer = null;
     var crgcMedInputTimer = null;
     var medicineDoseMasterCache = { dose: [], when: [], freq: [], where: [] };
@@ -1201,6 +1209,7 @@
     };
     var patientId = <?= (int) ($patient_master[0]->id ?? 0) ?>;
     var doctorViewId = <?= (int) ($doctorId ?? 0) ?>;
+    autotypeSuggestCacheLocalKey = autotypeSuggestCacheLocalKey + '_' + doctorViewId;
     var consultSectionPreferenceKey = 'opd_consult_section_pref_' + doctorViewId;
     var consultSectionMeta = [
         { key: 'pain_scale', selector: '#rx_sec_pain_scale', title: 'Pain Measurement Scale' },
@@ -1581,6 +1590,106 @@
         return splitCommaTerms(term).pop() || '';
     }
 
+    function getAutotypeSuggestCacheKey(endpointUrl, term) {
+        return (endpointUrl || '') + '|' + (term || '').toString().trim().toLowerCase();
+    }
+
+    function pruneAutotypeSuggestCache(nowMs) {
+        var now = nowMs || Date.now();
+        var keys = Object.keys(autotypeSuggestCache || {});
+        if (!keys.length) {
+            autotypeSuggestCache = {};
+            return;
+        }
+
+        var rows = [];
+        keys.forEach(function(k) {
+            var item = autotypeSuggestCache[k] || {};
+            var ts = Number(item.ts || 0);
+            if (!ts || (now - ts) > autotypeSuggestCacheTtlMs) {
+                return;
+            }
+            rows.push({ key: k, ts: ts, rows: Array.isArray(item.rows) ? item.rows : [] });
+        });
+
+        rows.sort(function(a, b) { return b.ts - a.ts; });
+        if (rows.length > autotypeSuggestCacheMaxEntries) {
+            rows = rows.slice(0, autotypeSuggestCacheMaxEntries);
+        }
+
+        var next = {};
+        rows.forEach(function(item) {
+            next[item.key] = { ts: item.ts, rows: item.rows };
+        });
+        autotypeSuggestCache = next;
+    }
+
+    function ensureAutotypeSuggestCacheLoaded() {
+        if (autotypeSuggestCacheLocalReady) {
+            return;
+        }
+        autotypeSuggestCacheLocalReady = true;
+        try {
+            var raw = localStorage.getItem(autotypeSuggestCacheLocalKey);
+            if (!raw) {
+                return;
+            }
+            var parsed = JSON.parse(raw);
+            var entries = parsed && parsed.entries ? parsed.entries : {};
+            if (entries && typeof entries === 'object') {
+                autotypeSuggestCache = entries;
+                pruneAutotypeSuggestCache(Date.now());
+            }
+        } catch (e) {
+            autotypeSuggestCache = {};
+        }
+    }
+
+    function persistAutotypeSuggestCache() {
+        try {
+            pruneAutotypeSuggestCache(Date.now());
+            localStorage.setItem(autotypeSuggestCacheLocalKey, JSON.stringify({
+                saved_at: Date.now(),
+                entries: autotypeSuggestCache
+            }));
+        } catch (e) {
+            // Ignore localStorage write failures.
+        }
+    }
+
+    function getLastKeywordFromField(targetId) {
+        var text = ($('#' + targetId).val() || '').toString();
+        var token = extractLastCommaTerm(text).toString().trim();
+        if (!token) {
+            var parts = text.split(/[;,\n\r]+/);
+            token = (parts.pop() || '').toString().trim();
+        }
+        token = token.replace(/^[-*\s]+/, '').trim();
+        return token;
+    }
+
+    function saveAutotypeKeyword(section, keyword, done) {
+        var scope = 'doctor';
+        var useMaster = window.confirm('Save keyword to Master list for all doctors?\nChoose Cancel to save only for current doctor.');
+        if (useMaster) {
+            scope = 'master';
+        }
+
+        apiPost('<?= base_url('Opd_prescription/autotype_keyword_save') ?>', {
+            section: section,
+            keyword: keyword,
+            scope: scope
+        }, function(data) {
+            if (data && Number(data.update || 0) === 1) {
+                autotypeSuggestCache = {};
+                persistAutotypeSuggestCache();
+            }
+            if (typeof done === 'function') {
+                done(data || {});
+            }
+        });
+    }
+
     function bindLegacyCommaAutocomplete(selector, endpointUrl, extractValue) {
         var $field = $(selector);
         if (!$field.length || !($.ui && $.ui.autocomplete)) {
@@ -1602,6 +1711,15 @@
                         return;
                     }
 
+                    ensureAutotypeSuggestCacheLoaded();
+                    var cacheKey = getAutotypeSuggestCacheKey(endpointUrl, term);
+                    var hit = autotypeSuggestCache[cacheKey];
+                    var now = Date.now();
+                    if (hit && (now - Number(hit.ts || 0) < autotypeSuggestCacheTtlMs)) {
+                        response(hit.rows || []);
+                        return;
+                    }
+
                     $.getJSON(endpointUrl, { q: term }, function(data) {
                         var rows = (data && data.rows) ? data.rows : [];
                         var out = [];
@@ -1616,6 +1734,8 @@
                                 out.push({ label: value, value: value });
                             }
                         });
+                        autotypeSuggestCache[cacheKey] = { ts: Date.now(), rows: out };
+                        persistAutotypeSuggestCache();
                         response(out);
                     }).fail(function() {
                         response([]);
@@ -5825,6 +5945,28 @@
 
     $('#btn_reload_old_prescribed').on('click', function() {
         loadOldPrescribedPanel();
+    });
+
+    $(document).on('click', '.btn-save-autotype-keyword', function() {
+        var section = ($(this).data('section') || '').toString();
+        var targetId = ($(this).data('target') || '').toString();
+        if (!section || !targetId) {
+            return;
+        }
+
+        var keyword = getLastKeywordFromField(targetId);
+        if (!keyword || keyword.length < 2) {
+            $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Type at least 2 characters in this field, then click Save keyword.');
+            return;
+        }
+
+        saveAutotypeKeyword(section, keyword, function(data) {
+            if (Number(data.update || 0) === 1) {
+                $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text((data.error_text || 'Keyword saved') + ': ' + keyword);
+            } else {
+                $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text(data.error_text || 'Unable to save keyword.');
+            }
+        });
     });
 
     initConsultSectionDesigner();

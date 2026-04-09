@@ -3862,25 +3862,65 @@ class Opd_prescription extends BaseController
     public function complaints_search()
     {
         $q = trim((string) $this->request->getGet('q'));
-        if ($q === '' || ! $this->db->tableExists('complaints_master')) {
+        if ($q === '') {
             return $this->response->setJSON(['rows' => []]);
         }
 
-        $rows = $this->db->table('complaints_master')
-            ->select('Code as code, Name as name, name_hinglish, show_in_short, ai_hint')
-            ->where('is_active', 1)
-            ->groupStart()
-            ->like('Name', $q)
-            ->orLike('name_hinglish', $q)
-            ->orLike('keywords', $q)
-            ->groupEnd()
-            ->orderBy('show_in_short', 'DESC')
-            ->orderBy('Name', 'ASC')
-            ->limit(20)
-            ->get()
-            ->getResultArray();
+        $rows = [];
+        if ($this->db->tableExists('complaints_master')) {
+            $rows = $this->db->table('complaints_master')
+                ->select('Code as code, Name as name, name_hinglish, show_in_short, ai_hint')
+                ->where('is_active', 1)
+                ->groupStart()
+                ->like('Name', $q)
+                ->orLike('name_hinglish', $q)
+                ->orLike('keywords', $q)
+                ->groupEnd()
+                ->orderBy('show_in_short', 'DESC')
+                ->orderBy('Name', 'ASC')
+                ->limit(20)
+                ->get()
+                ->getResultArray();
+        }
 
-        return $this->response->setJSON(['rows' => $rows]);
+        $keywordRows = $this->fetchAutotypeKeywords(
+            'complaints',
+            $q,
+            max(0, (int) ($this->getCurrentUserId() ?? 0)),
+            20
+        );
+
+        $out = [];
+        $seen = [];
+        foreach ($rows as $row) {
+            $name = trim((string) ($row['name'] ?? ''));
+            if ($name === '') {
+                continue;
+            }
+            $k = strtoupper($name);
+            if (isset($seen[$k])) {
+                continue;
+            }
+            $seen[$k] = true;
+            $out[] = $row;
+        }
+
+        foreach ($keywordRows as $keyword) {
+            $k = strtoupper($keyword);
+            if ($keyword === '' || isset($seen[$k])) {
+                continue;
+            }
+            $seen[$k] = true;
+            $out[] = [
+                'code' => '',
+                'name' => $keyword,
+                'name_hinglish' => '',
+                'show_in_short' => 0,
+                'ai_hint' => '',
+            ];
+        }
+
+        return $this->response->setJSON(['rows' => array_slice($out, 0, 20)]);
     }
 
     public function provisional_diagnosis_search()
@@ -3908,7 +3948,37 @@ class Opd_prescription extends BaseController
             ->get()
             ->getResultArray();
 
-        return $this->response->setJSON(['rows' => $rows]);
+        $keywordRows = $this->fetchAutotypeKeywords(
+            'provisional_diagnosis',
+            $q,
+            max(0, (int) ($this->getCurrentUserId() ?? 0)),
+            20
+        );
+
+        $out = [];
+        $seen = [];
+        foreach ($rows as $row) {
+            $name = trim((string) ($row['name'] ?? ''));
+            if ($name === '') {
+                continue;
+            }
+            $k = strtoupper($name);
+            if (isset($seen[$k])) {
+                continue;
+            }
+            $seen[$k] = true;
+            $out[] = ['name' => $name];
+        }
+        foreach ($keywordRows as $keyword) {
+            $k = strtoupper($keyword);
+            if ($keyword === '' || isset($seen[$k])) {
+                continue;
+            }
+            $seen[$k] = true;
+            $out[] = ['name' => $keyword];
+        }
+
+        return $this->response->setJSON(['rows' => array_slice($out, 0, 20)]);
     }
 
     public function finding_exam_search()
@@ -3933,7 +4003,112 @@ class Opd_prescription extends BaseController
             ->get()
             ->getResultArray();
 
-        return $this->response->setJSON(['rows' => $rows]);
+        $keywordRows = $this->fetchAutotypeKeywords(
+            'finding_examinations',
+            $q,
+            max(0, (int) ($this->getCurrentUserId() ?? 0)),
+            20
+        );
+
+        $out = [];
+        $seen = [];
+        foreach ($rows as $row) {
+            $text = trim((string) ($row['finding_examinations'] ?? ''));
+            if ($text === '') {
+                continue;
+            }
+            $k = strtoupper($text);
+            if (isset($seen[$k])) {
+                continue;
+            }
+            $seen[$k] = true;
+            $out[] = ['finding_examinations' => $text];
+        }
+        foreach ($keywordRows as $keyword) {
+            $k = strtoupper($keyword);
+            if ($keyword === '' || isset($seen[$k])) {
+                continue;
+            }
+            $seen[$k] = true;
+            $out[] = ['finding_examinations' => $keyword];
+        }
+
+        return $this->response->setJSON(['rows' => array_slice($out, 0, 20)]);
+    }
+
+    public function autotype_keyword_save()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        if (! $this->canAccessPrescription()) {
+            return $this->response->setStatusCode(403)->setJSON(['update' => 0, 'error_text' => 'Access denied']);
+        }
+
+        $section = trim((string) $this->request->getPost('section'));
+        $keyword = trim((string) $this->request->getPost('keyword'));
+        $scope = strtolower(trim((string) $this->request->getPost('scope')));
+        if ($scope === '') {
+            $scope = 'doctor';
+        }
+
+        if (! $this->isAutotypeKeywordSectionAllowed($section)) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Unsupported section']);
+        }
+
+        $keyword = preg_replace('/\s+/', ' ', $keyword) ?? $keyword;
+        if (mb_strlen($keyword) < 2) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Keyword must be at least 2 characters']);
+        }
+
+        if (! $this->ensureAutotypeKeywordTable()) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Keyword storage unavailable']);
+        }
+
+        $docId = max(0, (int) ($this->getCurrentUserId() ?? 0));
+        if ($scope === 'master') {
+            $user = auth()->user();
+            $canMaster = $user && method_exists($user, 'can') && ($user->can('doctor_work.template_workspace.access') || $user->can('doctor_work.access'));
+            if (! $canMaster) {
+                return $this->response->setJSON(['update' => 0, 'error_text' => 'No permission to save master keyword']);
+            }
+            $docId = 0;
+        }
+
+        $table = $this->db->table('opd_autotype_keyword_master');
+        $existing = $table
+            ->where('doc_id', $docId)
+            ->where('section_key', $section)
+            ->where('keyword', $keyword)
+            ->get(1)
+            ->getRowArray();
+
+        if (! empty($existing)) {
+            $table->where('id', (int) ($existing['id'] ?? 0))->update([
+                'is_active' => 1,
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]);
+        } else {
+            $table->insert([
+                'doc_id' => $docId,
+                'section_key' => $section,
+                'keyword' => $keyword,
+                'is_active' => 1,
+                'created_at' => date('Y-m-d H:i:s'),
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]);
+        }
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'error_text' => $docId === 0 ? 'Keyword saved in master list' : 'Keyword saved for current doctor',
+            'keyword' => $keyword,
+            'section' => $section,
+            'scope' => $docId === 0 ? 'master' : 'doctor',
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
     }
 
     // Legacy-compatible wrappers used by older autocomplete clients.
@@ -6130,6 +6305,88 @@ class Opd_prescription extends BaseController
         }
 
         return $this->db->tableExists('opd_clinical_template_usage');
+    }
+
+    private function ensureAutotypeKeywordTable(): bool
+    {
+        if ($this->db->tableExists('opd_autotype_keyword_master')) {
+            return true;
+        }
+
+        try {
+            $sql = "CREATE TABLE IF NOT EXISTS opd_autotype_keyword_master (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                doc_id INT NOT NULL DEFAULT 0,
+                section_key VARCHAR(80) NOT NULL,
+                keyword VARCHAR(255) NOT NULL,
+                is_active TINYINT NOT NULL DEFAULT 1,
+                created_at DATETIME NULL,
+                updated_at DATETIME NULL,
+                UNIQUE KEY uniq_doc_section_keyword (doc_id, section_key, keyword),
+                INDEX idx_section_keyword (section_key, keyword),
+                INDEX idx_doc_active (doc_id, is_active)
+            )";
+            $this->db->query($sql);
+        } catch (\Throwable $e) {
+            return false;
+        }
+
+        return $this->db->tableExists('opd_autotype_keyword_master');
+    }
+
+    private function isAutotypeKeywordSectionAllowed(string $section): bool
+    {
+        return in_array($section, ['complaints', 'provisional_diagnosis', 'finding_examinations'], true);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function fetchAutotypeKeywords(string $section, string $q, int $docId, int $limit = 20): array
+    {
+        if ($q === '' || ! $this->isAutotypeKeywordSectionAllowed($section) || ! $this->ensureAutotypeKeywordTable()) {
+            return [];
+        }
+
+        $builder = $this->db->table('opd_autotype_keyword_master')
+            ->select('keyword,doc_id')
+            ->where('is_active', 1)
+            ->where('section_key', $section)
+            ->like('keyword', $q)
+            ->orderBy('doc_id', 'DESC')
+            ->orderBy('updated_at', 'DESC')
+            ->limit(max(1, $limit));
+
+        if ($docId > 0) {
+            $builder->groupStart()
+                ->where('doc_id', 0)
+                ->orWhere('doc_id', $docId)
+                ->groupEnd();
+        } else {
+            $builder->where('doc_id', 0);
+        }
+
+        $rows = $builder->get()->getResultArray();
+        if (empty($rows)) {
+            return [];
+        }
+
+        $out = [];
+        $seen = [];
+        foreach ($rows as $row) {
+            $keyword = trim((string) ($row['keyword'] ?? ''));
+            if ($keyword === '') {
+                continue;
+            }
+            $k = strtoupper($keyword);
+            if (isset($seen[$k])) {
+                continue;
+            }
+            $seen[$k] = true;
+            $out[] = $keyword;
+        }
+
+        return $out;
     }
 
     private function isTemplateSectionAllowed(string $section): bool
