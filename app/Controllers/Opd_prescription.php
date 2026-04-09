@@ -533,6 +533,8 @@ class Opd_prescription extends BaseController
             }
         }
 
+        $this->markOpdVisitedOnConsultCompletion((int) $opdId);
+
         return $this->response->setJSON([
             'update' => 1,
             'opd_session_id' => $recordId,
@@ -8684,6 +8686,7 @@ OPD SNAPSHOT JSON: " . $payload;
     public function opd_prescription_print(int $opdId, int $opdSessionId, int $printType = 0)
     {
         $this->createOpdPrescriptionWorkTask($opdId, $opdSessionId);
+        $this->markOpdVisitedOnConsultCompletion((int) $opdId);
 
         $printConfig = $this->resolvePrescriptionLayoutByDoctorField($opdId, $printType);
         $layoutMode = (string) ($printConfig['layout'] ?? 'content_only');
@@ -8698,6 +8701,19 @@ OPD SNAPSHOT JSON: " . $payload;
         }
 
         return redirect()->to($url);
+    }
+
+    private function markOpdVisitedOnConsultCompletion(int $opdId): void
+    {
+        if ($opdId <= 0 || ! $this->db->tableExists('opd_master')) {
+            return;
+        }
+
+        // Only promote waiting/booked OPD to visited; leave cancelled/visited untouched.
+        $this->db->table('opd_master')
+            ->where('opd_id', $opdId)
+            ->where('opd_status', 1)
+            ->update(['opd_status' => 2]);
     }
 
     /**
