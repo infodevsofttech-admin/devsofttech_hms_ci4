@@ -894,7 +894,8 @@ class Opd extends BaseController
         }
 
         $sql = "select o.opd_id,o.opd_code,o.opd_no,o.opd_status,
-                p.id,p.p_code,p.p_fname as P_name,p.p_rname,
+            p.id,p.p_code,p.p_fname as P_name,p.p_rname,
+            p.gender,p.age,p.age_in_month,p.estimate_dob,p.dob,
             o.opd_fee_desc,o.opd_fee_amount,o.payment_status,o.opd_fee_type,
             coalesce(o.running_opd,0) as running_opd,
             o.confirm_pay_opd,

@@ -93,7 +93,15 @@ $mergedGroups = [
                     $hasQueueNo         = $queueNo > 0;
                     $showFullActions    = $hasPrescription || $isConfirmedForQueue;
                     $opdId              = (int) ($row->opd_id ?? 0);
-                    $patientName        = esc(($row->P_name ?? '') . ' { ' . ($row->p_rname ?? '') . ' }');
+                    $patientRawName     = trim((string) ($row->P_name ?? '') . ' { ' . (string) ($row->p_rname ?? '') . ' }');
+                    $patientName        = esc($patientRawName);
+                    $patientAgeText     = function_exists('get_age_1')
+                        ? trim((string) get_age_1($row->dob ?? null, $row->age ?? '', $row->age_in_month ?? '', $row->estimate_dob ?? '', $opd_date ?? null))
+                        : trim((string) ($row->age ?? ''));
+                    $patientGenderCode  = (int) ($row->gender ?? 0);
+                    $patientGenderText  = $patientGenderCode === 1 ? 'Male' : ($patientGenderCode === 2 ? 'Female' : ($patientGenderCode === 3 ? 'Other' : ''));
+                    $patientAgeGender   = trim($patientAgeText . ($patientGenderText !== '' ? ' / ' . $patientGenderText : ''));
+                    $patientDisplayName = esc($patientRawName . ($patientAgeGender !== '' ? ' (' . $patientAgeGender . ')' : ''));
                     $tabType            = $group['tabType'];
                     $status             = $group['status'];
                     ?>
@@ -103,7 +111,7 @@ $mergedGroups = [
                         data-has-prescription="<?= $showFullActions ? 1 : 0 ?>">
                         <td><span class="badge <?= esc($group['badge']) ?>"><?= esc($group['label']) ?></span></td>
                         <td><?= esc($row->opd_code ?? '') ?></td>
-                        <td><?= $patientName ?></td>
+                        <td><?= $patientDisplayName ?></td>
                         <td data-order="<?= $hasQueueNo ? $queueNo : 9999 ?>"><?= $hasQueueNo ? $queueNo : '' ?></td>
                         <td><?= esc($row->p_code ?? '') ?></td>
                         <td><?= esc($row->opd_type ?? '') ?> / Amt: <?= esc($row->opd_fee_amount ?? '') ?></td>
