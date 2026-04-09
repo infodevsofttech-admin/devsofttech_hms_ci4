@@ -72,20 +72,19 @@ $feeTypes = $fee_types ?? [];
             return y + '-' + m + '-' + d;
         }
 
-        var now = new Date();
-        var firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-        var lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        var today = new Date();
+        var currentDate = toDateValue(today);
 
-        document.getElementById('opd_report_start').value = toDateValue(firstDay);
-        document.getElementById('opd_report_end').value = toDateValue(lastDay);
+        document.getElementById('opd_report_start').value = currentDate;
+        document.getElementById('opd_report_end').value = currentDate;
 
         function buildQuery() {
             var startVal = document.getElementById('opd_report_start').value;
             var endVal = document.getElementById('opd_report_end').value;
 
             if (!startVal || !endVal) {
-                startVal = toDateValue(firstDay);
-                endVal = toDateValue(lastDay);
+                startVal = currentDate;
+                endVal = currentDate;
             }
 
             var dateRange = encodeURIComponent(startVal + 'S' + endVal);
