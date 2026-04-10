@@ -66,7 +66,7 @@ class OpdModel
 
             $lastOpdRow = $this->db->table('opd_master')
                 ->select('max(opd_id) as last_opd_id')
-                ->where('apointment_date >=', date('Y-m-d', strtotime('-4 days')))
+                ->where('apointment_date >=', $this->resolveRunningLookupDate($docId))
                 ->where('apointment_date <=', date('Y-m-d'))
                 ->where('running_opd', 0)
                 ->where('opd_fee_type <>', 3)
@@ -107,5 +107,16 @@ class OpdModel
             ->update($update);
 
         return $insertId;
+    }
+
+    private function resolveRunningLookupDate(int $docId): string
+    {
+        $docRow = $this->db->table('doctor_master')
+            ->select('opd_valid_no_days')
+            ->where('id', $docId)
+            ->get()
+            ->getRow();
+        $validDays = max(4, (int) ($docRow->opd_valid_no_days ?? 5) - 1);
+        return date('Y-m-d', strtotime('-' . $validDays . ' days'));
     }
 }

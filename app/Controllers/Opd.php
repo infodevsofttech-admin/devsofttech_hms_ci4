@@ -2197,7 +2197,16 @@ class Opd extends BaseController
         $opdNo = (string) ($opd->opd_code ?? '');
         $opdDate = (string) ($opd->str_apointment_date ?? '');
         $expDate = trim((string) ($opd->opd_Exp_Date ?? ''));
-        $expDateText = $expDate !== '' ? ('<b>Valid Upto : </b>' . esc($expDate)) : '';
+        $isRunningOpdEntry = ((int) ($opd->running_opd ?? 0) === 1)
+            || ((int) ($opd->opd_fee_type ?? 0) === 3);
+        if ($isRunningOpdEntry && !empty($data['old_opd'][0] ?? null)) {
+            $oldExpDate = trim((string) ($data['old_opd'][0]->opd_Exp_Date ?? ''));
+            $oldStartDate = trim((string) ($data['old_opd'][0]->str_apointment_date ?? ''));
+            $expDateText = ($oldStartDate !== '' ? 'OPD Start Date : ' . esc($oldStartDate) . '<br>' : '')
+                . ($oldExpDate !== '' ? '<b>Valid Upto : </b>' . esc($oldExpDate) : '');
+        } else {
+            $expDateText = $expDate !== '' ? ('<b>Valid Upto : </b>' . esc($expDate)) : '';
+        }
 
         $specName = trim((string) ($doctor->SpecName ?? $opd->doc_spec ?? ''));
         $doctorShortDescription = trim((string) ($doctor->doc_sign ?? $opd->doc_sign ?? ''));
