@@ -177,6 +177,10 @@ class Ipd extends BaseController
             return $this->response->setStatusCode(404)->setBody('IPD not found');
         }
 
+        // Keep billing snapshot fresh on every panel open (legacy behavior parity).
+        $this->recalculateIpdBillingSafely($ipdId, 'panel.open');
+        $panelData = $this->ipdModel->getIpdPanelInfo($ipdId);
+
         return view('billing/ipd/panel', $panelData);
     }
 
@@ -547,6 +551,8 @@ class Ipd extends BaseController
         }
 
         if ($tab === 'bill-details') {
+            $this->recalculateIpdBillingSafely($ipdId, 'panel.tab.bill-details');
+            $panelData = $this->ipdModel->getIpdPanelInfo($ipdId);
             return view('billing/ipd/panel_bill_details', $this->buildBillDetailsTabData($panelData, $ipdId));
         }
 
@@ -882,6 +888,10 @@ class Ipd extends BaseController
         if (empty($panelData)) {
             return $this->response->setStatusCode(404)->setBody('IPD not found');
         }
+
+        // Recalculate before print so PDF always reflects latest bill math.
+        $this->recalculateIpdBillingSafely($ipdId, 'bill.print');
+        $panelData = $this->ipdModel->getIpdPanelInfo($ipdId);
 
         $mode = max(1, min(6, $mode));
         $data = $this->buildBillDetailsTabData($panelData, $ipdId);
@@ -2694,6 +2704,16 @@ class Ipd extends BaseController
             'total_paid' => $totalPaid,
             'total_balance' => $totalBalance,
         ];
+    }
+
+    private function recalculateIpdBillingSafely(int $ipdId, string $context): void
+    {
+        try {
+            $this->ipdEditModel->calculateIPD($ipdId);
+        } catch (\Throwable $e) {
+            // Do not break UI render if recalculation fails; log for diagnostics.
+            log_message('error', 'IPD calculateIPD failed for IPD #' . $ipdId . ' [' . $context . ']: ' . $e->getMessage());
+        }
     }
 
     private function buildBillDetailsTabData(array $panelData, int $ipdId): array
