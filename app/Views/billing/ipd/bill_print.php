@@ -6,7 +6,11 @@ $ipdItems = $ipd_invoice_items ?? [];
 $showItems = $showinvoice ?? [];
 $medicalItems = $inv_med_list ?? [];
 $payments = $ipd_payment ?? [];
-$billTotals = $bill_totals ?? ['gross' => 0, 'net' => 0, 'paid' => 0, 'balance' => 0];
+$billTotals = is_array($bill_totals ?? null) ? $bill_totals : [];
+$hasGrossTotal = array_key_exists('gross', $billTotals);
+$hasNetTotal = array_key_exists('net', $billTotals);
+$hasPaidTotal = array_key_exists('paid', $billTotals);
+$hasBalanceTotal = array_key_exists('balance', $billTotals);
 
 $printMode = (int) ($print_mode ?? 1);
 $showPaymentDetails = (bool) ($show_payment_details ?? true);
@@ -66,23 +70,23 @@ if ($dischargeTimeText !== '') {
     $dischargeDateText = trim($dischargeDateText . ' ' . substr($dischargeTimeText, 0, 5));
 }
 
-$grossAmount = (float) ($billTotals['gross'] ?? 0);
-if ($grossAmount <= 0 && $ipd) {
+$grossAmount = $hasGrossTotal ? (float) ($billTotals['gross'] ?? 0) : (float) ($ipd->gross_amount ?? 0);
+if (! $hasGrossTotal && $grossAmount <= 0 && $ipd) {
     $grossAmount = (float) ($ipd->gross_amount ?? 0);
 }
 
-$netAmount = (float) ($billTotals['net'] ?? 0);
-if ($netAmount <= 0 && $ipd) {
+$netAmount = $hasNetTotal ? (float) ($billTotals['net'] ?? 0) : (float) ($ipd->net_amount ?? 0);
+if (! $hasNetTotal && $netAmount <= 0 && $ipd) {
     $netAmount = (float) ($ipd->net_amount ?? 0);
 }
 
-$paidAmount = (float) ($billTotals['paid'] ?? 0);
-if ($paidAmount <= 0) {
+$paidAmount = $hasPaidTotal ? (float) ($billTotals['paid'] ?? 0) : (float) ($ipd->total_paid_amount ?? 0);
+if (! $hasPaidTotal && $paidAmount <= 0) {
     $paidAmount = (float) ($ipd->total_paid_amount ?? 0);
 }
 
-$balanceAmount = (float) ($billTotals['balance'] ?? 0);
-if ($balanceAmount === 0.0 && $ipd) {
+$balanceAmount = $hasBalanceTotal ? (float) ($billTotals['balance'] ?? 0) : (float) ($ipd->balance_amount ?? 0);
+if (! $hasBalanceTotal && $balanceAmount === 0.0 && $ipd) {
     $balanceAmount = (float) ($ipd->balance_amount ?? 0);
 }
 

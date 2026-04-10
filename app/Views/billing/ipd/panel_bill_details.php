@@ -12,25 +12,35 @@ if ($ipd) {
     $discountTotal = (float) ($ipd->Discount ?? 0) + (float) ($ipd->Discount2 ?? 0) + (float) ($ipd->Discount3 ?? 0);
     $extraCharge = (float) ($ipd->chargeamount1 ?? 0) + (float) ($ipd->chargeamount2 ?? 0);
 }
-$billTotals = $bill_totals ?? ['gross' => 0.0, 'net' => 0.0];
-$paidTotal = (float) ($billTotals['paid'] ?? 0);
-$balanceTotal = (float) ($billTotals['balance'] ?? 0);
+$billTotals = is_array($bill_totals ?? null) ? $bill_totals : [];
+$hasGrossTotal = array_key_exists('gross', $billTotals);
+$hasNetTotal = array_key_exists('net', $billTotals);
+$hasPaidTotal = array_key_exists('paid', $billTotals);
+$hasBalanceTotal = array_key_exists('balance', $billTotals);
+$paidTotal = $hasPaidTotal ? (float) ($billTotals['paid'] ?? 0) : (float) ($ipd->total_paid_amount ?? 0);
+$balanceTotal = $hasBalanceTotal ? (float) ($billTotals['balance'] ?? 0) : (float) ($ipd->balance_amount ?? 0);
 $showPrintActions = (bool) ($show_print_actions ?? true);
 $canPrintBill = (bool) ($can_print_bill ?? false);
 $showPaymentDetails = (bool) ($show_payment_details ?? true);
-$grossAmount = (float) ($billTotals['gross'] ?? 0);
-$netAmount = (float) ($billTotals['net'] ?? 0);
+$grossAmount = $hasGrossTotal ? (float) ($billTotals['gross'] ?? 0) : (float) ($ipd->gross_amount ?? 0);
+$netAmount = $hasNetTotal ? (float) ($billTotals['net'] ?? 0) : (float) ($ipd->net_amount ?? 0);
 $balanceAmount = $balanceTotal;
 
-if ($grossAmount <= 0 && $ipd) {
+if (! $hasGrossTotal && $grossAmount <= 0 && $ipd) {
     $grossAmount = (float) ($ipd->gross_amount ?? 0);
 }
-if ($netAmount <= 0 && $ipd) {
+if (! $hasNetTotal && $netAmount <= 0 && $ipd) {
     $netAmount = (float) ($ipd->net_amount ?? 0);
 }
-if ($balanceAmount === 0.0 && $ipd) {
+if (! $hasBalanceTotal && $balanceAmount === 0.0 && $ipd) {
     $balanceAmount = (float) ($ipd->balance_amount ?? 0);
 }
+$payableByTpa = (float) ($ipd->payable_by_tpa ?? 0);
+$discountForTpa = (float) ($ipd->discount_for_tpa ?? 0);
+$discountByHospital = (float) ($ipd->discount_by_hospital ?? 0);
+$discountByHospital2 = (float) ($ipd->discount_by_hospital_2 ?? 0);
+$hasFinalAdjustments = $payableByTpa > 0 || $discountForTpa > 0 || $discountByHospital > 0 || $discountByHospital2 > 0;
+$finalBalanceAmount = $hasFinalAdjustments ? (float) ($ipd->balance_discount_after ?? $balanceAmount) : $balanceAmount;
 $isDischargeFinal = (int) ($ipd->discarge_patient_status ?? 0) > 0;
 $billHeaderTitle = $isDischargeFinal ? 'Bill No. : ' . (string) ($ipd->ipd_code ?? '') : 'IPD Invoice';
 ?>
@@ -296,40 +306,40 @@ $billHeaderTitle = $isDischargeFinal ? 'Bill No. : ' . (string) ($ipd->ipd_code 
                         <th>Balance</th>
                         <th class="text-end"><?= esc(number_format($balanceAmount, 2)) ?></th>
                     </tr>
-                    <?php if (($ipd->payable_by_tpa ?? 0) > 0) : ?>
+                    <?php if ($payableByTpa > 0) : ?>
                         <tr>
                             <td>#</td>
                             <td colspan="2">Payable By TPA</td>
                             <td></td>
                             <td></td>
-                            <td class="text-end"><?= esc(number_format((float) ($ipd->payable_by_tpa ?? 0), 2)) ?></td>
+                            <td class="text-end"><?= esc(number_format($payableByTpa, 2)) ?></td>
                         </tr>
                     <?php endif; ?>
-                    <?php if (($ipd->discount_for_tpa ?? 0) > 0) : ?>
+                    <?php if ($discountForTpa > 0) : ?>
                         <tr>
                             <td>#</td>
                             <td colspan="2">Discount For TPA</td>
                             <td></td>
                             <td></td>
-                            <td class="text-end"><?= esc(number_format((float) ($ipd->discount_for_tpa ?? 0), 2)) ?></td>
+                            <td class="text-end"><?= esc(number_format($discountForTpa, 2)) ?></td>
                         </tr>
                     <?php endif; ?>
-                    <?php if (($ipd->discount_by_hospital ?? 0) > 0) : ?>
+                    <?php if ($discountByHospital > 0) : ?>
                         <tr>
                             <td>#</td>
                             <td colspan="2">Discount By Hospital</td>
                             <td><?= esc($ipd->discount_by_hospital_remark ?? '') ?></td>
                             <td></td>
-                            <td class="text-end"><?= esc(number_format((float) ($ipd->discount_by_hospital ?? 0), 2)) ?></td>
+                            <td class="text-end"><?= esc(number_format($discountByHospital, 2)) ?></td>
                         </tr>
                     <?php endif; ?>
-                    <?php if (($ipd->discount_by_hospital_2 ?? 0) > 0) : ?>
+                    <?php if ($discountByHospital2 > 0) : ?>
                         <tr>
                             <td>#</td>
                             <td colspan="2">Discount By Hospital/ Doctor</td>
                             <td><?= esc($ipd->discount_by_hospital_2_remark ?? '') ?></td>
                             <td></td>
-                            <td class="text-end"><?= esc(number_format((float) ($ipd->discount_by_hospital_2 ?? 0), 2)) ?></td>
+                            <td class="text-end"><?= esc(number_format($discountByHospital2, 2)) ?></td>
                         </tr>
                     <?php endif; ?>
                     <tr>
@@ -338,7 +348,7 @@ $billHeaderTitle = $isDischargeFinal ? 'Bill No. : ' . (string) ($ipd->ipd_code 
                         <th></th>
                         <th></th>
                         <th>Final Balance</th>
-                        <th class="text-end"><?= esc(number_format((float) ($ipd->balance_discount_after ?? 0), 2)) ?></th>
+                        <th class="text-end"><?= esc(number_format($finalBalanceAmount, 2)) ?></th>
                     </tr>
                 </tbody>
             </table>
