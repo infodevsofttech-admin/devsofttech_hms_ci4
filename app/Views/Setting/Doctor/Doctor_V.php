@@ -116,6 +116,18 @@
                         </div>
                     <?php endif; ?>
 
+                    <?php if (isset($templateFieldSet['opd_cont_paper_print'])) : ?>
+                        <div class="col-md-4">
+                            <label class="form-label">OPD Continuation Paper Template</label>
+                            <select class="form-select" name="tmpl_opd_cont_paper_print">
+                                <option value="">-- Select Template --</option>
+                                <?php foreach ($templateOptions as $tmpl) : ?>
+                                    <option value="<?= esc($tmpl) ?>" <?= combo_checked($tmpl, strtolower(trim((string) ($formData['tmpl_opd_cont_paper_print'] ?? '')))) ?>><?= esc($tmpl) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                    <?php endif; ?>
+
                     <?php if (isset($templateFieldSet['rx_pre_print_letter_head_format'])) : ?>
                         <div class="col-md-4">
                             <label class="form-label">Rx Pre-Print Letterhead</label>

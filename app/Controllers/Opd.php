@@ -2114,7 +2114,7 @@ class Opd extends BaseController
 
     public function opd_cont_print(int $opdId)
     {
-        $printConfig = $this->resolveDoctorPrintConfigByField($opdId, 'opd_print_format', 'content_only');
+        $printConfig = $this->resolveDoctorPrintConfigByField($opdId, 'opd_cont_paper_print', 'content_only');
         $url = base_url('Opd/opd_lettre_pdf/' . (int) $opdId);
         if ($printConfig['template'] !== '') {
             $url .= '?template=' . urlencode($printConfig['template']);
