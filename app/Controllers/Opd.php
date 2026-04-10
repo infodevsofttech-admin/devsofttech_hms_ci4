@@ -2723,7 +2723,30 @@ class Opd extends BaseController
             ->where('p_id', $patientId);
 
         $currentOpdId = (int) ($opdRow->opd_id ?? 0);
-        if ($currentOpdId > 0) {
+        $currentOpdDateTime = trim((string) ($opdRow->apointment_date ?? ''));
+        $currentOpdDate = '';
+        if ($currentOpdDateTime !== '') {
+            $ts = strtotime($currentOpdDateTime);
+            if ($ts !== false) {
+                $currentOpdDate = date('Y-m-d', $ts);
+            }
+        }
+
+        if ($currentOpdDate !== '') {
+            // Count visits up to the current OPD date; for same date, limit to current row id.
+            $builder->groupStart()
+                ->where('date(apointment_date) <', $currentOpdDate)
+                ->orGroupStart()
+                    ->where('date(apointment_date)', $currentOpdDate);
+
+            if ($currentOpdId > 0) {
+                $builder->where('opd_id <=', $currentOpdId);
+            }
+
+            $builder->groupEnd()
+            ->groupEnd();
+        } elseif ($currentOpdId > 0) {
+            // Fallback for rows without appointment date.
             $builder->where('opd_id <=', $currentOpdId);
         }
 
