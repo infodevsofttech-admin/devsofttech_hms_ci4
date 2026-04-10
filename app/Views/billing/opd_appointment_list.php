@@ -40,13 +40,13 @@ $mergedGroups = [
     <!-- Filter buttons + Missing Vitals toggle -->
     <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
         <div class="btn-group" role="group" aria-label="Filter by status">
-            <button type="button" class="btn btn-sm btn-outline-secondary active btn-opd-filter" data-filter="">
+            <button type="button" class="btn btn-sm btn-outline-secondary btn-opd-filter" data-filter="">
                 All <span id="countBadgeAll" class="badge bg-secondary ms-1"><?= $countAll ?></span>
             </button>
             <button type="button" class="btn btn-sm btn-outline-secondary btn-opd-filter" data-filter="booked">
                 Booked <span id="countBadgeBooked" class="badge bg-secondary ms-1"><?= $countBooked ?></span>
             </button>
-            <button type="button" class="btn btn-sm btn-outline-primary btn-opd-filter" data-filter="waiting">
+            <button type="button" class="btn btn-sm btn-outline-primary active btn-opd-filter" data-filter="waiting">
                 Waiting <span id="countBadgeWaiting" class="badge bg-primary ms-1"><?= $countWaiting ?></span>
                 <span id="waitingMissingBadge" class="badge rounded-pill bg-warning text-dark ms-1<?= $missingVitalsCount > 0 ? '' : ' d-none' ?>" title="<?= $missingVitalsCount ?> patient(s) missing vitals"><?= $missingVitalsCount ?></span>
             </button>
@@ -230,7 +230,7 @@ $mergedGroups = [
     var vitalsModalEl = document.getElementById('vitalsModal');
     var vitalsModalObj = vitalsModalEl ? new bootstrap.Modal(vitalsModalEl) : null;
     var opdDataTable = null;
-    var activeStatusFilter = '';
+    var activeStatusFilter = 'waiting';
     var canOpenPrescription = <?= $canOpenPrescription ? 'true' : 'false' ?>;
     var isUserUpdateInProgress = false;
     var liveDigest = '';
@@ -988,6 +988,10 @@ $mergedGroups = [
 
     // Manual refresh button
     $(document).off('click.opdrefresh', '#btn_manual_refresh').on('click.opdrefresh', '#btn_manual_refresh', function() {
+        activeStatusFilter = 'waiting';
+        $('#toggle_missing_vitals_only').prop('checked', false);
+        $('.btn-opd-filter').removeClass('active');
+        $('.btn-opd-filter[data-filter="waiting"]').addClass('active');
         clearRefreshSignal();
         reloadAppointmentList();
     });
@@ -1000,6 +1004,7 @@ $mergedGroups = [
     registerOpdTableFilter();
     opdDataTable = initializeOpdTable();
     recalcStatusCounts();
+    applyFilters();
     syncWaitingHintAndBadge();
     startLiveUpdates(); // lightweight digest poll — shows "Refresh" badge instead of auto-reloading
 })();
