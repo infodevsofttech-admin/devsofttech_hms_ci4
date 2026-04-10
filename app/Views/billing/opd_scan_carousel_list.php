@@ -25,7 +25,11 @@
                         <div class="small text-muted">
                             Uploaded: <?= esc($item['insert_date'] ?? '') ?>
                         </div>
-                        <button type="button" class="btn btn-outline-danger btn-sm" onclick="deleteOpdScanFromList(<?= (int) ($item['id'] ?? 0) ?>, <?= (int) ($opdid ?? 0) ?>)">Delete</button>
+                        <?php if ((int) ($item['can_delete_limited'] ?? $item['can_delete_today'] ?? 0) === 1) : ?>
+                            <button type="button" class="btn btn-outline-danger btn-sm" onclick="deleteOpdScanFromList(<?= (int) ($item['id'] ?? 0) ?>, <?= (int) ($opdid ?? 0) ?>)">Delete</button>
+                        <?php else : ?>
+                            <span class="badge bg-secondary">Delete: within 24h or same date</span>
+                        <?php endif; ?>
                     </div>
                 </div>
             <?php endforeach; ?>

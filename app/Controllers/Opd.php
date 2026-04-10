@@ -5027,11 +5027,19 @@ class Opd extends BaseController
                 $ext = '.' . $ext;
             }
 
+            $insertDateRaw = (string) ($row['insert_date'] ?? '');
+            $insertTs = $insertDateRaw !== '' ? strtotime($insertDateRaw) : false;
+            $nowTs = time();
+            $isWithin24Hours = ($insertTs !== false) && (($nowTs - $insertTs) <= 86400);
+            $isSameDate = ($insertTs !== false) && (date('Y-m-d', $insertTs) === date('Y-m-d', $nowTs));
+            $canDeleteLimited = $isWithin24Hours || $isSameDate;
+
             $list[] = [
                 'id' => (int) ($row['id'] ?? 0),
                 'path' => $publicPath,
                 'is_pdf' => $ext === '.pdf',
                 'insert_date' => !empty($row['insert_date']) ? date('d/m/Y-H:i', strtotime((string) $row['insert_date'])) : '',
+                'can_delete_limited' => $canDeleteLimited ? 1 : 0,
                 'scan_type' => (string) ($row['scan_type'] ?? ''),
                 'document_type' => (string) ($row['document_type'] ?? ''),
                 'content_description' => (string) ($row['content_description'] ?? ''),
@@ -5065,7 +5073,6 @@ class Opd extends BaseController
             ->get()
             ->getResultArray();
 
-        $today = date('Y-m-d');
         $slides = [];
         foreach ($rows as $row) {
             $rawPath = (string) ($row['full_path'] ?? '');
@@ -5082,15 +5089,19 @@ class Opd extends BaseController
             }
 
             $insertDate = (string) ($row['insert_date'] ?? '');
-            $insertYmd = $insertDate !== '' ? date('Y-m-d', strtotime($insertDate)) : '';
-            $canDeleteToday = $insertYmd === $today;
+            $insertTs = $insertDate !== '' ? strtotime($insertDate) : false;
+            $nowTs = time();
+            $isWithin24Hours = ($insertTs !== false) && (($nowTs - $insertTs) <= 86400);
+            $isSameDate = ($insertTs !== false) && (date('Y-m-d', $insertTs) === date('Y-m-d', $nowTs));
+            $canDeleteLimited = $isWithin24Hours || $isSameDate;
 
             $slides[] = [
                 'id' => (int) ($row['id'] ?? 0),
                 'path' => $publicPath,
                 'is_pdf' => $ext === 'pdf',
                 'insert_date' => $insertDate !== '' ? date('d-m-Y H:i', strtotime($insertDate)) : '',
-                'can_delete_today' => $canDeleteToday ? 1 : 0,
+                'can_delete_today' => $canDeleteLimited ? 1 : 0,
+                'can_delete_limited' => $canDeleteLimited ? 1 : 0,
             ];
         }
 
@@ -5247,6 +5258,20 @@ class Opd extends BaseController
             return $this->response->setJSON([
                 'update' => 0,
                 'error_text' => 'File not found',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $insertDate = (string) ($row['insert_date'] ?? '');
+        $insertTs = $insertDate !== '' ? strtotime($insertDate) : false;
+        $nowTs = time();
+        $isWithin24Hours = ($insertTs !== false) && (($nowTs - $insertTs) <= 86400);
+        $isSameDate = ($insertTs !== false) && (date('Y-m-d', $insertTs) === date('Y-m-d', $nowTs));
+        if (! ($isWithin24Hours || $isSameDate)) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Delete allowed only within 24 hours or same current date uploads',
                 'csrfName' => csrf_token(),
                 'csrfHash' => csrf_hash(),
             ]);

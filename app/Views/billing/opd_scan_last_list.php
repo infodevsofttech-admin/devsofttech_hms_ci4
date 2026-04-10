@@ -30,7 +30,11 @@
                         <div class="small text-muted mt-1" style="line-height:1.2"><?= nl2br(esc((string) ($item['content_description'] ?? ''))) ?></div>
                     <?php } ?>
                     <div class="small text-muted mt-1"><?= esc($item['insert_date'] ?? '') ?></div>
-                    <button type="button" class="btn btn-link btn-sm text-danger p-0" onclick="removeOpdScanImage(<?= (int) ($item['id'] ?? 0) ?>)">Delete</button>
+                    <?php if ((int) ($item['can_delete_limited'] ?? 0) === 1) { ?>
+                        <button type="button" class="btn btn-link btn-sm text-danger p-0" onclick="removeOpdScanImage(<?= (int) ($item['id'] ?? 0) ?>)">Delete</button>
+                    <?php } else { ?>
+                        <span class="badge bg-secondary">Delete: within 24h or same date</span>
+                    <?php } ?>
                 </div>
             </div>
         <?php } ?>
