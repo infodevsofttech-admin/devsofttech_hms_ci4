@@ -2209,7 +2209,7 @@ class Opd extends BaseController
         $specName = trim((string) ($doctor->SpecName ?? $opd->doc_spec ?? ''));
         $doctorShortDescription = trim((string) ($doctor->doc_sign ?? $opd->doc_sign ?? ''));
         $opdFeeDesc = trim((string) (($opd->opd_fee_amount ?? '') . ' ' . ($opd->opd_fee_desc ?? '')));
-        $totalNoVisit = (string) ($opd->no_visit ?? '');
+        $totalNoVisit = $this->resolveTotalOpdVisitCountForPrint($opd);
         $lastVisitDate = '';
         $lastVisitText = '';
         if (!empty($data['old_opd'][0]->str_apointment_date ?? '')) {
@@ -2705,6 +2705,36 @@ class Opd extends BaseController
             'painscale_img' => '',
             'morbidities' => implode(', ', is_array($data['selected_morbidities'] ?? null) ? ($data['selected_morbidities'] ?? []) : []),
         ];
+    }
+
+    private function resolveTotalOpdVisitCountForPrint(?object $opdRow): string
+    {
+        if ($opdRow === null) {
+            return '';
+        }
+
+        $patientId = (int) ($opdRow->p_id ?? 0);
+        if ($patientId <= 0 || ! $this->db->tableExists('opd_master')) {
+            return (string) ($opdRow->no_visit ?? '');
+        }
+
+        $builder = $this->db->table('opd_master')
+            ->select('count(*) as total_visit', false)
+            ->where('p_id', $patientId);
+
+        $currentOpdId = (int) ($opdRow->opd_id ?? 0);
+        if ($currentOpdId > 0) {
+            $builder->where('opd_id <=', $currentOpdId);
+        }
+
+        $row = $builder->get(1)->getRow();
+        $count = (int) ($row->total_visit ?? 0);
+
+        if ($count <= 0) {
+            return (string) ($opdRow->no_visit ?? '');
+        }
+
+        return (string) $count;
     }
 
     private function translateToLocalPatientText(string $input): string
