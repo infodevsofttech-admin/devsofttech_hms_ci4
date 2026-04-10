@@ -2312,7 +2312,7 @@ class Opd extends BaseController
         $medicalHtml = '';
         if (!empty($rxMeds)) {
             $medicalHtml .= '<table width="100%" style="border-collapse:collapse;font-size:12px;">';
-            $medicalHtml .= '<tr><th style="text-align:left;">#</th><th style="text-align:left;">Medicine</th><th style="text-align:left;">Dose/Freq</th><th style="text-align:left;">Day</th><th style="text-align:left;">Instruction</th></tr>';
+            $medicalHtml .= '<tr><th style="text-align:left;">#</th><th style="text-align:left;">Medicine</th><th style="text-align:left;">Dose/Freq</th><th style="text-align:left;">Qty</th><th style="text-align:left;">Day</th><th style="text-align:left;">Instruction</th></tr>';
             $i = 0;
             foreach ($rxMeds as $med) {
                 $i++;
@@ -2348,6 +2348,8 @@ class Opd extends BaseController
                 $freq    = trim((string) ($med['dosage_freq_label'] ?? $med['dosage_freq'] ?? $med['drug_freq'] ?? $med['frequency'] ?? ''));
                 $doseLocalRaw = trim((string) ($med['dosage_local_label'] ?? $med['dosage_local'] ?? ''));
                 $freqLocalRaw = trim((string) ($med['dosage_freq_local_label'] ?? $med['dosage_freq_local'] ?? ''));
+                $qtyRaw  = trim((string) ($med['qty'] ?? $med['quantity'] ?? $med['drug_qty'] ?? ''));
+                $qty     = ($qtyRaw === '0') ? '' : $qtyRaw;
                 $days    = trim((string) ($med['no_of_days'] ?? $med['drug_day'] ?? $med['days'] ?? ''));
                 $when    = trim((string) ($med['dosage_when_label'] ?? $med['dosage_when'] ?? ''));
                 $remark  = trim((string) ($med['remark'] ?? ''));
@@ -2420,6 +2422,7 @@ class Opd extends BaseController
                     . '<td>' . esc($doseFreqText)
                     . ($doseFreqLocal !== '' ? ('<div style="font-size:11px;color:#444;line-height:1.4;" lang="hi">' . esc($doseFreqLocal) . '</div>') : '')
                     . '</td>'
+                    . '<td>' . esc($qty) . '</td>'
                     . '<td>' . esc($days) . '</td>'
                     . '<td>' . esc($inst)
                     . ($instLocal !== '' ? ('<div style="font-size:11px;color:#444;line-height:1.4;" lang="hi">' . esc($instLocal) . '</div>') : '')
