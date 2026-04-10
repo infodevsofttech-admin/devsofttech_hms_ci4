@@ -1988,6 +1988,16 @@
             return;
         }
 
+        function closeAutocompleteMenu() {
+            try {
+                if ($field.autocomplete('instance')) {
+                    $field.autocomplete('close');
+                }
+            } catch (e) {
+                // Ignore if widget is not fully initialized/destroyed.
+            }
+        }
+
         $field
             .on('keydown', function(event) {
                 if (event.keyCode === $.ui.keyCode.TAB && $(this).autocomplete('instance') && $(this).autocomplete('instance').menu.active) {
@@ -1999,6 +2009,7 @@
                 source: function(request, response) {
                     var term = extractLastCommaTerm(request.term || '').trim();
                     if (term.length < 2) {
+                        closeAutocompleteMenu();
                         response([]);
                         return;
                     }
@@ -2058,6 +2069,20 @@
             if (ac && ac.menu && ac.menu.element && ac.menu.element.is(':visible')) {
                 positionAutocompleteNearCaret($self);
             }
+        });
+
+        $field.on('blur', function() {
+            closeAutocompleteMenu();
+        });
+
+        // Close stale suggestion popup when clicking outside or scrolling away.
+        $(document).on('mousedown.autoclose_' + $field.attr('id'), function(event) {
+            if (!$(event.target).closest($field).length && !$(event.target).closest('.ui-autocomplete').length) {
+                closeAutocompleteMenu();
+            }
+        });
+        $(window).on('scroll.autoclose_' + $field.attr('id') + ' resize.autoclose_' + $field.attr('id'), function() {
+            closeAutocompleteMenu();
         });
     }
 
@@ -3955,6 +3980,8 @@
     $('#complaint_lookup').on('input', function() {
         var q = ($(this).val() || '').trim();
         if (q.length < 2) {
+            complaintSuggestions = [];
+            $('#complaint_suggest').html('');
             return;
         }
 
@@ -3992,6 +4019,8 @@
         if (chosen) {
             addComplaintValue(chosen);
             $('#complaint_lookup').val('');
+            $('#complaint_suggest').html('');
+            $('#complaint_lookup').blur();
             return;
         }
 
@@ -4020,7 +4049,20 @@
             }
 
             $('#complaint_lookup').val('');
+            $('#complaint_suggest').html('');
+            $('#complaint_lookup').blur();
         });
+    });
+
+    $('#complaint_lookup').on('blur', function() {
+        var $input = $(this);
+        // Delay is needed so option selection (click/enter) can finish first.
+        setTimeout(function() {
+            if (document.activeElement !== $input.get(0)) {
+                complaintSuggestions = [];
+                $('#complaint_suggest').html('');
+            }
+        }, 120);
     });
 
     $(document).on('click', '.btn-remove-complaint', function() {
