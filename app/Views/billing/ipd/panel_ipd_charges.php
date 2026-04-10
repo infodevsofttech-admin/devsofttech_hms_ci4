@@ -94,7 +94,7 @@ $doctorVisitFeeMap = $doctor_visit_fee_map ?? [];
                                             <?= esc(number_format($rate, 2)) ?>
                                         </td>
                                         <td>
-                                            <input class="form-control form-control-sm" style="width: 90px" id="input_qty_<?= $itemId ?>" value="<?= esc($qty) ?>" type="number" step="0.01" />
+                                            <input class="form-control form-control-sm" style="width: 90px" id="input_qty_<?= $itemId ?>" value="<?= esc($qty) ?>" type="number" step="1" />
                                         </td>
                                         <td class="text-end"><?= esc(number_format((float) ($row->item_amount ?? 0), 2)) ?></td>
                                         <td></td>
@@ -188,11 +188,11 @@ $doctorVisitFeeMap = $doctor_visit_fee_map ?? [];
                             </div>
                             <div class="col-md-2">
                                 <label class="form-label">Rate</label>
-                                <input class="form-control form-control-sm" id="bedside_item_rate" value="0" type="number" step="0.01" />
+                                <input class="form-control form-control-sm" id="bedside_item_rate" value="0" type="number" $11" />
                             </div>
                             <div class="col-md-2">
                                 <label class="form-label">Qty</label>
-                                <input class="form-control form-control-sm" id="bedside_item_qty" value="1" type="number" step="0.01" />
+                                <input class="form-control form-control-sm" id="bedside_item_qty" value="1" type="number" $11" />
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label">Date</label>
@@ -242,7 +242,7 @@ $doctorVisitFeeMap = $doctor_visit_fee_map ?? [];
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label">Rate</label>
-                                <input class="form-control form-control-sm" id="doctor_visit_rate" value="0.00" type="number" step="0.01" />
+                                <input class="form-control form-control-sm" id="doctor_visit_rate" value="0.00" type="number" $11" />
                             </div>
                             <div class="col-md-5">
                                 <label class="form-label">Description</label>
@@ -250,7 +250,7 @@ $doctorVisitFeeMap = $doctor_visit_fee_map ?? [];
                             </div>
                             <div class="col-md-2">
                                 <label class="form-label">Qty</label>
-                                <input class="form-control form-control-sm" id="doctor_visit_qty" value="1" type="number" step="0.01" />
+                                <input class="form-control form-control-sm" id="doctor_visit_qty" value="1" type="number" $11" />
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label">Date</label>
@@ -319,11 +319,11 @@ $doctorVisitFeeMap = $doctor_visit_fee_map ?? [];
                                     <div class="row">
                                         <div class="col-md-4">
                                             <label class="form-label">Rate</label>
-                                            <input class="form-control form-control-sm" id="input_rate_<?= $typeId ?>" value="0.00" type="number" step="0.01" />
+                                            <input class="form-control form-control-sm" id="input_rate_<?= $typeId ?>" value="0.00" type="number" step="1" />
                                         </div>
                                         <div class="col-md-4">
                                             <label class="form-label">Qty</label>
-                                            <input class="form-control form-control-sm" id="input_qty_<?= $typeId ?>" value="1" type="number" step="0.01" />
+                                            <input class="form-control form-control-sm" id="input_qty_<?= $typeId ?>" value="1" type="number" step="1" />
                                         </div>
                                         <div class="col-md-4">
                                             <label class="form-label">Date</label>

@@ -54,11 +54,11 @@
                         <div class="col-md-2"><input class="form-control" name="purchase_uom" value="Unit" placeholder="Purchase UOM"></div>
                         <div class="col-md-2"><input class="form-control" name="issue_uom" value="Unit" placeholder="Issue UOM"></div>
                         <div class="col-md-2"><input class="form-control" name="issue_per_purchase" type="number" step="0.0001" value="1" placeholder="Issue/Purchase"></div>
-                        <div class="col-md-2"><input class="form-control" name="current_stock" type="number" step="0.01" placeholder="Stock"></div>
-                        <div class="col-md-2"><input class="form-control" name="min_stock_level" type="number" step="0.01" placeholder="Min stock"></div>
+                        <div class="col-md-2"><input class="form-control" name="current_stock" type="number" $11" placeholder="Stock"></div>
+                        <div class="col-md-2"><input class="form-control" name="min_stock_level" type="number" $11" placeholder="Min stock"></div>
 
-                        <div class="col-md-2"><input class="form-control" name="reorder_level" type="number" step="0.01" placeholder="Reorder"></div>
-                        <div class="col-md-2"><input class="form-control" name="unit_cost" type="number" step="0.01" placeholder="Unit cost"></div>
+                        <div class="col-md-2"><input class="form-control" name="reorder_level" type="number" $11" placeholder="Reorder"></div>
+                        <div class="col-md-2"><input class="form-control" name="unit_cost" type="number" $11" placeholder="Unit cost"></div>
                         <div class="col-md-2"><input class="form-control" name="expiry_date" type="date"></div>
                         <div class="col-md-2"><input class="form-control" name="barcode" placeholder="Barcode"></div>
                         <div class="col-md-2"><input class="form-control" name="qr_code" placeholder="QR code"></div>

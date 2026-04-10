@@ -28,15 +28,15 @@
                        placeholder="Description (medicines / items)">
             </div>
             <div class="col-md-2">
-                <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="bill_amount"
+                <input type="number" $11" min="0" class="form-control form-control-sm" name="bill_amount"
                        id="pb_bill_amount" placeholder="Bill Amount" oninput="pbCalcNet()">
             </div>
             <div class="col-md-2">
-                <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="tax_amount"
+                <input type="number" $11" min="0" class="form-control form-control-sm" name="tax_amount"
                        id="pb_tax_amount" placeholder="Tax / GST" value="0" oninput="pbCalcNet()">
             </div>
             <div class="col-md-2">
-                <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="net_amount"
+                <input type="number" $11" min="0" class="form-control form-control-sm" name="net_amount"
                        id="pb_net_amount" placeholder="Net Payable" readonly style="background:#f8f9fa;">
             </div>
             <div class="col-md-6">
@@ -68,7 +68,7 @@
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label form-label-sm mb-0">Amount Paid (Rs.)</label>
-                                <input type="number" step="0.01" min="0.01" class="form-control form-control-sm"
+                                <input type="number" $11" min="0.01" class="form-control form-control-sm"
                                        name="paid_amount" id="ps_paid_amount" required>
                             </div>
                             <div class="col-md-6">

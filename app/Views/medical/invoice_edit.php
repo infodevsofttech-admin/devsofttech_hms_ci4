@@ -214,7 +214,7 @@
                                     </div>
                                     <div class="col-md-3">
                                         <label class="form-label form-label-sm mb-1">Disc %</label>
-                                        <input class="form-control form-control-sm" name="disc_per" id="input_disc" placeholder="Discount %" type="number" min="0" max="100" step="0.01" value="0" autocomplete="off">
+                                        <input class="form-control form-control-sm" name="disc_per" id="input_disc" placeholder="Discount %" type="number" min="0" max="100" $11" value="0" autocomplete="off">
                                     </div>
                                     <div class="col-md-2">
                                         <button class="btn btn-sm btn-primary w-100" type="submit" id="additem" disabled>Add</button>
@@ -250,7 +250,7 @@
                                                         <input type="hidden" name="inv_id" value="<?= (int)($invoice->id ?? 0) ?>">
                                                         <input type="hidden" name="stock_id" value="<?= (int)($row->stock_id ?? 0) ?>">
                                                         <input type="number" name="qty" value="1" min="1" step="1" class="form-control form-control-sm" style="width:80px;">
-                                                        <input type="number" name="disc_per" value="0" min="0" max="100" step="0.01" class="form-control form-control-sm" style="width:90px;" title="Disc %">
+                                                        <input type="number" name="disc_per" value="0" min="0" max="100" $11" class="form-control form-control-sm" style="width:90px;" title="Disc %">
                                                         <button class="btn btn-sm btn-primary" type="submit">Add</button>
                                                     </form>
                                                 </td>

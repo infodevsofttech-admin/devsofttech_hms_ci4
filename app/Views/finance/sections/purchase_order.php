@@ -15,7 +15,7 @@
                 </select>
             </div>
             <div class="col-md-4"><input type="text" class="form-control" name="department" placeholder="Department"></div>
-            <div class="col-md-4"><input type="number" step="0.01" class="form-control" name="amount" placeholder="Amount"></div>
+            <div class="col-md-4"><input type="number" $11" class="form-control" name="amount" placeholder="Amount"></div>
             <div class="col-md-4">
                 <select class="form-select" name="approval_status">
                     <option value="draft">Draft</option>

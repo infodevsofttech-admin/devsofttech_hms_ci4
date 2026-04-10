@@ -38,7 +38,7 @@ $old = is_array($old ?? null) ? $old : [];
 
     <div class="col-md-4">
         <label class="form-label">Amount</label>
-        <input type="number" step="0.01" min="0.01" name="amount" class="form-control" value="<?= esc((string) ($old['amount'] ?? '')) ?>" required>
+        <input type="number" $11" min="0.01" name="amount" class="form-control" value="<?= esc((string) ($old['amount'] ?? '')) ?>" required>
     </div>
 
     <div class="col-md-8">

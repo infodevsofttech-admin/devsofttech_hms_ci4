@@ -160,7 +160,7 @@
   <div class="row mt-2 mb-3">
     <div class="col-md-6">
       <label>Received Amount</label>
-      <input class="form-control" type="number" step="0.01" id="input_received_amount" value="<?= esc(number_format((float) ($pending_amount ?? 0), 2, '.', '')) ?>" />
+      <input class="form-control" type="number" $11" id="input_received_amount" value="<?= esc(number_format((float) ($pending_amount ?? 0), 2, '.', '')) ?>" />
     </div>
   </div>
   <div class="payment_type">

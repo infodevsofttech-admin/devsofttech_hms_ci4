@@ -64,11 +64,11 @@
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">Base Charge Override</label>
-                    <input class="form-control" id="base_charge_override" name="base_charge_override" type="number" step="0.01">
+                    <input class="form-control" id="base_charge_override" name="base_charge_override" type="number" $11">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">Nursing Charge Override</label>
-                    <input class="form-control" id="nursing_charge_override" name="nursing_charge_override" type="number" step="0.01">
+                    <input class="form-control" id="nursing_charge_override" name="nursing_charge_override" type="number" $11">
                 </div>
                 <div class="col-md-12">
                     <div class="form-check form-check-inline">

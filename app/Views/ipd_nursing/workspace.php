@@ -442,11 +442,11 @@ ksort($nurseNames);
                                         </div>
                                         <div class="col-md-3">
                                             <label class="form-label">Rate</label>
-                                            <input class="form-control form-control-sm" id="nursing_bedside_item_rate" value="0" type="number" step="0.01" />
+                                            <input class="form-control form-control-sm" id="nursing_bedside_item_rate" value="0" type="number" $11" />
                                         </div>
                                         <div class="col-md-3">
                                             <label class="form-label">Qty</label>
-                                            <input class="form-control form-control-sm" id="nursing_bedside_item_qty" value="1" type="number" step="0.01" />
+                                            <input class="form-control form-control-sm" id="nursing_bedside_item_qty" value="1" type="number" $11" />
                                         </div>
                                         <div class="col-md-4">
                                             <label class="form-label">Date</label>
@@ -498,11 +498,11 @@ ksort($nurseNames);
                                         </div>
                                         <div class="col-md-4">
                                             <label class="form-label">Rate</label>
-                                            <input class="form-control form-control-sm" id="nursing_doctor_visit_rate" value="0.00" type="number" step="0.01" />
+                                            <input class="form-control form-control-sm" id="nursing_doctor_visit_rate" value="0.00" type="number" $11" />
                                         </div>
                                         <div class="col-md-4">
                                             <label class="form-label">Qty</label>
-                                            <input class="form-control form-control-sm" id="nursing_doctor_visit_qty" value="1" type="number" step="0.01" />
+                                            <input class="form-control form-control-sm" id="nursing_doctor_visit_qty" value="1" type="number" $11" />
                                         </div>
                                         <div class="col-md-4">
                                             <label class="form-label">Date</label>

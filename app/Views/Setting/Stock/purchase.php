@@ -32,9 +32,9 @@
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-2"><input type="number" step="0.01" min="0.01" id="poQty" class="form-control form-control-sm" placeholder="Qty"></div>
-                <div class="col-md-2"><input type="number" step="0.01" min="0" id="poRate" class="form-control form-control-sm" placeholder="Rate"></div>
-                <div class="col-md-2"><input type="number" step="0.01" min="0" id="poTax" class="form-control form-control-sm" placeholder="Tax %"></div>
+                <div class="col-md-2"><input type="number" $11" min="0.01" id="poQty" class="form-control form-control-sm" placeholder="Qty"></div>
+                <div class="col-md-2"><input type="number" $11" min="0" id="poRate" class="form-control form-control-sm" placeholder="Rate"></div>
+                <div class="col-md-2"><input type="number" $11" min="0" id="poTax" class="form-control form-control-sm" placeholder="Tax %"></div>
                 <div class="col-md-1"><button id="addPoItem" type="button" class="btn btn-outline-primary btn-sm w-100">Add</button></div>
             </div>
             <table class="table table-sm mt-2" id="poItemsTable">

@@ -71,7 +71,7 @@ if (strlen($dischargeTime) > 5) {
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label">Deduction Amount <?= $slot ?></label>
-                                    <input type="number" step="0.01" min="0" class="form-control" id="dis_amount_<?= $slot ?>" value="<?= esc((string) number_format((float) ($ipd->{$amountField} ?? 0), 2, '.', '')) ?>" placeholder="0.00">
+                                    <input type="number" $11" min="0" class="form-control" id="dis_amount_<?= $slot ?>" value="<?= esc((string) number_format((float) ($ipd->{$amountField} ?? 0), 2, '.', '')) ?>" placeholder="0.00">
                                 </div>
                                 <div class="col-md-4">
                                     <button type="button" class="btn btn-primary w-100 js-update-discount" data-slot="<?= $slot ?>">Update Deduction <?= $slot ?></button>
@@ -93,7 +93,7 @@ if (strlen($dischargeTime) > 5) {
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label">Additional Charge Amount <?= $slot ?></label>
-                                    <input type="number" step="0.01" min="0" class="form-control" id="charge_amount_<?= $slot ?>" value="<?= esc((string) number_format((float) ($ipd->{$amountField} ?? 0), 2, '.', '')) ?>" placeholder="0.00">
+                                    <input type="number" $11" min="0" class="form-control" id="charge_amount_<?= $slot ?>" value="<?= esc((string) number_format((float) ($ipd->{$amountField} ?? 0), 2, '.', '')) ?>" placeholder="0.00">
                                 </div>
                                 <div class="col-md-4">
                                     <button type="button" class="btn btn-primary w-100 js-update-charge" data-slot="<?= $slot ?>">Update Additional Charge <?= $slot ?></button>

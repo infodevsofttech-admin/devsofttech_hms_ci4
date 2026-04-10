@@ -56,7 +56,7 @@
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">Cost</label>
-                    <input class="form-control" id="cost" name="cost" type="number" step="0.01">
+                    <input class="form-control" id="cost" name="cost" type="number" $11">
                 </div>
                 <div class="col-md-4">
                     <label class="form-label">Performed By</label>

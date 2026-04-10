@@ -150,7 +150,7 @@
                     <th style="width: 18px">#</th>
                     <th style="width: 140px">Deduction</th>
                     <th><input class="form-control form-control-sm" id="input_dis_desc" value="<?= esc($deductionRemark) ?>" placeholder="Ded. Desc." type="text"></th>
-                    <th style="width: 140px"><input class="form-control form-control-sm" id="input_dis_amt" value="<?= esc(number_format($deduction, 2, '.', '')) ?>" placeholder="Amount" type="number" step="0.01"></th>
+                    <th style="width: 140px"><input class="form-control form-control-sm" id="input_dis_amt" value="<?= esc(number_format($deduction, 2, '.', '')) ?>" placeholder="Amount" type="number" step="1"></th>
                     <th style="width: 110px"><button type="button" class="btn btn-primary btn-sm" id="btn_update_ded">Update</button></th>
                 </tr>
             </table>
@@ -176,7 +176,7 @@
         <?php if (abs($balance) > 0.0001): ?>
             <div class="mb-3" style="max-width:520px;">
                 <label class="form-label form-label-sm">Received Amount</label>
-                <input class="form-control form-control-sm" id="input_amount_paid" type="number" step="0.01" value="<?= esc(number_format($balance, 2, '.', '')) ?>">
+                <input class="form-control form-control-sm" id="input_amount_paid" type="number" $11" value="<?= esc(number_format($balance, 2, '.', '')) ?>">
             </div>
 
             <?php if ($allowPaymentMode): ?>

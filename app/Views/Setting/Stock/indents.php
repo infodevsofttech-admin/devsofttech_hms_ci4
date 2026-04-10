@@ -31,7 +31,7 @@
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-2"><input type="number" step="0.01" min="0.01" id="indentQty" class="form-control form-control-sm" placeholder="Qty"></div>
+                <div class="col-md-2"><input type="number" $11" min="0.01" id="indentQty" class="form-control form-control-sm" placeholder="Qty"></div>
                 <div class="col-md-2"><input id="indentUom" class="form-control form-control-sm" placeholder="UOM"></div>
                 <div class="col-md-2"><button id="addIndentItem" type="button" class="btn btn-outline-primary btn-sm w-100">Add</button></div>
             </div>

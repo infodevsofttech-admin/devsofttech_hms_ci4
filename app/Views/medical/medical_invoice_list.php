@@ -160,7 +160,7 @@
                 <tr>
                     <td><a class="btn btn-danger btn-sm" href="javascript:load_form_div('<?= base_url('Medical/med_cash_payment/' . $ipdId) ?>','medical-main');">Payment Add</a></td>
                     <td>
-                        <input class="form-control form-control-sm" id="input_discount" placeholder="Discount Amount" type="number" step="0.01" value="<?= esc(number_format((float)($currentDiscount ?? 0), 2, '.', '')) ?>">
+                        <input class="form-control form-control-sm" id="input_discount" placeholder="Discount Amount" type="number" $11" value="<?= esc(number_format((float)($currentDiscount ?? 0), 2, '.', '')) ?>">
                     </td>
                     <td>
                         <button type="button" class="btn btn-primary btn-sm" id="btn_update_group_discount">Update Discount</button>

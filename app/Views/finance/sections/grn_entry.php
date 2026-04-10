@@ -13,7 +13,7 @@
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="col-md-6"><input type="number" step="0.01" class="form-control" name="received_amount" placeholder="Received Amount"></div>
+            <div class="col-md-6"><input type="number" $11" class="form-control" name="received_amount" placeholder="Received Amount"></div>
             <div class="col-md-6"><input type="text" class="form-control" name="received_by" placeholder="Received By"></div>
             <div class="col-12">
                 <textarea class="form-control" name="remarks" rows="2" placeholder="Notes / Remarks (optional)"></textarea>

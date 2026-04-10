@@ -136,7 +136,7 @@ $panelTitle = $modalityLabel . ' Print Template';
                     </div>
                     <div class="col-md-2">
                         <label class="form-label small">Watermark Alpha</label>
-                        <input type="number" step="0.01" min="0.01" max="1" class="form-control form-control-sm" name="watermark_alpha" value="<?= esc((string) ($row['watermark_alpha'] ?? '0.12')) ?>">
+                        <input type="number" $11" min="0.01" max="1" class="form-control form-control-sm" name="watermark_alpha" value="<?= esc((string) ($row['watermark_alpha'] ?? '0.12')) ?>">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label small">Watermark Text</label>

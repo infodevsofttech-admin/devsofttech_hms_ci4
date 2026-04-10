@@ -64,7 +64,7 @@
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label form-label-sm">Amount</label>
-                                <input type="number" min="0" step="0.01" id="input_Amount" class="form-control form-control-sm" placeholder="0.00">
+                                <input type="number" min="0" $11" id="input_Amount" class="form-control form-control-sm" placeholder="0.00">
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label form-label-sm">Remark</label>

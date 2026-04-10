@@ -20,7 +20,7 @@
                 <div class="col-md-3"><input type="text" class="form-control" name="department" placeholder="Department" required></div>
                 <div class="col-md-3"><input type="text" class="form-control" name="bank_name" placeholder="Bank Name" required></div>
                 <div class="col-md-3"><input type="text" class="form-control" name="slip_no" placeholder="Slip No"></div>
-                <div class="col-md-3"><input type="number" step="0.01" class="form-control" name="deposited_amount" placeholder="Deposited Amount" required></div>
+                <div class="col-md-3"><input type="number" $11" class="form-control" name="deposited_amount" placeholder="Deposited Amount" required></div>
                 <div class="col-md-3">
                     <select class="form-select" name="related_scroll_id">
                         <option value="">Related Scroll (optional)</option>

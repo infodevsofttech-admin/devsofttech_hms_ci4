@@ -53,7 +53,7 @@ $ayushmanChecklistItems = $ayushman_checklist_items ?? [];
                                     <?php endif; ?>
                                 </td>
                                 <td>
-                                    <input class="form-control form-control-sm" style="width: 120px" id="input_amt_<?= (int) ($row->id ?? 0) ?>" value="<?= esc($row->package_Amount ?? 0) ?>" type="number" step="0.01" />
+                                    <input class="form-control form-control-sm" style="width: 120px" id="input_amt_<?= (int) ($row->id ?? 0) ?>" value="<?= esc($row->package_Amount ?? 0) ?>" type="number" step="1" />
                                 </td>
                                 <td>
                                     <button type="button" class="btn btn-primary btn-sm" onclick="ipdPackageUpdate(<?= (int) ($row->id ?? 0) ?>)">Update</button>
@@ -90,7 +90,7 @@ $ayushmanChecklistItems = $ayushman_checklist_items ?? [];
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label">Rate</label>
-                                <input class="form-control form-control-sm" id="input_amount_m" value="0.00" type="number" step="0.01" />
+                                <input class="form-control form-control-sm" id="input_amount_m" value="0.00" type="number" $11" />
                             </div>
                             <div class="col-md-3 d-flex align-items-end">
                                 <button type="button" class="btn btn-primary btn-sm" onclick="ipdPackageAddManual()">Add in List</button>
@@ -122,7 +122,7 @@ $ayushmanChecklistItems = $ayushman_checklist_items ?? [];
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label">Amount</label>
-                                <input class="form-control form-control-sm" id="input_amount_p" value="0.00" type="number" step="0.01" />
+                                <input class="form-control form-control-sm" id="input_amount_p" value="0.00" type="number" $11" />
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Comment</label>

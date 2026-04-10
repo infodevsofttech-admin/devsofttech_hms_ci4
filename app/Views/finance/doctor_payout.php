@@ -22,8 +22,8 @@
                         <div class="col-md-4"><input type="text" class="form-control" name="doctor_code" placeholder="Doctor Code" required></div>
                         <div class="col-md-8"><input type="text" class="form-control" name="doctor_name" placeholder="Doctor Name" required></div>
                         <div class="col-md-6"><input type="text" class="form-control" name="specialization" placeholder="Specialization"></div>
-                        <div class="col-md-3"><input type="number" step="0.01" class="form-control" name="consultation_rate" placeholder="Consult. Rate"></div>
-                        <div class="col-md-3"><input type="number" step="0.01" class="form-control" name="surgery_rate" placeholder="Surgery Rate"></div>
+                        <div class="col-md-3"><input type="number" $11" class="form-control" name="consultation_rate" placeholder="Consult. Rate"></div>
+                        <div class="col-md-3"><input type="number" $11" class="form-control" name="surgery_rate" placeholder="Surgery Rate"></div>
                         <div class="col-md-6"><input type="date" class="form-control" name="agreement_start_date"></div>
                         <div class="col-md-6"><input type="date" class="form-control" name="agreement_end_date"></div>
                         <div class="col-12"><button type="submit" class="btn btn-primary btn-sm">Save Agreement</button></div>

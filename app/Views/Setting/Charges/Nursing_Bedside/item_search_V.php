@@ -62,7 +62,7 @@ $csrfHash = csrf_hash();
                     <div class="col-md-5"><label class="form-label">Item Name *</label><input type="text" class="form-control" id="item_name" required></div>
                     <div class="col-md-4"><label class="form-label">Item Type *</label><input type="text" class="form-control" id="item_type" required placeholder="Investigation / Procedure"></div>
                     <div class="col-md-4"><label class="form-label">Category</label><input type="text" class="form-control" id="category" placeholder="Lab Test / Cardiac"></div>
-                    <div class="col-md-2"><label class="form-label">Rate</label><input type="number" step="0.01" class="form-control" id="default_rate" value="0"></div>
+                    <div class="col-md-2"><label class="form-label">Rate</label><input type="number" $11" class="form-control" id="default_rate" value="0"></div>
                     <div class="col-md-2"><label class="form-label">Unit</label><input type="text" class="form-control" id="unit" value="Unit"></div>
                     <div class="col-md-2"><label class="form-label">Billable</label><select class="form-select" id="is_billable"><option value="1">Yes</option><option value="0">No</option></select></div>
                     <div class="col-md-2"><label class="form-label">Active</label><select class="form-select" id="is_active"><option value="1">Yes</option><option value="0">No</option></select></div>
@@ -82,7 +82,7 @@ $csrfHash = csrf_hash();
                     </div>
                     <div class="col-md-3">
                         <label class="form-label">Rate</label>
-                        <input type="number" step="0.01" class="form-control" id="insurance_rate" value="0">
+                        <input type="number" $11" class="form-control" id="insurance_rate" value="0">
                     </div>
                     <div class="col-md-2">
                         <label class="form-label">Code</label>

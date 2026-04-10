@@ -47,7 +47,7 @@
                         </div>
                         <div class="col-md-4"><input type="text" class="form-control" name="department" placeholder="Department (OPD/IPD/Pharmacy)"></div>
                         <div class="col-md-4"><input type="text" class="form-control" name="reference_no" placeholder="Reference No"></div>
-                        <div class="col-md-4"><input type="number" step="0.01" class="form-control" name="amount" placeholder="Amount" required></div>
+                        <div class="col-md-4"><input type="number" $11" class="form-control" name="amount" placeholder="Amount" required></div>
                         <div class="col-md-4">
                             <select class="form-select" name="mode" required>
                                 <option value="cash">Cash</option>
@@ -73,7 +73,7 @@
                     <form id="scroll_form" class="row g-2">
                         <div class="col-md-4"><input type="date" name="scroll_date" class="form-control" value="<?= date('Y-m-d') ?>" required></div>
                         <div class="col-md-4"><input type="text" name="department" class="form-control" placeholder="Department" required></div>
-                        <div class="col-md-4"><input type="number" step="0.01" name="submitted_amount" class="form-control" placeholder="Submitted Amount" required></div>
+                        <div class="col-md-4"><input type="number" $11" name="submitted_amount" class="form-control" placeholder="Submitted Amount" required></div>
                         <div class="col-md-6"><input type="text" name="submitted_by" class="form-control" placeholder="Submitted By"></div>
                         <div class="col-md-6"><input type="text" name="remarks" class="form-control" placeholder="Remarks"></div>
                         <div class="col-12"><button type="submit" class="btn btn-primary btn-sm">Submit Scroll</button></div>

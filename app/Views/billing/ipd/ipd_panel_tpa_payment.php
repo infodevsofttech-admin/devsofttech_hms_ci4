@@ -11,17 +11,17 @@ $ipdId = (int) ($ipd_id ?? ($ipd->id ?? 0));
         <div class="row g-2">
             <div class="col-md-4">
                 <label class="form-label">Payable By TPA</label>
-                <input class="form-control" name="input_payable_by_tpa" id="input_payable_by_tpa" placeholder="0.00" type="number" step="0.01" value="<?= esc($ipd->payable_by_tpa ?? 0) ?>" />
+                <input class="form-control" name="input_payable_by_tpa" id="input_payable_by_tpa" placeholder="0.00" type="number" $11" value="<?= esc($ipd->payable_by_tpa ?? 0) ?>" />
             </div>
             <div class="col-md-4">
                 <label class="form-label">Discount For TPA</label>
-                <input class="form-control" name="input_discount_for_tpa" id="input_discount_for_tpa" placeholder="0.00" type="number" step="0.01" value="<?= esc($ipd->discount_for_tpa ?? 0) ?>" />
+                <input class="form-control" name="input_discount_for_tpa" id="input_discount_for_tpa" placeholder="0.00" type="number" $11" value="<?= esc($ipd->discount_for_tpa ?? 0) ?>" />
             </div>
         </div>
         <div class="row g-2 mt-2">
             <div class="col-md-4">
                 <label class="form-label">Discount By Hospital</label>
-                <input class="form-control" name="input_discount_by_hospital" id="input_discount_by_hospital" placeholder="0.00" type="number" step="0.01" value="<?= esc($ipd->discount_by_hospital ?? 0) ?>" />
+                <input class="form-control" name="input_discount_by_hospital" id="input_discount_by_hospital" placeholder="0.00" type="number" $11" value="<?= esc($ipd->discount_by_hospital ?? 0) ?>" />
             </div>
             <div class="col-md-4">
                 <label class="form-label">Remark</label>
@@ -31,7 +31,7 @@ $ipdId = (int) ($ipd_id ?? ($ipd->id ?? 0));
         <div class="row g-2 mt-2">
             <div class="col-md-4">
                 <label class="form-label">Discount By Doctor</label>
-                <input class="form-control" name="input_discount_by_hospital_2" id="input_discount_by_hospital_2" placeholder="0.00" type="number" step="0.01" value="<?= esc($ipd->discount_by_hospital_2 ?? 0) ?>" />
+                <input class="form-control" name="input_discount_by_hospital_2" id="input_discount_by_hospital_2" placeholder="0.00" type="number" $11" value="<?= esc($ipd->discount_by_hospital_2 ?? 0) ?>" />
             </div>
             <div class="col-md-4">
                 <label class="form-label">Remark</label>

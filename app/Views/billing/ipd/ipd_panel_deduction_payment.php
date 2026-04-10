@@ -6,7 +6,7 @@
         <div class="row g-2 align-items-end">
             <div class="col-md-6">
                 <label class="form-label">Amount</label>
-                <input class="form-control" id="input_Amount" placeholder="0.00" type="number" step="0.01">
+                <input class="form-control" id="input_Amount" placeholder="0.00" type="number" $11">
             </div>
         </div>
     </div>

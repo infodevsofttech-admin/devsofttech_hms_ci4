@@ -39,11 +39,11 @@
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">Base Charge/Day</label>
-                    <input class="form-control" id="base_charge_per_day" name="base_charge_per_day" type="number" step="0.01">
+                    <input class="form-control" id="base_charge_per_day" name="base_charge_per_day" type="number" $11">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">Nursing Charge/Day</label>
-                    <input class="form-control" id="nursing_charge_per_day" name="nursing_charge_per_day" type="number" step="0.01">
+                    <input class="form-control" id="nursing_charge_per_day" name="nursing_charge_per_day" type="number" $11">
                 </div>
                 <div class="col-md-6">
                     <label class="form-label">Amenities (JSON or comma list)</label>

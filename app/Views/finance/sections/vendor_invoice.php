@@ -29,7 +29,7 @@
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="col-md-4"><input type="number" step="0.01" class="form-control" name="invoice_amount" placeholder="Invoice Amount"></div>
+            <div class="col-md-4"><input type="number" $11" class="form-control" name="invoice_amount" placeholder="Invoice Amount"></div>
             <div class="col-md-4">
                 <select class="form-select" name="payment_status">
                     <option value="pending">Pending</option>
