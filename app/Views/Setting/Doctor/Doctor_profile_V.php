@@ -1,6 +1,15 @@
 <?php
 $doctorRegNo = '';
 $doctorHprId = '';
+$hospitalDefaultOpdDays = (int) ($hospital_default_opd_valid_no_days ?? 5);
+if ($hospitalDefaultOpdDays < 1) {
+    $hospitalDefaultOpdDays = 5;
+}
+$existingDoctorOpdDays = (! empty($data) && ! empty($data[0])) ? (int) ($data[0]->opd_valid_no_days ?? 0) : 0;
+$doctorOpdValidNoDays = (int) ($doctor_opd_valid_no_days ?? ($existingDoctorOpdDays > 0 ? $existingDoctorOpdDays : $hospitalDefaultOpdDays));
+if ($doctorOpdValidNoDays < 1) {
+    $doctorOpdValidNoDays = $hospitalDefaultOpdDays;
+}
 if (!empty($data) && !empty($data[0])) {
     foreach (['nmc_reg_no', 'mci_reg_no', 'registration_no', 'reg_no', 'doctor_reg_no', 'doc_reg_no', 'council_reg_no'] as $regField) {
         if (isset($data[0]->{$regField}) && trim((string) $data[0]->{$regField}) !== '') {
@@ -96,6 +105,11 @@ if (!empty($data) && !empty($data[0]) && !empty($data[0]->dob)) {
                     <div class="col-md-3">
                         <label class="form-label">Date of Birth</label>
                         <input class="form-control" name="datepicker_dob" value="<?= esc($doctorDobValue) ?>" type="date" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">OPD Validity (Days)</label>
+                        <input class="form-control" name="input_opd_valid_no_days" placeholder="5" type="number" min="1" max="365" value="<?= esc((string) $doctorOpdValidNoDays) ?>" />
+                        <small class="text-muted">Default hospital value: <?= esc((string) $hospitalDefaultOpdDays) ?> day(s)</small>
                     </div>
                 </div>
                 <div class="row g-3 mt-1">

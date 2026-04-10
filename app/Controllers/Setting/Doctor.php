@@ -27,6 +27,7 @@ class Doctor extends BaseController
             'template_options' => $templateContext['options'],
             'opd_print_template_options' => $templateContext['opd_print_options'],
             'template_fields' => $templateContext['fields'],
+            'hospital_default_opd_valid_no_days' => $this->getHospitalDefaultOpdValidityDays(),
         ]);
     }
 
@@ -47,6 +48,7 @@ class Doctor extends BaseController
                     'template_options' => $templateContext['options'],
                     'opd_print_template_options' => $templateContext['opd_print_options'],
                     'template_fields' => $templateContext['fields'],
+                    'hospital_default_opd_valid_no_days' => $this->getHospitalDefaultOpdValidityDays(),
                 ]);
             }
 
@@ -90,6 +92,11 @@ class Doctor extends BaseController
             'doc_sign' => $shortDescription,
         ];
 
+        $doctorFields = $this->db->tableExists('doctor_master') ? ($this->db->getFieldNames('doctor_master') ?? []) : [];
+        if (in_array('opd_valid_no_days', $doctorFields, true)) {
+            $data['opd_valid_no_days'] = $this->resolveOpdValidityInput((string) $this->request->getPost('input_opd_valid_no_days'));
+        }
+
         $templateContext = $this->getDoctorTemplateContext();
         $templateFieldMap = [
             'opd_print_format' => 'tmpl_opd_print_format',
@@ -125,6 +132,7 @@ class Doctor extends BaseController
                     'template_options' => $templateContext['options'],
                     'opd_print_template_options' => $templateContext['opd_print_options'],
                     'template_fields' => $templateContext['fields'],
+                    'hospital_default_opd_valid_no_days' => $this->getHospitalDefaultOpdValidityDays(),
                 ]);
             }
 
@@ -138,9 +146,11 @@ class Doctor extends BaseController
     {
         $doctorModel = new DoctorModel();
         $templateContext = $this->getDoctorTemplateContext();
+        $doctorRows = $doctorModel->getDoctorById($id);
+        $doctorRow = $doctorRows[0] ?? null;
 
         return view('Setting/Doctor/Doctor_profile_V', [
-            'data' => $doctorModel->getDoctorById($id),
+            'data' => $doctorRows,
             'doc_spec_a' => $doctorModel->getDoctorSpecs($id),
             'doc_spec_l' => $doctorModel->getSpecsList(),
             'doc_fee_type' => $doctorModel->getFeeTypes(),
@@ -150,6 +160,8 @@ class Doctor extends BaseController
             'template_options' => $templateContext['options'],
             'opd_print_template_options' => $templateContext['opd_print_options'],
             'template_fields' => $templateContext['fields'],
+            'hospital_default_opd_valid_no_days' => $this->getHospitalDefaultOpdValidityDays(),
+            'doctor_opd_valid_no_days' => $this->resolveDoctorOpdValidityDaysForView($doctorRow),
         ]);
     }
 
@@ -188,6 +200,11 @@ class Doctor extends BaseController
             'doc_sign' => $shortDescription,
             'email1' => $this->request->getPost('input_email'),
         ];
+
+        $doctorFields = $this->db->tableExists('doctor_master') ? ($this->db->getFieldNames('doctor_master') ?? []) : [];
+        if (in_array('opd_valid_no_days', $doctorFields, true)) {
+            $data['opd_valid_no_days'] = $this->resolveOpdValidityInput((string) $this->request->getPost('input_opd_valid_no_days'));
+        }
 
         $templateContext = $this->getDoctorTemplateContext();
         $templateFieldMap = [
@@ -693,6 +710,72 @@ class Doctor extends BaseController
         }
 
         return $options;
+    }
+
+    private function resolveDoctorOpdValidityDaysForView(?object $doctorRow): int
+    {
+        $doctorValue = (int) ($doctorRow->opd_valid_no_days ?? 0);
+        if ($doctorValue > 0) {
+            return $doctorValue;
+        }
+
+        return $this->getHospitalDefaultOpdValidityDays();
+    }
+
+    private function resolveOpdValidityInput(string $raw): int
+    {
+        $raw = trim($raw);
+        if ($raw === '') {
+            return $this->getHospitalDefaultOpdValidityDays();
+        }
+
+        $value = (int) $raw;
+        if ($value < 1) {
+            $value = 1;
+        }
+        if ($value > 365) {
+            $value = 365;
+        }
+
+        return $value;
+    }
+
+    private function getHospitalDefaultOpdValidityDays(): int
+    {
+        if (! $this->db->tableExists('hospital_setting')) {
+            return 5;
+        }
+
+        $keys = [
+            'OPD_VALID_NO_DAYS',
+            'OPD_VALIDITY_DAYS',
+            'DEFAULT_OPD_VALID_NO_DAYS',
+            'DEFAULT_OPD_VALIDITY_DAYS',
+        ];
+
+        $rows = $this->db->table('hospital_setting')
+            ->select('s_name,s_value')
+            ->whereIn('s_name', $keys)
+            ->get()
+            ->getResultArray();
+
+        $map = [];
+        foreach ($rows as $row) {
+            $name = strtoupper(trim((string) ($row['s_name'] ?? '')));
+            if ($name === '') {
+                continue;
+            }
+            $map[$name] = (string) ($row['s_value'] ?? '');
+        }
+
+        foreach ($keys as $key) {
+            $value = (int) ($map[$key] ?? 0);
+            if ($value > 0) {
+                return min(365, $value);
+            }
+        }
+
+        return 5;
     }
 
 }

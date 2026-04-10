@@ -116,7 +116,50 @@ class OpdModel
             ->where('id', $docId)
             ->get()
             ->getRow();
-        $validDays = max(4, (int) ($docRow->opd_valid_no_days ?? 5) - 1);
-        return date('Y-m-d', strtotime('-' . $validDays . ' days'));
+        $validDays = (int) ($docRow->opd_valid_no_days ?? 0);
+        if ($validDays <= 0) {
+            $validDays = $this->getHospitalDefaultOpdValidityDays();
+        }
+
+        $spanDays = max(0, $validDays - 1);
+        return date('Y-m-d', strtotime('-' . $spanDays . ' days'));
+    }
+
+    private function getHospitalDefaultOpdValidityDays(): int
+    {
+        if (! $this->db->tableExists('hospital_setting')) {
+            return 5;
+        }
+
+        $keys = [
+            'OPD_VALID_NO_DAYS',
+            'OPD_VALIDITY_DAYS',
+            'DEFAULT_OPD_VALID_NO_DAYS',
+            'DEFAULT_OPD_VALIDITY_DAYS',
+        ];
+
+        $rows = $this->db->table('hospital_setting')
+            ->select('s_name,s_value')
+            ->whereIn('s_name', $keys)
+            ->get()
+            ->getResultArray();
+
+        $map = [];
+        foreach ($rows as $row) {
+            $name = strtoupper(trim((string) ($row['s_name'] ?? '')));
+            if ($name === '') {
+                continue;
+            }
+            $map[$name] = (string) ($row['s_value'] ?? '');
+        }
+
+        foreach ($keys as $key) {
+            $value = (int) ($map[$key] ?? 0);
+            if ($value > 0) {
+                return min(365, $value);
+            }
+        }
+
+        return 5;
     }
 }

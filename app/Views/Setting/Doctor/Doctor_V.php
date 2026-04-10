@@ -17,6 +17,11 @@
             [$dobDay, $dobMonth, $dobYear] = explode('/', $doctorDobValue);
             $doctorDobValue = $dobYear . '-' . $dobMonth . '-' . $dobDay;
         }
+        $hospitalDefaultOpdDays = (int) ($hospital_default_opd_valid_no_days ?? 5);
+        if ($hospitalDefaultOpdDays < 1) {
+            $hospitalDefaultOpdDays = 5;
+        }
+        $opdValidNoDaysInput = trim((string) ($formData['input_opd_valid_no_days'] ?? (string) $hospitalDefaultOpdDays));
         ?>
         <?php if (! empty($errors)) : ?>
             <div class="alert alert-danger">
@@ -73,6 +78,11 @@
                 <div class="col-md-4">
                     <label class="form-label">Date of Birth</label>
                     <input class="form-control" name="datepicker_dob" type="date" value="<?= esc($doctorDobValue) ?>">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">OPD Validity (Days)</label>
+                    <input class="form-control" name="input_opd_valid_no_days" placeholder="5" type="number" min="1" max="365" value="<?= esc($opdValidNoDaysInput) ?>">
+                    <small class="text-muted">Default hospital value: <?= esc((string) $hospitalDefaultOpdDays) ?> day(s)</small>
                 </div>
             </div>
             <?php

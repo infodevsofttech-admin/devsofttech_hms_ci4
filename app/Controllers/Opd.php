@@ -1364,10 +1364,8 @@ class Opd extends BaseController
         $query = $this->db->query($sql);
         $doctorMaster = $query->getResult();
 
-        $noOpdDays = 5 - 1;
-        if (count($doctorMaster) > 0 && !empty($doctorMaster[0]->opd_valid_no_days)) {
-            $noOpdDays = (int) $doctorMaster[0]->opd_valid_no_days - 1;
-        }
+        $doctorRow = $doctorMaster[0] ?? null;
+        $noOpdDays = $this->resolveOpdValiditySpanDays($doctorRow);
 
         $sql = "select d.id, d.p_fname, group_concat(m.SpecName) as SpecName,
             if(d.gender=1,'Male','Female') as xGender
@@ -3487,6 +3485,35 @@ class Opd extends BaseController
         return trim((string) ($row['s_value'] ?? ''));
     }
 
+    private function resolveOpdValiditySpanDays(?object $doctorRow): int
+    {
+        $validDays = (int) ($doctorRow->opd_valid_no_days ?? 0);
+        if ($validDays <= 0) {
+            $validDays = $this->getHospitalDefaultOpdValidityDays();
+        }
+
+        return max(0, $validDays - 1);
+    }
+
+    private function getHospitalDefaultOpdValidityDays(): int
+    {
+        $keys = [
+            'OPD_VALID_NO_DAYS',
+            'OPD_VALIDITY_DAYS',
+            'DEFAULT_OPD_VALID_NO_DAYS',
+            'DEFAULT_OPD_VALIDITY_DAYS',
+        ];
+
+        foreach ($keys as $key) {
+            $value = (int) $this->readSettingValueFromDb($key);
+            if ($value > 0) {
+                return min(365, $value);
+            }
+        }
+
+        return 5;
+    }
+
     private function buildOpdLetterPrintData(int $opdId, int $sessionId = 0, bool $includeContent = true): ?array
     {
         $sql = "Select * from opd_master where opd_id=" . (int) $opdId;
@@ -3499,7 +3526,7 @@ class Opd extends BaseController
 
         $data = [];
         $docId = (int) ($opdMaster[0]->doc_id ?? 0);
-        $noOpdDays = 5 - 1;
+        $noOpdDays = $this->resolveOpdValiditySpanDays(null);
 
         $data['doctor_master'] = [];
         if ($docId > 0) {
@@ -3511,9 +3538,7 @@ class Opd extends BaseController
                 group by d.id";
             $query = $this->db->query($sql);
             $data['doctor_master'] = $query->getResult();
-            if (!empty($data['doctor_master']) && !empty($data['doctor_master'][0]->opd_valid_no_days)) {
-                $noOpdDays = (int) $data['doctor_master'][0]->opd_valid_no_days - 1;
-            }
+            $noOpdDays = $this->resolveOpdValiditySpanDays($data['doctor_master'][0] ?? null);
         }
 
         $sql = "select o.*,date_format(o.apointment_date,'%d-%m-%Y') as str_apointment_date,
