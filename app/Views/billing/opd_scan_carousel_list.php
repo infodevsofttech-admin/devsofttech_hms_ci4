@@ -25,11 +25,7 @@
                         <div class="small text-muted">
                             Uploaded: <?= esc($item['insert_date'] ?? '') ?>
                         </div>
-                        <?php if ((int) ($item['can_delete_today'] ?? 0) === 1) : ?>
-                            <button type="button" class="btn btn-outline-danger btn-sm" onclick="deleteOpdScanFromList(<?= (int) ($item['id'] ?? 0) ?>, <?= (int) ($opdid ?? 0) ?>)">Delete</button>
-                        <?php else : ?>
-                            <span class="badge bg-secondary">Delete allowed only for today upload</span>
-                        <?php endif; ?>
+                        <button type="button" class="btn btn-outline-danger btn-sm" onclick="deleteOpdScanFromList(<?= (int) ($item['id'] ?? 0) ?>, <?= (int) ($opdid ?? 0) ?>)">Delete</button>
                     </div>
                 </div>
             <?php endforeach; ?>

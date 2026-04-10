@@ -30,7 +30,7 @@
                         <div class="small text-muted mt-1" style="line-height:1.2"><?= nl2br(esc((string) ($item['content_description'] ?? ''))) ?></div>
                     <?php } ?>
                     <div class="small text-muted mt-1"><?= esc($item['insert_date'] ?? '') ?></div>
-                    <button type="button" class="btn btn-link btn-sm text-danger p-0" onclick="removeOpdScanImage(<?= (int) ($item['id'] ?? 0) ?>)">Hide</button>
+                    <button type="button" class="btn btn-link btn-sm text-danger p-0" onclick="removeOpdScanImage(<?= (int) ($item['id'] ?? 0) ?>)">Delete</button>
                 </div>
             </div>
         <?php } ?>

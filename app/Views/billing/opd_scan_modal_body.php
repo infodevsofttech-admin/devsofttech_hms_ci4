@@ -57,7 +57,6 @@
     var $textBox = $('#opd_scan_text_box');
     var $aiResult = $('#opd_scan_ai_result');
     var opdid = parseInt($('#opd_scan_opdid').val() || '0', 10);
-    var listPollingTimer = null;
     var latestFileId = 0;
 
     function getCsrfPair() {
@@ -165,13 +164,6 @@
         $aiResult.removeClass('text-danger').addClass('text-muted').text('AI processing started...');
         renderExtractedText('');
         queueAiProcessing(latestFileId);
-    }
-
-    function startListPolling() {
-        if (listPollingTimer) {
-            clearInterval(listPollingTimer);
-        }
-        listPollingTimer = setInterval(loadLastList, 5000);
     }
 
     function submitScanFormData(formData) {
@@ -287,21 +279,32 @@
         if (!fileId) {
             return;
         }
-        $.post('<?= base_url('Opd/opd_file_hide') ?>/' + fileId, {}, function(html) {
-            $('#opd_scan_list').html(html || '');
+        if (!window.confirm('Delete this scan file?')) {
+            return;
+        }
+
+        var csrf = getCsrfPair();
+        var payload = {};
+        payload[csrf.name] = csrf.value;
+
+        $.post('<?= base_url('Opd/opd_file_delete') ?>/' + fileId, payload, function(resp) {
+            updateCsrf(resp || {});
+            if (!resp || parseInt(resp.update || 0, 10) !== 1) {
+                $results.html('<div class="text-danger">' + ((resp && resp.error_text) ? $('<div>').text(resp.error_text).html() : 'Unable to delete scan file.') + '</div>');
+                return;
+            }
+            loadLastList();
+            $results.html('<div class="text-success">Scan deleted successfully.</div>');
+        }, 'json').fail(function() {
+            $results.html('<div class="text-danger">Unable to delete scan file.</div>');
         });
     };
 
     startCamera();
     loadLastList();
-    startListPolling();
 
     $('#tallModal').off('hidden.bs.modal.opdscan').on('hidden.bs.modal.opdscan', function() {
         stopCamera();
-        if (listPollingTimer) {
-            clearInterval(listPollingTimer);
-            listPollingTimer = null;
-        }
         $('#opd_scan_results').html('Captured image will appear here.');
     });
 })();

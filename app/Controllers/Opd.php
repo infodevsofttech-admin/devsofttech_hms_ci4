@@ -4939,6 +4939,25 @@ class Opd extends BaseController
             }
         }
 
+        $opdStatusUpdated = 0;
+        if ($insertId > 0 && $this->db->tableExists('opd_master')) {
+            $opdFields = $this->db->getFieldNames('opd_master') ?? [];
+            $currentStatus = (int) ($opdRow['opd_status'] ?? 0);
+            if ($currentStatus !== 2 && $currentStatus !== 3) {
+                $statusUpdate = [];
+                if (in_array('opd_status', $opdFields, true)) {
+                    $statusUpdate['opd_status'] = 2;
+                }
+                if (in_array('opd_status_remark', $opdFields, true)) {
+                    $statusUpdate['opd_status_remark'] = 'Auto Visit Done after scan upload';
+                }
+                if (! empty($statusUpdate)) {
+                    $this->db->table('opd_master')->where('opd_id', $opdid)->update($statusUpdate);
+                    $opdStatusUpdated = 1;
+                }
+            }
+        }
+
         return $this->response->setJSON([
             'update' => 1,
             'filename' => $filename,
@@ -4950,6 +4969,8 @@ class Opd extends BaseController
             'opd_session_id' => 0,
             'target_field' => '',
             'ai_status' => 'pending',
+            'opd_status' => 2,
+            'opd_status_updated' => $opdStatusUpdated,
             'error_text' => 'File uploaded successfully',
             'csrfName' => csrf_token(),
             'csrfHash' => csrf_hash(),
@@ -5226,17 +5247,6 @@ class Opd extends BaseController
             return $this->response->setJSON([
                 'update' => 0,
                 'error_text' => 'File not found',
-                'csrfName' => csrf_token(),
-                'csrfHash' => csrf_hash(),
-            ]);
-        }
-
-        $insertDate = (string) ($row['insert_date'] ?? '');
-        $isToday = $insertDate !== '' && date('Y-m-d', strtotime($insertDate)) === date('Y-m-d');
-        if (! $isToday) {
-            return $this->response->setJSON([
-                'update' => 0,
-                'error_text' => 'Delete allowed only for current date uploads',
                 'csrfName' => csrf_token(),
                 'csrfHash' => csrf_hash(),
             ]);
