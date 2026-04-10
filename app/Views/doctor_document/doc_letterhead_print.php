@@ -21,6 +21,9 @@ $hasSelectedPrintTemplate = ! empty($has_selected_print_template);
     header: html_myHeader;
     footer: html_myFooter;
 }
+body, p, td, th, div, span, li {
+    font-family: 'freesans', 'freeserif', sans-serif;
+}
 </style>
 
 <htmlpageheader name="myHeader">

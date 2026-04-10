@@ -828,52 +828,98 @@ class DoctorDocument extends BaseController
         if ($resp = $this->ensureAccess()) {
             return $resp;
         }
+        try {
+            if (! $this->db->tableExists('patient_doc') || ! $this->db->tableExists('patient_doc_raw')) {
+                return $this->response->setJSON([
+                    'update' => 0,
+                    'error_text' => 'Document tables not available',
+                    'csrfName' => csrf_token(),
+                    'csrfHash' => csrf_hash(),
+                ]);
+            }
 
-        $pending = $this->db->table('patient_doc_raw')
-            ->where('p_doc_id', $patientDocId)
-            ->where('update_data', 0)
-            ->countAllResults();
+            $pending = 0;
+            if ($this->hasColumn('patient_doc_raw', 'update_data')) {
+                $pending = $this->db->table('patient_doc_raw')
+                    ->where('p_doc_id', $patientDocId)
+                    ->where('update_data', 0)
+                    ->countAllResults();
+            }
 
-        if ($pending > 0) {
+            if ($pending > 0) {
+                return $this->response->setJSON([
+                    'update' => 0,
+                    'error_text' => 'Some field pending',
+                    'csrfName' => csrf_token(),
+                    'csrfHash' => csrf_hash(),
+                ]);
+            }
+
+            $patientDoc = $this->db->table('patient_doc')->where('id', $patientDocId)->get(1)->getRowArray();
+            if (! is_array($patientDoc)) {
+                return $this->response->setJSON([
+                    'update' => 0,
+                    'error_text' => 'Document not found',
+                    'csrfName' => csrf_token(),
+                    'csrfHash' => csrf_hash(),
+                ]);
+            }
+
+            $report = (string) ($patientDoc['raw_data'] ?? '');
+
+            $values = $this->db->table('patient_doc_raw r')
+                ->select('r.p_doc_raw_value,s.input_code')
+                ->join('doc_format_sub s', 'r.p_doc_sub_id=s.id', 'left')
+                ->where('r.p_doc_id', $patientDocId)
+                ->get()
+                ->getResultArray();
+
+            foreach ($values as $row) {
+                $code = trim((string) ($row['input_code'] ?? ''));
+                if ($code === '') {
+                    continue;
+                }
+                $val = nl2br((string) ($row['p_doc_raw_value'] ?? ''));
+                $report = str_replace('{' . $code . '}', $val, $report);
+            }
+
+            $updatePayload = [
+                'raw_data' => $report,
+                'update_pre_value' => 1,
+                'updated_at' => date('Y-m-d H:i:s'),
+            ];
+            $updatePayload = $this->filterPayloadByExistingColumns('patient_doc', $updatePayload);
+
+            if (empty($updatePayload)) {
+                return $this->response->setJSON([
+                    'update' => 0,
+                    'error_text' => 'Unable to compile due to schema mismatch',
+                    'csrfName' => csrf_token(),
+                    'csrfHash' => csrf_hash(),
+                ]);
+            }
+
+            $this->db->table('patient_doc')->where('id', $patientDocId)->update($updatePayload);
+
             return $this->response->setJSON([
+                'update' => 1,
+                'error_text' => 'Compile done',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        } catch (\Throwable $e) {
+            log_message('error', 'DoctorDocument update_doc_field failed for doc_id {doc_id}: {message}', [
+                'doc_id' => $patientDocId,
+                'message' => $e->getMessage(),
+            ]);
+
+            return $this->response->setStatusCode(500)->setJSON([
                 'update' => 0,
-                'error_text' => 'Some field pending',
+                'error_text' => 'Compile failed due to server error',
                 'csrfName' => csrf_token(),
                 'csrfHash' => csrf_hash(),
             ]);
         }
-
-        $patientDoc = $this->db->table('patient_doc')->where('id', $patientDocId)->get(1)->getRowArray();
-        $report = (string) ($patientDoc['raw_data'] ?? '');
-
-        $values = $this->db->table('patient_doc_raw r')
-            ->select('r.p_doc_raw_value,s.input_code')
-            ->join('doc_format_sub s', 'r.p_doc_sub_id=s.id', 'left')
-            ->where('r.p_doc_id', $patientDocId)
-            ->get()
-            ->getResultArray();
-
-        foreach ($values as $row) {
-            $code = trim((string) ($row['input_code'] ?? ''));
-            if ($code === '') {
-                continue;
-            }
-            $val = nl2br((string) ($row['p_doc_raw_value'] ?? ''));
-            $report = str_replace('{' . $code . '}', $val, $report);
-        }
-
-        $this->db->table('patient_doc')->where('id', $patientDocId)->update([
-            'raw_data' => $report,
-            'update_pre_value' => 1,
-            'updated_at' => date('Y-m-d H:i:s'),
-        ]);
-
-        return $this->response->setJSON([
-            'update' => 1,
-            'error_text' => 'Compile done',
-            'csrfName' => csrf_token(),
-            'csrfHash' => csrf_hash(),
-        ]);
     }
 
     public function load_doc(int $patientDocId)
@@ -1063,6 +1109,10 @@ class DoctorDocument extends BaseController
             mkdir($mpdfTempDir, 0755, true);
         }
 
+        // FreeSans (GNU FreeFont) ships with mPDF and covers Devanagari (Hindi) Unicode glyphs.
+        $mpdfFontDir = realpath(__DIR__ . '/../../vendor/mpdf/mpdf/ttfonts');
+        $mpdfFontDirs = $mpdfFontDir !== false ? [$mpdfFontDir] : [];
+
         try {
             $mpdf = new Mpdf([
                 'format' => $pageSize,
@@ -1073,8 +1123,28 @@ class DoctorDocument extends BaseController
                 'margin_header' => $printHeaderMargin * 10,
                 'margin_footer' => $printFooterMargin * 10,
                 'tempDir' => $mpdfTempDir,
-                'autoScriptToLang' => false,
-                'autoLanguageDetection' => false,
+                'default_font' => 'freesans',
+                'fontDir' => $mpdfFontDirs,
+                'fontdata' => [
+                    'freesans' => [
+                        'R' => 'FreeSans.ttf',
+                        'B' => 'FreeSansBold.ttf',
+                        'I' => 'FreeSansOblique.ttf',
+                        'BI' => 'FreeSansBoldOblique.ttf',
+                        'useOTL' => 0xFF,
+                        'useKashida' => 75,
+                    ],
+                    'freeserif' => [
+                        'R' => 'FreeSerif.ttf',
+                        'B' => 'FreeSerifBold.ttf',
+                        'I' => 'FreeSerifItalic.ttf',
+                        'BI' => 'FreeSerifBoldItalic.ttf',
+                        'useOTL' => 0xFF,
+                        'useKashida' => 75,
+                    ],
+                ],
+                'autoScriptToLang' => true,
+                'autoLanguageDetection' => true,
                 'autoArabic' => false,
                 'autoVietnamese' => false,
             ]);

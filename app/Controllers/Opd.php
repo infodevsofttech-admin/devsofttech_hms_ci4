@@ -1378,7 +1378,8 @@ class Opd extends BaseController
         $docInfo = $query->getResult();
 
         $sql = "select * from opd_master where p_id=" . $pId . " and doc_id=" . $docId .
-            " and apointment_date >= date_add(curdate(),interval -" . $noOpdDays . " day) and opd_fee_type<>3";
+            " and apointment_date >= date_add(curdate(),interval -" . $noOpdDays . " day)"
+            . " and opd_fee_type<>3 and coalesce(opd_fee_amount,0) > 0";
         $query = $this->db->query($sql);
         $opdRunning = $query->getResult();
 
@@ -1544,7 +1545,25 @@ class Opd extends BaseController
             'prepared_by' => $userNameInfo,
         ];
 
-        if (count($opdMaster) > 0) {
+        $isZeroValueRunning = ((int) ($docFee[0]->doc_fee_type ?? 0) === 3)
+            || ((float) ($docFee[0]->amount ?? 0) <= 0);
+
+        if ($isZeroValueRunning) {
+            $sql = "select apointment_date from opd_master"
+                . " where p_id=" . $pid
+                . " and doc_id=" . $docId
+                . " and opd_fee_type<>3"
+                . " and coalesce(opd_fee_amount,0) > 0"
+                . " order by opd_id desc limit 1";
+            $query = $this->db->query($sql);
+            $previousPaid = $query->getResult();
+
+            if (!empty($previousPaid[0]->apointment_date ?? null)) {
+                $insert['last_opdvisit_date'] = $previousPaid[0]->apointment_date;
+            } elseif (count($opdMaster) > 0) {
+                $insert['last_opdvisit_date'] = $opdMaster[0]->apointment_date;
+            }
+        } elseif (count($opdMaster) > 0) {
             $insert['last_opdvisit_date'] = $opdMaster[0]->apointment_date;
         }
 
@@ -3488,10 +3507,16 @@ class Opd extends BaseController
             }
         }
 
-        $sql = "select *,date_format(apointment_date,'%d-%m-%Y') as str_apointment_date,
-            date_format(date_add(apointment_date,interval " . $noOpdDays . " day),'%d-%m-%Y') as opd_Exp_Date,
+        $sql = "select o.*,date_format(o.apointment_date,'%d-%m-%Y') as str_apointment_date,
+            date_format(date_add(
+                case
+                    when (coalesce(o.running_opd,0)=1 or coalesce(o.opd_fee_amount,0)<=0) and coalesce(o.running_opd_id,0)>0
+                        then coalesce((select apointment_date from opd_master where opd_id=o.running_opd_id), o.apointment_date)
+                    else o.apointment_date
+                end,
+            interval " . $noOpdDays . " day),'%d-%m-%Y') as opd_Exp_Date,
             (case payment_status when 1 then 'Cash' when 2 then 'Bank Card' when 3 then 'Org. Credit' else 'Pending' end) as Payment_type_str
-            from opd_master where opd_id=" . (int) $opdId;
+            from opd_master o where o.opd_id=" . (int) $opdId;
         $query = $this->db->query($sql);
         $data['opd_master'] = $query->getResult();
 
@@ -3511,11 +3536,25 @@ class Opd extends BaseController
             $pRow->age = get_age_1($pRow->dob ?? null, $pRow->age ?? '', $pRow->age_in_month ?? '', $pRow->estimate_dob ?? '', $opdRow->apointment_date ?? null);
         }
 
-        $sql = "select *,date_format(apointment_date,'%d-%m-%Y') as str_apointment_date,
-            date_format(date_add(apointment_date,interval " . $noOpdDays . " day),'%d-%m-%Y') as opd_Exp_Date
-            from opd_master where p_id=" . (int) $opdRow->p_id . " and opd_id < " . (int) $opdId . " order by opd_id desc limit 1";
-        $query = $this->db->query($sql);
-        $data['old_opd'] = $query->getResult();
+        $data['old_opd'] = [];
+        if (!empty($opdRow->last_opdvisit_date)) {
+            $sql = "select *,date_format(apointment_date,'%d-%m-%Y') as str_apointment_date,
+                date_format(date_add(apointment_date,interval " . $noOpdDays . " day),'%d-%m-%Y') as opd_Exp_Date
+                from opd_master where p_id=" . (int) $opdRow->p_id
+                . " and doc_id=" . (int) ($opdRow->doc_id ?? 0)
+                . " and apointment_date=" . $this->db->escape((string) $opdRow->last_opdvisit_date)
+                . " order by opd_id desc limit 1";
+            $query = $this->db->query($sql);
+            $data['old_opd'] = $query->getResult();
+        }
+
+        if (empty($data['old_opd'])) {
+            $sql = "select *,date_format(apointment_date,'%d-%m-%Y') as str_apointment_date,
+                date_format(date_add(apointment_date,interval " . $noOpdDays . " day),'%d-%m-%Y') as opd_Exp_Date
+                from opd_master where p_id=" . (int) $opdRow->p_id . " and opd_id < " . (int) $opdId . " order by opd_id desc limit 1";
+            $query = $this->db->query($sql);
+            $data['old_opd'] = $query->getResult();
+        }
 
         $sql = "select * from hc_insurance where id=" . (int) ($opdRow->insurance_id ?? 0);
         $query = $this->db->query($sql);

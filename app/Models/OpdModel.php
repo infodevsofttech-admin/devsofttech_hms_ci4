@@ -42,14 +42,6 @@ class OpdModel
             return 0;
         }
 
-        $opdTimesRow = $this->db->table('opd_master')
-            ->select('count(*) as xtimes')
-            ->where('opd_id <=', $insertId)
-            ->where('p_id', $pId)
-            ->get()
-            ->getRow();
-        $opdTimes = (int) ($opdTimesRow->xtimes ?? 0);
-
         $opdNoRow = $this->db->table('opd_master')
             ->select('count(*) as no_max')
             ->where('apointment_date', date('Y-m-d'))
@@ -66,6 +58,8 @@ class OpdModel
 
         $runningOpd = 0;
         $lastOpdId = 0;
+        $isZeroValueRunning = ((int) ($data['opd_fee_type'] ?? 0) === 3)
+            || ((float) ($data['opd_fee_amount'] ?? 0) <= 0);
 
         if ((int) ($data['opd_fee_type'] ?? 0) === 3) {
             $runningOpd = 1;
@@ -75,6 +69,8 @@ class OpdModel
                 ->where('apointment_date >=', date('Y-m-d', strtotime('-4 days')))
                 ->where('apointment_date <=', date('Y-m-d'))
                 ->where('running_opd', 0)
+                ->where('opd_fee_type <>', 3)
+                ->where('coalesce(opd_fee_amount,0) >', 0, false)
                 ->where('doc_id', $docId)
                 ->where('p_id', $pId)
                 ->get()
@@ -82,6 +78,21 @@ class OpdModel
 
             $lastOpdId = (int) ($lastOpdRow->last_opd_id ?? 0);
         }
+
+        $opdTimesBuilder = $this->db->table('opd_master')
+            ->select('count(*) as xtimes')
+            ->where('opd_id <=', $insertId)
+            ->where('p_id', $pId);
+
+        if ($isZeroValueRunning && $lastOpdId > 0) {
+            // For zero-value running OPD, keep visit count within the same paid OPD validity cycle.
+            $opdTimesBuilder
+                ->where('opd_id >=', $lastOpdId)
+                ->where('doc_id', $docId);
+        }
+
+        $opdTimesRow = $opdTimesBuilder->get()->getRow();
+        $opdTimes = (int) ($opdTimesRow->xtimes ?? 0);
 
         $update = [
             'opd_code' => $opdCode,
