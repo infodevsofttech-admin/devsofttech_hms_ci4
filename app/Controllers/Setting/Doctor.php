@@ -101,6 +101,7 @@ class Doctor extends BaseController
         $templateFieldMap = [
             'opd_print_format' => 'tmpl_opd_print_format',
             'opd_blank_print' => 'tmpl_opd_blank_print',
+            'opd_cont_paper_print' => 'tmpl_opd_cont_paper_print',
             'rx_pre_print_letter_head_format' => 'tmpl_rx_pre_print_letter_head_format',
             'rx_blank_letter_head' => 'tmpl_rx_blank_letter_head',
             'rx_plain_paper' => 'tmpl_rx_plain_paper',
@@ -210,6 +211,7 @@ class Doctor extends BaseController
         $templateFieldMap = [
             'opd_print_format' => 'tmpl_opd_print_format',
             'opd_blank_print' => 'tmpl_opd_blank_print',
+            'opd_cont_paper_print' => 'tmpl_opd_cont_paper_print',
             'rx_pre_print_letter_head_format' => 'tmpl_rx_pre_print_letter_head_format',
             'rx_blank_letter_head' => 'tmpl_rx_blank_letter_head',
             'rx_plain_paper' => 'tmpl_rx_plain_paper',
@@ -643,6 +645,7 @@ class Doctor extends BaseController
         $allTemplateFields = [
             'opd_print_format',
             'opd_blank_print',
+            'opd_cont_paper_print',
             'rx_pre_print_letter_head_format',
             'rx_blank_letter_head',
             'rx_plain_paper',
