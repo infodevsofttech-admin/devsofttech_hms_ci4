@@ -66,14 +66,14 @@ if ($dischargeTimeText !== '') {
     $dischargeDateText = trim($dischargeDateText . ' ' . substr($dischargeTimeText, 0, 5));
 }
 
-$grossAmount = (float) ($ipd->gross_amount ?? 0);
-if ($grossAmount <= 0) {
-    $grossAmount = (float) ($billTotals['gross'] ?? 0);
+$grossAmount = (float) ($billTotals['gross'] ?? 0);
+if ($grossAmount <= 0 && $ipd) {
+    $grossAmount = (float) ($ipd->gross_amount ?? 0);
 }
 
-$netAmount = (float) ($ipd->net_amount ?? 0);
-if ($netAmount <= 0) {
-    $netAmount = (float) ($billTotals['net'] ?? 0);
+$netAmount = (float) ($billTotals['net'] ?? 0);
+if ($netAmount <= 0 && $ipd) {
+    $netAmount = (float) ($ipd->net_amount ?? 0);
 }
 
 $paidAmount = (float) ($billTotals['paid'] ?? 0);
@@ -81,9 +81,9 @@ if ($paidAmount <= 0) {
     $paidAmount = (float) ($ipd->total_paid_amount ?? 0);
 }
 
-$balanceAmount = (float) ($ipd->balance_amount ?? 0);
-if ($balanceAmount <= 0) {
-    $balanceAmount = (float) ($billTotals['balance'] ?? 0);
+$balanceAmount = (float) ($billTotals['balance'] ?? 0);
+if ($balanceAmount === 0.0 && $ipd) {
+    $balanceAmount = (float) ($ipd->balance_amount ?? 0);
 }
 
 $patientAddress = trim((string) (($person->add1 ?? '') . ' ' . ($person->add2 ?? '') . ' ' . ($person->city ?? '') . ' ' . ($person->state ?? '')));

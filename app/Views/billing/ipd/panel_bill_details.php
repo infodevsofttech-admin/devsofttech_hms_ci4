@@ -18,17 +18,18 @@ $balanceTotal = (float) ($billTotals['balance'] ?? 0);
 $showPrintActions = (bool) ($show_print_actions ?? true);
 $canPrintBill = (bool) ($can_print_bill ?? false);
 $showPaymentDetails = (bool) ($show_payment_details ?? true);
-$grossAmount = (float) ($ipd->gross_amount ?? 0);
-$netAmount = (float) ($ipd->net_amount ?? 0);
- $balanceAmount = (float) ($ipd->balance_amount ?? 0);
-if ($grossAmount <= 0) {
-    $grossAmount = (float) ($billTotals['gross'] ?? 0);
+$grossAmount = (float) ($billTotals['gross'] ?? 0);
+$netAmount = (float) ($billTotals['net'] ?? 0);
+$balanceAmount = $balanceTotal;
+
+if ($grossAmount <= 0 && $ipd) {
+    $grossAmount = (float) ($ipd->gross_amount ?? 0);
 }
-if ($netAmount <= 0) {
-    $netAmount = (float) ($billTotals['net'] ?? 0);
+if ($netAmount <= 0 && $ipd) {
+    $netAmount = (float) ($ipd->net_amount ?? 0);
 }
-if ($balanceAmount <= 0) {
-    $balanceAmount = $balanceTotal;
+if ($balanceAmount === 0.0 && $ipd) {
+    $balanceAmount = (float) ($ipd->balance_amount ?? 0);
 }
 $isDischargeFinal = (int) ($ipd->discarge_patient_status ?? 0) > 0;
 $billHeaderTitle = $isDischargeFinal ? 'Bill No. : ' . (string) ($ipd->ipd_code ?? '') : 'IPD Invoice';
