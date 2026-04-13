@@ -5047,6 +5047,16 @@ class Opd_prescription extends BaseController
                 $builder->orLike($nameField, $qFirstToken, 'after');
             }
 
+            // Phonetic candidates can differ by one letter (e.g. CETLAY/CETLEY),
+            // so include an alpha-prefix fallback to widen SQL fetch before PHP ranking.
+            if ($qAlpha !== '') {
+                if (mb_strlen($qAlpha) >= 3) {
+                    $builder->orLike($nameField, substr($qAlpha, 0, 3), 'after');
+                } elseif (mb_strlen($qAlpha) >= 2) {
+                    $builder->orLike($nameField, substr($qAlpha, 0, 2), 'after');
+                }
+            }
+
             // Normalize separators so variants like "utor", "u-tor", "u tor" match each other.
             if ($qNormalized !== '') {
                 $qNormalizedSql = str_replace("'", "''", strtoupper($qNormalized));
