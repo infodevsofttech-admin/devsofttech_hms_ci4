@@ -5046,6 +5046,18 @@ class Opd_prescription extends BaseController
             if ($qFirstToken !== '' && mb_strlen($qFirstToken) >= 1) {
                 $builder->orLike($nameField, $qFirstToken, 'after');
             }
+
+            // Normalize separators so variants like "utor", "u-tor", "u tor" match each other.
+            if ($qNormalized !== '') {
+                $qNormalizedSql = str_replace("'", "''", strtoupper($qNormalized));
+                $nameNormalizedSql = "REPLACE(REPLACE(UPPER(" . $nameField . "), '-', ''), ' ', '')";
+                $builder->orWhere($nameNormalizedSql . " LIKE '%" . $qNormalizedSql . "%'", null, false);
+
+                if ($formField !== null) {
+                    $formNormalizedSql = "REPLACE(REPLACE(UPPER(" . $formField . "), '-', ''), ' ', '')";
+                    $builder->orWhere($formNormalizedSql . " LIKE '%" . $qNormalizedSql . "%'", null, false);
+                }
+            }
             $builder->groupEnd();
         }
 
