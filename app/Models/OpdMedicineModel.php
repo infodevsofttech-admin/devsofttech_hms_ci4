@@ -69,6 +69,61 @@ class OpdMedicineModel
         return trim($name);
     }
 
+    /**
+     * Extract strength tokens so near-identical brands with different strengths
+     * (e.g. 20 MG vs 40 MG) are not treated as duplicates.
+     */
+    private function extractStrengthSignature(string $name, string $formulation = ''): string
+    {
+        $source = trim($name . ' ' . $formulation);
+        if ($source === '') {
+            return '';
+        }
+
+        $source = mb_strtolower($source);
+        $source = preg_replace('/[\(\)\[\],\/\-]+/', ' ', $source) ?? $source;
+        $source = preg_replace('/\s+/', ' ', $source) ?? $source;
+
+        preg_match_all('/\b(\d+(?:\.\d+)?)\s*(mcg|mg|g|kg|ml|l|iu|units|meq|mmol)?\b/i', $source, $matches, PREG_SET_ORDER);
+        if (empty($matches)) {
+            return '';
+        }
+
+        $tokens = [];
+        foreach ($matches as $match) {
+            $number = trim((string) ($match[1] ?? ''));
+            if ($number === '') {
+                continue;
+            }
+            $unit = strtolower(trim((string) ($match[2] ?? '')));
+            $tokens[] = $number . ($unit !== '' ? $unit : 'n');
+        }
+
+        if (empty($tokens)) {
+            return '';
+        }
+
+        $tokens = array_values(array_unique($tokens));
+        sort($tokens, SORT_NATURAL);
+
+        return implode('|', $tokens);
+    }
+
+    private function buildDuplicateKey(string $name, string $formulation = ''): string
+    {
+        $base = $this->normalizeMedicineNameFuzzy($name);
+        if ($base === '') {
+            return '';
+        }
+
+        $strength = $this->extractStrengthSignature($name, $formulation);
+        if ($strength === '') {
+            return $base;
+        }
+
+        return $base . '::' . $strength;
+    }
+
     public function findDuplicateByName(string $itemName, int $excludeId = 0): ?array
     {
         if (! $this->tableExists()) {
@@ -81,7 +136,7 @@ class OpdMedicineModel
             ->get()
             ->getResultArray();
 
-        $needle = $this->normalizeMedicineNameFuzzy($itemName);
+        $needle = $this->buildDuplicateKey($itemName, '');
         if ($needle === '') {
             return null;
         }
@@ -92,7 +147,7 @@ class OpdMedicineModel
                 continue;
             }
 
-            $current = $this->normalizeMedicineNameFuzzy((string) ($row['item_name'] ?? ''));
+            $current = $this->buildDuplicateKey((string) ($row['item_name'] ?? ''), (string) ($row['formulation'] ?? ''));
             if ($current !== '' && $current === $needle) {
                 return $row;
             }
@@ -115,7 +170,7 @@ class OpdMedicineModel
 
         $groups = [];
         foreach ($rows as $row) {
-            $norm = $this->normalizeMedicineNameFuzzy((string) ($row['item_name'] ?? ''));
+            $norm = $this->buildDuplicateKey((string) ($row['item_name'] ?? ''), (string) ($row['formulation'] ?? ''));
             if ($norm === '') {
                 continue;
             }
