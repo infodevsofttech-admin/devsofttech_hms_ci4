@@ -4973,6 +4973,9 @@ class Opd_prescription extends BaseController
         $qNormalized = trim((string) (preg_replace('/[^A-Z0-9]+/', '', $qUpper) ?? $qUpper));
         $qTokens = array_values(array_filter(preg_split('/\s+/', $qLoose) ?: [], static fn(string $token): bool => $token !== ''));
         $qFirstToken = $qTokens[0] ?? '';
+        $qAlpha = trim((string) (preg_replace('/[^A-Z]+/', '', $qUpper) ?? $qUpper));
+        $qSoundex = $qAlpha !== '' ? soundex($qAlpha) : '';
+        $qMetaphone = $qAlpha !== '' ? metaphone($qAlpha) : '';
 
         $table = $this->findExistingTable(['opd_med_master']);
         if ($table === null) {
@@ -5064,6 +5067,9 @@ class Opd_prescription extends BaseController
             $nameUpper = strtoupper($name);
             $nameLoose = trim((string) (preg_replace('/[^A-Z0-9]+/', ' ', $nameUpper) ?? $nameUpper));
             $nameNormalized = trim((string) (preg_replace('/[^A-Z0-9]+/', '', $nameUpper) ?? $nameUpper));
+            $nameAlpha = trim((string) (preg_replace('/[^A-Z]+/', '', $nameUpper) ?? $nameUpper));
+            $nameSoundex = $nameAlpha !== '' ? soundex($nameAlpha) : '';
+            $nameMetaphone = $nameAlpha !== '' ? metaphone($nameAlpha) : '';
 
             $tokenMatch = false;
             if (! empty($qTokens)) {
@@ -5076,11 +5082,25 @@ class Opd_prescription extends BaseController
                 }
             }
 
+            $phoneticMatch = false;
+            if ($qAlpha !== '' && $nameAlpha !== '') {
+                $phoneticMatch = ($qSoundex !== '' && $qSoundex === $nameSoundex)
+                    || ($qMetaphone !== '' && $qMetaphone === $nameMetaphone);
+            }
+
+            $nearMatch = false;
+            if ($qNormalized !== '' && $nameNormalized !== '') {
+                $dist = levenshtein($qNormalized, $nameNormalized);
+                $nearMatch = $dist >= 0 && $dist <= 2;
+            }
+
             $matchesSearch = false;
             if ($qUpper !== '') {
                 $matchesSearch = str_contains($nameUpper, $qUpper)
                     || ($qNormalized !== '' && str_contains($nameNormalized, $qNormalized))
-                    || $tokenMatch;
+                    || $tokenMatch
+                    || $phoneticMatch
+                    || $nearMatch;
             }
 
             if (! $matchesSearch) {
@@ -5129,6 +5149,14 @@ class Opd_prescription extends BaseController
                     if ($qFirstToken !== '' && str_starts_with($nameLoose, $qFirstToken)) {
                         $score += 40;
                     }
+                }
+
+                if ($phoneticMatch) {
+                    $score += 110;
+                }
+
+                if ($nearMatch) {
+                    $score += 70;
                 }
             }
 
