@@ -4968,6 +4968,12 @@ class Opd_prescription extends BaseController
             return $this->response->setJSON(['rows' => []]);
         }
 
+        $qUpper = strtoupper($q);
+        $qLoose = trim((string) (preg_replace('/[^A-Z0-9]+/', ' ', $qUpper) ?? $qUpper));
+        $qNormalized = trim((string) (preg_replace('/[^A-Z0-9]+/', '', $qUpper) ?? $qUpper));
+        $qTokens = array_values(array_filter(preg_split('/\s+/', $qLoose) ?: [], static fn(string $token): bool => $token !== ''));
+        $qFirstToken = $qTokens[0] ?? '';
+
         $table = $this->findExistingTable(['opd_med_master']);
         if ($table === null) {
             return $this->response->setJSON(['rows' => []]);
@@ -5030,15 +5036,19 @@ class Opd_prescription extends BaseController
         $builder = $this->db->table($table)->select($select);
         if ($q !== '') {
             $builder->groupStart()
-                ->like($nameField, $q, 'after');
+                ->like($nameField, $q, 'both');
             if ($formField !== null) {
-                $builder->orLike($formField, $q, 'after');
+                $builder->orLike($formField, $q, 'both');
+            }
+            if ($qFirstToken !== '' && mb_strlen($qFirstToken) >= 1) {
+                $builder->orLike($nameField, $qFirstToken, 'after');
             }
             $builder->groupEnd();
         }
 
         $rows = $builder
-            ->limit(120)
+            ->orderBy($nameField, 'ASC')
+            ->limit(500)
             ->get()
             ->getResultArray();
 
@@ -5048,12 +5058,34 @@ class Opd_prescription extends BaseController
 
         $favoriteMap = $userId > 0 ? $this->getUserFavoriteMedicineIds($userId) : [];
         $usageMap = $userId > 0 ? $this->getUserMedicineUsageMap($userId) : [];
-        $qUpper = strtoupper($q);
-
         foreach ($rows as &$row) {
             $medId = (int) ($row['id'] ?? 0);
             $name = trim((string) ($row['med_name'] ?? ''));
             $nameUpper = strtoupper($name);
+            $nameLoose = trim((string) (preg_replace('/[^A-Z0-9]+/', ' ', $nameUpper) ?? $nameUpper));
+            $nameNormalized = trim((string) (preg_replace('/[^A-Z0-9]+/', '', $nameUpper) ?? $nameUpper));
+
+            $tokenMatch = false;
+            if (! empty($qTokens)) {
+                $tokenMatch = true;
+                foreach ($qTokens as $token) {
+                    if ($token === '' || ! str_contains($nameLoose, $token)) {
+                        $tokenMatch = false;
+                        break;
+                    }
+                }
+            }
+
+            $matchesSearch = false;
+            if ($qUpper !== '') {
+                $matchesSearch = str_contains($nameUpper, $qUpper)
+                    || ($qNormalized !== '' && str_contains($nameNormalized, $qNormalized))
+                    || $tokenMatch;
+            }
+
+            if (! $matchesSearch) {
+                $row['_skip'] = 1;
+            }
 
             $isFavorite = isset($favoriteMap[$medId]);
             $useCount = (int) ($usageMap[$medId]['use_count'] ?? 0);
@@ -5085,6 +5117,19 @@ class Opd_prescription extends BaseController
                 } elseif (str_contains($nameUpper, $qUpper)) {
                     $score += 100;
                 }
+
+                if ($qNormalized !== '' && str_starts_with($nameNormalized, $qNormalized)) {
+                    $score += 180;
+                } elseif ($qNormalized !== '' && str_contains($nameNormalized, $qNormalized)) {
+                    $score += 120;
+                }
+
+                if ($tokenMatch) {
+                    $score += 140;
+                    if ($qFirstToken !== '' && str_starts_with($nameLoose, $qFirstToken)) {
+                        $score += 40;
+                    }
+                }
             }
 
             $row['is_favorite'] = $isFavorite ? 1 : 0;
@@ -5093,6 +5138,8 @@ class Opd_prescription extends BaseController
             $row['_score'] = $score;
         }
         unset($row);
+
+        $rows = array_values(array_filter($rows, static fn(array $row): bool => (int) ($row['_skip'] ?? 0) !== 1));
 
         if ($scope === 'favorite') {
             $rows = array_values(array_filter($rows, static fn(array $row): bool => (int) ($row['is_favorite'] ?? 0) === 1));
@@ -5115,6 +5162,7 @@ class Opd_prescription extends BaseController
         $rows = array_slice($rows, 0, $limit);
         foreach ($rows as &$row) {
             unset($row['_score']);
+            unset($row['_skip']);
         }
         unset($row);
 
@@ -5855,7 +5903,7 @@ class Opd_prescription extends BaseController
             $builder->where('id !=', $excludeId);
         }
 
-        foreach (['med_id', 'med_name', 'med_type', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days', 'qty', 'remark'] as $field) {
+        foreach (['med_id', 'med_type', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days', 'qty', 'remark'] as $field) {
             if (! in_array($field, $fields, true)) {
                 continue;
             }
@@ -5868,7 +5916,41 @@ class Opd_prescription extends BaseController
             }
         }
 
-        return $builder->get(1)->getRowArray() !== null;
+        $candidates = $builder->get()->getResultArray();
+        if (empty($candidates)) {
+            return false;
+        }
+
+        if (! in_array('med_name', $fields, true)) {
+            return true;
+        }
+
+        $needle = $this->normalizeMedicineMatchKey((string) ($row['med_name'] ?? ''));
+        if ($needle === '') {
+            foreach ($candidates as $candidate) {
+                $name = trim((string) ($candidate['med_name'] ?? ''));
+                if ($name === '') {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        foreach ($candidates as $candidate) {
+            $current = $this->normalizeMedicineMatchKey((string) ($candidate['med_name'] ?? ''));
+            if ($current !== '' && $current === $needle) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function normalizeMedicineMatchKey(string $value): string
+    {
+        $key = strtoupper(trim($value));
+        $key = preg_replace('/[^A-Z0-9]+/', '', $key) ?? $key;
+        return trim((string) $key);
     }
 
     public function medicine_remove($id)
