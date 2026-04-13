@@ -508,8 +508,13 @@
                 },
                 {
                     data: 'item_name',
-                    render: function(data) {
-                        return esc(data);
+                    render: function(data, type, row) {
+                        var name = String(data || '').trim();
+                        var formulation = String((row && row.formulation) ? row.formulation : '').trim();
+                        if (!name) {
+                            return '';
+                        }
+                        return formulation ? (esc(name) + ' (' + esc(formulation) + ')') : esc(name);
                     }
                 },
                 {
