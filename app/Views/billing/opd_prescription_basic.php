@@ -807,7 +807,7 @@
                                         <option value="">Load profile...</option>
                                     </select>
                                     <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_apply_custom_inv_profile">Apply</button>
-                                    <button type="button" class="btn btn-outline-warning btn-sm" id="btn_toggle_legacy_inv_panel"><i class="bi bi-star"></i> Fav</button>
+                                    <button type="button" class="btn btn-outline-warning btn-sm" id="btn_toggle_legacy_inv_panel"><i class="bi bi-star"></i> Custom Investigation</button>
                                 </div>
                             </div>
 
