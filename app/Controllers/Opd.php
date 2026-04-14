@@ -2312,7 +2312,7 @@ class Opd extends BaseController
         $medicalHtml = '';
         if (!empty($rxMeds)) {
             $medicalHtml .= '<table width="100%" style="border-collapse:collapse;font-size:12px;">';
-            $medicalHtml .= '<tr><th style="text-align:left;width:5%;">#</th><th style="text-align:left;width:49%;">Medicine</th><th style="text-align:left;width:26%;">Dose/Freq</th><th style="text-align:left;width:10%;">Qty</th><th style="text-align:left;width:10%;">Day</th></tr>';
+            $medicalHtml .= '<tr><th style="text-align:left;width:5%;">#</th><th style="text-align:left;width:43%;">Medicine</th><th style="text-align:left;width:32%;">Dose/Freq</th><th style="text-align:left;width:10%;">Qty</th><th style="text-align:left;width:10%;">Day</th></tr>';
             $i = 0;
             foreach ($rxMeds as $med) {
                 $i++;
@@ -2416,21 +2416,25 @@ class Opd extends BaseController
                 if ($generic !== '') {
                     $nameHtml .= '<div style="font-size:11px;color:#444;">Salt/Generic: ' . esc($generic) . '</div>';
                 }
+
+                $hasInstruction = ($inst !== '' || $instLocal !== '');
+                $baseRowCellStyle = $hasInstruction ? ' style="border-bottom:none;"' : '';
+
                 $medicalHtml .= '<tr>'
-                    . '<td>' . $i . '</td>'
-                    . '<td>' . $nameHtml . '</td>'
-                    . '<td>' . esc($doseFreqText)
+                    . '<td' . $baseRowCellStyle . '>' . $i . '</td>'
+                    . '<td' . $baseRowCellStyle . '>' . $nameHtml . '</td>'
+                    . '<td' . $baseRowCellStyle . '>' . esc($doseFreqText)
                     . ($doseFreqLocal !== '' ? ('<div style="font-size:11px;color:#444;line-height:1.4;" lang="hi">' . esc($doseFreqLocal) . '</div>') : '')
                     . '</td>'
-                    . '<td>' . esc($qty) . '</td>'
-                    . '<td>' . esc($days) . '</td>'
+                    . '<td' . $baseRowCellStyle . '>' . esc($qty) . '</td>'
+                    . '<td' . $baseRowCellStyle . '>' . esc($days) . '</td>'
                     . '</tr>';
 
-                if ($inst !== '' || $instLocal !== '') {
+                if ($hasInstruction) {
                     $medicalHtml .= '<tr>'
                         . '<td></td>'
                         . '<td colspan="4" style="padding-top:2px;padding-bottom:4px;">'
-                        . '<div><strong>Instruction:</strong> ' . esc($inst !== '' ? $inst : '-') . '</div>'
+                        . '<div>' . esc($inst !== '' ? $inst : '-') . '</div>'
                         . ($instLocal !== '' ? ('<div style="font-size:11px;color:#444;line-height:1.4;" lang="hi">' . esc($instLocal) . '</div>') : '')
                         . '</td>'
                         . '</tr>';
