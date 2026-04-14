@@ -807,7 +807,15 @@
                                         <option value="">Load profile...</option>
                                     </select>
                                     <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_apply_custom_inv_profile">Apply</button>
+                                    <button type="button" class="btn btn-outline-dark btn-sm" id="btn_toggle_legacy_inv_panel">Old Type Panel</button>
+                                    <a href="javascript:load_form_div('<?= base_url('Opd_prescription/opd_invest_shortcuts_manager') ?>','maindiv','Shortcuts Manager');" class="btn btn-outline-info btn-sm" title="Configure which tests appear in the Old Type Panel and their groups"><i class="bi bi-grid-3x2"></i> Manage Shortcuts</a>
+                                    <button type="button" class="btn btn-outline-dark btn-sm" id="btn_open_custom_investigation" data-bs-toggle="modal" data-bs-target="#customInvestigationModal">Custome Investigation</button>
                                 </div>
+                            </div>
+
+                            <div id="legacy_inv_shortcuts_panel" class="border rounded p-2 mb-3" style="display:none;">
+                                <div class="small fw-semibold mb-2">Legacy Investigation Shortcuts</div>
+                                <div id="legacy_inv_shortcuts_grouped"></div>
                             </div>
 
                             <div class="row g-2 mb-3">
@@ -1230,6 +1238,26 @@
             </div>
         </div>
     </div>
+
+    <div class="modal fade" id="customInvestigationModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Custome Investigation</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label fw-semibold" for="custom_investigation_select2">Select Investigations</label>
+                    <select class="form-select" id="custom_investigation_select2" multiple="multiple" style="width:100%;"></select>
+                    <div class="small text-muted mt-2">Search and select multiple tests, then click Add Selected.</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="btn_add_custom_investigations">Add Selected</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </section>
 
 <script>
@@ -1273,6 +1301,7 @@
     var invCustomProfileKey = 'opd_inv_custom_profiles';
     var legacyInvestigationProfiles = {};
     var legacyInvestigationProfileList = [];
+    var legacyInvestigationShortTests = [];
     var investigationBatchActive = false;
     var activeMedicineScope = 'all';
     var medicineSuggestRows = [];
@@ -2785,6 +2814,7 @@
     function loadInvestigationShortcutsFromLegacy() {
         apiGet('<?= base_url('Opd_prescription/investigation_shortcuts') ?>', function(data) {
             var profiles = (data && data.profiles) ? data.profiles : [];
+            var shortTests = (data && data.short_tests) ? data.short_tests : [];
             var $profileWrap = $('#inv_profile_chip_wrap');
 
             if ($profileWrap.length) {
@@ -2792,6 +2822,8 @@
             }
             legacyInvestigationProfiles = {};
             legacyInvestigationProfileList = [];
+            legacyInvestigationShortTests = Array.isArray(shortTests) ? shortTests : [];
+            renderLegacyInvestigationShortcuts(legacyInvestigationShortTests);
 
             if (profiles.length) {
                 profiles.forEach(function(p) {
@@ -2833,6 +2865,112 @@
                 }
             }
 
+        });
+    }
+
+    function renderLegacyInvestigationShortcuts(rows) {
+        var $wrap = $('#legacy_inv_shortcuts_grouped');
+        if (!$wrap.length) {
+            return;
+        }
+
+        $wrap.empty();
+        rows = Array.isArray(rows) ? rows : [];
+        if (!rows.length) {
+            $wrap.append('<div class="text-muted small">No legacy investigations found.</div>');
+            return;
+        }
+
+        // Bootstrap 5 equivalents of CI3 Bootstrap 3 colors (btn-default removed in BS5 → btn-secondary)
+        var btnColor = ['btn-secondary', 'btn-primary', 'btn-success', 'btn-info', 'btn-danger', 'btn-warning'];
+        var shortName = '';
+        var counter = 1;
+        var btnStyle = 'btn-secondary';
+        var hasAny = false;
+
+        rows.forEach(function(row) {
+            var rowShortName = (row.short_name || '').toString().trim();
+            var testName = (row.name || '').toString().trim();
+            var testCode = (row.code || '').toString().trim();
+
+            // Skip if missing name or short_name
+            if (!testName || !rowShortName) {
+                return;
+            }
+            hasAny = true;
+
+            // CI3 LOGIC: if (row->short_name <> short_name) { echo '<br />'; pick new color; counter++ }
+            if (rowShortName !== shortName) {
+                $wrap.append('<br />');
+                btnStyle = btnColor[counter % btnColor.length];
+                counter++;
+            }
+
+            // btn-xs removed in Bootstrap 5 → use btn-sm
+            var $btn = $('<button type="button" class="btn btn-sm legacy-inv-chip inv-quick-chip" style="margin: 2px;"></button>')
+                .addClass(btnStyle)
+                .attr('data-test', testName)
+                .attr('data-code', testCode)
+                .text(testName);
+            $wrap.append($btn);
+
+            // Update short_name for next iteration
+            shortName = rowShortName;
+        });
+
+        if (!hasAny) {
+            $wrap.append('<div class="text-muted small">No legacy investigations found.</div>');
+        }
+    }
+
+    function initCustomInvestigationModal() {
+        var $modal = $('#customInvestigationModal');
+        var $sel = $('#custom_investigation_select2');
+        if (!$modal.length || !$sel.length || !($.fn && $.fn.select2)) {
+            return;
+        }
+
+        if ($sel.data('select2')) {
+            return;
+        }
+
+        $sel.select2({
+            width: '100%',
+            dropdownParent: $modal,
+            multiple: true,
+            placeholder: 'Search investigations...',
+            ajax: {
+                delay: 250,
+                transport: function(params, success, failure) {
+                    var term = (params.data && params.data.term) ? params.data.term : '';
+                    $.ajax({
+                        url: '<?= base_url('Opd_prescription/investigation_search') ?>',
+                        dataType: 'json',
+                        data: { q: term },
+                        success: success,
+                        error: failure
+                    });
+                },
+                processResults: function(data) {
+                    var rows = (data && data.rows) ? data.rows : [];
+                    return {
+                        results: rows.map(function(row) {
+                            var name = (row.name || '').toString();
+                            var code = (row.code || '').toString();
+                            return {
+                                id: name + (code ? ' [' + code + ']' : ''),
+                                text: name + (code ? ' [' + code + ']' : ''),
+                                name: name,
+                                code: code
+                            };
+                        })
+                    };
+                }
+            }
+        });
+
+        $modal.on('hidden.bs.modal', function() {
+            $sel.val(null).trigger('change');
         });
     }
 
@@ -5022,7 +5160,12 @@
 
     $(document).on('click', '.inv-quick-chip', function() {
         var test = ($(this).data('test') || '').toString().trim();
+        var code = ($(this).data('code') || '').toString().trim();
         if (!test) {
+            return;
+        }
+        if (code) {
+            batchAddInvestigationRows([{ name: test, code: code }]);
             return;
         }
         batchAddInvestigations([test]);
@@ -5095,6 +5238,47 @@
         $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Invalid profile selection.');
     });
 
+    $('#btn_toggle_legacy_inv_panel').on('click', function() {
+        var $panel = $('#legacy_inv_shortcuts_panel');
+        if (!$panel.length) {
+            return;
+        }
+        $panel.stop(true, true).slideToggle(140);
+    });
+
+    $('#btn_add_custom_investigations').on('click', function() {
+        var selected = [];
+        if ($.fn && $.fn.select2 && $('#custom_investigation_select2').length) {
+            selected = $('#custom_investigation_select2').select2('data') || [];
+        }
+
+        if (!selected.length) {
+            $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Select at least one investigation.');
+            return;
+        }
+
+        var rows = selected.map(function(item) {
+            return {
+                name: (item.name || item.text || '').toString().trim(),
+                code: (item.code || '').toString().trim()
+            };
+        }).filter(function(item) {
+            return item.name !== '';
+        });
+
+        if (!rows.length) {
+            return;
+        }
+
+        batchAddInvestigationRows(rows);
+
+        if (window.bootstrap && window.bootstrap.Modal) {
+            window.bootstrap.Modal.getOrCreateInstance(document.getElementById('customInvestigationModal')).hide();
+        } else {
+            $('#customInvestigationModal').modal('hide');
+        }
+    });
+
     $('#advise_investigation_notes').on('input', function() {
         $('#investigation').val($(this).val() || '');
         refreshCounters();
@@ -5103,6 +5287,7 @@
 
     refreshCustomProfileSelect();
     loadInvestigationShortcutsFromLegacy();
+    initCustomInvestigationModal();
     initInvestigationPicker();
         loadInvSpecDropdown();
 

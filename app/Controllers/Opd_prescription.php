@@ -3381,6 +3381,85 @@ class Opd_prescription extends BaseController
         ]);
     }
 
+    public function opd_invest_shortcuts_manager()
+    {
+        return view('billing/opd_invest_shortcuts_manager');
+    }
+
+    public function opd_invest_shortcuts_all()
+    {
+        if (! $this->db->tableExists('investigation')) {
+            return $this->response->setJSON(['rows' => []]);
+        }
+        $fields    = $this->db->getFieldNames('investigation');
+        $keyField  = $this->resolveFirstField($fields, ['id', 'Code', 'code']);
+        $codeField = $this->resolveFirstField($fields, ['Code', 'code']);
+        $nameField = $this->resolveFirstField($fields, ['Name', 'name']);
+        if ($keyField === null || $codeField === null || $nameField === null) {
+            return $this->response->setJSON(['rows' => []]);
+        }
+        $selectCols = $keyField . ' as id, ' . $codeField . ' as code, ' . $nameField . ' as name';
+        foreach (['short_name', 'sort_id'] as $f) {
+            if (in_array($f, $fields, true)) {
+                $selectCols .= ', ' . $f;
+            }
+        }
+        $rows = $this->db->table('investigation')
+            ->select($selectCols)
+            ->orderBy($nameField, 'ASC')
+            ->get()->getResultArray();
+        $rows = array_map(static function (array $r): array {
+            return [
+                'id'         => (int) ($r['id'] ?? 0),
+                'code'       => (string) ($r['code'] ?? ''),
+                'name'       => (string) ($r['name'] ?? ''),
+                'short_name' => (string) ($r['short_name'] ?? ''),
+                'sort_id'    => (int) ($r['sort_id'] ?? 0),
+            ];
+        }, $rows);
+        return $this->response->setJSON([
+            'rows'    => $rows,
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
+    public function opd_invest_shortcuts_save_item()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0]);
+        }
+        if (! $this->db->tableExists('investigation')) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Investigation table not found']);
+        }
+        $id = (int) $this->request->getPost('id');
+        if ($id <= 0) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid id']);
+        }
+        $fields   = $this->db->getFieldNames('investigation');
+        $keyField = $this->resolveFirstField($fields, ['id', 'Code', 'code']);
+        if ($keyField === null) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid table structure']);
+        }
+        $data = [];
+        if (in_array('short_name', $fields, true)) {
+            $data['short_name'] = trim((string) $this->request->getPost('short_name'));
+        }
+        if (in_array('sort_id', $fields, true)) {
+            $data['sort_id'] = max(0, (int) $this->request->getPost('sort_id'));
+        }
+        if (empty($data)) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Nothing to update']);
+        }
+        $this->db->table('investigation')->where($keyField, $id)->update($data);
+        return $this->response->setJSON([
+            'update'     => 1,
+            'error_text' => 'Saved',
+            'csrfName'   => csrf_token(),
+            'csrfHash'   => csrf_hash(),
+        ]);
+    }
+
     public function opd_invest_profile_master()
     {
         return view('billing/opd_invest_profile_master_workspace');
@@ -4697,25 +4776,36 @@ class Opd_prescription extends BaseController
 
         if ($this->db->tableExists('investigation')) {
             $invFields = $this->db->getFieldNames('investigation');
-            $codeField = $this->resolveFirstField($invFields, ['Code', 'code']);
-            $nameField = $this->resolveFirstField($invFields, ['Name', 'name']);
-            $shortField = $this->resolveFirstField($invFields, ['short_name', 'shortName', 'short']);
-            $sortField = $this->resolveFirstField($invFields, ['sort_id', 'sort_order', 'id']);
 
-            if ($codeField !== null && $nameField !== null && $shortField !== null) {
-                $builder = $this->db->table('investigation')
-                    ->select($codeField . ' as code,' . $nameField . ' as name,' . $shortField . ' as short_name')
+            $pickField = static function (array $fields, array $candidates): ?string {
+                $map = [];
+                foreach ($fields as $field) {
+                    $map[strtolower((string) $field)] = (string) $field;
+                }
+                foreach ($candidates as $candidate) {
+                    $key = strtolower((string) $candidate);
+                    if (isset($map[$key])) {
+                        return $map[$key];
+                    }
+                }
+                return null;
+            };
+
+            $codeField = $pickField($invFields, ['Code', 'code']);
+            $nameField = $pickField($invFields, ['Name', 'name']);
+            $shortField = $pickField($invFields, ['short_name', 'shortName', 'short']);
+            $sortField = $pickField($invFields, ['sort_id', 'sort_order', 'id']);
+
+            if ($codeField !== null && $nameField !== null && $shortField !== null && $sortField !== null) {
+                // Keep legacy CI3 behavior: show only mostly-used tests and group/order by short_name, sort_id.
+                $shortTests = $this->db->table('investigation')
+                    ->select($codeField . ' as code,' . $nameField . ' as name,' . $shortField . ' as short_name,' . $sortField . ' as sort_id')
                     ->where($shortField . ' !=', '')
                     ->where($shortField . ' is not null', null, false)
-                    ->limit(200);
-
-                if ($sortField !== null) {
-                    $builder->orderBy($shortField, 'ASC')->orderBy($sortField, 'ASC');
-                } else {
-                    $builder->orderBy($shortField, 'ASC')->orderBy($nameField, 'ASC');
-                }
-
-                $shortTests = $builder->get()->getResultArray();
+                    ->orderBy($shortField, 'ASC')
+                    ->orderBy($sortField, 'ASC')
+                    ->get()
+                    ->getResultArray();
             }
         }
 
@@ -4794,6 +4884,36 @@ class Opd_prescription extends BaseController
             'profiles' => $profiles,
             'short_tests' => $shortTests,
         ]);
+    }
+
+    // DEBUG ENDPOINT - Remove after verifying data
+    public function debug_investigation_fields()
+    {
+        if ($this->db->tableExists('investigation')) {
+            $fields = $this->db->getFieldNames('investigation');
+            $total = $this->db->table('investigation')->countAll();
+            $withShortName = $this->db->table('investigation')
+                ->where("short_name != ''", null, false)
+                ->where('short_name IS NOT NULL', null, false)
+                ->countAll();
+            
+            $sample = $this->db->table('investigation')
+                ->where("short_name != ''", null, false)
+                ->where('short_name IS NOT NULL', null, false)
+                ->orderBy('short_name', 'ASC')
+                ->orderBy('sort_id', 'ASC')
+                ->limit(10)
+                ->get()
+                ->getResultArray();
+
+            return $this->response->setJSON([
+                'table_fields' => $fields,
+                'total_investigations' => $total,
+                'with_short_name' => $withShortName,
+                'sample_data' => $sample,
+            ]);
+        }
+        return $this->response->setJSON(['error' => 'investigation table not found']);
     }
 
     public function investigation_list($opdId, $sessionId = 0)

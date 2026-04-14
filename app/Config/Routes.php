@@ -625,6 +625,7 @@ $routes->post('Opd_prescription/advice_remove/(:num)', 'Opd_prescription::advice
 
 $routes->get('Opd_prescription/investigation_search', 'Opd_prescription::investigation_search');
 $routes->get('Opd_prescription/investigation_shortcuts', 'Opd_prescription::investigation_shortcuts');
+$routes->get('Opd_prescription/debug_investigation_fields', 'Opd_prescription::debug_investigation_fields');
 $routes->get('Opd_prescription/investigation_list/(:num)', 'Opd_prescription::investigation_list/$1');
 $routes->get('Opd_prescription/investigation_list/(:num)/(:num)', 'Opd_prescription::investigation_list/$1/$2');
 $routes->post('Opd_prescription/investigation_add', 'Opd_prescription::investigation_add');
@@ -636,6 +637,9 @@ $routes->get('Opd_prescription/opd_invest_master_get/(:num)', 'Opd_prescription:
 $routes->post('Opd_prescription/opd_invest_master_save', 'Opd_prescription::opd_invest_master_save');
 $routes->post('Opd_prescription/opd_invest_master_remove/(:num)', 'Opd_prescription::opd_invest_master_remove/$1');
 $routes->post('Opd_prescription/opd_invest_master_toggle_fav/(:num)', 'Opd_prescription::opd_invest_master_toggle_fav/$1');
+$routes->get('Opd_prescription/opd_invest_shortcuts_manager', 'Opd_prescription::opd_invest_shortcuts_manager', ['filter' => 'permission:doctor_work.medicine.manage,doctor_work.access']);
+$routes->get('Opd_prescription/opd_invest_shortcuts_all', 'Opd_prescription::opd_invest_shortcuts_all');
+$routes->post('Opd_prescription/opd_invest_shortcuts_save_item', 'Opd_prescription::opd_invest_shortcuts_save_item');
 $routes->get('Opd_prescription/opd_invest_profile_master', 'Opd_prescription::opd_invest_profile_master', ['filter' => 'permission:doctor_work.medicine.manage,doctor_work.access']);
 $routes->get('Opd_prescription/opd_invest_profile_master_list', 'Opd_prescription::opd_invest_profile_master_list');
 $routes->get('Opd_prescription/opd_invest_profile_master_data', 'Opd_prescription::opd_invest_profile_master_data');
