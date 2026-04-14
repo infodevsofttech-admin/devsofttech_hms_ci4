@@ -2504,6 +2504,7 @@ class Opd extends BaseController
 
         $findingExaminationsText = $rxRead($rx, ['Finding_Examinations', 'finding_examinations', 'finding', 'findings', 'examination']);
         $prescriberRemarksText = $rxRead($rx, ['Prescriber_Remarks', 'prescriber_remarks', 'remarks', 'remark', 'doctor_note']);
+        $prescriberRemarksText = $this->sanitizePrescriberRemarksForPrint($prescriberRemarksText);
         $nextVisitText = $rxRead($rx, ['next_visit', 'next_visit_date', 'follow_up', 'followup', 'review_after']);
         $complaintLocal = $this->translateToLocalPatientText($complaintText);
         $diagnosisLocal = $this->translateToLocalPatientText($diagnosisText);
@@ -6476,6 +6477,32 @@ class Opd extends BaseController
             'adr_history' => $extract('/^\s*ADR\s*History\s*:\s*(.+)$/im', $remarks),
             'current_medications' => $extract('/^\s*Current\s*Medications\s*:\s*(.+)$/im', $remarks),
         ];
+    }
+
+    private function sanitizePrescriberRemarksForPrint(string $remarks): string
+    {
+        $remarks = trim($remarks);
+        if ($remarks === '') {
+            return '';
+        }
+
+        $lines = preg_split('/\r\n|\r|\n/', $remarks) ?: [];
+        $cleaned = [];
+        foreach ($lines as $line) {
+            $trimmed = trim((string) $line);
+            if (
+                preg_match('/^Drug\s*Allergy\s*Status\s*:/i', $trimmed) === 1
+                || preg_match('/^Drug\s*Allergy\s*Details\s*:/i', $trimmed) === 1
+                || preg_match('/^ADR\s*History\s*:/i', $trimmed) === 1
+                || preg_match('/^Current\s*Medications\s*:/i', $trimmed) === 1
+            ) {
+                continue;
+            }
+
+            $cleaned[] = $line;
+        }
+
+        return trim(implode("\n", $cleaned));
     }
 
     private function extractWomenRelatedProblemsFromRemarks(string $remarks): string
