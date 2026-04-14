@@ -807,9 +807,7 @@
                                         <option value="">Load profile...</option>
                                     </select>
                                     <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_apply_custom_inv_profile">Apply</button>
-                                    <button type="button" class="btn btn-outline-dark btn-sm" id="btn_toggle_legacy_inv_panel">Old Type Panel</button>
-                                    <a href="javascript:load_form_div('<?= base_url('Opd_prescription/opd_invest_shortcuts_manager') ?>','maindiv','Shortcuts Manager');" class="btn btn-outline-info btn-sm" title="Configure which tests appear in the Old Type Panel and their groups"><i class="bi bi-grid-3x2"></i> Manage Shortcuts</a>
-                                    <button type="button" class="btn btn-outline-dark btn-sm" id="btn_open_custom_investigation" data-bs-toggle="modal" data-bs-target="#customInvestigationModal">Custome Investigation</button>
+                                    <button type="button" class="btn btn-outline-warning btn-sm" id="btn_toggle_legacy_inv_panel"><i class="bi bi-star"></i> Fav</button>
                                 </div>
                             </div>
 
