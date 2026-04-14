@@ -2312,7 +2312,7 @@ class Opd extends BaseController
         $medicalHtml = '';
         if (!empty($rxMeds)) {
             $medicalHtml .= '<table width="100%" style="border-collapse:collapse;font-size:12px;">';
-            $medicalHtml .= '<tr><th style="text-align:left;">#</th><th style="text-align:left;">Medicine</th><th style="text-align:left;">Dose/Freq</th><th style="text-align:left;">Qty</th><th style="text-align:left;">Day</th><th style="text-align:left;">Instruction</th></tr>';
+            $medicalHtml .= '<tr><th style="text-align:left;width:5%;">#</th><th style="text-align:left;width:49%;">Medicine</th><th style="text-align:left;width:26%;">Dose/Freq</th><th style="text-align:left;width:10%;">Qty</th><th style="text-align:left;width:10%;">Day</th></tr>';
             $i = 0;
             foreach ($rxMeds as $med) {
                 $i++;
@@ -2424,10 +2424,17 @@ class Opd extends BaseController
                     . '</td>'
                     . '<td>' . esc($qty) . '</td>'
                     . '<td>' . esc($days) . '</td>'
-                    . '<td>' . esc($inst)
-                    . ($instLocal !== '' ? ('<div style="font-size:11px;color:#444;line-height:1.4;" lang="hi">' . esc($instLocal) . '</div>') : '')
-                    . '</td>'
                     . '</tr>';
+
+                if ($inst !== '' || $instLocal !== '') {
+                    $medicalHtml .= '<tr>'
+                        . '<td></td>'
+                        . '<td colspan="4" style="padding-top:2px;padding-bottom:4px;">'
+                        . '<div><strong>Instruction:</strong> ' . esc($inst !== '' ? $inst : '-') . '</div>'
+                        . ($instLocal !== '' ? ('<div style="font-size:11px;color:#444;line-height:1.4;" lang="hi">' . esc($instLocal) . '</div>') : '')
+                        . '</td>'
+                        . '</tr>';
+                }
             }
             $medicalHtml .= '</table>';
         }
