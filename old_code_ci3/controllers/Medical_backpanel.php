@@ -339,7 +339,7 @@ class Medical_backpanel extends MY_Controller
 
 		$where .= " and i.date_of_invoice>date_add(curdate(),interval -24 month) ";
 
-		$sql = "SELECT m.item_name, m.id,m.genericname,
+		$sql = "SELECT m.item_name, m.id,m.genericname,m.company_name,
 			SUM(p.tqty) AS Pak_qty,
 			SUM(p.total_unit) AS P_Unit_Qty,
 			m.packing,
