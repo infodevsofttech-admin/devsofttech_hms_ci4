@@ -26,14 +26,14 @@ class Database extends Config
      */
     public array $default = [
         'DSN'          => '',
-        'hostname'     => env('database.default.hostname', 'localhost'),
-        'username'     => env('database.default.username', 'root'),
-        'password'     => env('database.default.password', ''),
-        'database'     => env('database.default.database', 'hms_ci4_2026'),
-        'DBDriver'     => env('database.default.DBDriver', 'MySQLi'),
+        'hostname'     => 'localhost',
+        'username'     => 'root',
+        'password'     => '',
+        'database'     => 'hms_ci4_2026',
+        'DBDriver'     => 'MySQLi',
         'DBPrefix'     => '',
         'pConnect'     => false,
-        'DBDebug'      => env('database.default.DBDebug', true),
+        'DBDebug'      => true,
         'charset'      => 'utf8mb4',
         'DBCollat'     => 'utf8mb4_general_ci',
         'swapPre'      => '',
@@ -41,7 +41,7 @@ class Database extends Config
         'compress'     => false,
         'strictOn'     => false,
         'failover'     => [],
-        'port'         => env('database.default.port', 3306),
+        'port'         => 3306,
         'numberNative' => false,
         'foundRows'    => false,
         'dateFormat'   => [
@@ -193,6 +193,15 @@ class Database extends Config
     public function __construct()
     {
         parent::__construct();
+
+        // Load database credentials from .env
+        $this->default['hostname'] = env('database.default.hostname', 'localhost');
+        $this->default['username'] = env('database.default.username', 'root');
+        $this->default['password'] = env('database.default.password', '');
+        $this->default['database'] = env('database.default.database', 'hms_ci4_2026');
+        $this->default['DBDriver'] = env('database.default.DBDriver', 'MySQLi');
+        $this->default['DBDebug'] = env('database.default.DBDebug', true);
+        $this->default['port'] = env('database.default.port', 3306);
 
         // Ensure that we always set the database group to 'tests' if
         // we are currently running an automated test suite, so that
