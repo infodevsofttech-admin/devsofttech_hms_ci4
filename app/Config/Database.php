@@ -200,8 +200,8 @@ class Database extends Config
         $this->default['password'] = env('database.default.password', '');
         $this->default['database'] = env('database.default.database', 'hms_ci4_2026');
         $this->default['DBDriver'] = env('database.default.DBDriver', 'MySQLi');
-        $this->default['DBDebug'] = env('database.default.DBDebug', true);
-        $this->default['port'] = env('database.default.port', 3306);
+        $this->default['DBDebug'] = filter_var(env('database.default.DBDebug', 'true'), FILTER_VALIDATE_BOOLEAN);
+        $this->default['port'] = (int) env('database.default.port', 3306);
 
         // Ensure that we always set the database group to 'tests' if
         // we are currently running an automated test suite, so that
