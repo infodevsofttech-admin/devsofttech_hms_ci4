@@ -97,6 +97,7 @@ class Opd_prescription extends BaseController
                     $firstRow,
                     (string) ($first->Prescriber_Remarks ?? '')
                 );
+                $first->Prescriber_Remarks = $this->stripNabhFieldsFromRemarks((string) ($first->Prescriber_Remarks ?? ''));
                 $first->drug_allergy_status = (string) ($nabhInfo['drug_allergy_status'] ?? '');
                 $first->drug_allergy_details = (string) ($nabhInfo['drug_allergy_details'] ?? '');
                 $first->adr_history = (string) ($nabhInfo['adr_history'] ?? '');
@@ -435,7 +436,10 @@ class Opd_prescription extends BaseController
             'adr_history' => (string) ($payload['adr_history'] ?? ''),
             'current_medications' => (string) ($payload['current_medications'] ?? ''),
         ];
-        $unmappedNabh = $this->mapNabhFieldsToExistingColumns($payload, $fields, $nabhInput);
+        $this->mapNabhFieldsToExistingColumns($payload, $fields, $nabhInput);
+
+        // Keep prescription remarks user-controlled; do not auto-inject structured NABH lines.
+        $payload['Prescriber_Remarks'] = $this->stripNabhFieldsFromRemarks((string) ($payload['Prescriber_Remarks'] ?? ''));
 
         if (!in_array('women_related_problems', $fields, true)) {
             $womenText = trim((string) ($payload['women_related_problems'] ?? ''));
@@ -445,13 +449,6 @@ class Opd_prescription extends BaseController
                     $womenText
                 );
             }
-        }
-
-        if (!empty(array_filter($unmappedNabh, static fn ($v) => trim((string) $v) !== ''))) {
-            $payload['Prescriber_Remarks'] = $this->upsertNabhFieldsIntoRemarks(
-                (string) ($payload['Prescriber_Remarks'] ?? ''),
-                $unmappedNabh
-            );
         }
 
         foreach ($payload as $value) {
@@ -4212,9 +4209,9 @@ class Opd_prescription extends BaseController
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Unsupported section']);
         }
 
-        $keyword = preg_replace('/\s+/', ' ', $keyword) ?? $keyword;
-        if (mb_strlen($keyword) < 2) {
-            return $this->response->setJSON(['update' => 0, 'error_text' => 'Keyword must be at least 2 characters']);
+        $keyword = $this->normalizeAutocompleteSuggestionText($keyword);
+        if (! $this->isUsableAutotypeKeyword($keyword)) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Please enter a meaningful keyword (not only commas/symbols).']);
         }
 
         if (! $this->ensureAutotypeKeywordTable()) {
@@ -4241,10 +4238,16 @@ class Opd_prescription extends BaseController
 
         if (! empty($existing)) {
             $table->where('id', (int) ($existing['id'] ?? 0))->update([
+                'keyword' => $keyword,
                 'is_active' => 1,
                 'updated_at' => date('Y-m-d H:i:s'),
             ]);
         } else {
+            $dupId = $this->findNormalizedAutotypeKeywordId($docId, $section, $keyword, 0);
+            if ($dupId > 0) {
+                return $this->response->setJSON(['update' => 0, 'error_text' => 'Keyword already exists in this scope']);
+            }
+
             $table->insert([
                 'doc_id' => $docId,
                 'section_key' => $section,
@@ -4352,9 +4355,9 @@ class Opd_prescription extends BaseController
 
         $id = (int) $this->request->getPost('id');
         $keyword = trim((string) $this->request->getPost('keyword'));
-        $keyword = preg_replace('/\s+/', ' ', $keyword) ?? $keyword;
-        if ($id <= 0 || mb_strlen($keyword) < 2) {
-            return $this->response->setJSON(['update' => 0, 'error_text' => 'Valid keyword is required']);
+        $keyword = $this->normalizeAutocompleteSuggestionText($keyword);
+        if ($id <= 0 || ! $this->isUsableAutotypeKeyword($keyword)) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Please enter a meaningful keyword (not only commas/symbols).']);
         }
 
         if (! $this->ensureAutotypeKeywordTable()) {
@@ -4391,6 +4394,11 @@ class Opd_prescription extends BaseController
             ->get(1)
             ->getRowArray();
         if (! empty($dup)) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Keyword already exists in this scope']);
+        }
+
+        $dupNormalizedId = $this->findNormalizedAutotypeKeywordId($rowDocId, $section, $keyword, $id);
+        if ($dupNormalizedId > 0) {
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Keyword already exists in this scope']);
         }
 
@@ -4453,6 +4461,50 @@ class Opd_prescription extends BaseController
             'csrfName' => csrf_token(),
             'csrfHash' => csrf_hash(),
         ]);
+    }
+
+    private function isUsableAutotypeKeyword(string $keyword): bool
+    {
+        if (mb_strlen($keyword) < 2) {
+            return false;
+        }
+
+        // Must contain at least one letter/number to avoid symbol/comma-only junk keywords.
+        return preg_match('/[\p{L}\p{N}]/u', $keyword) === 1;
+    }
+
+    private function findNormalizedAutotypeKeywordId(int $docId, string $section, string $normalizedKeyword, int $ignoreId = 0): int
+    {
+        if (! $this->db->tableExists('opd_autotype_keyword_master')) {
+            return 0;
+        }
+
+        $builder = $this->db->table('opd_autotype_keyword_master')
+            ->select('id, keyword')
+            ->where('doc_id', $docId)
+            ->where('section_key', $section)
+            ->where('is_active', 1);
+
+        if ($ignoreId > 0) {
+            $builder->where('id <>', $ignoreId);
+        }
+
+        $rows = $builder->get()->getResultArray();
+        if ($rows === []) {
+            return 0;
+        }
+
+        $needle = mb_strtoupper($this->normalizeAutocompleteSuggestionText($normalizedKeyword));
+        foreach ($rows as $row) {
+            $candidate = mb_strtoupper($this->normalizeAutocompleteSuggestionText((string) ($row['keyword'] ?? '')));
+            if ($candidate === '' || $candidate !== $needle) {
+                continue;
+            }
+
+            return (int) ($row['id'] ?? 0);
+        }
+
+        return 0;
     }
 
     // Legacy-compatible wrappers used by older autocomplete clients.
@@ -6737,12 +6789,7 @@ class Opd_prescription extends BaseController
 
     private function upsertNabhFieldsIntoRemarks(string $remarks, array $input): string
     {
-        $clean = trim($remarks);
-        $clean = preg_replace('/\n?\s*Drug\s*Allergy\s*Status\s*:\s*.+$/im', '', $clean) ?? $clean;
-        $clean = preg_replace('/\n?\s*Drug\s*Allergy\s*Details\s*:\s*.+$/im', '', $clean) ?? $clean;
-        $clean = preg_replace('/\n?\s*ADR\s*History\s*:\s*.+$/im', '', $clean) ?? $clean;
-        $clean = preg_replace('/\n?\s*Current\s*Medications\s*:\s*.+$/im', '', $clean) ?? $clean;
-        $clean = trim($clean);
+        $clean = $this->stripNabhFieldsFromRemarks($remarks);
 
         $lines = [];
         if (trim((string) ($input['drug_allergy_status'] ?? '')) !== '') {
@@ -6767,6 +6814,16 @@ class Opd_prescription extends BaseController
         }
 
         return implode("\n", $lines);
+    }
+
+    private function stripNabhFieldsFromRemarks(string $remarks): string
+    {
+        $clean = trim($remarks);
+        $clean = preg_replace('/\n?\s*Drug\s*Allergy\s*Status\s*:\s*.+$/im', '', $clean) ?? $clean;
+        $clean = preg_replace('/\n?\s*Drug\s*Allergy\s*Details\s*:\s*.+$/im', '', $clean) ?? $clean;
+        $clean = preg_replace('/\n?\s*ADR\s*History\s*:\s*.+$/im', '', $clean) ?? $clean;
+        $clean = preg_replace('/\n?\s*Current\s*Medications\s*:\s*.+$/im', '', $clean) ?? $clean;
+        return trim($clean);
     }
 
     private function ensureClinicalTemplateTable(): bool
