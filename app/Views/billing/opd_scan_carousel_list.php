@@ -29,11 +29,12 @@
                             Uploaded: <?= esc($item['insert_date'] ?? '') ?>
                         </div>
                         <?php if ((int) ($item['can_delete_limited'] ?? $item['can_delete_today'] ?? 0) === 1) : ?>
-                            <a
-                                href="<?= base_url('Opd/opd_file_delete/' . (int) ($item['id'] ?? 0)) . '?opd_id=' . (int) ($opdid ?? 0) ?>"
-                                class="btn btn-outline-danger btn-sm"
-                                onclick="if (!window.confirm('Delete this scan document?')) { return false; } if (typeof window.deleteOpdScanFromList === 'function' && typeof getCsrfPair === 'function' && typeof updateCsrf === 'function') { window.deleteOpdScanFromList(<?= (int) ($item['id'] ?? 0) ?>, <?= (int) ($opdid ?? 0) ?>); return false; } return true;"
-                            >Delete</a>
+                            <button
+                                type="button"
+                                class="btn btn-outline-danger btn-sm js-opd-scan-delete"
+                                data-file-id="<?= (int) ($item['id'] ?? 0) ?>"
+                                data-opd-id="<?= (int) ($opdid ?? 0) ?>"
+                            >Delete</button>
                         <?php else : ?>
                             <span class="badge bg-secondary">Delete: within 24h or same date</span>
                         <?php endif; ?>
@@ -54,3 +55,98 @@
         <?php endif; ?>
     </div>
 <?php endif; ?>
+
+<script>
+(function() {
+    if (typeof window.jQuery === 'undefined') {
+        return;
+    }
+
+    var $ = window.jQuery;
+    var csrfName = '<?= csrf_token() ?>';
+    var csrfHash = '<?= csrf_hash() ?>';
+    var baseUrl = '<?= rtrim(base_url('/'), '/') ?>/';
+
+    function getCsrfPayload() {
+        var payload = {};
+        var $input = $('input[name="' + csrfName + '"]').first();
+        if ($input.length && $input.val()) {
+            csrfHash = $input.val();
+        }
+        payload[csrfName] = csrfHash;
+        return payload;
+    }
+
+    function syncCsrf(resp) {
+        if (!resp || !resp.csrfName || !resp.csrfHash) {
+            return;
+        }
+        csrfName = resp.csrfName;
+        csrfHash = resp.csrfHash;
+        var $inputs = $('input[name="' + resp.csrfName + '"]');
+        if ($inputs.length) {
+            $inputs.val(resp.csrfHash);
+        }
+    }
+
+    function findRefreshContainer($trigger) {
+        var $panel = $('#testentry-bodyc');
+        if ($panel.length) {
+            return $panel;
+        }
+        var $modalBody = $trigger.closest('.modal-body');
+        if ($modalBody.length) {
+            return $modalBody;
+        }
+        return $trigger.closest('#opdScanCarousel').parent();
+    }
+
+    $(document)
+        .off('click.opdScanDeleteInline', '.js-opd-scan-delete')
+        .on('click.opdScanDeleteInline', '.js-opd-scan-delete', function() {
+            var $btn = $(this);
+            var fileId = parseInt($btn.attr('data-file-id') || '0', 10);
+            var opdid = parseInt($btn.attr('data-opd-id') || '0', 10);
+            if (!fileId || !opdid) {
+                return;
+            }
+
+            if (!window.confirm('Delete this scan document?')) {
+                return;
+            }
+
+            var payload = getCsrfPayload();
+            $btn.prop('disabled', true);
+
+            $.ajax({
+                url: baseUrl + 'Opd/opd_file_delete/' + fileId,
+                method: 'POST',
+                dataType: 'json',
+                data: payload,
+            }).done(function(resp) {
+                syncCsrf(resp || {});
+
+                if (!resp || parseInt(resp.update || 0, 10) !== 1) {
+                    var msg = (resp && resp.error_text) ? resp.error_text : 'Unable to delete document.';
+                    window.alert(msg);
+                    return;
+                }
+
+                var refreshPayload = getCsrfPayload();
+                $.ajax({
+                    url: baseUrl + 'Opd/opd_file_list/' + opdid,
+                    method: 'POST',
+                    data: refreshPayload,
+                }).done(function(html) {
+                    findRefreshContainer($btn).html(html || '<div class="text-muted">No scan documents found.</div>');
+                }).fail(function() {
+                    window.location.href = baseUrl + 'Opd/opd_file_list/' + opdid;
+                });
+            }).fail(function() {
+                window.alert('Unable to delete document.');
+            }).always(function() {
+                $btn.prop('disabled', false);
+            });
+        });
+})();
+</script>
