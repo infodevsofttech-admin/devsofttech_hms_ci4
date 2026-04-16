@@ -2015,6 +2015,11 @@
             return;
         }
 
+        function hasOpenAutocompleteMenu() {
+            var ac = $field.autocomplete('instance');
+            return !!(ac && ac.menu && ac.menu.element && ac.menu.element.is(':visible'));
+        }
+
         function closeAutocompleteMenu() {
             try {
                 if ($field.autocomplete('instance')) {
@@ -2027,8 +2032,17 @@
 
         $field
             .on('keydown', function(event) {
-                if (event.keyCode === $.ui.keyCode.TAB && $(this).autocomplete('instance') && $(this).autocomplete('instance').menu.active) {
+                var ac = $(this).autocomplete('instance');
+                if (!ac || !ac.menu) {
+                    return;
+                }
+
+                if (
+                    (event.keyCode === $.ui.keyCode.TAB || event.keyCode === $.ui.keyCode.ENTER)
+                    && ac.menu.active
+                ) {
                     event.preventDefault();
+                    ac.menu.select(event);
                 }
             })
             .autocomplete({
@@ -2099,7 +2113,19 @@
         });
 
         $field.on('blur', function() {
-            closeAutocompleteMenu();
+            // Delay close so clicking a suggestion does not get cancelled by textarea blur.
+            setTimeout(function() {
+                if (!hasOpenAutocompleteMenu()) {
+                    return;
+                }
+
+                var active = document.activeElement;
+                if ($(active).closest('.ui-autocomplete').length || $(active).is($field)) {
+                    return;
+                }
+
+                closeAutocompleteMenu();
+            }, 140);
         });
 
         // Close stale suggestion popup when clicking outside or scrolling away.
