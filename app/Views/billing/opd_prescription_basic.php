@@ -1853,6 +1853,16 @@
         return token;
     }
 
+    function isLikelyUsableKeyword(keyword) {
+        var text = (keyword || '').toString().trim();
+        if (!text || text.length < 2) {
+            return false;
+        }
+
+        // Require at least one letter/number; blocks comma-only/symbol-only inputs.
+        return /[A-Za-z0-9\u00C0-\uFFFF]/.test(text);
+    }
+
     function saveAutotypeKeyword(section, keyword, done, scopeOverride) {
         var scope = (scopeOverride || '').toString().trim().toLowerCase();
         if (scope !== 'doctor' && scope !== 'master') {
@@ -1969,8 +1979,8 @@
             $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Please select section for keyword.');
             return;
         }
-        if (!keyword || keyword.length < 2) {
-            $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Please type at least 2 characters in keyword text.');
+        if (!isLikelyUsableKeyword(keyword)) {
+            $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Please type a meaningful keyword (not only commas/symbols).');
             return;
         }
 
@@ -1978,7 +1988,8 @@
             if (Number(data.update || 0) === 1) {
                 clearAutotypeSuggestionCaches();
                 $('#autotype_keyword_add_text').val('');
-                $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text((data.error_text || 'Keyword saved') + ': ' + keyword);
+                var savedKeyword = ((data && data.keyword) ? data.keyword : keyword).toString();
+                $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text((data.error_text || 'Keyword saved') + ': ' + savedKeyword);
                 loadAutotypeKeywordManagerRows();
             } else {
                 $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text(data.error_text || 'Unable to save keyword.');
@@ -4875,7 +4886,7 @@
         loadPredefinedAdvice('');
     });
 
-    $(document).on('click', '.btn-add-predefined-advice', function() {
+    $(document).off('click.addPredefinedAdvice', '.btn-add-predefined-advice').on('click.addPredefinedAdvice', '.btn-add-predefined-advice', function() {
         var txt = ($(this).data('text') || '').toString().trim();
         var adviceId = parseInt($(this).data('id') || '0', 10);
         if (!txt) {
@@ -4941,7 +4952,7 @@
         $('#next_visit').val(value).trigger('input').trigger('change');
     });
 
-    $(document).on('click', '.btn-del-advice', function() {
+    $(document).off('click.delAdvice', '.btn-del-advice').on('click.delAdvice', '.btn-del-advice', function() {
         var id = $(this).data('id');
         apiPost('<?= base_url('Opd_prescription/advice_remove') ?>/' + id, {}, function() {
             loadAdviceList();
@@ -6548,14 +6559,15 @@
         }
 
         var keyword = getLastKeywordFromField(targetId);
-        if (!keyword || keyword.length < 2) {
-            $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Type at least 2 characters in this field, then click Save keyword.');
+        if (!isLikelyUsableKeyword(keyword)) {
+            $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Type a meaningful keyword in this field, then click Save keyword.');
             return;
         }
 
         saveAutotypeKeyword(section, keyword, function(data) {
             if (Number(data.update || 0) === 1) {
-                $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text((data.error_text || 'Keyword saved') + ': ' + keyword);
+                var savedKeyword = ((data && data.keyword) ? data.keyword : keyword).toString();
+                $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text((data.error_text || 'Keyword saved') + ': ' + savedKeyword);
                 loadAutotypeKeywordManagerRows();
             } else {
                 $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text(data.error_text || 'Unable to save keyword.');
