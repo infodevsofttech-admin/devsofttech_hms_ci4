@@ -1,13 +1,16 @@
 <?php $items = $slides ?? []; ?>
+<?php $hasMultipleSlides = count($items) > 1; ?>
 <?php if (empty($items)) : ?>
     <div class="text-muted">No scan documents found.</div>
 <?php else : ?>
     <div id="opdScanCarousel" class="carousel slide" data-bs-ride="false">
-        <div class="carousel-indicators">
-            <?php foreach ($items as $index => $item) : ?>
-                <button type="button" data-bs-target="#opdScanCarousel" data-bs-slide-to="<?= (int) $index ?>" class="<?= $index === 0 ? 'active' : '' ?>" <?= $index === 0 ? 'aria-current="true"' : '' ?> aria-label="Slide <?= (int) ($index + 1) ?>"></button>
-            <?php endforeach; ?>
-        </div>
+        <?php if ($hasMultipleSlides) : ?>
+            <div class="carousel-indicators">
+                <?php foreach ($items as $index => $item) : ?>
+                    <button type="button" data-bs-target="#opdScanCarousel" data-bs-slide-to="<?= (int) $index ?>" class="<?= $index === 0 ? 'active' : '' ?>" <?= $index === 0 ? 'aria-current="true"' : '' ?> aria-label="Slide <?= (int) ($index + 1) ?>"></button>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
 
         <div class="carousel-inner bg-light rounded border" style="min-height:420px;">
             <?php foreach ($items as $index => $item) : ?>
@@ -21,7 +24,7 @@
                         <?php endif; ?>
                     </div>
 
-                    <div class="d-flex justify-content-between align-items-center mt-2">
+                    <div class="d-flex justify-content-between align-items-center mt-2" style="position:relative;z-index:3;">
                         <div class="small text-muted">
                             Uploaded: <?= esc($item['insert_date'] ?? '') ?>
                         </div>
@@ -39,13 +42,15 @@
             <?php endforeach; ?>
         </div>
 
-        <button class="carousel-control-prev" type="button" data-bs-target="#opdScanCarousel" data-bs-slide="prev">
-            <span class="carousel-control-prev-icon" aria-hidden="true"></span>
-            <span class="visually-hidden">Previous</span>
-        </button>
-        <button class="carousel-control-next" type="button" data-bs-target="#opdScanCarousel" data-bs-slide="next">
-            <span class="carousel-control-next-icon" aria-hidden="true"></span>
-            <span class="visually-hidden">Next</span>
-        </button>
+        <?php if ($hasMultipleSlides) : ?>
+            <button class="carousel-control-prev" type="button" data-bs-target="#opdScanCarousel" data-bs-slide="prev">
+                <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                <span class="visually-hidden">Previous</span>
+            </button>
+            <button class="carousel-control-next" type="button" data-bs-target="#opdScanCarousel" data-bs-slide="next">
+                <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                <span class="visually-hidden">Next</span>
+            </button>
+        <?php endif; ?>
     </div>
 <?php endif; ?>
