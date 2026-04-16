@@ -487,6 +487,8 @@ $routes->match(['get', 'post'], 'Opd/opd_file_last_list', 'Opd::opd_file_last_li
 $routes->match(['get', 'post'], 'Opd/opd_file_last_list/(:num)', 'Opd::opd_file_last_list/$1');
 $routes->match(['get', 'post'], 'Opd/save_image/(:num)', 'Opd::save_image/$1');
 $routes->post('Opd/scan_ai_process_file', 'Opd::scan_ai_process_file');
+// Legacy CI3 uploads fallback: serves files from project-root uploads/ when missing from public/uploads/
+$routes->get('uploads/(:any)', 'Opd::serve_legacy_upload/$1');
 $routes->post('Opd/scan_ai_assist', 'Opd::scan_ai_assist');
 $routes->match(['get', 'post'], 'Opd/opd_file_hide/(:num)', 'Opd::opd_file_hide/$1');
 $routes->match(['get', 'post'], 'Opd/opd_file_delete/(:num)', 'Opd::opd_file_delete/$1');

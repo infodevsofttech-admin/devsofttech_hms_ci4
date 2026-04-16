@@ -6569,4 +6569,72 @@ class Opd extends BaseController
             'women_pregnancy_related' => $pregnancyRelated,
         ];
     }
+
+    /**
+     * Fallback for legacy CI3 uploads that live in the project-root uploads/ directory
+     * instead of public/uploads/. Apache routes the request here when the file is not
+     * found as a real file in public/uploads/.
+     *
+     * URL pattern: /uploads/<subpath>
+     */
+    public function serve_legacy_upload(string $subpath = ''): \CodeIgniter\HTTP\Response
+    {
+        // Sanitise: reject any path-traversal attempts.
+        $subpath = ltrim(str_replace('\\', '/', $subpath), '/');
+        if (
+            $subpath === ''
+            || strpos($subpath, '..') !== false
+            || strpos($subpath, "\0") !== false
+        ) {
+            return $this->response->setStatusCode(404)->setBody('Not Found');
+        }
+
+        // Try project-root uploads/ (CI3 legacy location).
+        $legacyPath = rtrim(ROOTPATH, '/\\') . '/uploads/' . $subpath;
+        // Also try writable/uploads/ just in case.
+        $writablePath = rtrim(WRITEPATH, '/\\') . '/uploads/' . $subpath;
+
+        $filePath = '';
+        if (is_file($legacyPath)) {
+            $filePath = $legacyPath;
+        } elseif (is_file($writablePath)) {
+            $filePath = $writablePath;
+        }
+
+        if ($filePath === '') {
+            return $this->response->setStatusCode(404)->setBody('Not Found');
+        }
+
+        $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+        $mimeMap = [
+            'jpg'  => 'image/jpeg',
+            'jpeg' => 'image/jpeg',
+            'png'  => 'image/png',
+            'gif'  => 'image/gif',
+            'webp' => 'image/webp',
+            'pdf'  => 'application/pdf',
+            'bmp'  => 'image/bmp',
+            'tiff' => 'image/tiff',
+            'tif'  => 'image/tiff',
+        ];
+
+        if (!array_key_exists($ext, $mimeMap)) {
+            return $this->response->setStatusCode(403)->setBody('Forbidden');
+        }
+
+        $mime    = $mimeMap[$ext];
+        $size    = filesize($filePath);
+        $etag    = md5($filePath . (string) filemtime($filePath));
+
+        // Basic cache headers.
+        $this->response
+            ->setHeader('Content-Type', $mime)
+            ->setHeader('Content-Length', (string) $size)
+            ->setHeader('ETag', $etag)
+            ->setHeader('Cache-Control', 'public, max-age=86400')
+            ->setHeader('X-Legacy-Upload', '1');
+
+        // @phpstan-ignore-next-line
+        return $this->response->setBody((string) file_get_contents($filePath));
+    }
 }
