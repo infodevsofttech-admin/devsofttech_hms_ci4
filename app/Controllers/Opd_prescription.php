@@ -3973,28 +3973,40 @@ class Opd_prescription extends BaseController
 
         $out = [];
         $seen = [];
+        $needle = mb_strtolower($this->normalizeAutocompleteSuggestionText($q));
         foreach ($rows as $row) {
-            $name = trim((string) ($row['name'] ?? ''));
+            $name = $this->normalizeAutocompleteSuggestionText((string) ($row['name'] ?? ''));
             if ($name === '') {
                 continue;
             }
-            $k = strtoupper($name);
+            if ($needle !== '' && mb_stripos($name, $needle) === false) {
+                continue;
+            }
+            $k = mb_strtoupper($name);
             if (isset($seen[$k])) {
                 continue;
             }
             $seen[$k] = true;
+            $row['name'] = $name;
             $out[] = $row;
         }
 
         foreach ($keywordRows as $keyword) {
-            $k = strtoupper($keyword);
-            if ($keyword === '' || isset($seen[$k])) {
+            $name = $this->normalizeAutocompleteSuggestionText((string) $keyword);
+            if ($name === '') {
+                continue;
+            }
+            if ($needle !== '' && mb_stripos($name, $needle) === false) {
+                continue;
+            }
+            $k = mb_strtoupper($name);
+            if (isset($seen[$k])) {
                 continue;
             }
             $seen[$k] = true;
             $out[] = [
                 'code' => '',
-                'name' => $keyword,
+                'name' => $name,
                 'name_hinglish' => '',
                 'show_in_short' => 0,
                 'ai_hint' => '',
@@ -4038,12 +4050,16 @@ class Opd_prescription extends BaseController
 
         $out = [];
         $seen = [];
+        $needle = mb_strtolower($this->normalizeAutocompleteSuggestionText($q));
         foreach ($rows as $row) {
-            $name = trim((string) ($row['name'] ?? ''));
+            $name = $this->normalizeAutocompleteSuggestionText((string) ($row['name'] ?? ''));
             if ($name === '') {
                 continue;
             }
-            $k = strtoupper($name);
+            if ($needle !== '' && mb_stripos($name, $needle) === false) {
+                continue;
+            }
+            $k = mb_strtoupper($name);
             if (isset($seen[$k])) {
                 continue;
             }
@@ -4051,12 +4067,19 @@ class Opd_prescription extends BaseController
             $out[] = ['name' => $name];
         }
         foreach ($keywordRows as $keyword) {
-            $k = strtoupper($keyword);
-            if ($keyword === '' || isset($seen[$k])) {
+            $name = $this->normalizeAutocompleteSuggestionText((string) $keyword);
+            if ($name === '') {
+                continue;
+            }
+            if ($needle !== '' && mb_stripos($name, $needle) === false) {
+                continue;
+            }
+            $k = mb_strtoupper($name);
+            if (isset($seen[$k])) {
                 continue;
             }
             $seen[$k] = true;
-            $out[] = ['name' => $keyword];
+            $out[] = ['name' => $name];
         }
 
         return $this->response->setJSON(['rows' => array_slice($out, 0, 20)]);
@@ -4093,12 +4116,16 @@ class Opd_prescription extends BaseController
 
         $out = [];
         $seen = [];
+        $needle = mb_strtolower($this->normalizeAutocompleteSuggestionText($q));
         foreach ($rows as $row) {
-            $text = trim((string) ($row['finding_examinations'] ?? ''));
+            $text = $this->normalizeAutocompleteSuggestionText((string) ($row['finding_examinations'] ?? ''));
             if ($text === '') {
                 continue;
             }
-            $k = strtoupper($text);
+            if ($needle !== '' && mb_stripos($text, $needle) === false) {
+                continue;
+            }
+            $k = mb_strtoupper($text);
             if (isset($seen[$k])) {
                 continue;
             }
@@ -4106,15 +4133,41 @@ class Opd_prescription extends BaseController
             $out[] = ['finding_examinations' => $text];
         }
         foreach ($keywordRows as $keyword) {
-            $k = strtoupper($keyword);
-            if ($keyword === '' || isset($seen[$k])) {
+            $text = $this->normalizeAutocompleteSuggestionText((string) $keyword);
+            if ($text === '') {
+                continue;
+            }
+            if ($needle !== '' && mb_stripos($text, $needle) === false) {
+                continue;
+            }
+            $k = mb_strtoupper($text);
+            if (isset($seen[$k])) {
                 continue;
             }
             $seen[$k] = true;
-            $out[] = ['finding_examinations' => $keyword];
+            $out[] = ['finding_examinations' => $text];
         }
 
         return $this->response->setJSON(['rows' => array_slice($out, 0, 20)]);
+    }
+
+    private function normalizeAutocompleteSuggestionText(string $text): string
+    {
+        $text = str_replace(["\r\n", "\r", "\n"], ' ', $text);
+        $text = preg_replace('/\s+/', ' ', $text) ?? $text;
+
+        $parts = preg_split('/\s*,\s*/', $text) ?: [];
+        $cleanParts = [];
+        foreach ($parts as $part) {
+            $part = trim((string) $part);
+            if ($part === '') {
+                continue;
+            }
+            $cleanParts[] = $part;
+        }
+
+        $normalized = implode(', ', $cleanParts);
+        return rtrim(trim($normalized), ', ');
     }
 
     public function autotype_keyword_save()
