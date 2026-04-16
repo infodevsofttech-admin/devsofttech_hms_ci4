@@ -6589,13 +6589,18 @@ class Opd extends BaseController
             return $this->response->setStatusCode(404)->setBody('Not Found');
         }
 
-        // Try project-root uploads/ (CI3 legacy location).
+        // 1. public/uploads/ — CI4 standard location (covers servers that route all
+        //    requests through index.php, e.g. Nginx without try_files static bypass).
+        $publicUploadsPath = rtrim(FCPATH, '/\\') . '/uploads/' . $subpath;
+        // 2. Project-root uploads/ — CI3 legacy location.
         $legacyPath = rtrim(ROOTPATH, '/\\') . '/uploads/' . $subpath;
-        // Also try writable/uploads/ just in case.
+        // 3. writable/uploads/ — fallback.
         $writablePath = rtrim(WRITEPATH, '/\\') . '/uploads/' . $subpath;
 
         $filePath = '';
-        if (is_file($legacyPath)) {
+        if (is_file($publicUploadsPath)) {
+            $filePath = $publicUploadsPath;
+        } elseif (is_file($legacyPath)) {
             $filePath = $legacyPath;
         } elseif (is_file($writablePath)) {
             $filePath = $writablePath;
