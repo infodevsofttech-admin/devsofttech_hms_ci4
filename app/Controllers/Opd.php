@@ -5242,13 +5242,32 @@ class Opd extends BaseController
 
     public function opd_file_delete(int $fileId)
     {
+        $isAjax = $this->request->isAJAX();
+        $requestedOpdId = (int) ($this->request->getGetPost('opd_id') ?? 0);
+        $respondDelete = function (int $update, string $message, int $opdId = 0) use ($isAjax, $requestedOpdId) {
+            $effectiveOpdId = $opdId > 0 ? $opdId : $requestedOpdId;
+            if ($isAjax) {
+                return $this->response->setJSON([
+                    'update' => $update,
+                    'opd_id' => $effectiveOpdId,
+                    'error_text' => $message,
+                    'csrfName' => csrf_token(),
+                    'csrfHash' => csrf_hash(),
+                ]);
+            }
+
+            if ($effectiveOpdId > 0) {
+                $target = base_url('Opd/opd_file_list/' . $effectiveOpdId);
+                return redirect()->to($target)
+                    ->with($update === 1 ? 'success' : 'error', $message);
+            }
+
+            return redirect()->to(base_url('Opd'))
+                ->with($update === 1 ? 'success' : 'error', $message);
+        };
+
         if (! $this->db->tableExists('file_upload_data')) {
-            return $this->response->setJSON([
-                'update' => 0,
-                'error_text' => 'File table not found',
-                'csrfName' => csrf_token(),
-                'csrfHash' => csrf_hash(),
-            ]);
+            return $respondDelete(0, 'File table not found');
         }
 
         $row = $this->db->table('file_upload_data')
@@ -5258,12 +5277,7 @@ class Opd extends BaseController
             ->getRowArray();
 
         if (empty($row)) {
-            return $this->response->setJSON([
-                'update' => 0,
-                'error_text' => 'File not found',
-                'csrfName' => csrf_token(),
-                'csrfHash' => csrf_hash(),
-            ]);
+            return $respondDelete(0, 'File not found');
         }
 
         $insertDate = (string) ($row['insert_date'] ?? '');
@@ -5272,12 +5286,7 @@ class Opd extends BaseController
         $isWithin24Hours = ($insertTs !== false) && (($nowTs - $insertTs) <= 86400);
         $isSameDate = ($insertTs !== false) && (date('Y-m-d', $insertTs) === date('Y-m-d', $nowTs));
         if (! ($isWithin24Hours || $isSameDate)) {
-            return $this->response->setJSON([
-                'update' => 0,
-                'error_text' => 'Delete allowed only within 24 hours or same current date uploads',
-                'csrfName' => csrf_token(),
-                'csrfHash' => csrf_hash(),
-            ]);
+            return $respondDelete(0, 'Delete allowed only within 24 hours or same current date uploads', (int) ($row['opd_id'] ?? 0));
         }
 
         $fullPath = (string) ($row['full_path'] ?? '');
@@ -5287,13 +5296,7 @@ class Opd extends BaseController
 
         $this->db->table('file_upload_data')->where('id', (int) $fileId)->delete();
 
-        return $this->response->setJSON([
-            'update' => 1,
-            'opd_id' => (int) ($row['opd_id'] ?? 0),
-            'error_text' => 'Scan deleted',
-            'csrfName' => csrf_token(),
-            'csrfHash' => csrf_hash(),
-        ]);
+        return $respondDelete(1, 'Scan deleted', (int) ($row['opd_id'] ?? 0));
     }
 
     private function insertOpdFileUploadRecord(string $fullPath, string $publicPath, int $pid, int $opdid, int $caseId, string $uploadBy, int $uploadById, string $mimeType = 'image/jpeg', int $isImageFile = 1, string $fileExt = '.jpg'): int

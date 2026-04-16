@@ -26,7 +26,11 @@
                             Uploaded: <?= esc($item['insert_date'] ?? '') ?>
                         </div>
                         <?php if ((int) ($item['can_delete_limited'] ?? $item['can_delete_today'] ?? 0) === 1) : ?>
-                            <button type="button" class="btn btn-outline-danger btn-sm" onclick="deleteOpdScanFromList(<?= (int) ($item['id'] ?? 0) ?>, <?= (int) ($opdid ?? 0) ?>)">Delete</button>
+                            <a
+                                href="<?= base_url('Opd/opd_file_delete/' . (int) ($item['id'] ?? 0)) . '?opd_id=' . (int) ($opdid ?? 0) ?>"
+                                class="btn btn-outline-danger btn-sm"
+                                onclick="if (typeof window.deleteOpdScanFromList === 'function') { window.deleteOpdScanFromList(<?= (int) ($item['id'] ?? 0) ?>, <?= (int) ($opdid ?? 0) ?>); return false; } return window.confirm('Delete this scan document?');"
+                            >Delete</a>
                         <?php else : ?>
                             <span class="badge bg-secondary">Delete: within 24h or same date</span>
                         <?php endif; ?>
