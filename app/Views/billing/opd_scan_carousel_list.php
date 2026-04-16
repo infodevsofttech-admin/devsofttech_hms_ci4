@@ -29,7 +29,7 @@
                             <a
                                 href="<?= base_url('Opd/opd_file_delete/' . (int) ($item['id'] ?? 0)) . '?opd_id=' . (int) ($opdid ?? 0) ?>"
                                 class="btn btn-outline-danger btn-sm"
-                                onclick="if (typeof window.deleteOpdScanFromList === 'function') { window.deleteOpdScanFromList(<?= (int) ($item['id'] ?? 0) ?>, <?= (int) ($opdid ?? 0) ?>); return false; } return window.confirm('Delete this scan document?');"
+                                onclick="if (!window.confirm('Delete this scan document?')) { return false; } if (typeof window.deleteOpdScanFromList === 'function' && typeof getCsrfPair === 'function' && typeof updateCsrf === 'function') { window.deleteOpdScanFromList(<?= (int) ($item['id'] ?? 0) ?>, <?= (int) ($opdid ?? 0) ?>); return false; } return true;"
                             >Delete</a>
                         <?php else : ?>
                             <span class="badge bg-secondary">Delete: within 24h or same date</span>
