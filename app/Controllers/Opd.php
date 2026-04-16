@@ -3253,18 +3253,9 @@ class Opd extends BaseController
         $tokens['investigation'] = $formatBlock('Investigation Advised', (string) ($tokens['investigation_raw'] ?? ''));
         $tokens['Prescriber_Remarks'] = $formatBlock('Remarks', (string) ($tokens['Prescriber_Remarks_raw'] ?? ''));
         $adviceRaw = trim((string) ($tokens['advice_raw'] ?? ''));
-        $adviceLocalText = trim((string) ($tokens['advice_local'] ?? ''));
+        // Print advice exactly as typed — no AI/Hindi conversion applied.
         if ($adviceRaw !== '') {
-            $advLabelHtml = '<span style="font-weight:700;font-size:13px;line-height:1.35;">सलाह (Advice) :</span>';
-            $adviceHtml = '<div style="margin-bottom:4px;">';
-            if ($adviceLocalText !== '') {
-                $adviceHtml .= $advLabelHtml . ' <span lang="hi">' . $adviceLocalText . '</span>';
-                $adviceHtml .= '<div style="font-size:10px;color:#666;margin-top:1px;">(Advice: ' . $adviceRaw . ')</div>';
-            } else {
-                $adviceHtml .= $advLabelHtml . ' ' . $adviceRaw;
-            }
-            $adviceHtml .= '</div>';
-            $tokens['advice'] = $adviceHtml;
+            $tokens['advice'] = nl2br(htmlspecialchars($adviceRaw, ENT_QUOTES, 'UTF-8'));
         } else {
             $tokens['advice'] = '';
         }

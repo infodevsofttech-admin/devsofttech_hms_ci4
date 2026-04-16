@@ -180,9 +180,13 @@ class Setup extends BaseController
                 $maxRuntimeSeconds = 5;
             }
 
+            // For analyze: run to full completion — no time or table-count truncation.
+            $analyzeMaxRuntime = $action === 'analyze' ? PHP_INT_MAX : $maxRuntimeSeconds;
+            $analyzeMaxTables  = $action === 'analyze' ? 0 : -1; // 0 = unlimited override
+
             $startedAt = microtime(true);
 
-            $syncResult = $this->buildSchemaSyncPlan($startedAt, $maxRuntimeSeconds);
+            $syncResult = $this->buildSchemaSyncPlan($startedAt, $analyzeMaxRuntime, $analyzeMaxTables);
             if ($action === 'apply' && empty($syncResult['errors']) && !empty($syncResult['sql'])) {
                 $maxApplyStatements = (int) env('setup.sync.max_apply_statements_per_run', 75);
                 if ($maxApplyStatements <= 0) {
@@ -695,7 +699,7 @@ class Setup extends BaseController
     /**
      * @return array<string, mixed>
      */
-    private function buildSchemaSyncPlan(float $startedAt, int $maxRuntimeSeconds): array
+    private function buildSchemaSyncPlan(float $startedAt, int $maxRuntimeSeconds, int $maxTablesOverride = -1): array
     {
         $errors = [];
         $sql = [];
@@ -724,9 +728,14 @@ class Setup extends BaseController
         $masterTables = $masterSchema['tables'] ?? [];
         $clientTables = array_flip($client->listTables());
 
-        $maxTables = (int) env('setup.sync.max_tables_per_run', 0);
-        if ($maxTables < 0) {
-            $maxTables = 0;
+        // $maxTablesOverride >= 0 takes precedence over the .env setting (0 = unlimited).
+        if ($maxTablesOverride >= 0) {
+            $maxTables = $maxTablesOverride;
+        } else {
+            $maxTables = (int) env('setup.sync.max_tables_per_run', 0);
+            if ($maxTables < 0) {
+                $maxTables = 0;
+            }
         }
         $processedTables = 0;
         $truncated = false;

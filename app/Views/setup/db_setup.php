@@ -180,11 +180,20 @@
 
                 <div class="form-group">
                     <label>Generated SQL</label>
-                    <textarea class="form-control" rows="14" readonly><?php
+                    <?php
                         $sqlLines = $sync_result['sql'] ?? [];
+                        $totalSqlLines = is_array($sqlLines) ? count($sqlLines) : 0;
+                        $displayLimit = 2000;
+                    ?>
+                    <?php if ($totalSqlLines > $displayLimit) : ?>
+                        <div class="alert alert-warning" style="margin-bottom:4px;">
+                            Showing first <?= $displayLimit ?> of <?= $totalSqlLines ?> statements.
+                            Use <strong>Apply Sync to Client DB</strong> to execute all statements.
+                        </div>
+                    <?php endif; ?>
+                    <textarea class="form-control" rows="14" readonly><?php
                         if (is_array($sqlLines)) {
-                            $sqlLines = array_slice($sqlLines, 0, 300);
-                            echo esc(implode("\n", $sqlLines));
+                            echo esc(implode("\n", array_slice($sqlLines, 0, $displayLimit)));
                         }
                     ?></textarea>
                 </div>
