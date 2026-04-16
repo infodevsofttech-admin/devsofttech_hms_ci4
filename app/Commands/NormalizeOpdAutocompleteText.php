@@ -199,6 +199,26 @@ class NormalizeOpdAutocompleteText extends BaseCommand
             if ($part === '') {
                 continue;
             }
+
+            $part = preg_replace('/\s+/', ' ', $part) ?? $part;
+            $part = preg_replace_callback('/\b([A-Za-z])\s*\/\s*([A-Za-z])\b/u', static function (array $m): string {
+                return mb_strtoupper($m[1]) . '/' . mb_strtoupper($m[2]);
+            }, $part) ?? $part;
+
+            if (preg_match('/^[+-]{1,3}$/', $part) && $clean !== []) {
+                $lastIndex = count($clean) - 1;
+                $clean[$lastIndex] = rtrim($clean[$lastIndex]) . ' ' . $part;
+                continue;
+            }
+
+            if (preg_match('/^(.+?)([+-]{1,3})$/u', $part, $m) === 1) {
+                $base = trim((string) $m[1]);
+                $sign = trim((string) $m[2]);
+                if ($base !== '') {
+                    $part = $base . ' ' . $sign;
+                }
+            }
+
             $clean[] = $part;
         }
 
