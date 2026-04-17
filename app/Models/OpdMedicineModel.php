@@ -116,6 +116,11 @@ class OpdMedicineModel
             return '';
         }
 
+        $normalizedFormulation = $this->normalizeMedicineName($formulation);
+        if ($normalizedFormulation !== '') {
+            $base .= '::f:' . $normalizedFormulation;
+        }
+
         $strength = $this->extractStrengthSignature($name, $formulation);
         if ($strength === '') {
             return $base;
@@ -184,9 +189,15 @@ class OpdMedicineModel
             }
 
             if (! isset($groups[$norm])) {
+                $displayName = trim((string) ($row['item_name'] ?? ''));
+                $displayFormulation = trim((string) ($row['formulation'] ?? ''));
+                if ($displayFormulation !== '') {
+                    $displayName .= ' (' . $displayFormulation . ')';
+                }
+
                 $groups[$norm] = [
                     'normalized_name' => $norm,
-                    'display_name' => (string) ($row['item_name'] ?? ''),
+                    'display_name' => $displayName,
                     'rows' => [],
                 ];
             }
