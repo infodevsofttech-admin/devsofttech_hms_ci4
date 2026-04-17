@@ -2328,16 +2328,17 @@ class Opd_prescription extends BaseController
 
         $id = (int) $this->request->getPost('id');
         $itemName = trim((string) $this->request->getPost('item_name'));
+        $formulation = trim((string) $this->request->getPost('formulation'));
         if ($itemName === '') {
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Medicine name is required']);
         }
 
         $medicineModel = new OpdMedicineModel($this->db);
-        $duplicate = $medicineModel->findDuplicateByName($itemName, $id);
+        $duplicate = $medicineModel->findDuplicateByName($itemName, $formulation, $id);
         if (! empty($duplicate)) {
             return $this->response->setJSON([
                 'update' => 0,
-                'error_text' => 'Duplicate medicine name found (ID: ' . (int) ($duplicate['id'] ?? 0) . '). Please use existing entry or merge duplicates.',
+                'error_text' => 'Duplicate medicine name with same formulation found (ID: ' . (int) ($duplicate['id'] ?? 0) . '). Please use existing entry or merge duplicates.',
                 'duplicate_id' => (int) ($duplicate['id'] ?? 0),
                 'csrfName' => csrf_token(),
                 'csrfHash' => csrf_hash(),
@@ -2355,7 +2356,7 @@ class Opd_prescription extends BaseController
             $data['item_name'] = $itemName;
         }
         if (in_array('formulation', $fields, true)) {
-            $data['formulation'] = trim((string) $this->request->getPost('formulation'));
+            $data['formulation'] = $formulation;
         }
         if ($genericField !== null) {
             $data[$genericField] = trim((string) $this->request->getPost('genericname'));

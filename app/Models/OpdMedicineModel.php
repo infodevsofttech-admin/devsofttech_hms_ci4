@@ -124,7 +124,7 @@ class OpdMedicineModel
         return $base . '::' . $strength;
     }
 
-    public function findDuplicateByName(string $itemName, int $excludeId = 0): ?array
+    public function findDuplicateByName(string $itemName, string $formulation = '', int $excludeId = 0): ?array
     {
         if (! $this->tableExists()) {
             return null;
@@ -136,7 +136,8 @@ class OpdMedicineModel
             ->get()
             ->getResultArray();
 
-        $needle = $this->buildDuplicateKey($itemName, '');
+        $needle = $this->buildDuplicateKey($itemName, $formulation);
+        $needleFormulation = $this->normalizeMedicineName($formulation);
         if ($needle === '') {
             return null;
         }
@@ -148,9 +149,16 @@ class OpdMedicineModel
             }
 
             $current = $this->buildDuplicateKey((string) ($row['item_name'] ?? ''), (string) ($row['formulation'] ?? ''));
-            if ($current !== '' && $current === $needle) {
-                return $row;
+            if ($current === '' || $current !== $needle) {
+                continue;
             }
+
+            $currentFormulation = $this->normalizeMedicineName((string) ($row['formulation'] ?? ''));
+            if ($currentFormulation !== $needleFormulation) {
+                continue;
+            }
+
+            return $row;
         }
 
         return null;
