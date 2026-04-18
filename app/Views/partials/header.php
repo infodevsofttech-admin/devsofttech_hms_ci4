@@ -2,6 +2,45 @@
             <?php
                 $authUser = $user ?? (function_exists('auth') ? auth()->user() : null);
 
+                // Shortcut permission flags
+                $hdrCanBilling = false;
+                $hdrCanIpdBilling = false;
+                $hdrCanDoctorWork = false;
+                $hdrCanPharmacy = false;
+                if ($authUser && method_exists($authUser, 'can')) {
+                    $hdrCanBilling = $authUser->can('billing.access')
+                        || $authUser->can('billing.opd.edit')
+                        || $authUser->can('billing.opd.pay')
+                        || $authUser->can('billing.charges.view')
+                        || $authUser->can('billing.charges.edit')
+                        || $authUser->can('billing.charges.pay')
+                        || $authUser->can('billing.charges.cancel')
+                        || $authUser->can('billing.charges.correct')
+                        || $authUser->can('billing.ipd.access')
+                        || $authUser->can('billing.ipd.current-admission')
+                        || $authUser->can('billing.ipd.invoice')
+                        || $authUser->can('billing.ipd.cash-balance')
+                        || $authUser->can('billing.ipd.export')
+                        || $authUser->can('billing.*');
+                    $hdrCanIpdBilling = $authUser->can('billing.ipd.access')
+                        || $authUser->can('billing.ipd.current-admission')
+                        || $authUser->can('billing.ipd.invoice')
+                        || $authUser->can('billing.ipd.cash-balance')
+                        || $authUser->can('billing.access');
+                    $hdrCanDoctorWork = $authUser->can('doctor_work.access')
+                        || $authUser->can('doctor_work.appointment.view')
+                        || $authUser->can('doctor_work.*');
+                    $hdrCanPharmacy = $authUser->can('pharmacy.access')
+                        || $authUser->can('billing.access');
+                }
+                if ($authUser && method_exists($authUser, 'inGroup')) {
+                    $inAdminGroup = $authUser->inGroup('superadmin', 'admin', 'developer');
+                    if (! $hdrCanBilling)     { $hdrCanBilling     = $inAdminGroup; }
+                    if (! $hdrCanIpdBilling)  { $hdrCanIpdBilling  = $inAdminGroup; }
+                    if (! $hdrCanDoctorWork)  { $hdrCanDoctorWork  = $inAdminGroup; }
+                    if (! $hdrCanPharmacy)    { $hdrCanPharmacy    = $inAdminGroup; }
+                }
+
                 $loginId = trim((string) ($authUser->username ?? ''));
                 if ($loginId === '') {
                     $loginId = trim((string) ($authUser->email ?? ''));
@@ -50,6 +89,34 @@
                 $serverDisplayTime = $serverNow->format('d-m-Y h:i A') . ' (' . $serverTimeZoneLabel . ')';
             ?>
             <ul class="d-flex align-items-center">
+                <?php if ($hdrCanBilling) { ?>
+                <li class="nav-item d-flex align-items-center" style="margin-right:14px;">
+                    <a class="nav-shortcut-icon text-decoration-none" href="javascript:load_form('<?= base_url('/billing/patient') ?>','Patient List')" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Patient List">
+                        <i class="bi bi-person-lines-fill fs-5"></i>
+                    </a>
+                </li>
+                <?php } ?>
+                <?php if ($hdrCanIpdBilling) { ?>
+                <li class="nav-item d-flex align-items-center" style="margin-right:14px;">
+                    <a class="nav-shortcut-icon text-decoration-none" href="javascript:load_form('<?= base_url('/billing/ipd') ?>','IPD Billing')" data-bs-toggle="tooltip" data-bs-placement="bottom" title="IPD Billing">
+                        <i class="bi bi-hospital fs-5"></i>
+                    </a>
+                </li>
+                <?php } ?>
+                <?php if ($hdrCanDoctorWork) { ?>
+                <li class="nav-item d-flex align-items-center" style="margin-right:14px;">
+                    <a class="nav-shortcut-icon text-decoration-none" href="javascript:load_form('<?= base_url('/opd/appointment') ?>','OPD Appointment List')" data-bs-toggle="tooltip" data-bs-placement="bottom" title="OPD Appointment">
+                        <i class="bi bi-calendar2-check fs-5"></i>
+                    </a>
+                </li>
+                <?php } ?>
+                <?php if ($hdrCanPharmacy) { ?>
+                <li class="nav-item d-flex align-items-center" style="margin-right:18px;">
+                    <a class="nav-shortcut-icon text-decoration-none" href="javascript:load_form('<?= base_url('/Medical') ?>','Pharmacy')" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Pharmacy">
+                        <i class="bi bi-capsule fs-5"></i>
+                    </a>
+                </li>
+                <?php } ?>
                 <li class="nav-item pe-3 d-flex align-items-center text-nowrap">
                     <a class="text-decoration-none" href="<?= base_url('help.html') ?>" target="_blank" rel="noopener">
                         <i class="bi bi-question-circle me-1"></i>

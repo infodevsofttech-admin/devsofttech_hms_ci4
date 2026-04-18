@@ -92,6 +92,12 @@
     <script src="https://cdn.jsdelivr.net/npm/select2@4.0.3/dist/js/select2.min.js"></script>
     <script src="<?= base_url('assets/vendor/apexcharts/apexcharts.min.js') ?>"></script>
     <script src="<?= base_url('assets/vendor/bootstrap/js/bootstrap.bundle.min.js') ?>"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var tooltipEls = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+            tooltipEls.forEach(function (el) { new bootstrap.Tooltip(el); });
+        });
+    </script>
     <script src="<?= base_url('assets/vendor/chart.js/chart.umd.js') ?>"></script>
     <script src="<?= base_url('assets/vendor/echarts/echarts.min.js') ?>"></script>
     <script src="<?= base_url('assets/vendor/quill/quill.js') ?>"></script>

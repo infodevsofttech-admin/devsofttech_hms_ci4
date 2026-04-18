@@ -473,6 +473,16 @@ h6 {
   position: relative;
 }
 
+.header-nav .nav-shortcut-icon {
+  color: #012970;
+  display: flex;
+  align-items: center;
+}
+
+.header-nav .nav-shortcut-icon:hover {
+  color: #4154f1;
+}
+
 .header-nav .nav-profile {
   color: #012970;
 }
