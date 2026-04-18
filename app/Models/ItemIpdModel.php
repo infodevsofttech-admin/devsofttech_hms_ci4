@@ -7,34 +7,89 @@ use Config\Database;
 
 class ItemIpdModel extends Model
 {
+    /**
+     * @var array<string, bool>
+     */
+    private array $fieldExistsCache = [];
+
     public function __construct()
     {
         parent::__construct();
         $this->db = Database::connect();
     }
 
+    public function supportsItemTypeSortOrder(): bool
+    {
+        return $this->fieldExists('ipd_item_type', 'sort_order');
+    }
+
+    private function fieldExists(string $table, string $field): bool
+    {
+        $cacheKey = $table . '.' . $field;
+
+        if (! array_key_exists($cacheKey, $this->fieldExistsCache)) {
+            $this->fieldExistsCache[$cacheKey] = $this->db->fieldExists($field, $table);
+        }
+
+        return $this->fieldExistsCache[$cacheKey];
+    }
+
+    private function applyItemTypeOrdering($builder, string $alias = '')
+    {
+        $prefix = $alias !== '' ? $alias . '.' : '';
+
+        if ($this->supportsItemTypeSortOrder()) {
+            $builder->orderBy('COALESCE(' . $prefix . 'sort_order, 0)', 'ASC', false);
+        }
+
+        return $builder->orderBy($prefix . 'group_desc', 'ASC');
+    }
+
+    private function filterItemTypeData(array $data): array
+    {
+        if (! $this->supportsItemTypeSortOrder()) {
+            unset($data['sort_order']);
+        }
+
+        return $data;
+    }
+
     public function getItemTypes(): array
     {
-        return $this->db->table('ipd_item_type')
-            ->orderBy('group_desc', 'ASC')
+        $select = ['t.itype_id', 't.group_desc', 'COUNT(m.id) AS item_count'];
+        $groupBy = ['t.itype_id', 't.group_desc'];
+
+        if ($this->supportsItemTypeSortOrder()) {
+            $select[] = 'COALESCE(t.sort_order, 0) AS sort_order';
+            $groupBy[] = 't.sort_order';
+        }
+
+        $builder = $this->db->table('ipd_item_type t')
+            ->select(implode(', ', $select), false)
+            ->join('ipd_items m', 'm.itype = t.itype_id', 'left')
+            ->groupBy(implode(', ', $groupBy), false);
+
+        return $this->applyItemTypeOrdering($builder, 't')
             ->get()
             ->getResult();
     }
 
     public function getItemTypesList(): array
     {
-        return $this->db->table('ipd_item_type')
-            ->orderBy('group_desc', 'ASC')
+        $builder = $this->db->table('ipd_item_type');
+
+        return $this->applyItemTypeOrdering($builder)
             ->get()
             ->getResult();
     }
 
     public function getItemTypeById(int $id): array
     {
-        return $this->db->table('ipd_item_type')
-            ->where('itype_id', $id)
-            ->get()
-            ->getResult();
+        $builder = $this->db->table('ipd_item_type');
+        $builder->where('itype_id', $id);
+        $this->applyItemTypeOrdering($builder);
+
+        return $builder->get()->getResult();
     }
 
     public function getItemsByType(int $typeId): array
@@ -68,7 +123,7 @@ class ItemIpdModel extends Model
             't.group_desc',
         ]);
         $builder->join('ipd_item_type t', 'm.itype = t.itype_id', 'inner');
-        $builder->orderBy('t.group_desc', 'ASC');
+        $this->applyItemTypeOrdering($builder, 't');
 
         return $builder->get()->getResult();
     }
@@ -171,7 +226,7 @@ class ItemIpdModel extends Model
 
     public function insertItemType(array $data): int
     {
-        $this->db->table('ipd_item_type')->insert($data);
+        $this->db->table('ipd_item_type')->insert($this->filterItemTypeData($data));
 
         return (int) $this->db->insertID();
     }
@@ -180,7 +235,48 @@ class ItemIpdModel extends Model
     {
         return (bool) $this->db->table('ipd_item_type')
             ->where('itype_id', $id)
-            ->update($data);
+            ->update($this->filterItemTypeData($data));
+    }
+
+    public function swapItemTypeSortOrder(int $currentId, int $currentSort, int $targetId, int $targetSort): bool
+    {
+        if (! $this->supportsItemTypeSortOrder() || $currentId <= 0 || $targetId <= 0 || $currentId === $targetId) {
+            return false;
+        }
+
+        $this->db->transStart();
+
+        $this->db->table('ipd_item_type')
+            ->where('itype_id', $currentId)
+            ->update(['sort_order' => 0]);
+
+        $this->db->table('ipd_item_type')
+            ->where('itype_id', $targetId)
+            ->update(['sort_order' => $currentSort]);
+
+        $this->db->table('ipd_item_type')
+            ->where('itype_id', $currentId)
+            ->update(['sort_order' => $targetSort]);
+
+        $this->db->transComplete();
+
+        return $this->db->transStatus();
+    }
+
+    public function deleteItemType(int $id): bool
+    {
+        // Only delete if no items are linked
+        $count = (int) $this->db->table('ipd_items')
+            ->where('itype', $id)
+            ->countAllResults();
+
+        if ($count > 0) {
+            return false;
+        }
+
+        return (bool) $this->db->table('ipd_item_type')
+            ->where('itype_id', $id)
+            ->delete();
     }
 
     public function insertItemInsurance(array $data): int

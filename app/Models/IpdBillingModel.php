@@ -8,6 +8,17 @@ class IpdBillingModel extends Model
 {
     protected $table = 'v_ipd_list';
 
+    private ?bool $ipdItemTypeHasSortOrder = null;
+
+    private function ipdItemTypeHasSortOrder(): bool
+    {
+        if ($this->ipdItemTypeHasSortOrder === null) {
+            $this->ipdItemTypeHasSortOrder = $this->db->fieldExists('sort_order', 'ipd_item_type');
+        }
+
+        return $this->ipdItemTypeHasSortOrder;
+    }
+
     public function getCurrentAdmissions(): array
     {
         $builder = $this->baseIpdListQuery();
@@ -172,10 +183,16 @@ class IpdBillingModel extends Model
 
     public function getIpdCharges(int $ipdId): array
     {
-        return $this->db->table('ipd_invoice_item i')
+        $builder = $this->db->table('ipd_invoice_item i')
             ->select('i.*, t.group_desc')
             ->join('ipd_item_type t', 'i.item_type = t.itype_id', 'left')
-            ->where('i.ipd_id', $ipdId)
+            ->where('i.ipd_id', $ipdId);
+
+        if ($this->ipdItemTypeHasSortOrder()) {
+            $builder->orderBy('COALESCE(t.sort_order, 0)', 'ASC', false);
+        }
+
+        return $builder
             ->orderBy('i.id', 'DESC')
             ->get()
             ->getResult();
@@ -183,11 +200,17 @@ class IpdBillingModel extends Model
 
     public function getIpdChargesGrouped(int $ipdId): array
     {
-        return $this->db->table('ipd_invoice_item i')
+        $builder = $this->db->table('ipd_invoice_item i')
             ->select('t.group_desc, i.*, sum(i.item_amount) as xAmount')
             ->join('ipd_item_type t', 'i.item_type = t.itype_id', 'left')
             ->where('i.ipd_id', $ipdId)
-            ->groupBy('i.item_type,i.id')
+            ->groupBy('i.item_type,i.id');
+
+        if ($this->ipdItemTypeHasSortOrder()) {
+            $builder->orderBy('COALESCE(t.sort_order, 0)', 'ASC', false);
+        }
+
+        return $builder
             ->orderBy('i.item_type', 'ASC')
             ->orderBy('i.id', 'ASC')
             ->get()
@@ -363,6 +386,10 @@ class IpdBillingModel extends Model
 
         if ($excludePackage) {
             $builder->where('i.package_id', 0);
+        }
+
+        if ($this->ipdItemTypeHasSortOrder()) {
+            $builder->orderBy('COALESCE(t.sort_order, 0)', 'ASC', false);
         }
 
         return $builder

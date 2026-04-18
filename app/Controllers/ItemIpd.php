@@ -7,12 +7,20 @@ use App\Models\ItemIpdModel;
 
 class ItemIpd extends BaseController
 {
+    private function getPostedItemTypeSortOrder(): int
+    {
+        $sortOrder = $this->request->getPost('sort_order');
+
+        return max(0, (int) $sortOrder);
+    }
+
     public function searchItemType(): string
     {
         $model = new ItemIpdModel();
 
         return view('Setting/Charges/IPD_Charges/item_type_search_v', [
             'data' => $model->getItemTypes(),
+            'supportsSortOrder' => $model->supportsItemTypeSortOrder(),
         ]);
     }
 
@@ -222,6 +230,25 @@ class ItemIpd extends BaseController
         ]);
     }
 
+    public function deleteItemTypeRecord()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setJSON(['deleted' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $model = new ItemIpdModel();
+        $id = (int) $this->request->getPost('itype_id');
+
+        $deleted = $model->deleteItemType($id);
+
+        return $this->response->setJSON([
+            'deleted' => $deleted ? 1 : 0,
+            'error_text' => $deleted ? '' : 'Cannot delete: group has charges or does not exist.',
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
     public function createItemTypeRecord()
     {
         if (! $this->request->isAJAX()) {
@@ -232,6 +259,10 @@ class ItemIpd extends BaseController
         $data = [
             'group_desc' => $this->request->getPost('input_Item_type'),
         ];
+
+        if ($model->supportsItemTypeSortOrder()) {
+            $data['sort_order'] = $this->getPostedItemTypeSortOrder();
+        }
 
         $insertId = $model->insertItemType($data);
 
@@ -256,12 +287,48 @@ class ItemIpd extends BaseController
             'group_desc' => $this->request->getPost('input_Item_type'),
         ];
 
+        if ($model->supportsItemTypeSortOrder()) {
+            $data['sort_order'] = $this->getPostedItemTypeSortOrder();
+        }
+
         $updated = $model->updateItemType($data, $itemTypeId);
 
         return $this->response->setJSON([
             'update' => $updated ? 1 : 0,
             'showcontent' => $updated ? 'Data Saved successfully' : '',
             'error_text' => $updated ? '' : 'Please Check',
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
+    public function changeItemTypeSort()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setJSON(['moved' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $model = new ItemIpdModel();
+
+        if (! $model->supportsItemTypeSortOrder()) {
+            return $this->response->setJSON([
+                'moved' => 0,
+                'error_text' => 'Sort order is not available in this environment.',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $currentId = (int) $this->request->getPost('current_id');
+        $currentSort = max(0, (int) $this->request->getPost('current_sort'));
+        $targetId = (int) $this->request->getPost('target_id');
+        $targetSort = max(0, (int) $this->request->getPost('target_sort'));
+
+        $moved = $model->swapItemTypeSortOrder($currentId, $currentSort, $targetId, $targetSort);
+
+        return $this->response->setJSON([
+            'moved' => $moved ? 1 : 0,
+            'error_text' => $moved ? '' : 'Could not update sort order.',
             'csrfName' => csrf_token(),
             'csrfHash' => csrf_hash(),
         ]);

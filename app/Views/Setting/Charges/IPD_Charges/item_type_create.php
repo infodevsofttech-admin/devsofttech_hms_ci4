@@ -17,6 +17,10 @@
                     <label class="form-label">Charges Group Name</label>
                     <input class="form-control" name="input_Item_type" placeholder="Item Name" type="text" autocomplete="off">
                 </div>
+                <div class="col-md-3">
+                    <label class="form-label">Sort Order</label>
+                    <input class="form-control" name="sort_order" placeholder="0" value="0" type="number" min="0" step="1" autocomplete="off">
+                </div>
                 <div class="col-md-4 d-flex align-items-end">
                     <button type="submit" class="btn btn-primary" id="btn_update">Add Record</button>
                 </div>

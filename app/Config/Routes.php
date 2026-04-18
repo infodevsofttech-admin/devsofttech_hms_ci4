@@ -1071,6 +1071,8 @@ $routes->group('item-ipd', static function($routes) {
     $routes->post('update', 'ItemIpd::updateRecord');
     $routes->post('create-type', 'ItemIpd::createItemTypeRecord');
     $routes->post('update-type', 'ItemIpd::updateItemTypeRecord');
+    $routes->post('delete-type', 'ItemIpd::deleteItemTypeRecord');
+    $routes->post('change-sort-type', 'ItemIpd::changeItemTypeSort');
     $routes->post('insurance/add', 'ItemIpd::addInsuranceItemRecord');
     $routes->post('insurance/remove', 'ItemIpd::removeInsuranceItem');
 });
@@ -1143,6 +1145,7 @@ $routes->group('Item_IPD', static function($routes) {
     $routes->post('UpdateRecord', 'ItemIpd::updateRecord');
     $routes->post('CreateItemTypeRecord', 'ItemIpd::createItemTypeRecord');
     $routes->post('UpdateItemTypeRecord', 'ItemIpd::updateItemTypeRecord');
+    $routes->post('change_sort_itemtype', 'ItemIpd::changeItemTypeSort');
     $routes->post('AddInsuranceItemRecord', 'ItemIpd::addInsuranceItemRecord');
     $routes->post('remove_record_item', 'ItemIpd::removeInsuranceItem');
 });

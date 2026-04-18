@@ -19,6 +19,10 @@
                         <label class="form-label">Charges Group Name</label>
                         <input class="form-control" name="input_Item_type" placeholder="Item Name" value="<?= esc($data_item[0]->group_desc ?? '') ?>" type="text" autocomplete="off">
                     </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Sort Order</label>
+                        <input class="form-control" name="sort_order" placeholder="0" value="<?= esc((string) ((int) ($data_item[0]->sort_order ?? 0))) ?>" type="number" min="0" step="1" autocomplete="off">
+                    </div>
                     <div class="col-md-4 d-flex align-items-end">
                         <button type="button" class="btn btn-primary" id="btn_update">Update Record</button>
                     </div>

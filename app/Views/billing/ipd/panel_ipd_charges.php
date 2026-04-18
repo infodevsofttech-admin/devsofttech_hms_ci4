@@ -32,6 +32,28 @@ $doctorVisitFeeMap = $doctor_visit_fee_map ?? [];
     .ipd-charge-accordion .accordion-body {
         background: #f8fafc;
     }
+    .ipd-charge-section-toggle {
+        width: 100%;
+        border: 0;
+        background: transparent;
+        padding: 0;
+        text-align: left;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        color: inherit;
+    }
+    .ipd-charge-section-toggle:focus {
+        outline: none;
+        box-shadow: none;
+    }
+    .ipd-charge-section-toggle .bi {
+        transition: transform 0.2s ease;
+    }
+    .ipd-charge-section-toggle.collapsed .bi {
+        transform: rotate(-90deg);
+    }
 </style>
 
 <div class="row g-3">
@@ -158,128 +180,142 @@ $doctorVisitFeeMap = $doctor_visit_fee_map ?? [];
             </div>
             <div class="card-body">
                 <div class="card mb-3 border-info">
-                    <div class="card-header py-2"><strong>Bedside Clinical / Nursing Charge</strong></div>
-                    <div class="card-body">
-                        <div class="row g-2">
-                            <div class="col-md-3">
-                                <label class="form-label">Item Type</label>
-                                <select class="form-select form-select-sm" id="bedside_item_type">
-                                    <option value="">All</option>
-                                </select>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Category</label>
-                                <select class="form-select form-select-sm" id="bedside_category">
-                                    <option value="">Select</option>
-                                    <?php foreach (array_keys($bedsideItemsByCategory) as $categoryName) : ?>
-                                        <option value="<?= esc($categoryName) ?>"><?= esc($categoryName) ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
-                            <div class="col-md-5">
-                                <label class="form-label">Item</label>
-                                <select class="form-select form-select-sm" id="bedside_item_id">
-                                    <option value="">Select</option>
-                                </select>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Quick Search</label>
-                                <input type="text" class="form-control form-control-sm" id="bedside_item_search" placeholder="Search by code or name">
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label">Rate</label>
-                                <input class="form-control form-control-sm" id="bedside_item_rate" value="0" type="number" $11" />
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label">Qty</label>
-                                <input class="form-control form-control-sm" id="bedside_item_qty" value="1" type="number" $11" />
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Date</label>
-                                <input class="form-control form-control-sm" id="bedside_item_date" value="<?= esc($today) ?>" type="date" />
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Doctor</label>
-                                <select class="form-select form-select-sm" id="bedside_doc_id">
-                                    <option value="0">NONE</option>
-                                    <?php foreach ($doc_list ?? [] as $doc) : ?>
-                                        <option value="<?= esc($doc->id ?? '') ?>"><?= esc($doc->DocSpecName ?? '') ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Comment</label>
-                                <input class="form-control form-control-sm" id="bedside_comment" value="" type="text" />
-                            </div>
-                            <div class="col-md-12">
-                                <button type="button" class="btn btn-outline-primary btn-sm" onclick="ipdBedsideChargeAdd()">Add Bedside Charge</button>
+                    <div class="card-header py-2">
+                        <button type="button" class="ipd-charge-section-toggle" data-bs-toggle="collapse" data-bs-target="#bedsideChargeCollapse" aria-expanded="false" aria-controls="bedsideChargeCollapse">
+                            <span>Bedside Clinical / Nursing Charge</span>
+                            <i class="bi bi-chevron-down" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                    <div id="bedsideChargeCollapse" class="collapse">
+                        <div class="card-body">
+                            <div class="row g-2">
+                                <div class="col-md-3">
+                                    <label class="form-label">Item Type</label>
+                                    <select class="form-select form-select-sm" id="bedside_item_type">
+                                        <option value="">All</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Category</label>
+                                    <select class="form-select form-select-sm" id="bedside_category">
+                                        <option value="">Select</option>
+                                        <?php foreach (array_keys($bedsideItemsByCategory) as $categoryName) : ?>
+                                            <option value="<?= esc($categoryName) ?>"><?= esc($categoryName) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="col-md-5">
+                                    <label class="form-label">Item</label>
+                                    <select class="form-select form-select-sm" id="bedside_item_id">
+                                        <option value="">Select</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Quick Search</label>
+                                    <input type="text" class="form-control form-control-sm" id="bedside_item_search" placeholder="Search by code or name">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Rate</label>
+                                    <input class="form-control form-control-sm" id="bedside_item_rate" value="0" type="number" $11" />
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Qty</label>
+                                    <input class="form-control form-control-sm" id="bedside_item_qty" value="1" type="number" $11" />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Date</label>
+                                    <input class="form-control form-control-sm" id="bedside_item_date" value="<?= esc($today) ?>" type="date" />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Doctor</label>
+                                    <select class="form-select form-select-sm" id="bedside_doc_id">
+                                        <option value="0">NONE</option>
+                                        <?php foreach ($doc_list ?? [] as $doc) : ?>
+                                            <option value="<?= esc($doc->id ?? '') ?>"><?= esc($doc->DocSpecName ?? '') ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Comment</label>
+                                    <input class="form-control form-control-sm" id="bedside_comment" value="" type="text" />
+                                </div>
+                                <div class="col-md-12">
+                                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="ipdBedsideChargeAdd()">Add Bedside Charge</button>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <div class="card mb-3 border-primary">
-                    <div class="card-header py-2"><strong>Doctor Visit Charge</strong></div>
-                    <div class="card-body">
-                        <div class="row g-2">
-                            <div class="col-md-5">
-                                <label class="form-label">Doctor</label>
-                                <select class="form-select form-select-sm" id="doctor_visit_doc_id">
-                                    <option value="">Select</option>
-                                    <?php foreach ($doc_list ?? [] as $doc) : ?>
-                                        <option value="<?= esc($doc->id ?? '') ?>"><?= esc($doc->DocSpecName ?? '') ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Visit Type</label>
-                                <select class="form-select form-select-sm" id="doctor_visit_fee_type">
-                                    <option value="">Select</option>
-                                    <?php foreach ($doctorVisitFeeTypes as $row) : ?>
-                                        <option value="<?= esc($row['id'] ?? 0) ?>"><?= esc($row['fee_type'] ?? '') ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Rate</label>
-                                <input class="form-control form-control-sm" id="doctor_visit_rate" value="0.00" type="number" $11" />
-                            </div>
-                            <div class="col-md-5">
-                                <label class="form-label">Description</label>
-                                <input class="form-control form-control-sm" id="doctor_visit_fee_desc" value="" type="text" readonly />
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label">Qty</label>
-                                <input class="form-control form-control-sm" id="doctor_visit_qty" value="1" type="number" $11" />
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Date</label>
-                                <input class="form-control form-control-sm" id="doctor_visit_date" value="<?= esc($today) ?>" type="date" />
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label">Time</label>
-                                <input class="form-control form-control-sm" id="doctor_visit_time" type="time" />
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label">Duration (min)</label>
-                                <input class="form-control form-control-sm" id="doctor_visit_duration" value="0" type="number" min="0" step="1" />
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Hospital/Clinic</label>
-                                <input class="form-control form-control-sm" id="doctor_visit_hospital" value="" type="text" />
-                            </div>
-                            <div class="col-md-3 d-flex align-items-end">
-                                <div class="form-check mb-1">
-                                    <input class="form-check-input" type="checkbox" id="doctor_visit_outside" value="1">
-                                    <label class="form-check-label" for="doctor_visit_outside">Outside Doctor</label>
+                    <div class="card-header py-2">
+                        <button type="button" class="ipd-charge-section-toggle" data-bs-toggle="collapse" data-bs-target="#doctorVisitChargeCollapse" aria-expanded="false" aria-controls="doctorVisitChargeCollapse">
+                            <span>Doctor Visit Charge</span>
+                            <i class="bi bi-chevron-down" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                    <div id="doctorVisitChargeCollapse" class="collapse">
+                        <div class="card-body">
+                            <div class="row g-2">
+                                <div class="col-md-5">
+                                    <label class="form-label">Doctor</label>
+                                    <select class="form-select form-select-sm" id="doctor_visit_doc_id">
+                                        <option value="">Select</option>
+                                        <?php foreach ($doc_list ?? [] as $doc) : ?>
+                                            <option value="<?= esc($doc->id ?? '') ?>"><?= esc($doc->DocSpecName ?? '') ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
                                 </div>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Comment</label>
-                                <input class="form-control form-control-sm" id="doctor_visit_comment" value="" type="text" />
-                            </div>
-                            <div class="col-md-12">
-                                <button type="button" class="btn btn-outline-primary btn-sm" onclick="ipdDoctorVisitChargeAdd()">Add Doctor Visit</button>
+                                <div class="col-md-4">
+                                    <label class="form-label">Visit Type</label>
+                                    <select class="form-select form-select-sm" id="doctor_visit_fee_type">
+                                        <option value="">Select</option>
+                                        <?php foreach ($doctorVisitFeeTypes as $row) : ?>
+                                            <option value="<?= esc($row['id'] ?? 0) ?>"><?= esc($row['fee_type'] ?? '') ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Rate</label>
+                                    <input class="form-control form-control-sm" id="doctor_visit_rate" value="0.00" type="number" $11" />
+                                </div>
+                                <div class="col-md-5">
+                                    <label class="form-label">Description</label>
+                                    <input class="form-control form-control-sm" id="doctor_visit_fee_desc" value="" type="text" readonly />
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Qty</label>
+                                    <input class="form-control form-control-sm" id="doctor_visit_qty" value="1" type="number" $11" />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Date</label>
+                                    <input class="form-control form-control-sm" id="doctor_visit_date" value="<?= esc($today) ?>" type="date" />
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Time</label>
+                                    <input class="form-control form-control-sm" id="doctor_visit_time" type="time" />
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Duration (min)</label>
+                                    <input class="form-control form-control-sm" id="doctor_visit_duration" value="0" type="number" min="0" step="1" />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Hospital/Clinic</label>
+                                    <input class="form-control form-control-sm" id="doctor_visit_hospital" value="" type="text" />
+                                </div>
+                                <div class="col-md-3 d-flex align-items-end">
+                                    <div class="form-check mb-1">
+                                        <input class="form-check-input" type="checkbox" id="doctor_visit_outside" value="1">
+                                        <label class="form-check-label" for="doctor_visit_outside">Outside Doctor</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Comment</label>
+                                    <input class="form-control form-control-sm" id="doctor_visit_comment" value="" type="text" />
+                                </div>
+                                <div class="col-md-12">
+                                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="ipdDoctorVisitChargeAdd()">Add Doctor Visit</button>
+                                </div>
                             </div>
                         </div>
                     </div>
