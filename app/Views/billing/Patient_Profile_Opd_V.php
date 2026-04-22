@@ -132,8 +132,21 @@
                     <h5 class="modal-title">OPD Scan</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
+                <div class="modal-body pb-0">
+                    <div class="d-flex justify-content-end gap-2 mb-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="opdScanZoomOut">-</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="opdScanZoomIn">+</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="opdScanRotate">Rotate</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="opdScanZoomReset">Reset</button>
+                    </div>
+                    <div class="small text-muted text-end mb-2">
+                        Keys: + or = (Zoom In), - (Zoom Out), R (Rotate), 0 (Reset) | Mouse: Wheel to zoom, drag image to pan
+                    </div>
+                </div>
                 <div class="modal-body text-center">
-                    <img id="opdScanModalImg" class="img-fluid" alt="OPD Scan">
+                    <div class="overflow-auto" id="opdScanViewport" style="max-height:75vh;">
+                        <img id="opdScanModalImg" class="img-fluid" alt="OPD Scan" style="transform-origin:center center; transition:transform 0.08s linear; cursor:grab; user-select:none;">
+                    </div>
                 </div>
             </div>
         </div>
@@ -142,10 +155,143 @@
 
 <script>
 $(function() {
+    var currentZoom = 1;
+    var minZoom = 0.5;
+    var maxZoom = 4;
+    var zoomStep = 0.25;
+    var currentRotate = 0;
+    var panX = 0;
+    var panY = 0;
+    var isDragging = false;
+    var startX = 0;
+    var startY = 0;
+
+    var $img = $('#opdScanModalImg');
+    var $viewport = $('#opdScanViewport');
+
+    function applyTransform() {
+        $img.css('transform', 'translate(' + panX + 'px, ' + panY + 'px) rotate(' + currentRotate + 'deg) scale(' + currentZoom + ')');
+    }
+
+    function applyZoom() {
+        applyTransform();
+    }
+
+    function resetView() {
+        currentZoom = 1;
+        currentRotate = 0;
+        panX = 0;
+        panY = 0;
+        applyTransform();
+    }
+
+    $('#opdScanZoomIn').on('click', function() {
+        currentZoom = Math.min(maxZoom, currentZoom + zoomStep);
+        applyTransform();
+    });
+
+    $('#opdScanZoomOut').on('click', function() {
+        currentZoom = Math.max(minZoom, currentZoom - zoomStep);
+        applyTransform();
+    });
+
+    $('#opdScanRotate').on('click', function() {
+        currentRotate = (currentRotate + 90) % 360;
+        applyTransform();
+    });
+
+    $('#opdScanZoomReset').on('click', function() {
+        resetView();
+    });
+
+    $viewport.on('wheel', function(event) {
+        event.preventDefault();
+        var originalEvent = event.originalEvent;
+        if (!originalEvent) {
+            return;
+        }
+
+        if (originalEvent.deltaY < 0) {
+            currentZoom = Math.min(maxZoom, currentZoom + zoomStep);
+        } else {
+            currentZoom = Math.max(minZoom, currentZoom - zoomStep);
+        }
+        applyTransform();
+    });
+
+    $img.on('mousedown', function(event) {
+        if (event.which !== 1) {
+            return;
+        }
+
+        isDragging = true;
+        startX = event.clientX - panX;
+        startY = event.clientY - panY;
+        $img.css('cursor', 'grabbing');
+        event.preventDefault();
+    });
+
+    $(document).on('mousemove.opdScanPan', function(event) {
+        if (!isDragging) {
+            return;
+        }
+
+        panX = event.clientX - startX;
+        panY = event.clientY - startY;
+        applyTransform();
+    });
+
+    $(document).on('mouseup.opdScanPan', function() {
+        if (!isDragging) {
+            return;
+        }
+        isDragging = false;
+        $img.css('cursor', 'grab');
+    });
+
+    $(document).on('keydown.opdScanHotkeys', function(event) {
+        if (!$('#opdScanModal').hasClass('show')) {
+            return;
+        }
+
+        var key = String(event.key || '').toLowerCase();
+        if (key === '+' || key === '=' || key === 'add') {
+            event.preventDefault();
+            currentZoom = Math.min(maxZoom, currentZoom + zoomStep);
+            applyTransform();
+            return;
+        }
+
+        if (key === '-' || key === '_' || key === 'subtract') {
+            event.preventDefault();
+            currentZoom = Math.max(minZoom, currentZoom - zoomStep);
+            applyTransform();
+            return;
+        }
+
+        if (key === 'r') {
+            event.preventDefault();
+            currentRotate = (currentRotate + 90) % 360;
+            applyTransform();
+            return;
+        }
+
+        if (key === '0') {
+            event.preventDefault();
+            resetView();
+        }
+    });
+
     $('#opdScanModal').on('show.bs.modal', function(event) {
         var button = $(event.relatedTarget);
         var src = button.data('src');
-        $('#opdScanModalImg').attr('src', src);
+        $img.attr('src', src);
+        resetView();
+    });
+
+    $('#opdScanModal').on('hidden.bs.modal', function() {
+        $img.attr('src', '');
+        resetView();
     });
 });
 </script>
