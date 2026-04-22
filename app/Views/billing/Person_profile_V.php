@@ -35,7 +35,7 @@
                         <div class="d-flex gap-2 flex-wrap justify-content-center">
                             <button type="button" class="btn btn-danger btn-sm" onclick="load_form('<?= base_url('billing/patient/person_record') ?>/<?=$data[0]->id?>/1');">Profile Edit</button>
                             <button type="button" class="btn btn-success btn-sm" onclick="load_form('<?= base_url('billing/patient/show_profile_image') ?>/<?=$data[0]->id?>/1');">Edit Picture</button>
-                            <button type="button" class="btn btn-info btn-sm" onclick="load_form('<?= base_url('billing/patient/show_profile_opd') ?>/<?=$data[0]->id?>/1');">OPD Scan</button>
+                            <button type="button" class="btn btn-info btn-sm" onclick="load_form('<?= base_url('billing/patient/show_profile_opd') ?>/<?=$data[0]->id?>/1');">Consult History</button>
                         </div>
                         <div class="mt-3 w-100">
                             <div class="d-grid gap-2">

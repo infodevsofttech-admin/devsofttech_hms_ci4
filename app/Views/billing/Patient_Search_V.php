@@ -14,7 +14,7 @@
 	    <th>Age</th>
       <th>Last Visit</th>
       <th>Insurance</th>
-      <th>Patient History</th>
+      <th>Action</th>
     </tr>
     </thead>
     <tbody>
@@ -27,8 +27,17 @@
       <td><?=$data[$i]->Last_Visit ?></td>
       <td><?php echo ($data[$i]->insurance_id==0 ? 'Self': 'Insuranced'); ?></td>
       <td>
-        <a href="javascript:load_form('<?= base_url('billing/patient/show_profile_opd') ?>/<?=$data[$i]->id ?>/1');" class="btn btn-info btn-xs">
-          <span class="fa fa-history"></span> Patient History
+        <a href="javascript:load_form('<?= base_url('billing/patient/show_profile_opd') ?>/<?=$data[$i]->id ?>/1');"
+           class="btn btn-info btn-sm"
+           title="Patient History"
+           aria-label="Patient History">
+          <i class="bi bi-clock-history"></i>
+        </a>
+        <a href="javascript:load_form('<?= base_url('billing/patient/person_record') ?>/<?=$data[$i]->id ?>');"
+           class="btn btn-primary btn-sm"
+           title="Open Profile"
+           aria-label="Open Profile">
+          <i class="bi bi-person-vcard"></i>
         </a>
       </td>
     </tr>
@@ -42,7 +51,7 @@
 	    <th>Age</th>
       <th>Last Visit</th>
       <th>Insurance</th>
-      <th>Patient History</th>
+      <th>Action</th>
     </tr>
     </tfoot>
   </table>
