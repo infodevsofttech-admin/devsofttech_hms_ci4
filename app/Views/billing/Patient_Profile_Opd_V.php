@@ -1,9 +1,9 @@
 <div class="pagetitle">
-    <h1>OPD History</h1>
+    <h1>Consult History</h1>
     <nav>
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="javascript:load_form('<?= base_url('billing/patient/person_record') ?>/<?= esc($patient->id) ?>/0');">Profile</a></li>
-            <li class="breadcrumb-item active">OPD History</li>
+            <li class="breadcrumb-item active">Consult History</li>
         </ol>
     </nav>
 </div>
@@ -129,16 +129,16 @@
         <div class="modal-dialog modal-fullscreen modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">OPD Scan</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body pb-0">
-                    <div class="d-flex justify-content-end gap-2 mb-2">
+                    <h5 class="modal-title">Consult History</h5>
+                    <div class="ms-auto d-flex gap-2 align-items-center flex-wrap justify-content-end">
                         <button type="button" class="btn btn-outline-secondary btn-sm" id="opdScanZoomOut">-</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm" id="opdScanZoomIn">+</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm" id="opdScanRotate">Rotate</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm" id="opdScanZoomReset">Reset</button>
+                        <button type="button" class="btn btn-danger btn-sm" data-bs-dismiss="modal">Close X</button>
                     </div>
+                </div>
+                <div class="modal-body pb-0">
                     <div class="small text-muted text-end mb-2">
                         Keys: + or = (Zoom In), - (Zoom Out), R (Rotate), 0 (Reset) | Mouse: Wheel to zoom, drag image to pan
                     </div>
