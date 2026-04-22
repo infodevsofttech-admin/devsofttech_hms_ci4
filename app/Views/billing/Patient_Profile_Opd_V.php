@@ -126,7 +126,7 @@
     </div>
 
     <div class="modal fade" id="opdScanModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-xl">
+        <div class="modal-dialog modal-fullscreen modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">OPD Scan</h5>
