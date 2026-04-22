@@ -12,7 +12,11 @@ class FinanceScrollSubmissionModel extends Model
     protected $useAutoIncrement = true;
     protected $allowedFields = [
         'scroll_date',
+        'start_datetime',
+        'end_datetime',
         'department',
+        'collected_by',
+        'payment_count',
         'total_receipts',
         'submitted_amount',
         'variance_amount',

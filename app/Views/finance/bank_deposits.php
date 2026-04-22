@@ -1,7 +1,7 @@
 <section class="content finance-bank-deposit">
     <div class="mb-3">
-        <h2 class="mb-1">Bank Deposit Register</h2>
-        <p class="text-muted mb-0">Track cash to bank deposits and reconcile with submitted scrolls.</p>
+        <h2 class="mb-1">Bank Transaction Audit And Statement Update</h2>
+        <p class="text-muted mb-0">Track deposits, audit bank transactions, and mark entries updated in bank statement.</p>
     </div>
 
     <div id="deposit_alert"></div>
@@ -20,7 +20,7 @@
                 <div class="col-md-3"><input type="text" class="form-control" name="department" placeholder="Department" required></div>
                 <div class="col-md-3"><input type="text" class="form-control" name="bank_name" placeholder="Bank Name" required></div>
                 <div class="col-md-3"><input type="text" class="form-control" name="slip_no" placeholder="Slip No"></div>
-                <div class="col-md-3"><input type="number" $11" class="form-control" name="deposited_amount" placeholder="Deposited Amount" required></div>
+                <div class="col-md-3"><input type="number" min="0" step="0.01" class="form-control" name="deposited_amount" placeholder="Deposited Amount" required></div>
                 <div class="col-md-3">
                     <select class="form-select" name="related_scroll_id">
                         <option value="">Related Scroll (optional)</option>
@@ -50,6 +50,28 @@
     function refreshTable() {
         load_form_div('<?= base_url('Finance/bank_deposits_table') ?>', 'bank_deposit_table_wrap');
     }
+
+    window.financeDepositStatusAction = function(depositId, action) {
+        var fd = new window.FormData();
+        fd.append('deposit_id', String(depositId));
+        fd.append('action', action);
+
+        fetch('<?= base_url('Finance/bank_deposit_status_update') ?>', {
+            method: 'POST',
+            headers: {'X-Requested-With': 'XMLHttpRequest'},
+            body: fd
+        })
+        .then(function(res) { return res.json().then(function(data) { return { ok: res.ok, data: data }; }); })
+        .then(function(result) {
+            if (!result.ok || !result.data || result.data.status !== 1) {
+                showAlert((result.data && result.data.message) ? result.data.message : 'Request failed', false);
+                return;
+            }
+            showAlert(result.data.message || 'Updated successfully', true);
+            refreshTable();
+        })
+        .catch(function() { showAlert('Network or server error.', false); });
+    };
 
     var form = document.getElementById('bank_deposit_form');
     if (form) {

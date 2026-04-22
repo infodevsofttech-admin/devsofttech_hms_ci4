@@ -2,6 +2,38 @@
 
 Date: 2026-02-08
 
+---
+
+## Storestock Module — 2026-04-19
+
+Ported Hospital Stock Management (Storestock) module from CI3 to CI4.
+
+### Files created
+- `app/Controllers/Storestock.php` — full port: index, indent_list, getIndentTable, new_indent, indent_create, indent_show, indent_items_list, add_item (type 1/2/3), get_drug, final_invoice, print_single_indent, store_stock, store_stock_result, get_product_stock, report_2, main_store
+- `app/Views/storestock/dashboard.php`
+- `app/Views/storestock/indent_list.php` — jQuery DataTable server-side, CI4 CSRF
+- `app/Views/storestock/new_indent.php` — location + employee indent creation
+- `app/Views/storestock/indent_edit.php` — add/update/delete items via AJAX, jQuery autocomplete for drug search
+- `app/Views/storestock/indent_item_list.php` — AJAX partial; qty edit, remove buttons
+- `app/Views/storestock/final_invoice.php` — read-only summary + print link
+- `app/Views/storestock/store_stock_search.php` — search form with schedule filter
+- `app/Views/storestock/stock_search_result.php` — result table + modal for batch detail
+- `app/Views/storestock/stock_item_history.php` — batch-wise purchase detail table
+- `app/Views/storestock/day_report.php` — date range stub
+- `app/Views/storestock/main_store_dashboard.php` — main store nav panel
+- `app/Views/storestock/store_print.php` — mPDF print template
+
+### Routes modified
+- `app/Config/Routes.php` — 17 Storestock routes added after `service('auth')->routes()`
+
+### Key patterns
+- Auth via `ensureStoreAccess()` — checks `hospital_stock.access` permission + group membership
+- `getIndentTable()` uses parameterised queries (no raw user-input interpolation)
+- `add_item()` calls stored procs `p_stock_update_purchase_id_store` + `p_update_med_GST_store`
+- indent_code generated as `S{ym}{padded_id}` after insert
+- Delete archives row to `inv_stock_item_delete` before deleting from `inv_stock_item`
+- `print_single_indent` uses mPDF (Mpdf\Mpdf), no debug toolbar
+
 ## Summary
 Ported OPD Charges, IPD Charges, and Package modules from CI3 to CI4 with consistent NiceAdmin UI, AJAX modal flows, Simple-DataTables, insurance rate handling, and print/Excel exports.
 

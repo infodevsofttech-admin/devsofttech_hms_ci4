@@ -74,20 +74,23 @@ if (! $canHospitalStock && $user && method_exists($user, 'inGroup')) {
 
 $canFinance = false;
 if ($user && method_exists($user, 'can')) {
-    $canFinance = $user->can('finance.access')
-        || $user->can('finance.vendor.manage')
-        || $user->can('finance.po.manage')
-        || $user->can('finance.grn.manage')
-        || $user->can('finance.invoice.manage')
-        || $user->can('finance.cash.manage')
-        || $user->can('finance.doctor_payout.manage')
-        || $user->can('finance.bank_deposit.manage')
-        || $user->can('finance.compliance.view')
+    $canFinance = $user->can('finance.workflow.view')
+        || $user->can('finance.cash.billing.submit')
+        || $user->can('finance.cash.accounts.accept')
+        || $user->can('finance.cash.accounts.verify')
+        || $user->can('finance.bank.deposit.create')
+        || $user->can('finance.bank.audit')
+        || $user->can('finance.bank.statement.update')
         || $user->can('finance.*');
 }
 
-if (! $canFinance && $user && method_exists($user, 'inGroup')) {
-    $canFinance = $user->inGroup('superadmin', 'admin', 'developer');
+$canFinanceBilling = false;
+$canFinanceAccounts = false;
+$canFinanceBank = false;
+if ($user && method_exists($user, 'can')) {
+    $canFinanceBilling = $user->can('finance.cash.billing.submit') || $user->can('finance.*');
+    $canFinanceAccounts = $user->can('finance.cash.accounts.accept') || $user->can('finance.cash.accounts.verify') || $user->can('finance.*');
+    $canFinanceBank = $user->can('finance.bank.deposit.create') || $user->can('finance.bank.audit') || $user->can('finance.bank.statement.update') || $user->can('finance.*');
 }
 
 $canDoctorWork = false;
@@ -246,44 +249,61 @@ if (! $canChargesSettings && $user && method_exists($user, 'inGroup')) {
             <span>Org Packing </span>
         </a>
     </li>
+    <?php if ($canFinanceBilling) { ?>
+    <li class="nav-item">
+        <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('billing/cash-submission/create') ?>','Cash Submission')">
+            <i class="bi bi-cash-stack"></i>
+            <span>Cash Submission</span>
+        </a>
+    </li>
+    <?php } ?>
     <?php } ?>
     <?php if ($canFinance) { ?>
         <li class="nav-heading">Accounts And Finance</li>
         <li class="nav-item">
             <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Finance/index') ?>','Finance & Accounting')">
                 <i class="bi bi-bank"></i>
-                <span>Finance & Accounting</span>
+                <span>Accounts And Finance</span>
             </a>
         </li>
+        <?php if ($canFinanceBilling) { ?>
+            <li class="nav-item">
+                <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('billing/cash-submission/create') ?>','Billing Cash Statement Submission')">
+                    <i class="bi bi-journal-arrow-up"></i>
+                    <span>Billing Cash Statement</span>
+                </a>
+            </li>
+        <?php } ?>
+        <?php if ($canFinanceAccounts) { ?>
+            <li class="nav-item">
+                <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Finance/cashbook/accounts') ?>','Accounts Accept and Verify')">
+                    <i class="bi bi-patch-check"></i>
+                    <span>Accounts Verify Payment</span>
+                </a>
+            </li>
+        <?php } ?>
+        <?php if ($canFinanceBank) { ?>
+            <li class="nav-item">
+                <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Finance/bank_audit') ?>','Bank Payment Audit')">
+                    <i class="bi bi-building"></i>
+                    <span>Bank Audit And Statement</span>
+                </a>
+            </li>
+        <?php } ?>
         <li class="nav-item">
-            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Finance/phase2') ?>','Finance & Accounting - Phase 2')">
-                <i class="bi bi-diagram-3"></i>
-                <span>Finance Phase 2</span>
+            <a class="nav-link collapsed" data-bs-target="#finance-payout-nav" data-bs-toggle="collapse" href="#">
+                <i class="bi bi-cash-stack"></i>
+                <span>Payout</span>
+                <i class="bi bi-chevron-down ms-auto"></i>
             </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Finance/cashbook') ?>','Cash Collection & Disbursement SOP')">
-                <i class="bi bi-cash-coin"></i>
-                <span>Cash & Disbursement SOP</span>
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Finance/doctor_payout') ?>','Doctor Payout Workflow')">
-                <i class="bi bi-person-badge"></i>
-                <span>Doctor Payout Workflow</span>
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Finance/bank_deposits') ?>','Bank Deposit Register')">
-                <i class="bi bi-building"></i>
-                <span>Bank Deposit Register</span>
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Finance/compliance_report') ?>','Finance Compliance Report')">
-                <i class="bi bi-shield-exclamation"></i>
-                <span>Finance Compliance Report</span>
-            </a>
+            <ul id="finance-payout-nav" class="nav-content collapse" data-bs-parent="#sidebar-nav">
+                <li>
+                    <a href="javascript:load_form('<?= base_url('Finance/payout/opd-consult') ?>','OPD Consult Payout')">
+                        <i class="bi bi-circle"></i>
+                        <span>OPD Consult Payout</span>
+                    </a>
+                </li>
+            </ul>
         </li>
     <?php } ?>
     <?php if ($canIpdBilling) { ?>
@@ -360,7 +380,7 @@ if (! $canChargesSettings && $user && method_exists($user, 'inGroup')) {
     <?php if ($canHospitalStock) { ?>
         <li class="nav-heading">Hospital Stock</li>
         <li class="nav-item">
-            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('setting/admin/hospital-stock') ?>','Hospital Stock Management');">
+            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Storestock') ?>','Hospital Stock');">
                 <i class="bi bi-box-seam"></i>
                 <span>Hospital Stock</span>
             </a>

@@ -2,6 +2,7 @@
 
 namespace App\Controllers;
 
+use App\Models\DoctorModel;
 use App\Models\FinanceGrnModel;
 use App\Models\FinanceCashTransactionModel;
 use App\Models\FinanceBankDepositModel;
@@ -1800,6 +1801,384 @@ class Finance extends BaseController
         return view('finance/index');
     }
 
+    public function payoutOpdConsult()
+    {
+        if (! $this->canFinanceAny([
+            'finance.workflow.view',
+            'finance.cash.billing.submit',
+            'finance.cash.accounts.accept',
+            'finance.cash.accounts.verify',
+            'finance.bank.deposit.create',
+            'finance.bank.audit',
+            'finance.bank.statement.update',
+        ])) {
+            return $this->response->setStatusCode(403)->setBody('Access denied');
+        }
+
+        $doctorModel = new DoctorModel();
+        $doctorRows = $doctorModel->getDoctors();
+        usort($doctorRows, static function ($left, $right): int {
+            $leftName = trim((string) (($left->p_title ?? '') . ' ' . ($left->p_fname ?? '')));
+            $rightName = trim((string) (($right->p_title ?? '') . ' ' . ($right->p_fname ?? '')));
+
+            return strcasecmp($leftName, $rightName);
+        });
+
+        $doctorOptions = [];
+        foreach ($doctorRows as $row) {
+            $isActive = property_exists($row, 'active') ? (int) ($row->active ?? 0) : 1;
+            if ($isActive !== 1) {
+                continue;
+            }
+
+            $doctorOptions[] = [
+                'id' => (int) ($row->id ?? 0),
+                'name' => trim((string) (($row->p_title ?? '') . ' ' . ($row->p_fname ?? ''))),
+            ];
+        }
+
+        return view('finance/payout_opd_consult', [
+            'doctor_options' => $doctorOptions,
+            'state_unit_options' => $this->fetchOpdStateUnitOptions(),
+        ]);
+    }
+
+    public function payoutOpdConsultSummary()
+    {
+        if (! $this->canFinanceAny([
+            'finance.workflow.view',
+            'finance.cash.billing.submit',
+            'finance.cash.accounts.accept',
+            'finance.cash.accounts.verify',
+            'finance.bank.deposit.create',
+            'finance.bank.audit',
+            'finance.bank.statement.update',
+        ])) {
+            return $this->response->setStatusCode(403)->setBody('Access denied');
+        }
+
+        $fromDate = $this->normalizeDateInput((string) ($this->request->getGet('from_date') ?? ''));
+        $toDate = $this->normalizeDateInput((string) ($this->request->getGet('to_date') ?? ''));
+        $doctorId = (int) ($this->request->getGet('doctor_id') ?? 0);
+        $stateUnit = trim((string) ($this->request->getGet('state_unit') ?? ''));
+
+        if ($fromDate === '') {
+            $fromDate = date('Y-m-01');
+        }
+        if ($toDate === '') {
+            $toDate = date('Y-m-d');
+        }
+        if ($fromDate > $toDate) {
+            [$fromDate, $toDate] = [$toDate, $fromDate];
+        }
+
+        return view('finance/partials/payout_opd_consult_summary', $this->buildOpdConsultPayoutSummaryData($fromDate, $toDate, $doctorId, $stateUnit));
+    }
+
+    public function payoutOpdConsultDraftsTable()
+    {
+        if (! $this->canFinanceAny([
+            'finance.workflow.view',
+            'finance.cash.billing.submit',
+            'finance.cash.accounts.accept',
+            'finance.cash.accounts.verify',
+            'finance.bank.deposit.create',
+            'finance.bank.audit',
+            'finance.bank.statement.update',
+            'finance.doctor_payout.manage',
+        ])) {
+            return $this->response->setStatusCode(403)->setBody('Access denied');
+        }
+
+        $fromDate = $this->normalizeDateInput((string) ($this->request->getGet('from_date') ?? ''));
+        $toDate = $this->normalizeDateInput((string) ($this->request->getGet('to_date') ?? ''));
+        $doctorId = (int) ($this->request->getGet('doctor_id') ?? 0);
+        $stateUnit = trim((string) ($this->request->getGet('state_unit') ?? ''));
+
+        if ($fromDate === '') {
+            $fromDate = date('Y-m-01');
+        }
+        if ($toDate === '') {
+            $toDate = date('Y-m-d');
+        }
+        if ($fromDate > $toDate) {
+            [$fromDate, $toDate] = [$toDate, $fromDate];
+        }
+
+        $builder = $this->doctorPayoutModel
+            ->select('finance_doctor_payouts.*, finance_doctor_agreements.doctor_code, finance_doctor_agreements.doctor_name')
+            ->join('finance_doctor_agreements', 'finance_doctor_agreements.id = finance_doctor_payouts.doctor_id', 'left')
+            ->where('finance_doctor_payouts.payout_type', 'consultation')
+            ->where('finance_doctor_payouts.payout_date >=', $fromDate)
+            ->where('finance_doctor_payouts.payout_date <=', $toDate)
+            ->orderBy('finance_doctor_payouts.id', 'DESC');
+
+        if ($doctorId > 0) {
+            $agreementIds = $this->findDoctorAgreementIdsFromMaster($doctorId);
+            if (! empty($agreementIds)) {
+                $builder->whereIn('finance_doctor_payouts.doctor_id', $agreementIds);
+            } else {
+                $builder->where('1 = 0', null, false);
+            }
+        }
+
+        if ($stateUnit !== '') {
+            $builder->like('finance_doctor_payouts.case_reference', '-U' . $this->normalizeStateUnitToken($stateUnit), 'both');
+        }
+
+        return view('finance/partials/payout_opd_consult_drafts_table', [
+            'rows' => $builder->findAll(30),
+        ]);
+    }
+
+    public function payoutOpdConsultDraftCreate()
+    {
+        if (! $this->canFinanceAny([
+            'finance.workflow.view',
+            'finance.cash.billing.submit',
+            'finance.cash.accounts.accept',
+            'finance.cash.accounts.verify',
+            'finance.bank.deposit.create',
+            'finance.bank.audit',
+            'finance.bank.statement.update',
+            'finance.doctor_payout.manage',
+        ])) {
+            return $this->response->setStatusCode(403)->setJSON(['status' => 0, 'message' => 'Access denied']);
+        }
+
+        if (! method_exists($this->db, 'tableExists') || ! $this->db->tableExists('finance_doctor_payouts')) {
+            return $this->response->setStatusCode(500)->setJSON(['status' => 0, 'message' => 'Payout table not available.']);
+        }
+
+        $doctorId = (int) ($this->request->getPost('doctor_id') ?? 0);
+        $fromDate = $this->normalizeDateInput((string) ($this->request->getPost('from_date') ?? ''));
+        $toDate = $this->normalizeDateInput((string) ($this->request->getPost('to_date') ?? ''));
+        $stateUnit = trim((string) ($this->request->getPost('state_unit') ?? ''));
+        $baseAmount = (float) ($this->request->getPost('base_amount') ?? 0);
+        $doctorShare = (float) ($this->request->getPost('doctor_share') ?? 75);
+        $hospitalShare = (float) ($this->request->getPost('hospital_share') ?? 25);
+        $deductions = (float) ($this->request->getPost('deductions') ?? 0);
+        $adjustments = (float) ($this->request->getPost('adjustments') ?? 0);
+
+        if ($doctorId <= 0) {
+            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Please select a doctor before creating payout draft.']);
+        }
+
+        if ($fromDate === '') {
+            $fromDate = date('Y-m-01');
+        }
+        if ($toDate === '') {
+            $toDate = date('Y-m-d');
+        }
+        if ($fromDate > $toDate) {
+            [$fromDate, $toDate] = [$toDate, $fromDate];
+        }
+
+        $summaryData = $this->buildOpdConsultPayoutSummaryData($fromDate, $toDate, $doctorId, $stateUnit);
+        $summary = (array) ($summaryData['summary'] ?? []);
+        $eligibleOpdIds = $this->fetchEligibleOpdIdsForPayout($fromDate, $toDate, $doctorId, $stateUnit);
+        $completedOpd = count($eligibleOpdIds);
+        if ($completedOpd <= 0) {
+            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'No completed OPD found for selected filters.']);
+        }
+
+        if ($baseAmount <= 0) {
+            $baseAmount = (float) ($summary['total_received'] ?? 0);
+        }
+
+        $doctorGross = round(($baseAmount * $doctorShare) / 100, 2);
+        $hospitalGross = round(($baseAmount * $hospitalShare) / 100, 2);
+        $netPayable = round($doctorGross - $deductions + $adjustments, 2);
+        if ($netPayable < 0) {
+            $netPayable = 0.0;
+        }
+
+        $agreementId = $this->resolveOrCreateDoctorAgreementIdFromMaster($doctorId);
+        if ($agreementId <= 0) {
+            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Unable to map selected doctor to payout agreement.']);
+        }
+
+        $rate = round($netPayable / max(1, $completedOpd), 2);
+        $caseReference = 'OPD-' . str_replace('-', '', $fromDate) . '-' . str_replace('-', '', $toDate) . '-D' . $doctorId;
+        if ($stateUnit !== '') {
+            $caseReference .= '-U' . $this->normalizeStateUnitToken($stateUnit);
+        }
+
+        $remarks = 'OPD payout draft from OPD Consult Payout | Completed=' . $completedOpd
+            . ', Base=' . number_format($baseAmount, 2, '.', '')
+            . ', Doc%=' . number_format($doctorShare, 2, '.', '')
+            . ', Hosp%=' . number_format($hospitalShare, 2, '.', '')
+            . ', Deductions=' . number_format($deductions, 2, '.', '')
+            . ', Adjustments=' . number_format($adjustments, 2, '.', '')
+            . ', DoctorGross=' . number_format($doctorGross, 2, '.', '')
+            . ', HospitalShare=' . number_format($hospitalGross, 2, '.', '')
+            . ', Net=' . number_format($netPayable, 2, '.', '');
+
+        $this->db->transStart();
+
+        $this->doctorPayoutModel->insert([
+            'payout_date' => $toDate,
+            'doctor_id' => $agreementId,
+            'case_reference' => $caseReference,
+            'payout_type' => 'consultation',
+            'units' => $completedOpd,
+            'rate' => $rate,
+            'calculated_amount' => $netPayable,
+            'approved_amount' => $netPayable,
+            'status' => 'draft',
+            'remarks' => $remarks,
+            'hr_submitted_by' => $this->currentUserName(),
+        ]);
+
+        $insertId = (int) ($this->doctorPayoutModel->getInsertID() ?? 0);
+
+        if ($insertId > 0 && ! empty($eligibleOpdIds) && method_exists($this->db, 'tableExists') && $this->db->tableExists('opd_master')) {
+            $opdUpdate = [
+                'payout_draft_id' => $insertId,
+                'payout_calculated_at' => date('Y-m-d H:i:s'),
+                'payout_calculated_by' => $this->currentUserName(),
+            ];
+            if ($this->tableHasField('opd_master', 'updated_at')) {
+                $opdUpdate['updated_at'] = date('Y-m-d H:i:s');
+            }
+
+            $this->db->table('opd_master')
+                ->whereIn('opd_id', $eligibleOpdIds)
+                ->update($opdUpdate);
+        }
+
+        $this->db->transComplete();
+
+        if (! $this->db->transStatus() || $insertId <= 0) {
+            return $this->response->setStatusCode(500)->setJSON(['status' => 0, 'message' => 'Failed to create payout draft.']);
+        }
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'message' => 'Payout draft created successfully.',
+            'payout_id' => $insertId,
+            'case_reference' => $caseReference,
+            'net_payable' => $netPayable,
+        ]);
+    }
+
+    public function payoutOpdConsultDraftUpdate()
+    {
+        if (! $this->canFinanceAny([
+            'finance.workflow.view',
+            'finance.cash.billing.submit',
+            'finance.cash.accounts.accept',
+            'finance.cash.accounts.verify',
+            'finance.bank.deposit.create',
+            'finance.bank.audit',
+            'finance.bank.statement.update',
+            'finance.doctor_payout.manage',
+        ])) {
+            return $this->response->setStatusCode(403)->setJSON(['status' => 0, 'message' => 'Access denied']);
+        }
+
+        $payoutId = (int) ($this->request->getPost('payout_id') ?? 0);
+        $payoutDate = $this->normalizeDateInput((string) ($this->request->getPost('payout_date') ?? ''));
+        $approvedAmount = (float) ($this->request->getPost('approved_amount') ?? 0);
+        $remarks = trim((string) ($this->request->getPost('remarks') ?? ''));
+
+        if ($payoutId <= 0) {
+            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Invalid payout id.']);
+        }
+
+        $row = $this->doctorPayoutModel->find($payoutId);
+        if (! is_array($row)) {
+            return $this->response->setStatusCode(404)->setJSON(['status' => 0, 'message' => 'Payout draft not found.']);
+        }
+
+        if ((string) ($row['status'] ?? 'draft') !== 'draft') {
+            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Only draft entries can be edited.']);
+        }
+
+        if ($payoutDate === '') {
+            $payoutDate = (string) ($row['payout_date'] ?? date('Y-m-d'));
+        }
+        if ($approvedAmount < 0) {
+            $approvedAmount = 0;
+        }
+
+        $units = max(1, (int) ($row['units'] ?? 1));
+        $rate = round($approvedAmount / $units, 2);
+
+        $this->doctorPayoutModel->update($payoutId, [
+            'payout_date' => $payoutDate,
+            'approved_amount' => round($approvedAmount, 2),
+            'rate' => $rate,
+            'remarks' => $remarks !== '' ? $remarks : null,
+        ]);
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'message' => 'Payout draft updated successfully.',
+        ]);
+    }
+
+    public function payoutOpdConsultDraftDelete()
+    {
+        if (! $this->canFinanceAny([
+            'finance.workflow.view',
+            'finance.cash.billing.submit',
+            'finance.cash.accounts.accept',
+            'finance.cash.accounts.verify',
+            'finance.bank.deposit.create',
+            'finance.bank.audit',
+            'finance.bank.statement.update',
+            'finance.doctor_payout.manage',
+        ])) {
+            return $this->response->setStatusCode(403)->setJSON(['status' => 0, 'message' => 'Access denied']);
+        }
+
+        $payoutId = (int) ($this->request->getPost('payout_id') ?? 0);
+        if ($payoutId <= 0) {
+            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Invalid payout id.']);
+        }
+
+        $row = $this->doctorPayoutModel->find($payoutId);
+        if (! is_array($row)) {
+            return $this->response->setStatusCode(404)->setJSON(['status' => 0, 'message' => 'Payout draft not found.']);
+        }
+
+        if ((string) ($row['status'] ?? 'draft') !== 'draft') {
+            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Only draft entries can be deleted.']);
+        }
+
+        $this->db->transStart();
+
+        if (method_exists($this->db, 'tableExists') && $this->db->tableExists('opd_master') && $this->tableHasField('opd_master', 'payout_draft_id')) {
+            $clearData = [
+                'payout_draft_id' => null,
+            ];
+            if ($this->tableHasField('opd_master', 'payout_calculated_at')) {
+                $clearData['payout_calculated_at'] = null;
+            }
+            if ($this->tableHasField('opd_master', 'payout_calculated_by')) {
+                $clearData['payout_calculated_by'] = null;
+            }
+
+            $this->db->table('opd_master')
+                ->where('payout_draft_id', $payoutId)
+                ->update($clearData);
+        }
+
+        $this->doctorPayoutModel->delete($payoutId);
+
+        $this->db->transComplete();
+
+        if (! $this->db->transStatus()) {
+            return $this->response->setStatusCode(500)->setJSON(['status' => 0, 'message' => 'Failed to delete payout draft.']);
+        }
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'message' => 'Payout draft deleted and linked OPD records unlocked for recalculation.',
+        ]);
+    }
+
     public function phase2()
     {
         if (! $this->canFinance('finance.access')) {
@@ -3305,6 +3684,369 @@ class Finance extends BaseController
         $value = (float) ($row['setting_value'] ?? $default);
 
         return $value > 0 ? $value : $default;
+    }
+
+    private function buildOpdConsultPayoutSummaryData(string $fromDate, string $toDate, int $doctorId = 0, string $stateUnit = ''): array
+    {
+        $db = \Config\Database::connect();
+        $stateUnitColumn = $this->resolveOpdStateUnitColumn();
+
+        $runningExpr = "(COALESCE(o.running_opd,0)=1 OR o.opd_fee_type=3 OR UPPER(COALESCE(o.opd_fee_desc,'')) LIKE '%RUNNING%')";
+        $newExpr = "(o.opd_fee_type=1 OR UPPER(COALESCE(o.opd_fee_desc,'')) LIKE '%NEW%')";
+        $emergencyExpr = "(UPPER(COALESCE(o.opd_fee_desc,'')) LIKE '%EMERG%')";
+        $routineExpr = "(NOT {$emergencyExpr})";
+        $orgCreditExpr = "(COALESCE(o.insurance_case_id,0) > 0 OR COALESCE(o.insurance_id,0) > 0 OR COALESCE(o.payment_status,0) = 3)";
+
+        $doctorName = 'All Doctors';
+        if ($doctorId > 0) {
+            $doctorRow = $db->table('doctor_master')->select('p_title, p_fname')->where('id', $doctorId)->get()->getRow();
+            if ($doctorRow) {
+                $doctorName = trim((string) (($doctorRow->p_title ?? '') . ' ' . ($doctorRow->p_fname ?? '')));
+            }
+        }
+
+        $opdBuilder = $db->table('opd_master o')
+            ->select('o.doc_id')
+            ->select("COALESCE(NULLIF(TRIM(o.doc_name), ''), CONCAT('Doctor #', o.doc_id)) AS doctor_name", false)
+            ->select('SUM(CASE WHEN o.opd_status IN (1,2) THEN 1 ELSE 0 END) AS completed_opd', false)
+            ->select("SUM(CASE WHEN o.opd_status IN (1,2) AND {$routineExpr} THEN 1 ELSE 0 END) AS routine_opd", false)
+            ->select("SUM(CASE WHEN o.opd_status IN (1,2) AND {$emergencyExpr} THEN 1 ELSE 0 END) AS emergency_opd", false)
+            ->select("SUM(CASE WHEN o.opd_status IN (1,2) AND {$runningExpr} THEN 1 ELSE 0 END) AS running_opd", false)
+            ->select("SUM(CASE WHEN o.opd_status IN (1,2) AND {$newExpr} THEN 1 ELSE 0 END) AS new_opd", false)
+            ->select('SUM(CASE WHEN o.opd_status IN (1,2) THEN COALESCE(o.opd_fee_amount,0) ELSE 0 END) AS gross_amount', false)
+            ->select("SUM(CASE WHEN o.opd_status IN (1,2) AND {$orgCreditExpr} THEN COALESCE(o.opd_fee_amount,0) ELSE 0 END) AS org_credit_amount", false)
+            ->where('o.apointment_date >=', $fromDate)
+            ->where('o.apointment_date <=', $toDate)
+            ->whereIn('o.opd_status', [1, 2]);
+
+        if ($this->tableHasField('opd_master', 'payout_draft_id')) {
+            $opdBuilder->groupStart()
+                ->where('o.payout_draft_id IS NULL', null, false)
+                ->orWhere('o.payout_draft_id', 0)
+                ->groupEnd();
+        }
+
+        if ($doctorId > 0) {
+            $opdBuilder->where('o.doc_id', $doctorId);
+        }
+        if ($stateUnit !== '' && $stateUnitColumn !== null) {
+            $opdBuilder->where('o.' . $stateUnitColumn, $stateUnit);
+        }
+
+        $doctorBreakdown = $opdBuilder
+            ->groupBy('o.doc_id, o.doc_name')
+            ->orderBy('doctor_name', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        $summary = [
+            'completed_opd' => 0,
+            'routine_opd' => 0,
+            'emergency_opd' => 0,
+            'running_opd' => 0,
+            'new_opd' => 0,
+            'calculated_opd' => 0,
+            'gross_amount' => 0.0,
+            'org_credit_amount' => 0.0,
+            'doctor_count' => 0,
+            'approved_consents' => 0,
+            'payout_count' => 0,
+            'payout_amount' => 0.0,
+            'cash_received' => 0.0,
+            'bank_received' => 0.0,
+            'total_received' => 0.0,
+            'credit_amount' => 0.0,
+        ];
+
+        foreach ($doctorBreakdown as &$row) {
+            $row['completed_opd'] = (int) ($row['completed_opd'] ?? 0);
+            $row['routine_opd'] = (int) ($row['routine_opd'] ?? 0);
+            $row['emergency_opd'] = (int) ($row['emergency_opd'] ?? 0);
+            $row['running_opd'] = (int) ($row['running_opd'] ?? 0);
+            $row['new_opd'] = (int) ($row['new_opd'] ?? 0);
+            $row['gross_amount'] = (float) ($row['gross_amount'] ?? 0);
+            $row['org_credit_amount'] = (float) ($row['org_credit_amount'] ?? 0);
+            $row['cash_received'] = 0.0;
+            $row['bank_received'] = 0.0;
+            $row['credit_amount'] = 0.0;
+            $row['payout_amount'] = 0.0;
+
+            $summary['completed_opd'] += $row['completed_opd'];
+            $summary['routine_opd'] += $row['routine_opd'];
+            $summary['emergency_opd'] += $row['emergency_opd'];
+            $summary['running_opd'] += $row['running_opd'];
+            $summary['new_opd'] += $row['new_opd'];
+            $summary['gross_amount'] += $row['gross_amount'];
+            $summary['org_credit_amount'] += $row['org_credit_amount'];
+        }
+        unset($row);
+
+        $summary['doctor_count'] = count($doctorBreakdown);
+
+        if ($this->tableHasField('opd_master', 'payout_draft_id')) {
+            $calcBuilder = $db->table('opd_master o')
+                ->select('COUNT(*) AS calculated_opd', false)
+                ->where('o.apointment_date >=', $fromDate)
+                ->where('o.apointment_date <=', $toDate)
+                ->whereIn('o.opd_status', [1, 2])
+                ->where('o.payout_draft_id >', 0);
+
+            if ($doctorId > 0) {
+                $calcBuilder->where('o.doc_id', $doctorId);
+            }
+            if ($stateUnit !== '' && $stateUnitColumn !== null) {
+                $calcBuilder->where('o.' . $stateUnitColumn, $stateUnit);
+            }
+
+            $calcRow = $calcBuilder->get()->getRowArray();
+            $summary['calculated_opd'] = (int) ($calcRow['calculated_opd'] ?? 0);
+        }
+
+        $collectionBuilder = $db->table('payment_history p')
+            ->select('o.doc_id')
+            ->select('SUM(CASE WHEN p.credit_debit = 0 THEN COALESCE(p.amount,0) ELSE 0 END) AS total_received', false)
+            ->select('SUM(CASE WHEN p.credit_debit = 0 AND p.payment_mode = 1 THEN COALESCE(p.amount,0) ELSE 0 END) AS cash_received', false)
+            ->select('SUM(CASE WHEN p.credit_debit = 0 AND p.payment_mode = 2 THEN COALESCE(p.amount,0) ELSE 0 END) AS bank_received', false)
+            ->join('opd_master o', 'p.payof_type = 1 AND o.opd_id = p.payof_id', 'inner')
+            ->where('DATE(p.payment_date) >=', $fromDate)
+            ->where('DATE(p.payment_date) <=', $toDate);
+
+        if ($doctorId > 0) {
+            $collectionBuilder->where('o.doc_id', $doctorId);
+        }
+        if ($stateUnit !== '' && $stateUnitColumn !== null) {
+            $collectionBuilder->where('o.' . $stateUnitColumn, $stateUnit);
+        }
+
+        $collectionRows = $collectionBuilder->groupBy('o.doc_id')->get()->getResultArray();
+        $collectionMap = [];
+        foreach ($collectionRows as $row) {
+            $docKey = (int) ($row['doc_id'] ?? 0);
+            $collectionMap[$docKey] = [
+                'total_received' => (float) ($row['total_received'] ?? 0),
+                'cash_received' => (float) ($row['cash_received'] ?? 0),
+                'bank_received' => (float) ($row['bank_received'] ?? 0),
+            ];
+        }
+
+        foreach ($doctorBreakdown as &$row) {
+            $docKey = (int) ($row['doc_id'] ?? 0);
+            $received = $collectionMap[$docKey] ?? ['total_received' => 0.0, 'cash_received' => 0.0, 'bank_received' => 0.0];
+            $row['cash_received'] = $received['cash_received'];
+            $row['bank_received'] = $received['bank_received'];
+            $row['total_received'] = $received['total_received'];
+            $row['credit_amount'] = max(0, round($row['gross_amount'] - $row['total_received'], 2));
+
+            $summary['cash_received'] += $row['cash_received'];
+            $summary['bank_received'] += $row['bank_received'];
+        }
+        unset($row);
+
+        $summary['total_received'] = $summary['cash_received'] + $summary['bank_received'];
+        $summary['credit_amount'] = max(0, round($summary['gross_amount'] - $summary['total_received'], 2));
+
+        if ($db->tableExists('abdm_consent_records')) {
+            $consentBuilder = $db->table('abdm_consent_records acr')
+                ->select('COUNT(DISTINCT acr.id) AS approved_consents', false)
+                ->join('opd_master o', 'o.p_id = acr.patient_id', 'inner')
+                ->where('o.apointment_date >=', $fromDate)
+                ->where('o.apointment_date <=', $toDate)
+                ->whereIn('o.opd_status', [1, 2])
+                ->where('acr.consent_status', 'approved');
+
+            if ($doctorId > 0) {
+                $consentBuilder->where('o.doc_id', $doctorId);
+            }
+            if ($stateUnit !== '' && $stateUnitColumn !== null) {
+                $consentBuilder->where('o.' . $stateUnitColumn, $stateUnit);
+            }
+
+            $consentRow = $consentBuilder->get()->getRowArray();
+            $summary['approved_consents'] = (int) ($consentRow['approved_consents'] ?? 0);
+        }
+
+        if ($db->tableExists('finance_doctor_payouts')) {
+            $payoutBuilder = $db->table('finance_doctor_payouts p')
+                ->select('COUNT(*) AS payout_count, SUM(COALESCE(p.approved_amount, p.calculated_amount, 0)) AS payout_amount', false)
+                ->where('p.payout_date >=', $fromDate)
+                ->where('p.payout_date <=', $toDate);
+
+            if ($doctorId > 0) {
+                $agreementIds = $this->findDoctorAgreementIdsFromMaster($doctorId);
+                if (! empty($agreementIds)) {
+                    $payoutBuilder->whereIn('p.doctor_id', $agreementIds);
+                } else {
+                    $payoutBuilder->where('1 = 0', null, false);
+                }
+            }
+
+            $payoutRow = $payoutBuilder->get()->getRowArray();
+            $summary['payout_count'] = (int) ($payoutRow['payout_count'] ?? 0);
+            $summary['payout_amount'] = (float) ($payoutRow['payout_amount'] ?? 0);
+        }
+
+        foreach ($doctorBreakdown as &$row) {
+            $row['payout_amount'] = $summary['doctor_count'] === 1 ? $summary['payout_amount'] : 0.0;
+        }
+        unset($row);
+
+        return [
+            'summary' => $summary,
+            'doctor_breakdown' => $doctorBreakdown,
+            'from_date' => $fromDate,
+            'to_date' => $toDate,
+            'doctor_name' => $doctorName,
+            'state_unit' => $stateUnit,
+            'state_unit_label' => $stateUnitColumn !== null ? ucwords(str_replace('_', ' ', $stateUnitColumn)) : 'State/Unit',
+        ];
+    }
+
+    private function fetchOpdStateUnitOptions(): array
+    {
+        $column = $this->resolveOpdStateUnitColumn();
+        if ($column === null || ! method_exists($this->db, 'tableExists') || ! $this->db->tableExists('opd_master')) {
+            return [];
+        }
+
+        try {
+            $rows = $this->db->table('opd_master o')
+                ->select('TRIM(o.' . $column . ') AS value', false)
+                ->where('o.' . $column . ' IS NOT NULL', null, false)
+                ->where("TRIM(o." . $column . ") != ''", null, false)
+                ->groupBy('o.' . $column)
+                ->orderBy('value', 'ASC')
+                ->get()
+                ->getResultArray();
+
+            return array_values(array_filter(array_map(static function (array $row): string {
+                return trim((string) ($row['value'] ?? ''));
+            }, $rows), static fn(string $value): bool => $value !== ''));
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    private function resolveOpdStateUnitColumn(): ?string
+    {
+        $candidates = ['unit_name', 'unit', 'state_name', 'state', 'branch_name', 'branch', 'center_name', 'location', 'city'];
+        foreach ($candidates as $column) {
+            if ($this->tableHasField('opd_master', $column)) {
+                return $column;
+            }
+        }
+
+        return null;
+    }
+
+    private function normalizeStateUnitToken(string $value): string
+    {
+        return preg_replace('/[^A-Za-z0-9]/', '', strtoupper(trim($value)));
+    }
+
+    private function findDoctorAgreementIdsFromMaster(int $doctorId): array
+    {
+        if ($doctorId <= 0) {
+            return [];
+        }
+
+        $ids = [];
+        $code = 'DM-' . $doctorId;
+        $row = $this->doctorAgreementModel->select('id')->where('doctor_code', $code)->first();
+        if (is_array($row) && (int) ($row['id'] ?? 0) > 0) {
+            $ids[] = (int) ($row['id'] ?? 0);
+        }
+
+        if (empty($ids) && method_exists($this->db, 'tableExists') && $this->db->tableExists('doctor_master')) {
+            $doctor = $this->db->table('doctor_master')->select('p_title, p_fname')->where('id', $doctorId)->get(1)->getRowArray();
+            if (is_array($doctor)) {
+                $doctorName = trim((string) (($doctor['p_title'] ?? '') . ' ' . ($doctor['p_fname'] ?? '')));
+                if ($doctorName !== '') {
+                    $nameRows = $this->doctorAgreementModel->select('id')->like('doctor_name', $doctorName, 'both')->findAll();
+                    foreach ($nameRows as $item) {
+                        $id = (int) ($item['id'] ?? 0);
+                        if ($id > 0) {
+                            $ids[] = $id;
+                        }
+                    }
+                }
+            }
+        }
+
+        return array_values(array_unique(array_filter($ids, static fn(int $id): bool => $id > 0)));
+    }
+
+    private function fetchEligibleOpdIdsForPayout(string $fromDate, string $toDate, int $doctorId, string $stateUnit = ''): array
+    {
+        if (! method_exists($this->db, 'tableExists') || ! $this->db->tableExists('opd_master')) {
+            return [];
+        }
+
+        $builder = $this->db->table('opd_master o')
+            ->select('o.opd_id')
+            ->where('o.apointment_date >=', $fromDate)
+            ->where('o.apointment_date <=', $toDate)
+            ->whereIn('o.opd_status', [1, 2]);
+
+        if ($doctorId > 0) {
+            $builder->where('o.doc_id', $doctorId);
+        }
+
+        $stateUnitColumn = $this->resolveOpdStateUnitColumn();
+        if ($stateUnit !== '' && $stateUnitColumn !== null) {
+            $builder->where('o.' . $stateUnitColumn, $stateUnit);
+        }
+
+        if ($this->tableHasField('opd_master', 'payout_draft_id')) {
+            $builder->groupStart()
+                ->where('o.payout_draft_id IS NULL', null, false)
+                ->orWhere('o.payout_draft_id', 0)
+                ->groupEnd();
+        }
+
+        $rows = $builder->get()->getResultArray();
+
+        return array_values(array_filter(array_map(static fn(array $row): int => (int) ($row['opd_id'] ?? 0), $rows), static fn(int $id): bool => $id > 0));
+    }
+
+    private function resolveOrCreateDoctorAgreementIdFromMaster(int $doctorId): int
+    {
+        if ($doctorId <= 0 || ! method_exists($this->db, 'tableExists') || ! $this->db->tableExists('doctor_master')) {
+            return 0;
+        }
+
+        $doctorRow = $this->db->table('doctor_master')
+            ->select('id, p_title, p_fname')
+            ->where('id', $doctorId)
+            ->get(1)
+            ->getRowArray();
+        if (! is_array($doctorRow)) {
+            return 0;
+        }
+
+        $doctorName = trim((string) (($doctorRow['p_title'] ?? '') . ' ' . ($doctorRow['p_fname'] ?? '')));
+        if ($doctorName === '') {
+            $doctorName = 'Doctor #' . $doctorId;
+        }
+        $doctorCode = 'DM-' . $doctorId;
+
+        $existing = $this->doctorAgreementModel->where('doctor_code', $doctorCode)->first();
+        if (is_array($existing) && (int) ($existing['id'] ?? 0) > 0) {
+            return (int) $existing['id'];
+        }
+
+        $this->doctorAgreementModel->insert([
+            'doctor_code' => $doctorCode,
+            'doctor_name' => $doctorName,
+            'specialization' => null,
+            'consultation_rate' => 0,
+            'surgery_rate' => 0,
+            'agreement_start_date' => null,
+            'agreement_end_date' => null,
+            'status' => 1,
+            'created_by' => $this->currentUserName(),
+        ]);
+
+        return (int) ($this->doctorAgreementModel->getInsertID() ?? 0);
     }
 
     private function normalizeDateInput(string $date): string

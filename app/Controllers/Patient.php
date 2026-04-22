@@ -731,8 +731,14 @@ class Patient extends BaseController
 			return $this->response->setStatusCode(404)->setBody('Patient not found');
 		}
 
+		$opdFields = $this->db->getFieldNames('opd_master') ?? [];
+		$opdSelect = ['opd_id', 'opd_code', 'doc_name', 'apointment_date'];
+		if (in_array('queue_no', $opdFields, true)) {
+			$opdSelect[] = 'queue_no';
+		}
+
 		$opdList = $this->db->table('opd_master')
-			->select('opd_id, opd_code, doc_name, apointment_date, queue_no')
+			->select(implode(', ', $opdSelect))
 			->where('p_id', $pno)
 			->orderBy('opd_id', 'DESC')
 			->get()
@@ -741,6 +747,7 @@ class Patient extends BaseController
 		$opdIds = array_column($opdList, 'opd_id');
 		$filesByOpd = [];
 		$rxByOpd = [];
+		$medicinesBySession = [];
 
 		if ($opdIds && $this->db->tableExists('file_upload_data')) {
 			$fields = $this->db->getFieldNames('file_upload_data') ?? [];
@@ -790,7 +797,7 @@ class Patient extends BaseController
 			if (in_array('opd_id', $rxFields, true)) {
 				$selectParts[] = 'opd_id';
 			}
-			foreach (['date_opd_visit', 'queue_no', 'bp', 'diastolic', 'pulse', 'temp', 'spo2', 'complaints', 'diagnosis', 'investigation', 'advice'] as $col) {
+			foreach (['date_opd_visit', 'queue_no', 'bp', 'diastolic', 'pulse', 'temp', 'spo2', 'complaints', 'diagnosis', 'investigation', 'advice', 'next_visit', 'refer_to'] as $col) {
 				if (in_array($col, $rxFields, true)) {
 					$selectParts[] = $col;
 				}
@@ -811,6 +818,55 @@ class Patient extends BaseController
 					}
 					$rxByOpd[$opdId] = $rxRow;
 				}
+			}
+		}
+
+		$medicineTable = $this->findExistingTable(['opd_prescrption_prescribed', 'opd_prescription_prescribed']);
+		$rxSessionIds = array_values(array_filter(array_map(static fn(array $row): int => (int) ($row['id'] ?? 0), $rxByOpd), static fn(int $id): bool => $id > 0));
+		if ($medicineTable !== null && $this->db->tableExists($medicineTable) && $rxSessionIds !== []) {
+			$medicineBuilder = $this->db->table($medicineTable . ' pt')
+				->select('pt.id, pt.opd_pre_id, pt.med_type, pt.med_name, pt.dosage, pt.dosage_when, pt.dosage_freq, pt.dosage_where, pt.no_of_days, pt.qty, pt.remark');
+
+			if ($this->db->tableExists('opd_dose_shed')) {
+				$medicineBuilder->select('d.dose_show_sign AS dose_shed', false)
+					->join('opd_dose_shed d', 'pt.dosage = d.dose_shed_id', 'left');
+			}
+			if ($this->db->tableExists('opd_dose_when')) {
+				$medicineBuilder->select('dw.dose_sign_desc AS dose_when_label', false)
+					->join('opd_dose_when dw', 'pt.dosage_when = dw.dose_when_id', 'left');
+			}
+			if ($this->db->tableExists('opd_dose_frequency')) {
+				$medicineBuilder->select('df.dose_sign_desc AS dose_frequency_label', false)
+					->join('opd_dose_frequency df', 'pt.dosage_freq = df.dose_freq_id', 'left');
+			}
+			if ($this->db->tableExists('opd_dose_where')) {
+				$medicineBuilder->select('d_on.dose_sign_desc AS dose_where_label', false)
+					->join('opd_dose_where d_on', 'pt.dosage_where = d_on.dose_where_id', 'left');
+			}
+
+			$medicineRows = $medicineBuilder
+				->whereIn('pt.opd_pre_id', $rxSessionIds)
+				->orderBy('pt.id', 'ASC')
+				->get()
+				->getResultArray();
+
+			foreach ($medicineRows as $medicineRow) {
+				$sessionId = (int) ($medicineRow['opd_pre_id'] ?? 0);
+				if ($sessionId <= 0) {
+					continue;
+				}
+
+				$medicinesBySession[$sessionId][] = [
+					'med_type' => trim((string) ($medicineRow['med_type'] ?? '')),
+					'med_name' => trim((string) ($medicineRow['med_name'] ?? '')),
+					'dose' => trim((string) ($medicineRow['dose_shed'] ?? '')),
+					'timing' => trim((string) ($medicineRow['dose_when_label'] ?? '')),
+					'frequency' => trim((string) ($medicineRow['dose_frequency_label'] ?? '')),
+					'where' => trim((string) ($medicineRow['dose_where_label'] ?? '')),
+					'days' => trim((string) ($medicineRow['no_of_days'] ?? '')),
+					'qty' => trim((string) ($medicineRow['qty'] ?? '')),
+					'remark' => trim((string) ($medicineRow['remark'] ?? '')),
+				];
 			}
 		}
 
@@ -838,6 +894,9 @@ class Patient extends BaseController
 				'diagnosis' => (string) ($rx['diagnosis'] ?? ''),
 				'investigation' => (string) ($rx['investigation'] ?? ''),
 				'advice' => (string) ($rx['advice'] ?? ''),
+				'next_visit' => (string) ($rx['next_visit'] ?? ''),
+				'refer_to' => (string) ($rx['refer_to'] ?? ''),
+				'medicines' => $medicinesBySession[$rxSessionId] ?? [],
 				'files' => $filesByOpd[$opdId] ?? [],
 			];
 		}
@@ -846,6 +905,17 @@ class Patient extends BaseController
 			'patient' => $patient,
 			'opdGroups' => $opdGroups,
 		]);
+	}
+
+	private function findExistingTable(array $candidates): ?string
+	{
+		foreach ($candidates as $table) {
+			if ($this->db->tableExists($table)) {
+				return $table;
+			}
+		}
+
+		return null;
 	}
 
 	public function save_profile_image(int $pid)
