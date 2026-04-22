@@ -1,9 +1,9 @@
 <div class="pagetitle">
-    <h1>OPD Scans</h1>
+    <h1>OPD History</h1>
     <nav>
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="javascript:load_form('<?= base_url('billing/patient/person_record') ?>/<?= esc($patient->id) ?>/0');">Profile</a></li>
-            <li class="breadcrumb-item active">OPD Scans</li>
+            <li class="breadcrumb-item active">OPD History</li>
         </ol>
     </nav>
 </div>
@@ -11,7 +11,7 @@
 <section class="section profile">
     <div class="card">
         <div class="card-header">
-            <h3 class="card-title mb-0">OPD Scans</h3>
+            <h3 class="card-title mb-0">OPD History</h3>
         </div>
         <div class="card-body">
             <p class="mb-3">Patient: <strong><?= esc($patient->p_fname ?? '') ?></strong></p>
@@ -31,9 +31,62 @@
                             </div>
                         </div>
 
+                        <div class="mt-2">
+                            <?php if ((int) ($group['rx_session_id'] ?? 0) > 0) { ?>
+                                <a class="btn btn-primary btn-sm" target="_blank"
+                                   href="<?= base_url('Opd_prescription/opd_prescription_print/' . (int) $group['opd_id'] . '/' . (int) $group['rx_session_id']) ?>">
+                                    Prescription Print
+                                </a>
+                            <?php } ?>
+
+                            <?php if (!empty($group['bp']) || !empty($group['diastolic']) || !empty($group['pulse']) || !empty($group['temp']) || !empty($group['spo2'])) { ?>
+                                <div class="small text-muted mt-2">
+                                    <?php if (!empty($group['bp'])) { ?><span class="me-3"><strong>BP:</strong> <?= esc($group['bp']) ?></span><?php } ?>
+                                    <?php if (!empty($group['diastolic'])) { ?><span class="me-3"><strong>Diastolic:</strong> <?= esc($group['diastolic']) ?></span><?php } ?>
+                                    <?php if (!empty($group['pulse'])) { ?><span class="me-3"><strong>Pulse:</strong> <?= esc($group['pulse']) ?></span><?php } ?>
+                                    <?php if (!empty($group['temp'])) { ?><span class="me-3"><strong>Temp:</strong> <?= esc($group['temp']) ?></span><?php } ?>
+                                    <?php if (!empty($group['spo2'])) { ?><span class="me-3"><strong>SPO2:</strong> <?= esc($group['spo2']) ?></span><?php } ?>
+                                </div>
+                            <?php } ?>
+
+                            <?php if (!empty($group['complaints']) || !empty($group['diagnosis']) || !empty($group['investigation']) || !empty($group['advice'])) { ?>
+                                <div class="row g-2 mt-2">
+                                    <?php if (!empty($group['complaints'])) { ?>
+                                        <div class="col-12 col-lg-6">
+                                            <div class="border rounded p-2 bg-light small">
+                                                <strong>Complaints:</strong> <?= esc($group['complaints']) ?>
+                                            </div>
+                                        </div>
+                                    <?php } ?>
+                                    <?php if (!empty($group['diagnosis'])) { ?>
+                                        <div class="col-12 col-lg-6">
+                                            <div class="border rounded p-2 bg-light small">
+                                                <strong>Diagnosis:</strong> <?= esc($group['diagnosis']) ?>
+                                            </div>
+                                        </div>
+                                    <?php } ?>
+                                    <?php if (!empty($group['investigation'])) { ?>
+                                        <div class="col-12 col-lg-6">
+                                            <div class="border rounded p-2 bg-light small">
+                                                <strong>Investigation:</strong> <?= esc($group['investigation']) ?>
+                                            </div>
+                                        </div>
+                                    <?php } ?>
+                                    <?php if (!empty($group['advice'])) { ?>
+                                        <div class="col-12 col-lg-6">
+                                            <div class="border rounded p-2 bg-light small">
+                                                <strong>Advice:</strong> <?= esc($group['advice']) ?>
+                                            </div>
+                                        </div>
+                                    <?php } ?>
+                                </div>
+                            <?php } ?>
+                        </div>
+
                         <?php if (empty($group['files'])) { ?>
-                            <div class="text-muted mt-2">No files for this OPD.</div>
+                            <div class="text-muted mt-2">No scanned files for this OPD.</div>
                         <?php } else { ?>
+                            <div class="small fw-semibold mt-3 mb-1">Scanned Files</div>
                             <div class="row g-2 mt-2">
                                 <?php foreach ($group['files'] as $index => $file) { ?>
                                     <div class="col-6 col-md-3">

@@ -14,6 +14,7 @@
 	    <th>Age</th>
       <th>Last Visit</th>
       <th>Insurance</th>
+      <th>Patient History</th>
     </tr>
     </thead>
     <tbody>
@@ -25,6 +26,11 @@
       <td><?= esc(get_age_1($data[$i]->dob ?? null, $data[$i]->age ?? '', $data[$i]->age_in_month ?? '', $data[$i]->estimate_dob ?? '', $data[$i]->Last_Visit ?? null)) ?></td>
       <td><?=$data[$i]->Last_Visit ?></td>
       <td><?php echo ($data[$i]->insurance_id==0 ? 'Self': 'Insuranced'); ?></td>
+      <td>
+        <a href="javascript:load_form('<?= base_url('billing/patient/show_profile_opd') ?>/<?=$data[$i]->id ?>/1');" class="btn btn-info btn-xs">
+          <span class="fa fa-history"></span> Patient History
+        </a>
+      </td>
     </tr>
     <?php } ?>
     </tbody>
@@ -36,6 +42,7 @@
 	    <th>Age</th>
       <th>Last Visit</th>
       <th>Insurance</th>
+      <th>Patient History</th>
     </tr>
     </tfoot>
   </table>

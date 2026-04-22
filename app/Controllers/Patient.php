@@ -740,6 +740,7 @@ class Patient extends BaseController
 
 		$opdIds = array_column($opdList, 'opd_id');
 		$filesByOpd = [];
+		$rxByOpd = [];
 
 		if ($opdIds && $this->db->tableExists('file_upload_data')) {
 			$fields = $this->db->getFieldNames('file_upload_data') ?? [];
@@ -779,15 +780,64 @@ class Patient extends BaseController
 			}
 		}
 
+		if ($opdIds && $this->db->tableExists('opd_prescription')) {
+			$rxFields = $this->db->getFieldNames('opd_prescription') ?? [];
+			$selectParts = [];
+
+			if (in_array('id', $rxFields, true)) {
+				$selectParts[] = 'id';
+			}
+			if (in_array('opd_id', $rxFields, true)) {
+				$selectParts[] = 'opd_id';
+			}
+			foreach (['date_opd_visit', 'queue_no', 'bp', 'diastolic', 'pulse', 'temp', 'spo2', 'complaints', 'diagnosis', 'investigation', 'advice'] as $col) {
+				if (in_array($col, $rxFields, true)) {
+					$selectParts[] = $col;
+				}
+			}
+
+			if ($selectParts !== [] && in_array('opd_id', $rxFields, true)) {
+				$rxRows = $this->db->table('opd_prescription')
+					->select(implode(',', $selectParts), false)
+					->whereIn('opd_id', $opdIds)
+					->orderBy('id', 'DESC')
+					->get()
+					->getResultArray();
+
+				foreach ($rxRows as $rxRow) {
+					$opdId = (int) ($rxRow['opd_id'] ?? 0);
+					if ($opdId <= 0 || isset($rxByOpd[$opdId])) {
+						continue;
+					}
+					$rxByOpd[$opdId] = $rxRow;
+				}
+			}
+		}
+
 		$opdGroups = [];
 		foreach ($opdList as $row) {
 			$opdId = (int) $row['opd_id'];
+			$rx = $rxByOpd[$opdId] ?? null;
+			$rxSessionId = (int) (($rx['id'] ?? 0));
+
 			$opdGroups[] = [
 				'opd_id' => $opdId,
 				'opd_code' => $row['opd_code'] ?? '',
 				'doc_name' => $row['doc_name'] ?? '',
 				'opd_date' => !empty($row['apointment_date']) ? date('d-m-Y', strtotime($row['apointment_date'])) : '',
 				'queue_no' => !empty($row['queue_no']) ? ('Q:' . $row['queue_no']) : '',
+				'rx_session_id' => $rxSessionId,
+				'rx_date' => !empty($rx['date_opd_visit']) ? date('d-m-Y', strtotime((string) $rx['date_opd_visit'])) : '',
+				'rx_queue_no' => !empty($rx['queue_no']) ? ('Q:' . $rx['queue_no']) : '',
+				'bp' => (string) ($rx['bp'] ?? ''),
+				'diastolic' => (string) ($rx['diastolic'] ?? ''),
+				'pulse' => (string) ($rx['pulse'] ?? ''),
+				'temp' => (string) ($rx['temp'] ?? ''),
+				'spo2' => (string) ($rx['spo2'] ?? ''),
+				'complaints' => (string) ($rx['complaints'] ?? ''),
+				'diagnosis' => (string) ($rx['diagnosis'] ?? ''),
+				'investigation' => (string) ($rx['investigation'] ?? ''),
+				'advice' => (string) ($rx['advice'] ?? ''),
 				'files' => $filesByOpd[$opdId] ?? [],
 			];
 		}
