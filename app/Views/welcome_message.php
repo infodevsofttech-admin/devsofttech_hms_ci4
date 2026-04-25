@@ -14,8 +14,7 @@
     <link href="<?= base_url('assets/img/favicon.png') ?>" rel="alternate icon" type="image/png">
     <link href="<?= base_url('assets/img/apple-touch-icon.png') ?>" rel="apple-touch-icon">
 
-    <link href="https://fonts.gstatic.com" rel="preconnect">
-    <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Nunito:300,300i,400,400i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
+    <!-- Google Fonts removed: offline app uses system fonts -->
 
     <link href="<?= base_url('assets/vendor/bootstrap/css/bootstrap.min.css') ?>" rel="stylesheet">
     <link href="<?= base_url('assets/vendor/bootstrap-icons/bootstrap-icons.css') ?>" rel="stylesheet">
@@ -24,11 +23,11 @@
     <link href="<?= base_url('assets/vendor/quill/quill.bubble.css') ?>" rel="stylesheet">
     <link href="<?= base_url('assets/vendor/remixicon/remixicon.css') ?>" rel="stylesheet">
     <link href="<?= base_url('assets/vendor/simple-datatables/style.css') ?>" rel="stylesheet">
-    <link href="https://cdn.datatables.net/1.13.8/css/jquery.dataTables.min.css" rel="stylesheet">
-    <link href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+    <link href="<?= base_url('assets/vendor/datatables/jquery.dataTables.min.css') ?>" rel="stylesheet">
+    <link href="<?= base_url('assets/vendor/datatables/dataTables.bootstrap5.min.css') ?>" rel="stylesheet">
     <link href="<?= base_url('assets/vendor/jquery-ui/jquery-ui.min.css') ?>" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/select2@4.0.3/dist/css/select2.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/@ttskch/select2-bootstrap4-theme@1.5.2/dist/select2-bootstrap4.min.css" rel="stylesheet">
+    <link href="<?= base_url('assets/vendor/select2/select2.min.css') ?>" rel="stylesheet">
+    <link href="<?= base_url('assets/vendor/select2/select2-bootstrap4.min.css') ?>" rel="stylesheet">
 
     <link href="<?= base_url('assets/css/style.css') ?>" rel="stylesheet">
 </head>
@@ -77,8 +76,8 @@
 
     <script src="<?= base_url('assets/vendor/jquery/jquery-4.0.0.min.js') ?>"></script>
     <script src="<?= base_url('assets/vendor/jquery-ui/jquery-ui.min.js') ?>"></script>
-    <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
-    <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
+    <script src="<?= base_url('assets/vendor/datatables/jquery.dataTables.min.js') ?>"></script>
+    <script src="<?= base_url('assets/vendor/datatables/dataTables.bootstrap5.min.js') ?>"></script>
     <script>
         if (window.jQuery && typeof jQuery.isArray !== 'function') {
             jQuery.isArray = Array.isArray;
@@ -89,7 +88,7 @@
             };
         }
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/select2@4.0.3/dist/js/select2.min.js"></script>
+    <script src="<?= base_url('assets/vendor/select2/select2.min.js') ?>"></script>
     <script src="<?= base_url('assets/vendor/apexcharts/apexcharts.min.js') ?>"></script>
     <script src="<?= base_url('assets/vendor/bootstrap/js/bootstrap.bundle.min.js') ?>"></script>
     <script>
@@ -101,7 +100,7 @@
     <script src="<?= base_url('assets/vendor/chart.js/chart.umd.js') ?>"></script>
     <script src="<?= base_url('assets/vendor/echarts/echarts.min.js') ?>"></script>
     <script src="<?= base_url('assets/vendor/quill/quill.js') ?>"></script>
-    <script src="https://cdn.ckeditor.com/4.22.1/standard/ckeditor.js"></script>
+    <script src="<?= base_url('assets/vendor/ckeditor/ckeditor.js') ?>"></script>
     <script>
         if (window.CKEDITOR) {
             CKEDITOR.config.versionCheck = false;
