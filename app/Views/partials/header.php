@@ -51,6 +51,7 @@
 
                 $displayName = $loginId;
                 $displayUserId = (int) ($authUser->id ?? 0);
+                $displayPhoto = '';
 
                 if ($displayUserId > 0) {
                     $tables = config('Auth')->tables;
@@ -73,9 +74,22 @@
                                     if ($fullName !== '') {
                                         $displayName = $fullName;
                                     }
+
+                                    $profilePhoto = trim((string) ($decoded['profile_photo'] ?? ''));
+                                    if ($profilePhoto !== '') {
+                                        $displayPhoto = basename($profilePhoto);
+                                    }
                                 }
                             }
                         }
+                    }
+                }
+
+                $profileImageUrl = base_url('assets/img/profile-img.jpg');
+                if ($displayPhoto !== '') {
+                    $profileImageAbsolute = FCPATH . 'assets/images/user_profile/' . $displayPhoto;
+                    if (is_file($profileImageAbsolute)) {
+                        $profileImageUrl = base_url('assets/images/user_profile/' . $displayPhoto);
                     }
                 }
 
@@ -132,7 +146,7 @@
                 </li>
                 <li class="nav-item dropdown pe-3">
                     <a class="nav-link nav-profile d-flex align-items-center pe-0" href="#" data-bs-toggle="dropdown">
-                        <img src="<?= base_url('assets/img/profile-img.jpg') ?>" alt="Profile" class="rounded-circle">
+                        <img src="<?= esc($profileImageUrl) ?>" alt="Profile" class="rounded-circle" id="header-user-avatar">
                         <span class="d-none d-md-block dropdown-toggle ps-2" id="header-user-with-id">
                             <?= esc($displayName) ?>
                         </span>

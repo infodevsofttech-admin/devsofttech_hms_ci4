@@ -6,6 +6,8 @@ use CodeIgniter\Shield\Models\UserModel;
 
 class Home extends BaseController
 {
+    private const USER_PROFILE_PHOTO_DIR = 'assets/images/user_profile';
+
     private function ensureAuthenticated()
     {
         if (function_exists('auth') && auth()->loggedIn()) {
@@ -233,6 +235,7 @@ class Home extends BaseController
             'user' => $user,
             'phone_no' => $meta['phone_no'] ?? '',
             'person_name' => $meta['full_name'] ?? '',
+            'profile_photo_url' => $this->buildUserProfilePhotoUrl((string) ($meta['profile_photo'] ?? '')),
         ]);
     }
 
@@ -387,6 +390,57 @@ class Home extends BaseController
         $phoneNo = trim((string) $this->request->getPost('phone_no'));
         $password = (string) $this->request->getPost('password');
         $passwordConfirm = (string) $this->request->getPost('password_confirm');
+        $metaBeforeUpdate = $this->getCurrentUserProfileMeta($userId);
+
+        $profilePhotoFile = $this->request->getFile('profile_photo');
+        if ($profilePhotoFile !== null && $profilePhotoFile->getError() !== UPLOAD_ERR_NO_FILE && ! $profilePhotoFile->isValid()) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Invalid profile photo upload.',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $photoProvided = $profilePhotoFile !== null
+            && $profilePhotoFile->isValid()
+            && $profilePhotoFile->getError() !== UPLOAD_ERR_NO_FILE;
+        $profilePhotoFileName = '';
+
+        if ($photoProvided) {
+            $photoSize = (int) $profilePhotoFile->getSize();
+            $photoMime = strtolower((string) $profilePhotoFile->getMimeType());
+            $allowedMime = [
+                'image/jpeg',
+                'image/jpg',
+                'image/png',
+                'image/webp',
+            ];
+
+            if ($photoSize <= 0 || $photoSize > (2 * 1024 * 1024)) {
+                return $this->response->setJSON([
+                    'update' => 0,
+                    'error_text' => 'Profile photo must be less than 2MB.',
+                    'csrfName' => csrf_token(),
+                    'csrfHash' => csrf_hash(),
+                ]);
+            }
+
+            if (! in_array($photoMime, $allowedMime, true)) {
+                return $this->response->setJSON([
+                    'update' => 0,
+                    'error_text' => 'Profile photo must be JPG, PNG, or WEBP.',
+                    'csrfName' => csrf_token(),
+                    'csrfHash' => csrf_hash(),
+                ]);
+            }
+
+            $extension = strtolower((string) $profilePhotoFile->getExtension());
+            if ($extension === '') {
+                $extension = $photoMime === 'image/png' ? 'png' : ($photoMime === 'image/webp' ? 'webp' : 'jpg');
+            }
+            $profilePhotoFileName = 'user_' . $userId . '_' . date('YmdHis') . '_' . bin2hex(random_bytes(4)) . '.' . $extension;
+        }
 
         if ($personName !== '' && mb_strlen($personName) > 120) {
             return $this->response->setJSON([
@@ -482,7 +536,45 @@ class Home extends BaseController
             ]);
         }
 
-        $this->setCurrentUserProfileMeta($userId, $phoneNo, $personName);
+        if ($photoProvided) {
+            $uploadDir = FCPATH . self::USER_PROFILE_PHOTO_DIR;
+            if (! is_dir($uploadDir) && ! @mkdir($uploadDir, 0755, true) && ! is_dir($uploadDir)) {
+                return $this->response->setJSON([
+                    'update' => 0,
+                    'error_text' => 'Unable to create profile photo directory.',
+                    'csrfName' => csrf_token(),
+                    'csrfHash' => csrf_hash(),
+                ]);
+            }
+
+            try {
+                $profilePhotoFile->move($uploadDir, $profilePhotoFileName, true);
+            } catch (\Throwable $e) {
+                return $this->response->setJSON([
+                    'update' => 0,
+                    'error_text' => 'Unable to upload profile photo.',
+                    'csrfName' => csrf_token(),
+                    'csrfHash' => csrf_hash(),
+                ]);
+            }
+
+            $oldPhoto = trim((string) ($metaBeforeUpdate['profile_photo'] ?? ''));
+            if ($oldPhoto !== '' && $oldPhoto !== $profilePhotoFileName) {
+                $oldPhotoPath = $uploadDir . DIRECTORY_SEPARATOR . basename($oldPhoto);
+                if (is_file($oldPhotoPath)) {
+                    @unlink($oldPhotoPath);
+                }
+            }
+        }
+
+        $this->setCurrentUserProfileMeta(
+            $userId,
+            $phoneNo,
+            $personName,
+            $photoProvided ? $profilePhotoFileName : null
+        );
+
+        $metaAfterUpdate = $this->getCurrentUserProfileMeta($userId);
 
         $displayName = trim((string) ($user->username ?? ''));
         if ($personName !== '') {
@@ -500,24 +592,25 @@ class Home extends BaseController
             'user_id' => $userId,
             'email' => $email,
             'phone_no' => $phoneNo,
+            'profile_photo_url' => $this->buildUserProfilePhotoUrl((string) ($metaAfterUpdate['profile_photo'] ?? '')),
             'csrfName' => csrf_token(),
             'csrfHash' => csrf_hash(),
         ]);
     }
 
     /**
-     * @return array{phone_no:string, full_name:string}
+     * @return array{phone_no:string, full_name:string, profile_photo:string}
      */
     private function getCurrentUserProfileMeta(int $userId): array
     {
         if ($userId <= 0) {
-            return ['phone_no' => '', 'full_name' => ''];
+            return ['phone_no' => '', 'full_name' => '', 'profile_photo' => ''];
         }
 
         $tables = config('Auth')->tables;
         $identitiesTable = (string) ($tables['identities'] ?? 'auth_identities');
         if (! $this->db->tableExists($identitiesTable)) {
-            return ['phone_no' => '', 'full_name' => ''];
+            return ['phone_no' => '', 'full_name' => '', 'profile_photo' => ''];
         }
 
         $row = $this->db->table($identitiesTable)
@@ -529,21 +622,22 @@ class Home extends BaseController
 
         $extraRaw = trim((string) ($row['extra'] ?? ''));
         if ($extraRaw === '') {
-            return ['phone_no' => '', 'full_name' => ''];
+            return ['phone_no' => '', 'full_name' => '', 'profile_photo' => ''];
         }
 
         $decoded = json_decode($extraRaw, true);
         if (! is_array($decoded)) {
-            return ['phone_no' => '', 'full_name' => ''];
+            return ['phone_no' => '', 'full_name' => '', 'profile_photo' => ''];
         }
 
         return [
             'phone_no' => trim((string) ($decoded['phone_no'] ?? '')),
             'full_name' => trim((string) ($decoded['full_name'] ?? '')),
+            'profile_photo' => trim((string) ($decoded['profile_photo'] ?? '')),
         ];
     }
 
-    private function setCurrentUserProfileMeta(int $userId, string $phoneNo, string $fullName): void
+    private function setCurrentUserProfileMeta(int $userId, string $phoneNo, string $fullName, ?string $profilePhoto = null): void
     {
         if ($userId <= 0) {
             return;
@@ -587,10 +681,34 @@ class Home extends BaseController
             $payload['full_name'] = $fullName;
         }
 
+        if ($profilePhoto !== null) {
+            $profilePhoto = trim($profilePhoto);
+            if ($profilePhoto === '') {
+                unset($payload['profile_photo']);
+            } else {
+                $payload['profile_photo'] = basename($profilePhoto);
+            }
+        }
+
         $this->db->table($identitiesTable)
             ->where('id', (int) $row['id'])
             ->update([
                 'extra' => empty($payload) ? null : json_encode($payload, JSON_UNESCAPED_UNICODE),
             ]);
+    }
+
+    private function buildUserProfilePhotoUrl(string $photoFileName): string
+    {
+        $photoFileName = trim($photoFileName);
+        if ($photoFileName === '') {
+            return base_url('assets/img/profile-img.jpg');
+        }
+
+        $absolutePath = FCPATH . self::USER_PROFILE_PHOTO_DIR . DIRECTORY_SEPARATOR . basename($photoFileName);
+        if (! is_file($absolutePath)) {
+            return base_url('assets/img/profile-img.jpg');
+        }
+
+        return base_url(self::USER_PROFILE_PHOTO_DIR . '/' . basename($photoFileName));
     }
 }

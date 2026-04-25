@@ -34,6 +34,21 @@
                         <input type="text" class="form-control form-control-sm" id="profile_phone_no" maxlength="20" value="<?= esc((string) ($phone_no ?? '')) ?>" placeholder="Enter phone number">
                     </div>
 
+                    <div class="border rounded p-2 mb-3">
+                        <div class="small fw-semibold mb-2">Profile Photo</div>
+                        <div class="d-flex align-items-center gap-3 flex-wrap">
+                            <img id="profile_photo_preview"
+                                 src="<?= esc((string) ($profile_photo_url ?? base_url('assets/img/profile-img.jpg'))) ?>"
+                                 alt="Profile Photo"
+                                 class="rounded-circle border"
+                                 style="width:72px;height:72px;object-fit:cover;">
+                            <div>
+                                <input type="file" class="form-control form-control-sm" id="profile_photo" accept="image/jpeg,image/png,image/webp">
+                                <div class="small text-muted mt-1">Allowed: JPG, PNG, WEBP. Max size: 2MB.</div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="border rounded p-2 mb-3 bg-light">
                         <div class="small fw-semibold mb-2">Change Password (Optional)</div>
                         <div class="mb-2">
@@ -95,22 +110,57 @@
         setMsg('normal', 'Password fields cleared.');
     });
 
+    $('#profile_photo').on('change', function() {
+        var file = this.files && this.files[0] ? this.files[0] : null;
+        if (!file) {
+            return;
+        }
+
+        var allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+        if (allowed.indexOf((file.type || '').toLowerCase()) < 0) {
+            $(this).val('');
+            setMsg('err', 'Profile photo must be JPG, PNG, or WEBP.');
+            return;
+        }
+
+        if ((file.size || 0) > 2 * 1024 * 1024) {
+            $(this).val('');
+            setMsg('err', 'Profile photo must be less than 2MB.');
+            return;
+        }
+
+        var blobUrl = URL.createObjectURL(file);
+        $('#profile_photo_preview').attr('src', blobUrl);
+        setMsg('normal', 'Photo selected. Click Save Profile to upload.');
+    });
+
     $('#btn_profile_save').on('click', function() {
-        var payload = {
-            person_name: ($('#profile_person_name').val() || '').trim(),
-            email: ($('#profile_email').val() || '').trim(),
-            phone_no: ($('#profile_phone_no').val() || '').trim(),
-            password: ($('#profile_password').val() || '').toString(),
-            password_confirm: ($('#profile_password_confirm').val() || '').toString()
-        };
+        var payload = new window.FormData();
+        payload.append('person_name', ($('#profile_person_name').val() || '').trim());
+        payload.append('email', ($('#profile_email').val() || '').trim());
+        payload.append('phone_no', ($('#profile_phone_no').val() || '').trim());
+        payload.append('password', ($('#profile_password').val() || '').toString());
+        payload.append('password_confirm', ($('#profile_password_confirm').val() || '').toString());
+
+        var photoInput = document.getElementById('profile_photo');
+        if (photoInput && photoInput.files && photoInput.files[0]) {
+            payload.append('profile_photo', photoInput.files[0]);
+        }
 
         var csrf = getCsrfPair();
-        payload[csrf.name] = csrf.value;
+        payload.append(csrf.name, csrf.value);
 
         var $btn = $(this);
         $btn.prop('disabled', true).text('Saving...');
 
-        $.post('<?= base_url('my-profile/save') ?>', payload, function(data) {
+        $.ajax({
+            url: '<?= base_url('my-profile/save') ?>',
+            method: 'POST',
+            data: payload,
+            processData: false,
+            contentType: false,
+            dataType: 'json'
+        }).done(function(data) {
             updateCsrf(data);
             $btn.prop('disabled', false).text('Save Profile');
 
@@ -135,7 +185,13 @@
             if (loginId) {
                 $('#header-user-login-id').text('Login ID: ' + loginId);
             }
-        }, 'json').fail(function() {
+
+            if (data.profile_photo_url) {
+                $('#profile_photo_preview').attr('src', data.profile_photo_url);
+                $('#header-user-avatar').attr('src', data.profile_photo_url);
+                $('#profile_photo').val('');
+            }
+        }).fail(function() {
             $btn.prop('disabled', false).text('Save Profile');
             setMsg('err', 'Unable to update profile');
         });
