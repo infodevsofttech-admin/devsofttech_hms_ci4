@@ -12,7 +12,9 @@ class AddBankSettlementStatementMatchFields extends Migration
             return;
         }
 
-        if (! $this->hasField('finance_bank_settlement_entries', 'reconciliation_status')) {
+        $existingFields = $this->db->getFieldNames('finance_bank_settlement_entries');
+
+        if (! in_array('reconciliation_status', $existingFields)) {
             $this->forge->addColumn('finance_bank_settlement_entries', [
                 'reconciliation_status' => [
                     'type'       => 'VARCHAR',
@@ -24,7 +26,7 @@ class AddBankSettlementStatementMatchFields extends Migration
             ]);
         }
 
-        if (! $this->hasField('finance_bank_settlement_entries', 'statement_matched_by')) {
+        if (! in_array('statement_matched_by', $existingFields)) {
             $this->forge->addColumn('finance_bank_settlement_entries', [
                 'statement_matched_by' => [
                     'type'       => 'VARCHAR',
@@ -35,7 +37,7 @@ class AddBankSettlementStatementMatchFields extends Migration
             ]);
         }
 
-        if (! $this->hasField('finance_bank_settlement_entries', 'statement_matched_at')) {
+        if (! in_array('statement_matched_at', $existingFields)) {
             $this->forge->addColumn('finance_bank_settlement_entries', [
                 'statement_matched_at' => [
                     'type' => 'DATETIME',
@@ -45,7 +47,7 @@ class AddBankSettlementStatementMatchFields extends Migration
             ]);
         }
 
-        if (! $this->hasField('finance_bank_settlement_entries', 'statement_match_remarks')) {
+        if (! in_array('statement_match_remarks', $existingFields)) {
             $this->forge->addColumn('finance_bank_settlement_entries', [
                 'statement_match_remarks' => [
                     'type' => 'TEXT',
@@ -64,16 +66,18 @@ class AddBankSettlementStatementMatchFields extends Migration
             return;
         }
 
-        if ($this->hasField('finance_bank_settlement_entries', 'statement_match_remarks')) {
+        $existingFields = $this->db->getFieldNames('finance_bank_settlement_entries');
+
+        if (in_array('statement_match_remarks', $existingFields)) {
             $this->forge->dropColumn('finance_bank_settlement_entries', 'statement_match_remarks');
         }
-        if ($this->hasField('finance_bank_settlement_entries', 'statement_matched_at')) {
+        if (in_array('statement_matched_at', $existingFields)) {
             $this->forge->dropColumn('finance_bank_settlement_entries', 'statement_matched_at');
         }
-        if ($this->hasField('finance_bank_settlement_entries', 'statement_matched_by')) {
+        if (in_array('statement_matched_by', $existingFields)) {
             $this->forge->dropColumn('finance_bank_settlement_entries', 'statement_matched_by');
         }
-        if ($this->hasField('finance_bank_settlement_entries', 'reconciliation_status')) {
+        if (in_array('reconciliation_status', $existingFields)) {
             $this->forge->dropColumn('finance_bank_settlement_entries', 'reconciliation_status');
         }
     }
