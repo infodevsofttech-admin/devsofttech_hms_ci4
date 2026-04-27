@@ -35,6 +35,9 @@ class HospitalProfile extends BaseController
             'pharmacy_gst' => $this->readSettingValue('H_Med_GST'),
             'pharmacy_logo' => $pharmacyLogo,
             'pharmacy_logo_url' => $pharmacyLogo !== '' ? base_url('assets/images/' . rawurlencode($pharmacyLogo)) : '',
+            'sidebar_auto_hide_seconds' => $this->readSettingValue('SIDEBAR_AUTO_HIDE_SECONDS') !== ''
+                ? $this->readSettingValue('SIDEBAR_AUTO_HIDE_SECONDS')
+                : '7',
         ]);
     }
 
@@ -64,6 +67,8 @@ class HospitalProfile extends BaseController
         $pharmacyAddress = trim((string) $this->request->getPost('pharmacy_address'));
         $pharmacyPhone = trim((string) $this->request->getPost('pharmacy_phone'));
         $pharmacyGst = trim((string) $this->request->getPost('pharmacy_gst'));
+        $sidebarAutoHideSecondsRaw = trim((string) $this->request->getPost('sidebar_auto_hide_seconds'));
+        $sidebarAutoHideSeconds = $sidebarAutoHideSecondsRaw === '' ? 7 : (int) $sidebarAutoHideSecondsRaw;
 
         if ($name === '' || $address === '') {
             return $this->response->setJSON([
@@ -78,6 +83,15 @@ class HospitalProfile extends BaseController
             return $this->response->setJSON([
                 'update' => 0,
                 'error_text' => 'HFR ID format is invalid. Use alphanumeric characters with / or -',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        if ($sidebarAutoHideSeconds < 0 || $sidebarAutoHideSeconds > 60) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Sidebar auto hide seconds must be between 0 and 60.',
                 'csrfName' => csrf_token(),
                 'csrfHash' => csrf_hash(),
             ]);
@@ -115,6 +129,9 @@ class HospitalProfile extends BaseController
             $savedCount++;
         }
         if ($this->upsertSettingValue('H_Med_GST', $pharmacyGst)) {
+            $savedCount++;
+        }
+        if ($this->upsertSettingValue('SIDEBAR_AUTO_HIDE_SECONDS', (string) $sidebarAutoHideSeconds)) {
             $savedCount++;
         }
 
@@ -226,6 +243,7 @@ class HospitalProfile extends BaseController
             'H_Med_phone_No',
             'H_Med_GST',
             'H_Med_logo',
+            'SIDEBAR_AUTO_HIDE_SECONDS',
         ])->delete();
 
         if ($logo !== '') {

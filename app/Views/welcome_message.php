@@ -122,6 +122,19 @@
     <script src="<?= base_url('assets/vendor/tinymce/tinymce.min.js') ?>"></script>
     <script src="<?= base_url('assets/vendor/php-email-form/validate.js') ?>"></script>
 
+    <?php
+        $sidebarAutoHideSeconds = (int) hospital_setting_value('SIDEBAR_AUTO_HIDE_SECONDS', '7');
+        if ($sidebarAutoHideSeconds < 0) {
+            $sidebarAutoHideSeconds = 0;
+        }
+        if ($sidebarAutoHideSeconds > 60) {
+            $sidebarAutoHideSeconds = 60;
+        }
+    ?>
+    <script>
+        window.SIDEBAR_AUTO_HIDE_DELAY_MS = <?= (int) ($sidebarAutoHideSeconds * 1000) ?>;
+    </script>
+
     <script src="<?= base_url('assets/js/main.js') ?>"></script>
 
     <script>

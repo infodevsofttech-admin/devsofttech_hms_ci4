@@ -49,6 +49,71 @@
   }
 
   /**
+   * Auto-hide sidebar after a short idle period on desktop
+   * to provide larger work area for clinical forms.
+   */
+  const configuredDelay = parseInt(window.SIDEBAR_AUTO_HIDE_DELAY_MS || 7000, 10)
+  const SIDEBAR_AUTO_HIDE_DELAY_MS = isNaN(configuredDelay) ? 7000 : Math.max(0, configuredDelay)
+  let sidebarAutoHideTimer = null
+  let lastActivityTs = 0
+
+  const clearSidebarAutoHideTimer = () => {
+    if (sidebarAutoHideTimer) {
+      clearTimeout(sidebarAutoHideTimer)
+      sidebarAutoHideTimer = null
+    }
+  }
+
+  const canAutoHideSidebar = () => {
+    return SIDEBAR_AUTO_HIDE_DELAY_MS > 0
+      && window.innerWidth >= 1200
+      && !select('body').classList.contains('toggle-sidebar')
+  }
+
+  const scheduleSidebarAutoHide = () => {
+    clearSidebarAutoHideTimer()
+    if (!canAutoHideSidebar()) {
+      return
+    }
+
+    sidebarAutoHideTimer = setTimeout(() => {
+      if (canAutoHideSidebar()) {
+        select('body').classList.add('toggle-sidebar')
+      }
+    }, SIDEBAR_AUTO_HIDE_DELAY_MS)
+  }
+
+  const trackActivityForSidebar = () => {
+    const now = Date.now()
+    if (now - lastActivityTs < 400) {
+      return
+    }
+    lastActivityTs = now
+    scheduleSidebarAutoHide()
+  }
+
+  if (select('.toggle-sidebar-btn')) {
+    // Re-arm timer after manual toggle when sidebar is visible again.
+    on('click', '.toggle-sidebar-btn', function() {
+      if (select('body').classList.contains('toggle-sidebar')) {
+        clearSidebarAutoHideTimer()
+      } else {
+        scheduleSidebarAutoHide()
+      }
+    })
+
+    ;['click', 'keydown'].forEach((evtName) => {
+      document.addEventListener(evtName, trackActivityForSidebar)
+    })
+    ;['wheel', 'touchstart'].forEach((evtName) => {
+      document.addEventListener(evtName, trackActivityForSidebar, { passive: true })
+    })
+
+    window.addEventListener('resize', scheduleSidebarAutoHide)
+    window.addEventListener('load', scheduleSidebarAutoHide)
+  }
+
+  /**
    * Search bar toggle
    */
   if (select('.search-bar-toggle')) {

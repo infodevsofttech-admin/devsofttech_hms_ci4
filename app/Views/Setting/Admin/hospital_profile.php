@@ -36,6 +36,11 @@
                 <input type="text" class="form-control" id="footer_version" value="<?= esc($footer_version ?? '') ?>" placeholder="e.g. 2026.03.27.01">
                 <div class="form-text">Shown in the footer so live deployments can be verified without code changes.</div>
             </div>
+            <div class="col-md-6">
+                <label class="form-label">Sidebar Auto Hide (seconds)</label>
+                <input type="number" class="form-control" id="sidebar_auto_hide_seconds" min="0" max="60" step="1" value="<?= esc($sidebar_auto_hide_seconds ?? '7') ?>" placeholder="7">
+                <div class="form-text">Desktop only. Set 0 to disable auto-hide.</div>
+            </div>
 
             <div class="col-md-7">
                 <label class="form-label">Hospital Logo</label>
@@ -153,6 +158,7 @@
         fd.append('hospital_email', ($('#hospital_email').val() || '').trim());
         fd.append('hospital_hfr_id', ($('#hospital_hfr_id').val() || '').trim());
         fd.append('footer_version', ($('#footer_version').val() || '').trim());
+        fd.append('sidebar_auto_hide_seconds', ($('#sidebar_auto_hide_seconds').val() || '').trim());
         fd.append('pharmacy_name', ($('#pharmacy_name').val() || '').trim());
         fd.append('pharmacy_address', ($('#pharmacy_address').val() || '').trim());
         fd.append('pharmacy_phone', ($('#pharmacy_phone').val() || '').trim());
@@ -268,6 +274,7 @@
             $('#hospital_email').val('');
             $('#hospital_hfr_id').val('');
             $('#footer_version').val('');
+            $('#sidebar_auto_hide_seconds').val('7');
             $('#pharmacy_name').val('');
             $('#pharmacy_address').val('');
             $('#pharmacy_phone').val('');
