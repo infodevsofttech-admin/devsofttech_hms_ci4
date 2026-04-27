@@ -77,7 +77,19 @@
     <script src="<?= base_url('assets/vendor/jquery/jquery-4.0.0.min.js') ?>"></script>
     <script src="<?= base_url('assets/vendor/jquery-ui/jquery-ui.min.js') ?>"></script>
     <script src="<?= base_url('assets/vendor/datatables/jquery.dataTables.min.js') ?>"></script>
-    <script src="<?= base_url('assets/vendor/datatables/dataTables.bootstrap5.min.js') ?>"></script>
+    <script>
+        // The local DataTables file is a lightweight shim in this project.
+        // Load Bootstrap 5 adapter only when full DataTables core API exists.
+        (function() {
+            if (!(window.jQuery && jQuery.fn && jQuery.fn.dataTable && jQuery.fn.dataTable.defaults)) {
+                return;
+            }
+
+            var script = document.createElement('script');
+            script.src = "<?= base_url('assets/vendor/datatables/dataTables.bootstrap5.min.js') ?>";
+            document.head.appendChild(script);
+        })();
+    </script>
     <script>
         if (window.jQuery && typeof jQuery.isArray !== 'function') {
             jQuery.isArray = Array.isArray;

@@ -3,6 +3,7 @@
 namespace App\Controllers;
 
 use App\Controllers\BaseController;
+use App\Libraries\HealthplixService;
 use App\Models\OpdModel;
 use App\Models\PaymentModel;
 use CodeIgniter\I18n\Time;
@@ -1692,7 +1693,171 @@ class Opd extends BaseController
         $query = $this->db->query($sql);
         $data['bank_data'] = $query->getResult();
 
+        // ── HealthPlix sync status for invoice button ─────────────────────────
+        $data['healthplix_sync_applicable'] = false;
+        $data['healthplix_sync_done']       = false;
+        $data['healthplix_log']             = null;
+
+        $healthplixEnabled = $this->readHealthplixSetting('HEALTHPLIX_ENABLED') === '1';
+        if ($healthplixEnabled && (int) ($opdRow->payment_status ?? 0) === 1) {
+            $docId = (int) ($opdRow->doc_id ?? 0);
+            $doctorIdentifier = '';
+            if ($docId > 0 && $this->db->tableExists('doctor_master')) {
+                $identifierField = $this->resolveDoctorHealthplixIdentifierField();
+                if ($identifierField !== null) {
+                    $docRow2 = $this->db->table('doctor_master')
+                        ->select($identifierField)
+                        ->where('id', $docId)
+                        ->get(1)
+                        ->getRowArray();
+                    $doctorIdentifier = trim((string) ($docRow2[$identifierField] ?? ''));
+                }
+            }
+            if ($doctorIdentifier !== '') {
+                $data['healthplix_sync_applicable'] = true;
+                if ($this->db->tableExists('abdm_api_logs')) {
+                    $hpLog = $this->db->table('abdm_api_logs')
+                        ->where('channel', 'healthplix')
+                        ->where('event_type', 'healthplix.appointment.book')
+                        ->where('entity_type', 'opd')
+                        ->where('entity_id', (string) $opdId)
+                        ->where('status', 'success')
+                        ->orderBy('id', 'DESC')
+                        ->get(1)
+                        ->getRowArray();
+                    if (! empty($hpLog)) {
+                        $data['healthplix_sync_done'] = true;
+                        $data['healthplix_log']       = $hpLog;
+                    }
+                }
+            }
+        }
+        // OPD-level sync ID stored in table after successful appointment push.
+        $data['healthplix_opd_sync_id'] = trim((string) ($opdRow->healthplix_sync_id ?? ''));
+        // ─────────────────────────────────────────────────────────────────────
+
         return view('billing/opd_invoice_V', $data);
+    }
+
+    public function healthplix_push(int $opdId)
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'message' => 'Invalid request']);
+        }
+
+        $opdId = (int) $opdId;
+        if ($opdId <= 0) {
+            return $this->response->setJSON([
+                'ok' => 0,
+                'message' => 'Invalid OPD ID',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        // If a success log already exists, just return it.
+        if ($this->db->tableExists('abdm_api_logs')) {
+            $existing = $this->db->table('abdm_api_logs')
+                ->where('channel', 'healthplix')
+                ->where('event_type', 'healthplix.appointment.book')
+                ->where('entity_type', 'opd')
+                ->where('entity_id', (string) $opdId)
+                ->where('status', 'success')
+                ->orderBy('id', 'DESC')
+                ->get(1)
+                ->getRowArray();
+            if (! empty($existing)) {
+                return $this->response->setJSON([
+                    'ok' => 1,
+                    'already_synced' => true,
+                    'message' => 'Already synced to HealthPlix.',
+                    'log' => $existing,
+                    'csrfName' => csrf_token(),
+                    'csrfHash' => csrf_hash(),
+                ]);
+            }
+        }
+
+        $this->syncPaidOpdToHealthplix($opdId);
+
+        // Check result
+        $synced = false;
+        $log = null;
+       $errorMsg = 'Sync failed. Check HealthPlix settings or logs.';
+        if ($this->db->tableExists('abdm_api_logs')) {
+            $log = $this->db->table('abdm_api_logs')
+                ->where('channel', 'healthplix')
+                ->where('event_type', 'healthplix.appointment.book')
+                ->where('entity_type', 'opd')
+                ->where('entity_id', (string) $opdId)
+                ->where('status', 'success')
+                ->orderBy('id', 'DESC')
+                ->get(1)
+                ->getRowArray();
+            $synced = ! empty($log);
+
+           if (! $synced) {
+               $errLog = $this->db->table('abdm_api_logs')
+                   ->where('channel', 'healthplix')
+                   ->where('status', 'error')
+                   ->orderBy('id', 'DESC')
+                   ->get(1)
+                   ->getRowArray();
+               // If no OPD-level error, look for any recent healthplix error (token/patient)
+               if (empty($errLog)) {
+                   $errLog = $this->db->table('abdm_api_logs')
+                       ->where('channel', 'healthplix')
+                       ->where('status', 'error')
+                       ->where('created_at >=', date('Y-m-d H:i:s', time() - 30))
+                       ->orderBy('id', 'DESC')
+                       ->get(1)
+                       ->getRowArray();
+               }
+               if (! empty($errLog)) {
+                   $errDetail = trim((string) ($errLog['error_message'] ?? ''));
+                   $errCode   = (int) ($errLog['response_code'] ?? 0);
+                   $errEvent  = trim((string) ($errLog['event_type'] ?? ''));
+                   if ($errCode > 0 && $errDetail !== '') {
+                       $errorMsg = '[' . $errEvent . '] HTTP ' . $errCode . ': ' . $errDetail;
+                   } elseif ($errCode > 0) {
+                       $errorMsg = '[' . $errEvent . '] HealthPlix API returned HTTP ' . $errCode . '.';
+                   } elseif ($errDetail !== '') {
+                       $errorMsg = '[' . $errEvent . '] ' . $errDetail;
+                   }
+               } else {
+                   // No API log at all — likely a gate/config issue.
+                   $healthplixEnabled = $this->readHealthplixSetting('HEALTHPLIX_ENABLED') === '1';
+                   if (! $healthplixEnabled) {
+                       $errorMsg = 'HealthPlix integration is disabled in settings.';
+                   } else {
+                       $identifierField = $this->resolveDoctorHealthplixIdentifierField();
+                       $hasDoctorId = false;
+                       if ($identifierField !== null) {
+                           $opdRow2 = $this->db->table('opd_master')->select('doc_id')->where('opd_id', $opdId)->get(1)->getRowArray();
+                           $docId2  = (int) ($opdRow2['doc_id'] ?? 0);
+                           if ($docId2 > 0) {
+                               $docRow2 = $this->db->table('doctor_master')->select($identifierField)->where('id', $docId2)->get(1)->getRowArray();
+                               $hasDoctorId = trim((string) ($docRow2[$identifierField] ?? '')) !== '';
+                           }
+                       }
+                       if (! $hasDoctorId) {
+                           $errorMsg = 'Doctor does not have a HealthPlix Doctor Identifier set. Add it in Doctor Master.';
+                       }
+                   }
+               }
+           }
+        }
+
+        return $this->response->setJSON([
+            'ok' => $synced ? 1 : 0,
+            'synced' => $synced,
+            'message' => $synced
+                ? 'Appointment registered in HealthPlix.'
+               : $errorMsg,
+            'log' => $log,
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
     }
 
     public function invoice_print(int $opdId)
@@ -4229,6 +4394,7 @@ class Opd extends BaseController
             $this->db->table('opd_master')->where('opd_id', $oid)->update($data);
 
             $this->autoCreateOpdQueue($oid);
+            $this->syncPaidOpdToHealthplix($oid);
 
             return $this->response->setJSON([
                 'update' => 1,
@@ -4267,6 +4433,7 @@ class Opd extends BaseController
             $this->db->table('opd_master')->where('opd_id', $oid)->update($data);
 
             $this->autoCreateOpdQueue($oid);
+            $this->syncPaidOpdToHealthplix($oid);
 
             return $this->response->setJSON([
                 'update' => 1,
@@ -4316,6 +4483,7 @@ class Opd extends BaseController
             $this->db->table('opd_master')->where('opd_id', $oid)->update($data);
 
             $this->autoCreateOpdQueue($oid);
+            $this->syncPaidOpdToHealthplix($oid);
 
             return $this->response->setJSON([
                 'update' => 1,
@@ -4338,6 +4506,7 @@ class Opd extends BaseController
             $this->db->table('opd_master')->where('opd_id', $oid)->update($data);
 
             $this->autoCreateOpdQueue($oid);
+            $this->syncPaidOpdToHealthplix($oid);
 
             return $this->response->setJSON([
                 'update' => 1,
@@ -4353,6 +4522,250 @@ class Opd extends BaseController
             'csrfName' => csrf_token(),
             'csrfHash' => csrf_hash(),
         ]);
+    }
+
+    private function syncPaidOpdToHealthplix(int $opdId): void
+    {
+        if ($opdId <= 0 || ! $this->db->tableExists('opd_master')) {
+            return;
+        }
+
+        // Skip duplicate push if one success log already exists for this OPD.
+        if ($this->db->tableExists('abdm_api_logs')) {
+            $existing = $this->db->table('abdm_api_logs')
+                ->where('channel', 'healthplix')
+                ->where('event_type', 'healthplix.appointment.book')
+                ->where('entity_type', 'opd')
+                ->where('entity_id', (string) $opdId)
+                ->where('status', 'success')
+                ->get(1)
+                ->getRowArray();
+            if (! empty($existing)) {
+                return;
+            }
+        }
+
+        try {
+            $opd = $this->db->table('opd_master')
+                ->where('opd_id', $opdId)
+                ->get(1)
+                ->getRowArray();
+            if (! is_array($opd) || empty($opd)) {
+                return;
+            }
+
+            $patientId = (int) ($opd['p_id'] ?? 0);
+            $patient = [];
+            if ($patientId > 0 && $this->db->tableExists('patient_master')) {
+                $patient = $this->db->table('patient_master')
+                    ->where('id', $patientId)
+                    ->get(1)
+                    ->getRowArray() ?? [];
+            }
+
+            $doctorRow = [];
+            $doctorId = (int) ($opd['doc_id'] ?? 0);
+            if ($doctorId > 0 && $this->db->tableExists('doctor_master')) {
+                $doctorRow = $this->db->table('doctor_master')
+                    ->where('id', $doctorId)
+                    ->get(1)
+                    ->getRowArray() ?? [];
+            }
+
+            $doctorIdentifier = $this->readHealthplixSetting('HEALTHPLIX_DOCTOR_IDENTIFIER');
+            $doctorEmail = $this->readHealthplixSetting('HEALTHPLIX_DOCTOR_EMAIL');
+            $serviceIdentifier = $this->readHealthplixSetting('HEALTHPLIX_SERVICE_IDENTIFIER');
+            $serviceName = $this->readHealthplixSetting('HEALTHPLIX_SERVICE_NAME');
+
+            if (! empty($doctorRow)) {
+                $doctorIdentifierField = $this->resolveDoctorHealthplixIdentifierField();
+                if ($doctorIdentifierField !== null) {
+                    $rowDoctorIdentifier = trim((string) ($doctorRow[$doctorIdentifierField] ?? ''));
+                    if ($rowDoctorIdentifier !== '') {
+                        $doctorIdentifier = $rowDoctorIdentifier;
+                    }
+                }
+
+                $rowDoctorEmail = trim((string) ($doctorRow['email1'] ?? ''));
+                if ($rowDoctorEmail !== '') {
+                    $doctorEmail = $rowDoctorEmail;
+                }
+            }
+
+            // Appointment booking should use a valid HealthPlix doctor UUID, not local doctor id.
+            if ($doctorIdentifier === '') {
+                return;
+            }
+
+            $service = new HealthplixService();
+
+            $patientPayload = [
+                'external_patient_id' => (string) $patientId,
+                'patient_code' => trim((string) ($patient['p_code'] ?? $patientId)),
+                'full_name' => trim((string) ($patient['p_fname'] ?? ($opd['P_name'] ?? ''))),
+                'mobile' => trim((string) ($patient['mphone1'] ?? '')),
+                'email' => trim((string) ($patient['email1'] ?? '')),
+                'gender' => $this->mapPatientGenderToHealthplix((string) ($patient['gender'] ?? '')),
+                'dob' => trim((string) ($patient['dob'] ?? '')),
+                'estimate_dob' => trim((string) ($patient['estimate_dob'] ?? '')),
+                'age_years' => trim((string) ($patient['age'] ?? '')),
+                'age_months' => trim((string) ($patient['age_in_month'] ?? '')),
+                'address_line1' => trim((string) ($patient['add1'] ?? '')),
+                'city' => trim((string) ($patient['city'] ?? '')),
+                'district' => trim((string) ($patient['district'] ?? '')),
+                'state' => trim((string) ($patient['state'] ?? '')),
+                'zip' => trim((string) ($patient['zip'] ?? '')),
+                'aadhar' => trim((string) ($patient['udai'] ?? '')),
+                'abha_id' => '',
+                'trigger' => 'opd.payment.confirmed',
+            ];
+
+            $patientResult = $service->registerPatient($patientPayload);
+            $patientStatus = (int) ($patientResult['status'] ?? 0);
+            $patientAlreadyExists = $patientStatus === 409;
+            if (($patientResult['ok'] ?? false) !== true && ! $patientAlreadyExists) {
+                return;
+            }
+
+            // Persist patient sync id when HealthPlix accepted/recognized this patient.
+            $patientSyncFallback = trim((string) ($patient['p_code'] ?? $patientId));
+            $patientSyncId = $this->extractHealthplixSyncId($patientResult, $patientSyncFallback);
+            $this->persistHealthplixSyncId('patient_master', 'id', $patientId, $patientSyncId);
+
+            $payload = [
+                'external_appointment_id' => (string) $opdId,
+                'appointment_id' => (string) ($opd['opd_code'] ?? ''),
+                'appointment_datetime' => trim((string) ($opd['apointment_date'] ?? '')),
+                'patient_identifier' => (string) ($patient['p_code'] ?? $patientId),
+                'patient_name' => trim((string) ($patient['p_fname'] ?? ($opd['P_name'] ?? ''))),
+                'patient_mobile' => trim((string) ($patient['mphone1'] ?? '')),
+                'doctor_identifier' => $doctorIdentifier,
+                'doctor_name' => trim((string) ($opd['doc_name'] ?? '')),
+                'doctor_email' => $doctorEmail,
+                'service_identifier' => $serviceIdentifier,
+                'service_name' => $serviceName !== '' ? $serviceName : trim((string) ($opd['opd_fee_desc'] ?? 'Consultation')),
+                'price' => (float) ($opd['opd_fee_amount'] ?? 0),
+                'local_trigger' => 'opd.payment.confirmed',
+            ];
+
+            $appointmentResult = $service->bookAppointment($payload);
+            if (($appointmentResult['ok'] ?? false) === true) {
+                $appointmentSyncFallback = trim((string) ($opd['opd_code'] ?? $opdId));
+                $appointmentSyncId = $this->extractHealthplixSyncId($appointmentResult, $appointmentSyncFallback);
+                $this->persistHealthplixSyncId('opd_master', 'opd_id', $opdId, $appointmentSyncId);
+            }
+        } catch (\Throwable $e) {
+            // Never block OPD payment flow due to external integration errors.
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $result
+     */
+    private function extractHealthplixSyncId(array $result, string $fallback = ''): string
+    {
+        $data = (array) ($result['data'] ?? []);
+        $candidates = [
+            $data['sync_id'] ?? null,
+            $data['reference_id'] ?? null,
+            $data['referenceId'] ?? null,
+            $data['request_id'] ?? null,
+            $data['appointment_id'] ?? null,
+            $data['appointment_identifier'] ?? null,
+            $data['patient_id'] ?? null,
+            $data['patient_identifier'] ?? null,
+            $data['id'] ?? null,
+            $data['uuid'] ?? null,
+            $result['sync_id'] ?? null,
+        ];
+
+        foreach ($candidates as $candidate) {
+            $value = trim((string) $candidate);
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return trim($fallback);
+    }
+
+    private function persistHealthplixSyncId(string $table, string $idField, int $entityId, string $syncId): void
+    {
+        if ($entityId <= 0 || $syncId === '') {
+            return;
+        }
+        if (! $this->db->tableExists($table)) {
+            return;
+        }
+
+        $fields = array_map(
+            static fn (object $field): string => (string) ($field->name ?? ''),
+            $this->db->getFieldData($table)
+        );
+
+        if (! in_array($idField, $fields, true) || ! in_array('healthplix_sync_id', $fields, true)) {
+            return;
+        }
+
+        $this->db->table($table)
+            ->where($idField, $entityId)
+            ->update(['healthplix_sync_id' => $syncId]);
+    }
+
+    private function mapPatientGenderToHealthplix(string $gender): string
+    {
+        $gender = trim(strtolower($gender));
+        if ($gender === '1' || $gender === 'male' || $gender === 'm') {
+            return 'male';
+        }
+        if ($gender === '2' || $gender === 'female' || $gender === 'f') {
+            return 'female';
+        }
+
+        return 'other';
+    }
+
+    private function readHealthplixSetting(string $name): string
+    {
+        $value = trim((string) env($name, ''));
+        if ($value !== '') {
+            return $value;
+        }
+
+        if (defined($name)) {
+            $defined = trim((string) constant($name));
+            if ($defined !== '') {
+                return $defined;
+            }
+        }
+
+        if (! $this->db->tableExists('hospital_setting')) {
+            return '';
+        }
+
+        $row = $this->db->table('hospital_setting')
+            ->select('s_value')
+            ->where('s_name', $name)
+            ->get(1)
+            ->getRowArray();
+
+        return trim((string) ($row['s_value'] ?? ''));
+    }
+
+    private function resolveDoctorHealthplixIdentifierField(): ?string
+    {
+        if (! $this->db->tableExists('doctor_master')) {
+            return null;
+        }
+
+        $fields = $this->db->getFieldNames('doctor_master') ?? [];
+        foreach (['healthplix_doctor_identifier', 'healthplix_identifier'] as $field) {
+            if (in_array($field, $fields, true)) {
+                return $field;
+            }
+        }
+
+        return null;
     }
 
     private function autoCreateOpdQueue(int $opdId): void

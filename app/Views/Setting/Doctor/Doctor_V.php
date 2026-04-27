@@ -75,6 +75,12 @@
                     <label class="form-label">HPR ID</label>
                     <input class="form-control" name="input_hpr_id" placeholder="ABDM HPR ID" type="text" value="<?= esc($formData['input_hpr_id'] ?? '') ?>">
                 </div>
+                <?php if (! empty($healthplix_enabled)) : ?>
+                    <div class="col-md-4">
+                        <label class="form-label">HealthPlix Doctor Identifier</label>
+                        <input class="form-control" name="input_healthplix_doctor_identifier" placeholder="UUID from HealthPlix" type="text" value="<?= esc($formData['input_healthplix_doctor_identifier'] ?? '') ?>">
+                    </div>
+                <?php endif; ?>
                 <div class="col-md-4">
                     <label class="form-label">Date of Birth</label>
                     <input class="form-control" name="datepicker_dob" type="date" value="<?= esc($doctorDobValue) ?>">

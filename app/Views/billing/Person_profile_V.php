@@ -111,6 +111,15 @@
                                     <div class="col-lg-3 col-md-4 label">ABHA ID</div>
                                     <div class="col-lg-9 col-md-8"><?= esc($patientAbhaId) ?></div>
                                 </div>
+                                <?php $hpPatientSyncId = trim((string) ($data[0]->healthplix_sync_id ?? '')); ?>
+                                <?php if ($hpPatientSyncId !== '') : ?>
+                                <div class="row">
+                                    <div class="col-lg-3 col-md-4 label">HealthPlix ID</div>
+                                    <div class="col-lg-9 col-md-8">
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle"><?= esc($hpPatientSyncId) ?></span>
+                                    </div>
+                                </div>
+                                <?php endif; ?>
                                 <div class="row">
                                     <div class="col-lg-3 col-md-4 label">Phone</div>
                                     <div class="col-lg-9 col-md-8"><?=$data[0]->mphone1?></div>

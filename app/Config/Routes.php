@@ -502,6 +502,7 @@ $routes->post('Opd/confirm_payment', 'Opd::confirm_payment');
 $routes->post('Opd/update_doc_date/(:num)', 'Opd::update_doc_date/$1');
 $routes->post('Opd/opd_discount_update/(:num)', 'Opd::opd_discount_update/$1');
 $routes->post('Opd/opd_cancel/(:num)', 'Opd::opd_cancel/$1');
+$routes->post('Opd/healthplix_push/(:num)', 'Opd::healthplix_push/$1');
 $routes->match(['get', 'post'], 'Opd/opd_load_doc/(:num)', 'Opd::opd_load_doc/$1');
 $routes->match(['get', 'post'], 'Opd/opd_file_list/(:num)', 'Opd::opd_file_list/$1');
 $routes->match(['get', 'post'], 'Opd/opd_file_last_list', 'Opd::opd_file_last_list');
@@ -548,6 +549,10 @@ $routes->get('AbdmTaskBoard', 'AbdmTaskBoard::index', ['filter' => $abdmPermFilt
 $routes->get('AbdmTaskBoard/list', 'AbdmTaskBoard::list', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmTaskBoard/perform_action', 'AbdmTaskBoard::performAction', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmTaskBoard/mark_status', 'AbdmTaskBoard::markStatus', ['filter' => $abdmPermFilter]);
+$healthplixPermFilter = 'permission:admin.access,admin.settings';
+$routes->post('HealthplixGateway/generate_token', 'HealthplixGateway::generateToken', ['filter' => $healthplixPermFilter]);
+$routes->post('HealthplixGateway/register_patient', 'HealthplixGateway::registerPatient', ['filter' => $healthplixPermFilter]);
+$routes->post('HealthplixGateway/book_appointment', 'HealthplixGateway::bookAppointment', ['filter' => $healthplixPermFilter]);
 $routes->get('Opd_prescription/fhir_bundle/(:num)', 'Opd_prescription::fhir_bundle/$1');
 $routes->get('Opd_prescription/fhir_bundle/(:num)/(:num)', 'Opd_prescription::fhir_bundle/$1/$2');
 $routes->get('Opd_prescription/fhir_bundle_history/(:num)', 'Opd_prescription::fhir_bundle_history/$1');
@@ -957,6 +962,9 @@ $routes->group('setting', static function($routes) {
     $routes->post('admin/ai-settings/save', 'Setting\\AiSettings::save');
     $routes->post('admin/ai-settings/test', 'Setting\\AiSettings::test');
     $routes->post('admin/ai-settings/usage', 'Setting\\AiSettings::usage');
+    $routes->get('admin/healthplix-settings', 'Setting\\HealthplixSettings::index');
+    $routes->post('admin/healthplix-settings/save', 'Setting\\HealthplixSettings::save');
+    $routes->post('admin/healthplix-settings/test', 'Setting\\HealthplixSettings::test');
     $routes->get('admin/hospital-profile', 'Setting\\HospitalProfile::index');
     $routes->post('admin/hospital-profile/save', 'Setting\\HospitalProfile::save');
     $routes->post('admin/hospital-profile/delete-logo', 'Setting\\HospitalProfile::deleteLogo');

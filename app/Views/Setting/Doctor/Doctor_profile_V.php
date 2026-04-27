@@ -1,6 +1,7 @@
 <?php
 $doctorRegNo = '';
 $doctorHprId = '';
+$doctorHealthplixIdentifier = '';
 $hospitalDefaultOpdDays = (int) ($hospital_default_opd_valid_no_days ?? 5);
 if ($hospitalDefaultOpdDays < 1) {
     $hospitalDefaultOpdDays = 5;
@@ -33,6 +34,13 @@ if (!empty($data) && !empty($data[0])) {
     foreach (['hpr_id', 'hpr_no', 'hpr_number'] as $hprField) {
         if (isset($data[0]->{$hprField}) && trim((string) $data[0]->{$hprField}) !== '') {
             $doctorHprId = trim((string) $data[0]->{$hprField});
+            break;
+        }
+    }
+
+    foreach (['healthplix_doctor_identifier', 'healthplix_identifier'] as $hpField) {
+        if (isset($data[0]->{$hpField}) && trim((string) $data[0]->{$hpField}) !== '') {
+            $doctorHealthplixIdentifier = trim((string) $data[0]->{$hpField});
             break;
         }
     }
@@ -102,6 +110,12 @@ if (!empty($data) && !empty($data[0]) && !empty($data[0]->dob)) {
                         <label class="form-label">HPR ID</label>
                         <input class="form-control" name="input_hpr_id" placeholder="ABDM HPR ID" type="text" value="<?= esc($doctorHprId) ?>">
                     </div>
+                    <?php if (! empty($healthplix_enabled)) : ?>
+                        <div class="col-md-3">
+                            <label class="form-label">HealthPlix Doctor Identifier</label>
+                            <input class="form-control" name="input_healthplix_doctor_identifier" placeholder="UUID from HealthPlix" type="text" value="<?= esc($doctorHealthplixIdentifier) ?>">
+                        </div>
+                    <?php endif; ?>
                     <div class="col-md-3">
                         <label class="form-label">Date of Birth</label>
                         <input class="form-control" name="datepicker_dob" value="<?= esc($doctorDobValue) ?>" type="date" />

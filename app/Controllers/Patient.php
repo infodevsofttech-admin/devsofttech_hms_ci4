@@ -5,6 +5,7 @@ namespace App\Controllers;
 use App\Controllers\BaseController;
 use App\Libraries\AbdmWorkTaskService;
 use App\Libraries\BridgeSyncService;
+use App\Libraries\HealthplixService;
 use App\Models\BloodGroupModel;
 use App\Models\PatientModel;
 
@@ -1329,6 +1330,65 @@ class Patient extends BaseController
 				'trigger' => 'patient.created',
 			]
 		);
+	}
+
+	private function syncPatientToHealthplix(int $patientId, string $trigger): void
+	{
+		if ($patientId <= 0 || ! $this->db->tableExists('patient_master')) {
+			return;
+		}
+
+		try {
+			$row = $this->db->table('patient_master')
+				->where('id', $patientId)
+				->get(1)
+				->getRowArray();
+
+			if (! is_array($row) || empty($row)) {
+				return;
+			}
+
+			$abhaField = $this->resolvePatientAbhaIdField();
+			$abhaId = $abhaField !== null ? trim((string) ($row[$abhaField] ?? '')) : '';
+
+			$payload = [
+				'external_patient_id' => (string) $patientId,
+				'patient_code' => trim((string) ($row['p_code'] ?? '')),
+				'full_name' => trim((string) ($row['p_fname'] ?? '')),
+				'mobile' => trim((string) ($row['mphone1'] ?? '')),
+				'email' => trim((string) ($row['email1'] ?? '')),
+				'gender' => $this->mapPatientGenderToHealthplix((string) ($row['gender'] ?? '')),
+				'dob' => trim((string) ($row['dob'] ?? '')),
+				'age_years' => trim((string) ($row['age'] ?? '')),
+				'age_months' => trim((string) ($row['age_in_month'] ?? '')),
+				'address_line1' => trim((string) ($row['add1'] ?? '')),
+				'city' => trim((string) ($row['city'] ?? '')),
+				'district' => trim((string) ($row['district'] ?? '')),
+				'state' => trim((string) ($row['state'] ?? '')),
+				'zip' => trim((string) ($row['zip'] ?? '')),
+				'aadhar' => trim((string) ($row['udai'] ?? '')),
+				'abha_id' => $abhaId,
+				'trigger' => $trigger,
+			];
+
+			$service = new HealthplixService();
+			$service->registerPatient($payload);
+		} catch (\Throwable $e) {
+			// Never block patient workflows due to external integration failures.
+		}
+	}
+
+	private function mapPatientGenderToHealthplix(string $gender): string
+	{
+		$gender = trim(strtolower($gender));
+		if ($gender === '1' || $gender === 'male' || $gender === 'm') {
+			return 'male';
+		}
+		if ($gender === '2' || $gender === 'female' || $gender === 'f') {
+			return 'female';
+		}
+
+		return 'other';
 	}
 
 
