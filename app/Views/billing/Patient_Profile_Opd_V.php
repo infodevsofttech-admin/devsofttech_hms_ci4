@@ -1,8 +1,22 @@
+<?php
+    $request = service('request');
+    $defaultBackUrl = base_url('billing/patient/person_record') . '/' . (int) ($patient->id ?? 0) . '/0';
+    $backUrl = trim((string) $request->getGet('back_url'));
+    $backTitle = trim((string) $request->getGet('back_title'));
+
+    if ($backUrl === '') {
+        $backUrl = $defaultBackUrl;
+    }
+    if ($backTitle === '') {
+        $backTitle = 'Profile';
+    }
+?>
+
 <div class="pagetitle">
     <h1>Consult History</h1>
     <nav>
         <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="javascript:load_form('<?= base_url('billing/patient/person_record') ?>/<?= esc($patient->id) ?>/0');">Profile</a></li>
+            <li class="breadcrumb-item"><a href="javascript:load_form('<?= esc($backUrl, 'js') ?>','<?= esc($backTitle, 'js') ?>');"><?= esc($backTitle) ?></a></li>
             <li class="breadcrumb-item active">Consult History</li>
         </ol>
     </nav>
@@ -15,7 +29,10 @@
                 <h3 class="card-title mb-0">Old Prescription With Scanned Records</h3>
                 <div class="small text-muted mt-1">Patient: <?= esc($patient->p_fname ?? '') ?></div>
             </div>
-            <span class="badge bg-secondary"><?= count($opdGroups ?? []) ?> OPD Record(s)</span>
+            <div class="d-flex align-items-center gap-2">
+                <a href="javascript:load_form('<?= esc($backUrl, 'js') ?>','<?= esc($backTitle, 'js') ?>');" class="btn btn-outline-secondary btn-sm">Back</a>
+                <span class="badge bg-secondary"><?= count($opdGroups ?? []) ?> OPD Record(s)</span>
+            </div>
         </div>
         <div class="card-body">
             <?php if (empty($opdGroups)) { ?>

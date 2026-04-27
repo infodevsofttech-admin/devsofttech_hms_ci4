@@ -116,6 +116,22 @@ $mergedGroups = [
                         <td><?= esc($row->p_code ?? '') ?></td>
                         <td><?= esc($row->opd_type ?? '') ?> / Amt: <?= esc($row->opd_fee_amount ?? '') ?></td>
                         <td>
+                            <?php $patientId = (int) ($row->id ?? 0); ?>
+                            <?php
+                                $historyBackUrl = base_url('Opd/get_appointment_list') . '/' . (int) ($doc_id ?? 0) . '/' . (string) ($opd_date ?? '');
+                                $historyUrl = base_url('billing/patient/show_profile_opd') . '/' . $patientId . '/1?' . http_build_query([
+                                    'back_url' => $historyBackUrl,
+                                    'back_title' => 'OPD Appointment List',
+                                ]);
+                            ?>
+                            <?php if ($patientId > 0) : ?>
+                                <a class="btn btn-info btn-sm"
+                                   href="javascript:load_form('<?= esc($historyUrl, 'js') ?>','Consult History');"
+                                   title="Patient History"
+                                   aria-label="Patient History">
+                                    <i class="bi bi-clock-history"></i>
+                                </a>
+                            <?php endif; ?>
                             <?php if ($tabType === 'booking') : ?>
                                 <?php if ($isConfirmedForQueue) : ?>
                                     <button type="button" class="btn btn-outline-success btn-sm btn-opd-create-queue" data-opdid="<?= $opdId ?>" title="Add to Queue">

@@ -58,4 +58,44 @@
 </div>
 <!-- /.box-body -->
 </div>
+
+<script>
+(function() {
+  var table = document.getElementById('example1');
+  if (!table) {
+    return;
+  }
+
+  // Prevent duplicate initialization when this partial is loaded repeatedly.
+  if (table.dataset.dtInit === '1') {
+    return;
+  }
+
+  // Prefer simple-datatables for static HTML tables loaded via load_form.
+  if (window.simpleDatatables && window.simpleDatatables.DataTable) {
+    try {
+      new window.simpleDatatables.DataTable(table);
+      table.dataset.dtInit = '1';
+      return;
+    } catch (e) {
+      console.warn('simple-datatables init failed for patient search table', e);
+    }
+  }
+
+  // Fallback to full jQuery DataTables plugin only (not the local shim).
+  if (window.jQuery && $.fn && $.fn.DataTable && $.fn.dataTable && $.fn.dataTable.defaults) {
+    try {
+      if (!$.fn.DataTable.isDataTable('#example1')) {
+        $('#example1').DataTable({
+          order: [[0, 'asc']],
+          pageLength: 25
+        });
+      }
+      table.dataset.dtInit = '1';
+    } catch (e) {
+      console.warn('jQuery DataTables init failed for patient search table', e);
+    }
+  }
+})();
+</script>
     

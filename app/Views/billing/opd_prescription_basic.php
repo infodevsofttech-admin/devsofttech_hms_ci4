@@ -316,6 +316,19 @@
                 </select>
                 <button type="button" class="btn btn-outline-warning btn-sm" id="btn_new_opd_session_reset" title="Start clean OPD session view (clear Advice/Investigation/Medicine list)">New OPD Session</button>
                 <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_restore_draft">Restore Draft</button>
+                <?php
+                    $historyBackUrl = base_url('Opd_prescription/Prescription') . '/' . (int) ($opd_id ?? 0);
+                    $historyUrl = base_url('billing/patient/show_profile_opd') . '/' . (int) ($patient_master[0]->id ?? 0) . '/1?' . http_build_query([
+                        'back_url' => $historyBackUrl,
+                        'back_title' => 'Consult',
+                    ]);
+                ?>
+                <a href="javascript:load_form('<?= esc($historyUrl, 'js') ?>','Consult History');"
+                   class="btn btn-info btn-sm"
+                   title="Patient History"
+                   aria-label="Patient History">
+                    <i class="bi bi-clock-history"></i>
+                </a>
                 <button type="button" class="btn btn-outline-success btn-sm" id="btn_local_clinical_assist" title="Local rule-based support using complaints + vitals">Clinical Assist (Local)</button>
                 <button type="button" class="btn btn-outline-primary btn-sm" id="btn_ai_full_draft" title="Use complete OPD data to generate draft notes">AI Draft (Full Form)</button>
                 <button type="button" class="btn btn-primary btn-sm" id="btn_save_rx">Save Consult</button>
