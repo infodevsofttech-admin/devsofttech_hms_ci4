@@ -553,6 +553,7 @@ $healthplixPermFilter = 'permission:admin.access,admin.settings';
 $routes->post('HealthplixGateway/generate_token', 'HealthplixGateway::generateToken', ['filter' => $healthplixPermFilter]);
 $routes->post('HealthplixGateway/register_patient', 'HealthplixGateway::registerPatient', ['filter' => $healthplixPermFilter]);
 $routes->post('HealthplixGateway/book_appointment', 'HealthplixGateway::bookAppointment', ['filter' => $healthplixPermFilter]);
+$routes->post('healthplix/fetch', 'HealthplixCallback::fetch');
 $routes->get('Opd_prescription/fhir_bundle/(:num)', 'Opd_prescription::fhir_bundle/$1');
 $routes->get('Opd_prescription/fhir_bundle/(:num)/(:num)', 'Opd_prescription::fhir_bundle/$1/$2');
 $routes->get('Opd_prescription/fhir_bundle_history/(:num)', 'Opd_prescription::fhir_bundle_history/$1');

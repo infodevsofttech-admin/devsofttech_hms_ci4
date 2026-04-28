@@ -30,6 +30,20 @@
             </div>
         </div>
 
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Fetch Callback Secret</label>
+                <input type="password" class="form-control" id="healthplix_fetch_secret" placeholder="Enter to set/update callback secret">
+                <div class="form-text" id="healthplix_fetch_secret_hint">
+                    <?php if (!empty($healthplix_fetch_secret_exists)) : ?>
+                        <span class="text-success">&#10003; Secret saved (<?= esc($healthplix_fetch_secret_masked ?? '') ?>). Leave blank to keep existing.</span>
+                    <?php else : ?>
+                        No callback secret configured yet.
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+
         <hr class="my-2">
         <h6 class="mb-2">API Endpoints <span class="badge bg-secondary">V1</span></h6>
         <div class="form-text mb-2">Paths are relative to the Base URL above. Pre-filled from HealthPlix API Specification Doc v1.7.</div>
@@ -140,6 +154,7 @@
         return {
             healthplix_enabled: $('#healthplix_enabled').is(':checked') ? '1' : '0',
             healthplix_base_url: ($('#healthplix_base_url').val() || '').trim(),
+            healthplix_fetch_secret: ($('#healthplix_fetch_secret').val() || '').trim(),
             healthplix_tenant_header_name: ($('#healthplix_tenant_header_name').val() || '').trim(),
             healthplix_tenant_id: ($('#healthplix_tenant_id').val() || '').trim(),
             healthplix_tenant_key: ($('#healthplix_tenant_key').val() || '').trim(),
@@ -163,6 +178,15 @@
         }
     });
 
+    $('#healthplix_fetch_secret').on('input', function() {
+        var val = $(this).val().trim();
+        if (val.length > 0) {
+            $('#healthplix_fetch_secret_hint').html('<span class="text-warning">&#9998; New secret will be saved on Save Settings.</span>');
+        } else {
+            $('#healthplix_fetch_secret_hint').html('<span class="text-muted">Leave blank to keep existing callback secret.</span>');
+        }
+    });
+
     $('#btn_save_healthplix').on('click', function() {
         postJson('<?= base_url('setting/admin/healthplix-settings/save') ?>', payload(), function(data) {
             if ((data.update || 0) !== 1) {
@@ -178,7 +202,17 @@
             } else {
                 $('#healthplix_tenant_key_hint').html('<span class="text-muted">Leave blank to keep existing key.</span>');
             }
+
+            var savedSecret = ($('#healthplix_fetch_secret').val() || '').trim();
+            if (savedSecret.length > 0) {
+                var maskedSecret = savedSecret.length <= 8 ? '********' : (savedSecret.substring(0, 4) + '****' + savedSecret.slice(-4));
+                $('#healthplix_fetch_secret_hint').html('<span class="text-success">&#10003; Secret saved (' + maskedSecret + '). Leave blank to keep existing.</span>');
+            } else {
+                $('#healthplix_fetch_secret_hint').html('<span class="text-muted">Leave blank to keep existing callback secret.</span>');
+            }
+
             $('#healthplix_tenant_key').val('');
+            $('#healthplix_fetch_secret').val('');
         });
     });
 

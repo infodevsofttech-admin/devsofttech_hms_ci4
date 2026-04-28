@@ -16,6 +16,8 @@ class HealthplixSettings extends BaseController
         return view('Setting/Admin/healthplix_settings', [
             'healthplix_enabled' => $this->readSettingValue('HEALTHPLIX_ENABLED') === '1' ? '1' : '0',
             'healthplix_base_url' => $this->readSettingValue('HEALTHPLIX_BASE_URL') ?: 'https://consultation-edge-dev.healthplix.com',
+            'healthplix_fetch_secret_masked' => $this->maskKey($this->readSettingValue('HEALTHPLIX_FETCH_SECRET')),
+            'healthplix_fetch_secret_exists' => $this->readSettingValue('HEALTHPLIX_FETCH_SECRET') !== '',
             'healthplix_tenant_id' => $this->readSettingValue('HEALTHPLIX_TENANT_ID'),
             'healthplix_tenant_key_masked' => $this->maskKey($this->readSettingValue('HEALTHPLIX_TENANT_KEY')),
             'healthplix_tenant_key_exists' => $this->readSettingValue('HEALTHPLIX_TENANT_KEY') !== '',
@@ -47,6 +49,7 @@ class HealthplixSettings extends BaseController
         $fields = [
             'HEALTHPLIX_ENABLED' => $this->request->getPost('healthplix_enabled') === '1' ? '1' : '0',
             'HEALTHPLIX_BASE_URL' => trim((string) $this->request->getPost('healthplix_base_url')),
+            'HEALTHPLIX_FETCH_SECRET' => trim((string) $this->request->getPost('healthplix_fetch_secret')),
             'HEALTHPLIX_TENANT_ID' => trim((string) $this->request->getPost('healthplix_tenant_id')),
             'HEALTHPLIX_TENANT_KEY' => trim((string) $this->request->getPost('healthplix_tenant_key')),
             'HEALTHPLIX_DOCTOR_IDENTIFIER' => trim((string) $this->request->getPost('healthplix_doctor_identifier')),

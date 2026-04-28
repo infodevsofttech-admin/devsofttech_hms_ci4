@@ -1,0 +1,8 @@
+# Add to your local hosts file for local-domain testing
+# Windows path: C:\Windows\System32\drivers\etc\hosts
+# Linux path: /etc/hosts
+
+127.0.0.1 100001.localtest
+
+# Optional for testing real VPN domain from your machine over VPN
+# 10.7.0.1 100001.dhms.in
