@@ -18,6 +18,27 @@ function str_to_MysqlDate(string $strDate): string
     return '1900-01-01';
 }
 
+function str_to_MysqlDateTime(string $strDate, string $strTime = ''): string
+{
+    $mysqlDate = str_to_MysqlDate($strDate);
+    
+    // Validate and format time (HH:MM)
+    $strTime = trim($strTime);
+    if ($strTime === '') {
+        $strTime = '00:00:00';
+    } elseif (preg_match('/^\d{2}:\d{2}$/', $strTime) === 1) {
+        $strTime = $strTime . ':00';
+    } elseif (!preg_match('/^\d{2}:\d{2}:\d{2}$/', $strTime)) {
+        $strTime = '00:00:00';
+    }
+    
+    if ($mysqlDate === '1900-01-01') {
+        return '1900-01-01 00:00:00';
+    }
+    
+    return $mysqlDate . ' ' . $strTime;
+}
+
 function MysqlDate_to_str(?string $strDate): string
 {
     if ($strDate === null || $strDate === '') {

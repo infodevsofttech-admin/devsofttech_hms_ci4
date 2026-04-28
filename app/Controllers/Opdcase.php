@@ -111,6 +111,7 @@ class Opdcase extends BaseController
         $pid = (int) $this->request->getPost('pid');
         $insuranceId = (int) $this->request->getPost('insurance_id');
         $appointmentDate = (string) $this->request->getPost('datepicker_appointment');
+        $appointmentTime = (string) $this->request->getPost('appointment_time');
 
         if ($docId <= 0 || $feeId <= 0 || $pid <= 0 || $insuranceId <= 0 || $appointmentDate === '') {
             return $this->response->setJSON([
@@ -158,6 +159,9 @@ class Opdcase extends BaseController
         $opdFeeAmount = $insurance[0]->opd_fee ?? 0;
         $opdFeeDesc = $insurance[0]->opd_desc ?? '';
 
+        // Combine appointment date and time into datetime
+        $appointmentDateTime = str_to_MysqlDateTime($appointmentDate, $appointmentTime);
+
         $insert = [
             'p_id' => $pid,
             'P_name' => strtoupper((string) $personInfo[0]->p_fname),
@@ -169,7 +173,7 @@ class Opdcase extends BaseController
             'opd_fee_desc' => $opdFeeDesc,
             'doc_name' => $docInfo[0]->p_fname,
             'doc_spec' => $docInfo[0]->SpecName,
-            'apointment_date' => str_to_MysqlDate($appointmentDate),
+            'apointment_date' => $appointmentDateTime,
             'opd_fee_type' => '1',
             'prepared_by' => $userNameInfo,
         ];

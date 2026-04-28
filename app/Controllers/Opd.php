@@ -1474,6 +1474,7 @@ class Opd extends BaseController
         $feeId = (int) $this->request->getPost('fee_id');
         $pid = (int) $this->request->getPost('pid');
         $appointmentDate = (string) $this->request->getPost('datepicker_appointment');
+        $appointmentTime = (string) $this->request->getPost('appointment_time');
         $abhaAddress = trim((string) $this->request->getPost('abha_address'));
 
         if ($docId <= 0 || $feeId <= 0 || $pid <= 0 || $appointmentDate === '') {
@@ -1528,6 +1529,9 @@ class Opd extends BaseController
         $userId = $user->id ?? '';
         $userNameInfo = $userLabel . ' [' . date('d-m-Y H:i:s') . '] ' . $userId;
 
+        // Combine appointment date and time into datetime
+        $appointmentDateTime = str_to_MysqlDateTime($appointmentDate, $appointmentTime);
+
         $insert = [
             'p_id' => $pid,
             'P_name' => strtoupper((string) $personInfo[0]->p_fname),
@@ -1539,7 +1543,7 @@ class Opd extends BaseController
             'opd_fee_desc' => $docFee[0]->doc_fee_desc,
             'doc_name' => $docInfo[0]->p_fname,
             'opd_fee_type' => $docFee[0]->doc_fee_type,
-            'apointment_date' => str_to_MysqlDate($appointmentDate),
+            'apointment_date' => $appointmentDateTime,
             'doc_spec' => $docInfo[0]->SpecName,
             'prepared_by' => $userNameInfo,
         ];
@@ -2382,7 +2386,21 @@ class Opd extends BaseController
             $lastVisitText = 'Last Visit : ' . $lastVisitDate;
         }
 
-        $bookTime = (string) ($opd->apointment_date ?? '');
+        $bookTime = '';
+        if (!empty($opd->apointment_date)) {
+            $dateTime = $opd->apointment_date;
+            // Format datetime to "dd/mm/yyyy HH:MM" format
+            if (preg_match('/^\d{4}-\d{2}-\d{2}/', $dateTime)) {
+                try {
+                    $dt = new \DateTime($dateTime);
+                    $bookTime = $dt->format('d/m/Y H:i');
+                } catch (\Exception $e) {
+                    $bookTime = (string) $dateTime;
+                }
+            } else {
+                $bookTime = (string) $dateTime;
+            }
+        }
 
         $rxMeds = is_array($data['rx_medicines'] ?? null) ? $data['rx_medicines'] : [];
 

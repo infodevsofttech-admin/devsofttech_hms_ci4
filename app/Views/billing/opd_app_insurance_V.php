@@ -29,6 +29,11 @@
                                 <input class="form-control datepicker" id="datepicker_appointment" name="datepicker_appointment"
                                     type="text" value="<?= date('d/m/Y') ?>" readonly>
                             </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Time</label>
+                                <input class="form-control" id="appointment_time" name="appointment_time"
+                                    type="time" value="<?= date('H:i') ?>">
+                            </div>
                         </div>
 
                         <div class="row g-3 mt-2" id="ShowDoctor">
@@ -136,6 +141,7 @@
                 "input_clam_id": $('#input_clam_id').val(),
                 "pid": $('#pid').val(),
                 "datepicker_appointment": $('#datepicker_appointment').val(),
+                "appointment_time": $('#appointment_time').val(),
                 [csrf.name]: csrf.value
             }, function(data) {
                 updateCsrf(data);

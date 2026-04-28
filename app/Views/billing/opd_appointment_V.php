@@ -25,7 +25,12 @@
                                 <input class="form-control datepicker" id="datepicker_appointment" name="datepicker_appointment"
                                     type="text" value="<?= date('d/m/Y') ?>" readonly>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-2">
+                                <label class="form-label">Time</label>
+                                <input class="form-control" id="appointment_time" name="appointment_time"
+                                    type="time" value="<?= date('H:i') ?>">
+                            </div>
+                            <div class="col-md-3">
                                 <label class="form-label">ABHA Address</label>
                                 <input class="form-control" id="abha_address" name="abha_address" type="text"
                                     maxlength="18" value="<?= esc($person_info[0]->abha_address ?? $person_info[0]->abha ?? '') ?>"
@@ -132,6 +137,7 @@
                 "input_clam_id": $('#input_clam_id').val(),
                 "pid": $('#pid').val(),
                 "datepicker_appointment": $('#datepicker_appointment').val(),
+                "appointment_time": $('#appointment_time').val(),
                 "abha_address": $('#abha_address').val(),
                 [csrf.name]: csrf.value
             }, function(data) {
