@@ -17,13 +17,16 @@ class OpdModel
     {
         $pId = (int) ($data['p_id'] ?? 0);
         $docId = (int) ($data['doc_id'] ?? 0);
+        $todayStart = date('Y-m-d') . ' 00:00:00';
+        $tomorrowStart = date('Y-m-d', strtotime('+1 day')) . ' 00:00:00';
 
         if ($pId <= 0 || $docId <= 0) {
             return 0;
         }
 
         $duplicate = $this->db->table('opd_master')
-            ->where('apointment_date', date('Y-m-d'))
+            ->where('apointment_date >=', $todayStart)
+            ->where('apointment_date <', $tomorrowStart)
             ->where('p_id', $pId)
             ->where('doc_id', $docId)
             ->groupStart()
@@ -44,7 +47,8 @@ class OpdModel
 
         $opdNoRow = $this->db->table('opd_master')
             ->select('count(*) as no_max')
-            ->where('apointment_date', date('Y-m-d'))
+            ->where('apointment_date >=', $todayStart)
+            ->where('apointment_date <', $tomorrowStart)
             ->where('doc_id', $docId)
             ->get()
             ->getRow();
@@ -66,8 +70,8 @@ class OpdModel
 
             $lastOpdRow = $this->db->table('opd_master')
                 ->select('max(opd_id) as last_opd_id')
-                ->where('apointment_date >=', $this->resolveRunningLookupDate($docId))
-                ->where('apointment_date <=', date('Y-m-d'))
+                ->where('apointment_date >=', $this->resolveRunningLookupDate($docId) . ' 00:00:00')
+                ->where('apointment_date <', $tomorrowStart)
                 ->where('running_opd', 0)
                 ->where('opd_fee_type <>', 3)
                 ->where('coalesce(opd_fee_amount,0) >', 0, false)

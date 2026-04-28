@@ -63,14 +63,18 @@ class Home extends BaseController
         $user = service('auth')->user();
         $today = date('Y-m-d');
         $monthStart = date('Y-m-01');
+        $todayStart = $today . ' 00:00:00';
+        $tomorrowStart = date('Y-m-d', strtotime('+1 day')) . ' 00:00:00';
+        $monthStartDateTime = $monthStart . ' 00:00:00';
 
         $opdToday = $this->db->table('opd_master')
-            ->where('apointment_date', $today)
+            ->where('apointment_date >=', $todayStart)
+            ->where('apointment_date <', $tomorrowStart)
             ->countAllResults();
 
         $opdLast7Days = $this->db->table('opd_master')
-            ->where('apointment_date >=', date('Y-m-d', strtotime('-7 days')))
-            ->where('apointment_date <=', $today)
+            ->where('apointment_date >=', date('Y-m-d', strtotime('-7 days')) . ' 00:00:00')
+            ->where('apointment_date <', $tomorrowStart)
             ->countAllResults();
 
         $admitToday = $this->db->table('ipd_master')
@@ -96,8 +100,8 @@ class Home extends BaseController
             ->select('ins.short_name as org_name')
             ->select('COUNT(o.opd_id) as total_cases', false)
             ->join('hc_insurance ins', 'ins.id = o.insurance_id', 'left')
-            ->where('o.apointment_date >=', $monthStart)
-            ->where('o.apointment_date <=', $today)
+            ->where('o.apointment_date >=', $monthStartDateTime)
+            ->where('o.apointment_date <', $tomorrowStart)
             ->groupBy('ins.short_name')
             ->orderBy('total_cases', 'DESC')
             ->limit(10)
@@ -109,7 +113,8 @@ class Home extends BaseController
             ->select('COUNT(o.opd_id) as total_cases', false)
             ->select("SUM(CASE WHEN (o.insurance_id IS NULL OR o.insurance_id <= 1) THEN 1 ELSE 0 END) as direct_cases", false)
             ->select("SUM(CASE WHEN (o.insurance_id IS NULL OR o.insurance_id <= 1) THEN 0 ELSE 1 END) as org_cases", false)
-            ->where('o.apointment_date', $today)
+            ->where('o.apointment_date >=', $todayStart)
+            ->where('o.apointment_date <', $tomorrowStart)
             ->where('o.doc_name IS NOT NULL', null, false)
             ->where("o.doc_name != ''", null, false)
             ->groupBy('o.doc_name')
@@ -160,8 +165,8 @@ class Home extends BaseController
         $opdTrendRaw = $this->db->table('opd_master')
             ->select("DATE_FORMAT(apointment_date, '%Y-%m-%d') as yd", false)
             ->select('COUNT(opd_id) as total', false)
-            ->where('apointment_date >=', $trendStart)
-            ->where('apointment_date <=', $trendEnd)
+            ->where('apointment_date >=', $trendStart . ' 00:00:00')
+            ->where('apointment_date <', $tomorrowStart)
             ->groupBy('yd')
             ->get()
             ->getResult();

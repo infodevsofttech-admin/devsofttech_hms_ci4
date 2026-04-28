@@ -382,7 +382,7 @@ class Patient extends BaseController
 		}
 
 		$sql = "select o.opd_id,o.opd_code,o.doc_name,o.apointment_date,o.p_id,
-		p.p_fname,if(o.apointment_date=curdate(),1,0) as new_opd,
+		p.p_fname,if(date(o.apointment_date)=curdate(),1,0) as new_opd,
 		date_format(o.apointment_date,'%d-%m-%Y') as str_apointment_date
 		from opd_master o join patient_master p on o.p_id=p.id
 		where o.p_id=$pno
