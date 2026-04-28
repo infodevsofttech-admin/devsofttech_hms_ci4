@@ -22,6 +22,11 @@ class App extends BaseConfig
     {
         parent::__construct();
 
+        $envAllowedHostnames = $this->resolveAllowedHostnamesFromEnv();
+        if ($envAllowedHostnames !== []) {
+            $this->allowedHostnames = $envAllowedHostnames;
+        }
+
         if ($this->baseURL === '') {
             $isHttps = ! empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
             $scheme  = $isHttps ? 'https' : 'http';
@@ -29,6 +34,43 @@ class App extends BaseConfig
 
             $this->baseURL = $scheme . '://' . $host . '/';
         }
+    }
+
+    /**
+     * Accepts .env value in either CSV or JSON array format.
+     * Example CSV: app.allowedHostnames = localhost,100001.dhms.in
+     * Example JSON: app.allowedHostnames = ["localhost","100001.dhms.in"]
+     *
+     * @return list<string>
+     */
+    private function resolveAllowedHostnamesFromEnv(): array
+    {
+        $raw = trim((string) env('app.allowedHostnames', ''));
+        if ($raw === '') {
+            return [];
+        }
+
+        $items = [];
+        if (str_starts_with($raw, '[')) {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) {
+                $items = $decoded;
+            }
+        } else {
+            $items = preg_split('/[\r\n,]+/', $raw) ?: [];
+        }
+
+        $hostnames = [];
+        foreach ($items as $item) {
+            $hostname = trim((string) $item);
+            if ($hostname === '') {
+                continue;
+            }
+
+            $hostnames[] = $hostname;
+        }
+
+        return array_values(array_unique($hostnames));
     }
 
     /**
@@ -46,6 +88,7 @@ class App extends BaseConfig
         'localhost',
         'hmskrishnaksp.dhms.in',
         'hmslocal.devsofttech.co.in',
+        'khrc1.dhms.in',
     ];
 
     /**

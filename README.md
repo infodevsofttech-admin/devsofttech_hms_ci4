@@ -144,6 +144,9 @@ CI_ENVIRONMENT = production          # use "development" while installing
 # APP
 #--------------------------------------------------------------------
 app.baseURL = 'https://hms.yourhospital.in/'
+app.allowedHostnames = localhost,hms.yourhospital.in,100001.dhms.in
+# or JSON format:
+# app.allowedHostnames = ["localhost","hms.yourhospital.in","100001.dhms.in"]
 app.appTimezone = 'Asia/Kolkata'     # adjust to your timezone
 
 #--------------------------------------------------------------------
@@ -184,6 +187,15 @@ EKA_BEARER_TOKEN = your-token
 # EKA_CLIENT_ID = your-client-id
 # EKA_EVENT_ENDPOINTS_JSON = {"abdm.abha.validate":"/your/path"}
 # EKA_WEBHOOK_SECRET = shared-secret-for-callback-signature
+```
+
+### HealthPlix callback secret fallback
+
+If `HEALTHPLIX_FETCH_SECRET` is set in `.env`, `POST /healthplix/fetch` uses it as fallback
+when the hospital setting value is empty.
+
+```dotenv
+HEALTHPLIX_FETCH_SECRET = your-shared-secret
 ```
 
 Then process queue normally:
