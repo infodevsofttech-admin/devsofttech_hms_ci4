@@ -82,9 +82,13 @@ class HealthplixSettings extends BaseController
             ]);
         }
 
+        $storedFetchSecret = $this->readSettingValue('HEALTHPLIX_FETCH_SECRET');
+
         return $this->response->setJSON([
             'update' => 1,
             'error_text' => 'Saved ' . $savedCount . ' setting(s)',
+            'healthplixFetchSecretConfigured' => $storedFetchSecret !== '',
+            'healthplixFetchSecretMasked' => $this->maskKey($storedFetchSecret),
             'csrfName' => csrf_token(),
             'csrfHash' => csrf_hash(),
         ]);

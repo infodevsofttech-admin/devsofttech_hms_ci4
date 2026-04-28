@@ -136,6 +136,16 @@
         $('#healthplix_settings_msg').html('<div class="' + cls + '">' + $('<div>').text(text || '').html() + '</div>');
     }
 
+    function updateFetchSecretHintFromServer(data) {
+        if (data && data.healthplixFetchSecretConfigured) {
+            var maskedSecret = data.healthplixFetchSecretMasked || '********';
+            $('#healthplix_fetch_secret_hint').html('<span class="text-success">&#10003; Secret saved (' + $('<div>').text(maskedSecret).html() + '). Leave blank to keep existing.</span>');
+            return;
+        }
+
+        $('#healthplix_fetch_secret_hint').html('<span class="text-muted">No callback secret configured yet.</span>');
+    }
+
     function postJson(url, payload, cb) {
         var csrf = getCsrfPair();
         payload = payload || {};
@@ -203,13 +213,7 @@
                 $('#healthplix_tenant_key_hint').html('<span class="text-muted">Leave blank to keep existing key.</span>');
             }
 
-            var savedSecret = ($('#healthplix_fetch_secret').val() || '').trim();
-            if (savedSecret.length > 0) {
-                var maskedSecret = savedSecret.length <= 8 ? '********' : (savedSecret.substring(0, 4) + '****' + savedSecret.slice(-4));
-                $('#healthplix_fetch_secret_hint').html('<span class="text-success">&#10003; Secret saved (' + maskedSecret + '). Leave blank to keep existing.</span>');
-            } else {
-                $('#healthplix_fetch_secret_hint').html('<span class="text-muted">Leave blank to keep existing callback secret.</span>');
-            }
+            updateFetchSecretHintFromServer(data);
 
             $('#healthplix_tenant_key').val('');
             $('#healthplix_fetch_secret').val('');
