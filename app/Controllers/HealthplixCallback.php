@@ -7,8 +7,7 @@ class HealthplixCallback extends BaseController
     public function fetch()
     {
         $rawBody = (string) $this->request->getBody();
-        $decoded = $this->request->getJSON(true);
-        $payload = is_array($decoded) ? $decoded : [];
+        $payload = $this->resolvePayload($rawBody);
 
         $expectedSecret = $this->resolveExpectedSecret();
         $providedSecret = trim((string) $this->request->getHeaderLine('X-Healthplix-Secret'));
@@ -36,6 +35,24 @@ class HealthplixCallback extends BaseController
             'ok' => 1,
             'message' => 'HealthPlix fetch callback received',
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolvePayload(string $rawBody): array
+    {
+        if (trim($rawBody) === '') {
+            return [];
+        }
+
+        try {
+            $decoded = $this->request->getJSON(true);
+            return is_array($decoded) ? $decoded : [];
+        } catch (\Throwable $e) {
+            $decoded = json_decode($rawBody, true);
+            return is_array($decoded) ? $decoded : [];
+        }
     }
 
     private function resolveExpectedSecret(): string

@@ -682,11 +682,16 @@ h6 {
 }
 
 .sidebar-nav .nav-heading {
-  font-size: 11px;
+  font-size: 13px;
   text-transform: uppercase;
-  color: #899bbd;
-  font-weight: 600;
-  margin: 10px 0 5px 15px;
+  color: #b3475b;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  margin: 14px 12px 8px;
+  border-top: 1px solid #d8e2f5;
+  background: #f4f7fc;
+  border-radius: 6px;
+  padding: 7px 10px;
 }
 
 .sidebar-nav .nav-link {
