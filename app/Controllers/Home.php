@@ -234,13 +234,23 @@ class Home extends BaseController
         }
 
         $user = service('auth')->user();
-        $meta = $this->getCurrentUserProfileMeta((int) ($user->id ?? 0));
+        $userId = (int) ($user->id ?? 0);
+        $meta = $this->getCurrentUserProfileMeta($userId);
+
+        // Load user settings (use hospital defaults if not set)
+        $userSettingsModel = model('UserSettings');
+        $sidebarAutoHideSecondsUser = $userSettingsModel->getUserSetting(
+            $userId,
+            'SIDEBAR_AUTO_HIDE_SECONDS',
+            hospital_setting_value('SIDEBAR_AUTO_HIDE_SECONDS', '7')
+        );
 
         return view('account/my_profile', [
             'user' => $user,
             'phone_no' => $meta['phone_no'] ?? '',
             'person_name' => $meta['full_name'] ?? '',
             'profile_photo_url' => $this->buildUserProfilePhotoUrl((string) ($meta['profile_photo'] ?? '')),
+            'sidebar_auto_hide_seconds' => $sidebarAutoHideSecondsUser,
         ]);
     }
 
@@ -578,6 +588,23 @@ class Home extends BaseController
             $personName,
             $photoProvided ? $profilePhotoFileName : null
         );
+
+        // Save user settings
+        $sidebarAutoHideSeconds = (int) trim((string) $this->request->getPost('sidebar_auto_hide_seconds'));
+        if ($sidebarAutoHideSeconds < 0) {
+            $sidebarAutoHideSeconds = 0;
+        }
+        if ($sidebarAutoHideSeconds > 60) {
+            $sidebarAutoHideSeconds = 60;
+        }
+
+        $userSettingsModel = model('UserSettings');
+        if ($sidebarAutoHideSeconds > 0) {
+            $userSettingsModel->setUserSetting($userId, 'SIDEBAR_AUTO_HIDE_SECONDS', (string) $sidebarAutoHideSeconds);
+        } else {
+            // Delete if zero to use hospital default
+            $userSettingsModel->deleteUserSetting($userId, 'SIDEBAR_AUTO_HIDE_SECONDS');
+        }
 
         $metaAfterUpdate = $this->getCurrentUserProfileMeta($userId);
 

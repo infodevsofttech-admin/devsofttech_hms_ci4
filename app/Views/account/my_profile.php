@@ -68,6 +68,21 @@
                     <div class="small text-muted mt-2" id="profile_msg">Update your email, phone, and password here.</div>
                 </div>
             </div>
+
+            <div class="card mt-3">
+                <div class="card-header"><strong>User Settings</strong></div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">Sidebar Auto-Hide Delay (Seconds)</label>
+                        <div class="input-group input-group-sm">
+                            <input type="number" class="form-control" id="sidebar_auto_hide_seconds" min="0" max="60" step="1" value="<?= esc((string) ($sidebar_auto_hide_seconds ?? '7')) ?>" placeholder="0-60">
+                            <span class="input-group-text"><small class="text-muted">Hospital default: <?= esc((string) hospital_setting_value('SIDEBAR_AUTO_HIDE_SECONDS', '7')) ?>s</small></span>
+                        </div>
+                        <div class="small text-muted mt-1">How many seconds before sidebar auto-hides. Enter 0 to disable auto-hide. Leave blank to use hospital default.</div>
+                    </div>
+                    <div class="small text-success" id="settings_msg" style="display:none;">Settings auto-saved.</div>
+                </div>
+            </div>
         </div>
     </div>
 </section>
@@ -141,6 +156,7 @@
         payload.append('phone_no', ($('#profile_phone_no').val() || '').trim());
         payload.append('password', ($('#profile_password').val() || '').toString());
         payload.append('password_confirm', ($('#profile_password_confirm').val() || '').toString());
+        payload.append('sidebar_auto_hide_seconds', ($('#sidebar_auto_hide_seconds').val() || '').trim());
 
         var photoInput = document.getElementById('profile_photo');
         if (photoInput && photoInput.files && photoInput.files[0]) {

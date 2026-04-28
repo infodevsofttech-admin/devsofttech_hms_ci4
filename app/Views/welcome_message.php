@@ -123,7 +123,24 @@
     <script src="<?= base_url('assets/vendor/php-email-form/validate.js') ?>"></script>
 
     <?php
+        // Get user settings (use hospital defaults as fallback)
         $sidebarAutoHideSeconds = (int) hospital_setting_value('SIDEBAR_AUTO_HIDE_SECONDS', '7');
+        
+        if (function_exists('auth') && auth()->loggedIn()) {
+            $authUser = auth()->user();
+            if ($authUser && isset($authUser->id)) {
+                $userSettingsModel = model('App\Models\UserSettings');
+                $userSidebarSetting = $userSettingsModel->getUserSetting(
+                    (int) $authUser->id,
+                    'SIDEBAR_AUTO_HIDE_SECONDS',
+                    ''
+                );
+                if ($userSidebarSetting !== '') {
+                    $sidebarAutoHideSeconds = (int) $userSidebarSetting;
+                }
+            }
+        }
+        
         if ($sidebarAutoHideSeconds < 0) {
             $sidebarAutoHideSeconds = 0;
         }
