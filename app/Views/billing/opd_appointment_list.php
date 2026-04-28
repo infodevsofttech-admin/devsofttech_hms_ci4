@@ -327,7 +327,7 @@ $mergedGroups = [
             return null;
         }
 
-        if ($.fn.DataTable.isDataTable('#opdAllTable')) {
+        if ($.fn.dataTable.isDataTable('#opdAllTable')) {
             $('#opdAllTable').DataTable().destroy();
         }
 

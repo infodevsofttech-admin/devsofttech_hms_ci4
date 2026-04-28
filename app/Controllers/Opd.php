@@ -1672,7 +1672,10 @@ class Opd extends BaseController
 
         $sql = "select id,payment_date,insert_time,payment_mode,credit_debit,amount,remark,card_tran_id,update_by,
             (case payment_mode when 0 then 'Zero Amount' when 1 then 'Cash' when 2 then 'Bank/Online' when 3 then 'Return Cash' when 4 then 'Bank Return' else 'Other' end) as payment_mode_str
-            from payment_history where payof_type=1 and payof_id=" . (int) $opdId . " order by id desc";
+                        from payment_history
+                        where payof_type=1 and payof_id=" . (int) $opdId . "
+                            and not (payment_mode=0 and coalesce(amount,0)=0)
+                        order by id desc";
         $query = $this->db->query($sql);
         $data['payment_history_rows'] = $query->getResult();
 
@@ -4368,6 +4371,7 @@ class Opd extends BaseController
 
         $paidAmount = (float) ($chkPayment[0]->opd_pay ?? 0);
         $pendingAmt = (float) $opdMaster[0]->opd_fee_amount - $paidAmount;
+        $alreadyPaid = (int) ($opdMaster[0]->payment_status ?? 0) === 1;
 
         $payRemark = '';
         if (!empty($opdMaster[0]->opd_discount) && (float) $opdMaster[0]->opd_discount > 0) {
@@ -4383,28 +4387,29 @@ class Opd extends BaseController
         $paymentModel = new PaymentModel();
         $opdModel = new OpdModel();
 
-        if ($mode === 0) {
-            $paydata = [
-                'payment_mode' => '0',
-                'payof_type' => '1',
-                'payof_id' => $oid,
-                'payof_code' => $opdMaster[0]->opd_code,
-                'credit_debit' => '0',
-                'amount' => $opdMaster[0]->opd_fee_amount,
-                'payment_date' => date('Y-m-d H:i:s'),
-                'remark' => $payRemark,
-                'update_by' => $userNameInfo . ' [' . $userId . ']',
-                'update_by_id' => $userId,
-                'insert_code' => $spid,
-            ];
+        if ($alreadyPaid && in_array($mode, [1, 2, 4], true)) {
+            return $this->response->setJSON([
+                'update' => 1,
+                'showcontent' => (string) ($opdMaster[0]->payment_mode_desc ?? 'Paid'),
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
 
-            $insertId = $paymentModel->insertPayment($paydata);
+        if ($mode === 0) {
+            if ($alreadyPaid && $pendingAmt <= 0) {
+                return $this->response->setJSON([
+                    'update' => 1,
+                    'showcontent' => 'No Cost',
+                    'csrfName' => csrf_token(),
+                    'csrfHash' => csrf_hash(),
+                ]);
+            }
 
             $data = [
                 'payment_mode' => '0',
                 'payment_status' => '1',
                 'payment_mode_desc' => 'No Cost',
-                'payment_id' => $insertId,
                 'confirm_pay_opd' => date('Y-m-d H:i:s'),
                 'prepared_by_id' => $userId,
             ];
@@ -4412,7 +4417,7 @@ class Opd extends BaseController
             $this->db->table('opd_master')->where('opd_id', $oid)->update($data);
 
             $this->autoCreateOpdQueue($oid);
-            $this->syncPaidOpdToHealthplix($oid);
+            // Keep zero-amount confirm fast; user can trigger HealthPlix sync manually from invoice.
 
             return $this->response->setJSON([
                 'update' => 1,
@@ -4437,7 +4442,22 @@ class Opd extends BaseController
                 'insert_code' => $spid,
             ];
 
-            $insertId = $paymentModel->insertPayment($paydata);
+            $existingPayment = null;
+            if ($spid !== '') {
+                $existingPayment = $this->db->table('payment_history')
+                    ->select('id')
+                    ->where('payof_type', 1)
+                    ->where('payof_id', $oid)
+                    ->where('insert_code', $spid)
+                    ->orderBy('id', 'DESC')
+                    ->get(1)
+                    ->getRow();
+            }
+
+            $insertId = (int) ($existingPayment->id ?? 0);
+            if ($insertId <= 0) {
+                $insertId = $paymentModel->insertPayment($paydata);
+            }
 
             $data = [
                 'payment_mode' => '1',
@@ -4485,9 +4505,25 @@ class Opd extends BaseController
                 'pay_bank_id' => (int) $this->request->getPost('cbo_pay_type'),
                 'card_tran_id' => $cardTran,
                 'update_by_id' => $userId,
+                'insert_code' => $spid,
             ];
 
-            $insertId = $paymentModel->insertPayment($paydata);
+            $existingPayment = null;
+            if ($spid !== '') {
+                $existingPayment = $this->db->table('payment_history')
+                    ->select('id')
+                    ->where('payof_type', 1)
+                    ->where('payof_id', $oid)
+                    ->where('insert_code', $spid)
+                    ->orderBy('id', 'DESC')
+                    ->get(1)
+                    ->getRow();
+            }
+
+            $insertId = (int) ($existingPayment->id ?? 0);
+            if ($insertId <= 0) {
+                $insertId = $paymentModel->insertPayment($paydata);
+            }
 
             $data = [
                 'payment_mode' => '2',
