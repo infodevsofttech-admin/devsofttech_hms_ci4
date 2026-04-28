@@ -80,7 +80,11 @@
                         </div>
                         <div class="small text-muted mt-1">How many seconds before sidebar auto-hides. Enter 0 to disable auto-hide. Leave blank to use hospital default.</div>
                     </div>
-                    <div class="small text-success" id="settings_msg" style="display:none;">Settings auto-saved.</div>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-success btn-sm" id="btn_settings_save">Save Settings</button>
+                    </div>
+                    <div class="small text-success mt-2" id="settings_msg" style="display:none;">Settings saved successfully.</div>
+                    <div class="small text-danger mt-2" id="settings_error" style="display:none;"></div>
                 </div>
             </div>
         </div>
@@ -210,6 +214,57 @@
         }).fail(function() {
             $btn.prop('disabled', false).text('Save Profile');
             setMsg('err', 'Unable to update profile');
+        });
+    });
+
+    $('#btn_settings_save').on('click', function() {
+        var sidebarAutoHideSeconds = ($('#sidebar_auto_hide_seconds').val() || '').trim();
+        
+        // Validate input
+        if (sidebarAutoHideSeconds !== '') {
+            var val = parseInt(sidebarAutoHideSeconds, 10);
+            if (isNaN(val) || val < 0 || val > 60) {
+                $('#settings_error').text('Please enter a value between 0 and 60.').show();
+                $('#settings_msg').hide();
+                return;
+            }
+        }
+
+        var payload = new window.FormData();
+        payload.append('sidebar_auto_hide_seconds', sidebarAutoHideSeconds);
+
+        var csrf = getCsrfPair();
+        payload.append(csrf.name, csrf.value);
+
+        var $btn = $(this);
+        $btn.prop('disabled', true).text('Saving...');
+
+        $.ajax({
+            url: '<?= base_url('my-profile/save-settings') ?>',
+            method: 'POST',
+            data: payload,
+            processData: false,
+            contentType: false,
+            dataType: 'json'
+        }).done(function(data) {
+            updateCsrf(data);
+            $btn.prop('disabled', false).text('Save Settings');
+
+            if (parseInt(data.success || '0', 10) !== 1) {
+                $('#settings_error').text(data.message || 'Unable to save settings').show();
+                $('#settings_msg').hide();
+                return;
+            }
+
+            $('#settings_msg').show();
+            $('#settings_error').hide();
+            setTimeout(function() {
+                $('#settings_msg').fadeOut(500);
+            }, 2000);
+        }).fail(function() {
+            $btn.prop('disabled', false).text('Save Settings');
+            $('#settings_error').text('Unable to save settings').show();
+            $('#settings_msg').hide();
         });
     });
 })();

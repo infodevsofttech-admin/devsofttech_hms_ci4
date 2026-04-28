@@ -630,6 +630,62 @@ class Home extends BaseController
         ]);
     }
 
+    public function myProfileSaveSettings()
+    {
+        if (! $this->request->is('post')) {
+            return $this->response->setStatusCode(405)->setJSON([
+                'success' => 0,
+                'message' => 'Method not allowed.',
+            ]);
+        }
+
+        $authUser = auth()->user();
+        if (! $authUser) {
+            return $this->response->setStatusCode(401)->setJSON([
+                'success' => 0,
+                'message' => 'Not authenticated.',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $userId = (int) $authUser->id;
+
+        // Process sidebar auto-hide setting
+        $sidebarAutoHideSecondsInput = trim((string) $this->request->getPost('sidebar_auto_hide_seconds'));
+        $userSettingsModel = model('UserSettings');
+
+        if ($sidebarAutoHideSecondsInput === '') {
+            // Empty means use hospital default
+            $userSettingsModel->deleteUserSetting($userId, 'SIDEBAR_AUTO_HIDE_SECONDS');
+            $message = 'Settings saved. Using hospital default.';
+        } else {
+            $sidebarAutoHideSeconds = (int) $sidebarAutoHideSecondsInput;
+            if ($sidebarAutoHideSeconds < 0) {
+                $sidebarAutoHideSeconds = 0;
+            }
+            if ($sidebarAutoHideSeconds > 60) {
+                $sidebarAutoHideSeconds = 60;
+            }
+
+            if ($sidebarAutoHideSeconds > 0) {
+                $userSettingsModel->setUserSetting($userId, 'SIDEBAR_AUTO_HIDE_SECONDS', (string) $sidebarAutoHideSeconds);
+                $message = "Sidebar auto-hide set to {$sidebarAutoHideSeconds} seconds.";
+            } else {
+                // 0 means disable auto-hide
+                $userSettingsModel->setUserSetting($userId, 'SIDEBAR_AUTO_HIDE_SECONDS', '0');
+                $message = 'Sidebar auto-hide disabled.';
+            }
+        }
+
+        return $this->response->setJSON([
+            'success' => 1,
+            'message' => $message,
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
     /**
      * @return array{phone_no:string, full_name:string, profile_photo:string}
      */
