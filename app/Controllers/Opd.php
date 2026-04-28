@@ -833,7 +833,7 @@ class Opd extends BaseController
                     sum(case when o.opd_status = 3 then 1 else 0 end) as count_cancel
                 from opd_master o
                 left join opd_prescription pr on pr.opd_id = o.opd_id
-                where o.apointment_date = " . $opdDateSql . "
+                where date(o.apointment_date) = " . $opdDateSql . "
                 group by o.doc_id
             ) oa
             join doctor_master d on d.id = oa.doc_id and d.active = 1
@@ -925,7 +925,7 @@ class Opd extends BaseController
             from opd_master o
             join patient_master p on o.p_id=p.id
             left join opd_prescription pr on o.opd_id=pr.opd_id
-            where o.apointment_date=" . $opdDateSql . " and o.doc_id=" . $docId;
+            where date(o.apointment_date)=" . $opdDateSql . " and o.doc_id=" . $docId;
         $query = $this->db->query($sql);
         $allRows = $query->getResult();
 
@@ -1107,7 +1107,7 @@ class Opd extends BaseController
                 ) as digest_crc
             from opd_master o
             left join opd_prescription pr on o.opd_id = pr.opd_id
-            where o.apointment_date = " . $opdDateSql . " and o.doc_id = " . $docId;
+            where date(o.apointment_date) = " . $opdDateSql . " and o.doc_id = " . $docId;
 
         $row = $this->db->query($sql)->getRow();
 
@@ -1176,7 +1176,7 @@ class Opd extends BaseController
                 coalesce(pr.queue_no,0) as queue_no
             from opd_master o
             left join opd_prescription pr on o.opd_id = pr.opd_id
-            where o.apointment_date = " . $opdDateSql . " and o.doc_id = " . $docId;
+            where date(o.apointment_date) = " . $opdDateSql . " and o.doc_id = " . $docId;
 
         $rows = $this->db->query($sql)->getResult();
 

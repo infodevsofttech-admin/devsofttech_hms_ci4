@@ -11,6 +11,18 @@ if ($user) {
     }
 }
 $paymentHistoryRows = $payment_history_rows ?? [];
+$appointmentDateRaw = trim((string) ($opd_master[0]->apointment_date ?? ''));
+$appointmentDateDisplay = '';
+$appointmentDateTimeDisplay = '';
+$appointmentDatePickerValue = '';
+if ($appointmentDateRaw !== '') {
+    $appointmentTimestamp = strtotime($appointmentDateRaw);
+    if ($appointmentTimestamp !== false) {
+        $appointmentDateDisplay = date('d/m/y', $appointmentTimestamp);
+        $appointmentDateTimeDisplay = date('d/m/y H:i:s', $appointmentTimestamp);
+        $appointmentDatePickerValue = date('d/m/Y', $appointmentTimestamp);
+    }
+}
 ?>
 <section class="content-header">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -32,7 +44,7 @@ $paymentHistoryRows = $payment_history_rows ?? [];
                 <address>
                     <strong><?= esc(strtoupper($opd_master[0]->P_name ?? '')) ?></strong><br>
                     <?= esc($patient_master[0]->p_relative ?? '') ?> : <?= esc($patient_master[0]->p_rname ?? '') ?><br>
-                    OPD Book Date (y-m-d time) : <?= esc($opd_master[0]->opd_book_date ?? '') ?><br>
+                    OPD Book Time : <?= esc($appointmentDateTimeDisplay !== '' ? $appointmentDateTimeDisplay : $appointmentDateRaw) ?><br>
                     Gender : <?= esc($patient_master[0]->xgender ?? '') ?><br>
                     Age : <?= esc($patient_master[0]->age ?? '') ?><br>
                     Phone No : <?= esc($patient_master[0]->mphone1 ?? '') ?>
@@ -40,7 +52,7 @@ $paymentHistoryRows = $payment_history_rows ?? [];
             </div>
             <div class="col-sm-4 invoice-col">
                 <b>OPD ID:</b> <?= esc($opd_master[0]->opd_code ?? '') ?><br>
-                <b>Date of Appointment:</b> <?= esc($opd_master[0]->str_apointment_date ?? '') ?><br>
+                <b>Date of Appointment:</b> <?= esc($appointmentDateTimeDisplay !== '' ? $appointmentDateTimeDisplay : ($appointmentDateDisplay !== '' ? $appointmentDateDisplay : ($opd_master[0]->str_apointment_date ?? ''))) ?><br>
                 <b>Patient ID :</b> <?= esc($patient_master[0]->p_code ?? '') ?><br>
                 <?php if (($opd_master[0]->insurance_id ?? 0) > 1 && !empty($insurance)) : ?>
                     <strong> Ins. Comp. :</strong> <?= esc($insurance[0]->ins_company_name ?? '') ?><br>
@@ -66,7 +78,7 @@ $paymentHistoryRows = $payment_history_rows ?? [];
                     </thead>
                     <tbody>
                         <tr>
-                            <td><?= esc(MysqlDate_to_str($opd_master[0]->apointment_date ?? '')) ?></td>
+                            <td><?= esc($appointmentDateTimeDisplay !== '' ? $appointmentDateTimeDisplay : ($appointmentDateDisplay !== '' ? $appointmentDateDisplay : MysqlDate_to_str($opd_master[0]->apointment_date ?? ''))) ?></td>
                             <td>Dr. <?= esc($opd_master[0]->doc_name ?? '') ?></td>
                             <td><?= esc($opd_master[0]->doc_spec ?? '') ?></td>
                             <td><?= esc($opd_master[0]->opd_fee_gross_amount ?? '') ?></td>
@@ -341,8 +353,8 @@ $paymentHistoryRows = $payment_history_rows ?? [];
                     </select>
                 </div>
                 <div class="col-md-3">
-                    <label>Date <?= esc(MysqlDate_to_str($opd_master[0]->apointment_date ?? '')) ?></label>
-                    <input class="form-control datepicker" id="datepicker_opddate" name="datepicker_opddate" type="text" value="<?= esc(MysqlDate_to_str($opd_master[0]->apointment_date ?? '')) ?>" />
+                    <label>Date <?= esc($appointmentDatePickerValue !== '' ? $appointmentDatePickerValue : MysqlDate_to_str($opd_master[0]->apointment_date ?? '')) ?></label>
+                    <input class="form-control datepicker" id="datepicker_opddate" name="datepicker_opddate" type="text" value="<?= esc($appointmentDatePickerValue !== '' ? $appointmentDatePickerValue : MysqlDate_to_str($opd_master[0]->apointment_date ?? '')) ?>" />
                 </div>
                 <div class="col-md-3">
                     <label>OPD Fee <?= esc($opd_master[0]->opd_fee_gross_amount ?? '') ?> / <?= esc($opd_master[0]->opd_fee_amount ?? '') ?></label>
