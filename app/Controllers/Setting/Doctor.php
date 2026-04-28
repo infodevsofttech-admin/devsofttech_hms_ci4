@@ -86,26 +86,6 @@ class Doctor extends BaseController
             return redirect()->back()->withInput()->with('errors', $errors);
         }
 
-        if ($this->isHealthplixEnabled()
-            && in_array('healthplix_doctor_identifier', $doctorFields, true)
-            && $healthplixDoctorIdentifier === '') {
-            $errors = ['HealthPlix Doctor Identifier is required when HealthPlix integration is enabled.'];
-            if ($this->request->isAJAX()) {
-                $templateContext = $this->getDoctorTemplateContext();
-                return view('Setting/Doctor/Doctor_V', [
-                    'errors' => $errors,
-                    'formData' => $this->request->getPost(),
-                    'template_options' => $templateContext['options'],
-                    'opd_print_template_options' => $templateContext['opd_print_options'],
-                    'template_fields' => $templateContext['fields'],
-                    'hospital_default_opd_valid_no_days' => $this->getHospitalDefaultOpdValidityDays(),
-                    'healthplix_enabled' => $this->isHealthplixEnabled(),
-                ]);
-            }
-
-            return redirect()->back()->withInput()->with('errors', $errors);
-        }
-
         $data = [
             'p_title' => $this->request->getPost('select_title'),
             'mphone1' => $this->request->getPost('input_mphone1'),
@@ -222,15 +202,7 @@ class Doctor extends BaseController
             ]);
         }
 
-        if ($this->isHealthplixEnabled()
-            && in_array('healthplix_doctor_identifier', $doctorFields, true)
-            && $healthplixDoctorIdentifier === '') {
-            return $this->response->setJSON([
-                'update' => 0,
-                'showcontent' => '',
-                'error_text' => 'HealthPlix Doctor Identifier is required when HealthPlix integration is enabled.',
-            ]);
-        }
+
 
         $data = [
             'p_title' => $this->request->getPost('select_title'),
