@@ -111,23 +111,23 @@
                 </li>
                 <?php } ?>
                 <?php if ($hdrCanIpdBilling) { ?>
-                <li class="nav-item d-flex align-items-center" style="margin-right:14px;">
+                <li class="nav-item d-flex align-items-center" style="margin-right:20px;">
                     <a class="nav-shortcut-icon text-decoration-none" href="javascript:load_form('<?= base_url('/billing/ipd') ?>','IPD Billing')" data-bs-toggle="tooltip" data-bs-placement="bottom" title="IPD Billing">
-                        <i class="bi bi-hospital fs-5"></i>
+                        <i class="bi bi-hospital fs-4"></i>
                     </a>
                 </li>
                 <?php } ?>
                 <?php if ($hdrCanDoctorWork) { ?>
-                <li class="nav-item d-flex align-items-center" style="margin-right:14px;">
+                <li class="nav-item d-flex align-items-center" style="margin-right:20px;">
                     <a class="nav-shortcut-icon text-decoration-none" href="javascript:load_form('<?= base_url('/opd/appointment') ?>','OPD Appointment List')" data-bs-toggle="tooltip" data-bs-placement="bottom" title="OPD Appointment">
-                        <i class="bi bi-calendar2-check fs-5"></i>
+                        <i class="bi bi-calendar2-check fs-4"></i>
                     </a>
                 </li>
                 <?php } ?>
                 <?php if ($hdrCanPharmacy) { ?>
-                <li class="nav-item d-flex align-items-center" style="margin-right:18px;">
+                <li class="nav-item d-flex align-items-center" style="margin-right:20px;">
                     <a class="nav-shortcut-icon text-decoration-none" href="javascript:load_form('<?= base_url('/Medical') ?>','Pharmacy')" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Pharmacy">
-                        <i class="bi bi-capsule fs-5"></i>
+                        <i class="bi bi-capsule fs-4"></i>
                     </a>
                 </li>
                 <?php } ?>
