@@ -19,6 +19,11 @@ use App\Models\FinanceScrollSubmissionItemModel;
 use App\Models\FinanceScrollSubmissionModel;
 use App\Models\FinanceVendorInvoiceModel;
 use App\Models\FinancePharmacyBillModel;
+use App\Models\FinancePayoutRequestAuditModel;
+use App\Models\FinancePayoutRequestLineModel;
+use App\Models\FinancePayoutRequestModel;
+use App\Models\FinanceOutgoingPaymentAllocationModel;
+use App\Models\FinanceOutgoingPaymentHistoryModel;
 use App\Models\FinanceVendorModel;
 
 class Finance extends BaseController
@@ -40,6 +45,11 @@ class Finance extends BaseController
     private FinanceDoctorAgreementModel $doctorAgreementModel;
     private FinanceDoctorPayoutModel $doctorPayoutModel;
     private FinancePharmacyBillModel $pharmBillModel;
+    private FinancePayoutRequestModel $payoutRequestModel;
+    private FinancePayoutRequestLineModel $payoutRequestLineModel;
+    private FinanceOutgoingPaymentHistoryModel $outgoingPaymentHistoryModel;
+    private FinanceOutgoingPaymentAllocationModel $outgoingPaymentAllocationModel;
+    private FinancePayoutRequestAuditModel $payoutRequestAuditModel;
 
     public function __construct()
     {
@@ -60,6 +70,11 @@ class Finance extends BaseController
         $this->doctorAgreementModel = new FinanceDoctorAgreementModel();
         $this->doctorPayoutModel = new FinanceDoctorPayoutModel();
         $this->pharmBillModel = new FinancePharmacyBillModel();
+        $this->payoutRequestModel = new FinancePayoutRequestModel();
+        $this->payoutRequestLineModel = new FinancePayoutRequestLineModel();
+        $this->outgoingPaymentHistoryModel = new FinanceOutgoingPaymentHistoryModel();
+        $this->outgoingPaymentAllocationModel = new FinanceOutgoingPaymentAllocationModel();
+        $this->payoutRequestAuditModel = new FinancePayoutRequestAuditModel();
     }
 
     public function bankDeposits()
@@ -3565,6 +3580,607 @@ class Finance extends BaseController
         }
 
         return $builder->get()->getResultArray();
+    }
+
+    public function medicalStoreRequests()
+    {
+        if (! $this->canFinanceAny(['finance.workflow.view', 'finance.cash.accounts.accept', 'finance.cash.accounts.verify', 'finance.doctor_payout.manage'])) {
+            return $this->response->setStatusCode(403)->setJSON(['status' => 0, 'message' => 'Access denied']);
+        }
+
+        if (! $this->db->tableExists('finance_payout_requests')) {
+            return $this->response->setJSON(['status' => 1, 'rows' => [], 'message' => 'Payout request table not available']);
+        }
+
+        $status = trim((string) ($this->request->getGet('status') ?? ''));
+        $fromDate = $this->normalizeDateInput((string) ($this->request->getGet('from_date') ?? ''));
+        $toDate = $this->normalizeDateInput((string) ($this->request->getGet('to_date') ?? ''));
+
+        $builder = $this->payoutRequestModel->where('request_type', 'medical_store_credit')->orderBy('id', 'DESC');
+        if ($status !== '') {
+            $builder->where('status', $status);
+        }
+        if ($fromDate !== '') {
+            $builder->where('request_date >=', $fromDate);
+        }
+        if ($toDate !== '') {
+            $builder->where('request_date <=', $toDate);
+        }
+
+        $rows = $builder->findAll(300);
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'rows' => $rows,
+        ]);
+    }
+
+    public function medicalStoreCreditAccount()
+    {
+        if (! $this->canFinanceAny(['finance.workflow.view', 'finance.cash.accounts.accept', 'finance.cash.accounts.verify', 'finance.doctor_payout.manage'])) {
+            return $this->response->setStatusCode(403)->setBody('Access denied');
+        }
+
+        $summary = [
+            'total_requested' => 0.0,
+            'total_paid' => 0.0,
+            'total_pending' => 0.0,
+            'open_requests' => 0,
+        ];
+        $rows = [];
+
+        if ($this->db->tableExists('finance_payout_requests')) {
+            $summaryRow = $this->db->table('finance_payout_requests')
+                ->select('COALESCE(SUM(requested_amount),0) AS total_requested, COALESCE(SUM(paid_amount),0) AS total_paid, COALESCE(SUM(pending_amount),0) AS total_pending', false)
+                ->where('request_type', 'medical_store_credit')
+                ->get()->getRowArray();
+
+            $summary['total_requested'] = (float) ($summaryRow['total_requested'] ?? 0);
+            $summary['total_paid'] = (float) ($summaryRow['total_paid'] ?? 0);
+            $summary['total_pending'] = (float) ($summaryRow['total_pending'] ?? 0);
+            $summary['open_requests'] = $this->db->table('finance_payout_requests')
+                ->where('request_type', 'medical_store_credit')
+                ->whereIn('status', ['submitted', 'finance_review', 'approved', 'partially_paid'])
+                ->countAllResults();
+
+            $rows = $this->payoutRequestModel
+                ->where('request_type', 'medical_store_credit')
+                ->orderBy('id', 'DESC')
+                ->findAll(60);
+        }
+
+        return view('finance/medical_store_credit_account', [
+            'summary' => $summary,
+            'rows' => $rows,
+        ]);
+    }
+
+    public function medicalStoreRequestsTable()
+    {
+        if (! $this->canFinanceAny(['finance.workflow.view', 'finance.cash.accounts.accept', 'finance.cash.accounts.verify', 'finance.doctor_payout.manage'])) {
+            return $this->response->setStatusCode(403)->setBody('Access denied');
+        }
+
+        $status = trim((string) ($this->request->getGet('status') ?? ''));
+        $rows = [];
+
+        if ($this->db->tableExists('finance_payout_requests')) {
+            $builder = $this->payoutRequestModel
+                ->where('request_type', 'medical_store_credit')
+                ->orderBy('id', 'DESC');
+            if ($status !== '') {
+                $builder->where('status', $status);
+            }
+            $rows = $builder->findAll(200);
+        }
+
+        return view('finance/partials/medical_store_requests_table', [
+            'rows' => $rows,
+        ]);
+    }
+
+    public function medicalStoreRequestLinesTable()
+    {
+        if (! $this->canFinanceAny(['finance.workflow.view', 'finance.cash.accounts.accept', 'finance.cash.accounts.verify', 'finance.doctor_payout.manage'])) {
+            return $this->response->setStatusCode(403)->setBody('Access denied');
+        }
+
+        $requestId = (int) ($this->request->getGet('request_id') ?? 0);
+        if ($requestId <= 0) {
+            return view('finance/partials/medical_store_request_lines_table', [
+                'request' => null,
+                'lines' => [],
+                'payments' => [],
+            ]);
+        }
+
+        $request = $this->payoutRequestModel->find($requestId);
+        $lines = $this->db->tableExists('finance_payout_request_lines')
+            ? $this->payoutRequestLineModel->where('request_id', $requestId)->orderBy('line_order', 'ASC')->orderBy('id', 'ASC')->findAll()
+            : [];
+        $payments = $this->db->tableExists('finance_outgoing_payment_history')
+            ? $this->outgoingPaymentHistoryModel->where('request_id', $requestId)->orderBy('id', 'DESC')->findAll()
+            : [];
+
+        return view('finance/partials/medical_store_request_lines_table', [
+            'request' => $request,
+            'lines' => $lines,
+            'payments' => $payments,
+        ]);
+    }
+
+    public function medicalStoreRequestDetail($requestId = 0)
+    {
+        if (! $this->canFinanceAny(['finance.workflow.view', 'finance.cash.accounts.accept', 'finance.cash.accounts.verify', 'finance.doctor_payout.manage'])) {
+            return $this->response->setStatusCode(403)->setJSON(['status' => 0, 'message' => 'Access denied']);
+        }
+
+        $requestId = (int) $requestId;
+        if ($requestId <= 0) {
+            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Request ID required']);
+        }
+
+        $request = $this->payoutRequestModel->find($requestId);
+        if (! is_array($request)) {
+            return $this->response->setStatusCode(404)->setJSON(['status' => 0, 'message' => 'Request not found']);
+        }
+
+        $lines = [];
+        $payments = [];
+        if ($this->db->tableExists('finance_payout_request_lines')) {
+            $lines = $this->payoutRequestLineModel
+                ->where('request_id', $requestId)
+                ->orderBy('line_order', 'ASC')
+                ->orderBy('id', 'ASC')
+                ->findAll();
+        }
+        if ($this->db->tableExists('finance_outgoing_payment_history')) {
+            $payments = $this->outgoingPaymentHistoryModel
+                ->where('request_id', $requestId)
+                ->orderBy('id', 'DESC')
+                ->findAll();
+        }
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'request' => $request,
+            'lines' => $lines,
+            'payments' => $payments,
+        ]);
+    }
+
+    public function medicalStoreRequestReview()
+    {
+        return $this->transitionMedicalStoreRequestStatus('finance_review', ['submitted']);
+    }
+
+    public function medicalStoreRequestApprove()
+    {
+        return $this->transitionMedicalStoreRequestStatus('approved', ['finance_review']);
+    }
+
+    public function medicalStoreRequestReject()
+    {
+        return $this->transitionMedicalStoreRequestStatus('rejected', ['finance_review', 'submitted']);
+    }
+
+    public function medicalStorePaymentCreate()
+    {
+        if (! $this->canFinanceAny(['finance.cash.accounts.accept', 'finance.cash.accounts.verify', 'finance.doctor_payout.manage'])) {
+            return $this->response->setStatusCode(403)->setJSON(['status' => 0, 'message' => 'Access denied']);
+        }
+
+        $requestId = (int) ($this->request->getPost('request_id') ?? 0);
+        $amount = round((float) ($this->request->getPost('amount') ?? 0), 2);
+        $paymentMode = (int) ($this->request->getPost('payment_mode') ?? 1);
+        $remark = trim((string) ($this->request->getPost('remark') ?? ''));
+
+        if ($requestId <= 0 || $amount <= 0) {
+            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Request and amount are required.']);
+        }
+
+        $request = $this->payoutRequestModel->find($requestId);
+        if (! is_array($request)) {
+            return $this->response->setStatusCode(404)->setJSON(['status' => 0, 'message' => 'Request not found.']);
+        }
+
+        $status = (string) ($request['status'] ?? '');
+        if (! in_array($status, ['approved', 'partially_paid'], true)) {
+            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Only approved or partially paid requests can be paid.']);
+        }
+
+        $pending = round((float) ($request['pending_amount'] ?? 0), 2);
+        if ($pending <= 0) {
+            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Request has no pending amount.']);
+        }
+        if ($amount > $pending) {
+            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Payment amount exceeds pending amount.']);
+        }
+
+        $userId = $this->currentUserId();
+        $userName = $this->currentUserName();
+        $now = date('Y-m-d H:i:s');
+        $paymentNo = 'MSP-' . date('YmdHis') . '-' . random_int(1000, 9999);
+
+        $this->db->transStart();
+
+        $this->outgoingPaymentHistoryModel->insert([
+            'payment_no' => $paymentNo,
+            'payout_type' => 'medical_store',
+            'payee_label' => 'Medical Store Credit Settlement',
+            'request_id' => $requestId,
+            'payment_date' => $now,
+            'amount' => $amount,
+            'payment_mode' => $paymentMode,
+            'pay_bank_id' => (int) ($this->request->getPost('pay_bank_id') ?? 0),
+            'card_bank' => trim((string) ($this->request->getPost('card_bank') ?? '')),
+            'card_remark' => trim((string) ($this->request->getPost('card_remark') ?? '')),
+            'cust_card' => trim((string) ($this->request->getPost('cust_card') ?? '')),
+            'card_tran_id' => trim((string) ($this->request->getPost('card_tran_id') ?? '')),
+            'bankcard_machine' => trim((string) ($this->request->getPost('bankcard_machine') ?? '')),
+            'insert_code' => trim((string) ($this->request->getPost('insert_code') ?? '')),
+            'credit_debit' => 0,
+            'remark' => $remark,
+            'status' => 'paid',
+            'created_by' => $userName,
+            'created_by_id' => $userId,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        $paymentId = (int) $this->outgoingPaymentHistoryModel->getInsertID();
+
+        $openLines = $this->payoutRequestLineModel
+            ->where('request_id', $requestId)
+            ->where('pending_amount >', 0)
+            ->orderBy('line_order', 'ASC')
+            ->orderBy('id', 'ASC')
+            ->findAll();
+
+        $remaining = $amount;
+        $allocOrder = 1;
+        foreach ($openLines as $line) {
+            $lineId = (int) ($line['id'] ?? 0);
+            $linePending = round((float) ($line['pending_amount'] ?? 0), 2);
+            if ($lineId <= 0 || $linePending <= 0 || $remaining <= 0) {
+                continue;
+            }
+
+            $alloc = min($linePending, $remaining);
+            $alloc = round($alloc, 2);
+
+            $this->outgoingPaymentAllocationModel->insert([
+                'payment_id' => $paymentId,
+                'request_id' => $requestId,
+                'request_line_id' => $lineId,
+                'allocated_amount' => $alloc,
+                'allocation_order' => $allocOrder,
+                'allocation_note' => 'Auto FIFO allocation',
+                'created_by' => $userName,
+                'created_by_id' => $userId,
+                'created_at' => $now,
+            ]);
+
+            $newAllocated = round((float) ($line['allocated_amount'] ?? 0) + $alloc, 2);
+            $newPending = round(max(0, (float) ($line['line_amount'] ?? 0) - $newAllocated), 2);
+            $newLineStatus = $newPending <= 0 ? 'closed' : ($newAllocated > 0 ? 'partial' : 'open');
+
+            $this->payoutRequestLineModel->update($lineId, [
+                'allocated_amount' => $newAllocated,
+                'pending_amount' => $newPending,
+                'line_status' => $newLineStatus,
+                'updated_at' => $now,
+            ]);
+
+            $remaining = round($remaining - $alloc, 2);
+            $allocOrder++;
+        }
+
+        if ($remaining > 0) {
+            $this->db->transRollback();
+            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Payment exceeds open line capacity.']);
+        }
+
+        $this->recalculateMedicalStoreRequestTotals($requestId, $userId, $userName);
+        $this->logPayoutRequestAudit($requestId, 'payment_create', $status, null, 'Payment #' . $paymentNo . ' amount: ' . number_format($amount, 2, '.', ''));
+
+        $this->db->transComplete();
+
+        if (! $this->db->transStatus()) {
+            return $this->response->setStatusCode(500)->setJSON(['status' => 0, 'message' => 'Failed to save payout payment.']);
+        }
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'message' => 'Payment saved and allocated successfully.',
+            'payment_id' => $paymentId,
+            'payment_no' => $paymentNo,
+        ]);
+    }
+
+    public function medicalStoreDashboardCard()
+    {
+        if (! $this->canFinanceAny(['finance.workflow.view', 'finance.cash.accounts.accept', 'finance.cash.accounts.verify', 'finance.doctor_payout.manage'])) {
+            return $this->response->setStatusCode(403)->setJSON(['status' => 0, 'message' => 'Access denied']);
+        }
+
+        if (! $this->db->tableExists('finance_payout_requests')) {
+            return $this->response->setJSON([
+                'status' => 1,
+                'summary' => [
+                    'total_requested' => 0,
+                    'total_paid' => 0,
+                    'total_pending' => 0,
+                    'open_requests' => 0,
+                ],
+            ]);
+        }
+
+        $summaryRow = $this->db->table('finance_payout_requests')
+            ->select('COALESCE(SUM(requested_amount),0) AS total_requested, COALESCE(SUM(paid_amount),0) AS total_paid, COALESCE(SUM(pending_amount),0) AS total_pending', false)
+            ->where('request_type', 'medical_store_credit')
+            ->get()->getRowArray();
+
+        $openRequests = $this->db->table('finance_payout_requests')
+            ->where('request_type', 'medical_store_credit')
+            ->whereIn('status', ['submitted', 'finance_review', 'approved', 'partially_paid'])
+            ->countAllResults();
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'summary' => [
+                'total_requested' => (float) ($summaryRow['total_requested'] ?? 0),
+                'total_paid' => (float) ($summaryRow['total_paid'] ?? 0),
+                'total_pending' => (float) ($summaryRow['total_pending'] ?? 0),
+                'open_requests' => $openRequests,
+            ],
+        ]);
+    }
+
+    public function bankAuditOutgoingPaymentsTable()
+    {
+        if (! $this->canFinance('finance.bank.audit')) {
+            return $this->response->setStatusCode(403)->setJSON(['status' => 0, 'message' => 'Access denied']);
+        }
+
+        if (! $this->db->tableExists('finance_outgoing_payment_history')) {
+            return $this->response->setJSON(['status' => 1, 'rows' => []]);
+        }
+
+        $status = trim((string) ($this->request->getGet('status') ?? 'unmatched'));
+        $fromDate = $this->normalizeDateInput((string) ($this->request->getGet('from_date') ?? ''));
+        $toDate = $this->normalizeDateInput((string) ($this->request->getGet('to_date') ?? ''));
+
+        $q = $this->db->table('finance_outgoing_payment_history p')
+            ->select('p.id, p.payment_no, p.payment_date, p.amount, p.payment_mode, p.card_tran_id, p.card_remark, p.cust_card, p.remark, p.created_by, p.created_by_id, p.bank_reconcile_status, p.bank_statement_entry_id, p.bank_reconcile_batch_ref, p.bank_settlement_entry_id, p.insert_code, p.request_id, p.payout_type')
+            ->where('p.payment_mode', 2)
+            ->where('p.credit_debit', 0)
+            ->orderBy('p.id', 'DESC');
+
+        if ($status === 'unmatched') {
+            $q->groupStart()->where('p.bank_reconcile_status', null)->orWhere('p.bank_reconcile_status', '')->groupEnd();
+        } elseif ($status === 'matched') {
+            $q->where('p.bank_reconcile_status', 'matched');
+        }
+
+        if ($fromDate !== '') {
+            $q->where('DATE(p.payment_date) >=', $fromDate);
+        }
+        if ($toDate !== '') {
+            $q->where('DATE(p.payment_date) <=', $toDate);
+        }
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'rows' => $q->get()->getResultArray(),
+        ]);
+    }
+
+    public function bankReconcileOutgoingSingleMatch()
+    {
+        if (! $this->canFinance('finance.bank.audit')) {
+            return $this->response->setStatusCode(403)->setJSON(['status' => 0, 'message' => 'Access denied']);
+        }
+
+        $paymentId = (int) ($this->request->getPost('payment_id') ?? 0);
+        if ($paymentId <= 0) {
+            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Payment ID required.']);
+        }
+
+        $payment = $this->outgoingPaymentHistoryModel->find($paymentId);
+        if (! is_array($payment) || (int) ($payment['payment_mode'] ?? 0) !== 2 || (int) ($payment['credit_debit'] ?? 0) !== 0) {
+            return $this->response->setStatusCode(404)->setJSON(['status' => 0, 'message' => 'Outgoing bank payment not found.']);
+        }
+
+        if ((string) ($payment['bank_reconcile_status'] ?? '') === 'matched') {
+            return $this->response->setStatusCode(409)->setJSON(['status' => 0, 'message' => 'Payment already matched.']);
+        }
+
+        $this->outgoingPaymentHistoryModel->update($paymentId, [
+            'bank_reconcile_status' => 'matched',
+            'bank_statement_entry_id' => null,
+            'bank_reconcile_batch_ref' => null,
+            'bank_settlement_entry_id' => null,
+            'updated_at' => date('Y-m-d H:i:s'),
+        ]);
+
+        return $this->response->setJSON(['status' => 1, 'message' => 'Outgoing payment marked as matched.']);
+    }
+
+    public function bankReconcileOutgoingBatchMatch()
+    {
+        if (! $this->canFinance('finance.bank.audit')) {
+            return $this->response->setStatusCode(403)->setJSON(['status' => 0, 'message' => 'Access denied']);
+        }
+
+        $paymentIds = $this->request->getPost('payment_ids');
+        if (! is_array($paymentIds)) {
+            $paymentIds = [];
+        }
+
+        $ids = [];
+        foreach ($paymentIds as $id) {
+            $v = (int) $id;
+            if ($v > 0) {
+                $ids[$v] = $v;
+            }
+        }
+        $ids = array_values($ids);
+        if ($ids === []) {
+            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Select at least one payment.']);
+        }
+
+        $rows = $this->outgoingPaymentHistoryModel
+            ->select('id, bank_reconcile_status')
+            ->whereIn('id', $ids)
+            ->where('payment_mode', 2)
+            ->where('credit_debit', 0)
+            ->findAll();
+
+        if ($rows === []) {
+            return $this->response->setStatusCode(404)->setJSON(['status' => 0, 'message' => 'No eligible outgoing bank payments found.']);
+        }
+
+        $batchRef = 'OBR-' . date('YmdHis') . '-' . random_int(1000, 9999);
+        $matched = 0;
+        $now = date('Y-m-d H:i:s');
+        foreach ($rows as $row) {
+            if ((string) ($row['bank_reconcile_status'] ?? '') === 'matched') {
+                continue;
+            }
+
+            $this->outgoingPaymentHistoryModel->update((int) ($row['id'] ?? 0), [
+                'bank_reconcile_status' => 'matched',
+                'bank_statement_entry_id' => null,
+                'bank_reconcile_batch_ref' => $batchRef,
+                'bank_settlement_entry_id' => null,
+                'updated_at' => $now,
+            ]);
+            $matched++;
+        }
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'message' => 'Matched outgoing payments: ' . $matched,
+            'batch_ref' => $batchRef,
+        ]);
+    }
+
+    private function transitionMedicalStoreRequestStatus(string $newStatus, array $allowedFrom)
+    {
+        if (! $this->canFinanceAny(['finance.workflow.view', 'finance.cash.accounts.accept', 'finance.cash.accounts.verify', 'finance.doctor_payout.manage'])) {
+            return $this->response->setStatusCode(403)->setJSON(['status' => 0, 'message' => 'Access denied']);
+        }
+
+        $requestId = (int) ($this->request->getPost('request_id') ?? 0);
+        $remark = trim((string) ($this->request->getPost('remark') ?? ''));
+        if ($requestId <= 0) {
+            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Request ID required.']);
+        }
+
+        $request = $this->payoutRequestModel->find($requestId);
+        if (! is_array($request)) {
+            return $this->response->setStatusCode(404)->setJSON(['status' => 0, 'message' => 'Request not found.']);
+        }
+
+        $oldStatus = (string) ($request['status'] ?? '');
+        if (! in_array($oldStatus, $allowedFrom, true)) {
+            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Invalid status transition from ' . $oldStatus . ' to ' . $newStatus . '.']);
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $update = [
+            'status' => $newStatus,
+            'updated_at' => $now,
+            'updated_by' => $this->currentUserName(),
+            'updated_by_id' => $this->currentUserId(),
+        ];
+        if ($newStatus === 'finance_review') {
+            $update['finance_reviewed_at'] = $now;
+        }
+        if ($newStatus === 'approved') {
+            $update['approved_at'] = $now;
+            if ((float) ($request['approved_amount'] ?? 0) <= 0) {
+                $update['approved_amount'] = (float) ($request['requested_amount'] ?? 0);
+            }
+        }
+
+        $this->payoutRequestModel->update($requestId, $update);
+        $this->logPayoutRequestAudit($requestId, 'status_change', $oldStatus, $newStatus, $remark);
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'message' => 'Request status updated to ' . $newStatus . '.',
+        ]);
+    }
+
+    private function recalculateMedicalStoreRequestTotals(int $requestId, ?int $userId = null, ?string $userName = null): void
+    {
+        $sumLines = $this->db->table('finance_payout_request_lines')
+            ->select('COALESCE(SUM(line_amount),0) AS line_total, COALESCE(SUM(allocated_amount),0) AS allocated_total, COALESCE(SUM(pending_amount),0) AS pending_total', false)
+            ->where('request_id', $requestId)
+            ->get()->getRowArray();
+
+        $requested = round((float) ($sumLines['line_total'] ?? 0), 2);
+        $paid = round((float) ($sumLines['allocated_total'] ?? 0), 2);
+        $pending = round((float) ($sumLines['pending_total'] ?? 0), 2);
+
+        $newStatus = 'approved';
+        if ($paid <= 0) {
+            $newStatus = 'approved';
+        } elseif ($pending > 0) {
+            $newStatus = 'partially_paid';
+        } else {
+            $newStatus = 'paid';
+        }
+
+        $update = [
+            'requested_amount' => $requested,
+            'paid_amount' => $paid,
+            'pending_amount' => $pending,
+            'status' => $newStatus,
+            'updated_at' => date('Y-m-d H:i:s'),
+        ];
+
+        if ($userName !== null) {
+            $update['updated_by'] = $userName;
+        }
+        if ($userId !== null) {
+            $update['updated_by_id'] = $userId;
+        }
+        if ($newStatus === 'paid') {
+            $update['closed_at'] = date('Y-m-d H:i:s');
+        }
+
+        $this->payoutRequestModel->update($requestId, $update);
+    }
+
+    private function logPayoutRequestAudit(int $requestId, string $actionType, ?string $oldStatus, ?string $newStatus, string $note = ''): void
+    {
+        if (! $this->db->tableExists('finance_payout_request_audit')) {
+            return;
+        }
+
+        $this->payoutRequestAuditModel->insert([
+            'request_id' => $requestId,
+            'action_type' => $actionType,
+            'old_status' => $oldStatus,
+            'new_status' => $newStatus,
+            'action_note' => $note !== '' ? $note : null,
+            'action_by' => $this->currentUserName(),
+            'action_by_id' => $this->currentUserId(),
+            'action_at' => date('Y-m-d H:i:s'),
+        ]);
+    }
+
+    private function currentUserId(): ?int
+    {
+        $user = function_exists('auth') ? auth()->user() : null;
+        if (! $user || ! isset($user->id)) {
+            return null;
+        }
+
+        return (int) $user->id;
     }
 
     private function summarizePaymentHistoryRows(array $rows): array

@@ -3,6 +3,7 @@
     <?php $canBillingSubmit = $user && method_exists($user, 'can') ? ($user->can('finance.cash.billing.submit') || $user->can('finance.*')) : false; ?>
     <?php $canAccountsVerify = $user && method_exists($user, 'can') ? ($user->can('finance.cash.accounts.accept') || $user->can('finance.cash.accounts.verify') || $user->can('finance.*')) : false; ?>
     <?php $canBankAudit = $user && method_exists($user, 'can') ? ($user->can('finance.bank.deposit.create') || $user->can('finance.bank.audit') || $user->can('finance.bank.statement.update') || $user->can('finance.*')) : false; ?>
+    <?php $canMedicalStoreCredit = $user && method_exists($user, 'can') ? ($user->can('finance.workflow.view') || $user->can('finance.cash.accounts.accept') || $user->can('finance.cash.accounts.verify') || $user->can('finance.doctor_payout.manage') || $user->can('finance.*')) : false; ?>
 
     <div class="mb-3">
         <h2 class="mb-1">Accounts And Finance</h2>
@@ -44,6 +45,19 @@
                         <p class="small text-muted">Audit bank transactions and mark updates posted in the bank statement register.</p>
                         <a class="btn btn-success btn-sm" href="javascript:load_form('<?= base_url('Finance/bank_deposits') ?>','Bank Transaction Audit');">
                             Open Bank Audit Register
+                        </a>
+                    </div>
+                </div>
+            </div>
+        <?php endif; ?>
+        <?php if ($canMedicalStoreCredit): ?>
+            <div class="col-md-4">
+                <div class="card h-100 border-warning">
+                    <div class="card-body">
+                        <h5 class="card-title">4) Medical Store Credit Account</h5>
+                        <p class="small text-muted">Review credit payout requests raised by Medical Store and post settlement payments.</p>
+                        <a class="btn btn-warning btn-sm text-white" href="javascript:load_form('<?= base_url('Finance/medical_store_credit_account') ?>','Medical Store Credit Account');">
+                            Open Medical Store Credit
                         </a>
                     </div>
                 </div>

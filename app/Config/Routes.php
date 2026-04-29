@@ -237,6 +237,12 @@ $routes->get('Medical/master', 'Medical::master');
 $routes->get('Medical/master_report/med-payment-edit', 'Payment_Medical::index');
 $routes->get('Medical/master_report/(:segment)', 'Medical::master_report/$1');
 $routes->get('Medical/master_link/(:segment)', 'Medical::master_link/$1');
+$routes->get('Medical/credit_payout_pool', 'Medical::credit_payout_pool');
+$routes->match(['get', 'post'], 'Medical/credit_payout_pool_datatable', 'Medical::credit_payout_pool_datatable');
+$routes->get('Medical/credit_payout_request', 'Medical::credit_payout_request');
+$routes->post('Medical/credit_payout_request_create', 'Medical::credit_payout_request_create');
+$routes->get('Medical/credit_payout_requests', 'Medical::credit_payout_requests');
+$routes->get('Medical/credit_payout_request_detail/(:num)', 'Medical::credit_payout_request_detail/$1');
 
 $routes->get('Payment_Medical', 'Payment_Medical::index');
 $routes->get('Payment_Medical/payment_log', 'Payment_Medical::payment_log');
@@ -263,6 +269,7 @@ $routes->get('Finance/scroll_items_table', 'Finance::scrollItemsTable');
 $routes->get('Finance/bank_deposits', 'Finance::bankDeposits');
 $routes->get('Finance/bank_deposits_table', 'Finance::bankDepositsTable');
 $routes->get('Finance/bank_audit', 'Finance::bankAudit');
+$routes->get('Finance/medical_store_credit_account', 'Finance::medicalStoreCreditAccount');
 $routes->get('Finance/payout/opd-consult', 'Finance::payoutOpdConsult');
 $routes->get('Finance/payout/opd-consult-summary', 'Finance::payoutOpdConsultSummary');
 $routes->get('Finance/payout/opd-consult-drafts-table', 'Finance::payoutOpdConsultDraftsTable');
@@ -270,6 +277,7 @@ $routes->post('Finance/payout/opd-consult-draft-create', 'Finance::payoutOpdCons
 $routes->post('Finance/payout/opd-consult-draft-update', 'Finance::payoutOpdConsultDraftUpdate');
 $routes->post('Finance/payout/opd-consult-draft-delete', 'Finance::payoutOpdConsultDraftDelete');
 $routes->get('Finance/bank_audit_direct_payments_table', 'Finance::bankAuditDirectPaymentsTable');
+$routes->get('Finance/bank_audit_outgoing_payments_table', 'Finance::bankAuditOutgoingPaymentsTable');
 $routes->get('Finance/bank_statement_entries_table', 'Finance::bankStatementEntriesTable');
 $routes->get('Finance/bank_settlement_entries_table', 'Finance::bankSettlementEntriesTable');
 $routes->get('Finance/bank_settlement_linked_payments_table', 'Finance::bankSettlementLinkedPaymentsTable');
@@ -285,11 +293,22 @@ $routes->post('Finance/bank_deposit_status_update', 'Finance::bankDepositStatusU
 $routes->post('Finance/bank_statement_entry_create', 'Finance::bankStatementEntryCreate');
 $routes->post('Finance/bank_reconcile_match', 'Finance::bankReconcileMatch');
 $routes->post('Finance/bank_reconcile_batch_match', 'Finance::bankReconcileBatchMatch');
+$routes->post('Finance/bank_reconcile_outgoing_single_match', 'Finance::bankReconcileOutgoingSingleMatch');
+$routes->post('Finance/bank_reconcile_outgoing_batch_match', 'Finance::bankReconcileOutgoingBatchMatch');
 $routes->post('Finance/bank_settlement_create', 'Finance::bankSettlementCreate');
 $routes->post('Finance/bank_settlement_match_statement', 'Finance::bankSettlementMatchStatement');
 $routes->post('Finance/bank_reconcile_unmatch', 'Finance::bankReconcileUnmatch');
 $routes->post('Finance/bank_pos_settlement_create', 'Finance::bankPosSettlementCreate');
 $routes->post('Finance/bank_pos_settlement_accept', 'Finance::bankPosSettlementAccept');
+$routes->get('Finance/medical_store_requests', 'Finance::medicalStoreRequests');
+$routes->get('Finance/medical_store_requests_table', 'Finance::medicalStoreRequestsTable');
+$routes->get('Finance/medical_store_request_detail/(:num)', 'Finance::medicalStoreRequestDetail/$1');
+$routes->get('Finance/medical_store_request_lines_table', 'Finance::medicalStoreRequestLinesTable');
+$routes->post('Finance/medical_store_request_review', 'Finance::medicalStoreRequestReview');
+$routes->post('Finance/medical_store_request_approve', 'Finance::medicalStoreRequestApprove');
+$routes->post('Finance/medical_store_request_reject', 'Finance::medicalStoreRequestReject');
+$routes->post('Finance/medical_store_payment_create', 'Finance::medicalStorePaymentCreate');
+$routes->get('Finance/medical_store_dashboard_card', 'Finance::medicalStoreDashboardCard');
 
 service('auth')->routes($routes);
 

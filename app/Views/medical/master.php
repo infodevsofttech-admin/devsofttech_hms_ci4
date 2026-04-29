@@ -38,6 +38,9 @@
                             <a class="medical-master-link" href="javascript:load_form_div('<?= base_url('Medical/supplier_account') ?>','medical-main','Supplier Account :Pharmacy');">Supplier Account</a>
                         </li>
                         <li class="list-group-item px-0">
+                            <a class="medical-master-link" href="javascript:load_form_div('<?= base_url('Medical/credit_payout_request') ?>','medical-main','Credit Payout Request :Pharmacy');">Credit Payout Request</a>
+                        </li>
+                        <li class="list-group-item px-0">
                             <a class="medical-master-link" href="javascript:load_form_div('<?= base_url('Payment_Medical') ?>','medical-main','Med. Payment Edit :Pharmacy');">Med. Payment Edit</a>
                         </li>
                         <li class="list-group-item px-0">
@@ -158,6 +161,7 @@
         var keywordMap = {
             'Purchase Invoice': 'purchase bill buy vendor supplier invoice pi',
             'Supplier Account': 'supplier vendor ledger account payable',
+            'Credit Payout Request': 'credit payout request hospital due settlement finance',
             'Med. Payment Edit': 'payment edit correction cash bank',
             'Med. Payment Edit Logs': 'payment logs audit history',
             'Med. Invoice Item Update Logs': 'invoice item logs update history',

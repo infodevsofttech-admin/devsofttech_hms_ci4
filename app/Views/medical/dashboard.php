@@ -32,6 +32,9 @@
                 <a class="btn btn-outline-primary btn-sm" href="javascript:load_form_div('<?= base_url('Medical/master') ?>','medical-main','Master :Pharmacy');">
                     <i class="bi bi-sliders"></i> Master
                 </a>
+                <a class="btn btn-outline-warning btn-sm" href="javascript:load_form_div('<?= base_url('Medical/credit_payout_request') ?>','medical-main','Credit Payout Request :Pharmacy');">
+                    <i class="bi bi-cash-stack"></i> Credit Payout Request
+                </a>
             </div>
         </div>
     </div>

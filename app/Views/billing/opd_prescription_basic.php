@@ -34,6 +34,10 @@
 
 <section class="content">
     <style>
+        .rx-right-panel .card-body {
+            background: linear-gradient(180deg, #eaf1fb 0%, #f2f6fc 100%);
+            border-top: 1px solid #d7e3f4;
+        }
         .rx-sticky-actions {
             position: sticky;
             top: 0;
@@ -80,9 +84,16 @@
         }
         .rx-panel {
             display: block;
-            border-top: 1px solid #e9ecef;
-            margin-top: 1rem;
-            padding-top: 1rem;
+            border: 1px solid #cad9ef;
+            background: #ffffff;
+            border-radius: .6rem;
+            margin-top: .85rem;
+            padding: .85rem;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, .6);
+        }
+        .rx-panel h6 {
+            color: #274c77;
+            margin-bottom: .65rem;
         }
         .rx-consult-visibility-panel {
             display: none;
@@ -100,9 +111,22 @@
         .rx-foldable {
             border: 1px solid #dbe3f8;
             border-radius: .5rem;
-            background: #fff;
+            background: #ffffff;
             padding: .6rem .7rem;
             margin-bottom: .65rem;
+        }
+        #panel_notes .small > label,
+        #panel_notes .d-flex.flex-wrap.gap-2.small > label,
+        #panel_notes .me-2 {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+            line-height: 1.3;
+        }
+        #panel_notes input[type="checkbox"] {
+            margin: 0;
+            margin-top: 1px;
+            flex-shrink: 0;
         }
         .rx-foldable .rx-fold-heading {
             display: flex;
@@ -508,6 +532,22 @@
                                     <span class="form-check-label">Drug Allergy / ADR (NABH)</span>
                                 </label>
                                 <label class="form-check">
+                                    <input class="form-check-input rx-consult-visibility-item" type="checkbox" data-rx-key="vitals">
+                                    <span class="form-check-label">Vitals</span>
+                                </label>
+                                <label class="form-check">
+                                    <input class="form-check-input rx-consult-visibility-item" type="checkbox" data-rx-key="complaints">
+                                    <span class="form-check-label">Complaints</span>
+                                </label>
+                                <label class="form-check">
+                                    <input class="form-check-input rx-consult-visibility-item" type="checkbox" data-rx-key="examination">
+                                    <span class="form-check-label">Examination</span>
+                                </label>
+                                <label class="form-check">
+                                    <input class="form-check-input rx-consult-visibility-item" type="checkbox" data-rx-key="diagnosis">
+                                    <span class="form-check-label">Diagnosis</span>
+                                </label>
+                                <label class="form-check">
                                     <input class="form-check-input rx-consult-visibility-item" type="checkbox" data-rx-key="provisional_diagnosis">
                                     <span class="form-check-label">Provisional Diagnosis</span>
                                 </label>
@@ -521,21 +561,24 @@
                         <div id="panel_notes" class="rx-panel">
                             <div class="mb-3">
                                 <h6 class="mb-2">General Examination</h6>
-                                <div class="row g-2">
-                                    <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="pulse" placeholder="Pulse" value="<?= esc($opd_prescription[0]->pulse ?? '') ?>"></div>
-                                    <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="spo2" placeholder="SPO2" value="<?= esc($opd_prescription[0]->spo2 ?? '') ?>"></div>
-                                    <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="bp" placeholder="BP Systolic" value="<?= esc($opd_prescription[0]->bp ?? '') ?>"></div>
-                                    <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="diastolic" placeholder="Diastolic" value="<?= esc($opd_prescription[0]->diastolic ?? '') ?>"></div>
-                                    <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="temp" placeholder="Temp" value="<?= esc($opd_prescription[0]->temp ?? '') ?>"></div>
-                                    <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="rr_min" placeholder="RR/min" value="<?= esc($opd_prescription[0]->rr_min ?? '') ?>"></div>
-                                    <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="height" placeholder="Height" value="<?= esc($opd_prescription[0]->height ?? '') ?>"></div>
-                                    <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="weight" placeholder="Weight" value="<?= esc($opd_prescription[0]->weight ?? '') ?>"></div>
-                                    <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="waist" placeholder="Waist" value="<?= esc($opd_prescription[0]->waist ?? '') ?>"></div>
-                                    <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="pallor" placeholder="Pallor" value="<?= esc($opd_prescription[0]->pallor ?? '') ?>"></div>
-                                    <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="icterus" placeholder="Icterus" value="<?= esc($opd_prescription[0]->Icterus ?? '') ?>"></div>
-                                    <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="cyanosis" placeholder="Cyanosis" value="<?= esc($opd_prescription[0]->cyanosis ?? '') ?>"></div>
-                                    <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="clubbing" placeholder="Clubbing" value="<?= esc($opd_prescription[0]->clubbing ?? '') ?>"></div>
-                                    <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="edema" placeholder="Edema" value="<?= esc($opd_prescription[0]->edema ?? '') ?>"></div>
+                                <div class="mb-3" id="rx_sec_vitals">
+                                    <h6 class="mb-2">Vitals</h6>
+                                    <div class="row g-2">
+                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="pulse" placeholder="Pulse" value="<?= esc($opd_prescription[0]->pulse ?? '') ?>"></div>
+                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="spo2" placeholder="SPO2" value="<?= esc($opd_prescription[0]->spo2 ?? '') ?>"></div>
+                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="bp" placeholder="BP Systolic" value="<?= esc($opd_prescription[0]->bp ?? '') ?>"></div>
+                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="diastolic" placeholder="Diastolic" value="<?= esc($opd_prescription[0]->diastolic ?? '') ?>"></div>
+                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="temp" placeholder="Temp" value="<?= esc($opd_prescription[0]->temp ?? '') ?>"></div>
+                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="rr_min" placeholder="RR/min" value="<?= esc($opd_prescription[0]->rr_min ?? '') ?>"></div>
+                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="height" placeholder="Height" value="<?= esc($opd_prescription[0]->height ?? '') ?>"></div>
+                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="weight" placeholder="Weight" value="<?= esc($opd_prescription[0]->weight ?? '') ?>"></div>
+                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="waist" placeholder="Waist" value="<?= esc($opd_prescription[0]->waist ?? '') ?>"></div>
+                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="pallor" placeholder="Pallor" value="<?= esc($opd_prescription[0]->pallor ?? '') ?>"></div>
+                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="icterus" placeholder="Icterus" value="<?= esc($opd_prescription[0]->Icterus ?? '') ?>"></div>
+                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="cyanosis" placeholder="Cyanosis" value="<?= esc($opd_prescription[0]->cyanosis ?? '') ?>"></div>
+                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="clubbing" placeholder="Clubbing" value="<?= esc($opd_prescription[0]->clubbing ?? '') ?>"></div>
+                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="edema" placeholder="Edema" value="<?= esc($opd_prescription[0]->edema ?? '') ?>"></div>
+                                    </div>
                                 </div>
                                 <div class="row g-3 mt-2">
                                     <div class="col-md-12" id="rx_sec_pain_scale">
@@ -656,28 +699,31 @@
                                     <?php } ?>
                                 </div>
                             </div>
-                            <div class="mb-2">
-                                <label class="form-label">Smart Complaints Picker (English + Hinglish)</label>
-                                <div class="input-group">
-                                    <input type="text" class="form-control" id="complaint_lookup" list="complaint_suggest" placeholder="Type: bukhar, khansi, pet dard, chakkar...">
-                                    <button type="button" class="btn btn-outline-primary" id="btn_add_complaint">Add</button>
-                                    <button type="button" class="btn btn-outline-success" id="btn_ai_complaint_draft">AI Draft</button>
+                            <div class="mb-3" id="rx_sec_complaints">
+                                <h6 class="mb-2">Complaints</h6>
+                                <div class="mb-2">
+                                    <label class="form-label">Smart Complaints Picker (English + Hinglish)</label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" id="complaint_lookup" list="complaint_suggest" placeholder="Type: bukhar, khansi, pet dard, chakkar...">
+                                        <button type="button" class="btn btn-outline-primary" id="btn_add_complaint">Add</button>
+                                        <button type="button" class="btn btn-outline-success" id="btn_ai_complaint_draft">AI Draft</button>
+                                    </div>
+                                    <datalist id="complaint_suggest"></datalist>
+                                    <div id="complaint_chips" class="rx-chip-wrap mt-2"></div>
                                 </div>
-                                <datalist id="complaint_suggest"></datalist>
-                                <div id="complaint_chips" class="rx-chip-wrap mt-2"></div>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Complaints
-                                    <button type="button" class="btn btn-outline-primary btn-sm rx-ai-btn btn-ai-rewrite btn-complaints-rewrite" data-target="complaints" data-mode="hinglish_to_english" title="Convert Hinglish text to English">↔ Hinglish → English</button>
-                                    <button type="button" class="btn btn-outline-success btn-sm rx-ai-btn" id="btn_complaints_mic" title="Speech to text for complaints">Mic</button>
-                                    <button type="button" class="btn btn-outline-secondary btn-sm rx-ai-btn btn-save-autotype-keyword" data-section="complaints" data-target="complaints" title="Save keyword for autocomplete">Save keyword</button>
-                                </label>
-                                <textarea class="form-control rx-field" id="complaints" rows="4" maxlength="4000"><?= esc($opd_prescription[0]->complaints ?? '') ?></textarea>
-                                <div id="complaints_interim_preview" style="display:none;font-size:.8rem;color:#6c757d;padding:2px 4px;font-style:italic;"></div>
-                                <div class="rx-counter" id="counter_complaints">0/4000</div>
+                                <div class="mb-0">
+                                    <label class="form-label">Complaint Details
+                                        <button type="button" class="btn btn-outline-primary btn-sm rx-ai-btn btn-ai-rewrite btn-complaints-rewrite" data-target="complaints" data-mode="hinglish_to_english" title="Convert Hinglish text to English">↔ Hinglish → English</button>
+                                        <button type="button" class="btn btn-outline-success btn-sm rx-ai-btn" id="btn_complaints_mic" title="Speech to text for complaints">Mic</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm rx-ai-btn btn-save-autotype-keyword" data-section="complaints" data-target="complaints" title="Save keyword for autocomplete">Save keyword</button>
+                                    </label>
+                                    <textarea class="form-control rx-field" id="complaints" rows="4" maxlength="4000"><?= esc($opd_prescription[0]->complaints ?? '') ?></textarea>
+                                    <div id="complaints_interim_preview" style="display:none;font-size:.8rem;color:#6c757d;padding:2px 4px;font-style:italic;"></div>
+                                    <div class="rx-counter" id="counter_complaints">0/4000</div>
+                                </div>
                             </div>
 
-                            <div class="mb-3">
+                            <div class="mb-3" id="rx_sec_examination">
                                 <label class="form-label">Examination
                                 </label>
                                 <div class="d-flex flex-wrap gap-1 mb-1">
@@ -692,7 +738,7 @@
                                 <div class="rx-counter" id="counter_finding_examinations">0/4000</div>
                             </div>
 
-                            <div class="mb-3">
+                            <div class="mb-3" id="rx_sec_diagnosis">
                                 <label class="form-label">Diagnosis
                                 </label>
                                 <div class="d-flex flex-wrap gap-1 mb-1">
@@ -1348,6 +1394,10 @@
         { key: 'complication', selector: '#rx_sec_complication', title: 'Complication' },
         { key: 'addiction', selector: '#rx_sec_addiction', title: 'Addiction (if any)' },
         { key: 'drug_allergy', selector: '#rx_sec_drug_allergy', title: 'Drug Allergy / ADR (NABH)' },
+        { key: 'vitals', selector: '#rx_sec_vitals', title: 'Vitals' },
+        { key: 'complaints', selector: '#rx_sec_complaints', title: 'Complaints' },
+        { key: 'examination', selector: '#rx_sec_examination', title: 'Examination' },
+        { key: 'diagnosis', selector: '#rx_sec_diagnosis', title: 'Diagnosis' },
         { key: 'provisional_diagnosis', selector: '#rx_sec_provisional_diagnosis', title: 'Provisional Diagnosis' },
         { key: 'prescription', selector: '#rx_sec_prescription', title: 'Prescription' }
     ];

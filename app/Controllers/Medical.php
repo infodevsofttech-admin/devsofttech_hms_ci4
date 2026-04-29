@@ -11139,6 +11139,457 @@ class Medical extends BaseController
         ];
     }
 
+    public function credit_payout_pool()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        $scope = strtolower(trim((string) ($this->request->getGet('scope') ?? 'all')));
+        if (! in_array($scope, ['all', 'ipd', 'org'], true)) {
+            $scope = 'all';
+        }
+        $fromDate = $this->normalizeDate((string) ($this->request->getGet('from_date') ?? ''));
+        $toDate = $this->normalizeDate((string) ($this->request->getGet('to_date') ?? ''));
+
+        $baseSql = $this->buildMedicalCreditPoolBaseSql($scope, $fromDate, $toDate);
+        if ($baseSql === '') {
+            return $this->response->setJSON(['status' => 1, 'rows' => []]);
+        }
+
+        $rows = $this->db->query('SELECT * FROM (' . $baseSql . ') t ORDER BY t.inv_date DESC, t.source_ref_id DESC LIMIT 300')->getResultArray();
+        $rows = array_map(function (array $row): array {
+            return $this->normalizeMedicalCreditPoolRow($row);
+        }, $rows);
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'rows' => $rows,
+        ]);
+    }
+
+    public function credit_payout_pool_datatable()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        $draw = (int) ($this->request->getPost('draw') ?? $this->request->getGet('draw') ?? 1);
+        $start = max(0, (int) ($this->request->getPost('start') ?? $this->request->getGet('start') ?? 0));
+        $length = (int) ($this->request->getPost('length') ?? $this->request->getGet('length') ?? 25);
+        if ($length <= 0 || $length > 500) {
+            $length = 25;
+        }
+
+        $scope = strtolower(trim((string) ($this->request->getPost('scope') ?? $this->request->getGet('scope') ?? 'all')));
+        if (! in_array($scope, ['all', 'ipd', 'org'], true)) {
+            $scope = 'all';
+        }
+
+        $groupBy = strtolower(trim((string) ($this->request->getPost('group_by') ?? $this->request->getGet('group_by') ?? 'none')));
+        if (! in_array($groupBy, ['none', 'ipd', 'case'], true)) {
+            $groupBy = 'none';
+        }
+
+        $fromDate = $this->normalizeDate((string) ($this->request->getPost('from_date') ?? $this->request->getGet('from_date') ?? ''));
+        $toDate = $this->normalizeDate((string) ($this->request->getPost('to_date') ?? $this->request->getGet('to_date') ?? ''));
+
+        $search = $this->request->getPost('search');
+        if (! is_array($search)) {
+            $search = ['value' => (string) ($this->request->getGet('search') ?? '')];
+        }
+        $searchValue = trim((string) ($search['value'] ?? ''));
+
+        $order = $this->request->getPost('order');
+        if (! is_array($order)) {
+            $order = [];
+        }
+        $orderColIndex = isset($order[0]['column']) ? (int) $order[0]['column'] : 6;
+        $orderDir = strtolower((string) ($order[0]['dir'] ?? 'desc')) === 'asc' ? 'ASC' : 'DESC';
+
+        $orderCols = [
+            1 => 'q.source_type',
+            2 => 'q.invoice_code',
+            3 => 'q.ipd_code',
+            4 => 'q.case_code',
+            5 => 'q.credit_category',
+            6 => 'q.inv_date',
+            7 => 'q.line_amount',
+        ];
+        $orderBy = $orderCols[$orderColIndex] ?? 'q.inv_date';
+
+        $baseSql = $this->buildMedicalCreditPoolBaseSql($scope, $fromDate, $toDate);
+        if ($baseSql === '') {
+            return $this->response->setJSON([
+                'draw' => $draw,
+                'recordsTotal' => 0,
+                'recordsFiltered' => 0,
+                'data' => [],
+            ]);
+        }
+
+        $whereParts = ['q.line_amount > 0'];
+
+        if ($this->db->tableExists('finance_payout_request_lines') && $this->db->tableExists('finance_payout_requests')) {
+            $whereParts[] = "NOT EXISTS (
+                SELECT 1
+                FROM finance_payout_request_lines pl
+                JOIN finance_payout_requests pr ON pr.id = pl.request_id
+                WHERE pl.source_type = q.source_type
+                  AND pl.source_ref_id = q.source_ref_id
+                  AND pr.request_type = 'medical_store_credit'
+                  AND pr.status IN ('submitted','finance_review','approved','partially_paid')
+            )";
+        }
+
+        if ($searchValue !== '') {
+            $esc = $this->db->escapeLikeString($searchValue);
+            $like = $this->db->escape('%' . $esc . '%');
+            $whereParts[] = "(
+                q.source_type LIKE {$like} ESCAPE '!'
+                OR CAST(q.source_ref_id AS CHAR) LIKE {$like} ESCAPE '!'
+                OR q.invoice_code LIKE {$like} ESCAPE '!'
+                OR q.ipd_code LIKE {$like} ESCAPE '!'
+                OR q.case_code LIKE {$like} ESCAPE '!'
+                OR q.credit_category LIKE {$like} ESCAPE '!'
+            )";
+        }
+
+        $whereSql = ' WHERE ' . implode(' AND ', $whereParts);
+        $countTotalSql = 'SELECT COUNT(1) AS cnt FROM (' . $baseSql . ') q WHERE q.line_amount > 0';
+
+        $countFilteredSql = 'SELECT COUNT(1) AS cnt FROM (' . $baseSql . ') q' . $whereSql;
+        $orderPrefix = '';
+        if ($groupBy === 'ipd') {
+            $orderPrefix = 'COALESCE(NULLIF(q.ipd_code,\'\'), \'ZZZ\') ASC, ';
+        } elseif ($groupBy === 'case') {
+            $orderPrefix = 'COALESCE(NULLIF(q.case_code,\'\'), \'ZZZ\') ASC, ';
+        }
+
+        $dataSql = 'SELECT q.* FROM (' . $baseSql . ') q' . $whereSql
+            . ' ORDER BY ' . $orderPrefix . $orderBy . ' ' . $orderDir . ', q.source_ref_id DESC'
+            . ' LIMIT ' . $start . ', ' . $length;
+
+        $recordsTotal = (int) (($this->db->query($countTotalSql)->getRowArray()['cnt'] ?? 0));
+        $recordsFiltered = (int) (($this->db->query($countFilteredSql)->getRowArray()['cnt'] ?? 0));
+        $rows = $this->db->query($dataSql)->getResultArray();
+
+        $data = array_map(function (array $row): array {
+            return $this->normalizeMedicalCreditPoolRow($row);
+        }, $rows);
+
+        return $this->response->setJSON([
+            'draw' => $draw,
+            'recordsTotal' => $recordsTotal,
+            'recordsFiltered' => $recordsFiltered,
+            'data' => $data,
+        ]);
+    }
+
+    public function credit_payout_request()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        $rows = [];
+        if ($this->db->tableExists('finance_payout_requests')) {
+            $rows = $this->db->table('finance_payout_requests')
+                ->where('request_type', 'medical_store_credit')
+                ->orderBy('id', 'DESC')
+                ->get(80)
+                ->getResultArray();
+        }
+
+        return view('medical/credit_payout_request', [
+            'rows' => $rows,
+        ]);
+    }
+
+    public function credit_payout_request_create()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        if (! $this->db->tableExists('finance_payout_requests') || ! $this->db->tableExists('finance_payout_request_lines')) {
+            return $this->response->setStatusCode(500)->setJSON(['status' => 0, 'message' => 'Finance payout tables not available.']);
+        }
+
+        $requestDate = $this->normalizeDate((string) ($this->request->getPost('request_date') ?? date('Y-m-d')));
+        $remarks = trim((string) ($this->request->getPost('remarks') ?? ''));
+        $lineItemsRaw = $this->request->getPost('line_items');
+        $lineItems = [];
+        if (is_string($lineItemsRaw)) {
+            $decoded = json_decode($lineItemsRaw, true);
+            if (is_array($decoded)) {
+                $lineItems = $decoded;
+            }
+        } elseif (is_array($lineItemsRaw)) {
+            $lineItems = $lineItemsRaw;
+        }
+
+        if ($requestDate === '' || $lineItems === []) {
+            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Request date and line items are required.']);
+        }
+
+        $requestNo = 'MSR-' . date('YmdHis') . '-' . random_int(1000, 9999);
+        $now = date('Y-m-d H:i:s');
+        $userLabel = $this->pharmacyActorLabel();
+        $user = service('auth')->user();
+        $userId = $user && isset($user->id) ? (int) $user->id : null;
+
+        $this->db->transStart();
+
+        $this->db->table('finance_payout_requests')->insert([
+            'request_no' => $requestNo,
+            'request_type' => 'medical_store_credit',
+            'requester_unit' => 'medical_store',
+            'beneficiary_unit' => 'hospital',
+            'request_date' => $requestDate,
+            'requested_amount' => 0,
+            'approved_amount' => 0,
+            'paid_amount' => 0,
+            'pending_amount' => 0,
+            'status' => 'submitted',
+            'remarks' => $remarks,
+            'submitted_at' => $now,
+            'created_by' => $userLabel,
+            'created_by_id' => $userId,
+            'updated_by' => $userLabel,
+            'updated_by_id' => $userId,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+        $requestId = (int) $this->db->insertID();
+
+        $lineOrder = 1;
+        $total = 0.0;
+        foreach ($lineItems as $line) {
+            $sourceType = trim((string) ($line['source_type'] ?? ''));
+            $sourceRefId = (int) ($line['source_ref_id'] ?? 0);
+            $lineAmount = round((float) ($line['line_amount'] ?? 0), 2);
+            if ($sourceType === '' || $sourceRefId <= 0 || $lineAmount <= 0) {
+                continue;
+            }
+
+            $this->db->table('finance_payout_request_lines')->insert([
+                'request_id' => $requestId,
+                'source_domain' => 'medical_store',
+                'source_type' => $sourceType,
+                'source_ref_id' => $sourceRefId,
+                'invoice_id' => (int) ($line['invoice_id'] ?? 0) ?: null,
+                'invoice_code' => trim((string) ($line['invoice_code'] ?? '')),
+                'ipd_id' => (int) ($line['ipd_id'] ?? 0) ?: null,
+                'ipd_code' => trim((string) ($line['ipd_code'] ?? '')),
+                'case_id' => (int) ($line['case_id'] ?? 0) ?: null,
+                'case_code' => trim((string) ($line['case_code'] ?? '')),
+                'credit_category' => trim((string) ($line['credit_category'] ?? 'ipd_credit')),
+                'line_amount' => $lineAmount,
+                'allocated_amount' => 0,
+                'pending_amount' => $lineAmount,
+                'line_status' => 'open',
+                'line_remarks' => trim((string) ($line['line_remarks'] ?? '')),
+                'line_order' => $lineOrder,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+            $total += $lineAmount;
+            $lineOrder++;
+        }
+
+        if ($total <= 0) {
+            $this->db->transRollback();
+            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'No valid line item found.']);
+        }
+
+        $this->db->table('finance_payout_requests')->where('id', $requestId)->update([
+            'requested_amount' => round($total, 2),
+            'pending_amount' => round($total, 2),
+            'updated_at' => $now,
+        ]);
+
+        if ($this->db->tableExists('finance_payout_request_audit')) {
+            $this->db->table('finance_payout_request_audit')->insert([
+                'request_id' => $requestId,
+                'action_type' => 'request_create',
+                'old_status' => null,
+                'new_status' => 'submitted',
+                'action_note' => $remarks !== '' ? $remarks : 'Medical store payout request submitted.',
+                'action_by' => $userLabel,
+                'action_by_id' => $userId,
+                'action_at' => $now,
+            ]);
+        }
+
+        $this->db->transComplete();
+        if (! $this->db->transStatus()) {
+            return $this->response->setStatusCode(500)->setJSON(['status' => 0, 'message' => 'Failed to create payout request.']);
+        }
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'message' => 'Payout request created successfully.',
+            'request_id' => $requestId,
+            'request_no' => $requestNo,
+        ]);
+    }
+
+    public function credit_payout_requests()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        if (! $this->db->tableExists('finance_payout_requests')) {
+            return $this->response->setJSON(['status' => 1, 'rows' => []]);
+        }
+
+        $status = trim((string) ($this->request->getGet('status') ?? ''));
+        $builder = $this->db->table('finance_payout_requests')
+            ->where('request_type', 'medical_store_credit')
+            ->orderBy('id', 'DESC');
+        if ($status !== '') {
+            $builder->where('status', $status);
+        }
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'rows' => $builder->get()->getResultArray(),
+        ]);
+    }
+
+    public function credit_payout_request_detail($requestId = 0)
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        $requestId = (int) $requestId;
+        if ($requestId <= 0) {
+            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Request ID required']);
+        }
+
+        $request = $this->db->table('finance_payout_requests')->where('id', $requestId)->get()->getRowArray();
+        if (! is_array($request)) {
+            return $this->response->setStatusCode(404)->setJSON(['status' => 0, 'message' => 'Request not found']);
+        }
+
+        $lines = $this->db->table('finance_payout_request_lines')
+            ->where('request_id', $requestId)
+            ->orderBy('line_order', 'ASC')
+            ->orderBy('id', 'ASC')
+            ->get()->getResultArray();
+
+        $payments = [];
+        if ($this->db->tableExists('finance_outgoing_payment_history')) {
+            $payments = $this->db->table('finance_outgoing_payment_history')
+                ->where('request_id', $requestId)
+                ->orderBy('id', 'DESC')
+                ->get()->getResultArray();
+        }
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'request' => $request,
+            'lines' => $lines,
+            'payments' => $payments,
+        ]);
+    }
+
+    private function normalizeMedicalCreditPoolRow(array $row): array
+    {
+        return [
+            'source_type' => trim((string) ($row['source_type'] ?? '')),
+            'source_ref_id' => (int) ($row['source_ref_id'] ?? 0),
+            'invoice_id' => (int) ($row['invoice_id'] ?? 0),
+            'invoice_code' => trim((string) ($row['invoice_code'] ?? '')),
+            'ipd_id' => (int) ($row['ipd_id'] ?? 0),
+            'ipd_code' => trim((string) ($row['ipd_code'] ?? '')),
+            'case_id' => (int) ($row['case_id'] ?? 0),
+            'case_code' => trim((string) ($row['case_code'] ?? '')),
+            'credit_category' => trim((string) ($row['credit_category'] ?? 'ipd_credit')),
+            'line_amount' => round((float) ($row['line_amount'] ?? 0), 2),
+            'inv_date' => ! empty($row['inv_date']) ? date('Y-m-d', strtotime((string) $row['inv_date'])) : null,
+        ];
+    }
+
+    private function buildMedicalCreditPoolBaseSql(string $scope, string $fromDate, string $toDate): string
+    {
+        $parts = [];
+
+        $hasInvMedGroup = $this->db->tableExists('inv_med_group');
+        $hasInvMedMaster = $this->db->tableExists('invoice_med_master');
+        $hasIpdMaster = $this->db->tableExists('ipd_master');
+        $hasOrgCase = $this->db->tableExists('organization_case_master');
+
+        $dateCondIpd = '';
+        $dateCondOrg = '';
+        if ($fromDate !== '') {
+            $dateCondIpd .= ' AND DATE(m.inv_date) >= ' . $this->db->escape($fromDate);
+            $dateCondOrg .= ' AND DATE(m.inv_date) >= ' . $this->db->escape($fromDate);
+        }
+        if ($toDate !== '') {
+            $dateCondIpd .= ' AND DATE(m.inv_date) <= ' . $this->db->escape($toDate);
+            $dateCondOrg .= ' AND DATE(m.inv_date) <= ' . $this->db->escape($toDate);
+        }
+
+        if (($scope === 'all' || $scope === 'ipd') && $hasInvMedGroup && $hasInvMedMaster && $hasIpdMaster) {
+            $parts[] = "
+                SELECT
+                    'inv_med_group' AS source_type,
+                    g.med_group_id AS source_ref_id,
+                    MAX(m.id) AS invoice_id,
+                    MAX(COALESCE(m.inv_med_code, '')) AS invoice_code,
+                    MAX(COALESCE(m.ipd_id, 0)) AS ipd_id,
+                    MAX(COALESCE(m.ipd_code, '')) AS ipd_code,
+                    MAX(COALESCE(m.case_id, 0)) AS case_id,
+                    '' AS case_code,
+                    IF(g.med_type = 3, 'ipd_package', 'ipd_credit') AS credit_category,
+                    DATE(MAX(m.inv_date)) AS inv_date,
+                    ROUND(COALESCE(NULLIF(MAX(COALESCE(g.net_amount, 0)), 0), NULLIF(SUM(COALESCE(m.net_amount, 0)), 0), SUM(COALESCE(m.gross_amount, 0))), 2) AS line_amount
+                FROM inv_med_group g
+                JOIN invoice_med_master m ON m.med_group_id = g.med_group_id
+                JOIN ipd_master ip ON ip.id = g.ipd_id
+                WHERE g.med_type IN (2, 3)
+                  AND IFNULL(ip.ipd_status, 0) <> 0
+                  AND IFNULL(m.sale_return, 0) = 0
+                  {$dateCondIpd}
+                GROUP BY g.med_group_id, g.med_type
+            ";
+        }
+
+        if (($scope === 'all' || $scope === 'org') && $hasInvMedMaster && $hasOrgCase) {
+            $orgFields = $this->db->getFieldNames('organization_case_master') ?? [];
+            $caseCodeExpr = in_array('case_id_code', $orgFields, true) ? "COALESCE(o.case_id_code, '')" : "''";
+
+            $parts[] = "
+                SELECT
+                    'invoice_med_master' AS source_type,
+                    m.id AS source_ref_id,
+                    m.id AS invoice_id,
+                    COALESCE(m.inv_med_code, '') AS invoice_code,
+                    COALESCE(m.ipd_id, 0) AS ipd_id,
+                    COALESCE(m.ipd_code, '') AS ipd_code,
+                    COALESCE(m.case_id, 0) AS case_id,
+                    {$caseCodeExpr} AS case_code,
+                    'org_case_credit' AS credit_category,
+                    DATE(m.inv_date) AS inv_date,
+                    ROUND(COALESCE(NULLIF(m.net_amount, 0), m.gross_amount, 0), 2) AS line_amount
+                FROM invoice_med_master m
+                JOIN organization_case_master o ON o.id = m.case_id
+                WHERE m.case_id > 0
+                  AND IFNULL(m.case_credit, 0) = 1
+                  AND IFNULL(o.status, 0) = 2
+                  AND IFNULL(m.sale_return, 0) = 0
+                  {$dateCondOrg}
+            ";
+        }
+
+        return $parts === [] ? '' : implode(' UNION ALL ', $parts);
+    }
+
     public function master()
     {
         if ($deny = $this->ensurePharmacyAccess()) {

@@ -52,7 +52,7 @@
    * Auto-hide sidebar after a short idle period on desktop
    * to provide larger work area for clinical forms.
    */
-  const configuredDelay = parseInt(window.SIDEBAR_AUTO_HIDE_DELAY_MS || 7000, 10)
+  const configuredDelay = parseInt(window.SIDEBAR_AUTO_HIDE_DELAY_MS ?? 7000, 10)
   const SIDEBAR_AUTO_HIDE_DELAY_MS = isNaN(configuredDelay) ? 7000 : Math.max(0, configuredDelay)
   let sidebarAutoHideTimer = null
   let lastActivityTs = 0

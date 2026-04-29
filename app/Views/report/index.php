@@ -33,9 +33,11 @@
                         <li><a href="javascript:load_form('<?= base_url('Report/report_opd_total') ?>','OPD Total Report');"><i class="bi bi-arrow-right-short"></i> OPD Total Report</a></li>
                         <li><a href="javascript:load_form('<?= base_url('Report/billing_operations_report') ?>','Billing Operations Report');"><i class="bi bi-arrow-right-short"></i> Billing Operations Report</a></li>
                         <li><a href="javascript:load_form('<?= base_url('Finance/index') ?>','Accounts And Finance');"><i class="bi bi-arrow-right-short"></i> Accounts And Finance Dashboard</a></li>
+                        <li><a href="javascript:load_form('<?= base_url('Finance/medical_store_credit_account') ?>','Medical Store Credit Account');"><i class="bi bi-arrow-right-short"></i> Medical Store Credit Account</a></li>
                         <li><a href="javascript:load_form('<?= base_url('Finance/cashbook') ?>','Billing Cash Statement Submission');"><i class="bi bi-arrow-right-short"></i> Billing Cash Statement Submission</a></li>
                         <li><a href="javascript:load_form('<?= base_url('Finance/cashbook') ?>','Accounts Accept and Verify');"><i class="bi bi-arrow-right-short"></i> Accounts Accept and Verify</a></li>
                         <li><a href="javascript:load_form('<?= base_url('Finance/bank_deposits') ?>','Bank Transaction Audit');"><i class="bi bi-arrow-right-short"></i> Bank Transaction Audit</a></li>
+                        <li><a href="javascript:load_form('<?= base_url('Medical/credit_payout_request') ?>','Credit Payout Request :Pharmacy');"><i class="bi bi-arrow-right-short"></i> Medical Credit Payout Request</a></li>
                         <li><a href="javascript:load_form('<?= base_url('Report/nabh_audit_report') ?>','NABH Audit Report');"><i class="bi bi-arrow-right-short"></i> NABH Audit Report</a></li>
                     </ul>
                 </div>

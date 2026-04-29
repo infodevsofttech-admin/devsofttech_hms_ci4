@@ -303,6 +303,12 @@ if (! $canChargesSettings && $user && method_exists($user, 'inGroup')) {
                         <span>OPD Consult Payout</span>
                     </a>
                 </li>
+                <li>
+                    <a href="javascript:load_form('<?= base_url('Finance/medical_store_credit_account') ?>','Medical Store Credit Account')">
+                        <i class="bi bi-circle"></i>
+                        <span>Medical Store Credit Account</span>
+                    </a>
+                </li>
             </ul>
         </li>
     <?php } ?>
