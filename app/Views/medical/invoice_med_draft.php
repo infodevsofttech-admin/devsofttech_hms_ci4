@@ -90,7 +90,7 @@
             pageLength: 25,
             ajax: {
                 url: '<?= base_url('Medical/getInvoiceTable') ?>',
-                type: 'POST',
+                type: 'GET',
                 data: function (data) {
                     var statusInput = filterForm.find('input[name="status"]');
                     var caseInput = filterForm.find('input[name="case_id"]');
@@ -103,9 +103,6 @@
                     data.to = toInput.length ? (toInput.val() || '') : '';
                     data.q = qInput.length ? (qInput.val() || '') : '';
                     data.case_id = caseInput.length ? (caseInput.val() || defaultCaseId) : defaultCaseId;
-                    <?php if (function_exists('csrf_token') && function_exists('csrf_hash')): ?>
-                    data['<?= csrf_token() ?>'] = '<?= csrf_hash() ?>';
-                    <?php endif; ?>
                 },
                 error: function () {
                     jQuery(tableId + ' tbody').html('<tr><td colspan="8" class="text-center text-danger">No data found in server.</td></tr>');
