@@ -208,9 +208,38 @@
     }
 
     function loadPool() {
-        if (poolTable) {
-            poolTable.ajax.reload(null, false);
+        if (!poolTable) {
+            return;
         }
+
+        if (poolTable.ajax && typeof poolTable.ajax.reload === 'function') {
+            poolTable.ajax.reload(null, false);
+            return;
+        }
+
+        if (typeof poolTable.api === 'function') {
+            var api = poolTable.api();
+            if (api && api.ajax && typeof api.ajax.reload === 'function') {
+                api.ajax.reload(null, false);
+                return;
+            }
+            if (api && typeof api.draw === 'function') {
+                api.draw(false);
+                return;
+            }
+        }
+
+        if (typeof poolTable.draw === 'function') {
+            poolTable.draw(false);
+            return;
+        }
+
+        if (typeof poolTable.fnDraw === 'function') {
+            poolTable.fnDraw(false);
+            return;
+        }
+
+        showAlert('Unable to refresh credit entry table on this DataTable version.', false);
     }
 
     function applyPoolFilter() {
