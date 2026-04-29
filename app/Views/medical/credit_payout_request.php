@@ -83,7 +83,7 @@
                             <input type="date" class="form-control" name="request_date" value="<?= date('Y-m-d') ?>" required>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label mb-1">Selected Lines</label>
+                            <label class="form-label mb-1">No. of Invoices</label>
                             <input type="text" class="form-control" id="med_selected_count" value="0" readonly>
                         </div>
                         <div class="col-12">
