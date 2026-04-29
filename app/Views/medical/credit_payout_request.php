@@ -91,6 +91,24 @@
                             <input type="text" class="form-control" id="med_selected_total" value="0.00" readonly>
                         </div>
                         <div class="col-12">
+                            <label class="form-label mb-1">Selected Invoices</label>
+                            <div class="table-responsive border rounded" style="max-height: 180px; overflow:auto;">
+                                <table class="table table-sm table-bordered mb-0" id="med_selected_preview_table">
+                                    <thead class="table-light" style="position:sticky;top:0;z-index:1;">
+                                        <tr>
+                                            <th>Source</th>
+                                            <th>IPD / Case</th>
+                                            <th class="text-end">Amount</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr><td colspan="3" class="text-center text-muted py-2">No invoices selected.</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="small text-muted mt-1">Each invoice appears once in this list.</div>
+                        </div>
+                        <div class="col-12">
                             <label class="form-label mb-1">Remarks</label>
                             <textarea class="form-control" name="remarks" rows="3" placeholder="Optional remarks for finance"></textarea>
                         </div>
@@ -188,6 +206,27 @@
         var t = document.getElementById('med_selected_total');
         if (c) c.value = String(rows.length);
         if (t) t.value = total.toFixed(2);
+
+        var previewBody = document.querySelector('#med_selected_preview_table tbody');
+        if (previewBody) {
+            if (!rows.length) {
+                previewBody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-2">No invoices selected.</td></tr>';
+            } else {
+                var html = '';
+                rows.forEach(function (row) {
+                    var ref = String(row.source_type || '') + '#' + Number(row.source_ref_id || 0);
+                    var ipd = String(row.ipd_code || '').trim();
+                    var cse = String(row.case_code || '').trim();
+                    var label = ipd !== '' ? ('IPD: ' + ipd) : (cse !== '' ? ('Case: ' + cse) : '-');
+                    html += '<tr>'
+                        + '<td>' + ref + '</td>'
+                        + '<td>' + label + '</td>'
+                        + '<td class="text-end">' + Number(row.line_amount || 0).toFixed(2) + '</td>'
+                        + '</tr>';
+                });
+                previewBody.innerHTML = html;
+            }
+        }
     }
 
     function getGroupMode() {
