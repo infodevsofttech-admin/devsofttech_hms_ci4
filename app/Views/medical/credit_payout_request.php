@@ -190,6 +190,11 @@
         if (t) t.value = total.toFixed(2);
     }
 
+    function getGroupMode() {
+        var el = document.getElementById('med_pool_group_by');
+        return el ? String(el.value || 'none') : 'none';
+    }
+
     function updateMasterCheckboxForPage() {
         var master = document.getElementById('med_pool_master');
         if (!master || !poolTable) {
@@ -297,6 +302,9 @@
                     searchable: false,
                     className: 'text-center',
                     render: function (data, type, row) {
+                        if (getGroupMode() === 'ipd') {
+                            return '';
+                        }
                         var key = getRowKey(row);
                         poolRowCache[key] = row;
                         var checked = selectedMap[key] ? ' checked' : '';
@@ -366,7 +374,21 @@
             var val = groupMode === 'ipd' ? String(row.ipd_code || '').trim() : String(row.case_code || '').trim();
             var groupValue = val !== '' ? val : 'Unmapped';
             if (groupValue !== lastGroup) {
-                var title = (groupMode === 'ipd' ? 'IPD: ' : 'Case: ') + groupValue;
+                var groupRows = rows.filter(function (r) {
+                    var rv = groupMode === 'ipd' ? String(r.ipd_code || '').trim() : String(r.case_code || '').trim();
+                    return (rv !== '' ? rv : 'Unmapped') === groupValue;
+                });
+                var groupTotal = 0;
+                groupRows.forEach(function (r) { groupTotal += Number(r.line_amount || 0); });
+
+                var title = (groupMode === 'ipd' ? 'IPD: ' : 'Case: ') + groupValue + ' | Total: ' + groupTotal.toFixed(2);
+                if (groupMode === 'ipd') {
+                    var allSelected = groupRows.length > 0 && groupRows.every(function (r) {
+                        return !!selectedMap[getRowKey(r)];
+                    });
+                    var checked = allSelected ? ' checked' : '';
+                    title = '<input type="checkbox" class="form-check-input me-2 med-ipd-group-check" data-ipd="' + groupValue + '"' + checked + '> ' + title;
+                }
                 var header = window.jQuery('<tr class="med-group-row table-secondary"><td colspan="7" class="fw-semibold small">' + title + '</td></tr>');
                 window.jQuery(domRows[i]).before(header);
                 lastGroup = groupValue;
@@ -463,7 +485,11 @@
                     delete selectedMap[key];
                 }
             });
-            window.jQuery('#med_credit_pool_table tbody .med-pool-check').prop('checked', masterCb.checked);
+            if (getGroupMode() === 'ipd') {
+                window.jQuery('#med_credit_pool_table tbody .med-ipd-group-check').prop('checked', masterCb.checked);
+            } else {
+                window.jQuery('#med_credit_pool_table tbody .med-pool-check').prop('checked', masterCb.checked);
+            }
             refreshSelectionSummary();
         });
     }
@@ -486,8 +512,42 @@
                     delete selectedMap[key];
                 }
             });
-            window.jQuery('#med_credit_pool_table tbody .med-pool-check').prop('checked', anyUnchecked);
+            if (getGroupMode() === 'ipd') {
+                window.jQuery('#med_credit_pool_table tbody .med-ipd-group-check').prop('checked', anyUnchecked);
+            } else {
+                window.jQuery('#med_credit_pool_table tbody .med-pool-check').prop('checked', anyUnchecked);
+            }
             if (masterCb) masterCb.checked = anyUnchecked;
+            refreshSelectionSummary();
+        });
+    }
+
+    if (typeof window.jQuery !== 'undefined') {
+        window.jQuery('#med_credit_pool_table tbody').on('change', '.med-ipd-group-check', function () {
+            if (!poolTable) {
+                return;
+            }
+            var ipd = String(this.getAttribute('data-ipd') || '').trim();
+            if (!ipd) {
+                return;
+            }
+
+            var pageRows = poolTable.rows({ page: 'current' }).data().toArray();
+            pageRows.forEach(function (row) {
+                var rowIpd = String(row.ipd_code || '').trim();
+                var rowGroup = rowIpd !== '' ? rowIpd : 'Unmapped';
+                if (rowGroup !== ipd) {
+                    return;
+                }
+                var key = getRowKey(row);
+                if (this.checked) {
+                    selectedMap[key] = row;
+                } else {
+                    delete selectedMap[key];
+                }
+            }, this);
+
+            updateMasterCheckboxForPage();
             refreshSelectionSummary();
         });
     }
