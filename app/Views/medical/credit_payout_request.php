@@ -59,7 +59,6 @@
                                 <tr>
                                     <th style="width:42px;"><input type="checkbox" id="med_pool_master"></th>
                                     <th>Source</th>
-                                    <th>Invoice</th>
                                     <th>IPD</th>
                                     <th>Case</th>
                                     <th>Category</th>
@@ -277,7 +276,7 @@
             searching: true,
             lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
             pageLength: 25,
-            order: [[6, 'desc']],
+            order: [[5, 'desc']],
             ajax: {
                 url: BASE + 'Medical/credit_payout_pool_datatable',
                 type: 'POST',
@@ -310,7 +309,6 @@
                         return String(row.source_type || '') + '#' + Number(row.source_ref_id || 0);
                     }
                 },
-                { data: 'invoice_code', defaultContent: '' },
                 { data: 'ipd_code', defaultContent: '' },
                 { data: 'case_code', defaultContent: '' },
                 { data: 'credit_category', defaultContent: '' },
@@ -369,7 +367,7 @@
             var groupValue = val !== '' ? val : 'Unmapped';
             if (groupValue !== lastGroup) {
                 var title = (groupMode === 'ipd' ? 'IPD: ' : 'Case: ') + groupValue;
-                var header = window.jQuery('<tr class="med-group-row table-secondary"><td colspan="8" class="fw-semibold small">' + title + '</td></tr>');
+                var header = window.jQuery('<tr class="med-group-row table-secondary"><td colspan="7" class="fw-semibold small">' + title + '</td></tr>');
                 window.jQuery(domRows[i]).before(header);
                 lastGroup = groupValue;
             }

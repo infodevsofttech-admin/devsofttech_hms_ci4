@@ -11207,15 +11207,32 @@ class Medical extends BaseController
         $orderColIndex = isset($order[0]['column']) ? (int) $order[0]['column'] : 6;
         $orderDir = strtolower((string) ($order[0]['dir'] ?? 'desc')) === 'asc' ? 'ASC' : 'DESC';
 
-        $orderCols = [
-            1 => 'q.source_type',
-            2 => 'q.invoice_code',
-            3 => 'q.ipd_code',
-            4 => 'q.case_code',
-            5 => 'q.credit_category',
-            6 => 'q.inv_date',
-            7 => 'q.line_amount',
-        ];
+        $requestColumns = $this->request->getPost('columns');
+        if (! is_array($requestColumns)) {
+            $requestColumns = $this->request->getGet('columns');
+        }
+        $columnCount = is_array($requestColumns) ? count($requestColumns) : 0;
+
+        if ($columnCount >= 8) {
+            $orderCols = [
+                1 => 'q.source_type',
+                2 => 'q.invoice_code',
+                3 => 'q.ipd_code',
+                4 => 'q.case_code',
+                5 => 'q.credit_category',
+                6 => 'q.inv_date',
+                7 => 'q.line_amount',
+            ];
+        } else {
+            $orderCols = [
+                1 => 'q.source_type',
+                2 => 'q.ipd_code',
+                3 => 'q.case_code',
+                4 => 'q.credit_category',
+                5 => 'q.inv_date',
+                6 => 'q.line_amount',
+            ];
+        }
         $orderBy = $orderCols[$orderColIndex] ?? 'q.inv_date';
 
         $baseSql = $this->buildMedicalCreditPoolBaseSql($scope, $fromDate, $toDate);
