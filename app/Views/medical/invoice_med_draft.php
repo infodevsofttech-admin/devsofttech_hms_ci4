@@ -121,9 +121,42 @@
             table.columns(col).search(val).draw();
         });
 
+        function reloadInvoiceTable(resetPaging) {
+            var reset = !!resetPaging;
+
+            if (table && table.ajax && typeof table.ajax.reload === 'function') {
+                table.ajax.reload(null, reset);
+                return;
+            }
+
+            if (table && typeof table.api === 'function') {
+                var api = table.api();
+                if (api && api.ajax && typeof api.ajax.reload === 'function') {
+                    api.ajax.reload(null, reset);
+                    return;
+                }
+                if (api && typeof api.draw === 'function') {
+                    api.draw(!reset);
+                    return;
+                }
+            }
+
+            if (table && typeof table.draw === 'function') {
+                table.draw(!reset);
+                return;
+            }
+
+            if (table && typeof table.fnDraw === 'function') {
+                table.fnDraw();
+                return;
+            }
+
+            jQuery(tableId + ' tbody').html('<tr><td colspan="8" class="text-center text-danger">Table refresh failed due to DataTable version mismatch.</td></tr>');
+        }
+
         filterForm.on('submit', function (e) {
             e.preventDefault();
-            table.ajax.reload(null, true);
+            reloadInvoiceTable(true);
         });
     })();
 </script>
