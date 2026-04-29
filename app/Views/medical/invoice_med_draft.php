@@ -11,7 +11,7 @@
             <a class="btn btn-sm <?= ($status ?? '') === 'all' ? 'btn-dark' : 'btn-outline-dark' ?>" href="javascript:load_form('<?= base_url('Medical/Invoice_Med_Draft?status=all') ?>','Invoice List :Pharmacy');">All</a>
         </div>
 
-        <form method="get" action="<?= base_url(($status ?? 'draft') === 'final' ? 'Medical/Invoice_Med_Final' : 'Medical/Invoice_Med_Draft') ?>" class="row g-2 mb-3">
+        <form id="medical-invoice-filter-form" method="get" action="<?= base_url(($status ?? 'draft') === 'final' ? 'Medical/Invoice_Med_Final' : 'Medical/Invoice_Med_Draft') ?>" class="row g-2 mb-3">
             <?php if (($status ?? 'draft') !== 'final'): ?>
                 <input type="hidden" name="status" value="<?= esc($status ?? 'draft') ?>">
             <?php endif; ?>
@@ -76,6 +76,9 @@
         }
 
         var tableId = '#medical-invoice-grid';
+        var filterForm = jQuery('#medical-invoice-filter-form');
+        var defaultStatus = '<?= esc($status ?? 'draft') ?>';
+        var defaultCaseId = '<?= (int)($caseId ?? 0) ?>';
         if (jQuery.fn.dataTable.isDataTable(tableId)) {
             jQuery(tableId).DataTable().destroy();
         }
@@ -89,11 +92,17 @@
                 url: '<?= base_url('Medical/getInvoiceTable') ?>',
                 type: 'POST',
                 data: function (data) {
-                    data.status = '<?= esc($status ?? 'draft') ?>';
-                    data.from = '<?= esc($fromDate ?? '') ?>';
-                    data.to = '<?= esc($toDate ?? '') ?>';
-                    data.q = '<?= esc($search ?? '') ?>';
-                    data.case_id = '<?= (int)($caseId ?? 0) ?>';
+                    var statusInput = filterForm.find('input[name="status"]');
+                    var caseInput = filterForm.find('input[name="case_id"]');
+                    var fromInput = filterForm.find('input[name="from"]');
+                    var toInput = filterForm.find('input[name="to"]');
+                    var qInput = filterForm.find('input[name="q"]');
+
+                    data.status = statusInput.length ? (statusInput.val() || defaultStatus) : defaultStatus;
+                    data.from = fromInput.length ? (fromInput.val() || '') : '';
+                    data.to = toInput.length ? (toInput.val() || '') : '';
+                    data.q = qInput.length ? (qInput.val() || '') : '';
+                    data.case_id = caseInput.length ? (caseInput.val() || defaultCaseId) : defaultCaseId;
                     <?php if (function_exists('csrf_token') && function_exists('csrf_hash')): ?>
                     data['<?= csrf_token() ?>'] = '<?= csrf_hash() ?>';
                     <?php endif; ?>
@@ -110,6 +119,11 @@
             var col = jQuery(this).data('column');
             var val = jQuery(this).val();
             table.columns(col).search(val).draw();
+        });
+
+        filterForm.on('submit', function (e) {
+            e.preventDefault();
+            table.ajax.reload(null, true);
         });
     })();
 </script>
