@@ -11540,6 +11540,7 @@ class Medical extends BaseController
         $hasInvMedMaster = $this->db->tableExists('invoice_med_master');
         $hasIpdMaster = $this->db->tableExists('ipd_master');
         $hasOrgCase = $this->db->tableExists('organization_case_master');
+        $invMasterFields = $hasInvMedMaster ? ($this->db->getFieldNames('invoice_med_master') ?? []) : [];
 
         $dateCondIpd = '';
         $dateCondOrg = '';
@@ -11552,28 +11553,46 @@ class Medical extends BaseController
             $dateCondOrg .= ' AND DATE(m.inv_date) <= ' . $this->db->escape($toDate);
         }
 
-        if (($scope === 'all' || $scope === 'ipd') && $hasInvMedGroup && $hasInvMedMaster && $hasIpdMaster) {
+        if (($scope === 'all' || $scope === 'ipd') && $hasInvMedMaster && $hasIpdMaster) {
+            $canJoinGroup = $hasInvMedGroup && in_array('med_group_id', $invMasterFields, true);
+            $joinGroup = $canJoinGroup ? ' LEFT JOIN inv_med_group g ON g.med_group_id = m.med_group_id' : '';
+
+            if (in_array('ipd_credit_type', $invMasterFields, true)) {
+                $ipdCategoryExpr = "IF(IFNULL(m.ipd_credit_type, 1)=0, 'ipd_package', 'ipd_credit')";
+            } elseif ($canJoinGroup) {
+                $ipdCategoryExpr = "IF(IFNULL(g.med_type, 2)=3, 'ipd_package', 'ipd_credit')";
+            } else {
+                $ipdCategoryExpr = "'ipd_credit'";
+            }
+
+            $ipdCreditWhere = '';
+            if (in_array('ipd_credit', $invMasterFields, true)) {
+                $ipdCreditWhere = ' AND IFNULL(m.ipd_credit, 0) = 1';
+            } elseif ($canJoinGroup) {
+                $ipdCreditWhere = ' AND IFNULL(g.med_type, 0) IN (2, 3)';
+            }
+
             $parts[] = "
                 SELECT
-                    'inv_med_group' AS source_type,
-                    g.med_group_id AS source_ref_id,
-                    MAX(m.id) AS invoice_id,
-                    MAX(COALESCE(m.inv_med_code, '')) AS invoice_code,
-                    MAX(COALESCE(m.ipd_id, 0)) AS ipd_id,
-                    MAX(COALESCE(m.ipd_code, '')) AS ipd_code,
-                    MAX(COALESCE(m.case_id, 0)) AS case_id,
+                    'invoice_med_master' AS source_type,
+                    m.id AS source_ref_id,
+                    m.id AS invoice_id,
+                    COALESCE(m.inv_med_code, '') AS invoice_code,
+                    COALESCE(m.ipd_id, 0) AS ipd_id,
+                    COALESCE(m.ipd_code, '') AS ipd_code,
+                    COALESCE(m.case_id, 0) AS case_id,
                     '' AS case_code,
-                    IF(g.med_type = 3, 'ipd_package', 'ipd_credit') AS credit_category,
-                    DATE(MAX(m.inv_date)) AS inv_date,
-                    ROUND(COALESCE(NULLIF(MAX(COALESCE(g.net_amount, 0)), 0), NULLIF(SUM(COALESCE(m.net_amount, 0)), 0), SUM(COALESCE(m.gross_amount, 0))), 2) AS line_amount
-                FROM inv_med_group g
-                JOIN invoice_med_master m ON m.med_group_id = g.med_group_id
-                JOIN ipd_master ip ON ip.id = g.ipd_id
-                WHERE g.med_type IN (2, 3)
+                    {$ipdCategoryExpr} AS credit_category,
+                    DATE(m.inv_date) AS inv_date,
+                    ROUND(COALESCE(NULLIF(m.net_amount, 0), m.gross_amount, 0), 2) AS line_amount
+                FROM invoice_med_master m
+                JOIN ipd_master ip ON ip.id = m.ipd_id
+                {$joinGroup}
+                WHERE m.ipd_id > 0
                   AND IFNULL(ip.ipd_status, 0) <> 0
                   AND IFNULL(m.sale_return, 0) = 0
+                  {$ipdCreditWhere}
                   {$dateCondIpd}
-                GROUP BY g.med_group_id, g.med_type
             ";
         }
 
