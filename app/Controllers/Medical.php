@@ -3934,10 +3934,10 @@ class Medical extends BaseController
         }
 
         if ($fromDate !== '' && in_array('inv_date', $fields, true)) {
-            $baseBuilder->where('DATE(m.inv_date) >=', $fromDate, false);
+            $baseBuilder->where('DATE(m.inv_date) >=', $fromDate);
         }
         if ($toDate !== '' && in_array('inv_date', $fields, true)) {
-            $baseBuilder->where('DATE(m.inv_date) <=', $toDate, false);
+            $baseBuilder->where('DATE(m.inv_date) <=', $toDate);
         }
 
         if ($quickSearch !== '') {
