@@ -242,6 +242,7 @@ $routes->match(['get', 'post'], 'Medical/credit_payout_pool_datatable', 'Medical
 $routes->get('Medical/credit_payout_request', 'Medical::credit_payout_request');
 $routes->post('Medical/credit_payout_request_create', 'Medical::credit_payout_request_create');
 $routes->get('Medical/credit_payout_requests', 'Medical::credit_payout_requests');
+$routes->match(['get', 'post'], 'Medical/credit_payout_requests_datatable', 'Medical::credit_payout_requests_datatable');
 $routes->get('Medical/credit_payout_request_detail/(:num)', 'Medical::credit_payout_request_detail/$1');
 
 $routes->get('Payment_Medical', 'Payment_Medical::index');
@@ -276,6 +277,12 @@ $routes->get('Finance/payout/opd-consult-drafts-table', 'Finance::payoutOpdConsu
 $routes->post('Finance/payout/opd-consult-draft-create', 'Finance::payoutOpdConsultDraftCreate');
 $routes->post('Finance/payout/opd-consult-draft-update', 'Finance::payoutOpdConsultDraftUpdate');
 $routes->post('Finance/payout/opd-consult-draft-delete', 'Finance::payoutOpdConsultDraftDelete');
+$routes->get('Finance/payout/doctor-charges', 'Finance::doctorChargesPayout');
+$routes->get('Finance/payout/doctor-charges-summary', 'Finance::doctorChargesPayoutSummary');
+$routes->get('Finance/payout/doctor-charges-drafts-table', 'Finance::doctorChargesPayoutDraftsTable');
+$routes->post('Finance/payout/doctor-charges-draft-create', 'Finance::doctorChargesPayoutDraftCreate');
+$routes->post('Finance/payout/doctor-charges-draft-update', 'Finance::doctorChargesPayoutDraftUpdate');
+$routes->post('Finance/payout/doctor-charges-draft-delete', 'Finance::doctorChargesPayoutDraftDelete');
 $routes->get('Finance/bank_audit_direct_payments_table', 'Finance::bankAuditDirectPaymentsTable');
 $routes->get('Finance/bank_audit_outgoing_payments_table', 'Finance::bankAuditOutgoingPaymentsTable');
 $routes->get('Finance/bank_statement_entries_table', 'Finance::bankStatementEntriesTable');

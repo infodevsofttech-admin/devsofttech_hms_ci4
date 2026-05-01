@@ -1,8 +1,7 @@
 <?php
 $rows = $rows ?? [];
-$sourceLabel = trim((string) ($source_label ?? 'OPD Consultation'));
-$sourceType = trim((string) ($source_type ?? 'consultation'));
-$isConsultation = $sourceType === 'consultation';
+$sourceLabel = trim((string) ($source_label ?? 'Doctor Charges'));
+$sourceType = trim((string) ($source_type ?? 'pathology'));
 ?>
 
 <div class="card border-0 shadow-sm">
@@ -19,7 +18,7 @@ $isConsultation = $sourceType === 'consultation';
                         <th>Payout Date</th>
                         <th>Case Ref</th>
                         <th>Doctor</th>
-                        <th class="text-end"><?= $isConsultation ? 'OPDs' : 'Invoices' ?></th>
+                        <th class="text-end">Invoices</th>
                         <th class="text-end">Rate</th>
                         <th class="text-end">Calculated</th>
                         <th class="text-end">Approved</th>
@@ -58,11 +57,11 @@ $isConsultation = $sourceType === 'consultation';
                                 <td>
                                     <?php if ($status === 'draft'): ?>
                                         <button type="button" class="btn btn-outline-primary btn-sm"
-                                            onclick="editOpdPayoutDraft(<?= (int) ($row['id'] ?? 0) ?>, '<?= esc((string) ($row['payout_date'] ?? ''), 'js') ?>', '<?= esc((string) ($row['approved_amount'] ?? '0'), 'js') ?>', '<?= esc((string) ($row['remarks'] ?? ''), 'js') ?>')">
+                                            onclick="editDcPayoutDraft(<?= (int) ($row['id'] ?? 0) ?>, '<?= esc((string) ($row['payout_date'] ?? ''), 'js') ?>', '<?= esc((string) ($row['approved_amount'] ?? '0'), 'js') ?>', '<?= esc((string) ($row['remarks'] ?? ''), 'js') ?>')">
                                             <i class="bi bi-pencil-square me-1"></i>Edit
                                         </button>
                                         <button type="button" class="btn btn-outline-danger btn-sm mt-1"
-                                            onclick="deleteOpdPayoutDraft(<?= (int) ($row['id'] ?? 0) ?>)">
+                                            onclick="deleteDcPayoutDraft(<?= (int) ($row['id'] ?? 0) ?>)">
                                             <i class="bi bi-trash me-1"></i>Delete
                                         </button>
                                     <?php else: ?>

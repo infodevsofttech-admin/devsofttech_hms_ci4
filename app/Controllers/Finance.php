@@ -1858,6 +1858,48 @@ class Finance extends BaseController
         ]);
     }
 
+    public function doctorChargesPayout()
+    {
+        if (! $this->canFinanceAny([
+            'finance.workflow.view',
+            'finance.cash.billing.submit',
+            'finance.cash.accounts.accept',
+            'finance.cash.accounts.verify',
+            'finance.bank.deposit.create',
+            'finance.bank.audit',
+            'finance.bank.statement.update',
+        ])) {
+            return $this->response->setStatusCode(403)->setBody('Access denied');
+        }
+
+        $doctorModel = new DoctorModel();
+        $doctorRows = $doctorModel->getDoctors();
+        usort($doctorRows, static function ($left, $right): int {
+            $leftName = trim((string) (($left->p_title ?? '') . ' ' . ($left->p_fname ?? '')));
+            $rightName = trim((string) (($right->p_title ?? '') . ' ' . ($right->p_fname ?? '')));
+
+            return strcasecmp($leftName, $rightName);
+        });
+
+        $doctorOptions = [];
+        foreach ($doctorRows as $row) {
+            $isActive = property_exists($row, 'active') ? (int) ($row->active ?? 0) : 1;
+            if ($isActive !== 1) {
+                continue;
+            }
+
+            $doctorOptions[] = [
+                'id' => (int) ($row->id ?? 0),
+                'name' => trim((string) (($row->p_title ?? '') . ' ' . ($row->p_fname ?? ''))),
+            ];
+        }
+
+        return view('finance/doctor_charges_payout', [
+            'doctor_options' => $doctorOptions,
+            'state_unit_options' => $this->fetchOpdStateUnitOptions(),
+        ]);
+    }
+
     public function payoutOpdConsultSummary()
     {
         if (! $this->canFinanceAny([
@@ -1876,6 +1918,7 @@ class Finance extends BaseController
         $toDate = $this->normalizeDateInput((string) ($this->request->getGet('to_date') ?? ''));
         $doctorId = (int) ($this->request->getGet('doctor_id') ?? 0);
         $stateUnit = trim((string) ($this->request->getGet('state_unit') ?? ''));
+        $payoutSource = $this->normalizePayoutSource((string) ($this->request->getGet('payout_source') ?? 'consultation'));
 
         if ($fromDate === '') {
             $fromDate = date('Y-m-01');
@@ -1887,7 +1930,40 @@ class Finance extends BaseController
             [$fromDate, $toDate] = [$toDate, $fromDate];
         }
 
-        return view('finance/partials/payout_opd_consult_summary', $this->buildOpdConsultPayoutSummaryData($fromDate, $toDate, $doctorId, $stateUnit));
+        return view('finance/partials/payout_opd_consult_summary', $this->buildPayoutSummaryDataForSource($payoutSource, $fromDate, $toDate, $doctorId, $stateUnit));
+    }
+
+    public function doctorChargesPayoutSummary()
+    {
+        if (! $this->canFinanceAny([
+            'finance.workflow.view',
+            'finance.cash.billing.submit',
+            'finance.cash.accounts.accept',
+            'finance.cash.accounts.verify',
+            'finance.bank.deposit.create',
+            'finance.bank.audit',
+            'finance.bank.statement.update',
+        ])) {
+            return $this->response->setStatusCode(403)->setBody('Access denied');
+        }
+
+        $fromDate = $this->normalizeDateInput((string) ($this->request->getGet('from_date') ?? ''));
+        $toDate = $this->normalizeDateInput((string) ($this->request->getGet('to_date') ?? ''));
+        $doctorId = (int) ($this->request->getGet('doctor_id') ?? 0);
+        $stateUnit = trim((string) ($this->request->getGet('state_unit') ?? ''));
+        $payoutSource = $this->normalizePayoutSource((string) ($this->request->getGet('payout_source') ?? 'pathology'));
+
+        if ($fromDate === '') {
+            $fromDate = date('Y-m-01');
+        }
+        if ($toDate === '') {
+            $toDate = date('Y-m-d');
+        }
+        if ($fromDate > $toDate) {
+            [$fromDate, $toDate] = [$toDate, $fromDate];
+        }
+
+        return view('finance/partials/doctor_charges_payout_summary', $this->buildPayoutSummaryDataForSource($payoutSource, $fromDate, $toDate, $doctorId, $stateUnit));
     }
 
     public function payoutOpdConsultDraftsTable()
@@ -1909,6 +1985,8 @@ class Finance extends BaseController
         $toDate = $this->normalizeDateInput((string) ($this->request->getGet('to_date') ?? ''));
         $doctorId = (int) ($this->request->getGet('doctor_id') ?? 0);
         $stateUnit = trim((string) ($this->request->getGet('state_unit') ?? ''));
+        $payoutSource = $this->normalizePayoutSource((string) ($this->request->getGet('payout_source') ?? 'consultation'));
+        $payoutType = $this->payoutTypeFromSource($payoutSource);
 
         if ($fromDate === '') {
             $fromDate = date('Y-m-01');
@@ -1923,7 +2001,7 @@ class Finance extends BaseController
         $builder = $this->doctorPayoutModel
             ->select('finance_doctor_payouts.*, finance_doctor_agreements.doctor_code, finance_doctor_agreements.doctor_name')
             ->join('finance_doctor_agreements', 'finance_doctor_agreements.id = finance_doctor_payouts.doctor_id', 'left')
-            ->where('finance_doctor_payouts.payout_type', 'consultation')
+            ->where('finance_doctor_payouts.payout_type', $payoutType)
             ->where('finance_doctor_payouts.payout_date >=', $fromDate)
             ->where('finance_doctor_payouts.payout_date <=', $toDate)
             ->orderBy('finance_doctor_payouts.id', 'DESC');
@@ -1943,6 +2021,68 @@ class Finance extends BaseController
 
         return view('finance/partials/payout_opd_consult_drafts_table', [
             'rows' => $builder->findAll(30),
+            'source_type' => $payoutSource,
+            'source_label' => $this->payoutSourceLabel($payoutSource),
+        ]);
+    }
+
+    public function doctorChargesPayoutDraftsTable()
+    {
+        if (! $this->canFinanceAny([
+            'finance.workflow.view',
+            'finance.cash.billing.submit',
+            'finance.cash.accounts.accept',
+            'finance.cash.accounts.verify',
+            'finance.bank.deposit.create',
+            'finance.bank.audit',
+            'finance.bank.statement.update',
+            'finance.doctor_payout.manage',
+        ])) {
+            return $this->response->setStatusCode(403)->setBody('Access denied');
+        }
+
+        $fromDate = $this->normalizeDateInput((string) ($this->request->getGet('from_date') ?? ''));
+        $toDate = $this->normalizeDateInput((string) ($this->request->getGet('to_date') ?? ''));
+        $doctorId = (int) ($this->request->getGet('doctor_id') ?? 0);
+        $stateUnit = trim((string) ($this->request->getGet('state_unit') ?? ''));
+        $payoutSource = $this->normalizePayoutSource((string) ($this->request->getGet('payout_source') ?? 'pathology'));
+        $payoutType = $this->payoutTypeFromSource($payoutSource);
+
+        if ($fromDate === '') {
+            $fromDate = date('Y-m-01');
+        }
+        if ($toDate === '') {
+            $toDate = date('Y-m-d');
+        }
+        if ($fromDate > $toDate) {
+            [$fromDate, $toDate] = [$toDate, $fromDate];
+        }
+
+        $builder = $this->doctorPayoutModel
+            ->select('finance_doctor_payouts.*, finance_doctor_agreements.doctor_code, finance_doctor_agreements.doctor_name')
+            ->join('finance_doctor_agreements', 'finance_doctor_agreements.id = finance_doctor_payouts.doctor_id', 'left')
+            ->where('finance_doctor_payouts.payout_type', $payoutType)
+            ->where('finance_doctor_payouts.payout_date >=', $fromDate)
+            ->where('finance_doctor_payouts.payout_date <=', $toDate)
+            ->orderBy('finance_doctor_payouts.id', 'DESC');
+
+        if ($doctorId > 0) {
+            $agreementIds = $this->findDoctorAgreementIdsFromMaster($doctorId);
+            if (! empty($agreementIds)) {
+                $builder->whereIn('finance_doctor_payouts.doctor_id', $agreementIds);
+            } else {
+                $builder->where('1 = 0', null, false);
+            }
+        }
+
+        if ($stateUnit !== '') {
+            $builder->like('finance_doctor_payouts.case_reference', '-U' . $this->normalizeStateUnitToken($stateUnit), 'both');
+        }
+
+        return view('finance/partials/doctor_charges_payout_drafts_table', [
+            'rows' => $builder->findAll(30),
+            'source_type' => $payoutSource,
+            'source_label' => $this->payoutSourceLabel($payoutSource),
         ]);
     }
 
@@ -1969,11 +2109,27 @@ class Finance extends BaseController
         $fromDate = $this->normalizeDateInput((string) ($this->request->getPost('from_date') ?? ''));
         $toDate = $this->normalizeDateInput((string) ($this->request->getPost('to_date') ?? ''));
         $stateUnit = trim((string) ($this->request->getPost('state_unit') ?? ''));
+        $payoutSource = $this->normalizePayoutSource((string) ($this->request->getPost('payout_source') ?? 'consultation'));
         $baseAmount = (float) ($this->request->getPost('base_amount') ?? 0);
         $doctorShare = (float) ($this->request->getPost('doctor_share') ?? 75);
         $hospitalShare = (float) ($this->request->getPost('hospital_share') ?? 25);
         $deductions = (float) ($this->request->getPost('deductions') ?? 0);
         $adjustments = (float) ($this->request->getPost('adjustments') ?? 0);
+
+        if ($payoutSource !== 'consultation') {
+            return $this->createChargeInvoicePayoutDraft(
+                $payoutSource,
+                $doctorId,
+                $fromDate,
+                $toDate,
+                $stateUnit,
+                $baseAmount,
+                $doctorShare,
+                $hospitalShare,
+                $deductions,
+                $adjustments
+            );
+        }
 
         if ($doctorId <= 0) {
             return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Please select a doctor before creating payout draft.']);
@@ -2019,7 +2175,7 @@ class Finance extends BaseController
             $caseReference .= '-U' . $this->normalizeStateUnitToken($stateUnit);
         }
 
-        $remarks = 'OPD payout draft from OPD Consult Payout | Completed=' . $completedOpd
+        $remarks = 'OPD payout draft from Hospital Doctor Payout | Completed=' . $completedOpd
             . ', Base=' . number_format($baseAmount, 2, '.', '')
             . ', Doc%=' . number_format($doctorShare, 2, '.', '')
             . ', Hosp%=' . number_format($hospitalShare, 2, '.', '')
@@ -2075,6 +2231,11 @@ class Finance extends BaseController
             'case_reference' => $caseReference,
             'net_payable' => $netPayable,
         ]);
+    }
+
+    public function doctorChargesPayoutDraftCreate()
+    {
+        return $this->payoutOpdConsultDraftCreate();
     }
 
     public function payoutOpdConsultDraftUpdate()
@@ -2133,6 +2294,11 @@ class Finance extends BaseController
         ]);
     }
 
+    public function doctorChargesPayoutDraftUpdate()
+    {
+        return $this->payoutOpdConsultDraftUpdate();
+    }
+
     public function payoutOpdConsultDraftDelete()
     {
         if (! $this->canFinanceAny([
@@ -2164,20 +2330,39 @@ class Finance extends BaseController
 
         $this->db->transStart();
 
-        if (method_exists($this->db, 'tableExists') && $this->db->tableExists('opd_master') && $this->tableHasField('opd_master', 'payout_draft_id')) {
-            $clearData = [
-                'payout_draft_id' => null,
-            ];
-            if ($this->tableHasField('opd_master', 'payout_calculated_at')) {
-                $clearData['payout_calculated_at'] = null;
-            }
-            if ($this->tableHasField('opd_master', 'payout_calculated_by')) {
-                $clearData['payout_calculated_by'] = null;
-            }
+        $payoutType = strtolower(trim((string) ($row['payout_type'] ?? 'consultation')));
+        if ($payoutType === 'consultation') {
+            if (method_exists($this->db, 'tableExists') && $this->db->tableExists('opd_master') && $this->tableHasField('opd_master', 'payout_draft_id')) {
+                $clearData = [
+                    'payout_draft_id' => null,
+                ];
+                if ($this->tableHasField('opd_master', 'payout_calculated_at')) {
+                    $clearData['payout_calculated_at'] = null;
+                }
+                if ($this->tableHasField('opd_master', 'payout_calculated_by')) {
+                    $clearData['payout_calculated_by'] = null;
+                }
 
-            $this->db->table('opd_master')
-                ->where('payout_draft_id', $payoutId)
-                ->update($clearData);
+                $this->db->table('opd_master')
+                    ->where('payout_draft_id', $payoutId)
+                    ->update($clearData);
+            }
+        } else {
+            if (method_exists($this->db, 'tableExists') && $this->db->tableExists('invoice_item') && $this->tableHasField('invoice_item', 'payout_draft_id')) {
+                $clearData = [
+                    'payout_draft_id' => null,
+                ];
+                if ($this->tableHasField('invoice_item', 'payout_calculated_at')) {
+                    $clearData['payout_calculated_at'] = null;
+                }
+                if ($this->tableHasField('invoice_item', 'payout_calculated_by')) {
+                    $clearData['payout_calculated_by'] = null;
+                }
+
+                $this->db->table('invoice_item')
+                    ->where('payout_draft_id', $payoutId)
+                    ->update($clearData);
+            }
         }
 
         $this->doctorPayoutModel->delete($payoutId);
@@ -2190,8 +2375,13 @@ class Finance extends BaseController
 
         return $this->response->setJSON([
             'status' => 1,
-            'message' => 'Payout draft deleted and linked OPD records unlocked for recalculation.',
+            'message' => 'Payout draft deleted and linked records unlocked for recalculation.',
         ]);
+    }
+
+    public function doctorChargesPayoutDraftDelete()
+    {
+        return $this->payoutOpdConsultDraftDelete();
     }
 
     public function phase2()
@@ -4515,6 +4705,567 @@ class Finance extends BaseController
             'state_unit' => $stateUnit,
             'state_unit_label' => $stateUnitColumn !== null ? ucwords(str_replace('_', ' ', $stateUnitColumn)) : 'State/Unit',
         ];
+    }
+
+    private function normalizePayoutSource(string $source): string
+    {
+        $source = strtolower(trim($source));
+        $allowed = ['consultation', 'pathology', 'radiology', 'other_items'];
+
+        return in_array($source, $allowed, true) ? $source : 'consultation';
+    }
+
+    private function payoutTypeFromSource(string $source): string
+    {
+        return match ($this->normalizePayoutSource($source)) {
+            'pathology' => 'pathology',
+            'radiology' => 'radiology',
+            'other_items' => 'other_items',
+            default => 'consultation',
+        };
+    }
+
+    private function payoutSourceLabel(string $source): string
+    {
+        return match ($this->normalizePayoutSource($source)) {
+            'pathology' => 'Pathology Charges',
+            'radiology' => 'Radiology Charges',
+            'other_items' => 'Other Charge Items',
+            default => 'OPD Consultation',
+        };
+    }
+
+    private function buildPayoutSummaryDataForSource(string $source, string $fromDate, string $toDate, int $doctorId = 0, string $stateUnit = ''): array
+    {
+        $source = $this->normalizePayoutSource($source);
+        if ($source === 'consultation') {
+            $payload = $this->buildOpdConsultPayoutSummaryData($fromDate, $toDate, $doctorId, $stateUnit);
+            $payload['source_type'] = $source;
+            $payload['source_label'] = $this->payoutSourceLabel($source);
+            $payload['scope_label'] = 'Completed OPDs';
+            $payload['unit_label'] = 'OPDs';
+
+            return $payload;
+        }
+
+        $payload = $this->buildChargeInvoicePayoutSummaryData($source, $fromDate, $toDate, $doctorId, $stateUnit);
+        $payload['source_type'] = $source;
+        $payload['source_label'] = $this->payoutSourceLabel($source);
+        $payload['scope_label'] = 'Eligible Charge Invoices';
+        $payload['unit_label'] = 'Invoices';
+
+        return $payload;
+    }
+
+    private function resolveInvoiceDoctorColumn(): ?string
+    {
+        $candidates = ['doctor_id', 'doc_id', 'dr_id'];
+        foreach ($candidates as $column) {
+            if ($this->tableHasField('invoice_master', $column)) {
+                return $column;
+            }
+        }
+
+        return null;
+    }
+
+    private function resolveInvoiceStateUnitColumn(): ?string
+    {
+        $candidates = ['unit_name', 'unit', 'state_name', 'state', 'branch_name', 'branch', 'center_name', 'location', 'city'];
+        foreach ($candidates as $column) {
+            if ($this->tableHasField('invoice_master', $column)) {
+                return $column;
+            }
+        }
+
+        return null;
+    }
+
+    private function applyChargeCategoryFilter($builder, string $source, string $itemTypeColumn): void
+    {
+        $source = $this->normalizePayoutSource($source);
+        if (! $this->tableHasField('invoice_item', 'item_type')) {
+            if ($source !== 'other_items') {
+                $builder->where('1 = 0', null, false);
+            }
+
+            return;
+        }
+
+        if ($source === 'pathology') {
+            $builder->whereIn($itemTypeColumn, [5, 30]);
+            return;
+        }
+
+        if ($source === 'radiology') {
+            $builder->whereIn($itemTypeColumn, [1, 2, 3, 4, 6]);
+            return;
+        }
+
+        if ($source === 'other_items') {
+            $builder->groupStart()
+                ->where($itemTypeColumn . ' IS NULL', null, false)
+                ->orWhereNotIn($itemTypeColumn, [1, 2, 3, 4, 5, 6, 30])
+                ->groupEnd();
+        }
+    }
+
+    private function fetchEligibleChargeItemsForPayout(string $source, string $fromDate, string $toDate, int $doctorId, string $stateUnit = ''): array
+    {
+        if (! method_exists($this->db, 'tableExists') || ! $this->db->tableExists('invoice_master') || ! $this->db->tableExists('invoice_item')) {
+            return ['item_ids' => [], 'invoice_ids' => []];
+        }
+
+        $doctorColumn = $this->resolveInvoiceDoctorColumn();
+        if ($doctorColumn === null) {
+            return ['item_ids' => [], 'invoice_ids' => []];
+        }
+
+        $stateColumn = $this->resolveInvoiceStateUnitColumn();
+        $itemAmountExpr = $this->tableHasField('invoice_item', 'item_amount')
+            ? 'COALESCE(ii.item_amount, 0)'
+            : 'COALESCE(ii.item_rate,0) * COALESCE(ii.item_qty,0)';
+
+        $builder = $this->db->table('invoice_item ii')
+            ->select('ii.id AS item_id, ii.inv_master_id AS invoice_id')
+            ->join('invoice_master inv', 'inv.id = ii.inv_master_id', 'inner')
+            ->where('DATE(inv.inv_date) >=', $fromDate)
+            ->where('DATE(inv.inv_date) <=', $toDate)
+            ->where($itemAmountExpr . ' > 0', null, false);
+
+        if ($doctorId > 0) {
+            $builder->where('inv.' . $doctorColumn, $doctorId);
+        }
+
+        if ($stateUnit !== '' && $stateColumn !== null) {
+            $builder->where('inv.' . $stateColumn, $stateUnit);
+        }
+
+        $this->applyChargeCategoryFilter($builder, $source, 'ii.item_type');
+
+        if ($this->tableHasField('invoice_item', 'payout_draft_id')) {
+            $builder->groupStart()
+                ->where('ii.payout_draft_id IS NULL', null, false)
+                ->orWhere('ii.payout_draft_id', 0)
+                ->groupEnd();
+        }
+
+        $rows = $builder->get()->getResultArray();
+
+        $itemIds = [];
+        $invoiceIds = [];
+        foreach ($rows as $row) {
+            $itemId = (int) ($row['item_id'] ?? 0);
+            $invoiceId = (int) ($row['invoice_id'] ?? 0);
+            if ($itemId > 0) {
+                $itemIds[] = $itemId;
+            }
+            if ($invoiceId > 0) {
+                $invoiceIds[] = $invoiceId;
+            }
+        }
+
+        return [
+            'item_ids' => array_values(array_unique($itemIds)),
+            'invoice_ids' => array_values(array_unique($invoiceIds)),
+        ];
+    }
+
+    private function buildChargeInvoicePayoutSummaryData(string $source, string $fromDate, string $toDate, int $doctorId = 0, string $stateUnit = ''): array
+    {
+        $db = \Config\Database::connect();
+        $source = $this->normalizePayoutSource($source);
+        $doctorColumn = $this->resolveInvoiceDoctorColumn();
+        $stateColumn = $this->resolveInvoiceStateUnitColumn();
+
+        $summary = [
+            'completed_opd' => 0,
+            'routine_opd' => 0,
+            'emergency_opd' => 0,
+            'running_opd' => 0,
+            'new_opd' => 0,
+            'calculated_opd' => 0,
+            'gross_amount' => 0.0,
+            'org_credit_amount' => 0.0,
+            'doctor_count' => 0,
+            'approved_consents' => 0,
+            'payout_count' => 0,
+            'payout_amount' => 0.0,
+            'cash_received' => 0.0,
+            'bank_received' => 0.0,
+            'total_received' => 0.0,
+            'credit_amount' => 0.0,
+        ];
+
+        $doctorBreakdown = [];
+        $doctorName = 'All Doctors';
+        if ($doctorId > 0 && $db->tableExists('doctor_master')) {
+            $doctorRow = $db->table('doctor_master')->select('p_title, p_fname')->where('id', $doctorId)->get()->getRow();
+            if ($doctorRow) {
+                $doctorName = trim((string) (($doctorRow->p_title ?? '') . ' ' . ($doctorRow->p_fname ?? '')));
+            }
+        }
+
+        if ($doctorColumn === null || ! $db->tableExists('invoice_master') || ! $db->tableExists('invoice_item')) {
+            return [
+                'summary' => $summary,
+                'doctor_breakdown' => [],
+                'from_date' => $fromDate,
+                'to_date' => $toDate,
+                'doctor_name' => $doctorName,
+                'state_unit' => $stateUnit,
+                'state_unit_label' => $stateColumn !== null ? ucwords(str_replace('_', ' ', $stateColumn)) : 'State/Unit',
+            ];
+        }
+
+        $itemAmountExpr = $this->tableHasField('invoice_item', 'item_amount')
+            ? 'COALESCE(ii.item_amount, 0)'
+            : 'COALESCE(ii.item_rate,0) * COALESCE(ii.item_qty,0)';
+
+        $breakdownBuilder = $db->table('invoice_item ii')
+            ->select('inv.' . $doctorColumn . ' AS doc_id', false)
+            ->select("COALESCE(NULLIF(TRIM(CONCAT(COALESCE(dm.p_title,''), ' ', COALESCE(dm.p_fname,''))), ''), CONCAT('Doctor #', inv." . $doctorColumn . ")) AS doctor_name", false)
+            ->select('COUNT(DISTINCT inv.id) AS completed_opd', false)
+            ->select('SUM(' . $itemAmountExpr . ') AS gross_amount', false)
+            ->join('invoice_master inv', 'inv.id = ii.inv_master_id', 'inner')
+            ->join('doctor_master dm', 'dm.id = inv.' . $doctorColumn, 'left')
+            ->where('DATE(inv.inv_date) >=', $fromDate)
+            ->where('DATE(inv.inv_date) <=', $toDate)
+            ->where($itemAmountExpr . ' > 0', null, false);
+
+        if ($doctorId > 0) {
+            $breakdownBuilder->where('inv.' . $doctorColumn, $doctorId);
+        }
+        if ($stateUnit !== '' && $stateColumn !== null) {
+            $breakdownBuilder->where('inv.' . $stateColumn, $stateUnit);
+        }
+
+        $this->applyChargeCategoryFilter($breakdownBuilder, $source, 'ii.item_type');
+
+        if ($this->tableHasField('invoice_item', 'payout_draft_id')) {
+            $breakdownBuilder->groupStart()
+                ->where('ii.payout_draft_id IS NULL', null, false)
+                ->orWhere('ii.payout_draft_id', 0)
+                ->groupEnd();
+        }
+
+        $doctorBreakdown = $breakdownBuilder
+            ->groupBy('inv.' . $doctorColumn)
+            ->orderBy('doctor_name', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        foreach ($doctorBreakdown as &$row) {
+            $row['completed_opd'] = (int) ($row['completed_opd'] ?? 0);
+            $row['routine_opd'] = 0;
+            $row['emergency_opd'] = 0;
+            $row['running_opd'] = 0;
+            $row['new_opd'] = 0;
+            $row['gross_amount'] = (float) ($row['gross_amount'] ?? 0);
+            $row['org_credit_amount'] = 0.0;
+            $row['cash_received'] = 0.0;
+            $row['bank_received'] = 0.0;
+            $row['total_received'] = 0.0;
+            $row['credit_amount'] = 0.0;
+            $row['payout_amount'] = 0.0;
+
+            $summary['completed_opd'] += $row['completed_opd'];
+            $summary['gross_amount'] += $row['gross_amount'];
+        }
+        unset($row);
+
+        $summary['doctor_count'] = count($doctorBreakdown);
+
+        if ($this->tableHasField('invoice_item', 'payout_draft_id')) {
+            $calcBuilder = $db->table('invoice_item ii')
+                ->select('COUNT(DISTINCT inv.id) AS calculated_opd', false)
+                ->join('invoice_master inv', 'inv.id = ii.inv_master_id', 'inner')
+                ->where('DATE(inv.inv_date) >=', $fromDate)
+                ->where('DATE(inv.inv_date) <=', $toDate)
+                ->where($itemAmountExpr . ' > 0', null, false)
+                ->where('ii.payout_draft_id >', 0);
+
+            if ($doctorId > 0) {
+                $calcBuilder->where('inv.' . $doctorColumn, $doctorId);
+            }
+            if ($stateUnit !== '' && $stateColumn !== null) {
+                $calcBuilder->where('inv.' . $stateColumn, $stateUnit);
+            }
+            $this->applyChargeCategoryFilter($calcBuilder, $source, 'ii.item_type');
+
+            $calcRow = $calcBuilder->get()->getRowArray();
+            $summary['calculated_opd'] = (int) ($calcRow['calculated_opd'] ?? 0);
+        }
+
+        $eligible = $this->fetchEligibleChargeItemsForPayout($source, $fromDate, $toDate, $doctorId, $stateUnit);
+        if (! empty($eligible['invoice_ids'])) {
+            $invoiceIds = $eligible['invoice_ids'];
+
+            $categoryRows = $db->table('invoice_item ii')
+                ->select('ii.inv_master_id AS invoice_id, SUM(' . $itemAmountExpr . ') AS category_total', false)
+                ->whereIn('ii.inv_master_id', $invoiceIds)
+                ->where($itemAmountExpr . ' > 0', null, false);
+            $this->applyChargeCategoryFilter($categoryRows, $source, 'ii.item_type');
+            $categoryRows = $categoryRows->groupBy('ii.inv_master_id')->get()->getResultArray();
+
+            $invoiceTotals = $db->table('invoice_item ii')
+                ->select('ii.inv_master_id AS invoice_id, SUM(' . $itemAmountExpr . ') AS invoice_total', false)
+                ->whereIn('ii.inv_master_id', $invoiceIds)
+                ->where($itemAmountExpr . ' > 0', null, false)
+                ->groupBy('ii.inv_master_id')
+                ->get()->getResultArray();
+
+            $payments = $db->table('payment_history p')
+                ->select('p.payof_id AS invoice_id', false)
+                ->select('SUM(CASE WHEN p.credit_debit = 0 THEN COALESCE(p.amount,0) ELSE 0 END) AS total_received', false)
+                ->select('SUM(CASE WHEN p.credit_debit = 0 AND p.payment_mode = 1 THEN COALESCE(p.amount,0) ELSE 0 END) AS cash_received', false)
+                ->select('SUM(CASE WHEN p.credit_debit = 0 AND p.payment_mode = 2 THEN COALESCE(p.amount,0) ELSE 0 END) AS bank_received', false)
+                ->where('p.payof_type', 2)
+                ->whereIn('p.payof_id', $invoiceIds)
+                ->where('DATE(p.payment_date) >=', $fromDate)
+                ->where('DATE(p.payment_date) <=', $toDate)
+                ->groupBy('p.payof_id')
+                ->get()->getResultArray();
+
+            $invoiceToDocRows = $db->table('invoice_master inv')
+                ->select('inv.id AS invoice_id, inv.' . $doctorColumn . ' AS doc_id', false)
+                ->whereIn('inv.id', $invoiceIds)
+                ->get()->getResultArray();
+
+            $categoryMap = [];
+            foreach ($categoryRows as $row) {
+                $categoryMap[(int) ($row['invoice_id'] ?? 0)] = (float) ($row['category_total'] ?? 0);
+            }
+
+            $invoiceTotalMap = [];
+            foreach ($invoiceTotals as $row) {
+                $invoiceTotalMap[(int) ($row['invoice_id'] ?? 0)] = (float) ($row['invoice_total'] ?? 0);
+            }
+
+            $paymentMap = [];
+            foreach ($payments as $row) {
+                $paymentMap[(int) ($row['invoice_id'] ?? 0)] = [
+                    'total_received' => (float) ($row['total_received'] ?? 0),
+                    'cash_received' => (float) ($row['cash_received'] ?? 0),
+                    'bank_received' => (float) ($row['bank_received'] ?? 0),
+                ];
+            }
+
+            $invoiceDocMap = [];
+            foreach ($invoiceToDocRows as $row) {
+                $invoiceDocMap[(int) ($row['invoice_id'] ?? 0)] = (int) ($row['doc_id'] ?? 0);
+            }
+
+            $perDoctorReceived = [];
+            foreach ($invoiceIds as $invoiceId) {
+                $invoiceId = (int) $invoiceId;
+                $docId = (int) ($invoiceDocMap[$invoiceId] ?? 0);
+                if ($docId <= 0) {
+                    continue;
+                }
+
+                $categoryTotal = (float) ($categoryMap[$invoiceId] ?? 0);
+                $invoiceTotal = (float) ($invoiceTotalMap[$invoiceId] ?? 0);
+                if ($categoryTotal <= 0 || $invoiceTotal <= 0) {
+                    continue;
+                }
+
+                $ratio = $categoryTotal / $invoiceTotal;
+                $recv = $paymentMap[$invoiceId] ?? ['total_received' => 0.0, 'cash_received' => 0.0, 'bank_received' => 0.0];
+
+                $perDoctorReceived[$docId]['total_received'] = (float) ($perDoctorReceived[$docId]['total_received'] ?? 0) + ($recv['total_received'] * $ratio);
+                $perDoctorReceived[$docId]['cash_received'] = (float) ($perDoctorReceived[$docId]['cash_received'] ?? 0) + ($recv['cash_received'] * $ratio);
+                $perDoctorReceived[$docId]['bank_received'] = (float) ($perDoctorReceived[$docId]['bank_received'] ?? 0) + ($recv['bank_received'] * $ratio);
+            }
+
+            foreach ($doctorBreakdown as &$row) {
+                $docId = (int) ($row['doc_id'] ?? 0);
+                $recv = $perDoctorReceived[$docId] ?? ['total_received' => 0.0, 'cash_received' => 0.0, 'bank_received' => 0.0];
+
+                $row['total_received'] = round((float) ($recv['total_received'] ?? 0), 2);
+                $row['cash_received'] = round((float) ($recv['cash_received'] ?? 0), 2);
+                $row['bank_received'] = round((float) ($recv['bank_received'] ?? 0), 2);
+                $row['credit_amount'] = max(0, round((float) $row['gross_amount'] - (float) $row['total_received'], 2));
+
+                $summary['cash_received'] += (float) $row['cash_received'];
+                $summary['bank_received'] += (float) $row['bank_received'];
+            }
+            unset($row);
+        }
+
+        $summary['total_received'] = round((float) ($summary['cash_received'] + $summary['bank_received']), 2);
+        $summary['credit_amount'] = max(0, round((float) $summary['gross_amount'] - (float) $summary['total_received'], 2));
+
+        if ($db->tableExists('finance_doctor_payouts')) {
+            $payoutBuilder = $db->table('finance_doctor_payouts p')
+                ->select('COUNT(*) AS payout_count, SUM(COALESCE(p.approved_amount, p.calculated_amount, 0)) AS payout_amount', false)
+                ->where('p.payout_type', $this->payoutTypeFromSource($source))
+                ->where('p.payout_date >=', $fromDate)
+                ->where('p.payout_date <=', $toDate);
+
+            if ($doctorId > 0) {
+                $agreementIds = $this->findDoctorAgreementIdsFromMaster($doctorId);
+                if (! empty($agreementIds)) {
+                    $payoutBuilder->whereIn('p.doctor_id', $agreementIds);
+                } else {
+                    $payoutBuilder->where('1 = 0', null, false);
+                }
+            }
+
+            $payoutRow = $payoutBuilder->get()->getRowArray();
+            $summary['payout_count'] = (int) ($payoutRow['payout_count'] ?? 0);
+            $summary['payout_amount'] = (float) ($payoutRow['payout_amount'] ?? 0);
+        }
+
+        foreach ($doctorBreakdown as &$row) {
+            $row['payout_amount'] = $summary['doctor_count'] === 1 ? $summary['payout_amount'] : 0.0;
+        }
+        unset($row);
+
+        return [
+            'summary' => $summary,
+            'doctor_breakdown' => $doctorBreakdown,
+            'from_date' => $fromDate,
+            'to_date' => $toDate,
+            'doctor_name' => $doctorName,
+            'state_unit' => $stateUnit,
+            'state_unit_label' => $stateColumn !== null ? ucwords(str_replace('_', ' ', $stateColumn)) : 'State/Unit',
+        ];
+    }
+
+    private function createChargeInvoicePayoutDraft(
+        string $source,
+        int $doctorId,
+        string $fromDate,
+        string $toDate,
+        string $stateUnit,
+        float $baseAmount,
+        float $doctorShare,
+        float $hospitalShare,
+        float $deductions,
+        float $adjustments
+    ) {
+        if ($doctorId <= 0) {
+            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Please select a doctor before creating payout draft.']);
+        }
+
+        if ($fromDate === '') {
+            $fromDate = date('Y-m-01');
+        }
+        if ($toDate === '') {
+            $toDate = date('Y-m-d');
+        }
+        if ($fromDate > $toDate) {
+            [$fromDate, $toDate] = [$toDate, $fromDate];
+        }
+
+        $source = $this->normalizePayoutSource($source);
+        $summaryData = $this->buildChargeInvoicePayoutSummaryData($source, $fromDate, $toDate, $doctorId, $stateUnit);
+        $summary = (array) ($summaryData['summary'] ?? []);
+        $eligible = $this->fetchEligibleChargeItemsForPayout($source, $fromDate, $toDate, $doctorId, $stateUnit);
+        $eligibleItemIds = $eligible['item_ids'] ?? [];
+        $eligibleInvoiceIds = $eligible['invoice_ids'] ?? [];
+        $eligibleUnits = count($eligibleInvoiceIds);
+
+        if ($eligibleUnits <= 0) {
+            return $this->response->setStatusCode(422)->setJSON([
+                'status' => 0,
+                'message' => 'No eligible ' . strtolower($this->payoutSourceLabel($source)) . ' found for selected filters.',
+            ]);
+        }
+
+        if ($baseAmount <= 0) {
+            $baseAmount = (float) ($summary['total_received'] ?? 0);
+            if ($baseAmount <= 0) {
+                $baseAmount = (float) ($summary['gross_amount'] ?? 0);
+            }
+        }
+
+        $doctorGross = round(($baseAmount * $doctorShare) / 100, 2);
+        $hospitalGross = round(($baseAmount * $hospitalShare) / 100, 2);
+        $netPayable = round($doctorGross - $deductions + $adjustments, 2);
+        if ($netPayable < 0) {
+            $netPayable = 0.0;
+        }
+
+        $agreementId = $this->resolveOrCreateDoctorAgreementIdFromMaster($doctorId);
+        if ($agreementId <= 0) {
+            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Unable to map selected doctor to payout agreement.']);
+        }
+
+        $rate = round($netPayable / max(1, $eligibleUnits), 2);
+        $token = match ($source) {
+            'pathology' => 'PATH',
+            'radiology' => 'RAD',
+            'other_items' => 'OTH',
+            default => 'CHG',
+        };
+        $caseReference = 'CHG-' . $token . '-' . str_replace('-', '', $fromDate) . '-' . str_replace('-', '', $toDate) . '-D' . $doctorId;
+        if ($stateUnit !== '') {
+            $caseReference .= '-U' . $this->normalizeStateUnitToken($stateUnit);
+        }
+
+        $remarks = $this->payoutSourceLabel($source) . ' payout draft | Invoices=' . $eligibleUnits
+            . ', Items=' . count($eligibleItemIds)
+            . ', Base=' . number_format($baseAmount, 2, '.', '')
+            . ', Doc%=' . number_format($doctorShare, 2, '.', '')
+            . ', Hosp%=' . number_format($hospitalShare, 2, '.', '')
+            . ', Deductions=' . number_format($deductions, 2, '.', '')
+            . ', Adjustments=' . number_format($adjustments, 2, '.', '')
+            . ', DoctorGross=' . number_format($doctorGross, 2, '.', '')
+            . ', HospitalShare=' . number_format($hospitalGross, 2, '.', '')
+            . ', Net=' . number_format($netPayable, 2, '.', '');
+
+        $this->db->transStart();
+
+        $this->doctorPayoutModel->insert([
+            'payout_date' => $toDate,
+            'doctor_id' => $agreementId,
+            'case_reference' => $caseReference,
+            'payout_type' => $this->payoutTypeFromSource($source),
+            'units' => $eligibleUnits,
+            'rate' => $rate,
+            'calculated_amount' => $netPayable,
+            'approved_amount' => $netPayable,
+            'status' => 'draft',
+            'remarks' => $remarks,
+            'hr_submitted_by' => $this->currentUserName(),
+        ]);
+
+        $insertId = (int) ($this->doctorPayoutModel->getInsertID() ?? 0);
+
+        if ($insertId > 0 && ! empty($eligibleItemIds) && $this->tableHasField('invoice_item', 'payout_draft_id')) {
+            $itemUpdate = [
+                'payout_draft_id' => $insertId,
+            ];
+            if ($this->tableHasField('invoice_item', 'payout_calculated_at')) {
+                $itemUpdate['payout_calculated_at'] = date('Y-m-d H:i:s');
+            }
+            if ($this->tableHasField('invoice_item', 'payout_calculated_by')) {
+                $itemUpdate['payout_calculated_by'] = $this->currentUserName();
+            }
+            if ($this->tableHasField('invoice_item', 'updated_at')) {
+                $itemUpdate['updated_at'] = date('Y-m-d H:i:s');
+            }
+
+            $this->db->table('invoice_item')
+                ->whereIn('id', $eligibleItemIds)
+                ->update($itemUpdate);
+        }
+
+        $this->db->transComplete();
+
+        if (! $this->db->transStatus() || $insertId <= 0) {
+            return $this->response->setStatusCode(500)->setJSON(['status' => 0, 'message' => 'Failed to create payout draft.']);
+        }
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'message' => 'Payout draft created successfully.',
+            'payout_id' => $insertId,
+            'case_reference' => $caseReference,
+            'net_payable' => $netPayable,
+        ]);
     }
 
     private function fetchOpdStateUnitOptions(): array

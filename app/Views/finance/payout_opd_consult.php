@@ -1,7 +1,7 @@
 <section class="content finance-opd-payout">
     <div class="mb-3">
-        <h2 class="mb-1">OPD Consult Payout</h2>
-        <p class="text-muted mb-0">Start payout calculation from OPD consultation and collection data. This screen is enabled for testing and will be extended in the next phase.</p>
+        <h2 class="mb-1">OPD Consultation Payout</h2>
+        <p class="text-muted mb-0">Calculate and manage doctor payout from OPD consultation fees.</p>
     </div>
 
     <div id="opd_payout_alert"></div>
@@ -40,13 +40,6 @@
                         <i class="bi bi-arrow-repeat me-1"></i>Load Summary
                     </button>
                 </div>
-            </div>
-
-            <hr>
-
-            <div class="alert alert-info mb-0" role="alert">
-                <strong>Phase note:</strong> Menu and page are now available under Accounts And Finance -> Payout -> OPD Consult Payout.
-                Calculation grid, policy split engine, and payout approval workflow will be implemented next.
             </div>
 
             <div class="mt-3" id="opd_consult_payout_summary_wrap">
@@ -106,7 +99,6 @@
         var toDate = document.getElementById('opd_payout_to_date')?.value || '';
         var doctorId = document.getElementById('opd_payout_doctor_id')?.value || '';
         var stateUnit = document.getElementById('opd_payout_state_unit')?.value || '';
-
         load_form_div(
             '<?= base_url('Finance/payout/opd-consult-summary') ?>?from_date=' + encodeURIComponent(fromDate)
                 + '&to_date=' + encodeURIComponent(toDate)
@@ -174,7 +166,7 @@
     };
 
     window.deleteOpdPayoutDraft = function (payoutId) {
-        if (!window.confirm('Delete this payout draft? Linked OPDs will be unlocked for recalculation.')) {
+        if (!window.confirm('Delete this payout draft? Linked source records will be unlocked for recalculation.')) {
             return;
         }
 
@@ -198,5 +190,7 @@
     };
 
     refreshOpdConsultPayoutSummary();
+
+
 })();
 </script>

@@ -11477,6 +11477,165 @@ class Medical extends BaseController
         ]);
     }
 
+    public function credit_payout_requests_datatable()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        $draw = (int) ($this->request->getPost('draw') ?? $this->request->getGet('draw') ?? 1);
+        $start = max(0, (int) ($this->request->getPost('start') ?? $this->request->getGet('start') ?? 0));
+        $length = (int) ($this->request->getPost('length') ?? $this->request->getGet('length') ?? 25);
+        if ($length <= 0) {
+            $length = 25;
+        }
+        if ($length > 200) {
+            $length = 200;
+        }
+
+        if (! $this->db->tableExists('finance_payout_requests')) {
+            return $this->response->setJSON([
+                'draw' => $draw,
+                'recordsTotal' => 0,
+                'recordsFiltered' => 0,
+                'data' => [],
+                'status_summary' => [
+                    'total' => 0,
+                    'submitted' => 0,
+                    'finance_review' => 0,
+                    'approved' => 0,
+                    'partially_paid' => 0,
+                    'paid' => 0,
+                    'rejected' => 0,
+                ],
+            ]);
+        }
+
+        $searchRaw = $this->request->getPost('search');
+        if ($searchRaw === null) {
+            $searchRaw = $this->request->getGet('search');
+        }
+        $searchValue = '';
+        if (is_array($searchRaw)) {
+            $searchValue = trim((string) ($searchRaw['value'] ?? ''));
+        } elseif (is_string($searchRaw)) {
+            $searchValue = trim($searchRaw);
+        }
+
+        $orderRaw = $this->request->getPost('order');
+        if ($orderRaw === null) {
+            $orderRaw = $this->request->getGet('order');
+        }
+        $order = is_array($orderRaw) ? $orderRaw : [];
+
+        $columnsRaw = $this->request->getPost('columns');
+        if ($columnsRaw === null) {
+            $columnsRaw = $this->request->getGet('columns');
+        }
+        $columns = is_array($columnsRaw) ? $columnsRaw : [];
+
+        $builder = $this->db->table('finance_payout_requests pr')
+            ->where('pr.request_type', 'medical_store_credit');
+
+        $recordsTotal = (int) $builder->countAllResults(false);
+
+        if ($searchValue !== '') {
+            $builder
+                ->groupStart()
+                ->like('pr.request_no', $searchValue)
+                ->orLike('pr.status', $searchValue)
+                ->orLike('pr.request_date', $searchValue)
+                ->orLike('pr.created_by', $searchValue)
+                ->groupEnd();
+        }
+
+        $recordsFiltered = (int) $builder->countAllResults(false);
+
+        $orderableMap = [
+            'request_no' => 'pr.request_no',
+            'request_date' => 'pr.request_date',
+            'status' => 'pr.status',
+            'requested_amount' => 'pr.requested_amount',
+            'paid_amount' => 'pr.paid_amount',
+            'pending_amount' => 'pr.pending_amount',
+            'created_by' => 'pr.created_by',
+        ];
+
+        $appliedOrder = false;
+        if (! empty($order)) {
+            foreach ($order as $ord) {
+                $colIndex = (int) ($ord['column'] ?? -1);
+                $dir = strtolower((string) ($ord['dir'] ?? 'desc')) === 'asc' ? 'ASC' : 'DESC';
+                $colData = '';
+                if ($colIndex >= 0 && isset($columns[$colIndex]) && is_array($columns[$colIndex])) {
+                    $colData = (string) ($columns[$colIndex]['data'] ?? '');
+                }
+                if ($colData !== '' && isset($orderableMap[$colData])) {
+                    $builder->orderBy($orderableMap[$colData], $dir);
+                    $appliedOrder = true;
+                }
+            }
+        }
+
+        if (! $appliedOrder) {
+            $builder->orderBy('pr.id', 'DESC');
+        }
+
+        $rows = $builder
+            ->select('pr.id, pr.request_no, pr.request_date, pr.status, pr.requested_amount, pr.paid_amount, pr.pending_amount, pr.created_by')
+            ->limit($length, $start)
+            ->get()
+            ->getResultArray();
+
+        $data = [];
+        foreach ($rows as $i => $row) {
+            $data[] = [
+                'row_no' => $start + $i + 1,
+                'id' => (int) ($row['id'] ?? 0),
+                'request_no' => (string) ($row['request_no'] ?? ''),
+                'request_date' => (string) ($row['request_date'] ?? ''),
+                'status' => (string) ($row['status'] ?? ''),
+                'requested_amount' => round((float) ($row['requested_amount'] ?? 0), 2),
+                'paid_amount' => round((float) ($row['paid_amount'] ?? 0), 2),
+                'pending_amount' => round((float) ($row['pending_amount'] ?? 0), 2),
+                'created_by' => (string) ($row['created_by'] ?? ''),
+            ];
+        }
+
+        $summaryRows = $this->db->table('finance_payout_requests')
+            ->select('LOWER(status) AS status_key, COUNT(1) AS cnt', false)
+            ->where('request_type', 'medical_store_credit')
+            ->groupBy('LOWER(status)')
+            ->get()
+            ->getResultArray();
+
+        $statusSummary = [
+            'total' => 0,
+            'submitted' => 0,
+            'finance_review' => 0,
+            'approved' => 0,
+            'partially_paid' => 0,
+            'paid' => 0,
+            'rejected' => 0,
+        ];
+        foreach ($summaryRows as $sr) {
+            $key = strtolower(trim((string) ($sr['status_key'] ?? '')));
+            $cnt = (int) ($sr['cnt'] ?? 0);
+            $statusSummary['total'] += $cnt;
+            if (array_key_exists($key, $statusSummary)) {
+                $statusSummary[$key] += $cnt;
+            }
+        }
+
+        return $this->response->setJSON([
+            'draw' => $draw,
+            'recordsTotal' => $recordsTotal,
+            'recordsFiltered' => $recordsFiltered,
+            'data' => $data,
+            'status_summary' => $statusSummary,
+        ]);
+    }
+
     public function credit_payout_request_detail($requestId = 0)
     {
         if ($deny = $this->ensurePharmacyAccess()) {

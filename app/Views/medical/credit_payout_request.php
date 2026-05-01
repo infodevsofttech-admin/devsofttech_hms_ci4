@@ -10,6 +10,88 @@
 
 <section class="section">
     <div id="med_credit_req_alert"></div>
+    <style>
+        #med_req_status_dashboard_strip {
+            display: grid;
+            grid-template-columns: repeat(7, minmax(110px, 1fr));
+            gap: 8px;
+        }
+        #med_req_status_dashboard_strip .med-stat {
+            border: 1px solid #d9dee6;
+            border-radius: 6px;
+            padding: 8px 10px;
+            background: #fff;
+            min-height: 58px;
+        }
+        #med_req_status_dashboard_strip .med-stat-label {
+            color: #6c757d;
+            font-size: 12px;
+            line-height: 1.1;
+        }
+        #med_req_status_dashboard_strip .med-stat-value {
+            font-size: 28px;
+            font-weight: 600;
+            line-height: 1;
+            margin-top: 4px;
+        }
+        #med_request_history_table {
+            width: 100% !important;
+        }
+        @media (max-width: 1200px) {
+            #med_req_status_dashboard_strip {
+                grid-template-columns: repeat(4, minmax(110px, 1fr));
+            }
+        }
+        @media (max-width: 768px) {
+            #med_req_status_dashboard_strip {
+                grid-template-columns: repeat(2, minmax(110px, 1fr));
+            }
+        }
+    </style>
+
+    <?php
+        $historyRows = $rows ?? [];
+        $statusCounts = [
+            'submitted' => 0,
+            'finance_review' => 0,
+            'approved' => 0,
+            'partially_paid' => 0,
+            'paid' => 0,
+            'rejected' => 0,
+        ];
+        foreach ($historyRows as $historyRow) {
+            $st = strtolower(trim((string) ($historyRow['status'] ?? '')));
+            if (array_key_exists($st, $statusCounts)) {
+                $statusCounts[$st]++;
+            }
+        }
+    ?>
+
+    <div class="card mb-3" id="med_req_status_dashboard">
+        <div class="card-body p-2">
+            <div id="med_req_status_dashboard_strip">
+                <div class="med-stat"><div class="med-stat-label">Total</div><div class="med-stat-value text-dark" id="med_dash_total"><?= (int) count($historyRows) ?></div></div>
+                <div class="med-stat"><div class="med-stat-label">Submitted</div><div class="med-stat-value text-primary" id="med_dash_submitted"><?= (int) ($statusCounts['submitted'] ?? 0) ?></div></div>
+                <div class="med-stat"><div class="med-stat-label">Finance Review</div><div class="med-stat-value text-warning" id="med_dash_finance_review"><?= (int) ($statusCounts['finance_review'] ?? 0) ?></div></div>
+                <div class="med-stat"><div class="med-stat-label">Approved</div><div class="med-stat-value text-success" id="med_dash_approved"><?= (int) ($statusCounts['approved'] ?? 0) ?></div></div>
+                <div class="med-stat"><div class="med-stat-label">Partial</div><div class="med-stat-value text-info" id="med_dash_partially_paid"><?= (int) ($statusCounts['partially_paid'] ?? 0) ?></div></div>
+                <div class="med-stat"><div class="med-stat-label">Paid</div><div class="med-stat-value text-secondary" id="med_dash_paid"><?= (int) ($statusCounts['paid'] ?? 0) ?></div></div>
+                <div class="med-stat"><div class="med-stat-label">Rejected</div><div class="med-stat-value text-danger" id="med_dash_rejected"><?= (int) ($statusCounts['rejected'] ?? 0) ?></div></div>
+            </div>
+        </div>
+    </div>
+
+    <ul class="nav nav-tabs" id="medCreditTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="med-credit-select-tab" data-bs-toggle="tab" data-bs-target="#med-credit-select-pane" type="button" role="tab" aria-controls="med-credit-select-pane" aria-selected="true">1) Select Credit Entries</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="med-credit-history-tab" data-bs-toggle="tab" data-bs-target="#med-credit-history-pane" type="button" role="tab" aria-controls="med-credit-history-pane" aria-selected="false">Request History</button>
+        </li>
+    </ul>
+
+    <div class="tab-content border border-top-0 p-3 bg-white" id="medCreditTabsContent">
+        <div class="tab-pane fade show active" id="med-credit-select-pane" role="tabpanel" aria-labelledby="med-credit-select-tab" tabindex="0">
 
     <div class="row g-3">
         <div class="col-xl-7">
@@ -117,13 +199,16 @@
                         </div>
                     </form>
                     <hr>
-                    <div class="small text-muted">Request history is shown below. Use Finance panel for approval and payment settlement.</div>
+                    <div class="small text-muted">Use Request History tab to track status updates. Use Finance panel for approval and payment settlement.</div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="card mt-3">
+        </div>
+        <div class="tab-pane fade" id="med-credit-history-pane" role="tabpanel" aria-labelledby="med-credit-history-tab" tabindex="0">
+
+    <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
             <strong>Request History</strong>
             <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_med_history_refresh">Refresh</button>
@@ -142,25 +227,11 @@
                             <th class="text-end">Pending</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        <?php if (empty($rows ?? [])): ?>
-                            <tr><td colspan="7" class="text-center text-muted py-3">No payout requests yet.</td></tr>
-                        <?php else: ?>
-                            <?php foreach (($rows ?? []) as $i => $row): ?>
-                                <tr>
-                                    <td><?= (int) $i + 1 ?></td>
-                                    <td><strong><?= esc((string) ($row['request_no'] ?? '')) ?></strong><br><small class="text-muted">ID: <?= (int) ($row['id'] ?? 0) ?></small></td>
-                                    <td><?= esc((string) ($row['request_date'] ?? '')) ?></td>
-                                    <td><span class="badge bg-secondary"><?= esc((string) ($row['status'] ?? '')) ?></span></td>
-                                    <td class="text-end"><?= esc(number_format((float) ($row['requested_amount'] ?? 0), 2)) ?></td>
-                                    <td class="text-end"><?= esc(number_format((float) ($row['paid_amount'] ?? 0), 2)) ?></td>
-                                    <td class="text-end"><?= esc(number_format((float) ($row['pending_amount'] ?? 0), 2)) ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </tbody>
+                    <tbody><tr><td colspan="7" class="text-center text-muted py-3">Loading...</td></tr></tbody>
                 </table>
             </div>
+        </div>
+    </div>
         </div>
     </div>
 </section>
@@ -169,6 +240,7 @@
 (function () {
     var BASE = '<?= base_url() ?>';
     var poolTable = null;
+    var historyTable = null;
     var selectedMap = {};
     var poolRowCache = {};
 
@@ -177,6 +249,46 @@
         if (!box) return;
         box.innerHTML = '<div class="alert ' + (ok ? 'alert-success' : 'alert-danger') + ' alert-dismissible fade show" role="alert">'
             + msg + '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
+    }
+
+    function getStatusBadgeClass(status) {
+        var s = String(status || '').toLowerCase();
+        if (s === 'submitted') return 'bg-primary';
+        if (s === 'finance_review') return 'bg-warning text-dark';
+        if (s === 'approved') return 'bg-success';
+        if (s === 'partially_paid') return 'bg-info text-dark';
+        if (s === 'paid') return 'bg-dark';
+        if (s === 'rejected') return 'bg-danger';
+        return 'bg-secondary';
+    }
+
+    function refreshStatusDashboard(summary) {
+        var s = summary || {};
+        var counts = {
+            total: Number(s.total || 0),
+            submitted: Number(s.submitted || 0),
+            finance_review: Number(s.finance_review || 0),
+            approved: Number(s.approved || 0),
+            partially_paid: Number(s.partially_paid || 0),
+            paid: Number(s.paid || 0),
+            rejected: Number(s.rejected || 0)
+        };
+
+        var totalEl = document.getElementById('med_dash_total');
+        var submittedEl = document.getElementById('med_dash_submitted');
+        var reviewEl = document.getElementById('med_dash_finance_review');
+        var approvedEl = document.getElementById('med_dash_approved');
+        var partialEl = document.getElementById('med_dash_partially_paid');
+        var paidEl = document.getElementById('med_dash_paid');
+        var rejectedEl = document.getElementById('med_dash_rejected');
+
+        if (totalEl) totalEl.textContent = String(counts.total);
+        if (submittedEl) submittedEl.textContent = String(counts.submitted);
+        if (reviewEl) reviewEl.textContent = String(counts.finance_review);
+        if (approvedEl) approvedEl.textContent = String(counts.approved);
+        if (partialEl) partialEl.textContent = String(counts.partially_paid);
+        if (paidEl) paidEl.textContent = String(counts.paid);
+        if (rejectedEl) rejectedEl.textContent = String(counts.rejected);
     }
 
     function getRowKey(row) {
@@ -436,37 +548,89 @@
     }
 
     function loadHistory() {
-        fetch(BASE + 'Medical/credit_payout_requests', {
-            method: 'GET',
-            headers: {'X-Requested-With': 'XMLHttpRequest'}
-        }).then(function (res) {
-            return res.json().then(function (data) { return { ok: res.ok, data: data }; });
-        }).then(function (result) {
-            var table = document.querySelector('#med_request_history_table tbody');
-            if (!table) return;
-            if (!result.ok || !result.data || result.data.status !== 1) {
-                table.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-3">Unable to load request history.</td></tr>';
-                return;
+        if (!historyTable) {
+            return;
+        }
+        historyTable.ajax.reload(null, false);
+    }
+
+    function initHistoryTable() {
+        if (typeof window.jQuery === 'undefined' || typeof window.jQuery.fn.DataTable === 'undefined') {
+            showAlert('DataTable dependency missing. Unable to load request history.', false);
+            return;
+        }
+
+        historyTable = window.jQuery('#med_request_history_table').DataTable({
+            processing: true,
+            serverSide: true,
+            searching: true,
+            autoWidth: false,
+            lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
+            pageLength: 25,
+            order: [[0, 'desc']],
+            ajax: {
+                url: BASE + 'Medical/credit_payout_requests_datatable',
+                type: 'POST',
+                dataSrc: function (json) {
+                    refreshStatusDashboard(json && json.status_summary ? json.status_summary : {});
+                    return (json && Array.isArray(json.data)) ? json.data : [];
+                },
+                error: function () {
+                    refreshStatusDashboard({});
+                    showAlert('Unable to load request history.', false);
+                }
+            },
+            columns: [
+                { data: 'row_no', orderable: false, searchable: false },
+                {
+                    data: null,
+                    render: function (data, type, row) {
+                        return '<strong>' + String(row.request_no || '') + '</strong><br><small class="text-muted">ID: ' + Number(row.id || 0) + '</small>';
+                    }
+                },
+                { data: 'request_date', defaultContent: '' },
+                {
+                    data: 'status',
+                    render: function (v) {
+                        var status = String(v || '');
+                        return '<span class="badge ' + getStatusBadgeClass(status) + '">' + status + '</span>';
+                    }
+                },
+                {
+                    data: 'requested_amount',
+                    className: 'text-end',
+                    render: function (v) {
+                        return Number(v || 0).toFixed(2);
+                    }
+                },
+                {
+                    data: 'paid_amount',
+                    className: 'text-end',
+                    render: function (v) {
+                        return Number(v || 0).toFixed(2);
+                    }
+                },
+                {
+                    data: 'pending_amount',
+                    className: 'text-end',
+                    render: function (v) {
+                        return Number(v || 0).toFixed(2);
+                    }
+                }
+            ],
+            language: {
+                emptyTable: 'No payout requests yet.'
             }
-            var rows = result.data.rows || [];
-            if (!rows.length) {
-                table.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">No payout requests yet.</td></tr>';
-                return;
-            }
-            var html = '';
-            rows.forEach(function (row, i) {
-                html += '<tr>'
-                    + '<td>' + (i + 1) + '</td>'
-                    + '<td><strong>' + (row.request_no || '') + '</strong><br><small class="text-muted">ID: ' + Number(row.id || 0) + '</small></td>'
-                    + '<td>' + (row.request_date || '') + '</td>'
-                    + '<td><span class="badge bg-secondary">' + (row.status || '') + '</span></td>'
-                    + '<td class="text-end">' + Number(row.requested_amount || 0).toFixed(2) + '</td>'
-                    + '<td class="text-end">' + Number(row.paid_amount || 0).toFixed(2) + '</td>'
-                    + '<td class="text-end">' + Number(row.pending_amount || 0).toFixed(2) + '</td>'
-                    + '</tr>';
-            });
-            table.innerHTML = html;
         });
+
+        var historyTab = document.getElementById('med-credit-history-tab');
+        if (historyTab) {
+            historyTab.addEventListener('shown.bs.tab', function () {
+                if (historyTable && historyTable.columns) {
+                    historyTable.columns.adjust().draw(false);
+                }
+            });
+        }
     }
 
     var form = document.getElementById('med_credit_request_form');
@@ -613,6 +777,7 @@
 
     syncScopeWithGroupMode();
     initPoolTable();
+    initHistoryTable();
     loadHistory();
 })();
 </script>
