@@ -91,6 +91,10 @@ $mergedGroups = [
                     $isConfirmedForQueue= (int) ($row->is_confirmed_for_queue ?? 0) === 1;
                     $queueNo            = (int) (($row->display_queue_no ?? 0) ?: ($row->queue_no ?? 0));
                     $hasQueueNo         = $queueNo > 0;
+                    $queueDisplay       = trim((string) ($row->opd_no ?? ''));
+                    if ($queueDisplay === '' && $hasQueueNo) {
+                        $queueDisplay = (string) $queueNo;
+                    }
                     $showFullActions    = $hasPrescription || $isConfirmedForQueue;
                     $opdId              = (int) ($row->opd_id ?? 0);
                     $patientRawName     = trim((string) ($row->P_name ?? '') . ' { ' . (string) ($row->p_rname ?? '') . ' }');
@@ -112,7 +116,7 @@ $mergedGroups = [
                         <td><span class="badge <?= esc($group['badge']) ?>"><?= esc($group['label']) ?></span></td>
                         <td><?= esc($row->opd_code ?? '') ?></td>
                         <td><?= $patientDisplayName ?></td>
-                        <td data-order="<?= $hasQueueNo ? $queueNo : 9999 ?>"><?= $hasQueueNo ? $queueNo : '' ?></td>
+                        <td data-order="<?= esc($queueDisplay !== '' ? $queueDisplay : 'ZZZZ') ?>"><?= esc($queueDisplay) ?></td>
                         <td><?= esc($row->p_code ?? '') ?></td>
                         <td><?= esc($row->opd_type ?? '') ?> / Amt: <?= esc($row->opd_fee_amount ?? '') ?></td>
                         <td>
