@@ -148,8 +148,15 @@ class DoctorDocument extends BaseController
 
         $logoFile    = defined('H_logo') ? (string) constant('H_logo') : 'logo.png';
         $logoAbsPath = FCPATH . 'assets/images/' . $logoFile;
+        $logoSrc = $this->buildImageDataUriFromPath($logoAbsPath);
+        if ($logoSrc === '' && is_file($logoAbsPath)) {
+            $logoSrc = str_replace('\\', '/', $logoAbsPath);
+        }
+        if ($logoSrc === '') {
+            $logoSrc = base_url('assets/images/' . $logoFile);
+        }
         $logoHtml    = '<img style="width:100px;vertical-align:top;" src="'
-            . base_url('assets/images/' . $logoFile) . '" />';
+            . $logoSrc . '" />';
 
         $age    = (string) ($doc['age']    ?? '');
         $gender = (string) ($doc['gender'] ?? '');
@@ -158,7 +165,16 @@ class DoctorDocument extends BaseController
         $drSignImg  = '';
         $drSignFile = (string) ($doc['dr_sign'] ?? $doc['sign_image'] ?? $doc['doctor_sign'] ?? '');
         if ($drSignFile !== '') {
-            $drSignImg = '<img style="height:40px;" src="' . base_url('assets/images/' . $drSignFile) . '" />';
+            $drSignAbsPath = FCPATH . 'assets/images/' . ltrim($drSignFile, '/\\');
+            $drSignSrc = $this->buildImageDataUriFromPath($drSignAbsPath);
+            if ($drSignSrc === '' && is_file($drSignAbsPath)) {
+                $drSignSrc = str_replace('\\', '/', $drSignAbsPath);
+            }
+            if ($drSignSrc === '') {
+                $drSignSrc = base_url('assets/images/' . $drSignFile);
+            }
+
+            $drSignImg = '<img style="height:40px;" src="' . $drSignSrc . '" />';
         }
 
         $map = [
@@ -185,6 +201,29 @@ class DoctorDocument extends BaseController
         ];
 
         return str_replace(array_keys($map), array_values($map), $html);
+    }
+
+    private function buildImageDataUriFromPath(string $absolutePath): string
+    {
+        $absolutePath = trim($absolutePath);
+        if ($absolutePath === '' || ! is_file($absolutePath) || ! is_readable($absolutePath)) {
+            return '';
+        }
+
+        $bytes = @file_get_contents($absolutePath);
+        if ($bytes === false || $bytes === '') {
+            return '';
+        }
+
+        $mime = 'image/png';
+        if (function_exists('mime_content_type')) {
+            $detected = @mime_content_type($absolutePath);
+            if (is_string($detected) && str_starts_with($detected, 'image/')) {
+                $mime = $detected;
+            }
+        }
+
+        return 'data:' . $mime . ';base64,' . base64_encode($bytes);
     }
 
     private function hasColumn(string $table, string $column): bool
@@ -224,6 +263,128 @@ class DoctorDocument extends BaseController
         }
 
         return view('doctor_document/workspace');
+    }
+
+    public function patient_search()
+    {
+        if ($resp = $this->ensureAccess()) {
+            return $resp;
+        }
+
+        $search = trim((string) $this->request->getGet('q'));
+        $patients = $this->searchDoctorWorkPatients($search);
+        $countsByPatient = $this->getDoctorWorkPatientCounts(array_map(static fn(array $row): int => (int) ($row['id'] ?? 0), $patients));
+
+        foreach ($patients as &$patientRow) {
+            $patientId = (int) ($patientRow['id'] ?? 0);
+            $patientCounts = $countsByPatient[$patientId] ?? [];
+            $patientRow['opd_count'] = (int) ($patientCounts['opd_count'] ?? 0);
+            $patientRow['lab_count'] = (int) ($patientCounts['lab_count'] ?? 0);
+            $patientRow['ipd_count'] = (int) ($patientCounts['ipd_count'] ?? 0);
+        }
+        unset($patientRow);
+
+        return view('doctor_document/patient_search', [
+            'search' => $search,
+            'patients' => $patients,
+        ]);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function searchDoctorWorkPatients(string $search): array
+    {
+        $search = preg_replace('/[^A-Za-z0-9 _.@\-]/', '', trim($search)) ?? '';
+
+        if ($search === '') {
+            return [];
+        }
+
+        $searchTokens = preg_split('/\s+/', $search) ?: [];
+        $whereParts = ['1=1'];
+
+        foreach ($searchTokens as $token) {
+            $token = trim((string) $token);
+            if ($token === '') {
+                continue;
+            }
+
+            $escaped = $this->db->escape($token);
+            $likeToken = $this->db->escapeLikeString($token);
+
+            if (is_numeric($token)) {
+                $whereParts[] = "(p.p_code LIKE '%{$likeToken}' ESCAPE '!' OR p.mphone1 = {$escaped} OR p.udai = {$escaped})";
+                continue;
+            }
+
+            if (ctype_alpha($token)) {
+                $whereParts[] = "(p.p_fname LIKE '%{$likeToken}%' ESCAPE '!' OR p.email1 = {$escaped})";
+                continue;
+            }
+
+            $whereParts[] = "(p.p_code LIKE '{$likeToken}' ESCAPE '!' OR p.email1 = {$escaped})";
+        }
+
+        $sql = "SELECT p.*, DATE_FORMAT(p.last_visit,'%d-%m-%Y') AS Last_Visit
+            FROM patient_master p
+            WHERE " . implode(' AND ', $whereParts) . "
+            GROUP BY p.id
+            ORDER BY p.last_visit DESC
+            LIMIT 100";
+
+        return $this->db->query($sql)->getResultArray();
+    }
+
+    /**
+     * @param list<int> $patientIds
+     * @return array<int, array<string, int>>
+     */
+    private function getDoctorWorkPatientCounts(array $patientIds): array
+    {
+        $patientIds = array_values(array_unique(array_filter(array_map('intval', $patientIds), static fn(int $id): bool => $id > 0)));
+        if ($patientIds === []) {
+            return [];
+        }
+
+        $countsByPatient = [];
+        foreach ($patientIds as $patientId) {
+            $countsByPatient[$patientId] = [
+                'opd_count' => 0,
+                'lab_count' => 0,
+                'ipd_count' => 0,
+            ];
+        }
+
+        $countSources = [
+            ['table' => 'opd_master', 'column' => 'p_id', 'alias' => 'opd_count'],
+            ['table' => 'lab_request', 'column' => 'patient_id', 'alias' => 'lab_count'],
+            ['table' => 'ipd_master', 'column' => 'p_id', 'alias' => 'ipd_count'],
+        ];
+
+        foreach ($countSources as $source) {
+            if (! $this->hasColumn($source['table'], $source['column'])) {
+                continue;
+            }
+
+            $rows = $this->db->table($source['table'])
+                ->select($source['column'] . ' AS patient_id, COUNT(*) AS total_count', false)
+                ->whereIn($source['column'], $patientIds)
+                ->groupBy($source['column'])
+                ->get()
+                ->getResultArray();
+
+            foreach ($rows as $row) {
+                $patientId = (int) ($row['patient_id'] ?? 0);
+                if ($patientId <= 0 || ! array_key_exists($patientId, $countsByPatient)) {
+                    continue;
+                }
+
+                $countsByPatient[$patientId][$source['alias']] = (int) ($row['total_count'] ?? 0);
+            }
+        }
+
+        return $countsByPatient;
     }
 
     public function open_by_key()
@@ -1087,6 +1248,16 @@ class DoctorDocument extends BaseController
             $patientDoc
         );
 
+        $logoFile = defined('H_logo') ? (string) constant('H_logo') : 'logo.png';
+        $logoAbsPath = FCPATH . 'assets/images/' . $logoFile;
+        $hospitalLogoSrc = $this->buildImageDataUriFromPath($logoAbsPath);
+        if ($hospitalLogoSrc === '' && is_file($logoAbsPath)) {
+            $hospitalLogoSrc = str_replace('\\', '/', $logoAbsPath);
+        }
+        if ($hospitalLogoSrc === '') {
+            $hospitalLogoSrc = base_url('assets/images/' . $logoFile);
+        }
+
         $data = [
             'content' => $content,
             'print_on_type' => $resolvedPrintType,
@@ -1102,6 +1273,7 @@ class DoctorDocument extends BaseController
             'custom_header_html' => $customHeaderHtml,
             'custom_footer_html' => $customFooterHtml,
             'has_selected_print_template' => is_array($selectedPrintTemplate),
+            'hospital_logo_src' => $hospitalLogoSrc,
         ];
 
         $mpdfTempDir = WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'mpdf';

@@ -31,6 +31,7 @@
                     </div>
                     <div class="d-flex gap-2 flex-wrap">
                         <button type="button" class="btn btn-success" onclick="openPatientDoc()">Open Patient Documents</button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="load_form('<?= base_url('doctor_work/patient_search') ?>','Doctor Patient Search')">Search Patient with History</button>
                         <button type="button" class="btn btn-outline-primary" onclick="load_form('<?= base_url('Report/document_list') ?>', 'Document Issue Report')">Document Issue Report</button>
                     </div>
                 </div>

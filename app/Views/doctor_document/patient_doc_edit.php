@@ -5,14 +5,29 @@ $docId = (int) ($patientDoc['id'] ?? 0);
 $html = (string) ($patientDoc['raw_data'] ?? '');
 $printTemplates = $print_templates ?? [];
 $defaultPrintTemplateId = (int) ($default_print_template_id ?? 0);
+$request = service('request');
+$backUrl = trim((string) $request->getGet('back_url'));
+$backTitle = trim((string) $request->getGet('back_title'));
+if ($backUrl === '') {
+    $backUrl = base_url('doctor_work/document_workspace');
+}
+if ($backTitle === '') {
+    $backTitle = 'Doctor Documents Workspace';
+}
+$docListUrl = base_url('/Document_Patient/p_doc_record/' . (int) ($patient['id'] ?? 0));
+$docListQuery = http_build_query([
+    'back_url' => $backUrl,
+    'back_title' => $backTitle,
+]);
+$docListUrlWithQuery = $docListUrl . ($docListQuery !== '' ? '?' . $docListQuery : '');
 ?>
 <div class="pagetitle">
     <h1>Document Editor</h1>
     <nav>
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="<?= base_url('dashboard') ?>">Home</a></li>
-            <li class="breadcrumb-item"><a href="javascript:load_form('<?= base_url('/Patient/person_record/' . (int) ($patient['id'] ?? 0)) ?>');">Person</a></li>
-            <li class="breadcrumb-item"><a href="javascript:load_form('<?= base_url('/Document_Patient/p_doc_record/' . (int) ($patient['id'] ?? 0)) ?>');">Document List</a></li>
+            <li class="breadcrumb-item"><a href="javascript:load_form('<?= esc($backUrl, 'js') ?>','<?= esc($backTitle, 'js') ?>');"><?= esc($backTitle) ?></a></li>
+            <li class="breadcrumb-item"><a href="javascript:load_form('<?= esc($docListUrlWithQuery, 'js') ?>');">Document List</a></li>
             <li class="breadcrumb-item active">Editor</li>
         </ol>
     </nav>
@@ -121,7 +136,7 @@ $('#updatereport').off('click').on('click', function() {
 
 $('#editreport').off('click').on('click', function() {
     var document_id = $('#document_id').val();
-    load_form('<?= base_url('/Document_Patient/load_doc') ?>/' + document_id);
+    load_form('<?= base_url('/Document_Patient/load_doc') ?>/' + document_id + '?<?= esc($docListQuery, 'js') ?>');
 });
 
 $(document).off('click', '.btn-print-tpl, .btn-print-tpl-item').on('click', '.btn-print-tpl, .btn-print-tpl-item', function(e) {
@@ -137,33 +152,9 @@ $(document).off('click', '.btn-print-tpl, .btn-print-tpl-item').on('click', '.bt
 
     var url = '<?= base_url('/Document_Patient/create_final') ?>/' + document_id + '?ptid=' + encodeURIComponent(ptid);
 
-    fetch(url, { credentials: 'same-origin' })
-        .then(function(response) {
-            var ct = response.headers.get('Content-Type') || '';
-            if (!response.ok || ct.indexOf('application/pdf') === -1) {
-                return response.text().then(function(txt) {
-                    throw new Error('PDF generation failed (HTTP ' + response.status + '). ' + txt.substring(0, 300));
-                });
-            }
-            return response.blob();
-        })
-        .then(function(blob) {
-            var blobUrl = URL.createObjectURL(blob);
-            var a = document.createElement('a');
-            a.href = blobUrl;
-            a.target = '_blank';
-            a.rel = 'noopener';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            setTimeout(function() { URL.revokeObjectURL(blobUrl); }, 60000);
-        })
-        .catch(function(err) {
-            alert('Print error: ' + err.message);
-        })
-        .finally(function() {
-            $btn.prop('disabled', origDisabled).html(origHtml);
-        });
+    window.open(url, '_blank');
+
+    $btn.prop('disabled', origDisabled).html(origHtml);
 });
 
 $('#Re_Create').off('click').on('click', function() {

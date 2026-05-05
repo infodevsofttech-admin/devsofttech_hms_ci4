@@ -605,6 +605,7 @@ $routes->post('Opd_prescription/section_template_track_usage', 'Opd_prescription
 $routes->get('Opd_prescription/section_template_list', 'Opd_prescription::section_template_list');
 $routes->get('Opd_prescription/section_past_data', 'Opd_prescription::section_past_data');
 $routes->get('Opd_prescription/template_workspace', 'Opd_prescription::template_workspace', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
+$routes->get('doctor_work/patient_search', 'DoctorDocument::patient_search', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
 $routes->get('doctor_work/document_workspace', 'DoctorDocument::workspace', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
 
 // Legacy-compatible doctor document templates and issue flow.

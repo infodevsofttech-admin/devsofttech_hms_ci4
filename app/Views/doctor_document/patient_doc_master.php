@@ -5,13 +5,26 @@ $patientName = (string) ($patient['p_fname'] ?? '');
 $relativeName = (string) ($patient['p_rname'] ?? '');
 $ageText = (string) ($age_text ?? '-');
 $genderText = ((int) ($patient['gender'] ?? 0) === 1) ? 'Male' : (((int) ($patient['gender'] ?? 0) === 2) ? 'Female' : 'Other');
+$request = service('request');
+$backUrl = trim((string) $request->getGet('back_url'));
+$backTitle = trim((string) $request->getGet('back_title'));
+if ($backUrl === '') {
+    $backUrl = base_url('doctor_work/document_workspace');
+}
+if ($backTitle === '') {
+    $backTitle = 'Doctor Documents Workspace';
+}
+$backQuery = http_build_query([
+    'back_url' => $backUrl,
+    'back_title' => $backTitle,
+]);
 ?>
 <div class="pagetitle">
     <h1>Patient Document Data</h1>
     <nav>
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="<?= base_url('dashboard') ?>">Home</a></li>
-            <li class="breadcrumb-item"><a href="javascript:load_form('<?= base_url('/Patient/person_record/' . $patientId) ?>');">Person</a></li>
+            <li class="breadcrumb-item"><a href="javascript:load_form('<?= esc($backUrl, 'js') ?>','<?= esc($backTitle, 'js') ?>');"><?= esc($backTitle) ?></a></li>
             <li class="breadcrumb-item active">Documents</li>
         </ol>
     </nav>
@@ -31,7 +44,11 @@ $genderText = ((int) ($patient['gender'] ?? 0) === 1) ? 'Male' : (((int) ($patie
                     <strong>/ P Code :</strong><?= esc((string) ($patient['p_code'] ?? '')) ?>
                 </p>
                 <input type="hidden" id="pid" value="<?= $patientId ?>">
+                <input type="hidden" id="doc_back_query" value="<?= esc($backQuery) ?>">
                 <div class="mt-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="load_form('<?= esc($backUrl, 'js') ?>','<?= esc($backTitle, 'js') ?>')">
+                        Back
+                    </button>
                     <button type="button" class="btn btn-outline-primary btn-sm" onclick="load_form('<?= base_url('Report/document_list') ?>', 'Document Issue Report')">
                         Open Document Issue Report
                     </button>
@@ -91,7 +108,7 @@ $genderText = ((int) ($patient['gender'] ?? 0) === 1) ? 'Male' : (((int) ($patie
                                 <td><?= $n++ ?></td>
                                 <td><?= !empty($row['date_issue']) ? esc(date('d-m-Y', strtotime((string) $row['date_issue']))) : '' ?></td>
                                 <td><?= esc((string) ($row['doc_name'] ?? '')) ?></td>
-                                <td><button type="button" class="btn btn-primary btn-sm" onclick="load_form('<?= base_url('Document_Patient/load_doc/' . (int) ($row['id'] ?? 0)) ?>')">Edit</button></td>
+                                <td><button type="button" class="btn btn-primary btn-sm" onclick="load_form('<?= base_url('Document_Patient/load_doc/' . (int) ($row['id'] ?? 0)) ?>?<?= esc($backQuery, 'js') ?>')">Edit</button></td>
                             </tr>
                         <?php endforeach; ?>
                     </table>
@@ -122,8 +139,13 @@ $('#createdoc').off('click').on('click', function() {
         [csrfName]: csrfHash
     }, function(data) {
         var id = parseInt((data || '').toString(), 10);
+        var backQuery = $('#doc_back_query').val() || '';
         if (id > 0) {
-            load_form('<?= base_url('Document_Patient/Pre_Data') ?>/' + id);
+            var url = '<?= base_url('Document_Patient/Pre_Data') ?>/' + id;
+            if (backQuery) {
+                url += '?' + backQuery;
+            }
+            load_form(url);
         } else {
             alert('Unable to create document');
         }

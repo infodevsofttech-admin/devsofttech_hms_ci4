@@ -373,6 +373,12 @@ if (! $canChargesSettings && $user && method_exists($user, 'inGroup')) {
             </a>
         </li>
         <li class="nav-item">
+        <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('doctor_work/patient_search') ?>','Doctor Patient Search')">
+            <i class="bi bi-search"></i>
+            <span>Patient Search</span>
+        </a>
+    </li>
+        <li class="nav-item">
         <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('doctor_work/document_workspace') ?>','Doctor Documents Workspace')">
             <i class="bi bi-file-earmark-text"></i>
             <span>Document Issue </span>

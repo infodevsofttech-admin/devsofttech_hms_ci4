@@ -9,6 +9,10 @@ $footerMargin = number_format((float) ($print_footer_margin ?? 1.50), 2, '.', ''
 $customHeaderHtml = (string) ($custom_header_html ?? '');
 $customFooterHtml = (string) ($custom_footer_html ?? '');
 $hasSelectedPrintTemplate = ! empty($has_selected_print_template);
+$hospitalLogoSrc = trim((string) ($hospital_logo_src ?? ''));
+if ($hospitalLogoSrc === '') {
+    $hospitalLogoSrc = base_url('assets/images/' . (defined('H_logo') ? constant('H_logo') : 'logo.png'));
+}
 ?>
 <style>
 @page {
@@ -33,7 +37,7 @@ body, p, td, th, div, span, li {
 <table cellspacing="0" style="font-size:10px;width:100%;border-style:inset;">
     <tr>
         <td style="width:20%;vertical-align:top;">
-            <img style="width:100px;vertical-align:top;" src="<?= esc(base_url('assets/images/' . (defined('H_logo') ? constant('H_logo') : 'logo.png'))) ?>" />
+            <img style="width:100px;vertical-align:top;" src="<?= esc($hospitalLogoSrc) ?>" />
         </td>
         <td style="width:70%;vertical-align:top;">
             <p align="center" style="font-size:26px;"><?= esc(defined('H_Name') ? constant('H_Name') : 'Hospital') ?></p>
