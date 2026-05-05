@@ -938,7 +938,7 @@ class Opd extends BaseController
             $leftQueue = (int) ($left->queue_no ?? 0);
             $rightQueue = (int) ($right->queue_no ?? 0);
             if ($leftQueue !== $rightQueue) {
-                return $leftQueue <=> $rightQueue;
+                    return $rightQueue <=> $leftQueue;
             }
 
             return ((int) ($left->opd_id ?? 0)) <=> ((int) ($right->opd_id ?? 0));
