@@ -75,6 +75,8 @@
     <a href="#" class="back-to-top d-flex align-items-center justify-content-center"><i class="bi bi-arrow-up-short"></i></a>
 
     <script src="<?= base_url('assets/vendor/jquery/jquery-4.0.0.min.js') ?>"></script>
+    <script src="<?= base_url('assets/vendor/inputmask/inputmask.min.js') ?>"></script>
+    <script src="<?= base_url('assets/vendor/inputmask/jquery.inputmask.min.js') ?>"></script>
     <script src="<?= base_url('assets/vendor/jquery-ui/jquery-ui.min.js') ?>"></script>
     <script src="<?= base_url('assets/vendor/datatables/jquery.dataTables.min.js') ?>"></script>
     <script>
