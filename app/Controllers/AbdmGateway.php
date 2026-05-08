@@ -2,12 +2,24 @@
 
 namespace App\Controllers;
 
-use App\Libraries\BridgeSyncService;
+use App\Libraries\Abdm\AbdmConnectorInterface;
+use App\Libraries\Abdm\AbdmConnectorFactory;
 use App\Libraries\FhirR4Builder;
 use CodeIgniter\I18n\Time;
 
 class AbdmGateway extends BaseController
 {
+    private AbdmConnectorInterface $connector;
+
+    public function initController(
+        \CodeIgniter\HTTP\RequestInterface  $request,
+        \CodeIgniter\HTTP\ResponseInterface $response,
+        \Psr\Log\LoggerInterface            $logger
+    ) {
+        parent::initController($request, $response, $logger);
+        $this->connector = AbdmConnectorFactory::make();
+    }
+
     public function abhaValidate()
     {
         if (! $this->request->isAJAX()) {
@@ -26,8 +38,8 @@ class AbdmGateway extends BaseController
 
         $queueId = null;
         try {
-            $bridge = new BridgeSyncService();
-            $queueId = $bridge->enqueue('abdm.abha.validate', $payload, 'abha', $abhaId);
+            $result  = $this->connector->validateAbha($abhaId, $payload);
+            $queueId = $result['queue_id'] ?? null;
         } catch (\Throwable $e) {
         }
 
@@ -85,8 +97,8 @@ class AbdmGateway extends BaseController
 
         $queueId = null;
         try {
-            $bridge = new BridgeSyncService();
-            $queueId = $bridge->enqueue('abdm.consent.requested', $rawPayload, 'consent', $consentHandle);
+            $result  = $this->connector->requestConsent($patientId, $abhaId, $purposeCode, $expiresAt, $consentHandle, $rawPayload);
+            $queueId = $result['queue_id'] ?? null;
         } catch (\Throwable $e) {
         }
 
@@ -200,8 +212,8 @@ class AbdmGateway extends BaseController
 
         $queueId = null;
         try {
-            $bridge = new BridgeSyncService();
-            $queueId = $bridge->enqueue('abdm.scan_share.lookup', $payload, 'abha_scan', $abhaId !== '' ? $abhaId : null);
+            $result  = $this->connector->scanShareLookup($qrPayload, $abhaId, $payload);
+            $queueId = $result['queue_id'] ?? null;
         } catch (\Throwable $e) {
         }
 
@@ -272,8 +284,8 @@ class AbdmGateway extends BaseController
 
         $queueId = null;
         try {
-            $bridge = new BridgeSyncService();
-            $queueId = $bridge->enqueue('abdm.fhir.share.requested', $payload, 'opd_fhir_document', (string) ($bundleRow['id'] ?? ''));
+            $result  = $this->connector->sharePrescriptionBundle($payload, (string) ($bundleRow['id'] ?? ''));
+            $queueId = $result['queue_id'] ?? null;
         } catch (\Throwable $e) {
         }
 
@@ -337,8 +349,8 @@ class AbdmGateway extends BaseController
 
         $queueId = null;
         try {
-            $bridge = new BridgeSyncService();
-            $queueId = $bridge->enqueue('abdm.ipd.discharge.share.requested', $payload, 'ipd_discharge', (string) $ipdId);
+            $result  = $this->connector->shareIpdDischargeBundle($payload, (string) $ipdId);
+            $queueId = $result['queue_id'] ?? null;
         } catch (\Throwable $e) {
         }
 
@@ -393,8 +405,12 @@ class AbdmGateway extends BaseController
             'consent_handle'   => $consentRecord['consent_handle'] ?? $consentHandle,
         ];
 
-        $bridge   = new BridgeSyncService();
-        $queueId  = $bridge->enqueue('abdm.diagnosis.report.share.requested', $payload, 'lab_request', (string) $labReqId);
+        $queueId = null;
+        try {
+            $result  = $this->connector->shareDiagnosisReportBundle($payload, (string) $labReqId);
+            $queueId = $result['queue_id'] ?? null;
+        } catch (\Throwable $e) {
+        }
 
         return $this->response->setJSON([
             'ok'             => 1,
@@ -478,18 +494,8 @@ class AbdmGateway extends BaseController
         $documentId = (int) $this->db->insertID();
         $queueId = null;
         try {
-            $bridge = new BridgeSyncService();
-            $queueId = $bridge->enqueue(
-                'nhcx.claim.created',
-                [
-                    'nhcx_claim_document_id' => $documentId,
-                    'patient_id' => $patientId,
-                    'encounter_id' => $encounterId,
-                    'bundle' => $bundle,
-                ],
-                'nhcx_claim_document',
-                (string) $documentId
-            );
+            $result  = $this->connector->nhcxClaimCreate($bundle, $documentId, $patientId, $encounterId);
+            $queueId = $result['queue_id'] ?? null;
         } catch (\Throwable $e) {
         }
 
@@ -530,8 +536,8 @@ class AbdmGateway extends BaseController
 
         $queueId = null;
         try {
-            $bridge = new BridgeSyncService();
-            $queueId = $bridge->enqueue('nhcx.claim.status.requested', $payload, 'nhcx_claim_document', (string) $documentId);
+            $result  = $this->connector->nhcxClaimStatusRequest($documentId, $payload['external_ref'], $payload['claim_status'], $payload);
+            $queueId = $result['queue_id'] ?? null;
         } catch (\Throwable $e) {
         }
 
