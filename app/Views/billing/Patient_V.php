@@ -1,4 +1,18 @@
 <!-- Main content -->
+<style>
+    /* Hide browser autocomplete suggestions */
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover,
+    input:-webkit-autofill:focus {
+        -webkit-box-shadow: 0 0 0 1000px white inset !important;
+        box-shadow: 0 0 0 1000px white inset !important;
+    }
+    
+    /* Hide autocomplete dropdown suggestions */
+    input:autofill {
+        background-color: white !important;
+    }
+</style>
 <section class="content">
     <div class="row">
         <div class="col-md-12">
@@ -20,6 +34,11 @@
                             <button class="nav-link" id="lastopd-tab" data-bs-toggle="tab"
                                 data-bs-target="#lastopd" type="button" role="tab" aria-controls="lastopd"
                                 aria-selected="false" data-url="<?= base_url('billing/patient/search_opd') ?>">Last OPDs</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="abha-tab" data-bs-toggle="tab"
+                                data-bs-target="#abha" type="button" role="tab" aria-controls="abha"
+                                aria-selected="false">ABHA Create/Verify</button>
                         </li>
                     </ul>
                     <div class="tab-content pt-2" id="patientTabsContent">
@@ -243,10 +262,126 @@
                                     </span>
                                 </div>
                             </form>
+                            <div id="search_loading" class="alert alert-info mt-2" style="display:none;">
+                                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                <span id="search_loading_text">Searching...</span>
+                            </div>
                             <div class="searchresult"></div>
                         </div>
                         <div class="tab-pane fade" id="lastopd" role="tabpanel" aria-labelledby="lastopd-tab">
 
+                        </div>
+                        <div class="tab-pane fade" id="abha" role="tabpanel" aria-labelledby="abha-tab">
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <div class="card">
+                                        <div class="card-body">
+                                            <h6 class="card-title">ABHA Number Create and Verify</h6>
+                                            <p class="text-muted">Create and verify your unique health identification number</p>
+                                            
+                                            <ul class="nav nav-tabs" id="abhaSubTabs" role="tablist">
+                                                <li class="nav-item" role="presentation">
+                                                    <button class="nav-link active" id="abha-create-tab" data-bs-toggle="tab"
+                                                        data-bs-target="#abha-create" type="button" role="tab" aria-controls="abha-create"
+                                                        aria-selected="true">Create ABHA</button>
+                                                </li>
+                                                <li class="nav-item" role="presentation">
+                                                    <button class="nav-link" id="abha-verify-tab" data-bs-toggle="tab"
+                                                        data-bs-target="#abha-verify" type="button" role="tab" aria-controls="abha-verify"
+                                                        aria-selected="false">Verify ABHA</button>
+                                                </li>
+                                            </ul>
+                                            
+                                            <div class="tab-content pt-3" id="abhaSubTabsContent">
+                                                <div class="tab-pane fade show active" id="abha-create" role="tabpanel" aria-labelledby="abha-create-tab">
+                                                    <form id="abha_create_form" class="needs-validation" novalidate>
+                                                        <?= csrf_field() ?>
+                                                        <div class="row">
+                                                            <div class="col-md-6">
+                                                                <div class="form-group mb-3">
+                                                                    <label class="form-label">Aadhaar Number</label>
+                                                                    <input type="text" class="form-control" id="abha_create_aadhaar" 
+                                                                        name="aadhaar" placeholder="12-digit Aadhaar" required
+                                                                        data-inputmask='"mask": "9999-9999-9999"' data-mask>
+                                                                </div>
+                                                            </div>
+                                                            <div class="col-md-6">
+                                                                <div class="form-group mb-3">
+                                                                    <label class="form-label">Mobile Number</label>
+                                                                    <input type="text" class="form-control" id="abha_create_mobile" 
+                                                                        name="mobile" placeholder="10-digit Mobile" required
+                                                                        data-inputmask='"mask": "9999999999"' data-mask>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="row">
+                                                            <div class="col-md-6">
+                                                                <div class="form-group mb-3">
+                                                                    <label class="form-label">Full Name</label>
+                                                                    <input type="text" class="form-control" id="abha_create_name" 
+                                                                        name="full_name" placeholder="Patient Full Name" required>
+                                                                </div>
+                                                            </div>
+                                                            <div class="col-md-6">
+                                                                <div class="form-group mb-3">
+                                                                    <label class="form-label">Gender</label>
+                                                                    <select class="form-select" id="abha_create_gender" name="gender" required>
+                                                                        <option value="">Select Gender</option>
+                                                                        <option value="M">Male</option>
+                                                                        <option value="F">Female</option>
+                                                                        <option value="O">Other</option>
+                                                                    </select>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="row">
+                                                            <div class="col-md-6">
+                                                                <div class="form-group mb-3">
+                                                                    <label class="form-label">Date of Birth</label>
+                                                                    <input type="date" class="form-control" id="abha_create_dob" 
+                                                                        name="dob" required>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="row">
+                                                            <div class="col-md-12">
+                                                                <button type="submit" class="btn btn-primary">Generate OTP & Create ABHA</button>
+                                                            </div>
+                                                        </div>
+                                                    </form>
+                                                </div>
+                                                
+                                                <div class="tab-pane fade" id="abha-verify" role="tabpanel" aria-labelledby="abha-verify-tab">
+                                                    <form id="abha_verify_form" class="needs-validation" novalidate>
+                                                        <?= csrf_field() ?>
+                                                        <div class="row">
+                                                            <div class="col-md-6">
+                                                                <div class="form-group mb-3">
+                                                                    <label class="form-label">ABHA Number / Health ID</label>
+                                                                    <input type="text" class="form-control" id="abha_verify_number" 
+                                                                        name="abha_number" placeholder="ABHA Number" required>
+                                                                </div>
+                                                            </div>
+                                                            <div class="col-md-6">
+                                                                <div class="form-group mb-3">
+                                                                    <label class="form-label">Aadhaar or Mobile</label>
+                                                                    <input type="text" class="form-control" id="abha_verify_mobile" 
+                                                                        name="mobile_aadhaar" placeholder="Enter Mobile or Aadhaar" required>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="row">
+                                                            <div class="col-md-12">
+                                                                <button type="submit" class="btn btn-success">Verify ABHA</button>
+                                                            </div>
+                                                        </div>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -274,9 +409,21 @@
 
         $('form.form2').on('submit', function(form) {
             form.preventDefault();
+            var searchBtn = $('form.form2 button[type="submit"]');
+            var loadingDiv = $('#search_loading');
+            
+            // Show loading indicator and disable button
+            loadingDiv.show();
+            searchBtn.prop('disabled', true);
+            searchBtn.text('Searching...');
+            
             $.post('<?= base_url('billing/patient/search') ?>', $('form.form2').serialize(), function(data) {
                 $('div.searchresult').html(data);
-                $('#example1').DataTable();
+                
+                // Hide loading indicator and re-enable button
+                loadingDiv.hide();
+                searchBtn.prop('disabled', false);
+                searchBtn.text('Go!');
             });
         });
 
@@ -377,6 +524,10 @@
         });
 
         $("#input_name")
+            .on("focus", function() {
+                // Suppress browser autocomplete suggestions
+                $(this).removeAttr('readonly').off('mousedown.autocomplete');
+            })
             // don't navigate away from the field on tab when selecting an item
             .on("keydown", function(event) {
                 if (event.keyCode === $.ui.keyCode.TAB &&
@@ -515,7 +666,7 @@
     function onchange_title() {
         var d = $('#cbo_title').val();
 
-        if (d == "Mr." || d == "Master" || d == "Baby Boy") {
+        if (d == "Mr." || d == "Master" || d == "Baby Boy" || d == "Mohd.") {
             $("#options_gender1").prop("checked", true);
         } else {
             $("#options_gender2").prop("checked", true);

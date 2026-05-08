@@ -12,6 +12,45 @@ $ayushmanButtonClass = $isAyushmanCase ? 'accordion-button' : 'accordion-button 
 $ayushmanChecklistItems = $ayushman_checklist_items ?? [];
 ?>
 
+<style>
+    /* Select2 - match Bootstrap form-select-sm sizing */
+    #package_list_id + .select2-container .select2-selection--single {
+        height: calc(1.5em + 0.5rem + 2px);
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+        border: 1px solid #ced4da;
+        border-radius: 0.25rem;
+    }
+    #package_list_id + .select2-container .select2-selection--single .select2-selection__rendered {
+        line-height: calc(1.5em + 0.5rem);
+        padding-left: 0.4rem;
+        color: #212529;
+    }
+    #package_list_id + .select2-container .select2-selection--single .select2-selection__arrow {
+        height: calc(1.5em + 0.5rem);
+        top: 0;
+    }
+    #package_list_id + .select2-container--open .select2-selection--single {
+        border-color: #86b7fe;
+        outline: 0;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+    .select2-dropdown {
+        border: 1px solid #ced4da;
+        border-radius: 0.25rem;
+        font-size: 0.875rem;
+    }
+    .select2-container--default .select2-search--dropdown .select2-search__field {
+        border: 1px solid #ced4da;
+        border-radius: 0.2rem;
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+    }
+    .select2-results__option--highlighted {
+        background-color: #0d6efd !important;
+    }
+</style>
+
 <div class="card border-top border-3 border-danger">
     <div class="card-header">
         <strong>IPD Package</strong>
@@ -110,7 +149,7 @@ $ayushmanChecklistItems = $ayushman_checklist_items ?? [];
                         <div class="row g-2">
                             <div class="col-md-12">
                                 <label class="form-label">Package Name</label>
-                                <select class="form-select form-select-sm" id="package_list_id" onchange="ipdPackageSetRate()">
+                                <select class="form-select form-select-sm select2" id="package_list_id" onchange="ipdPackageSetRate()" style="width:100%">
                                     <option value="">Select</option>
                                     <?php foreach ($package_list ?? [] as $row) : ?>
                                         <?php $displayAmount = (float) ($row->amount1 ?? $row->Pakage_Min_Amount ?? 0); ?>
@@ -277,10 +316,6 @@ $ayushmanChecklistItems = $ayushman_checklist_items ?? [];
                     </div>
                 </div>
             </div>
-            <?php else : ?>
-            <div class="alert alert-light border mt-3 mb-0">
-                Ayushman Bharat treatment search is shown automatically for cases where insurance or scheme contains Ayushman or PMJAY.
-            </div>
             <?php endif; ?>
         </div>
     </div>
@@ -331,6 +366,19 @@ $ayushmanChecklistItems = $ayushman_checklist_items ?? [];
     var ipdAyushmanChecklistUrl = '<?= site_url('billing/ipd/panel/' . $ipdId . '/ayushman/checklist') ?>';
     var ipdAyushmanClaimSheetUrl = '<?= site_url('billing/ipd/panel/' . $ipdId . '/ayushman/claim-sheet') ?>';
     var ipdAyushmanResults = {};
+
+    // Initialize Select2 on package list select
+    (function initPackageSelect2() {
+        if (window.jQuery && $.fn && $.fn.select2) {
+            $('#package_list_id').select2({
+                placeholder: 'Search package...',
+                allowClear: true,
+                width: '100%'
+            }).on('select2:select select2:clear', function() {
+                ipdPackageSetRate();
+            });
+        }
+    })();
 
     function normalizeText(value) {
         return String(value || '')
