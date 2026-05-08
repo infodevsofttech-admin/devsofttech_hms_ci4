@@ -274,6 +274,7 @@ class BridgeSyncService
 
     private function readSetting(string $name): string
     {
+        // 1. Environment variable (highest priority — .env or server env)
         $envValue = getenv($name);
         if ($envValue !== false) {
             $value = trim((string) $envValue);
@@ -282,6 +283,7 @@ class BridgeSyncService
             }
         }
 
+        // 2. PHP constant
         if (defined($name)) {
             $value = trim((string) constant($name));
             if ($value !== '') {
@@ -289,6 +291,25 @@ class BridgeSyncService
             }
         }
 
+        // 3. Config\AbdmConnector PHP config file (editable without DB access)
+        static $dreamsoftConfigMap = null;
+        if ($dreamsoftConfigMap === null) {
+            try {
+                $cfg = config('AbdmConnector');
+                $dreamsoftConfigMap = [
+                    'BRIDGE_SYNC_URL'    => trim((string) ($cfg->dreamsoftBridgeUrl   ?? '')),
+                    'BRIDGE_SYNC_TOKEN'  => trim((string) ($cfg->dreamsoftBridgeToken  ?? '')),
+                    'BRIDGE_SOURCE_CODE' => trim((string) ($cfg->dreamsoftSourceCode   ?? '')),
+                ];
+            } catch (\Throwable $e) {
+                $dreamsoftConfigMap = [];
+            }
+        }
+        if (isset($dreamsoftConfigMap[$name]) && $dreamsoftConfigMap[$name] !== '') {
+            return $dreamsoftConfigMap[$name];
+        }
+
+        // 4. hospital_setting DB table (lowest priority — runtime admin panel)
         if (! $this->db->tableExists('hospital_setting')) {
             return '';
         }
