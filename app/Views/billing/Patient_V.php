@@ -12,6 +12,33 @@
     input:autofill {
         background-color: white !important;
     }
+
+    /* ABHA wizard progress track */
+    .abha-progress-wrap { display:flex; align-items:flex-start; margin-bottom:24px; }
+    .abha-progress-wrap .abha-node {
+        display:flex; flex-direction:column; align-items:center; flex:1; position:relative;
+    }
+    .abha-progress-wrap .abha-node:not(:last-child)::after {
+        content:''; position:absolute; top:16px; left:calc(50% + 20px);
+        right:calc(-50% + 20px); height:2px; background:#dee2e6; z-index:0;
+    }
+    .abha-progress-wrap .abha-node.done:not(:last-child)::after { background:#28a745; }
+    .abha-badge {
+        width:32px; height:32px; border-radius:50%;
+        display:flex; align-items:center; justify-content:center;
+        font-weight:700; font-size:13px; z-index:1;
+        background:#dee2e6; color:#6c757d; border:2px solid #dee2e6;
+        transition: all 0.25s;
+    }
+    .abha-node.active .abha-badge { background:#fff; color:#007bff; border-color:#007bff; }
+    .abha-node.done   .abha-badge { background:#28a745; color:#fff; border-color:#28a745; }
+    .abha-node-label {
+        font-size:0.72rem; text-align:center; margin-top:5px;
+        color:#aaa; max-width:80px; line-height:1.2;
+    }
+    .abha-node.active .abha-node-label { color:#007bff; font-weight:600; }
+    .abha-node.done   .abha-node-label { color:#28a745; }
+    .abha-panel { border-left:3px solid #007bff; padding-left:16px; }
 </style>
 <section class="content">
     <div class="row">
@@ -294,61 +321,133 @@
                                             
                                             <div class="tab-content pt-3" id="abhaSubTabsContent">
                                                 <div class="tab-pane fade show active" id="abha-create" role="tabpanel" aria-labelledby="abha-create-tab">
-                                                    <form id="abha_create_form" class="needs-validation" novalidate>
-                                                        <?= csrf_field() ?>
-                                                        <div class="row">
-                                                            <div class="col-md-6">
-                                                                <div class="form-group mb-3">
-                                                                    <label class="form-label">Aadhaar Number</label>
-                                                                    <input type="text" class="form-control" id="abha_create_aadhaar" 
-                                                                        name="aadhaar" placeholder="12-digit Aadhaar" required
-                                                                        data-inputmask='"mask": "9999-9999-9999"' data-mask>
-                                                                </div>
+
+                                                    <!-- Step progress indicator -->
+                                                    <div class="abha-progress-wrap mt-3 mb-4">
+                                                        <div class="abha-node active" id="abha_node_1">
+                                                            <div class="abha-badge" id="abha_badge_1">1</div>
+                                                            <div class="abha-node-label">Aadhaar &amp; Consent</div>
+                                                        </div>
+                                                        <div class="abha-node" id="abha_node_2">
+                                                            <div class="abha-badge" id="abha_badge_2">2</div>
+                                                            <div class="abha-node-label">OTP Verify</div>
+                                                        </div>
+                                                        <div class="abha-node" id="abha_node_3">
+                                                            <div class="abha-badge" id="abha_badge_3">3</div>
+                                                            <div class="abha-node-label">Mobile Confirm</div>
+                                                        </div>
+                                                        <div class="abha-node" id="abha_node_4">
+                                                            <div class="abha-badge" id="abha_badge_4">4</div>
+                                                            <div class="abha-node-label">ABHA Ready</div>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Step 1: Aadhaar entry + consent -->
+                                                    <div id="abha_step_1" class="abha-panel">
+                                                        <p class="text-muted small mb-3">Enter the patient's Aadhaar number. An OTP will be sent to the mobile linked with it.</p>
+                                                        <div class="row g-3 align-items-end">
+                                                            <div class="col-md-4">
+                                                                <label class="form-label">Aadhaar Number <span class="text-danger">*</span></label>
+                                                                <input type="text" class="form-control" id="abha_aadhaar_masked"
+                                                                    placeholder="0000-0000-0000" autocomplete="off"
+                                                                    data-inputmask='"mask": "9999-9999-9999"' data-mask>
+                                                                <small class="text-muted">Mobile must be linked with Aadhaar for OTP.</small>
                                                             </div>
-                                                            <div class="col-md-6">
-                                                                <div class="form-group mb-3">
-                                                                    <label class="form-label">Mobile Number</label>
-                                                                    <input type="text" class="form-control" id="abha_create_mobile" 
-                                                                        name="mobile" placeholder="10-digit Mobile" required
-                                                                        data-inputmask='"mask": "9999999999"' data-mask>
+                                                            <div class="col-md-3">
+                                                                <label class="form-label">Authentication Via</label>
+                                                                <select class="form-select" id="abha_auth_type">
+                                                                    <option value="aadhaar_otp">OTP</option>
+                                                                    <option value="biometric">Biometric</option>
+                                                                </select>
+                                                            </div>
+                                                        </div>
+                                                        <div class="mt-3">
+                                                            <div class="form-check">
+                                                                <input class="form-check-input" type="checkbox" id="abha_consent_chk">
+                                                                <label class="form-check-label" for="abha_consent_chk">
+                                                                    I confirm the patient has given consent to share their Aadhaar details with NHA/ABDM for ABHA number creation.
+                                                                    <a href="#" data-bs-toggle="collapse" data-bs-target="#abha_full_consent" class="ms-1 small">(read full consent)</a>
+                                                                </label>
+                                                            </div>
+                                                            <div class="collapse mt-2" id="abha_full_consent">
+                                                                <div class="card card-body bg-light py-2 small text-muted" style="max-height:100px;overflow-y:auto;">
+                                                                    I hereby declare that I am voluntarily sharing my Aadhaar number and demographic information issued by UIDAI with the National Health Authority (NHA) for the sole purpose of creating an ABHA number. I understand this number may be used for healthcare service purposes as notified by ABDM. My personal identifiable information (Name, Address, Age, DOB, Gender, Photo) may be made available to entities in the National Digital Health Ecosystem. I consent to use and disclosure of my health information to NDHE entities as permitted by law.
                                                                 </div>
                                                             </div>
                                                         </div>
-                                                        <div class="row">
-                                                            <div class="col-md-6">
-                                                                <div class="form-group mb-3">
-                                                                    <label class="form-label">Full Name</label>
-                                                                    <input type="text" class="form-control" id="abha_create_name" 
-                                                                        name="full_name" placeholder="Patient Full Name" required>
-                                                                </div>
-                                                            </div>
-                                                            <div class="col-md-6">
-                                                                <div class="form-group mb-3">
-                                                                    <label class="form-label">Gender</label>
-                                                                    <select class="form-select" id="abha_create_gender" name="gender" required>
-                                                                        <option value="">Select Gender</option>
-                                                                        <option value="M">Male</option>
-                                                                        <option value="F">Female</option>
-                                                                        <option value="O">Other</option>
-                                                                    </select>
-                                                                </div>
+                                                        <div id="abha_step1_alert" class="mt-2"></div>
+                                                        <div class="mt-3">
+                                                            <button type="button" class="btn btn-primary" id="abha_get_otp_btn">
+                                                                <span id="abha_get_otp_spinner" class="spinner-border spinner-border-sm me-1 d-none"></span>
+                                                                Send OTP
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Step 2: OTP verification -->
+                                                    <div id="abha_step_2" class="abha-panel" style="display:none;">
+                                                        <p class="text-muted small mb-3">Enter the OTP sent to the mobile number linked with Aadhaar.</p>
+                                                        <div class="row g-3 align-items-end">
+                                                            <div class="col-md-3">
+                                                                <label class="form-label">One-Time Password <span class="text-danger">*</span></label>
+                                                                <input type="text" class="form-control form-control-lg text-center letter-spacing-2"
+                                                                    id="abha_otp_input" placeholder="— — — — — —"
+                                                                    maxlength="6" autocomplete="one-time-code" inputmode="numeric">
                                                             </div>
                                                         </div>
-                                                        <div class="row">
-                                                            <div class="col-md-6">
-                                                                <div class="form-group mb-3">
-                                                                    <label class="form-label">Date of Birth</label>
-                                                                    <input type="date" class="form-control" id="abha_create_dob" 
-                                                                        name="dob" required>
+                                                        <div id="abha_step2_alert" class="mt-2"></div>
+                                                        <div class="mt-3 d-flex gap-2 flex-wrap">
+                                                            <button type="button" class="btn btn-success" id="abha_verify_otp_btn">
+                                                                <span id="abha_verify_otp_spinner" class="spinner-border spinner-border-sm me-1 d-none"></span>
+                                                                Confirm OTP
+                                                            </button>
+                                                            <button type="button" class="btn btn-outline-secondary" id="abha_resend_otp_btn">Resend OTP</button>
+                                                            <button type="button" class="btn btn-link text-secondary px-0" id="abha_back_step1_btn">&larr; Back</button>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Step 3: Mobile confirmation -->
+                                                    <div id="abha_step_3" class="abha-panel" style="display:none;">
+                                                        <p class="text-muted small mb-3">Verify or update the communication mobile number for this patient.</p>
+                                                        <div class="row g-3 align-items-end">
+                                                            <div class="col-md-3">
+                                                                <label class="form-label">Mobile Number <span class="text-danger">*</span></label>
+                                                                <input type="text" class="form-control" id="abha_comm_mobile"
+                                                                    placeholder="10-digit number" maxlength="10" inputmode="numeric" autocomplete="off">
+                                                            </div>
+                                                        </div>
+                                                        <div id="abha_step3_alert" class="mt-2"></div>
+                                                        <div class="mt-3 d-flex gap-2">
+                                                            <button type="button" class="btn btn-primary" id="abha_comm_next_btn">
+                                                                <span id="abha_comm_spinner" class="spinner-border spinner-border-sm me-1 d-none"></span>
+                                                                Confirm &amp; Continue
+                                                            </button>
+                                                            <button type="button" class="btn btn-link text-secondary px-0" id="abha_back_step2_btn">&larr; Back</button>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Step 4: Done / ABHA address -->
+                                                    <div id="abha_step_4" class="abha-panel" style="display:none;">
+                                                        <div id="abha_created_result" class="mb-3"></div>
+                                                        <div class="row g-3 align-items-end">
+                                                            <div class="col-md-4">
+                                                                <label class="form-label">Health ID Address <small class="text-muted">(optional)</small></label>
+                                                                <div class="input-group">
+                                                                    <input type="text" class="form-control" id="abha_address_input" placeholder="e.g. ramesh.kumar">
+                                                                    <span class="input-group-text">@abdm</span>
                                                                 </div>
+                                                                <small class="text-muted">Choose from suggested addresses or type your own.</small>
                                                             </div>
                                                         </div>
-                                                        <div class="row">
-                                                            <div class="col-md-12">
-                                                                <button type="submit" class="btn btn-primary">Generate OTP & Create ABHA</button>
-                                                            </div>
+                                                        <div id="abha_step4_alert" class="mt-2"></div>
+                                                        <div class="mt-3">
+                                                            <button type="button" class="btn btn-success" id="abha_finalise_btn">
+                                                                <span id="abha_finalise_spinner" class="spinner-border spinner-border-sm me-1 d-none"></span>
+                                                                Save ABHA Address
+                                                            </button>
                                                         </div>
-                                                    </form>
+                                                    </div>
+
                                                 </div>
                                                 
                                                 <div class="tab-pane fade" id="abha-verify" role="tabpanel" aria-labelledby="abha-verify-tab">
@@ -426,6 +525,198 @@
                 searchBtn.text('Go!');
             });
         });
+
+        /* ===================== ABHA CREATION WIZARD ===================== */
+        (function () {
+            var txnId = null;   // transaction id from ABDM API
+            var csrfToken = function() { return $('input[name="<?= csrf_token() ?>"]').first().val(); };
+
+            function abhaStep(step) {
+                $('#abha_step_1,#abha_step_2,#abha_step_3,#abha_step_4').hide();
+                $('#abha_step_' + step).show();
+                // update progress nodes
+                for (var i = 1; i <= 4; i++) {
+                    var $n = $('#abha_node_' + i);
+                    var $b = $('#abha_badge_' + i);
+                    $n.removeClass('active done');
+                    if (i < step) {
+                        $n.addClass('done');
+                        $b.html('<i class="fas fa-check fa-xs"></i>');
+                    } else if (i === step) {
+                        $n.addClass('active');
+                        $b.text(i);
+                    } else {
+                        $b.text(i);
+                    }
+                }
+            }
+
+            function showAlert(containerId, type, msg) {
+                $('#' + containerId).html('<div class="alert alert-' + type + ' py-2 mt-2">' + msg + '</div>');
+            }
+
+            // Apply inputmask to Aadhaar field
+            $('#abha_aadhaar_masked').inputmask('9999-9999-9999');
+
+            // Step 1 → Get OTP
+            $('#abha_get_otp_btn').on('click', function() {
+                var aadhaar = $('#abha_aadhaar_masked').val().replace(/\D/g, '');
+                if (aadhaar.length !== 12) {
+                    showAlert('abha_step1_alert', 'danger', 'Please enter a valid 12-digit Aadhaar number.');
+                    return;
+                }
+                if (!$('#abha_consent_chk').is(':checked')) {
+                    showAlert('abha_step1_alert', 'warning', 'You must agree to the Terms and Conditions to proceed.');
+                    return;
+                }
+                $('#abha_step1_alert').html('');
+                $('#abha_get_otp_spinner').removeClass('d-none');
+                $('#abha_get_otp_btn').prop('disabled', true);
+
+                $.post('<?= base_url('abha/create/initiate') ?>', {
+                    aadhaar: aadhaar,
+                    auth_type: $('#abha_auth_type').val(),
+                    '<?= csrf_token() ?>': csrfToken()
+                }, function(resp) {
+                    $('#abha_get_otp_spinner').addClass('d-none');
+                    $('#abha_get_otp_btn').prop('disabled', false);
+                    if (resp && resp.ok == 1) {
+                        txnId = resp.txn_id || null;
+                        abhaStep(2);
+                    } else {
+                        showAlert('abha_step1_alert', 'danger', (resp && resp.error_text) ? resp.error_text : 'Failed to send OTP. Please try again.');
+                    }
+                }, 'json').fail(function() {
+                    $('#abha_get_otp_spinner').addClass('d-none');
+                    $('#abha_get_otp_btn').prop('disabled', false);
+                    showAlert('abha_step1_alert', 'danger', 'Server error. Please try again.');
+                });
+            });
+
+            // Back to step 1
+            $('#abha_back_step1_btn').on('click', function() { abhaStep(1); });
+
+            // Resend OTP
+            $('#abha_resend_otp_btn').on('click', function() {
+                $('#abha_get_otp_btn').trigger('click');
+            });
+
+            // Step 2 → Verify OTP
+            $('#abha_verify_otp_btn').on('click', function() {
+                var otp = $('#abha_otp_input').val().trim();
+                if (!/^\d{6}$/.test(otp)) {
+                    showAlert('abha_step2_alert', 'danger', 'Please enter the 6-digit OTP.');
+                    return;
+                }
+                $('#abha_step2_alert').html('');
+                $('#abha_verify_otp_spinner').removeClass('d-none');
+                $('#abha_verify_otp_btn').prop('disabled', true);
+
+                $.post('<?= base_url('abha/create/verify_otp') ?>', {
+                    otp: otp,
+                    txn_id: txnId,
+                    '<?= csrf_token() ?>': csrfToken()
+                }, function(resp) {
+                    $('#abha_verify_otp_spinner').addClass('d-none');
+                    $('#abha_verify_otp_btn').prop('disabled', false);
+                    if (resp && resp.ok == 1) {
+                        txnId = resp.txn_id || txnId;
+                        if (resp.mobile) $('#abha_comm_mobile').val(resp.mobile);
+                        abhaStep(3);
+                    } else {
+                        showAlert('abha_step2_alert', 'danger', (resp && resp.error_text) ? resp.error_text : 'Invalid OTP. Please try again.');
+                    }
+                }, 'json').fail(function() {
+                    $('#abha_verify_otp_spinner').addClass('d-none');
+                    $('#abha_verify_otp_btn').prop('disabled', false);
+                    showAlert('abha_step2_alert', 'danger', 'Server error. Please try again.');
+                });
+            });
+
+            // Back to step 2
+            $('#abha_back_step2_btn').on('click', function() { abhaStep(2); });
+
+            // Step 3 → Communication next
+            $('#abha_comm_next_btn').on('click', function() {
+                var mobile = $('#abha_comm_mobile').val().trim();
+                if (!/^\d{10}$/.test(mobile)) {
+                    showAlert('abha_step3_alert', 'danger', 'Please enter a valid 10-digit mobile number.');
+                    return;
+                }
+                $('#abha_step3_alert').html('');
+                $('#abha_comm_spinner').removeClass('d-none');
+                $('#abha_comm_next_btn').prop('disabled', true);
+
+                $.post('<?= base_url('abha/create/communication') ?>', {
+                    mobile: mobile,
+                    txn_id: txnId,
+                    '<?= csrf_token() ?>': csrfToken()
+                }, function(resp) {
+                    $('#abha_comm_spinner').addClass('d-none');
+                    $('#abha_comm_next_btn').prop('disabled', false);
+                    if (resp && resp.ok == 1) {
+                        txnId = resp.txn_id || txnId;
+                        // Show created ABHA details
+                        if (resp.abha_number) {
+                            $('#abha_created_result').html(
+                                '<div class="alert alert-success">' +
+                                '<strong>ABHA Number Created!</strong><br>' +
+                                'ABHA Number: <strong>' + resp.abha_number + '</strong><br>' +
+                                (resp.name ? 'Name: ' + resp.name + '<br>' : '') +
+                                '</div>'
+                            );
+                        }
+                        if (resp.suggested_addresses && resp.suggested_addresses.length) {
+                            var opts = resp.suggested_addresses.map(function(a) {
+                                return '<option value="' + a + '">' + a + '</option>';
+                            }).join('');
+                            $('#abha_address_input').replaceWith(
+                                '<select class="form-select" id="abha_address_input"><option value="">Select an address...</option>' + opts + '</select>'
+                            );
+                        }
+                        abhaStep(4);
+                    } else {
+                        showAlert('abha_step3_alert', 'danger', (resp && resp.error_text) ? resp.error_text : 'Failed to proceed. Please try again.');
+                    }
+                }, 'json').fail(function() {
+                    $('#abha_comm_spinner').addClass('d-none');
+                    $('#abha_comm_next_btn').prop('disabled', false);
+                    showAlert('abha_step3_alert', 'danger', 'Server error. Please try again.');
+                });
+            });
+
+            // Step 4 → Finalise ABHA address
+            $('#abha_finalise_btn').on('click', function() {
+                var addr = $('#abha_address_input').val().trim();
+                if (!addr) {
+                    showAlert('abha_step4_alert', 'warning', 'Please choose an ABHA address.');
+                    return;
+                }
+                $('#abha_step4_alert').html('');
+                $('#abha_finalise_spinner').removeClass('d-none');
+                $('#abha_finalise_btn').prop('disabled', true);
+
+                $.post('<?= base_url('abha/create/address') ?>', {
+                    abha_address: addr,
+                    txn_id: txnId,
+                    '<?= csrf_token() ?>': csrfToken()
+                }, function(resp) {
+                    $('#abha_finalise_spinner').addClass('d-none');
+                    $('#abha_finalise_btn').prop('disabled', false);
+                    if (resp && resp.ok == 1) {
+                        showAlert('abha_step4_alert', 'success', 'ABHA Address <strong>' + addr + '@abdm</strong> successfully created!');
+                        $('#abha_finalise_btn').hide();
+                    } else {
+                        showAlert('abha_step4_alert', 'danger', (resp && resp.error_text) ? resp.error_text : 'Failed to create ABHA address.');
+                    }
+                }, 'json').fail(function() {
+                    $('#abha_finalise_spinner').addClass('d-none');
+                    $('#abha_finalise_btn').prop('disabled', false);
+                    showAlert('abha_step4_alert', 'danger', 'Server error. Please try again.');
+                });
+            });
+        })();
+        /* =============================================================== */
 
         $('#input_abha_id').on('change blur', function() {
             var abhaId = ($(this).val() || '').toString().trim();

@@ -717,11 +717,23 @@ class Patient extends BaseController
 			return $this->response->setStatusCode(404)->setBody('Patient not found');
 		}
 
+		$defaultBackUrl = base_url('billing/patient/person_record') . '/' . (int) ($patient->id ?? 0) . '/0';
+		$backUrl = trim((string) $this->request->getGet('back_url'));
+		$backTitle = trim((string) $this->request->getGet('back_title'));
+		if ($backUrl === '') {
+			$backUrl = $defaultBackUrl;
+		}
+		if ($backTitle === '') {
+			$backTitle = 'Profile';
+		}
+
 		$profileFilePath = $this->getProfileFilePath((int) ($patient->profile_file_id ?? 0));
 
 		return view('billing/Patient_Profile_Image_V', [
 			'patient' => $patient,
 			'profileFilePath' => $profileFilePath,
+			'backUrl' => $backUrl,
+			'backTitle' => $backTitle,
 		]);
 	}
 

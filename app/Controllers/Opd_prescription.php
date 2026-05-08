@@ -49,6 +49,32 @@ class Opd_prescription extends BaseController
         $query = $this->db->query($sql);
         $patient = $query->getResult();
 
+        $patientProfileFilePath = '/assets/images/no_image.svg';
+        if (!empty($patient)) {
+            $profilePicturePath = '';
+            if ($this->db->fieldExists('profile_picture', 'patient_master')) {
+                $profilePicturePath = trim((string) ($patient[0]->profile_picture ?? ''));
+            }
+
+            $profileFileId = (int) ($patient[0]->profile_file_id ?? 0);
+            if ($profileFileId > 0 && $this->db->tableExists('file_upload_data')) {
+                $fileRow = $this->db->table('file_upload_data')
+                    ->select('full_path')
+                    ->where('id', $profileFileId)
+                    ->get(1)
+                    ->getRow();
+
+                $fullPath = trim((string) ($fileRow->full_path ?? ''));
+                if ($fullPath !== '') {
+                    $pos = strpos($fullPath, '/uploads/', 1);
+                    $patientProfileFilePath = $pos !== false ? substr($fullPath, $pos) : $fullPath;
+                }
+            } elseif ($profilePicturePath !== '') {
+                $pos = strpos($profilePicturePath, '/uploads/', 1);
+                $patientProfileFilePath = $pos !== false ? substr($profilePicturePath, $pos) : $profilePicturePath;
+            }
+        }
+
         if (!empty($patient)) {
             $patient[0]->str_age = get_age_1($patient[0]->dob ?? null, $patient[0]->age ?? '', $patient[0]->age_in_month ?? '', $patient[0]->estimate_dob ?? '', $opdRow->apointment_date ?? null);
         }
@@ -110,6 +136,7 @@ class Opd_prescription extends BaseController
             'opd_id' => $opdId,
             'opd_master' => $opdMaster,
             'patient_master' => $patient,
+            'patient_profile_file_path' => $patientProfileFilePath,
             'opd_prescription' => $prescription,
             'next_visit_options' => $this->getNextVisitOptions(date('Y-m-d')),
             'addiction_flags' => $this->getPatientAddictionFlags($patientId),

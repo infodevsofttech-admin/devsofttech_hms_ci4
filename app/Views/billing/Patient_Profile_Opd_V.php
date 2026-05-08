@@ -10,7 +10,93 @@
     if ($backTitle === '') {
         $backTitle = 'Profile';
     }
+
+    $patientName = trim((string) (($patient->title ?? '') . ' ' . ($patient->p_fname ?? '')));
+    $relationText = trim((string) ($patient->p_relative ?? ''));
+    $relativeName = trim((string) ($patient->p_rname ?? ''));
+    $relationWithName = trim($relationText . ($relativeName !== '' ? ' ' . $relativeName : ''));
+
+    $ageYears = trim((string) ($patient->age ?? ''));
+    $ageMonths = trim((string) ($patient->age_in_month ?? ''));
+    $ageDisplay = '';
+    if ($ageYears !== '' || $ageMonths !== '') {
+        $ageDisplay = trim(($ageYears !== '' ? ($ageYears . ' Year') : '') . ($ageMonths !== '' ? (' ' . $ageMonths . ' Month') : ''));
+    }
+
+    // Fallback: derive age from DOB when explicit age fields are empty.
+    if ($ageDisplay === '' && !empty($patient->dob)) {
+        $dobTs = strtotime((string) $patient->dob);
+        if ($dobTs !== false) {
+            $today = new DateTime(date('Y-m-d'));
+            $dobDate = new DateTime(date('Y-m-d', $dobTs));
+            $diff = $dobDate->diff($today);
+            if ($diff->y > 0) {
+                $ageDisplay = $diff->y . ' Year';
+            } elseif ($diff->m > 0) {
+                $ageDisplay = $diff->m . ' Month';
+            } else {
+                $ageDisplay = $diff->d . ' Day';
+            }
+        }
+    }
+
+    $firstVisitRaw = '';
+    $patientData = (array) ($patient ?? []);
+    foreach (['date_of_registration', 'date_registration', 'insert_date', 'created_at', 'created_on', 'register_date'] as $candidate) {
+        if (!empty($patientData[$candidate])) {
+            $firstVisitRaw = (string) $patientData[$candidate];
+            break;
+        }
+    }
+
+    $firstVisitDisplay = '-';
+    if ($firstVisitRaw !== '') {
+        $firstVisitTs = strtotime($firstVisitRaw);
+        if ($firstVisitTs !== false) {
+            $firstVisitDisplay = date('d-m-Y', $firstVisitTs);
+        }
+    }
 ?>
+
+<style>
+    .patient-info-card {
+        background: #f5f9ff;
+        border: 1px solid #d8e7ff;
+        border-left: 5px solid #0d6efd;
+        border-radius: 8px;
+        padding: 12px 14px;
+        margin-top: 10px;
+        width: 100%;
+    }
+    .patient-info-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #0b3b91;
+        margin-bottom: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.2px;
+    }
+    .patient-info-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 22px;
+        align-items: center;
+    }
+    .patient-info-item {
+        font-size: 1.02rem;
+        line-height: 1.3;
+        white-space: nowrap;
+    }
+    .patient-info-item .label {
+        font-weight: 700;
+        color: #08306b;
+        margin-right: 4px;
+    }
+    .patient-info-item .value {
+        font-weight: 600;
+        color: #111827;
+    }
+</style>
 
 <div class="pagetitle">
     <h1>Consult History</h1>
@@ -25,13 +111,35 @@
 <section class="section profile">
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <div>
-                <h3 class="card-title mb-0">Old Prescription With Scanned Records</h3>
-                <div class="small text-muted mt-1">Patient: <?= esc($patient->p_fname ?? '') ?></div>
-            </div>
-            <div class="d-flex align-items-center gap-2">
-                <a href="javascript:load_form('<?= esc($backUrl, 'js') ?>','<?= esc($backTitle, 'js') ?>');" class="btn btn-outline-secondary btn-sm">Back</a>
-                <span class="badge bg-secondary"><?= count($opdGroups ?? []) ?> OPD Record(s)</span>
+            <div class="w-100">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h3 class="card-title mb-0">Old Prescription With Scanned Records</h3>
+                    <div class="d-flex align-items-center gap-2">
+                        <a href="javascript:load_form('<?= esc($backUrl, 'js') ?>','<?= esc($backTitle, 'js') ?>');" class="btn btn-outline-secondary btn-sm">Back</a>
+                        <span class="badge bg-secondary"><?= count($opdGroups ?? []) ?> OPD Record(s)</span>
+                    </div>
+                </div>
+                <div class="patient-info-card">
+                    <div class="patient-info-title">Patient Information</div>
+                    <div class="patient-info-row">
+                        <div class="patient-info-item">
+                            <span class="label">Name:</span>
+                            <span class="value"><?= esc($patientName !== '' ? $patientName : '-') ?></span>
+                        </div>
+                        <div class="patient-info-item">
+                            <span class="label">Relation:</span>
+                            <span class="value"><?= esc($relationWithName !== '' ? $relationWithName : '-') ?></span>
+                        </div>
+                        <div class="patient-info-item">
+                            <span class="label">Age:</span>
+                            <span class="value"><?= esc($ageDisplay !== '' ? $ageDisplay : '-') ?></span>
+                        </div>
+                        <div class="patient-info-item">
+                            <span class="label">First Visit Date:</span>
+                            <span class="value"><?= esc($firstVisitDisplay) ?></span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
         <div class="card-body">

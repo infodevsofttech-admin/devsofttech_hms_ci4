@@ -54,6 +54,24 @@
             border-radius: .5rem;
             padding: .75rem;
         }
+        .rx-patient-photo {
+            width: 96px;
+            height: 96px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid #d7e3f4;
+            background: #fff;
+        }
+        .rx-meta-line {
+            margin-bottom: .2rem;
+            line-height: 1.35;
+        }
+        .rx-meta-photo-col {
+            text-align: center;
+        }
+        .rx-meta-photo-actions {
+            margin-top: .4rem;
+        }
         .rx-counter {
             font-size: .8rem;
             color: #6c757d;
@@ -346,6 +364,19 @@
                         'back_url' => $historyBackUrl,
                         'back_title' => 'Consult',
                     ]);
+                    $profileImageUrl = base_url('billing/patient/show_profile_image') . '/' . (int) ($patient_master[0]->id ?? 0) . '/1?' . http_build_query([
+                        'back_url' => $historyBackUrl,
+                        'back_title' => 'Consult',
+                    ]);
+                    $patientRelation = trim((string) ($patient_master[0]->p_relative ?? ''));
+                    $patientRelativeName = trim((string) ($patient_master[0]->p_rname ?? ''));
+                    $patientName = trim((string) ($patient_master[0]->p_fname ?? ''));
+                    $patientNameWithRelation = $patientName;
+                    $relationLabel = trim($patientRelation . ($patientRelativeName !== '' ? (' ' . $patientRelativeName) : ''));
+                    if ($relationLabel !== '') {
+                        $patientNameWithRelation .= ' (' . $relationLabel . ')';
+                    }
+                    $patientAbhaAddress = trim((string) ($patient_master[0]->abha_address ?? $patient_master[0]->abha ?? ''));
                 ?>
                 <a href="javascript:load_form('<?= esc($historyUrl, 'js') ?>','Consult History');"
                    class="btn btn-info btn-sm"
@@ -377,19 +408,28 @@
         <div class="row g-3 rx-two-panel">
             <div class="col-lg-4 rx-left-panel">
                 <div class="rx-meta-box mb-3">
-                    <div><strong>Name:</strong> <?= esc($patient_master[0]->p_fname ?? '') ?></div>
-                    <div><strong>UHID:</strong> <?= esc($patient_master[0]->p_code ?? '') ?></div>
-                    <div><strong>Age:</strong> <?= esc($patient_master[0]->str_age ?? '') ?></div>
-                    <div><strong>Gender:</strong> <?= esc($patient_master[0]->xgender ?? '') ?></div>
-                    <div class="mt-2">
-                        <label class="form-label mb-1"><strong>ABHA Address:</strong></label>
-                        <input type="text" class="form-control form-control-sm" id="abha_address" maxlength="18"
-                            value="<?= esc($patient_master[0]->abha_address ?? $patient_master[0]->abha ?? '') ?>"
-                            placeholder="Enter ABHA Address">
+                    <div class="row g-2 align-items-start">
+                        <div class="col-8">
+                            <div class="rx-meta-line"><strong>Name:</strong> <?= esc($patientNameWithRelation !== '' ? $patientNameWithRelation : '-') ?></div>
+                            <div class="rx-meta-line"><strong>UHID:</strong> <?= esc($patient_master[0]->p_code ?? '') ?></div>
+                            <div class="rx-meta-line"><strong>Age:</strong> <?= esc($patient_master[0]->str_age ?? '') ?></div>
+                            <div class="rx-meta-line"><strong>Gender:</strong> <?= esc($patient_master[0]->xgender ?? '') ?></div>
+                            <?php if ($patientAbhaAddress !== '') { ?>
+                                <div class="rx-meta-line"><strong>ABHA Address:</strong> <?= esc($patientAbhaAddress) ?></div>
+                            <?php } ?>
+                            <div class="rx-meta-line"><strong>OPD:</strong> <?= esc($opd_master[0]->opd_code ?? '') ?></div>
+                            <div class="rx-meta-line"><strong>Date:</strong> <?= esc($opd_master[0]->apointment_date ?? '') ?></div>
+                            <div class="rx-meta-line mb-0"><strong>Doctor:</strong> <?= esc($opd_master[0]->doc_name ?? '') ?></div>
+                        </div>
+                        <div class="col-4 rx-meta-photo-col">
+                            <img src="<?= esc($patient_profile_file_path ?? '/assets/images/no_image.svg') ?>" alt="Patient Profile" class="rx-patient-photo">
+                            <div class="rx-meta-photo-actions">
+                                <a href="javascript:load_form('<?= esc($profileImageUrl, 'js') ?>','Profile Image');" class="btn btn-success btn-sm">
+                                    <i class="bi bi-camera-fill"></i> Edit Picture
+                                </a>
+                            </div>
+                        </div>
                     </div>
-                    <div><strong>OPD:</strong> <?= esc($opd_master[0]->opd_code ?? '') ?></div>
-                    <div><strong>Date:</strong> <?= esc($opd_master[0]->apointment_date ?? '') ?></div>
-                    <div><strong>Doctor:</strong> <?= esc($opd_master[0]->doc_name ?? '') ?></div>
                 </div>
                 <div class="card">
                     <div class="card-header"><strong>Quick Tips</strong></div>

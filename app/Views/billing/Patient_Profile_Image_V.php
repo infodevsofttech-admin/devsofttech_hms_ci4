@@ -2,7 +2,7 @@
     <h1>Profile Image</h1>
     <nav>
         <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="javascript:load_form('<?= base_url('billing/patient/person_record') ?>/<?= esc($patient->id) ?>/0');">Profile</a></li>
+            <li class="breadcrumb-item"><a href="javascript:load_form('<?= esc($backUrl ?? (base_url('billing/patient/person_record') . '/' . (int) ($patient->id ?? 0) . '/0'), 'js') ?>','<?= esc($backTitle ?? 'Profile', 'js') ?>');"><?= esc($backTitle ?? 'Profile') ?></a></li>
             <li class="breadcrumb-item active">Image</li>
         </ol>
     </nav>
@@ -11,7 +11,10 @@
 <section class="section profile">
     <div class="card">
         <div class="card-header">
-            <h3 class="card-title mb-0">Profile Image</h3>
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h3 class="card-title mb-0">Profile Image</h3>
+                <a href="javascript:load_form('<?= esc($backUrl ?? (base_url('billing/patient/person_record') . '/' . (int) ($patient->id ?? 0) . '/0'), 'js') ?>','<?= esc($backTitle ?? 'Profile', 'js') ?>');" class="btn btn-outline-secondary btn-sm">Back</a>
+            </div>
         </div>
         <div class="card-body">
             <p class="mb-3">Patient: <strong><?= esc($patient->p_fname ?? '') ?></strong></p>
