@@ -121,15 +121,22 @@
                 </div>
                 <div class="patient-info-card">
                     <div class="patient-info-title">Patient Information</div>
-                    <div class="patient-info-row">
-                        <div class="patient-info-item">
-                            <span class="label">Name:</span>
-                            <span class="value"><?= esc($patientName !== '' ? $patientName : '-') ?></span>
+                    <div class="d-flex align-items-start gap-3">
+                        <?php if (!empty($profile_file_path)) { ?>
+                        <div class="flex-shrink-0">
+                            <img src="<?= esc($profile_file_path) ?>" alt="Patient Photo"
+                                 style="width:72px;height:72px;object-fit:cover;border-radius:50%;border:2px solid #aac4f0;">
                         </div>
-                        <div class="patient-info-item">
-                            <span class="label">Relation:</span>
-                            <span class="value"><?= esc($relationWithName !== '' ? $relationWithName : '-') ?></span>
+                        <?php } ?>
+                    <div class="patient-info-row" style="flex:1;">
+                        <div class="patient-info-item w-100" style="font-size:1.18rem;font-weight:700;color:#0b3b91;line-height:1.3;">
+                            <?= esc($patientName !== '' ? $patientName : '-') ?>
                         </div>
+                        <?php if ($relationWithName !== '') { ?>
+                        <div class="patient-info-item w-100" style="font-size:0.88rem;font-weight:400;color:#374151;margin-top:1px;">
+                            <?= esc($relationWithName) ?>
+                        </div>
+                        <?php } ?>
                         <div class="patient-info-item">
                             <span class="label">Age:</span>
                             <span class="value"><?= esc($ageDisplay !== '' ? $ageDisplay : '-') ?></span>
@@ -138,6 +145,7 @@
                             <span class="label">First Visit Date:</span>
                             <span class="value"><?= esc($firstVisitDisplay) ?></span>
                         </div>
+                    </div>
                     </div>
                 </div>
             </div>

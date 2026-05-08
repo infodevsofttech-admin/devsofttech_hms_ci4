@@ -914,9 +914,33 @@ class Patient extends BaseController
 			];
 		}
 
+		// Resolve patient profile picture
+		$profileFilePath = '/assets/images/no_image.svg';
+		$profilePicturePath = '';
+		if ($this->db->fieldExists('profile_picture', 'patient_master')) {
+			$profilePicturePath = trim((string) ($patient->profile_picture ?? ''));
+		}
+		$profileFileId = (int) ($patient->profile_file_id ?? 0);
+		if ($profileFileId > 0 && $this->db->tableExists('file_upload_data')) {
+			$fileRow = $this->db->table('file_upload_data')
+				->select('full_path')
+				->where('id', $profileFileId)
+				->get(1)
+				->getRow();
+			$fullPath = trim((string) ($fileRow->full_path ?? ''));
+			if ($fullPath !== '') {
+				$pos = strpos($fullPath, '/uploads/', 1);
+				$profileFilePath = $pos !== false ? substr($fullPath, $pos) : $fullPath;
+			}
+		} elseif ($profilePicturePath !== '') {
+			$pos = strpos($profilePicturePath, '/uploads/', 1);
+			$profileFilePath = $pos !== false ? substr($profilePicturePath, $pos) : $profilePicturePath;
+		}
+
 		return view('billing/Patient_Profile_Opd_V', [
 			'patient' => $patient,
 			'opdGroups' => $opdGroups,
+			'profile_file_path' => $profileFilePath,
 		]);
 	}
 

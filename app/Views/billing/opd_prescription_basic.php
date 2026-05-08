@@ -410,7 +410,10 @@
                 <div class="rx-meta-box mb-3">
                     <div class="row g-2 align-items-start">
                         <div class="col-8">
-                            <div class="rx-meta-line"><strong>Name:</strong> <?= esc($patientNameWithRelation !== '' ? $patientNameWithRelation : '-') ?></div>
+                            <div class="rx-meta-line"><strong>Patient Name:</strong> <span style="font-size:1.18rem;font-weight:700;color:#0b3b91;"><?= esc($patientName !== '' ? $patientName : '-') ?></span></div>
+                            <?php if ($relationLabel !== '') { ?>
+                            <div class="rx-meta-line" style="font-size:0.88rem;font-weight:400;color:#374151;margin-top:1px;"><?= esc($relationLabel) ?></div>
+                            <?php } ?>
                             <div class="rx-meta-line"><strong>UHID:</strong> <?= esc($patient_master[0]->p_code ?? '') ?></div>
                             <div class="rx-meta-line"><strong>Age:</strong> <?= esc($patient_master[0]->str_age ?? '') ?></div>
                             <div class="rx-meta-line"><strong>Gender:</strong> <?= esc($patient_master[0]->xgender ?? '') ?></div>
