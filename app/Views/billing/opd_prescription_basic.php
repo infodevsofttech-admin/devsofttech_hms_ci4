@@ -525,16 +525,6 @@
                         <div class="text-muted">Loading scan history...</div>
                     </div>
                 </div>
-                <div class="card mt-3">
-                    <div class="card-header"><strong>Extracted Scan Text</strong></div>
-                    <div class="card-body">
-                        <textarea id="scan_extracted_text" class="form-control form-control-sm" rows="5" placeholder="ECG/Lab scan text will appear here..."></textarea>
-                        <div class="mt-2 d-flex gap-2">
-                            <button type="button" class="btn btn-sm btn-outline-success" id="btn_scan_to_finding">Copy to Finding</button>
-                            <button type="button" class="btn btn-sm btn-outline-success" id="btn_scan_to_investigation">Copy to Investigation</button>
-                        </div>
-                    </div>
-                </div>
             </div>
 
             <div class="col-lg-8 rx-right-panel">
@@ -723,7 +713,41 @@
                                     <?php if ($isFemalePatient) { ?>
                                         <div class="col-md-12">
                                             <div class="border rounded p-2">
-                                                <h6 class="mb-2">Women Related Problems</h6>
+                                                <h6 class="mb-2">Women Specific Patient History</h6>
+                                                <div class="row g-2">
+                                                    <div class="col-md-6">
+                                                        <label class="form-label mb-1">OBSTETRIC HISTORY</label>
+                                                        <textarea class="form-control form-control-sm rx-field" id="obstetric_history" rows="2" maxlength="4000" placeholder="Past pregnancies, deliveries, abortions, complications..."><?= esc($opd_prescription[0]->obstetric_history ?? '') ?></textarea>
+                                                        <div class="rx-counter" id="counter_obstetric_history">0/4000</div>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label mb-1">MENSTRUAL HISTORY</label>
+                                                        <textarea class="form-control form-control-sm rx-field" id="menstrual_history" rows="2" maxlength="4000" placeholder="Cycle pattern, flow, dysmenorrhea, menopause status..."><?= esc($opd_prescription[0]->menstrual_history ?? '') ?></textarea>
+                                                        <div class="rx-counter" id="counter_menstrual_history">0/4000</div>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label mb-1">MEDICAL / SURGICAL HISTORY</label>
+                                                        <textarea class="form-control form-control-sm rx-field" id="medical_surgical_history" rows="2" maxlength="4000" placeholder="Past illnesses, surgeries, hospitalizations..."><?= esc($opd_prescription[0]->medical_surgical_history ?? '') ?></textarea>
+                                                        <div class="rx-counter" id="counter_medical_surgical_history">0/4000</div>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label mb-1">FAMILY HISTORY</label>
+                                                        <textarea class="form-control form-control-sm rx-field" id="family_history" rows="2" maxlength="4000" placeholder="Family diseases, hereditary conditions..."><?= esc($opd_prescription[0]->family_history ?? '') ?></textarea>
+                                                        <div class="rx-counter" id="counter_family_history">0/4000</div>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label mb-1">ALLERGIC HISTORY</label>
+                                                        <textarea class="form-control form-control-sm rx-field" id="allergic_history" rows="2" maxlength="4000" placeholder="Drug, food, environmental allergies..."><?= esc($opd_prescription[0]->allergic_history ?? '') ?></textarea>
+                                                        <div class="rx-counter" id="counter_allergic_history">0/4000</div>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label mb-1">VACCINATION</label>
+                                                        <textarea class="form-control form-control-sm rx-field" id="vaccination_history" rows="2" maxlength="4000" placeholder="Immunization status and recent vaccines..."><?= esc($opd_prescription[0]->vaccination_history ?? '') ?></textarea>
+                                                        <div class="rx-counter" id="counter_vaccination_history">0/4000</div>
+                                                    </div>
+                                                </div>
+
+                                                <hr class="my-2">
                                                 <div class="row g-2 mb-2">
                                                     <div class="col-md-4">
                                                         <input type="number" min="0" step="1" class="form-control form-control-sm rx-instant" id="women_lmp" placeholder="LMP (No. of days before)" value="<?= esc($opd_prescription[0]->women_lmp ?? '') ?>">
@@ -735,7 +759,7 @@
                                                         <input type="text" class="form-control form-control-sm rx-instant" id="women_pregnancy_related" placeholder="Pregnancy Related" value="<?= esc($opd_prescription[0]->women_pregnancy_related ?? '') ?>">
                                                     </div>
                                                 </div>
-                                                <textarea class="form-control form-control-sm rx-field" id="women_related_problems" rows="2" maxlength="4000" placeholder="Enter women related problems if applicable..."><?= esc($opd_prescription[0]->women_related_problems ?? '') ?></textarea>
+                                                <textarea class="form-control form-control-sm rx-field" id="women_related_problems" rows="2" maxlength="4000" placeholder="Additional women related notes..."><?= esc($opd_prescription[0]->women_related_problems ?? '') ?></textarea>
                                                 <div class="rx-counter" id="counter_women_related_problems">0/4000</div>
                                             </div>
                                         </div>
@@ -3356,6 +3380,12 @@
             women_lmp: $('#women_lmp').length ? $('#women_lmp').val() : '',
             women_last_baby: $('#women_last_baby').length ? $('#women_last_baby').val() : '',
             women_pregnancy_related: $('#women_pregnancy_related').length ? $('#women_pregnancy_related').val() : '',
+            obstetric_history: $('#obstetric_history').length ? $('#obstetric_history').val() : '',
+            menstrual_history: $('#menstrual_history').length ? $('#menstrual_history').val() : '',
+            medical_surgical_history: $('#medical_surgical_history').length ? $('#medical_surgical_history').val() : '',
+            family_history: $('#family_history').length ? $('#family_history').val() : '',
+            allergic_history: $('#allergic_history').length ? $('#allergic_history').val() : '',
+            vaccination_history: $('#vaccination_history').length ? $('#vaccination_history').val() : '',
             drug_allergy_status: $('#drug_allergy_status').length ? $('#drug_allergy_status').val() : '',
             drug_allergy_details: $('#drug_allergy_details').length ? $('#drug_allergy_details').val() : '',
             adr_history: $('#adr_history').length ? $('#adr_history').val() : '',
@@ -3428,6 +3458,24 @@
             }
             if ($('#women_pregnancy_related').length) {
                 $('#women_pregnancy_related').val(data.women_pregnancy_related || '');
+            }
+            if ($('#obstetric_history').length) {
+                $('#obstetric_history').val(data.obstetric_history || '');
+            }
+            if ($('#menstrual_history').length) {
+                $('#menstrual_history').val(data.menstrual_history || '');
+            }
+            if ($('#medical_surgical_history').length) {
+                $('#medical_surgical_history').val(data.medical_surgical_history || '');
+            }
+            if ($('#family_history').length) {
+                $('#family_history').val(data.family_history || '');
+            }
+            if ($('#allergic_history').length) {
+                $('#allergic_history').val(data.allergic_history || '');
+            }
+            if ($('#vaccination_history').length) {
+                $('#vaccination_history').val(data.vaccination_history || '');
             }
             if ($('#drug_allergy_status').length) {
                 $('#drug_allergy_status').val(data.drug_allergy_status || '');
@@ -4777,30 +4825,6 @@
             $('#scan_extracted_text').val(data.extracted_text || '');
             $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text(data.error_text || 'Scan text extracted');
         });
-    });
-
-    $('#btn_scan_to_finding').on('click', function() {
-        var txt = ($('#scan_extracted_text').val() || '').trim();
-        if (!txt) {
-            return;
-        }
-        var old = ($('#finding_examinations').val() || '').trim();
-        $('#finding_examinations').val(old ? (old + '\n' + txt) : txt);
-        refreshCounters();
-        updateScanBanner();
-        markDirty('Scan text appended to Finding');
-    });
-
-    $('#btn_scan_to_investigation').on('click', function() {
-        var txt = ($('#scan_extracted_text').val() || '').trim();
-        if (!txt) {
-            return;
-        }
-        var old = ($('#investigation').val() || '').trim();
-        $('#investigation').val(old ? (old + '\n' + txt) : txt);
-        refreshCounters();
-        updateScanBanner();
-        markDirty('Scan text appended to Investigation');
     });
 
     $('#btn_reload_patient_scan_history').on('click', function() {

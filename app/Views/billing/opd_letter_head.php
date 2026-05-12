@@ -71,6 +71,12 @@
         $womenLmp = trim((string) ($rx['women_lmp'] ?? ''));
         $womenLastBaby = trim((string) ($rx['women_last_baby'] ?? ''));
         $womenPregnancyRelated = trim((string) ($rx['women_pregnancy_related'] ?? ''));
+        $obstetricHistory = trim((string) ($rx['obstetric_history'] ?? ''));
+        $menstrualHistory = trim((string) ($rx['menstrual_history'] ?? ''));
+        $medicalSurgicalHistory = trim((string) ($rx['medical_surgical_history'] ?? ''));
+        $familyHistory = trim((string) ($rx['family_history'] ?? ''));
+        $allergicHistory = trim((string) ($rx['allergic_history'] ?? ''));
+        $vaccinationHistory = trim((string) ($rx['vaccination_history'] ?? ''));
 
         $vitals = array_filter([
             trim((string) ($rx['bp'] ?? '')) !== '' ? ('BP: ' . trim((string) ($rx['bp'] ?? '')) . '/' . trim((string) ($rx['diastolic'] ?? ''))) : '',
@@ -139,6 +145,30 @@
 
             <?php if ($isFemale && $womenPregnancyRelated !== '') : ?>
                 <div class="col-xs-12"><strong>Pregnancy Related:</strong> <?= nl2br(esc($womenPregnancyRelated)) ?></div>
+            <?php endif; ?>
+
+            <?php if ($obstetricHistory !== '') : ?>
+                <div class="col-xs-12"><strong>OBSTETRIC HISTORY:</strong> <?= nl2br(esc($obstetricHistory)) ?></div>
+            <?php endif; ?>
+
+            <?php if ($menstrualHistory !== '') : ?>
+                <div class="col-xs-12"><strong>MENSTRUAL HISTORY:</strong> <?= nl2br(esc($menstrualHistory)) ?></div>
+            <?php endif; ?>
+
+            <?php if ($medicalSurgicalHistory !== '') : ?>
+                <div class="col-xs-12"><strong>MEDICAL / SURGICAL HISTORY:</strong> <?= nl2br(esc($medicalSurgicalHistory)) ?></div>
+            <?php endif; ?>
+
+            <?php if ($familyHistory !== '') : ?>
+                <div class="col-xs-12"><strong>FAMILY HISTORY:</strong> <?= nl2br(esc($familyHistory)) ?></div>
+            <?php endif; ?>
+
+            <?php if ($allergicHistory !== '') : ?>
+                <div class="col-xs-12"><strong>ALLERGIC HISTORY:</strong> <?= nl2br(esc($allergicHistory)) ?></div>
+            <?php endif; ?>
+
+            <?php if ($vaccinationHistory !== '') : ?>
+                <div class="col-xs-12"><strong>VACCINATION:</strong> <?= nl2br(esc($vaccinationHistory)) ?></div>
             <?php endif; ?>
 
             <?php if (!empty($rx['investigation'] ?? '')) : ?>

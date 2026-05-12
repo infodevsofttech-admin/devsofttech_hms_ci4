@@ -71,6 +71,12 @@ $drugAllergyStatus = trim((string) ($rx['drug_allergy_status'] ?? ''));
 $drugAllergyDetails = trim((string) ($rx['drug_allergy_details'] ?? ''));
 $adrHistory = trim((string) ($rx['adr_history'] ?? ''));
 $currentMedications = trim((string) ($rx['current_medications'] ?? ''));
+$obstetricHistory = trim((string) ($rx['obstetric_history'] ?? ''));
+$menstrualHistory = trim((string) ($rx['menstrual_history'] ?? ''));
+$medicalSurgicalHistory = trim((string) ($rx['medical_surgical_history'] ?? ''));
+$familyHistory = trim((string) ($rx['family_history'] ?? ''));
+$allergicHistory = trim((string) ($rx['allergic_history'] ?? ''));
+$vaccinationHistory = trim((string) ($rx['vaccination_history'] ?? ''));
 $painScaleMap = [
     '0' => 'No Pain',
     '1' => 'Mild Pain',
@@ -305,6 +311,30 @@ $toLocalText = static function (string $input): string {
         <?php if ($currentMedications !== '') : ?>
             <div class="section-line"><span class="label">Current Medications :</span> <?= esc($currentMedications) ?></div>
         <?php endif; ?>
+    <?php endif; ?>
+
+    <?php if ($obstetricHistory !== '') : ?>
+        <div class="section-line"><span class="label">OBSTETRIC HISTORY :</span> <?= nl2br(esc($obstetricHistory)) ?></div>
+    <?php endif; ?>
+
+    <?php if ($menstrualHistory !== '') : ?>
+        <div class="section-line"><span class="label">MENSTRUAL HISTORY :</span> <?= nl2br(esc($menstrualHistory)) ?></div>
+    <?php endif; ?>
+
+    <?php if ($medicalSurgicalHistory !== '') : ?>
+        <div class="section-line"><span class="label">MEDICAL / SURGICAL HISTORY :</span> <?= nl2br(esc($medicalSurgicalHistory)) ?></div>
+    <?php endif; ?>
+
+    <?php if ($familyHistory !== '') : ?>
+        <div class="section-line"><span class="label">FAMILY HISTORY :</span> <?= nl2br(esc($familyHistory)) ?></div>
+    <?php endif; ?>
+
+    <?php if ($allergicHistory !== '') : ?>
+        <div class="section-line"><span class="label">ALLERGIC HISTORY :</span> <?= nl2br(esc($allergicHistory)) ?></div>
+    <?php endif; ?>
+
+    <?php if ($vaccinationHistory !== '') : ?>
+        <div class="section-line"><span class="label">VACCINATION :</span> <?= nl2br(esc($vaccinationHistory)) ?></div>
     <?php endif; ?>
 
     <?php if (!empty($rx['Provisional_diagnosis'] ?? '')) : ?>

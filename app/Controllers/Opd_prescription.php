@@ -128,6 +128,17 @@ class Opd_prescription extends BaseController
                 $first->drug_allergy_details = (string) ($nabhInfo['drug_allergy_details'] ?? '');
                 $first->adr_history = (string) ($nabhInfo['adr_history'] ?? '');
                 $first->current_medications = (string) ($nabhInfo['current_medications'] ?? '');
+
+                $historyInfo = $this->hydratePatientHistoryFields(
+                    $firstRow,
+                    (string) ($first->Prescriber_Remarks ?? '')
+                );
+                $first->obstetric_history = (string) ($historyInfo['obstetric_history'] ?? '');
+                $first->menstrual_history = (string) ($historyInfo['menstrual_history'] ?? '');
+                $first->medical_surgical_history = (string) ($historyInfo['medical_surgical_history'] ?? '');
+                $first->family_history = (string) ($historyInfo['family_history'] ?? '');
+                $first->allergic_history = (string) ($historyInfo['allergic_history'] ?? '');
+                $first->vaccination_history = (string) ($historyInfo['vaccination_history'] ?? '');
                 $prescription[0] = $first;
             }
         }
@@ -390,6 +401,12 @@ class Opd_prescription extends BaseController
             'women_lmp' => trim((string) $this->request->getPost('women_lmp')),
             'women_last_baby' => trim((string) $this->request->getPost('women_last_baby')),
             'women_pregnancy_related' => trim((string) $this->request->getPost('women_pregnancy_related')),
+            'obstetric_history' => trim((string) $this->request->getPost('obstetric_history')),
+            'menstrual_history' => trim((string) $this->request->getPost('menstrual_history')),
+            'medical_surgical_history' => trim((string) $this->request->getPost('medical_surgical_history')),
+            'family_history' => trim((string) $this->request->getPost('family_history')),
+            'allergic_history' => trim((string) $this->request->getPost('allergic_history')),
+            'vaccination_history' => trim((string) $this->request->getPost('vaccination_history')),
             'drug_allergy_status' => trim((string) $this->request->getPost('drug_allergy_status')),
             'drug_allergy_details' => trim((string) $this->request->getPost('drug_allergy_details')),
             'adr_history' => trim((string) $this->request->getPost('adr_history')),
@@ -465,8 +482,26 @@ class Opd_prescription extends BaseController
         ];
         $this->mapNabhFieldsToExistingColumns($payload, $fields, $nabhInput);
 
+        $patientHistoryInput = [
+            'obstetric_history' => (string) ($payload['obstetric_history'] ?? ''),
+            'menstrual_history' => (string) ($payload['menstrual_history'] ?? ''),
+            'medical_surgical_history' => (string) ($payload['medical_surgical_history'] ?? ''),
+            'family_history' => (string) ($payload['family_history'] ?? ''),
+            'allergic_history' => (string) ($payload['allergic_history'] ?? ''),
+            'vaccination_history' => (string) ($payload['vaccination_history'] ?? ''),
+        ];
+        $unmappedPatientHistory = $this->mapPatientHistoryFieldsToExistingColumns($payload, $fields, $patientHistoryInput);
+
         // Keep prescription remarks user-controlled; do not auto-inject structured NABH lines.
         $payload['Prescriber_Remarks'] = $this->stripNabhFieldsFromRemarks((string) ($payload['Prescriber_Remarks'] ?? ''));
+        $payload['Prescriber_Remarks'] = $this->stripPatientHistoryFieldsFromRemarks((string) ($payload['Prescriber_Remarks'] ?? ''));
+
+        if ($this->hasAnyPatientHistoryField($unmappedPatientHistory)) {
+            $payload['Prescriber_Remarks'] = $this->upsertPatientHistoryFieldsIntoRemarks(
+                (string) ($payload['Prescriber_Remarks'] ?? ''),
+                $unmappedPatientHistory
+            );
+        }
 
         if (!in_array('women_related_problems', $fields, true)) {
             $womenText = trim((string) ($payload['women_related_problems'] ?? ''));
@@ -6854,6 +6889,165 @@ class Opd_prescription extends BaseController
         return trim($clean);
     }
 
+    /**
+     * @param array<string, mixed> $row
+     * @return array<string, string>
+     */
+    private function hydratePatientHistoryFields(array $row, string $remarks): array
+    {
+        $pick = function (array $candidates) use ($row): string {
+            foreach ($candidates as $field) {
+                $value = trim((string) ($row[$field] ?? ''));
+                if ($value !== '') {
+                    return $value;
+                }
+            }
+
+            return '';
+        };
+
+        $data = [
+            'obstetric_history' => $pick(['obstetric_history', 'obstetric_hist', 'obstetric_details']),
+            'menstrual_history' => $pick(['menstrual_history', 'menstrual_hist', 'menstrual_details']),
+            'medical_surgical_history' => $pick(['medical_surgical_history', 'medical_surgical_hist', 'past_medical_surgical_history', 'medical_history', 'surgical_history']),
+            'family_history' => $pick(['family_history', 'family_hist']),
+            'allergic_history' => $pick(['allergic_history', 'allergy_history', 'allergy_hist']),
+            'vaccination_history' => $pick(['vaccination_history', 'vaccination_hist', 'immunization_history']),
+        ];
+
+        $parsed = $this->extractPatientHistoryFieldsFromRemarks($remarks);
+        foreach ($data as $key => $value) {
+            if ($value === '' && ! empty($parsed[$key])) {
+                $data[$key] = (string) $parsed[$key];
+            }
+        }
+
+        return $data;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @param array<int, string> $fields
+     * @param array<string, string> $input
+     * @return array<string, string>
+     */
+    private function mapPatientHistoryFieldsToExistingColumns(array &$payload, array $fields, array $input): array
+    {
+        $mapping = [
+            'obstetric_history' => ['obstetric_history', 'obstetric_hist', 'obstetric_details'],
+            'menstrual_history' => ['menstrual_history', 'menstrual_hist', 'menstrual_details'],
+            'medical_surgical_history' => ['medical_surgical_history', 'medical_surgical_hist', 'past_medical_surgical_history', 'medical_history', 'surgical_history'],
+            'family_history' => ['family_history', 'family_hist'],
+            'allergic_history' => ['allergic_history', 'allergy_history', 'allergy_hist'],
+            'vaccination_history' => ['vaccination_history', 'vaccination_hist', 'immunization_history'],
+        ];
+
+        $unmapped = [];
+        foreach ($mapping as $logical => $candidates) {
+            $value = trim((string) ($input[$logical] ?? ''));
+            $target = null;
+            foreach ($candidates as $candidate) {
+                if (in_array($candidate, $fields, true)) {
+                    $target = $candidate;
+                    break;
+                }
+            }
+
+            if ($target !== null) {
+                $payload[$target] = $value;
+            } else {
+                $unmapped[$logical] = $value;
+            }
+        }
+
+        return $unmapped;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function extractPatientHistoryFieldsFromRemarks(string $remarks): array
+    {
+        $extract = static function (string $pattern, string $source): string {
+            if (preg_match($pattern, $source, $m) !== 1) {
+                return '';
+            }
+
+            return trim((string) ($m[1] ?? ''));
+        };
+
+        return [
+            'obstetric_history' => $extract('/^\s*OBSTETRIC\s*HISTORY\s*:\s*(.+)$/im', $remarks),
+            'menstrual_history' => $extract('/^\s*MENSTRUAL\s*HISTORY\s*:\s*(.+)$/im', $remarks),
+            'medical_surgical_history' => $extract('/^\s*MEDICAL\s*\/\s*SURGICAL\s*HISTORY\s*:\s*(.+)$/im', $remarks),
+            'family_history' => $extract('/^\s*FAMILY\s*HISTORY\s*:\s*(.+)$/im', $remarks),
+            'allergic_history' => $extract('/^\s*ALLERGIC\s*HISTORY\s*:\s*(.+)$/im', $remarks),
+            'vaccination_history' => $extract('/^\s*VACCINATION\s*:\s*(.+)$/im', $remarks),
+        ];
+    }
+
+    private function stripPatientHistoryFieldsFromRemarks(string $remarks): string
+    {
+        $clean = trim($remarks);
+        $clean = preg_replace('/\n?\s*OBSTETRIC\s*HISTORY\s*:\s*.+$/im', '', $clean) ?? $clean;
+        $clean = preg_replace('/\n?\s*MENSTRUAL\s*HISTORY\s*:\s*.+$/im', '', $clean) ?? $clean;
+        $clean = preg_replace('/\n?\s*MEDICAL\s*\/\s*SURGICAL\s*HISTORY\s*:\s*.+$/im', '', $clean) ?? $clean;
+        $clean = preg_replace('/\n?\s*FAMILY\s*HISTORY\s*:\s*.+$/im', '', $clean) ?? $clean;
+        $clean = preg_replace('/\n?\s*ALLERGIC\s*HISTORY\s*:\s*.+$/im', '', $clean) ?? $clean;
+        $clean = preg_replace('/\n?\s*VACCINATION\s*:\s*.+$/im', '', $clean) ?? $clean;
+
+        return trim($clean);
+    }
+
+    /**
+     * @param array<string, string> $input
+     */
+    private function upsertPatientHistoryFieldsIntoRemarks(string $remarks, array $input): string
+    {
+        $clean = $this->stripPatientHistoryFieldsFromRemarks($remarks);
+
+        $labels = [
+            'obstetric_history' => 'OBSTETRIC HISTORY',
+            'menstrual_history' => 'MENSTRUAL HISTORY',
+            'medical_surgical_history' => 'MEDICAL / SURGICAL HISTORY',
+            'family_history' => 'FAMILY HISTORY',
+            'allergic_history' => 'ALLERGIC HISTORY',
+            'vaccination_history' => 'VACCINATION',
+        ];
+
+        $lines = [];
+        foreach ($labels as $key => $label) {
+            $value = trim((string) ($input[$key] ?? ''));
+            if ($value !== '') {
+                $lines[] = $label . ': ' . $value;
+            }
+        }
+
+        if (empty($lines)) {
+            return $clean;
+        }
+
+        if ($clean !== '') {
+            return $clean . "\n" . implode("\n", $lines);
+        }
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * @param array<string, string> $input
+     */
+    private function hasAnyPatientHistoryField(array $input): bool
+    {
+        foreach ($input as $value) {
+            if (trim((string) $value) !== '') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private function ensureClinicalTemplateTable(): bool
     {
         if ($this->db->tableExists('opd_clinical_templates')) {
@@ -8651,7 +8845,7 @@ OPD SNAPSHOT JSON: " . $payload;
         $alerts = [];
 
         $rows = $this->db->table('opd_prescription p')
-            ->select('p.opd_id,p.complaints,p.diagnosis,p.bp,p.diastolic,p.pulse,p.temp,p.spo2,p.investigation,p.advice,o.apointment_date')
+            ->select('p.*,o.apointment_date')
             ->join('opd_master o', 'o.opd_id=p.opd_id', 'left')
             ->where('p.p_id', $patientId)
             ->where('p.opd_id !=', $currentOpdId)
@@ -8694,6 +8888,27 @@ OPD SNAPSHOT JSON: " . $payload;
                 $alerts[] = [
                     'type' => 'Vitals Trend',
                     'message' => $dateLabel . ': ' . implode(' | ', $vitalLine),
+                ];
+            }
+
+            $historyFields = $this->hydratePatientHistoryFields($row, (string) ($row['Prescriber_Remarks'] ?? ''));
+            $historyLabels = [
+                'obstetric_history' => 'Obstetric History',
+                'menstrual_history' => 'Menstrual History',
+                'medical_surgical_history' => 'Medical / Surgical History',
+                'family_history' => 'Family History',
+                'allergic_history' => 'Allergic History',
+                'vaccination_history' => 'Vaccination',
+            ];
+            foreach ($historyLabels as $key => $label) {
+                $value = trim((string) ($historyFields[$key] ?? ''));
+                if ($value === '') {
+                    continue;
+                }
+
+                $alerts[] = [
+                    'type' => $label,
+                    'message' => $dateLabel . ': ' . $value,
                 ];
             }
         }

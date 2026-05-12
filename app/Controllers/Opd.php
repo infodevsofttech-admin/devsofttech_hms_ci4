@@ -144,6 +144,10 @@ class Opd extends BaseController
             // Women related
             'women_lmp', 'women_last_baby', 'women_pregnancy_related', 'women_related_problems',
             'women_block',   // Formatted: Women Related : LMP | Last Baby | ...
+            // Women specific patient history
+            'obstetric_history', 'menstrual_history', 'medical_surgical_history',
+            'family_history', 'allergic_history', 'vaccination_history',
+            'patient_history_block',
             // Co-morbidities
             'morbidities',        // Raw comma-separated list
             'morbidities_block',  // Formatted: Co-Morbidities : Diabetes, HTn, ...
@@ -2789,6 +2793,23 @@ class Opd extends BaseController
         $womenPregnancyRelated = trim((string) ($rx['women_pregnancy_related'] ?? ''));
         $womenRelatedProblems  = trim((string) ($rx['women_related_problems'] ?? ''));
 
+        // ── Women specific patient history ──────────────────────────────────
+        $obstetricHistory = trim((string) ($rx['obstetric_history'] ?? ''));
+        $menstrualHistory = trim((string) ($rx['menstrual_history'] ?? ''));
+        $medicalSurgicalHistory = trim((string) ($rx['medical_surgical_history'] ?? ''));
+        $familyHistory = trim((string) ($rx['family_history'] ?? ''));
+        $allergicHistory = trim((string) ($rx['allergic_history'] ?? ''));
+        $vaccinationHistory = trim((string) ($rx['vaccination_history'] ?? ''));
+
+        $patientHistoryParts = [];
+        if ($obstetricHistory !== '') { $patientHistoryParts[] = 'Obstetric: ' . $obstetricHistory; }
+        if ($menstrualHistory !== '') { $patientHistoryParts[] = 'Menstrual: ' . $menstrualHistory; }
+        if ($medicalSurgicalHistory !== '') { $patientHistoryParts[] = 'Medical/Surgical: ' . $medicalSurgicalHistory; }
+        if ($familyHistory !== '') { $patientHistoryParts[] = 'Family: ' . $familyHistory; }
+        if ($allergicHistory !== '') { $patientHistoryParts[] = 'Allergic: ' . $allergicHistory; }
+        if ($vaccinationHistory !== '') { $patientHistoryParts[] = 'Vaccination: ' . $vaccinationHistory; }
+        $patientHistoryBlock = implode(' | ', $patientHistoryParts);
+
         $printContent = '<table width="100%" border="0" style="font-size:10pt;">'
             . '<tr>'
             . '<td width="33.3%" valign="top">'
@@ -2892,6 +2913,13 @@ class Opd extends BaseController
             'women_last_baby' => $womenLastBaby,
             'women_pregnancy_related' => $womenPregnancyRelated,
             'women_related_problems' => $womenRelatedProblems,
+            'obstetric_history' => $obstetricHistory,
+            'menstrual_history' => $menstrualHistory,
+            'medical_surgical_history' => $medicalSurgicalHistory,
+            'family_history' => $familyHistory,
+            'allergic_history' => $allergicHistory,
+            'vaccination_history' => $vaccinationHistory,
+            'patient_history_block' => $patientHistoryBlock,
             'Finding_Examinations' => $findingExaminationsText,
             'finding_examinations' => $findingExaminationsText,
             'Prescriber_Remarks' => $prescriberRemarksText,
@@ -3489,6 +3517,25 @@ class Opd extends BaseController
         $womenBlock = implode(' | ', $womenParts);
         $tokens['women_block'] = $womenBlock !== '' ? $formatBlock('Women Related', $womenBlock) : '';
 
+        // ── Women specific patient history (formatted) ─────────────────────
+        $patientHistoryParts = [];
+        $obstetric = trim((string) ($tokens['obstetric_history'] ?? ''));
+        $menstrual = trim((string) ($tokens['menstrual_history'] ?? ''));
+        $medicalSurgical = trim((string) ($tokens['medical_surgical_history'] ?? ''));
+        $family = trim((string) ($tokens['family_history'] ?? ''));
+        $allergic = trim((string) ($tokens['allergic_history'] ?? ''));
+        $vaccination = trim((string) ($tokens['vaccination_history'] ?? ''));
+
+        if ($obstetric !== '') { $patientHistoryParts[] = '<strong>Obstetric:</strong> ' . esc($obstetric); }
+        if ($menstrual !== '') { $patientHistoryParts[] = '<strong>Menstrual:</strong> ' . esc($menstrual); }
+        if ($medicalSurgical !== '') { $patientHistoryParts[] = '<strong>Medical/Surgical:</strong> ' . esc($medicalSurgical); }
+        if ($family !== '') { $patientHistoryParts[] = '<strong>Family:</strong> ' . esc($family); }
+        if ($allergic !== '') { $patientHistoryParts[] = '<strong>Allergic:</strong> ' . esc($allergic); }
+        if ($vaccination !== '') { $patientHistoryParts[] = '<strong>Vaccination:</strong> ' . esc($vaccination); }
+
+        $patientHistoryHtml = implode('<br/>', $patientHistoryParts);
+        $tokens['patient_history_block'] = $patientHistoryHtml !== '' ? $formatBlock('Patient History', $patientHistoryHtml, true) : '';
+
         // ── Morbidities (formatted) ───────────────────────────────────────────
         $tokens['morbidities_block'] = $formatBlock('Co-Morbidities', (string) ($tokens['morbidities'] ?? ''));
 
@@ -3520,6 +3567,7 @@ class Opd extends BaseController
             (string) ($tokens['Rx'] ?? ''),
             (string) ($tokens['InvestigationBlock'] ?? ''),
             (string) ($tokens['RemarksBlock'] ?? ''),
+            (string) ($tokens['patient_history_block'] ?? ''),
             (string) ($tokens['AdviceBlock'] ?? ''),
             (string) ($tokens['NextVisitBlock'] ?? ''),
         ], static fn ($value): bool => trim((string) $value) !== ''));
@@ -3894,6 +3942,17 @@ class Opd extends BaseController
                 $row['drug_allergy_details'] = (string) ($nabhInfo['drug_allergy_details'] ?? '');
                 $row['adr_history'] = (string) ($nabhInfo['adr_history'] ?? '');
                 $row['current_medications'] = (string) ($nabhInfo['current_medications'] ?? '');
+
+                $historyInfo = $this->hydratePatientHistoryPrintFields(
+                    $row,
+                    (string) ($row['Prescriber_Remarks'] ?? '')
+                );
+                $row['obstetric_history'] = (string) ($historyInfo['obstetric_history'] ?? '');
+                $row['menstrual_history'] = (string) ($historyInfo['menstrual_history'] ?? '');
+                $row['medical_surgical_history'] = (string) ($historyInfo['medical_surgical_history'] ?? '');
+                $row['family_history'] = (string) ($historyInfo['family_history'] ?? '');
+                $row['allergic_history'] = (string) ($historyInfo['allergic_history'] ?? '');
+                $row['vaccination_history'] = (string) ($historyInfo['vaccination_history'] ?? '');
                 $data['opd_prescription'] = $row;
             }
         }
@@ -6921,6 +6980,58 @@ class Opd extends BaseController
         }
 
         return $data;
+    }
+
+    private function hydratePatientHistoryPrintFields(array $row, string $remarks): array
+    {
+        $pick = function (array $candidates) use ($row): string {
+            foreach ($candidates as $field) {
+                $value = trim((string) ($row[$field] ?? ''));
+                if ($value !== '') {
+                    return $value;
+                }
+            }
+
+            return '';
+        };
+
+        $data = [
+            'obstetric_history' => $pick(['obstetric_history', 'obstetric_hist', 'obstetric_details']),
+            'menstrual_history' => $pick(['menstrual_history', 'menstrual_hist', 'menstrual_details']),
+            'medical_surgical_history' => $pick(['medical_surgical_history', 'medical_surgical_hist', 'past_medical_surgical_history', 'medical_history', 'surgical_history']),
+            'family_history' => $pick(['family_history', 'family_hist']),
+            'allergic_history' => $pick(['allergic_history', 'allergy_history', 'allergy_hist']),
+            'vaccination_history' => $pick(['vaccination_history', 'vaccination_hist', 'immunization_history']),
+        ];
+
+        $parsed = $this->extractPatientHistoryPrintFieldsFromRemarks($remarks);
+        foreach ($data as $key => $value) {
+            if ($value === '' && ! empty($parsed[$key])) {
+                $data[$key] = (string) $parsed[$key];
+            }
+        }
+
+        return $data;
+    }
+
+    private function extractPatientHistoryPrintFieldsFromRemarks(string $remarks): array
+    {
+        $extract = static function (string $pattern, string $source): string {
+            if (preg_match($pattern, $source, $m) !== 1) {
+                return '';
+            }
+
+            return trim((string) ($m[1] ?? ''));
+        };
+
+        return [
+            'obstetric_history' => $extract('/^\s*OBSTETRIC\s*HISTORY\s*:\s*(.+)$/im', $remarks),
+            'menstrual_history' => $extract('/^\s*MENSTRUAL\s*HISTORY\s*:\s*(.+)$/im', $remarks),
+            'medical_surgical_history' => $extract('/^\s*MEDICAL\s*\/\s*SURGICAL\s*HISTORY\s*:\s*(.+)$/im', $remarks),
+            'family_history' => $extract('/^\s*FAMILY\s*HISTORY\s*:\s*(.+)$/im', $remarks),
+            'allergic_history' => $extract('/^\s*ALLERGIC\s*HISTORY\s*:\s*(.+)$/im', $remarks),
+            'vaccination_history' => $extract('/^\s*VACCINATION\s*:\s*(.+)$/im', $remarks),
+        ];
     }
 
     private function extractNabhFieldsFromRemarks(string $remarks): array
