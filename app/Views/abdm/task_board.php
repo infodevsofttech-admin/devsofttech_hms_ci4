@@ -27,10 +27,103 @@
         <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="patient_abha_create">Unupdated ABHA</button>
         <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="patient_abha_update">ABHA Update</button>
         <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="opd_prescription_publish">OPD Publish</button>
+        <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="opd_consult_publish">OPD Consult Publish</button>
         <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="lab_report_publish">Lab Reports</button>
         <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="radiology_report_publish">Radiology Reports</button>
         <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="ipd_admission_publish">IPD Admission</button>
         <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="ipd_discharge_publish">IPD Discharge</button>
+    </div>
+
+    <div class="card shadow-sm mb-3">
+        <div class="card-body py-2">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label mb-1 small">Quick FHIR Preview OPD ID</label>
+                    <input type="number" min="1" class="form-control form-control-sm" id="tb_quick_opd_id" placeholder="Enter OPD ID">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label mb-1 small">Session ID (optional)</label>
+                    <input type="number" min="1" class="form-control form-control-sm" id="tb_quick_session_id" placeholder="Enter OPD Session ID">
+                </div>
+                <div class="col-md-4">
+                    <button type="button" class="btn btn-sm btn-outline-primary w-100" id="btn_quick_fhir_preview">Show FHIR JSON Inline</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-3" id="todayCreditOpdCard">
+        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+            <strong>Today Credit OPD Consult (FHIR Debug)</strong>
+            <small class="text-muted">Current date credit consults with quick inline preview</small>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>OPD</th>
+                            <th>Patient</th>
+                            <th>ABHA</th>
+                            <th>Consult Time</th>
+                            <th>Credit Ref</th>
+                            <th>FHIR Session</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php if (! empty($today_credit_opd_rows ?? [])): ?>
+                        <?php foreach (($today_credit_opd_rows ?? []) as $r): ?>
+                            <tr>
+                                <td>#<?= (int) ($r['opd_id'] ?? 0) ?></td>
+                                <td><?= esc((string) ($r['patient_name'] ?? '')) ?></td>
+                                <td><?= esc((string) ($r['abha_id'] ?? '')) ?></td>
+                                <td><?= esc((string) ($r['consult_datetime'] ?? '')) ?></td>
+                                <td><?= esc((string) ($r['credit_ref'] ?? '')) ?></td>
+                                <td>
+                                    <?php if (! empty($r['has_fhir'])): ?>
+                                        <?= (int) ($r['opd_session_id'] ?? 0) ?>
+                                    <?php else: ?>
+                                        <span class="text-muted">Not generated</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <button
+                                        type="button"
+                                        class="btn btn-sm btn-outline-primary inline-json-btn"
+                                        data-preview-url="<?= esc((string) ($r['preview_url'] ?? '')) ?>"
+                                        data-title="OPD <?= (int) ($r['opd_id'] ?? 0) ?><?= !empty($r['opd_session_id']) ? (' / Session ' . (int) $r['opd_session_id']) : '' ?>"
+                                    >Preview JSON</button>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <tr>
+                            <td colspan="7" class="text-muted px-2 py-2">No current date credit OPD consult rows found.</td>
+                        </tr>
+                    <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-3 d-none" id="fhirDebugCard">
+        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <strong id="fhirDebugTitle">FHIR JSON Debug</strong>
+                <span class="badge bg-secondary" id="fhirDataBadge">UNKNOWN</span>
+                <span class="badge bg-secondary" id="fhirHttpBadge">HTTP -</span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-sm btn-outline-primary" id="btnCopyFhirDebug">Copy JSON</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="btnHideFhirDebug">Hide</button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="small text-muted mb-2" id="fhirDebugMeta">Ready</div>
+            <pre id="fhirDebugJson" class="mb-0" style="max-height:420px; overflow:auto; background:#0b1020; color:#d9e2ff; padding:12px; border-radius:8px;">{}</pre>
+        </div>
     </div>
 
     <div class="card shadow-sm">
@@ -62,7 +155,8 @@
                             $meta = (isset($payload['meta']) && is_array($payload['meta'])) ? $payload['meta'] : [];
                             $opdId = (int) ($meta['opd_id'] ?? 0);
                             $opdSessionId = (int) ($meta['opd_session_id'] ?? 0);
-                            $showSandbox = ($type === 'opd_prescription_publish' && $hasValidAbha && $opdId > 0);
+                            $showSandbox = ($type === 'opd_prescription_publish' && $opdId > 0);
+                            $showPreview = ($type === 'opd_prescription_publish' && $opdId > 0);
                         ?>
                         <tr
                             data-task-id="<?= (int) ($t['id'] ?? 0) ?>"
@@ -100,6 +194,9 @@
                                     <?php endif; ?>
                                     <?php if ($showSandbox): ?>
                                         <button class="btn btn-sm btn-outline-info sandbox-btn">Sandbox</button>
+                                    <?php endif; ?>
+                                    <?php if ($showPreview): ?>
+                                        <button class="btn btn-sm btn-outline-primary preview-fhir-btn">Preview FHIR</button>
                                     <?php endif; ?>
                                     <button class="btn btn-sm btn-outline-dark close-btn">Close</button>
                                 </div>
@@ -147,6 +244,7 @@
 
             <div class="d-flex flex-wrap gap-2 mb-2">
                 <button type="button" class="btn btn-outline-success btn-sm" id="tb_btn_abdm_consent_request">Request Consent</button>
+                <button type="button" class="btn btn-outline-primary btn-sm" id="tb_btn_abdm_preview_fhir">Preview FHIR JSON</button>
                 <button type="button" class="btn btn-outline-warning btn-sm" id="tb_btn_abdm_share_fhir">Share FHIR</button>
             </div>
 
@@ -197,6 +295,7 @@
 (function () {
     var csrfName = '<?= csrf_token() ?>';
     var csrfHash = '<?= csrf_hash() ?>';
+    var refreshUrl = '<?= base_url('AbdmTaskBoard') ?>';
     var statusBox = document.getElementById('statusBox');
     var modalEl = document.getElementById('taskActionModal');
     var actionModal = new bootstrap.Modal(modalEl);
@@ -212,15 +311,45 @@
     var sandboxConsentExpiresInput = document.getElementById('tb_abdm_consent_expires_at');
     var sandboxConsentHandleInput = document.getElementById('tb_abdm_consent_handle');
     var sandboxClaimDocumentInput = document.getElementById('tb_abdm_claim_document_id');
+    var quickOpdInput = document.getElementById('tb_quick_opd_id');
+    var quickSessionInput = document.getElementById('tb_quick_session_id');
+    var fhirDebugCard = document.getElementById('fhirDebugCard');
+    var fhirDebugTitle = document.getElementById('fhirDebugTitle');
+    var fhirDebugMeta = document.getElementById('fhirDebugMeta');
+    var fhirDebugJson = document.getElementById('fhirDebugJson');
+    var fhirDataBadge = document.getElementById('fhirDataBadge');
+    var fhirHttpBadge = document.getElementById('fhirHttpBadge');
     var selectedAction = '';
     var selectedRow = null;
     var sandboxRow = null;
 
+    function setBadge(el, text, tone) {
+        if (!el) {
+            return;
+        }
+        el.classList.remove('bg-secondary', 'bg-success', 'bg-danger', 'bg-warning', 'text-dark');
+        if (tone === 'success') {
+            el.classList.add('bg-success');
+        } else if (tone === 'danger') {
+            el.classList.add('bg-danger');
+        } else if (tone === 'warning') {
+            el.classList.add('bg-warning', 'text-dark');
+        } else {
+            el.classList.add('bg-secondary');
+        }
+        el.textContent = text;
+    }
+
     function applyFilter(filter) {
+        var appliedFilter = filter;
+        if ((filter || '').toLowerCase() === 'opd_consult_publish') {
+            appliedFilter = 'opd_prescription_publish';
+        }
+
         var rows = document.querySelectorAll('#taskTable tbody tr');
         rows.forEach(function (row) {
             var type = (row.getAttribute('data-task-type') || '').toLowerCase();
-            row.style.display = (filter === 'all' || type === filter.toLowerCase()) ? '' : 'none';
+            row.style.display = (appliedFilter === 'all' || type === appliedFilter.toLowerCase()) ? '' : 'none';
         });
 
         document.querySelectorAll('.filter-btn').forEach(function (btn) {
@@ -232,6 +361,90 @@
             active.classList.remove('btn-outline-primary');
             active.classList.add('btn-primary');
         }
+    }
+
+    function showInlineFhirPreview(previewUrl, titleText) {
+        if (!previewUrl) {
+            setStatus('FHIR preview URL is missing.', true);
+            return;
+        }
+
+        if (fhirDebugTitle) {
+            fhirDebugTitle.textContent = titleText || 'FHIR JSON Debug';
+        }
+        if (fhirDebugMeta) {
+            fhirDebugMeta.textContent = 'Loading...';
+            fhirDebugMeta.className = 'small text-muted mb-2';
+        }
+        setBadge(fhirDataBadge, 'CHECKING', 'warning');
+        setBadge(fhirHttpBadge, 'HTTP ...', 'warning');
+        if (fhirDebugJson) {
+            fhirDebugJson.textContent = '{\n  "loading": true\n}';
+        }
+        if (fhirDebugCard) {
+            fhirDebugCard.classList.remove('d-none');
+            fhirDebugCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        fetch(previewUrl, {
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
+            }
+        }).then(function (r) {
+            return r.text().then(function (body) {
+                return {
+                    ok: r.ok,
+                    status: r.status,
+                    body: body
+                };
+            });
+        }).then(function (res) {
+            var parsed = null;
+            try {
+                parsed = JSON.parse(res.body || '{}');
+            } catch (e) {
+                parsed = { raw: res.body || '' };
+            }
+
+            var hasFhir = false;
+            if (parsed && typeof parsed === 'object') {
+                if (parsed.status === 'ok' && parsed.bundle && typeof parsed.bundle === 'object') {
+                    hasFhir = true;
+                }
+                if (parsed.resourceType === 'Bundle') {
+                    hasFhir = true;
+                }
+            }
+
+            if (fhirDebugMeta) {
+                if (res.ok) {
+                    fhirDebugMeta.textContent = 'Loaded successfully (' + res.status + ')';
+                    fhirDebugMeta.className = 'small text-success mb-2';
+                } else {
+                    fhirDebugMeta.textContent = 'Loaded with error status (' + res.status + ')';
+                    fhirDebugMeta.className = 'small text-danger mb-2';
+                }
+            }
+            setBadge(fhirHttpBadge, 'HTTP ' + res.status, res.ok ? 'success' : 'danger');
+            setBadge(fhirDataBadge, hasFhir ? 'HAS FHIR' : 'NOT GENERATED', hasFhir ? 'success' : 'danger');
+            if (fhirDebugJson) {
+                fhirDebugJson.textContent = JSON.stringify(parsed, null, 2);
+            }
+        }).catch(function (e) {
+            if (fhirDebugMeta) {
+                fhirDebugMeta.textContent = 'Request failed: ' + e.message;
+                fhirDebugMeta.className = 'small text-danger mb-2';
+            }
+            setBadge(fhirHttpBadge, 'HTTP ERR', 'danger');
+            setBadge(fhirDataBadge, 'NOT GENERATED', 'danger');
+            if (fhirDebugJson) {
+                fhirDebugJson.textContent = JSON.stringify({
+                    error: e.message
+                }, null, 2);
+            }
+        });
     }
 
     function setStatus(msg, isError) {
@@ -299,7 +512,7 @@
             return;
         }
         if ((row.getAttribute('data-sandbox-eligible') || '0') !== '1') {
-            setSandboxStatus('Sandbox actions are available only for OPD Publish rows with valid ABHA and printed consult.', 'warning');
+            setSandboxStatus('Sandbox actions are available only for OPD Publish rows with printed consult.', 'warning');
             return;
         }
 
@@ -382,6 +595,35 @@
     document.querySelectorAll('.sandbox-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
             openSandboxForRow(btn.closest('tr'));
+        });
+    });
+
+    document.querySelectorAll('.preview-fhir-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var row = btn.closest('tr');
+            if (!row) {
+                return;
+            }
+
+            var opdId = parseInt(row.getAttribute('data-opd-id') || '0', 10) || 0;
+            var opdSessionId = parseInt(row.getAttribute('data-opd-session-id') || '0', 10) || 0;
+            if (opdId <= 0) {
+                setStatus('FHIR preview unavailable for this row.', true);
+                return;
+            }
+
+            var previewUrl = opdSessionId > 0
+                ? '<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId + '/' + opdSessionId
+                : '<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId;
+            showInlineFhirPreview(previewUrl, 'Task Row OPD ' + opdId + (opdSessionId > 0 ? (' / Session ' + opdSessionId) : ''));
+        });
+    });
+
+    document.querySelectorAll('.inline-json-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var previewUrl = (btn.getAttribute('data-preview-url') || '').trim();
+            var titleText = (btn.getAttribute('data-title') || 'FHIR JSON Debug').trim();
+            showInlineFhirPreview(previewUrl, titleText);
         });
     });
 
@@ -534,6 +776,21 @@
         });
     });
 
+    document.getElementById('tb_btn_abdm_preview_fhir').addEventListener('click', function () {
+        var ctx = currentSandboxContext();
+        if (!ctx || ctx.opdId <= 0) {
+            setSandboxStatus('Select an eligible OPD Publish row first.', 'warning');
+            return;
+        }
+
+        var previewUrl = ctx.opdSessionId > 0
+            ? '<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + ctx.opdId + '/' + ctx.opdSessionId
+            : '<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + ctx.opdId;
+
+        window.open(previewUrl, '_blank');
+        setSandboxStatus('Opened FHIR preview for OPD ' + ctx.opdId + (ctx.opdSessionId > 0 ? (' / Session ' + ctx.opdSessionId) : ''), 'success');
+    });
+
     document.getElementById('tb_btn_abdm_claim_status').addEventListener('click', function () {
         var docId = parseInt((sandboxClaimDocumentInput.value || '0').toString(), 10) || 0;
         if (docId <= 0) {
@@ -553,8 +810,54 @@
         });
     });
 
+    document.getElementById('btn_quick_fhir_preview').addEventListener('click', function () {
+        var opdId = parseInt((quickOpdInput.value || '0').toString(), 10) || 0;
+        var sessionId = parseInt((quickSessionInput.value || '0').toString(), 10) || 0;
+        if (opdId <= 0) {
+            setStatus('Enter a valid OPD ID for quick preview.', true);
+            return;
+        }
+
+        var url = sessionId > 0
+            ? '<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId + '/' + sessionId
+            : '<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId;
+        showInlineFhirPreview(url, 'Quick Preview OPD ' + opdId + (sessionId > 0 ? (' / Session ' + sessionId) : ''));
+    });
+
+    document.getElementById('btnHideFhirDebug').addEventListener('click', function () {
+        if (fhirDebugCard) {
+            fhirDebugCard.classList.add('d-none');
+        }
+    });
+
+    document.getElementById('btnCopyFhirDebug').addEventListener('click', function () {
+        var btn = this;
+        var originalText = btn.textContent;
+        var originalClass = btn.className;
+        var jsonText = fhirDebugJson ? (fhirDebugJson.textContent || '{}') : '{}';
+        if (!navigator.clipboard || !navigator.clipboard.writeText) {
+            setStatus('Clipboard API unavailable in this browser context.', true);
+            return;
+        }
+        navigator.clipboard.writeText(jsonText).then(function () {
+            setStatus('FHIR JSON copied to clipboard.');
+            btn.textContent = 'Copied ✓';
+            btn.className = 'btn btn-sm btn-success';
+            window.setTimeout(function () {
+                btn.textContent = originalText;
+                btn.className = originalClass;
+            }, 1500);
+        }).catch(function (e) {
+            setStatus('Copy failed: ' + e.message, true);
+        });
+    });
+
     document.getElementById('btnRefresh').addEventListener('click', function () {
-        window.location.reload();
+        if (typeof window.load_form === 'function') {
+            window.load_form(refreshUrl, 'ABDM Task Board');
+            return;
+        }
+        window.location.href = refreshUrl;
     });
 })();
 </script>

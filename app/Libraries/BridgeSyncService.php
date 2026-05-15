@@ -299,6 +299,8 @@ class BridgeSyncService
                 $dreamsoftConfigMap = [
                     'BRIDGE_SYNC_URL'    => trim((string) ($cfg->dreamsoftBridgeUrl   ?? '')),
                     'BRIDGE_SYNC_TOKEN'  => trim((string) ($cfg->dreamsoftBridgeToken  ?? '')),
+                    'ABDM_BRIDGE_URL'    => trim((string) ($cfg->abdmBridgeUrl        ?? '')),
+                    'ABDM_BRIDGE_TOKEN'  => trim((string) ($cfg->abdmBridgeToken      ?? '')),
                     'BRIDGE_SOURCE_CODE' => trim((string) ($cfg->dreamsoftSourceCode   ?? '')),
                 ];
             } catch (\Throwable $e) {
@@ -335,6 +337,10 @@ class BridgeSyncService
             return ['ok' => false, 'error' => 'Missing event_type'];
         }
 
+        if (str_starts_with($eventType, 'snomed.')) {
+            return $this->buildBridgeDispatchContext($row, $payload, 'csnotk');
+        }
+
         $isAbdmOrNhcx = str_starts_with($eventType, 'abdm.') || str_starts_with($eventType, 'nhcx.');
         $provider = strtolower($this->readSetting('ABDM_SYNC_PROVIDER'));
         if ($provider === '' || ! $isAbdmOrNhcx) {
@@ -348,7 +354,11 @@ class BridgeSyncService
             return $this->buildEkaDispatchContext($row, $payload);
         }
 
-        return $this->buildBridgeDispatchContext($row, $payload);
+        if ($isAbdmOrNhcx) {
+            return $this->buildAbdmBridgeDispatchContext($row, $payload);
+        }
+
+        return $this->buildBridgeDispatchContext($row, $payload, 'bridge');
     }
 
     /**
@@ -356,7 +366,7 @@ class BridgeSyncService
      * @param array<string, mixed> $payload
      * @return array<string, mixed>
      */
-    private function buildBridgeDispatchContext(array $row, array $payload): array
+    private function buildBridgeDispatchContext(array $row, array $payload, string $channel = 'bridge'): array
     {
         $endpoint = $this->readSetting('BRIDGE_SYNC_URL');
         if ($endpoint === '') {
@@ -376,7 +386,58 @@ class BridgeSyncService
 
         return [
             'ok' => true,
-            'channel' => 'bridge',
+            'channel' => $channel,
+            'endpoint' => $endpoint,
+            'method' => 'POST',
+            'headers' => $headers,
+            'body' => [
+                'queue_id' => (int) ($row['id'] ?? 0),
+                'source' => $source,
+                'event_type' => (string) ($row['event_type'] ?? ''),
+                'entity_type' => (string) ($row['entity_type'] ?? ''),
+                'entity_id' => (string) ($row['entity_id'] ?? ''),
+                'payload' => $payload,
+                'occurred_at' => (string) ($row['created_at'] ?? Time::now('Asia/Kolkata')->toDateTimeString()),
+            ],
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    private function buildAbdmBridgeDispatchContext(array $row, array $payload): array
+    {
+        $endpoint = $this->readSetting('ABDM_BRIDGE_URL');
+        if ($endpoint === '') {
+            // Backward compatibility fallback
+            $endpoint = $this->readSetting('BRIDGE_SYNC_URL');
+        }
+
+        if ($endpoint === '') {
+            return ['ok' => false, 'error' => 'ABDM_BRIDGE_URL is not configured'];
+        }
+
+        $token = $this->readSetting('ABDM_BRIDGE_TOKEN');
+        if ($token === '') {
+            // Backward compatibility fallback
+            $token = $this->readSetting('BRIDGE_SYNC_TOKEN');
+        }
+
+        $source = $this->readSetting('BRIDGE_SOURCE_CODE');
+        if ($source === '') {
+            $source = (string) ($this->readSetting('HOSPITAL_CODE') ?: 'hms-local');
+        }
+
+        $headers = ['Content-Type' => 'application/json'];
+        if ($token !== '') {
+            $headers['Authorization'] = 'Bearer ' . $token;
+        }
+
+        return [
+            'ok' => true,
+            'channel' => 'abdm',
             'endpoint' => $endpoint,
             'method' => 'POST',
             'headers' => $headers,

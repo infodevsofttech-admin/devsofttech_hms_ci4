@@ -1,0 +1,70 @@
+%SYSTEM_PROMPT%
+# HMS CI4 ABDM Integration Architecture Prompt
+
+## CRITICAL CONTEXT (As of May 13, 2026)
+
+### Dual-Bridge Architecture Requirement
+HMS CI4 uses TWO separate bridges for different purposes:
+
+1. **CSNOtk Bridge** (`https://csnotk.e-atria.in/api/bridge`)
+   - **Purpose:** SNOMED CT terminology service + FHIR format conversion
+   - **Use Case:** Validate medical terms (diagnosis, medication) → receive SNOMED-coded, FHIR-formatted data
+   - **Event Types:** `snomed.diagnosis.validate`, `snomed.medication.validate`
+   - **Config Key:** `BRIDGE_SYNC_URL`, `BRIDGE_SYNC_TOKEN`
+   - **Direct REST API:** `/csnoserv/rest/search/suggest` (used by CsnotkTerminologyService for autocomplete)
+
+2. **ABDM Bridge** (`https://abdm-bridge.e-atria.in/api/v1/bridge`)
+   - **Purpose:** ABDM M1 communication (retrieve/submit patient health records)
+   - **Use Case:** Route ABDM events to ABDM sandbox/live servers
+   - **Event Types:** `abdm.abha.validate`, `abdm.fhir.share.requested`, `abdm.consent.requested`, etc.
+   - **Config Keys:** `ABDM_BRIDGE_URL`, `ABDM_BRIDGE_TOKEN`
+   - **Deployment:** PHP CI4 application at `/opt/abdm-gateway` on `https://abdm-bridge.e-atria.in`
+   - **Purpose of Centralized Bridge:** Multiple HMS installations at client sites → all communicate through single ABDM Bridge → ABDM servers (token management, compliance)
+
+### Event Routing Table (REQUIRED)
+| Event Type | Destination | Purpose |
+|-----------|-------------|---------|
+| `snomed.*` | CSNOtk `/api/bridge` | Terminology validation & FHIR coding |
+| `abdm.*` | ABDM Bridge `/api/v1/bridge` | ABDM M1 communication |
+
+### Implementation Status
+- ❌ **Routing logic NOT YET implemented** in BridgeSyncService.php
+  - Current: Single-bridge logic in buildBridgeDispatchContext()
+  - Needed: Conditional routing by event_type prefix (snomed.* vs abdm.*)
+- ✅ **CSNOtk REST API** integration exists (CsnotkTerminologyService.php)
+- ⏳ **ABDM Bridge** deployment pending (PHP gateway ready, deployment guide created)
+
+### Configuration Requirements
+Both .env keys MUST be set (currently empty):
+```env
+BRIDGE_SYNC_URL = https://csnotk.e-atria.in/api/bridge
+BRIDGE_SYNC_TOKEN = <32-char hex token>
+ABDM_BRIDGE_URL = https://abdm-bridge.e-atria.in/api/v1/bridge
+ABDM_BRIDGE_TOKEN = <32-char hex token>
+```
+
+### Key Files
+- `app/Libraries/BridgeSyncService.php` - Needs routing logic update
+- `DUAL_BRIDGE_ARCHITECTURE.md` - Complete architecture & implementation guide
+- `ABDM_GATEWAY_PHP_DEPLOYMENT.md` - PHP gateway deployment instructions
+- `gateway-php-ci4/` - PHP ABDM Bridge application
+- `docs/CSNOTK_API_REFERENCE.md` - CSNOtk API documentation
+
+### When This Matters
+- Any work on queue event processing
+- Any ABDM integration testing
+- Any terminology/SNOMED validation
+- Any config or deployment changes
+- Debugging "queue stuck" or "bridge 403/404" issues
+
+### DO NOT DO
+- Remove either bridge URL (both are needed)
+- Consolidate both bridges into single endpoint (architecturally wrong)
+- Use Node.js middleware-gateway as replacement (CSNOtk is terminology, ABDM handles ABDM)
+
+### ALWAYS REMEMBER
+1. CSNOtk = Terminology service (medical term coding)
+2. ABDM Bridge = ABDM communication (patient data sharing)
+3. They are NOT interchangeable
+4. Multiple HMS instances can use one ABDM Bridge (centralized)
+5. CSNOtk is stateless lookup API (can be called directly or via bridge)

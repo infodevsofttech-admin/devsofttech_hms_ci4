@@ -74,7 +74,7 @@
                         <div class="col-4"><input type="text" id="rx_qty" class="form-control form-control-sm" placeholder="Qty"></div>
                         <div class="col-4">
                             <select id="rx_dose_where" class="form-select form-select-sm">
-                                <option value="">Where</option>
+                                <option value="">Route</option>
                             </select>
                         </div>
                     </div>
@@ -188,7 +188,7 @@
             renderSelectOptions($('#rx_dosage'), doseMasterCache.dose, 'Dose');
             renderSelectOptions($('#rx_dosage_when'), doseMasterCache.when, 'When');
             renderSelectOptions($('#rx_dosage_freq'), doseMasterCache.freq, 'Frequency');
-            renderSelectOptions($('#rx_dose_where'), doseMasterCache.where, 'Where');
+            renderSelectOptions($('#rx_dose_where'), doseMasterCache.where, 'Route');
 
             if (pendingFillRow) {
                 var row = pendingFillRow;

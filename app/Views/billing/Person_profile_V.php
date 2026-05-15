@@ -76,6 +76,11 @@
                             <li class="nav-item" role="presentation">
                                 <button class="nav-link" data-bs-toggle="tab" data-bs-target="#profile-insurance" type="button" role="tab">Insurance</button>
                             </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#profile-abha" type="button" role="tab">
+                                    <i class="bi bi-person-check me-1"></i>ABHA Create/Verify
+                                </button>
+                            </li>
                             <?php if(count($opd_List)>0) { ?>
                             <li class="nav-item" role="presentation">
                                 <button class="nav-link" data-bs-toggle="tab" data-bs-target="#profile-opd" type="button" role="tab">OPD</button>
@@ -109,7 +114,34 @@
                                 </div>
                                 <div class="row">
                                     <div class="col-lg-3 col-md-4 label">ABHA ID</div>
-                                    <div class="col-lg-9 col-md-8"><?= esc($patientAbhaId) ?></div>
+                                    <div class="col-lg-9 col-md-8 d-flex align-items-center gap-2 flex-wrap">
+                                        <span id="abha_id_display">
+                                        <?php if ($patientAbhaId !== '') : ?>
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle font-monospace fs-6"><?= esc($patientAbhaId) ?></span>
+                                        <?php else : ?>
+                                            <span class="text-muted small">Not linked</span>
+                                        <?php endif; ?>
+                                        </span>
+                                        <button type="button" class="btn btn-sm btn-outline-primary py-0" style="font-size:12px"
+                                            onclick="openAbhaOtpModal(
+                                                <?= (int)$data[0]->id ?>,
+                                                '<?= esc($patientAbhaId) ?>',
+                                                '<?= esc($data[0]->mphone1 ?? '') ?>'
+                                            )">
+                                            <i class="bi bi-person-check me-1"></i><?= $patientAbhaId !== '' ? 'Re-link ABHA' : 'Link ABHA via OTP' ?>
+                                        </button>
+                                        <?php if ($patientAbhaId !== '') :
+                                            $abhaCardNum = preg_replace('/\D/', '', $patientAbhaId);
+                                        ?>
+                                        <a href="<?= base_url('abha/card/' . esc($abhaCardNum, 'url')) ?>"
+                                           target="_blank"
+                                           class="btn btn-sm btn-outline-success py-0"
+                                           style="font-size:12px"
+                                           title="View &amp; Print ABHA Card">
+                                            <i class="bi bi-card-image me-1"></i>ABHA Card
+                                        </a>
+                                        <?php endif; ?>
+                                    </div>
                                 </div>
                                 <?php $hpPatientSyncId = trim((string) ($data[0]->healthplix_sync_id ?? '')); ?>
                                 <?php if ($hpPatientSyncId !== '') : ?>
@@ -149,9 +181,16 @@
                                     <div class="col-lg-6">
                                         <label class="form-label">ABHA ID</label>
                                         <div class="input-group input-group-sm">
-                                            <input class="form-control" type="text" name="input_abha_id" id="input_abha_id" value="<?= esc($patientAbhaId) ?>" maxlength="14">
-                                            <button type="button" id="btn_update_abha" class="btn btn-info">Update</button>
+                                            <input class="form-control" type="text" name="input_abha_id" id="input_abha_id"
+                                                   value="<?= esc($patientAbhaId) ?>" maxlength="17"
+                                                   placeholder="14-digit or xx-xxxx-xxxx-xxxx">
+                                            <button type="button" id="btn_update_abha" class="btn btn-info">Save</button>
+                                            <button type="button" class="btn btn-outline-primary" title="Link via OTP"
+                                                onclick="openAbhaOtpModal(<?= (int)$data[0]->id ?>,'<?= esc($patientAbhaId) ?>','<?= esc($data[0]->mphone1 ?? '') ?>')">
+                                                <i class="bi bi-person-check"></i>
+                                            </button>
                                         </div>
+                                        <div class="form-text">Type to set manually, or use <i class="bi bi-person-check"></i> for OTP flow.</div>
                                     </div>
                                     <div class="col-lg-6">
                                         <button type="button" class="btn btn-warning btn-sm mt-4" onclick="load_form('<?= base_url('billing/patient/show_cards') ?>/<?=$data[0]->id?>/1');">Insurance Update</button>
@@ -271,6 +310,11 @@
                                 ?>
                             </div>
                             <?php } ?>
+
+                            <div class="tab-pane fade pt-3" id="profile-abha" role="tabpanel">
+                                <?= view('partials/abha_create_panel', ['data' => $data, 'patientAbhaId' => $patientAbhaId]) ?>
+                            </div>
+
                         </div>
                     </div>
                 </div>
@@ -396,4 +440,18 @@ function delete_invoice(inv_id) {
     }
 
 }
+
+    /* ---- ABHA OTP linked callback: refresh display ---- */
+    window.onAbhaLinked = function (patientId, abhaId) {
+        var disp = document.getElementById('abha_id_display');
+        if (disp) {
+            disp.innerHTML = '<span class="badge bg-success-subtle text-success border border-success-subtle font-monospace fs-6">' +
+                $('<div>').text(abhaId).html() + '</span>';
+        }
+        var inp = document.getElementById('input_abha_id');
+        if (inp) inp.value = abhaId;
+    };
+
 </script>
+
+<?= view('partials/abha_otp_modal') ?>

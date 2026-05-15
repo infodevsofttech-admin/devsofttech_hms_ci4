@@ -14,7 +14,7 @@
 	    <th>Age</th>
       <th>Last Visit</th>
       <th>Insurance</th>
-      <th>Action</th>
+      <th>Patient History</th>
     </tr>
     </thead>
     <tbody>
@@ -27,17 +27,8 @@
       <td><?=$data[$i]->Last_Visit ?></td>
       <td><?php echo ($data[$i]->insurance_id==0 ? 'Self': 'Insuranced'); ?></td>
       <td>
-        <a href="javascript:load_form('<?= base_url('billing/patient/show_profile_opd') ?>/<?=$data[$i]->id ?>/1');"
-           class="btn btn-info btn-sm"
-           title="Patient History"
-           aria-label="Patient History">
-          <i class="bi bi-clock-history"></i>
-        </a>
-        <a href="javascript:load_form('<?= base_url('billing/patient/person_record') ?>/<?=$data[$i]->id ?>');"
-           class="btn btn-primary btn-sm"
-           title="Open Profile"
-           aria-label="Open Profile">
-          <i class="bi bi-person-vcard"></i>
+        <a href="javascript:load_form('<?= base_url('billing/patient/show_profile_opd') ?>/<?=$data[$i]->id ?>/1');" class="btn btn-info btn-xs">
+          <span class="fa fa-history"></span> Patient History
         </a>
       </td>
     </tr>
@@ -51,51 +42,11 @@
 	    <th>Age</th>
       <th>Last Visit</th>
       <th>Insurance</th>
-      <th>Action</th>
+      <th>Patient History</th>
     </tr>
     </tfoot>
   </table>
 </div>
 <!-- /.box-body -->
 </div>
-
-<script>
-(function() {
-  var table = document.getElementById('example1');
-  if (!table) {
-    return;
-  }
-
-  // Prevent duplicate initialization when this partial is loaded repeatedly.
-  if (table.dataset.dtInit === '1') {
-    return;
-  }
-
-  // Prefer simple-datatables for static HTML tables loaded via load_form.
-  if (window.simpleDatatables && window.simpleDatatables.DataTable) {
-    try {
-      new window.simpleDatatables.DataTable(table);
-      table.dataset.dtInit = '1';
-      return;
-    } catch (e) {
-      console.warn('simple-datatables init failed for patient search table', e);
-    }
-  }
-
-  // Fallback to full jQuery DataTables plugin only (not the local shim).
-  if (window.jQuery && $.fn && $.fn.DataTable && $.fn.dataTable && $.fn.dataTable.defaults) {
-    try {
-      if (!$.fn.DataTable.isDataTable('#example1')) {
-        $('#example1').DataTable({
-          order: [[0, 'asc']],
-          pageLength: 25
-        });
-      }
-      table.dataset.dtInit = '1';
-    } catch (e) {
-      console.warn('jQuery DataTables init failed for patient search table', e);
-    }
-  }
-})();
-</script>
     

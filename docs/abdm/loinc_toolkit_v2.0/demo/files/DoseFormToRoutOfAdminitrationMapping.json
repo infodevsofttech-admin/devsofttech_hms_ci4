@@ -1,0 +1,2354 @@
+[
+	{
+		"sctId": "421026006",
+		"name": "Conventional release oral tablet",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "421366001",
+		"name": "Tablet for conventional release oral suspension",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "764780001",
+		"name": "Conventional release effervescent oral tablet",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385059007",
+		"name": "Gastro-resistant oral tablet",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "421620004",
+		"name": "Prolonged-release buccal tablet",
+		"RouteOfAdministration": {
+			"sctId": "54471007",
+			"name": "Buccal route"
+		}
+	},
+	{
+		"sctId": "385084005",
+		"name": "Conventional release sublingual tablet",
+		"RouteOfAdministration": {
+			"sctId": "37839007",
+			"name": "Sublingual route"
+		}
+	},
+	{
+		"sctId": "420692007",
+		"name": "Conventional release oral capsule",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "420929008",
+		"name": "Conventional release rectal suppository",
+		"RouteOfAdministration": {
+			"sctId": "37161004",
+			"name": "Rectal route"
+		}
+	},
+	{
+		"sctId": "385223009",
+		"name": "Powder for conventional release solution for injection",
+		"RouteOfAdministration": {
+			"sctId": "47625008",
+			"name": "Intravenous route"
+		}
+	},
+	{
+		"sctId": "385061003",
+		"name": "Modified-release oral tablet",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "420509004",
+		"name": "Conventional release oral granules",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385057009",
+		"name": "Film-coated tablet",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "767059009",
+		"name": "Conventional release vaginal pessary",
+		"RouteOfAdministration": {
+			"sctId": "16857009",
+			"name": "Vaginal route"
+		}
+	},
+	{
+		"sctId": "385207009",
+		"name": "Conventional release powder for inhalation",
+		"RouteOfAdministration": {
+			"sctId": "46713006",
+			"name": "Nasal route"
+		}
+	},
+	{
+		"sctId": "385026009",
+		"name": "Powder for conventional release oral solution",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385027000",
+		"name": "Powder for conventional release oral suspension",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385033009",
+		"name": "Powder for conventional release oral syrup",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385198000",
+		"name": "Conventional release solution for nebulizer",
+		"RouteOfAdministration": {
+			"sctId": "46713006",
+			"name": "Nasal route"
+		}
+	},
+	{
+		"sctId": "421873001",
+		"name": "Conventional release oral cream",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385038000",
+		"name": "Conventional release oral gel",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "783749008",
+		"name": "Conventional release oral ointment",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385018001",
+		"name": "Conventional release oral drops",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385041009",
+		"name": "Conventional release oral powder",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385133007",
+		"name": "Conventional release ear cream",
+		"RouteOfAdministration": {
+			"sctId": "10547007",
+			"name": "Otic route"
+		}
+	},
+	{
+		"sctId": "385134001",
+		"name": "Conventional release ear gel",
+		"RouteOfAdministration": {
+			"sctId": "10547007",
+			"name": "Otic route"
+		}
+	},
+	{
+		"sctId": "385135000",
+		"name": "Conventional release ear ointment",
+		"RouteOfAdministration": {
+			"sctId": "10547007",
+			"name": "Otic route"
+		}
+	},
+	{
+		"sctId": "421427005",
+		"name": "Conventional release ear or eye ointment",
+		"RouteOfAdministration": {
+			"sctId": "10547007; 54485002",
+			"name": "Otic route; Ophthalmic route"
+		}
+	},
+	{
+		"sctId": "385164009",
+		"name": "Conventional release ear or eye or nose ointment",
+		"RouteOfAdministration": {
+			"sctId": "10547007; 54485002; 46713006",
+			"name": "Otic route; Ophthalmic route; Nasal route"
+		}
+	},
+	{
+		"sctId": "385136004",
+		"name": "Conventional release ear drops",
+		"RouteOfAdministration": {
+			"sctId": "10547007",
+			"name": "Otic route"
+		}
+	},
+	{
+		"sctId": "420636007",
+		"name": "Conventional release ear or eye drops",
+		"RouteOfAdministration": {
+			"sctId": "10547007; 54485002",
+			"name": "Otic route; Ophthalmic route"
+		}
+	},
+	{
+		"sctId": "385130005",
+		"name": "Conventional release eye lotion",
+		"RouteOfAdministration": {
+			"sctId": "54485002",
+			"name": "Ophthalmic route"
+		}
+	},
+	{
+		"sctId": "385122009",
+		"name": "Conventional release eye gel",
+		"RouteOfAdministration": {
+			"sctId": "54485002",
+			"name": "Ophthalmic route"
+		}
+	},
+	{
+		"sctId": "385123004",
+		"name": "Conventional release eye ointment",
+		"RouteOfAdministration": {
+			"sctId": "54485002",
+			"name": "Ophthalmic route"
+		}
+	},
+	{
+		"sctId": "385124005",
+		"name": "Conventional release eye drops",
+		"RouteOfAdministration": {
+			"sctId": "54485002",
+			"name": "Ophthalmic route"
+		}
+	},
+	{
+		"sctId": "422060001",
+		"name": "Conventional release eye solution",
+		"RouteOfAdministration": {
+			"sctId": "54485002",
+			"name": "Ophthalmic route"
+		}
+	},
+	{
+		"sctId": "421628006",
+		"name": "Conventional release cutaneous cream",
+		"RouteOfAdministration": {
+			"sctId": "448598008",
+			"name": "Cutaneous route"
+		}
+	},
+	{
+		"sctId": "385112003",
+		"name": "Conventional release cutaneous powder",
+		"RouteOfAdministration": {
+			"sctId": "448598008",
+			"name": "Cutaneous route"
+		}
+	},
+	{
+		"sctId": "421343002",
+		"name": "Powder for conventional release cutaneous solution",
+		"RouteOfAdministration": {
+			"sctId": "448598008",
+			"name": "Cutaneous route"
+		}
+	},
+	{
+		"sctId": "762065001",
+		"name": "Conventional release cutaneous lotion",
+		"RouteOfAdministration": {
+			"sctId": "448598008",
+			"name": "Cutaneous route"
+		}
+	},
+	{
+		"sctId": "421949005",
+		"name": "Conventional release cutaneous gel",
+		"RouteOfAdministration": {
+			"sctId": "448598008",
+			"name": "Cutaneous route"
+		}
+	},
+	{
+		"sctId": "425753008",
+		"name": "Conventional release cutaneous ointment",
+		"RouteOfAdministration": {
+			"sctId": "448598008",
+			"name": "Cutaneous route"
+		}
+	},
+	{
+		"sctId": "385108009",
+		"name": "Conventional release cutaneous solution",
+		"RouteOfAdministration": {
+			"sctId": "448598008",
+			"name": "Cutaneous route"
+		}
+	},
+	{
+		"sctId": "785908001",
+		"name": "Conventional release cutaneous shampoo",
+		"RouteOfAdministration": {
+			"sctId": "448598008",
+			"name": "Cutaneous route"
+		}
+	},
+	{
+		"sctId": "385149009",
+		"name": "Conventional release nasal cream",
+		"RouteOfAdministration": {
+			"sctId": "46713006",
+			"name": "Nasal route"
+		}
+	},
+	{
+		"sctId": "385150009",
+		"name": "Conventional release nasal gel",
+		"RouteOfAdministration": {
+			"sctId": "46713006",
+			"name": "Nasal route"
+		}
+	},
+	{
+		"sctId": "385151008",
+		"name": "Conventional release nasal ointment",
+		"RouteOfAdministration": {
+			"sctId": "46713006",
+			"name": "Nasal route"
+		}
+	},
+	{
+		"sctId": "385157007",
+		"name": "Conventional release nasal spray",
+		"RouteOfAdministration": {
+			"sctId": "46713006",
+			"name": "Nasal route"
+		}
+	},
+	{
+		"sctId": "385081002",
+		"name": "Conventional release gingival gel",
+		"RouteOfAdministration": {
+			"sctId": "372457001",
+			"name": "Gingival route"
+		}
+	},
+	{
+		"sctId": "764478008",
+		"name": "Conventional release gingival ointment",
+		"RouteOfAdministration": {
+			"sctId": "372457001",
+			"name": "Gingival route"
+		}
+	},
+	{
+		"sctId": "385165005",
+		"name": "Conventional release vaginal cream",
+		"RouteOfAdministration": {
+			"sctId": "16857009",
+			"name": "Vaginal route"
+		}
+	},
+	{
+		"sctId": "385166006",
+		"name": "Conventional release vaginal gel",
+		"RouteOfAdministration": {
+			"sctId": "16857009",
+			"name": "Vaginal route"
+		}
+	},
+	{
+		"sctId": "385167002",
+		"name": "Conventional release vaginal ointment",
+		"RouteOfAdministration": {
+			"sctId": "16857009",
+			"name": "Vaginal route"
+		}
+	},
+	{
+		"sctId": "385183002",
+		"name": "Conventional release rectal gel",
+		"RouteOfAdministration": {
+			"sctId": "37161004",
+			"name": "Rectal route"
+		}
+	},
+	{
+		"sctId": "385184008",
+		"name": "Conventional release rectal ointment",
+		"RouteOfAdministration": {
+			"sctId": "37161004",
+			"name": "Rectal route"
+		}
+	},
+	{
+		"sctId": "385188006",
+		"name": "Conventional release rectal suspension",
+		"RouteOfAdministration": {
+			"sctId": "37161004",
+			"name": "Rectal route"
+		}
+	},
+	{
+		"sctId": "764477003",
+		"name": "Conventional release transdermal cream",
+		"RouteOfAdministration": {
+			"sctId": "45890007",
+			"name": "Transdermal route"
+		}
+	},
+	{
+		"sctId": "764802001",
+		"name": "Conventional release transdermal gel",
+		"RouteOfAdministration": {
+			"sctId": "45890007",
+			"name": "Transdermal route"
+		}
+	},
+	{
+		"sctId": "762893001",
+		"name": "Conventional release transdermal ointment",
+		"RouteOfAdministration": {
+			"sctId": "45890007",
+			"name": "Transdermal route"
+		}
+	},
+	{
+		"sctId": "385229008",
+		"name": "Conventional release solution for infusion",
+		"RouteOfAdministration": {
+			"sctId": "47625008",
+			"name": "Intravenous route"
+		}
+	},
+	{
+		"sctId": "385088008",
+		"name": "Conventional release dental gel",
+		"RouteOfAdministration": {
+			"sctId": "372449004",
+			"name": "Dental route"
+		}
+	},
+	{
+		"sctId": "385245005",
+		"name": "Conventional release urethral gel",
+		"RouteOfAdministration": {
+			"sctId": "90028008",
+			"name": "Urethral route"
+		}
+	},
+	{
+		"sctId": "385078007",
+		"name": "Conventional release oromucosal gel",
+		"RouteOfAdministration": {
+			"sctId": "372473007",
+			"name": "Oromucosal route"
+		}
+	},
+	{
+		"sctId": "385251000",
+		"name": "Conventional release endocervical gel",
+		"RouteOfAdministration": {
+			"sctId": "372450004",
+			"name": "Endocervical route"
+		}
+	},
+	{
+		"sctId": "420253005",
+		"name": "Prolonged-release oil for injection",
+		"RouteOfAdministration": {
+			"sctId": "78421000",
+			"name": "Intramuscular route"
+		}
+	},
+	{
+		"sctId": "420641004",
+		"name": "Conventional release solution for inhalation",
+		"RouteOfAdministration": {
+			"sctId": "46713006",
+			"name": "Nasal route"
+		}
+	},
+	{
+		"sctId": "385219001",
+		"name": "Conventional release solution for injection",
+		"RouteOfAdministration": {
+			"sctId": "78421000",
+			"name": "Intramuscular route"
+		}
+	},
+	{
+		"sctId": "764798002",
+		"name": "Conventional release solution for intraocular injection",
+		"RouteOfAdministration": {
+			"sctId": "372468001",
+			"name": "Intraocular route"
+		}
+	},
+	{
+		"sctId": "385221006",
+		"name": "Conventional release emulsion for injection",
+		"RouteOfAdministration": {
+			"sctId": "47625008",
+			"name": "Intravenous route"
+		}
+	},
+	{
+		"sctId": "385220007",
+		"name": "Conventional release suspension for injection",
+		"RouteOfAdministration": {
+			"sctId": "78421000",
+			"name": "Intramuscular route"
+		}
+	},
+	{
+		"sctId": "385023001",
+		"name": "Conventional release oral solution",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385032004",
+		"name": "Conventional release oral syrup",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385024007",
+		"name": "Conventional release oral suspension",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "63316001",
+		"name": "Cutaneous liniment",
+		"RouteOfAdministration": {
+			"sctId": "448598008",
+			"name": "Cutaneous route"
+		}
+	},
+	{
+		"sctId": "66076007",
+		"name": "Chewable tablet",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "70409003",
+		"name": "Oromucosal solution for mouthwash",
+		"RouteOfAdministration": {
+			"sctId": "372473007",
+			"name": "Oromucosal route"
+		}
+	},
+	{
+		"sctId": "385019009",
+		"name": "Oral drops solution",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385020003",
+		"name": "Oral drops suspension",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385021004",
+		"name": "Oral drops emulsion",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385025008",
+		"name": "Oral emulsion",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385028005",
+		"name": "Granules for oral solution",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385029002",
+		"name": "Granules for oral suspension",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385034003",
+		"name": "Granules for oral syrup",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385039008",
+		"name": "Oral paste",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385042002",
+		"name": "Effervescent oral powder",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385044001",
+		"name": "Effervescent oral granules",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385045000",
+		"name": "Gastro-resistant oral granules",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385046004",
+		"name": "Prolonged-release oral granules",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385047008",
+		"name": "Modified-release oral granules",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385052003",
+		"name": "Gastro-resistant oral capsule",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385053008",
+		"name": "Prolonged-release oral capsule",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385054002",
+		"name": "Modified-release oral capsule",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385060002",
+		"name": "Prolonged-release oral tablet",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385062005",
+		"name": "Oral lyophilisate",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385063000",
+		"name": "Oral gum",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385065007",
+		"name": "Oromucosal solution for gargle",
+		"RouteOfAdministration": {
+			"sctId": "372473007",
+			"name": "Oromucosal route"
+		}
+	},
+	{
+		"sctId": "385070000",
+		"name": "Oromucosal solution",
+		"RouteOfAdministration": {
+			"sctId": "372473007",
+			"name": "Oromucosal route"
+		}
+	},
+	{
+		"sctId": "385071001",
+		"name": "Oromucosal suspension",
+		"RouteOfAdministration": {
+			"sctId": "372473007",
+			"name": "Oromucosal route"
+		}
+	},
+	{
+		"sctId": "385072008",
+		"name": "Oromucosal drops",
+		"RouteOfAdministration": {
+			"sctId": "372473007",
+			"name": "Oromucosal route"
+		}
+	},
+	{
+		"sctId": "385073003",
+		"name": "Oromucosal spray",
+		"RouteOfAdministration": {
+			"sctId": "372473007",
+			"name": "Oromucosal route"
+		}
+	},
+	{
+		"sctId": "385074009",
+		"name": "Sublingual spray",
+		"RouteOfAdministration": {
+			"sctId": "37839007",
+			"name": "Sublingual route"
+		}
+	},
+	{
+		"sctId": "385077002",
+		"name": "Gingival solution",
+		"RouteOfAdministration": {
+			"sctId": "372457001",
+			"name": "Gingival route"
+		}
+	},
+	{
+		"sctId": "385079004",
+		"name": "Oromucosal paste",
+		"RouteOfAdministration": {
+			"sctId": "372473007",
+			"name": "Oromucosal route"
+		}
+	},
+	{
+		"sctId": "385082009",
+		"name": "Gingival paste",
+		"RouteOfAdministration": {
+			"sctId": "372457001",
+			"name": "Gingival route"
+		}
+	},
+	{
+		"sctId": "385085006",
+		"name": "Buccal tablet",
+		"RouteOfAdministration": {
+			"sctId": "54471007",
+			"name": "Buccal route"
+		}
+	},
+	{
+		"sctId": "385086007",
+		"name": "Prolonged-release muco-adhesive buccal tablet",
+		"RouteOfAdministration": {
+			"sctId": "54471007",
+			"name": "Buccal route"
+		}
+	},
+	{
+		"sctId": "385089000",
+		"name": "Dental stick",
+		"RouteOfAdministration": {
+			"sctId": "372449004",
+			"name": "Dental route"
+		}
+	},
+	{
+		"sctId": "385090009",
+		"name": "Prolonged-release dental insert",
+		"RouteOfAdministration": {
+			"sctId": "372449004",
+			"name": "Dental route"
+		}
+	},
+	{
+		"sctId": "385091008",
+		"name": "Dental powder",
+		"RouteOfAdministration": {
+			"sctId": "372449004",
+			"name": "Dental route"
+		}
+	},
+	{
+		"sctId": "385094000",
+		"name": "Dental solution",
+		"RouteOfAdministration": {
+			"sctId": "372449004",
+			"name": "Dental route"
+		}
+	},
+	{
+		"sctId": "385095004",
+		"name": "Dental suspension",
+		"RouteOfAdministration": {
+			"sctId": "372449004",
+			"name": "Dental route"
+		}
+	},
+	{
+		"sctId": "385096003",
+		"name": "Dental emulsion",
+		"RouteOfAdministration": {
+			"sctId": "372449004",
+			"name": "Dental route"
+		}
+	},
+	{
+		"sctId": "385102005",
+		"name": "Cutaneous paste",
+		"RouteOfAdministration": {
+			"sctId": "448598008",
+			"name": "Cutaneous route"
+		}
+	},
+	{
+		"sctId": "385103000",
+		"name": "Cutaneous foam",
+		"RouteOfAdministration": {
+			"sctId": "448598008",
+			"name": "Cutaneous route"
+		}
+	},
+	{
+		"sctId": "385105007",
+		"name": "Cutaneous spray",
+		"RouteOfAdministration": {
+			"sctId": "448598008",
+			"name": "Cutaneous route"
+		}
+	},
+	{
+		"sctId": "385106008",
+		"name": "Cutaneous solution spray",
+		"RouteOfAdministration": {
+			"sctId": "448598008",
+			"name": "Cutaneous route"
+		}
+	},
+	{
+		"sctId": "385110006",
+		"name": "Cutaneous suspension",
+		"RouteOfAdministration": {
+			"sctId": "448598008",
+			"name": "Cutaneous route"
+		}
+	},
+	{
+		"sctId": "385111005",
+		"name": "Cutaneous emulsion",
+		"RouteOfAdministration": {
+			"sctId": "448598008",
+			"name": "Cutaneous route"
+		}
+	},
+	{
+		"sctId": "385114002",
+		"name": "Prolonged-release transdermal patch",
+		"RouteOfAdministration": {
+			"sctId": "45890007",
+			"name": "Transdermal route"
+		}
+	},
+	{
+		"sctId": "385118004",
+		"name": "Cutaneous stick",
+		"RouteOfAdministration": {
+			"sctId": "448598008",
+			"name": "Cutaneous route"
+		}
+	},
+	{
+		"sctId": "385119007",
+		"name": "Cutaneous sponge",
+		"RouteOfAdministration": {
+			"sctId": "448598008",
+			"name": "Cutaneous route"
+		}
+	},
+	{
+		"sctId": "385121002",
+		"name": "Eye cream",
+		"RouteOfAdministration": {
+			"sctId": "54485002",
+			"name": "Ophthalmic route"
+		}
+	},
+	{
+		"sctId": "385125006",
+		"name": "Eye drops solution",
+		"RouteOfAdministration": {
+			"sctId": "54485002",
+			"name": "Ophthalmic route"
+		}
+	},
+	{
+		"sctId": "385128008",
+		"name": "Prolonged-release eye drops",
+		"RouteOfAdministration": {
+			"sctId": "54485002",
+			"name": "Ophthalmic route"
+		}
+	},
+	{
+		"sctId": "385132002",
+		"name": "Prolonged-release ophthalmic insert",
+		"RouteOfAdministration": {
+			"sctId": "54485002",
+			"name": "Ophthalmic route"
+		}
+	},
+	{
+		"sctId": "385137008",
+		"name": "Ear drops solution",
+		"RouteOfAdministration": {
+			"sctId": "10547007",
+			"name": "Otic route"
+		}
+	},
+	{
+		"sctId": "385138003",
+		"name": "Ear drops emulsion",
+		"RouteOfAdministration": {
+			"sctId": "10547007",
+			"name": "Otic route"
+		}
+	},
+	{
+		"sctId": "385139006",
+		"name": "Ear powder",
+		"RouteOfAdministration": {
+			"sctId": "10547007",
+			"name": "Otic route"
+		}
+	},
+	{
+		"sctId": "385140008",
+		"name": "Ear spray",
+		"RouteOfAdministration": {
+			"sctId": "10547007",
+			"name": "Otic route"
+		}
+	},
+	{
+		"sctId": "385141007",
+		"name": "Ear spray solution",
+		"RouteOfAdministration": {
+			"sctId": "10547007",
+			"name": "Otic route"
+		}
+	},
+	{
+		"sctId": "385142000",
+		"name": "Ear spray suspension",
+		"RouteOfAdministration": {
+			"sctId": "10547007",
+			"name": "Otic route"
+		}
+	},
+	{
+		"sctId": "385143005",
+		"name": "Ear spray emulsion",
+		"RouteOfAdministration": {
+			"sctId": "10547007",
+			"name": "Otic route"
+		}
+	},
+	{
+		"sctId": "385147006",
+		"name": "Ear tampon",
+		"RouteOfAdministration": {
+			"sctId": "10547007",
+			"name": "Otic route"
+		}
+	},
+	{
+		"sctId": "385148001",
+		"name": "Otic stick",
+		"RouteOfAdministration": {
+			"sctId": "10547007",
+			"name": "Otic route"
+		}
+	},
+	{
+		"sctId": "385152001",
+		"name": "Nasal drops",
+		"RouteOfAdministration": {
+			"sctId": "46713006",
+			"name": "Nasal route"
+		}
+	},
+	{
+		"sctId": "385153006",
+		"name": "Nasal drops solution",
+		"RouteOfAdministration": {
+			"sctId": "46713006",
+			"name": "Nasal route"
+		}
+	},
+	{
+		"sctId": "385154000",
+		"name": "Nasal drops suspension",
+		"RouteOfAdministration": {
+			"sctId": "46713006",
+			"name": "Nasal route"
+		}
+	},
+	{
+		"sctId": "385155004",
+		"name": "Nasal drops emulsion",
+		"RouteOfAdministration": {
+			"sctId": "46713006",
+			"name": "Nasal route"
+		}
+	},
+	{
+		"sctId": "385156003",
+		"name": "Nasal powder",
+		"RouteOfAdministration": {
+			"sctId": "46713006",
+			"name": "Nasal route"
+		}
+	},
+	{
+		"sctId": "385158002",
+		"name": "Nasal solution spray",
+		"RouteOfAdministration": {
+			"sctId": "46713006",
+			"name": "Nasal route"
+		}
+	},
+	{
+		"sctId": "385159005",
+		"name": "Nasal suspension spray",
+		"RouteOfAdministration": {
+			"sctId": "46713006",
+			"name": "Nasal route"
+		}
+	},
+	{
+		"sctId": "385160000",
+		"name": "Nasal emulsion spray",
+		"RouteOfAdministration": {
+			"sctId": "46713006",
+			"name": "Nasal route"
+		}
+	},
+	{
+		"sctId": "385162008",
+		"name": "Nasal stick",
+		"RouteOfAdministration": {
+			"sctId": "46713006",
+			"name": "Nasal route"
+		}
+	},
+	{
+		"sctId": "385163003",
+		"name": "Ear or eye or nose drops",
+		"RouteOfAdministration": {
+			"sctId": "10547007; 54485002",
+			"name": "Otic route; Ophthalmic route"
+		}
+	},
+	{
+		"sctId": "385168007",
+		"name": "Vaginal foam",
+		"RouteOfAdministration": {
+			"sctId": "16857009",
+			"name": "Vaginal route"
+		}
+	},
+	{
+		"sctId": "385170003",
+		"name": "Vaginal solution",
+		"RouteOfAdministration": {
+			"sctId": "16857009",
+			"name": "Vaginal route"
+		}
+	},
+	{
+		"sctId": "385171004",
+		"name": "Vaginal suspension",
+		"RouteOfAdministration": {
+			"sctId": "16857009",
+			"name": "Vaginal route"
+		}
+	},
+	{
+		"sctId": "385172006",
+		"name": "Vaginal emulsion",
+		"RouteOfAdministration": {
+			"sctId": "16857009",
+			"name": "Vaginal route"
+		}
+	},
+	{
+		"sctId": "385173001",
+		"name": "Tablet for vaginal solution",
+		"RouteOfAdministration": {
+			"sctId": "16857009",
+			"name": "Vaginal route"
+		}
+	},
+	{
+		"sctId": "385175008",
+		"name": "Vaginal capsule",
+		"RouteOfAdministration": {
+			"sctId": "16857009",
+			"name": "Vaginal route"
+		}
+	},
+	{
+		"sctId": "385176009",
+		"name": "Hard vaginal capsule",
+		"RouteOfAdministration": {
+			"sctId": "16857009",
+			"name": "Vaginal route"
+		}
+	},
+	{
+		"sctId": "385177000",
+		"name": "Soft vaginal capsule",
+		"RouteOfAdministration": {
+			"sctId": "16857009",
+			"name": "Vaginal route"
+		}
+	},
+	{
+		"sctId": "385178005",
+		"name": "Vaginal tablet",
+		"RouteOfAdministration": {
+			"sctId": "16857009",
+			"name": "Vaginal route"
+		}
+	},
+	{
+		"sctId": "385179002",
+		"name": "Effervescent vaginal tablet",
+		"RouteOfAdministration": {
+			"sctId": "16857009",
+			"name": "Vaginal route"
+		}
+	},
+	{
+		"sctId": "385182007",
+		"name": "Rectal cream",
+		"RouteOfAdministration": {
+			"sctId": "37161004",
+			"name": "Rectal route"
+		}
+	},
+	{
+		"sctId": "385185009",
+		"name": "Rectal foam",
+		"RouteOfAdministration": {
+			"sctId": "37161004",
+			"name": "Rectal route"
+		}
+	},
+	{
+		"sctId": "385187001",
+		"name": "Rectal solution",
+		"RouteOfAdministration": {
+			"sctId": "37161004",
+			"name": "Rectal route"
+		}
+	},
+	{
+		"sctId": "385189003",
+		"name": "Rectal emulsion",
+		"RouteOfAdministration": {
+			"sctId": "37161004",
+			"name": "Rectal route"
+		}
+	},
+	{
+		"sctId": "385191006",
+		"name": "Powder for rectal suspension",
+		"RouteOfAdministration": {
+			"sctId": "37161004",
+			"name": "Rectal route"
+		}
+	},
+	{
+		"sctId": "385192004",
+		"name": "Tablet for rectal solution",
+		"RouteOfAdministration": {
+			"sctId": "37161004",
+			"name": "Rectal route"
+		}
+	},
+	{
+		"sctId": "385193009",
+		"name": "Tablet for rectal suspension",
+		"RouteOfAdministration": {
+			"sctId": "37161004",
+			"name": "Rectal route"
+		}
+	},
+	{
+		"sctId": "385195002",
+		"name": "Rectal capsule",
+		"RouteOfAdministration": {
+			"sctId": "37161004",
+			"name": "Rectal route"
+		}
+	},
+	{
+		"sctId": "385196001",
+		"name": "Rectal tampon",
+		"RouteOfAdministration": {
+			"sctId": "37161004",
+			"name": "Rectal route"
+		}
+	},
+	{
+		"sctId": "385217004",
+		"name": "Gas for inhalation",
+		"RouteOfAdministration": {
+			"sctId": "46713006",
+			"name": "Nasal route"
+		}
+	},
+	{
+		"sctId": "385224003",
+		"name": "Powder for suspension for injection",
+		"RouteOfAdministration": {
+			"sctId": "47625008",
+			"name": "Intravenous route"
+		}
+	},
+	{
+		"sctId": "385238005",
+		"name": "Peritoneal dialysis solution",
+		"RouteOfAdministration": {
+			"sctId": "38239002",
+			"name": "Intraperitoneal route"
+		}
+	},
+	{
+		"sctId": "385242008",
+		"name": "Intravesical solution",
+		"RouteOfAdministration": {
+			"sctId": "372471009",
+			"name": "Intravesical route"
+		}
+	},
+	{
+		"sctId": "385246006",
+		"name": "Urethral stick",
+		"RouteOfAdministration": {
+			"sctId": "90028008",
+			"name": "Urethral route"
+		}
+	},
+	{
+		"sctId": "385247002",
+		"name": "Solution for endotracheopulmonary instillation",
+		"RouteOfAdministration": {
+			"sctId": "372452007",
+			"name": "Endotracheopulmonary route"
+		}
+	},
+	{
+		"sctId": "385248007",
+		"name": "Powder for solution for endotracheal instillation",
+		"RouteOfAdministration": {
+			"sctId": "372452007",
+			"name": "Endotracheopulmonary route"
+		}
+	},
+	{
+		"sctId": "385250004",
+		"name": "Suspension for endotracheopulmonary instillation",
+		"RouteOfAdministration": {
+			"sctId": "372452007",
+			"name": "Endotracheopulmonary route"
+		}
+	},
+	{
+		"sctId": "385258006",
+		"name": "Gastroenteral solution",
+		"RouteOfAdministration": {
+			"sctId": "372454008",
+			"name": "Gastroenteral route"
+		}
+	},
+	{
+		"sctId": "385259003",
+		"name": "Gastroenteral suspension",
+		"RouteOfAdministration": {
+			"sctId": "372454008",
+			"name": "Gastroenteral route"
+		}
+	},
+	{
+		"sctId": "385260008",
+		"name": "Gastroenteral emulsion",
+		"RouteOfAdministration": {
+			"sctId": "372454008",
+			"name": "Gastroenteral route"
+		}
+	},
+	{
+		"sctId": "385268001",
+		"name": "Oral dose form",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "385273007",
+		"name": "Dental dose form",
+		"RouteOfAdministration": {
+			"sctId": "372449004",
+			"name": "Dental route"
+		}
+	},
+	{
+		"sctId": "385276004",
+		"name": "Ocular dose form",
+		"RouteOfAdministration": {
+			"sctId": "372472002",
+			"name": "Ocular route"
+		}
+	},
+	{
+		"sctId": "385277008",
+		"name": "Otic dose form",
+		"RouteOfAdministration": {
+			"sctId": "10547007",
+			"name": "Otic route"
+		}
+	},
+	{
+		"sctId": "385278003",
+		"name": "Cutaneous powder spray",
+		"RouteOfAdministration": {
+			"sctId": "448598008",
+			"name": "Cutaneous route"
+		}
+	},
+	{
+		"sctId": "385279006",
+		"name": "Cutaneous suspension spray",
+		"RouteOfAdministration": {
+			"sctId": "448598008",
+			"name": "Cutaneous route"
+		}
+	},
+	{
+		"sctId": "385280009",
+		"name": "Gastroenteral dose form",
+		"RouteOfAdministration": {
+			"sctId": "372454008",
+			"name": "Gastroenteral route"
+		}
+	},
+	{
+		"sctId": "385282001",
+		"name": "Endocervical dose form",
+		"RouteOfAdministration": {
+			"sctId": "372450004",
+			"name": "Endocervical route"
+		}
+	},
+	{
+		"sctId": "385289005",
+		"name": "Rectal dose form",
+		"RouteOfAdministration": {
+			"sctId": "37161004",
+			"name": "Rectal route"
+		}
+	},
+	{
+		"sctId": "385290001",
+		"name": "Nasal dose form",
+		"RouteOfAdministration": {
+			"sctId": "46713006",
+			"name": "Nasal route"
+		}
+	},
+	{
+		"sctId": "385292009",
+		"name": "Vaginal dose form",
+		"RouteOfAdministration": {
+			"sctId": "16857009",
+			"name": "Vaginal route"
+		}
+	},
+	{
+		"sctId": "414951009",
+		"name": "Oral elixir",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "420283001",
+		"name": "Nasal emulsion",
+		"RouteOfAdministration": {
+			"sctId": "46713006",
+			"name": "Nasal route"
+		}
+	},
+	{
+		"sctId": "420292003",
+		"name": "Rectal powder",
+		"RouteOfAdministration": {
+			"sctId": "37161004",
+			"name": "Rectal route"
+		}
+	},
+	{
+		"sctId": "420378007",
+		"name": "Prolonged-release film-coated oral tablet",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "420536002",
+		"name": "Vaginal powder",
+		"RouteOfAdministration": {
+			"sctId": "16857009",
+			"name": "Vaginal route"
+		}
+	},
+	{
+		"sctId": "420540006",
+		"name": "Cutaneous oil",
+		"RouteOfAdministration": {
+			"sctId": "448598008",
+			"name": "Cutaneous route"
+		}
+	},
+	{
+		"sctId": "420631002",
+		"name": "Vaginal insert",
+		"RouteOfAdministration": {
+			"sctId": "16857009",
+			"name": "Vaginal route"
+		}
+	},
+	{
+		"sctId": "420736004",
+		"name": "Eye suspension",
+		"RouteOfAdministration": {
+			"sctId": "54485002",
+			"name": "Ophthalmic route"
+		}
+	},
+	{
+		"sctId": "420761001",
+		"name": "Urethral suppository",
+		"RouteOfAdministration": {
+			"sctId": "90028008",
+			"name": "Urethral route"
+		}
+	},
+	{
+		"sctId": "420873008",
+		"name": "Prolonged-release suspension for injection",
+		"RouteOfAdministration": {
+			"sctId": "78421000",
+			"name": "Intramuscular route"
+		}
+	},
+	{
+		"sctId": "420891003",
+		"name": "Ear drops suspension",
+		"RouteOfAdministration": {
+			"sctId": "10547007",
+			"name": "Otic route"
+		}
+	},
+	{
+		"sctId": "420901005",
+		"name": "Ear emulsion",
+		"RouteOfAdministration": {
+			"sctId": "10547007",
+			"name": "Otic route"
+		}
+	},
+	{
+		"sctId": "421155001",
+		"name": "Gastro-resistant and prolonged-release oral tablet",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "421195004",
+		"name": "Vaginal suppository",
+		"RouteOfAdministration": {
+			"sctId": "16857009",
+			"name": "Vaginal route"
+		}
+	},
+	{
+		"sctId": "421221008",
+		"name": "Suspension for inhalation",
+		"RouteOfAdministration": {
+			"sctId": "46713006",
+			"name": "Nasal route"
+		}
+	},
+	{
+		"sctId": "421300005",
+		"name": "Prolonged-release film-coated oral capsule",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "421382000",
+		"name": "Ear suspension",
+		"RouteOfAdministration": {
+			"sctId": "10547007",
+			"name": "Otic route"
+		}
+	},
+	{
+		"sctId": "421425002",
+		"name": "Powder for inhalation solution",
+		"RouteOfAdministration": {
+			"sctId": "46713006",
+			"name": "Nasal route"
+		}
+	},
+	{
+		"sctId": "421446006",
+		"name": "Granules for prolonged-release oral suspension",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "421701006",
+		"name": "Tablet for oral solution",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "421713001",
+		"name": "Ear solution",
+		"RouteOfAdministration": {
+			"sctId": "10547007",
+			"name": "Otic route"
+		}
+	},
+	{
+		"sctId": "421716009",
+		"name": "Prolonged-release transdermal drug delivery system",
+		"RouteOfAdministration": {
+			"sctId": "45890007",
+			"name": "Transdermal route"
+		}
+	},
+	{
+		"sctId": "421752008",
+		"name": "Gastro-resistant and prolonged-release oral capsule",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "421857007",
+		"name": "Powder for eye solution",
+		"RouteOfAdministration": {
+			"sctId": "54485002",
+			"name": "Ophthalmic route"
+		}
+	},
+	{
+		"sctId": "421987002",
+		"name": "Intraocular solution",
+		"RouteOfAdministration": {
+			"sctId": "372468001",
+			"name": "Intraocular route"
+		}
+	},
+	{
+		"sctId": "422068008",
+		"name": "Eye drops suspension",
+		"RouteOfAdministration": {
+			"sctId": "54485002",
+			"name": "Ophthalmic route"
+		}
+	},
+	{
+		"sctId": "422080000",
+		"name": "Nasal suspension",
+		"RouteOfAdministration": {
+			"sctId": "46713006",
+			"name": "Nasal route"
+		}
+	},
+	{
+		"sctId": "422085005",
+		"name": "Powder for eye suspension",
+		"RouteOfAdministration": {
+			"sctId": "54485002",
+			"name": "Ophthalmic route"
+		}
+	},
+	{
+		"sctId": "422201009",
+		"name": "Tablet for cutaneous solution",
+		"RouteOfAdministration": {
+			"sctId": "448598008",
+			"name": "Cutaneous route"
+		}
+	},
+	{
+		"sctId": "422336005",
+		"name": "Nasal solution",
+		"RouteOfAdministration": {
+			"sctId": "46713006",
+			"name": "Nasal route"
+		}
+	},
+	{
+		"sctId": "422353003",
+		"name": "Prolonged-release oral suspension",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "424552006",
+		"name": "Vaginal sponge",
+		"RouteOfAdministration": {
+			"sctId": "16857009",
+			"name": "Vaginal route"
+		}
+	},
+	{
+		"sctId": "425965000",
+		"name": "Rectal spray",
+		"RouteOfAdministration": {
+			"sctId": "37161004",
+			"name": "Rectal route"
+		}
+	},
+	{
+		"sctId": "426823003",
+		"name": "Vaginal spray",
+		"RouteOfAdministration": {
+			"sctId": "16857009",
+			"name": "Vaginal route"
+		}
+	},
+	{
+		"sctId": "442015005",
+		"name": "Intrauterine dose form",
+		"RouteOfAdministration": {
+			"sctId": "62226000",
+			"name": "Intrauterine route"
+		}
+	},
+	{
+		"sctId": "443424002",
+		"name": "Buccal film",
+		"RouteOfAdministration": {
+			"sctId": "54471007",
+			"name": "Buccal route"
+		}
+	},
+	{
+		"sctId": "447050008",
+		"name": "Orodispersible film",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "447079001",
+		"name": "Orodispersible tablet",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "719200003",
+		"name": "Ophthalmic strip",
+		"RouteOfAdministration": {
+			"sctId": "54485002",
+			"name": "Ophthalmic route"
+		}
+	},
+	{
+		"sctId": "739147005",
+		"name": "Rectal suspension spray",
+		"RouteOfAdministration": {
+			"sctId": "37161004",
+			"name": "Rectal route"
+		}
+	},
+	{
+		"sctId": "739148000",
+		"name": "Rectal solution spray",
+		"RouteOfAdministration": {
+			"sctId": "37161004",
+			"name": "Rectal route"
+		}
+	},
+	{
+		"sctId": "739371005",
+		"name": "Vaginal suspension spray",
+		"RouteOfAdministration": {
+			"sctId": "16857009",
+			"name": "Vaginal route"
+		}
+	},
+	{
+		"sctId": "739372003",
+		"name": "Vaginal solution spray",
+		"RouteOfAdministration": {
+			"sctId": "16857009",
+			"name": "Vaginal route"
+		}
+	},
+	{
+		"sctId": "739662008",
+		"name": "Vaginal tampon",
+		"RouteOfAdministration": {
+			"sctId": "16857009",
+			"name": "Vaginal route"
+		}
+	},
+	{
+		"sctId": "740548000",
+		"name": "Urethral dose form",
+		"RouteOfAdministration": {
+			"sctId": "90028008",
+			"name": "Urethral route"
+		}
+	},
+	{
+		"sctId": "740596000",
+		"name": "Cutaneous dose form",
+		"RouteOfAdministration": {
+			"sctId": "448598008",
+			"name": "Cutaneous route"
+		}
+	},
+	{
+		"sctId": "745991000",
+		"name": "Oromucosal dose form",
+		"RouteOfAdministration": {
+			"sctId": "372473007",
+			"name": "Oromucosal route"
+		}
+	},
+	{
+		"sctId": "746008008",
+		"name": "Gingival dose form",
+		"RouteOfAdministration": {
+			"sctId": "372457001",
+			"name": "Gingival route"
+		}
+	},
+	{
+		"sctId": "761845009",
+		"name": "Transdermal dose form",
+		"RouteOfAdministration": {
+			"sctId": "45890007",
+			"name": "Transdermal route"
+		}
+	},
+	{
+		"sctId": "761899004",
+		"name": "Powder for rectal solution",
+		"RouteOfAdministration": {
+			"sctId": "37161004",
+			"name": "Rectal route"
+		}
+	},
+	{
+		"sctId": "761900009",
+		"name": "Eye drops emulsion",
+		"RouteOfAdministration": {
+			"sctId": "54485002",
+			"name": "Ophthalmic route"
+		}
+	},
+	{
+		"sctId": "761901008",
+		"name": "Granules for gastro-resistant oral suspension",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "761905004",
+		"name": "Oromucosal spray solution",
+		"RouteOfAdministration": {
+			"sctId": "372473007",
+			"name": "Oromucosal route"
+		}
+	},
+	{
+		"sctId": "761906003",
+		"name": "Oromucosal suspension spray",
+		"RouteOfAdministration": {
+			"sctId": "372473007",
+			"name": "Oromucosal route"
+		}
+	},
+	{
+		"sctId": "761907007",
+		"name": "Powder for intravesical suspension",
+		"RouteOfAdministration": {
+			"sctId": "372471009",
+			"name": "Intravesical route"
+		}
+	},
+	{
+		"sctId": "762064002",
+		"name": "Eye emulsion",
+		"RouteOfAdministration": {
+			"sctId": "54485002",
+			"name": "Ophthalmic route"
+		}
+	},
+	{
+		"sctId": "762071007",
+		"name": "Intraocular dose form",
+		"RouteOfAdministration": {
+			"sctId": "372468001",
+			"name": "Intraocular route"
+		}
+	},
+	{
+		"sctId": "762072000",
+		"name": "Cutaneous tape",
+		"RouteOfAdministration": {
+			"sctId": "448598008",
+			"name": "Cutaneous route"
+		}
+	},
+	{
+		"sctId": "762895008",
+		"name": "Granules for oromucosal solution",
+		"RouteOfAdministration": {
+			"sctId": "372473007",
+			"name": "Oromucosal route"
+		}
+	},
+	{
+		"sctId": "763340003",
+		"name": "Sublingual solution spray",
+		"RouteOfAdministration": {
+			"sctId": "37839007",
+			"name": "Sublingual route"
+		}
+	},
+	{
+		"sctId": "763445009",
+		"name": "Dental paste",
+		"RouteOfAdministration": {
+			"sctId": "372449004",
+			"name": "Dental route"
+		}
+	},
+	{
+		"sctId": "763484004",
+		"name": "Intrauterine solution",
+		"RouteOfAdministration": {
+			"sctId": "62226000",
+			"name": "Intrauterine route"
+		}
+	},
+	{
+		"sctId": "763485003",
+		"name": "Intrauterine suspension",
+		"RouteOfAdministration": {
+			"sctId": "62226000",
+			"name": "Intrauterine route"
+		}
+	},
+	{
+		"sctId": "763819006",
+		"name": "Prolonged-release transdermal film",
+		"RouteOfAdministration": {
+			"sctId": "45890007",
+			"name": "Transdermal route"
+		}
+	},
+	{
+		"sctId": "763820000",
+		"name": "Gastro-resistant oral suspension",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "763823003",
+		"name": "Powder for oromucosal gel",
+		"RouteOfAdministration": {
+			"sctId": "372473007",
+			"name": "Oromucosal route"
+		}
+	},
+	{
+		"sctId": "763852000",
+		"name": "Conventional release buccal spray",
+		"RouteOfAdministration": {
+			"sctId": "54471007",
+			"name": "Buccal route"
+		}
+	},
+	{
+		"sctId": "764296002",
+		"name": "Prolonged-release subcutaneous implant",
+		"RouteOfAdministration": {
+			"sctId": "448598008",
+			"name": "Cutaneous route"
+		}
+	},
+	{
+		"sctId": "764297006",
+		"name": "Transdermal foam",
+		"RouteOfAdministration": {
+			"sctId": "45890007",
+			"name": "Transdermal route"
+		}
+	},
+	{
+		"sctId": "764446000",
+		"name": "Nasal paste",
+		"RouteOfAdministration": {
+			"sctId": "46713006",
+			"name": "Nasal route"
+		}
+	},
+	{
+		"sctId": "764485007",
+		"name": "Cutaneous patch",
+		"RouteOfAdministration": {
+			"sctId": "448598008",
+			"name": "Cutaneous route"
+		}
+	},
+	{
+		"sctId": "764486008",
+		"name": "Prolonged-release cutaneous patch",
+		"RouteOfAdministration": {
+			"sctId": "448598008",
+			"name": "Cutaneous route"
+		}
+	},
+	{
+		"sctId": "764499006",
+		"name": "Buccal lozenge",
+		"RouteOfAdministration": {
+			"sctId": "54471007",
+			"name": "Buccal route"
+		}
+	},
+	{
+		"sctId": "764501003",
+		"name": "Oromucosal lozenge",
+		"RouteOfAdministration": {
+			"sctId": "372473007",
+			"name": "Oromucosal route"
+		}
+	},
+	{
+		"sctId": "764671009",
+		"name": "Sublingual dose form",
+		"RouteOfAdministration": {
+			"sctId": "37839007",
+			"name": "Sublingual route"
+		}
+	},
+	{
+		"sctId": "764770000",
+		"name": "Dual delayed-release oral capsule",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "764772008",
+		"name": "Prolonged-release vaginal ring",
+		"RouteOfAdministration": {
+			"sctId": "16857009",
+			"name": "Vaginal route"
+		}
+	},
+	{
+		"sctId": "764773003",
+		"name": "Oromucosal pastille",
+		"RouteOfAdministration": {
+			"sctId": "372473007",
+			"name": "Oromucosal route"
+		}
+	},
+	{
+		"sctId": "764774009",
+		"name": "Conventional release and prolonged-release oral tablet",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "764776006",
+		"name": "Dental pellet",
+		"RouteOfAdministration": {
+			"sctId": "372449004",
+			"name": "Dental route"
+		}
+	},
+	{
+		"sctId": "764787003",
+		"name": "Oropharyngeal foam",
+		"RouteOfAdministration": {
+			"sctId": "418664002",
+			"name": "Oropharyngeal route"
+		}
+	},
+	{
+		"sctId": "764788008",
+		"name": "Oropharyngeal solution",
+		"RouteOfAdministration": {
+			"sctId": "418664002",
+			"name": "Oropharyngeal route"
+		}
+	},
+	{
+		"sctId": "764792001",
+		"name": "Pulmonary dose form",
+		"RouteOfAdministration": {
+			"sctId": "404818005",
+			"name": "Intratracheal route"
+		}
+	},
+	{
+		"sctId": "764803006",
+		"name": "Transdermal spray",
+		"RouteOfAdministration": {
+			"sctId": "45890007",
+			"name": "Transdermal route"
+		}
+	},
+	{
+		"sctId": "764842006",
+		"name": "Prolonged-release ocular implant",
+		"RouteOfAdministration": {
+			"sctId": "372472002",
+			"name": "Ocular route"
+		}
+	},
+	{
+		"sctId": "765061001",
+		"name": "Gastro-resistant oral soft capsule",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "765062008",
+		"name": "Prolonged-release oral soft capsule",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "765064009",
+		"name": "Modified-release oral soft capsule",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "765163001",
+		"name": "Ear or eye drops solution",
+		"RouteOfAdministration": {
+			"sctId": "10547007; 54485002",
+			"name": "Otic route; Ophthalmic route"
+		}
+	},
+	{
+		"sctId": "765164007",
+		"name": "Ear or eye or nose drops solution",
+		"RouteOfAdministration": {
+			"sctId": "10547007; 54485002; 46713006",
+			"name": "Otic route; Ophthalmic route; Nasal route"
+		}
+	},
+	{
+		"sctId": "765166009",
+		"name": "Ocular or otic dose form",
+		"RouteOfAdministration": {
+			"sctId": "10547007; 54485002",
+			"name": "Otic route; Ophthalmic route"
+		}
+	},
+	{
+		"sctId": "765167000",
+		"name": "Nasal or ocular or otic dose form",
+		"RouteOfAdministration": {
+			"sctId": "10547007; 54485002; 46713006",
+			"name": "Otic route; Ophthalmic route; Nasal route"
+		}
+	},
+	{
+		"sctId": "766233005",
+		"name": "Gastro-resistant and prolonged-release oral granules",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "766234004",
+		"name": "Powder for suspension for inhalation",
+		"RouteOfAdministration": {
+			"sctId": "46713006",
+			"name": "Nasal route"
+		}
+	},
+	{
+		"sctId": "766964003",
+		"name": "Oropharyngeal dose form",
+		"RouteOfAdministration": {
+			"sctId": "418664002",
+			"name": "Oropharyngeal route"
+		}
+	},
+	{
+		"sctId": "769000008",
+		"name": "Subcutaneous dose form",
+		"RouteOfAdministration": {
+			"sctId": "448598008",
+			"name": "Cutaneous route"
+		}
+	},
+	{
+		"sctId": "769115006",
+		"name": "Effervescent powder for oral solution",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "769120006",
+		"name": "Effervescent powder for oral suspension",
+		"RouteOfAdministration": {
+			"sctId": "26643006",
+			"name": "Oral route"
+		}
+	},
+	{
+		"sctId": "770109000",
+		"name": "Powder for suspension for endotracheal instillation",
+		"RouteOfAdministration": {
+			"sctId": "372452007",
+			"name": "Endotracheopulmonary route"
+		}
+	},
+	{
+		"sctId": "772805002",
+		"name": "Endotracheopulmonary dose form",
+		"RouteOfAdministration": {
+			"sctId": "372452007",
+			"name": "Endotracheopulmonary route"
+		}
+	},
+	{
+		"sctId": "772806001",
+		"name": "Buccal dose form",
+		"RouteOfAdministration": {
+			"sctId": "54471007",
+			"name": "Buccal route"
+		}
+	},
+	{
+		"sctId": "385287007",
+		"name": "Parenteral dose form",
+		"RouteOfAdministration": {
+			"sctId": "47625008",
+			"name": "Intravenous route"
+		}
+	},
+	{
+		"sctId": "421522002",
+		"name": "Liposomal suspension for injection",
+		"RouteOfAdministration": {
+			"sctId": "78421000",
+			"name": "Intramuscular route"
+		}
+	},
+	{
+		"sctId": "422264003",
+		"name": "Powder for prolonged-release suspension for injection",
+		"RouteOfAdministration": {
+			"sctId": "78421000",
+			"name": "Intramuscular route"
+		}
+	},
+	{
+		"sctId": "740575007",
+		"name": "Intravesical dose form",
+		"RouteOfAdministration": {
+			"sctId": "372471009",
+			"name": "Intravesical route"
+		}
+	},
+	{
+		"sctId": "764378009",
+		"name": "Enteral dose form",
+		"RouteOfAdministration": {
+			"sctId": "417985001",
+			"name": "Enteral route"
+		}
+	},
+	{
+		"sctId": "764799005",
+		"name": "Suspension for infusion",
+		"RouteOfAdministration": {
+			"sctId": "34206005",
+			"name": "Subcutaneous route"
+		}
+	},
+	{
+		"sctId": "764843001",
+		"name": "Powder for solution for infusion",
+		"RouteOfAdministration": {
+			"sctId": "34206005",
+			"name": "Subcutaneous route"
+		}
+	},
+	{
+		"sctId": "765065005",
+		"name": "Powder for suspension for infusion",
+		"RouteOfAdministration": {
+			"sctId": "34206005",
+			"name": "Subcutaneous route"
+		}
+	},
+	{
+		"sctId": "765367006",
+		"name": "Emulsion for infusion",
+		"RouteOfAdministration": {
+			"sctId": "34206005",
+			"name": "Subcutaneous route"
+		}
+	}
+]

@@ -1,13 +1,10 @@
 <?php
 $rows = $rows ?? [];
-$sourceLabel = trim((string) ($source_label ?? 'OPD Consultation'));
-$sourceType = trim((string) ($source_type ?? 'consultation'));
-$isConsultation = $sourceType === 'consultation';
 ?>
 
 <div class="card border-0 shadow-sm">
     <div class="card-header bg-white d-flex justify-content-between align-items-center">
-        <strong>Recent <?= esc($sourceLabel) ?> Payout Drafts</strong>
+        <strong>Recent OPD Payout Drafts</strong>
         <span class="small text-muted">Filtered by current date/doctor/state selection</span>
     </div>
     <div class="card-body p-0">
@@ -19,7 +16,7 @@ $isConsultation = $sourceType === 'consultation';
                         <th>Payout Date</th>
                         <th>Case Ref</th>
                         <th>Doctor</th>
-                        <th class="text-end"><?= $isConsultation ? 'OPDs' : 'Invoices' ?></th>
+                        <th class="text-end">Units</th>
                         <th class="text-end">Rate</th>
                         <th class="text-end">Calculated</th>
                         <th class="text-end">Approved</th>

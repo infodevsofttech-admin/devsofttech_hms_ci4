@@ -11,18 +11,6 @@ if ($user) {
     }
 }
 $paymentHistoryRows = $payment_history_rows ?? [];
-$appointmentDateRaw = trim((string) ($opd_master[0]->apointment_date ?? ''));
-$appointmentDateDisplay = '';
-$appointmentDateTimeDisplay = '';
-$appointmentDatePickerValue = '';
-if ($appointmentDateRaw !== '') {
-    $appointmentTimestamp = strtotime($appointmentDateRaw);
-    if ($appointmentTimestamp !== false) {
-        $appointmentDateDisplay = date('d/m/y', $appointmentTimestamp);
-        $appointmentDateTimeDisplay = date('d/m/y H:i:s', $appointmentTimestamp);
-        $appointmentDatePickerValue = date('d/m/Y', $appointmentTimestamp);
-    }
-}
 ?>
 <section class="content-header">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -44,7 +32,7 @@ if ($appointmentDateRaw !== '') {
                 <address>
                     <strong><?= esc(strtoupper($opd_master[0]->P_name ?? '')) ?></strong><br>
                     <?= esc($patient_master[0]->p_relative ?? '') ?> : <?= esc($patient_master[0]->p_rname ?? '') ?><br>
-                    OPD Book Time : <?= esc($appointmentDateTimeDisplay !== '' ? $appointmentDateTimeDisplay : $appointmentDateRaw) ?><br>
+                    OPD Book Date (y-m-d time) : <?= esc($opd_master[0]->opd_book_date ?? '') ?><br>
                     Gender : <?= esc($patient_master[0]->xgender ?? '') ?><br>
                     Age : <?= esc($patient_master[0]->age ?? '') ?><br>
                     Phone No : <?= esc($patient_master[0]->mphone1 ?? '') ?>
@@ -52,7 +40,7 @@ if ($appointmentDateRaw !== '') {
             </div>
             <div class="col-sm-4 invoice-col">
                 <b>OPD ID:</b> <?= esc($opd_master[0]->opd_code ?? '') ?><br>
-                <b>Date of Appointment:</b> <?= esc($appointmentDateTimeDisplay !== '' ? $appointmentDateTimeDisplay : ($appointmentDateDisplay !== '' ? $appointmentDateDisplay : ($opd_master[0]->str_apointment_date ?? ''))) ?><br>
+                <b>Date of Appointment:</b> <?= esc($opd_master[0]->str_apointment_date ?? '') ?><br>
                 <b>Patient ID :</b> <?= esc($patient_master[0]->p_code ?? '') ?><br>
                 <?php if (($opd_master[0]->insurance_id ?? 0) > 1 && !empty($insurance)) : ?>
                     <strong> Ins. Comp. :</strong> <?= esc($insurance[0]->ins_company_name ?? '') ?><br>
@@ -78,7 +66,7 @@ if ($appointmentDateRaw !== '') {
                     </thead>
                     <tbody>
                         <tr>
-                            <td><?= esc($appointmentDateTimeDisplay !== '' ? $appointmentDateTimeDisplay : ($appointmentDateDisplay !== '' ? $appointmentDateDisplay : MysqlDate_to_str($opd_master[0]->apointment_date ?? ''))) ?></td>
+                            <td><?= esc(MysqlDate_to_str($opd_master[0]->apointment_date ?? '')) ?></td>
                             <td>Dr. <?= esc($opd_master[0]->doc_name ?? '') ?></td>
                             <td><?= esc($opd_master[0]->doc_spec ?? '') ?></td>
                             <td><?= esc($opd_master[0]->opd_fee_gross_amount ?? '') ?></td>
@@ -232,41 +220,6 @@ if ($appointmentDateRaw !== '') {
                     <a href="<?= base_url('opd_print/opd_PDF_print') ?>/<?= esc($opd_master[0]->opd_id ?? 0) ?>" target="_blank" class="btn btn-outline-secondary">Print OPD HEAD in Letter Head</a>
                     <a href="<?= base_url('opd_print/opd_blank_print') ?>/<?= esc($opd_master[0]->opd_id ?? 0) ?>" target="_blank" class="btn btn-outline-secondary">Print OPD HEAD in Blank Page</a>
                     <a href="<?= base_url('opd_print/opd_Cont_print') ?>/<?= esc($opd_master[0]->opd_id ?? 0) ?>" target="_blank" class="btn btn-outline-secondary">Print Cont. Paper</a>
-                    <?php if (! empty($healthplix_sync_applicable)) : ?>
-                        <?php
-                        $hpOpdSyncId = trim((string) ($healthplix_opd_sync_id ?? ''));
-                        ?>
-                        <?php if (! empty($healthplix_sync_done)) : ?>
-                            <?php
-                            $hpLogRef = $hpOpdSyncId;
-                            if ($hpLogRef === '' && ! empty($healthplix_log['response_json'])) {
-                                $hpResp = @json_decode((string) ($healthplix_log['response_json'] ?? ''), true);
-                                $hpLogRef = trim((string) ($hpResp['id'] ?? ($hpResp['appointment_id'] ?? ($hpResp['reference_id'] ?? ''))));
-                            }
-                            if ($hpLogRef === '') {
-                                $hpLogRef = trim((string) ($healthplix_log['entity_id'] ?? ''));
-                            }
-                            $hpDate = trim((string) ($healthplix_log['created_at'] ?? ''));
-                            ?>
-                            <div class="d-flex flex-column align-items-start gap-1">
-                                <button type="button" class="btn btn-success" disabled
-                                    title="Synced to HealthPlix<?= $hpDate !== '' ? ' on ' . esc($hpDate) : '' ?>">
-                                    HealthPlix ✓
-                                </button>
-                                <?php if ($hpLogRef !== '') : ?>
-                                    <small class="text-muted px-1" id="hp_opd_sync_id_display" title="HealthPlix Sync ID">🔗 <?= esc($hpLogRef) ?></small>
-                                <?php endif; ?>
-                            </div>
-                        <?php else : ?>
-                            <div class="d-flex flex-column align-items-start gap-1">
-                                <button type="button" class="btn btn-danger" id="btn_healthplix_push"
-                                    data-opd-id="<?= esc($opd_master[0]->opd_id ?? 0) ?>">
-                                    HealthPlix — Sync
-                                </button>
-                                <small class="text-muted px-1" id="hp_opd_sync_id_display" style="display:none" title="HealthPlix Sync ID"></small>
-                            </div>
-                        <?php endif; ?>
-                    <?php endif; ?>
                     
                 </div>
                 <div class="col-sm-6">
@@ -353,8 +306,8 @@ if ($appointmentDateRaw !== '') {
                     </select>
                 </div>
                 <div class="col-md-3">
-                    <label>Date <?= esc($appointmentDatePickerValue !== '' ? $appointmentDatePickerValue : MysqlDate_to_str($opd_master[0]->apointment_date ?? '')) ?></label>
-                    <input class="form-control datepicker" id="datepicker_opddate" name="datepicker_opddate" type="text" value="<?= esc($appointmentDatePickerValue !== '' ? $appointmentDatePickerValue : MysqlDate_to_str($opd_master[0]->apointment_date ?? '')) ?>" />
+                    <label>Date <?= esc(MysqlDate_to_str($opd_master[0]->apointment_date ?? '')) ?></label>
+                    <input class="form-control datepicker" id="datepicker_opddate" name="datepicker_opddate" type="text" value="<?= esc(MysqlDate_to_str($opd_master[0]->apointment_date ?? '')) ?>" />
                 </div>
                 <div class="col-md-3">
                     <label>OPD Fee <?= esc($opd_master[0]->opd_fee_gross_amount ?? '') ?> / <?= esc($opd_master[0]->opd_fee_amount ?? '') ?></label>
@@ -526,43 +479,6 @@ if ($appointmentDateRaw !== '') {
                     load_form('<?= base_url('Opd/invoice') ?>/' + $('#oid').val());
                 });
             }
-        });
-
-        $('#btn_healthplix_push').click(function() {
-            var btn = $(this);
-            var opdId = btn.data('opd-id');
-            var csrf = getCsrfPair();
-            btn.prop('disabled', true).text('Syncing...');
-            $.post('<?= base_url('Opd/healthplix_push') ?>/' + opdId, {
-                [csrf.name]: csrf.value
-            }, function(data) {
-                updateCsrf(data);
-                if (data.ok == 1) {
-                    btn.removeClass('btn-danger').addClass('btn-success')
-                       .text('HealthPlix ✓')
-                       .prop('disabled', true);
-                    // Show sync ID below the button
-                    var syncId = (data.log && (data.log.sync_id || data.log.entity_id)) || '';
-                    if (syncId) {
-                        $('#hp_opd_sync_id_display').text('🔗 ' + syncId).show();
-                    }
-                    if (typeof notify === 'function') {
-                        notify('success', 'HealthPlix', data.message || 'Appointment synced.');
-                    }
-                } else {
-                    btn.prop('disabled', false).text('HealthPlix — Retry');
-                    if (typeof notify === 'function') {
-                        notify('error', 'HealthPlix Sync Failed', data.message || 'Sync failed. Check HealthPlix settings.');
-                    } else {
-                        alert(data.message || 'HealthPlix sync failed. Check settings.');
-                    }
-                }
-            }, 'json').fail(function() {
-                btn.prop('disabled', false).text('HealthPlix — Retry');
-                if (typeof notify === 'function') {
-                    notify('error', 'HealthPlix', 'Network error. Try again.');
-                }
-            });
         });
 
         $('#btn_cr_org').click(function() {

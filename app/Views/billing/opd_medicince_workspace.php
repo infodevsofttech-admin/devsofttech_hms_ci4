@@ -9,6 +9,9 @@
                         <button type="button" class="btn btn-outline-secondary btn-sm med-filter" data-filter="generic_issue">Generic/Salt Issue</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm med-filter" data-filter="generic_same_name">Generic=Name</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm med-filter" data-filter="company_blank">Company Blank</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm med-filter" data-filter="coding_missing">SNOMED/ATC Missing</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm med-filter" data-filter="snomed_missing">SNOMED Missing</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm med-filter" data-filter="atc_missing">ATC Missing</button>
                         <button type="button" class="btn btn-outline-primary btn-sm" id="btn_med_export">Export</button>
                         <button type="button" class="btn btn-outline-danger btn-sm" id="btn_med_check_duplicates">Check Duplicates</button>
                         <button type="button" class="btn btn-warning btn-sm" id="btn_med_add_mode">Add Medicine</button>
@@ -16,6 +19,9 @@
                     </div>
                 </div>
                 <div class="px-3 pt-2 pb-1">
+                    <div class="small mb-1" id="med_coding_summary">
+                        <span class="badge bg-secondary">Loading coding summary...</span>
+                    </div>
                     <div class="small text-muted" id="med_dup_status">Duplicate scan not run yet.</div>
                 </div>
                 <div class="card-body p-0">
@@ -98,6 +104,14 @@
                         <label class="form-label">Company Name</label>
                         <input type="text" id="med_company_name" list="med_company_suggestions" class="form-control form-control-sm" placeholder="Company Name (optional)">
                         <datalist id="med_company_suggestions"></datalist>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">SNOMED CT Code <small class="text-muted">(optional)</small></label>
+                        <input type="text" id="med_snomed_code" class="form-control form-control-sm" placeholder="e.g. 372687004">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">ATC Code <small class="text-muted">(optional)</small></label>
+                        <input type="text" id="med_atc_code" class="form-control form-control-sm" placeholder="e.g. N02BE01">
                     </div>
 
                     <hr class="my-2">
@@ -265,7 +279,7 @@
 
     function clearForm() {
         $('#med_id').val('0');
-        $('#med_item_name,#med_formulation,#med_genericname,#med_salt_name,#med_dosage_restriction,#med_company_name').val('');
+        $('#med_item_name,#med_formulation,#med_genericname,#med_salt_name,#med_dosage_restriction,#med_company_name,#med_snomed_code,#med_atc_code').val('');
         $('#med_default_days,#med_default_qty,#med_default_remark').val('');
         $('#med_default_dosage,#med_default_when,#med_default_freq,#med_default_where').val('');
     }
@@ -364,6 +378,8 @@
             salt_name: ($('#med_salt_name').val() || '').trim(),
             dosage_restriction: ($('#med_dosage_restriction').val() || '').trim(),
             company_name: ($('#med_company_name').val() || '').trim(),
+            snomed_code: ($('#med_snomed_code').val() || '').trim(),
+            atc_code: ($('#med_atc_code').val() || '').trim(),
             dosage: ($('#med_default_dosage').val() || '').trim(),
             dosage_when: ($('#med_default_when').val() || '').trim(),
             dosage_freq: ($('#med_default_freq').val() || '').trim(),
@@ -404,6 +420,8 @@
         $('#med_salt_name').val(row.salt_name || row.sal_name || row.salt || row.saltname || '');
         $('#med_dosage_restriction').val(row.dosage_restriction || row.dose_restriction || row.restriction_note || row.restriction || '');
         $('#med_company_name').val(row.company_name || '');
+        $('#med_snomed_code').val(row.snomed_code || row.medicine_snomed_code || row.snomed_ct_code || row.sctid || '');
+        $('#med_atc_code').val(row.atc_code || row.who_atc_code || '');
         setDefaultMasterValue($('#med_default_dosage'), row.dosage || '');
         setDefaultMasterValue($('#med_default_when'), row.dosage_when || '');
         setDefaultMasterValue($('#med_default_freq'), row.dosage_freq || '');
@@ -427,7 +445,36 @@
         });
     }
 
+    function renderCodingSummary(summary) {
+        summary = summary || {};
+        var total = parseInt(summary.total || 0, 10);
+        var codingMissing = parseInt(summary.coding_missing || 0, 10);
+        var snomedMissing = parseInt(summary.snomed_missing || 0, 10);
+        var atcMissing = parseInt(summary.atc_missing || 0, 10);
+        var bothMissing = parseInt(summary.both_missing || 0, 10);
+
+        var html = ''
+            + '<span class="badge bg-light text-dark border me-1">Total: ' + total + '</span>'
+            + '<span class="badge bg-danger me-1">Any Missing: ' + codingMissing + '</span>'
+            + '<span class="badge bg-warning text-dark me-1">SNOMED Missing: ' + snomedMissing + '</span>'
+            + '<span class="badge bg-info text-dark me-1">ATC Missing: ' + atcMissing + '</span>'
+            + '<span class="badge bg-dark">Both Missing: ' + bothMissing + '</span>';
+
+        $('#med_coding_summary').html(html);
+    }
+
+    function loadCodingSummary() {
+        apiGet('<?= base_url('Opd_prescription/opd_medicince_coding_summary') ?>', function(data) {
+            if ((data && data.update) != 1) {
+                $('#med_coding_summary').html('<span class="badge bg-secondary">Coding summary unavailable</span>');
+                return;
+            }
+            renderCodingSummary(data.summary || {});
+        });
+    }
+
     function loadList() {
+        loadCodingSummary();
         initMedMasterDataTable();
         if (medMasterDataTable) {
             medMasterDataTable.ajax.reload(null, true);
@@ -472,6 +519,12 @@
                             setMsg('normal', 'No record found where Generic/Salt is same as Medicine Name.');
                         } else if (activeListFilter === 'company_blank') {
                             setMsg('normal', 'No record found with blank Company Name.');
+                        } else if (activeListFilter === 'coding_missing') {
+                            setMsg('normal', 'No record found with missing SNOMED/ATC coding.');
+                        } else if (activeListFilter === 'snomed_missing') {
+                            setMsg('normal', 'No record found with missing SNOMED code.');
+                        } else if (activeListFilter === 'atc_missing') {
+                            setMsg('normal', 'No record found with missing ATC code.');
                         } else {
                             setMsg('normal', 'No medicine found.');
                         }
@@ -481,6 +534,12 @@
                         setMsg('normal', total + ' record(s) where Generic/Salt matches Medicine Name.');
                     } else if (activeListFilter === 'company_blank') {
                         setMsg('normal', total + ' record(s) with blank/unclear Company Name.');
+                    } else if (activeListFilter === 'coding_missing') {
+                        setMsg('normal', total + ' record(s) with missing SNOMED or ATC code.');
+                    } else if (activeListFilter === 'snomed_missing') {
+                        setMsg('normal', total + ' record(s) with missing SNOMED code.');
+                    } else if (activeListFilter === 'atc_missing') {
+                        setMsg('normal', total + ' record(s) with missing ATC code.');
                     } else {
                         setMsg('normal', '');
                     }

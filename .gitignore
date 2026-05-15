@@ -45,6 +45,13 @@ $RECYCLE.BIN/
 .vagrant
 Vagrantfile
 
+# Large SNOMED CT RF2 release data (~3.6 GB — not committed to repo)
+SnomedCT_InternationalRF2_PRODUCTION_*/
+
+# CDAC / CSNO Java toolkit binaries
+CDAC/
+CSNOtk_API_v9.0/
+
 #-------------------------
 # Temporary Files
 #-------------------------

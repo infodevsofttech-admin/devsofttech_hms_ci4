@@ -1,0 +1,101 @@
+<div ng-form name="updateForm">
+    <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close" ng-click="$dismiss()">
+            <span aria-hidden="true">&times;</span>
+        </button>
+        <div class="col-lg-8"> <h5 class="modal-title" id="myModalLabel2">Lab Test Details</h5></div>
+    </div>
+    <div class="modal-body">
+        <div ng-if="labdetails==null"><h6 class="center-align">No Details Available.</h6></div>
+        <div class="table-responsive viewDetailsDiv" ng-if="labdetails!=null" data-ng-repeat="labinformation in labdetails" >
+            <table class="table table-borderless">
+                <tr>
+                    <th colspan="4" class="bg-success"
+                        id="LabTestDetails">LabTest Details</th>
+                </tr>
+                <tr>
+                    <th id="LoincNumber">LOINC NUMBER </th>
+                    <td><b>{{labinformation.LOINC_NUMBER}}</b> </td>
+                </tr>
+                <tr>
+                    <th>Long Common Name</th>
+                    <td><strong>{{labinformation.LONG_COMMON_NAME}}</strong> </td>
+                </tr>
+                <tr>
+                    <th id="ShortName">Short Name</th>
+                    <td><strong>{{labinformation.ShortName}}</strong> </td>
+                </tr>
+                <tr>
+                    <th id="DisplayName">Display Name</th>
+                    <td><strong>{{labinformation.DisplayName}}</strong> </td>
+                </tr>
+
+                <tr>
+                    <th id="Component">Component</th>
+                    <td><strong>{{labinformation.COMPONENT}}</strong> </td>
+                </tr>
+
+                <tr>
+                    <th id="Property">Property</th>
+                    <td><strong>{{labinformation.PROPERTY}}</strong> </td>
+                </tr>
+
+                <tr>
+                    <th id="System">System</th>
+                    <td><strong>{{labinformation.SYSTEM}}</strong> </td>
+                </tr>
+
+                <tr>
+                    <th id="Scale">Scale</th>
+                    <td><strong>{{labinformation.SCALE_TYP}}</strong> </td>
+                </tr>
+
+                <tr>
+                    <th id="Method">Method</th>
+                    <td><strong>{{labinformation.METTHOD_TYP}}</strong> </td>
+                </tr>
+
+                <tr>
+                    <th id="Time">Time</th>
+                    <td><strong>{{labinformation.TIME_ASPCT}}</strong> </td>
+                </tr>
+
+                <tr>
+                    <th id="ExampleUnits">Example Units</th>
+                    <td><strong>{{labinformation.ExampleUnits}}</strong> </td>
+                </tr>
+
+                <tr>
+                    <th id="Class">Class</th>
+                    <td><strong>{{labinformation.CLASS}}</strong> </td>
+                </tr>
+                <tr>
+                    <th id="ClassType">Class Type</th>
+                    <td><strong>{{labinformation.CLASSTYPE}}</strong> </td>
+                </tr>
+                <tr>
+                    <th id="Status">Status</th>
+                    <td><strong>{{labinformation.STATUS}}</strong> </td>
+                </tr>
+                <tr>
+                    <th id="VersionLastChanged">Version Last Changed</th>
+                    <td><strong>{{labinformation.VersionLastChanged}}</strong> </td>
+                </tr>
+                <tr>
+                    <th id="VersionFirstReleased">Version First Released</th>
+                    <td><strong>{{labinformation.VersionFirstReleased}}</strong> </td>
+                </tr>
+
+
+                <tr>
+                    <th id="OrderVsObservation">Order vs. Observation</th>
+                    <td><strong>{{labinformation.ORDER_OBS}}</strong> </td>
+                </tr>
+			
+            </table>
+        </div>
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="btn btn-danger" ng-click="$dismiss()">Close</button>
+    </div>
+</div>

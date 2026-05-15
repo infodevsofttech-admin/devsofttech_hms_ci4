@@ -110,6 +110,39 @@ class DirectAbdmConnector implements AbdmConnectorInterface
     }
 
     // -------------------------------------------------------------------------
+    // M1 ABHA OTP Flows
+    // -------------------------------------------------------------------------
+
+    public function abhaAadhaarGenerateOtp(array $payload): array
+    {
+        throw new \RuntimeException(
+            'DirectAbdmConnector::abhaAadhaarGenerateOtp() not implemented. '
+            . 'Use EAtriaBridgeConnector (eatria_bridge) for M1 OTP flows.'
+        );
+    }
+
+    public function abhaAadhaarVerifyOtp(array $payload): array
+    {
+        throw new \RuntimeException(
+            'DirectAbdmConnector::abhaAadhaarVerifyOtp() not implemented.'
+        );
+    }
+
+    public function abhaMobileGenerateOtp(array $payload): array
+    {
+        throw new \RuntimeException(
+            'DirectAbdmConnector::abhaMobileGenerateOtp() not implemented.'
+        );
+    }
+
+    public function abhaMobileVerifyOtp(array $payload): array
+    {
+        throw new \RuntimeException(
+            'DirectAbdmConnector::abhaMobileVerifyOtp() not implemented.'
+        );
+    }
+
+    // -------------------------------------------------------------------------
     // Scan & Share
     // -------------------------------------------------------------------------
 

@@ -121,3 +121,19 @@
 # HEALTHPLIX_SERVICE_NAME =
 # Optional fallback secret used by POST /healthplix/fetch when hospital_setting has no value.
 # HEALTHPLIX_FETCH_SECRET =
+
+#--------------------------------------------------------------------
+# SNOMED / CSNOTK TERMINOLOGY (OPTIONAL)
+#--------------------------------------------------------------------
+
+# Enable CSNOtk lookup support. HMS also auto-enables when a base URL is configured.
+# snomed.csnotk.enabled = true
+
+# Preferred key used in code.
+# snomed.csnotk.baseUrl = https://csnotk.e-atria.in
+
+# Backward-compatible alternative key.
+# CSNOTK_BASE_URL = https://csnotk.e-atria.in
+
+# Request timeout in seconds.
+# snomed.csnotk.timeoutSec = 5

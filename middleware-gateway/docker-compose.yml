@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  abdm-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: abdm-bridge-gateway
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - PORT=3000
+      - BRIDGE_SOURCE_CODE=${BRIDGE_SOURCE_CODE}
+      - BRIDGE_SYNC_TOKEN=${BRIDGE_SYNC_TOKEN}
+      - ABDM_M3_URL=${ABDM_M3_URL}
+      - ABDM_M3_TOKEN=${ABDM_M3_TOKEN}
+      - SNOMED_SERVICE_URL=${SNOMED_SERVICE_URL}
+      - ABDM_HFR_ID=${ABDM_HFR_ID}
+      - ABDM_NPI_ID=${ABDM_NPI_ID}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      - ./logs:/app/logs
+      - ./config:/app/config:ro
+    restart: unless-stopped
+    networks:
+      - abdm-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/v3/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  nginx:
+    image: nginx:alpine
+    container_name: abdm-nginx-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - abdm-gateway
+    restart: unless-stopped
+    networks:
+      - abdm-network
+
+networks:
+  abdm-network:
+    driver: bridge
+
+volumes:
+  logs:
+  config:

@@ -6,11 +6,6 @@ $toDate = (string) ($to_date ?? '');
 $doctorName = trim((string) ($doctor_name ?? 'All Doctors'));
 $stateUnit = trim((string) ($state_unit ?? ''));
 $stateUnitLabel = trim((string) ($state_unit_label ?? 'State/Unit'));
-$sourceType = trim((string) ($source_type ?? 'consultation'));
-$sourceLabel = trim((string) ($source_label ?? 'OPD Consultation'));
-$scopeLabel = trim((string) ($scope_label ?? 'Completed OPDs'));
-$unitLabel = trim((string) ($unit_label ?? 'OPDs'));
-$isConsultation = $sourceType === 'consultation';
 
 $formatDate = static function (string $value): string {
     $value = trim($value);
@@ -30,9 +25,6 @@ $money = static function ($value): string {
 <div class="card border-0 bg-light mb-3">
     <div class="card-body py-2 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>
-            <strong>Source:</strong> <?= esc($sourceLabel) ?>
-        </div>
-        <div>
             <strong>Summary Range:</strong> <?= esc($formatDate($fromDate)) ?> to <?= esc($formatDate($toDate)) ?>
         </div>
         <div>
@@ -45,25 +37,18 @@ $money = static function ($value): string {
 </div>
 
 <div class="row g-2 mb-3">
-    <div class="col-xl-3 col-md-4 col-6"><div class="card border-primary"><div class="card-body py-2"><div class="small text-muted"><?= esc($scopeLabel) ?></div><div class="h5 mb-0 text-primary"><?= (int) ($summary['completed_opd'] ?? 0) ?></div></div></div></div>
-    <?php if ($isConsultation): ?>
+    <div class="col-xl-3 col-md-4 col-6"><div class="card border-primary"><div class="card-body py-2"><div class="small text-muted">Completed OPDs</div><div class="h5 mb-0 text-primary"><?= (int) ($summary['completed_opd'] ?? 0) ?></div></div></div></div>
     <div class="col-xl-3 col-md-4 col-6"><div class="card border-secondary"><div class="card-body py-2"><div class="small text-muted">Routine OPDs</div><div class="h5 mb-0"><?= (int) ($summary['routine_opd'] ?? 0) ?></div></div></div></div>
     <div class="col-xl-3 col-md-4 col-6"><div class="card border-danger"><div class="card-body py-2"><div class="small text-muted">Emergency OPDs</div><div class="h5 mb-0 text-danger"><?= (int) ($summary['emergency_opd'] ?? 0) ?></div></div></div></div>
-    <?php else: ?>
-    <div class="col-xl-3 col-md-4 col-6"><div class="card border-secondary"><div class="card-body py-2"><div class="small text-muted">Calculated Invoices</div><div class="h5 mb-0"><?= (int) ($summary['calculated_opd'] ?? 0) ?></div></div></div></div>
-    <div class="col-xl-3 col-md-4 col-6"><div class="card border-danger"><div class="card-body py-2"><div class="small text-muted">Locked Credit</div><div class="h5 mb-0 text-danger"><?= esc($money($summary['credit_amount'] ?? 0)) ?></div></div></div></div>
-    <?php endif; ?>
     <div class="col-xl-3 col-md-4 col-6"><div class="card border-info"><div class="card-body py-2"><div class="small text-muted">Doctors Involved</div><div class="h5 mb-0 text-info"><?= (int) ($summary['doctor_count'] ?? 0) ?></div></div></div></div>
 </div>
 
-<?php if ($isConsultation): ?>
 <div class="row g-2 mb-3">
     <div class="col-xl-3 col-md-4 col-6"><div class="card border-dark"><div class="card-body py-2"><div class="small text-muted">Already Calculated OPDs</div><div class="h5 mb-0\"><?= (int) ($summary['calculated_opd'] ?? 0) ?></div></div></div></div>
 </div>
-<?php endif; ?>
 
 <div class="row g-2 mb-3">
-    <div class="col-xl-3 col-md-4 col-6"><div class="card border-success"><div class="card-body py-2"><div class="small text-muted"><?= $isConsultation ? 'Gross OPD Revenue' : 'Gross Charges Amount' ?></div><div class="h5 mb-0 text-success"><?= esc($money($summary['gross_amount'] ?? 0)) ?></div></div></div></div>
+    <div class="col-xl-3 col-md-4 col-6"><div class="card border-success"><div class="card-body py-2"><div class="small text-muted">Gross OPD Revenue</div><div class="h5 mb-0 text-success"><?= esc($money($summary['gross_amount'] ?? 0)) ?></div></div></div></div>
     <div class="col-xl-3 col-md-4 col-6"><div class="card border-success"><div class="card-body py-2"><div class="small text-muted">Total Received</div><div class="h5 mb-0 text-success"><?= esc($money($summary['total_received'] ?? 0)) ?></div></div></div></div>
     <div class="col-xl-3 col-md-4 col-6"><div class="card border-warning"><div class="card-body py-2"><div class="small text-muted">Cash Received</div><div class="h5 mb-0 text-warning"><?= esc($money($summary['cash_received'] ?? 0)) ?></div></div></div></div>
     <div class="col-xl-3 col-md-4 col-6"><div class="card border-primary"><div class="card-body py-2"><div class="small text-muted">Bank Received</div><div class="h5 mb-0 text-primary"><?= esc($money($summary['bank_received'] ?? 0)) ?></div></div></div></div>
@@ -72,14 +57,14 @@ $money = static function ($value): string {
 <div class="row g-2 mb-3">
     <div class="col-xl-3 col-md-4 col-6"><div class="card border-dark"><div class="card-body py-2"><div class="small text-muted">Total Credit Amount</div><div class="h5 mb-0"><?= esc($money($summary['credit_amount'] ?? 0)) ?></div></div></div></div>
     <div class="col-xl-3 col-md-4 col-6"><div class="card border-dark"><div class="card-body py-2"><div class="small text-muted">Organizational Credit</div><div class="h5 mb-0"><?= esc($money($summary['org_credit_amount'] ?? 0)) ?></div></div></div></div>
-    <div class="col-xl-3 col-md-4 col-6"><div class="card border-info"><div class="card-body py-2"><div class="small text-muted"><?= $isConsultation ? 'Approved Consents' : 'Charge Group' ?></div><div class="h5 mb-0 text-info"><?= $isConsultation ? (int) ($summary['approved_consents'] ?? 0) : esc($sourceLabel) ?></div></div></div></div>
+    <div class="col-xl-3 col-md-4 col-6"><div class="card border-info"><div class="card-body py-2"><div class="small text-muted">Approved Consents</div><div class="h5 mb-0 text-info"><?= (int) ($summary['approved_consents'] ?? 0) ?></div></div></div></div>
     <div class="col-xl-3 col-md-4 col-6"><div class="card border-secondary"><div class="card-body py-2"><div class="small text-muted">Payout Records / Amount</div><div class="h6 mb-0"><?= (int) ($summary['payout_count'] ?? 0) ?> / <?= esc($money($summary['payout_amount'] ?? 0)) ?></div></div></div></div>
 </div>
 
 <div class="card border-0 shadow-sm">
     <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <strong>Doctor-wise <?= esc($sourceLabel) ?> and Collection Summary</strong>
-        <span class="small text-muted"><?= $isConsultation ? 'Running and New are shown for internal review; routine figure is non-emergency total.' : 'Collection is allocated by invoice share for selected charge category.' ?></span>
+        <strong>Doctor-wise OPD and Collection Summary</strong>
+        <span class="small text-muted">Running and New are shown for internal review; routine figure is non-emergency total.</span>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
@@ -88,13 +73,11 @@ $money = static function ($value): string {
                     <tr>
                         <th>#</th>
                         <th>Doctor</th>
-                        <th class="text-end"><?= esc($unitLabel) ?></th>
-                        <?php if ($isConsultation): ?>
+                        <th class="text-end">Completed</th>
                         <th class="text-end">Routine</th>
                         <th class="text-end">Emergency</th>
                         <th class="text-end">Running</th>
                         <th class="text-end">New</th>
-                        <?php endif; ?>
                         <th class="text-end">Gross Amount</th>
                         <th class="text-end">Cash</th>
                         <th class="text-end">Bank</th>
@@ -104,7 +87,7 @@ $money = static function ($value): string {
                 <tbody>
                     <?php if (empty($doctorBreakdown)): ?>
                         <tr>
-                            <td colspan="<?= $isConsultation ? '11' : '7' ?>" class="text-center text-muted py-3">No summary records found for the selected filters.</td>
+                            <td colspan="11" class="text-center text-muted py-3">No OPD summary records found for the selected filters.</td>
                         </tr>
                     <?php else: ?>
                         <?php $sr = 1; foreach ($doctorBreakdown as $row): ?>
@@ -112,12 +95,10 @@ $money = static function ($value): string {
                                 <td><?= $sr++ ?></td>
                                 <td><?= esc((string) ($row['doctor_name'] ?? '')) ?></td>
                                 <td class="text-end"><?= (int) ($row['completed_opd'] ?? 0) ?></td>
-                                <?php if ($isConsultation): ?>
                                 <td class="text-end"><?= (int) ($row['routine_opd'] ?? 0) ?></td>
                                 <td class="text-end"><?= (int) ($row['emergency_opd'] ?? 0) ?></td>
                                 <td class="text-end"><?= (int) ($row['running_opd'] ?? 0) ?></td>
                                 <td class="text-end"><?= (int) ($row['new_opd'] ?? 0) ?></td>
-                                <?php endif; ?>
                                 <td class="text-end"><?= esc($money($row['gross_amount'] ?? 0)) ?></td>
                                 <td class="text-end"><?= esc($money($row['cash_received'] ?? 0)) ?></td>
                                 <td class="text-end"><?= esc($money($row['bank_received'] ?? 0)) ?></td>
@@ -131,10 +112,12 @@ $money = static function ($value): string {
     </div>
 </div>
 
-<?php $baseForPayout = (float) (($summary['total_received'] ?? 0) > 0 ? ($summary['total_received'] ?? 0) : ($summary['gross_amount'] ?? 0)); ?>
+<?php
+$baseForPayout = (float) ($summary['total_received'] ?? 0);
+?>
 <div class="card border-0 shadow-sm mt-3">
     <div class="card-header bg-white">
-        <strong>Payout Calculation (Preview: <?= esc($sourceLabel) ?>)</strong>
+        <strong>Payout Calculation (Preview)</strong>
     </div>
     <div class="card-body">
         <div class="row g-2 align-items-end mb-2">
@@ -142,26 +125,37 @@ $money = static function ($value): string {
                 <label class="form-label form-label-sm">Base Amount</label>
                 <input type="number" class="form-control form-control-sm" id="opd_payout_base_amount" value="<?= number_format($baseForPayout, 2, '.', '') ?>" step="0.01" min="0">
             </div>
-            <div class="row g-1 mb-2">
-                <div class="col-xl-2 col-md-3 col-6"><div class="card border-start border-primary border-2 border-top-0 border-end-0 border-bottom-0 rounded-0"><div class="card-body py-1 px-2"><div class="text-muted" style="font-size:.7rem"><?= esc($scopeLabel) ?></div><div class="fw-bold text-primary"><?= (int) ($summary['completed_opd'] ?? 0) ?></div></div></div></div>
-                <?php if ($isConsultation): ?>
-                <div class="col-xl-2 col-md-3 col-6"><div class="card border-start border-secondary border-2 border-top-0 border-end-0 border-bottom-0 rounded-0"><div class="card-body py-1 px-2"><div class="text-muted" style="font-size:.7rem">Routine OPDs</div><div class="fw-bold"><?= (int) ($summary['routine_opd'] ?? 0) ?></div></div></div></div>
-                <div class="col-xl-2 col-md-3 col-6"><div class="card border-start border-danger border-2 border-top-0 border-end-0 border-bottom-0 rounded-0"><div class="card-body py-1 px-2"><div class="text-muted" style="font-size:.7rem">Emergency OPDs</div><div class="fw-bold text-danger"><?= (int) ($summary['emergency_opd'] ?? 0) ?></div></div></div></div>
-                <div class="col-xl-2 col-md-3 col-6"><div class="card border-start border-dark border-2 border-top-0 border-end-0 border-bottom-0 rounded-0"><div class="card-body py-1 px-2"><div class="text-muted" style="font-size:.7rem">Already Calculated</div><div class="fw-bold"><?= (int) ($summary['calculated_opd'] ?? 0) ?></div></div></div></div>
-                <?php else: ?>
-                <div class="col-xl-2 col-md-3 col-6"><div class="card border-start border-secondary border-2 border-top-0 border-end-0 border-bottom-0 rounded-0"><div class="card-body py-1 px-2"><div class="text-muted" style="font-size:.7rem">Already Calculated</div><div class="fw-bold"><?= (int) ($summary['calculated_opd'] ?? 0) ?></div></div></div></div>
-                <div class="col-xl-2 col-md-3 col-6"><div class="card border-start border-danger border-2 border-top-0 border-end-0 border-bottom-0 rounded-0"><div class="card-body py-1 px-2"><div class="text-muted" style="font-size:.7rem">Locked Credit</div><div class="fw-bold text-danger" style="font-size:.85rem"><?= esc($money($summary['credit_amount'] ?? 0)) ?></div></div></div></div>
-                <?php endif; ?>
-                <div class="col-xl-2 col-md-3 col-6"><div class="card border-start border-info border-2 border-top-0 border-end-0 border-bottom-0 rounded-0"><div class="card-body py-1 px-2"><div class="text-muted" style="font-size:.7rem">Doctors Involved</div><div class="fw-bold text-info"><?= (int) ($summary['doctor_count'] ?? 0) ?></div></div></div></div>
-                <div class="col-xl-2 col-md-3 col-6"><div class="card border-start border-success border-2 border-top-0 border-end-0 border-bottom-0 rounded-0"><div class="card-body py-1 px-2"><div class="text-muted" style="font-size:.7rem"><?= $isConsultation ? 'Gross OPD Revenue' : 'Gross Charges' ?></div><div class="fw-bold text-success" style="font-size:.85rem"><?= esc($money($summary['gross_amount'] ?? 0)) ?></div></div></div></div>
-                <div class="col-xl-2 col-md-3 col-6"><div class="card border-start border-success border-2 border-top-0 border-end-0 border-bottom-0 rounded-0"><div class="card-body py-1 px-2"><div class="text-muted" style="font-size:.7rem">Total Received</div><div class="fw-bold text-success" style="font-size:.85rem"><?= esc($money($summary['total_received'] ?? 0)) ?></div></div></div></div>
-                <div class="col-xl-2 col-md-3 col-6"><div class="card border-start border-warning border-2 border-top-0 border-end-0 border-bottom-0 rounded-0"><div class="card-body py-1 px-2"><div class="text-muted" style="font-size:.7rem">Cash Received</div><div class="fw-bold text-warning" style="font-size:.85rem"><?= esc($money($summary['cash_received'] ?? 0)) ?></div></div></div></div>
-                <div class="col-xl-2 col-md-3 col-6"><div class="card border-start border-primary border-2 border-top-0 border-end-0 border-bottom-0 rounded-0"><div class="card-body py-1 px-2"><div class="text-muted" style="font-size:.7rem">Bank Received</div><div class="fw-bold text-primary" style="font-size:.85rem"><?= esc($money($summary['bank_received'] ?? 0)) ?></div></div></div></div>
-                <div class="col-xl-2 col-md-3 col-6"><div class="card border-start border-dark border-2 border-top-0 border-end-0 border-bottom-0 rounded-0"><div class="card-body py-1 px-2"><div class="text-muted" style="font-size:.7rem">Total Credit</div><div class="fw-bold" style="font-size:.85rem"><?= esc($money($summary['credit_amount'] ?? 0)) ?></div></div></div></div>
-                <div class="col-xl-2 col-md-3 col-6"><div class="card border-start border-dark border-2 border-top-0 border-end-0 border-bottom-0 rounded-0"><div class="card-body py-1 px-2"><div class="text-muted" style="font-size:.7rem">Org. Credit</div><div class="fw-bold" style="font-size:.85rem"><?= esc($money($summary['org_credit_amount'] ?? 0)) ?></div></div></div></div>
-                <div class="col-xl-2 col-md-3 col-6"><div class="card border-start border-info border-2 border-top-0 border-end-0 border-bottom-0 rounded-0"><div class="card-body py-1 px-2"><div class="text-muted" style="font-size:.7rem"><?= $isConsultation ? 'Approved Consents' : 'Charge Group' ?></div><div class="fw-bold text-info"><?= $isConsultation ? (int) ($summary['approved_consents'] ?? 0) : esc($sourceLabel) ?></div></div></div></div>
-                <div class="col-xl-2 col-md-3 col-6"><div class="card border-start border-secondary border-2 border-top-0 border-end-0 border-bottom-0 rounded-0"><div class="card-body py-1 px-2"><div class="text-muted" style="font-size:.7rem">Payout Drafts / Amt</div><div class="fw-bold" style="font-size:.8rem"><?= (int) ($summary['payout_count'] ?? 0) ?> / <?= esc($money($summary['payout_amount'] ?? 0)) ?></div></div></div></div>
+            <div class="col-lg-2 col-md-6">
+                <label class="form-label form-label-sm">Doctor Share %</label>
+                <input type="number" class="form-control form-control-sm" id="opd_payout_doctor_share" value="75" step="0.01" min="0" max="100">
             </div>
+            <div class="col-lg-2 col-md-6">
+                <label class="form-label form-label-sm">Hospital Share %</label>
+                <input type="number" class="form-control form-control-sm" id="opd_payout_hospital_share" value="25" step="0.01" min="0" max="100">
+            </div>
+            <div class="col-lg-2 col-md-6">
+                <label class="form-label form-label-sm">Deductions</label>
+                <input type="number" class="form-control form-control-sm" id="opd_payout_deductions" value="0" step="0.01" min="0">
+            </div>
+            <div class="col-lg-3 col-md-6">
+                <label class="form-label form-label-sm">Adjustments (+/-)</label>
+                <input type="number" class="form-control form-control-sm" id="opd_payout_adjustments" value="0" step="0.01">
+            </div>
+            <div class="col-12 d-flex justify-content-end">
+                <button type="button" class="btn btn-success btn-sm" id="opd_payout_create_draft_btn">
+                    <i class="bi bi-file-earmark-plus me-1"></i>Create Payout Draft
+                </button>
+            </div>
+        </div>
+
+        <div class="row g-2">
+            <div class="col-md-4 col-12"><div class="card border-info"><div class="card-body py-2"><div class="small text-muted">Doctor Gross Share</div><div class="h6 mb-0 text-info" id="opd_payout_doctor_gross">Rs 0.00</div></div></div></div>
+            <div class="col-md-4 col-12"><div class="card border-secondary"><div class="card-body py-2"><div class="small text-muted">Hospital Share</div><div class="h6 mb-0" id="opd_payout_hospital_gross">Rs 0.00</div></div></div></div>
+            <div class="col-md-4 col-12"><div class="card border-success"><div class="card-body py-2"><div class="small text-muted">Net Payable To Doctor</div><div class="h6 mb-0 text-success" id="opd_payout_net_payable">Rs 0.00</div></div></div></div>
+        </div>
+    </div>
+</div>
+
 <script>
 (function () {
     function toNumber(id) {

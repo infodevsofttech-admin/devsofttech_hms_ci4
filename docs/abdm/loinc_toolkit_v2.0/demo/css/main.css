@@ -1,0 +1,297 @@
+@CHARSET "ISO-8859-1";
+.header
+{	
+	margin-top:0px;
+	height:70px;    
+   	background-color: #FCFCFC;
+   	border: 1px solid lightgray; 
+}
+.bar
+{	margin-top:0px;
+	margin-bottom:0px;
+	background-color: #f5f5f5;    
+    float: none;	
+    border-bottom: 1px solid #fff;
+    border-top: 1px solid #d9d9d9;
+    color:#333;  
+    font-family: "Helvetica Neue",Helvetica,Arial,sans-serif;    
+	font-size: 14px;
+	text-decoration: none;
+	padding: 10px;
+	font-weight: bold;
+        
+}
+.detailbar
+{
+	border: 1px solid lightgray;	
+	padding: 20px;
+	margin-bottom: 10px;
+	font-size: 14px;
+    font-family: Arial, 'Helvetica Neue', sans-serif;
+    letter-spacing: 0.1px;
+    line-height: 1.8;
+}
+
+.detailbar tr td
+{	
+	padding: 5px;
+	border: 0px	
+}
+
+
+.pull-left {
+	margin-left:10px;	
+	float:left !important;	
+}
+.pull-right {		
+	margin-right:10px;	
+	float:right !important;
+}
+.main-div{	
+	width:70%;
+	padding-left:15%;	
+	height:inherit;		
+	border-color:#e7e7e7;
+	transition: 0.5s;			
+}
+.tab {
+    display: inline-block;    
+    text-align: center;        
+}
+.tablinks{
+	text-decoration: none;
+	padding-right: 20px;
+	font-size: 14px;
+    font-family: Arial, 'Helvetica Neue', sans-serif;	
+}
+.simpletext
+{
+	font-size: 14px;
+    font-family: Arial, 'Helvetica Neue', sans-serif;
+    letter-spacing: 0.1px;
+    line-height: 1.8;
+    margin: 10px;   
+}
+.headings
+{
+	font-size: 14px;
+    font-family: Arial, 'Helvetica Neue', sans-serif;
+    letter-spacing: 0.1px;
+    line-height: 1.8;
+    font-weight: bold;  
+}
+.dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.dropdown-content {
+    display: none;
+    position: absolute;
+    background-color: #f9f9f9;   
+    box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+}
+
+.dropdown-content a {
+    color: black;
+    padding: 12px 16px;
+    text-decoration: none;
+    display: block;
+}
+
+.dropdown:hover .dropdown-content {
+    display: block;
+}
+.dropdown-content a:hover {
+	background-color: #f1f1f1
+}
+a{
+	color: #428bca;
+	text-decoration: none;
+	font-weight: normal;
+}
+.sidenav {
+    height:90%;
+    width: 0;
+    position: fixed;  
+    top: 0px;
+    right:-10px;
+    background-color: #E0E0E0;
+    overflow-x: hidden;    
+    transition: 0.5s;    
+    padding-top:60px; 
+    padding-left:5px;
+    padding-right:5px;                    
+    color: #2E618D;
+    font-family: "Helvetica Neue",Helvetica,Arial,sans-serif;  
+    font-size: 14px;
+}
+
+.closebtn {
+    position: absolute;
+    top: 0px;
+    right: 25px;
+    font-size: 48px !important;
+    margin-left: 50px;
+}
+.sublicenseclosebtn{
+	position: relative;
+	top: 0px;
+ 	right: 5px; 
+	font-size: 12px !important;
+	margin-right:0px;
+	width: 25px;
+	
+	
+	
+}
+td {
+	padding:10px;
+	border: 1px solid lightgray; 
+}
+
+ol {
+    counter-reset: item;
+}
+
+ol > li {
+    counter-increment: item;
+}
+
+ol ol > li {
+    display: block;
+   
+}
+
+ol ol > li:before {
+    content: counters(item, ".") ". ";
+     margin-left: -30px;	   	
+}
+
+.morecontent span {
+    display: none;
+}
+.morelink {
+    display: block;
+}
+
+/*
+css for form layout
+*/
+#maincontent input{
+width: 238px;
+padding: 5px;
+border: 1px solid #ddd;
+border-radius: 3px;
+}
+
+::placeholder{
+	color:grey;
+	opacity:.5;
+}
+
+#maincontent select{
+    width: 250px;
+    padding: 5px;
+    border: 1px solid #ddd;
+    border-radius: 3px;    
+}
+#maincontent label{
+    font-size: 14px;
+    font-family: Arial, 'Helvetica Neue', sans-serif;
+    letter-spacing: 0.1px;
+    line-height: 1.8;
+    font-weight: bold;
+    padding: 5px;
+}
+#maincontent button
+{
+    color: #fff;
+    background-color: #428bca;
+    border-color: #357ebd;
+    width: auto; 
+    display: inline-block;
+    font-weight: normal;
+    text-align: center;
+    vertical-align: middle;
+    cursor: pointer;
+    background-image: none;
+    border: 1px solid transparent;
+    white-space: nowrap;
+    padding: 6px 12px;
+    font-size: 14px;
+    border-radius: 4px;
+}
+
+#maincontent button[disabled]{
+	 background-color: #91c1ea;
+	 cursor: wait;
+}
+
+/*
+css for expand collapse - toggle
+*/
+table .theader
+{
+    cursor:pointer;
+    text-align: left;
+}
+.theader .sign:after{ 
+  content:url('../img/plus.png');
+  display:inline-block;      
+}
+.theader.expand .sign:after{
+  content:url('../img/minus.png');
+ }
+ 
+ /*
+ css for tooltip
+ */
+ .tooltip {
+    position: relative;
+    display: inline-block;
+    border-bottom: 1px dotted black;
+}
+
+.tooltip .tooltiptext {
+    visibility: hidden;
+    width: 200px;
+    background-color: #555;
+    color: #fff;
+    text-align: center;
+    border-radius: 6px;
+    padding: 5px 0;
+    position: absolute;
+    z-index: 1;
+    bottom: 125%;
+    left: 50%;
+    margin-left: -60px;
+    opacity: 0;
+    transition: opacity 1s;
+    font-size: 10px;
+}
+
+.tooltip .tooltiptext::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: #555 transparent transparent transparent;
+}
+
+.tooltip:hover .tooltiptext {
+    visibility: visible;
+    opacity: 1;
+}
+
+.labelText{
+	font-size: 12px;
+}
+
+.require {
+    color:red;
+     size:3.5;
+}

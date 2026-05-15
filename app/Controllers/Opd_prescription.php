@@ -5,6 +5,7 @@ namespace App\Controllers;
 use App\Controllers\BaseController;
 use App\Libraries\AbdmWorkTaskService;
 use App\Libraries\BridgeSyncService;
+use App\Libraries\CsnotkTerminologyService;
 use App\Models\OpdMedicineModel;
 use CodeIgniter\I18n\Time;
 
@@ -12,6 +13,24 @@ class Opd_prescription extends BaseController
 {
     private string $lastAiProvider = 'none';
     private string $lastAiServerError = '';
+
+    private function canAccessSnomedAdmin(): bool
+    {
+        $user = auth()->user();
+        if (! $user) {
+            return false;
+        }
+
+        if (method_exists($user, 'can') && (
+            $user->can('admin.access')
+            || $user->can('admin.settings')
+            || $user->can('abdm.access')
+        )) {
+            return true;
+        }
+
+        return false;
+    }
 
     private function canAccessPrescription(): bool
     {
@@ -393,8 +412,17 @@ class Opd_prescription extends BaseController
 
         $payload = [
             'complaints' => trim((string) $this->request->getPost('complaints')),
+            'complaint_onset' => trim((string) $this->request->getPost('complaint_onset')),
+            'complaint_duration_days' => trim((string) $this->request->getPost('complaint_duration_days')),
+            'complaint_severity' => trim((string) $this->request->getPost('complaint_severity')),
             'diagnosis' => trim((string) $this->request->getPost('diagnosis')),
+            'diagnosis_snomed_id' => trim((string) $this->request->getPost('diagnosis_snomed_id')),
+            'diagnosis_snomed_term' => trim((string) $this->request->getPost('diagnosis_snomed_term')),
+            'diagnosis_snomed_source' => trim((string) $this->request->getPost('diagnosis_snomed_source')),
             'Provisional_diagnosis' => trim((string) $this->request->getPost('provisional_diagnosis')),
+            'provisional_diagnosis_snomed_id' => trim((string) $this->request->getPost('provisional_diagnosis_snomed_id')),
+            'provisional_diagnosis_snomed_term' => trim((string) $this->request->getPost('provisional_diagnosis_snomed_term')),
+            'provisional_diagnosis_snomed_source' => trim((string) $this->request->getPost('provisional_diagnosis_snomed_source')),
             'Finding_Examinations' => trim((string) $this->request->getPost('finding_examinations')),
             'Prescriber_Remarks' => trim((string) $this->request->getPost('prescriber_remarks')),
             'women_related_problems' => trim((string) $this->request->getPost('women_related_problems')),
@@ -472,7 +500,72 @@ class Opd_prescription extends BaseController
             $womenStructuredInput
         );
 
+        $provisionalText = trim((string) ($payload['Provisional_diagnosis'] ?? ''));
+        $postedSnomedId = trim((string) ($payload['provisional_diagnosis_snomed_id'] ?? ''));
+        $postedSnomedTerm = trim((string) ($payload['provisional_diagnosis_snomed_term'] ?? ''));
+        $postedSnomedSource = trim((string) ($payload['provisional_diagnosis_snomed_source'] ?? ''));
+        $diagnosisText = trim((string) ($payload['diagnosis'] ?? ''));
+        $postedDiagnosisSnomedId = trim((string) ($payload['diagnosis_snomed_id'] ?? ''));
+        $postedDiagnosisSnomedTerm = trim((string) ($payload['diagnosis_snomed_term'] ?? ''));
+        $postedDiagnosisSnomedSource = trim((string) ($payload['diagnosis_snomed_source'] ?? ''));
+
+        if ($postedDiagnosisSnomedId !== '') {
+            $payload['diagnosis_snomed_id'] = $postedDiagnosisSnomedId;
+            $payload['diagnosis_snomed_term'] = $postedDiagnosisSnomedTerm !== '' ? $postedDiagnosisSnomedTerm : $diagnosisText;
+            $payload['diagnosis_snomed_source'] = $postedDiagnosisSnomedSource !== '' ? $postedDiagnosisSnomedSource : 'snomed';
+        } else {
+            $payload['diagnosis_snomed_id'] = '';
+            $payload['diagnosis_snomed_term'] = '';
+            $payload['diagnosis_snomed_source'] = '';
+
+            if ($diagnosisText !== '' && strpos($diagnosisText, ',') === false) {
+                $resolvedDiagnosis = $this->resolveProvisionalDiagnosisSnomedMatch($diagnosisText);
+                if (! empty($resolvedDiagnosis['concept_id'])) {
+                    $payload['diagnosis_snomed_id'] = (string) $resolvedDiagnosis['concept_id'];
+                    $payload['diagnosis_snomed_term'] = (string) ($resolvedDiagnosis['term'] ?? $diagnosisText);
+                    $payload['diagnosis_snomed_source'] = (string) ($resolvedDiagnosis['source'] ?? 'snomed-exact');
+                }
+            }
+        }
+
+        if ($postedSnomedId !== '') {
+            $payload['provisional_diagnosis_snomed_id'] = $postedSnomedId;
+            $payload['provisional_diagnosis_snomed_term'] = $postedSnomedTerm !== '' ? $postedSnomedTerm : $provisionalText;
+            $payload['provisional_diagnosis_snomed_source'] = $postedSnomedSource !== '' ? $postedSnomedSource : 'snomed';
+        } else {
+            $payload['provisional_diagnosis_snomed_id'] = '';
+            $payload['provisional_diagnosis_snomed_term'] = '';
+            $payload['provisional_diagnosis_snomed_source'] = '';
+
+            if ($provisionalText !== '' && strpos($provisionalText, ',') === false) {
+                $resolved = $this->resolveProvisionalDiagnosisSnomedMatch($provisionalText);
+                if (! empty($resolved['concept_id'])) {
+                    $payload['provisional_diagnosis_snomed_id'] = (string) $resolved['concept_id'];
+                    $payload['provisional_diagnosis_snomed_term'] = (string) ($resolved['term'] ?? $provisionalText);
+                    $payload['provisional_diagnosis_snomed_source'] = (string) ($resolved['source'] ?? 'snomed-exact');
+                }
+            }
+        }
+
         $this->mapWomenStructuredToExistingColumns($payload, $fields, $womenStructuredInput);
+
+        $complaintStructuredInput = [
+            'complaint_onset' => (string) ($payload['complaint_onset'] ?? ''),
+            'complaint_duration_days' => (string) ($payload['complaint_duration_days'] ?? ''),
+            'complaint_severity' => (string) ($payload['complaint_severity'] ?? ''),
+        ];
+        $this->mapComplaintStructuredToExistingColumns($payload, $fields, $complaintStructuredInput);
+        $payload['complaints'] = $this->upsertComplaintStructuredIntoComplaints(
+            (string) ($payload['complaints'] ?? ''),
+            $complaintStructuredInput
+        );
+
+        $diagnosisCodingInput = [
+            'diagnosis_snomed_id' => (string) ($payload['diagnosis_snomed_id'] ?? ''),
+            'diagnosis_snomed_term' => (string) ($payload['diagnosis_snomed_term'] ?? ''),
+            'diagnosis_snomed_source' => (string) ($payload['diagnosis_snomed_source'] ?? ''),
+        ];
+        $unmappedDiagnosisCoding = $this->mapDiagnosisCodingToExistingColumns($payload, $fields, $diagnosisCodingInput);
 
         $nabhInput = [
             'drug_allergy_status' => (string) ($payload['drug_allergy_status'] ?? ''),
@@ -503,6 +596,13 @@ class Opd_prescription extends BaseController
             );
         }
 
+        if ($this->hasAnyPatientHistoryField($unmappedDiagnosisCoding)) {
+            $payload['Prescriber_Remarks'] = $this->upsertDiagnosisCodingIntoRemarks(
+                (string) ($payload['Prescriber_Remarks'] ?? ''),
+                $unmappedDiagnosisCoding
+            );
+        }
+
         if (!in_array('women_related_problems', $fields, true)) {
             $womenText = trim((string) ($payload['women_related_problems'] ?? ''));
             if ($womenText !== '') {
@@ -511,6 +611,16 @@ class Opd_prescription extends BaseController
                     $womenText
                 );
             }
+        }
+
+        $abdmValidationErrors = $this->validateAbdmReadinessForConsult($payload, $patientRow, (array) $opdRow);
+        if (! empty($abdmValidationErrors)) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => implode(' ', $abdmValidationErrors),
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
         }
 
         foreach ($payload as $value) {
@@ -1084,9 +1194,118 @@ class Opd_prescription extends BaseController
         ]);
     }
 
+    public function section_recent_entries()
+    {
+        $opdId = (int) $this->request->getGet('opd_id');
+        if ($opdId <= 0 || ! $this->db->tableExists('opd_master') || ! $this->db->tableExists('opd_prescription')) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'sections' => [],
+                'error_text' => 'Recent entries not available',
+            ]);
+        }
+
+        $opdRow = $this->db->table('opd_master')->select('p_id')->where('opd_id', $opdId)->get(1)->getRowArray();
+        $patientId = (int) ($opdRow['p_id'] ?? 0);
+        if ($patientId <= 0) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'sections' => [],
+                'error_text' => 'Patient not found',
+            ]);
+        }
+
+        $sections = [
+            'complaints' => $this->collectRecentPrescriptionEntries($patientId, $opdId, ['complaints']),
+            'diagnosis' => $this->collectRecentPrescriptionEntries($patientId, $opdId, ['diagnosis']),
+            'provisional_diagnosis' => $this->collectRecentPrescriptionEntries($patientId, $opdId, ['Provisional_diagnosis', 'provisional_diagnosis']),
+            'investigation' => $this->collectRecentInvestigationEntries($patientId, $opdId),
+        ];
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'sections' => $sections,
+            'error_text' => 'Recent entries loaded',
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
     public function template_workspace()
     {
         return view('billing/opd_template_workspace');
+    }
+
+    public function snomed_dashboard()
+    {
+        if (! $this->canAccessSnomedAdmin()) {
+            return $this->response->setStatusCode(403)->setBody('Access denied');
+        }
+
+        return view('billing/snomed_dashboard');
+    }
+
+    public function snomed_release_status()
+    {
+        if (! $this->canAccessSnomedAdmin()) {
+            return $this->response->setStatusCode(403)->setJSON(['error_text' => 'Access denied']);
+        }
+
+        $latest = [];
+        if ($this->db->tableExists('snomed_release_log')) {
+            $latest = $this->db->table('snomed_release_log')
+                ->select('id,package_name,release_effective_time,rf2_md5,release_notes_md5,status,row_counts_json,error_text,imported_at,updated_at')
+                ->orderBy('id', 'DESC')
+                ->get(1)
+                ->getRowArray() ?? [];
+        }
+
+        $tableCounts = [
+            'concept' => $this->countTableRows('snomed_concept'),
+            'description' => $this->countTableRows('snomed_description'),
+            'language_refset' => $this->countTableRows('snomed_language_refset'),
+            'simple_map' => $this->countTableRows('snomed_map_simple'),
+            'extended_map' => $this->countTableRows('snomed_map_extended'),
+        ];
+
+        return $this->response->setJSON([
+            'latest_release' => $latest,
+            'table_counts' => $tableCounts,
+        ]);
+    }
+
+    public function snomed_map_lookup()
+    {
+        if (! $this->canAccessPrescription() && ! $this->canAccessSnomedAdmin()) {
+            return $this->response->setStatusCode(403)->setJSON(['rows' => [], 'error_text' => 'Access denied']);
+        }
+
+        $conceptId = trim((string) $this->request->getGet('concept_id'));
+        $q = trim((string) $this->request->getGet('q'));
+
+        if ($conceptId === '' && $q === '') {
+            return $this->response->setJSON(['rows' => []]);
+        }
+
+        if ($conceptId === '') {
+            $matched = $this->resolveProvisionalDiagnosisSnomedMatch($q);
+            if (! empty($matched['concept_id'])) {
+                $conceptId = (string) $matched['concept_id'];
+            }
+        }
+
+        if ($conceptId === '' || ! preg_match('/^[0-9]{6,20}$/', $conceptId)) {
+            return $this->response->setJSON(['rows' => []]);
+        }
+
+        $conceptTerm = $this->getSnomedPreferredTermByConcept($conceptId);
+        $rows = $this->fetchSnomedIcdMapRows($conceptId);
+
+        return $this->response->setJSON([
+            'concept_id' => $conceptId,
+            'concept_term' => $conceptTerm,
+            'rows' => $rows,
+        ]);
     }
 
     public function clinical_template_monitor()
@@ -2211,6 +2430,47 @@ class Opd_prescription extends BaseController
             ->setBody($csv);
     }
 
+    public function opd_medicince_coding_summary()
+    {
+        $rows = $this->getOpdMedicineRows('all', 'all', true);
+
+        $summary = [
+            'total' => 0,
+            'coding_missing' => 0,
+            'snomed_missing' => 0,
+            'atc_missing' => 0,
+            'both_missing' => 0,
+        ];
+
+        foreach ($rows as $row) {
+            $summary['total']++;
+
+            $snomed = strtoupper(trim((string) ($row['snomed_code'] ?? '')));
+            $atc = strtoupper(trim((string) ($row['atc_code'] ?? '')));
+
+            $isSnomedMissing = ($snomed === '');
+            $isAtcMissing = ($atc === '');
+
+            if ($isSnomedMissing) {
+                $summary['snomed_missing']++;
+            }
+            if ($isAtcMissing) {
+                $summary['atc_missing']++;
+            }
+            if ($isSnomedMissing || $isAtcMissing) {
+                $summary['coding_missing']++;
+            }
+            if ($isSnomedMissing && $isAtcMissing) {
+                $summary['both_missing']++;
+            }
+        }
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'summary' => $summary,
+        ]);
+    }
+
     private function getOpdMedicineRows(string $filter = '', string $scope = 'all', bool $showAll = false): array
     {
         $table = $this->findExistingTable(['opd_med_master']);
@@ -2225,6 +2485,8 @@ class Opd_prescription extends BaseController
         $saltField = $this->resolveFirstField($fields, ['salt_name', 'sal_name', 'salt', 'saltname']);
         $companyField = $this->resolveFirstField($fields, ['company_name', 'company']);
         $restrictionField = $this->resolveFirstField($fields, ['dosage_restriction', 'dose_restriction', 'restriction_note', 'restriction']);
+        $snomedField = $this->resolveFirstField($fields, ['snomed_code', 'medicine_snomed_code', 'snomed_ct_code', 'sctid']);
+        $atcField = $this->resolveFirstField($fields, ['atc_code', 'who_atc_code']);
         if ($idField === null || $nameField === null) {
             return [];
         }
@@ -2244,6 +2506,12 @@ class Opd_prescription extends BaseController
         }
         if ($restrictionField !== null) {
             $select .= ',' . $restrictionField . ' as dosage_restriction';
+        }
+        if ($snomedField !== null) {
+            $select .= ',' . $snomedField . ' as snomed_code';
+        }
+        if ($atcField !== null) {
+            $select .= ',' . $atcField . ' as atc_code';
         }
 
         $rows = $this->db->table($table)
@@ -2288,6 +2556,22 @@ class Opd_prescription extends BaseController
             $rows = array_values(array_filter($rows, static function (array $row) use ($normalize, $unclearTokens): bool {
                 $company = $normalize($row['company_name'] ?? '');
                 return $company === '' || in_array($company, $unclearTokens, true);
+            }));
+        } elseif ($filter === 'coding_missing') {
+            $rows = array_values(array_filter($rows, static function (array $row): bool {
+                $snomed = strtoupper(trim((string) ($row['snomed_code'] ?? '')));
+                $atc = strtoupper(trim((string) ($row['atc_code'] ?? '')));
+                return $snomed === '' || $atc === '';
+            }));
+        } elseif ($filter === 'snomed_missing') {
+            $rows = array_values(array_filter($rows, static function (array $row): bool {
+                $snomed = strtoupper(trim((string) ($row['snomed_code'] ?? '')));
+                return $snomed === '';
+            }));
+        } elseif ($filter === 'atc_missing') {
+            $rows = array_values(array_filter($rows, static function (array $row): bool {
+                $atc = strtoupper(trim((string) ($row['atc_code'] ?? '')));
+                return $atc === '';
             }));
         }
 
@@ -2412,6 +2696,8 @@ class Opd_prescription extends BaseController
         $saltField = $this->resolveFirstField($fields, ['salt_name', 'sal_name', 'salt', 'saltname']);
         $companyField = $this->resolveFirstField($fields, ['company_name', 'company']);
         $restrictionField = $this->resolveFirstField($fields, ['dosage_restriction', 'dose_restriction', 'restriction_note', 'restriction']);
+        $snomedField = $this->resolveFirstField($fields, ['snomed_code', 'medicine_snomed_code', 'snomed_ct_code', 'sctid']);
+        $atcField = $this->resolveFirstField($fields, ['atc_code', 'who_atc_code']);
 
         $data = [];
         if (in_array('item_name', $fields, true)) {
@@ -2431,6 +2717,12 @@ class Opd_prescription extends BaseController
         }
         if ($restrictionField !== null) {
             $data[$restrictionField] = trim((string) $this->request->getPost('dosage_restriction'));
+        }
+        if ($snomedField !== null) {
+            $data[$snomedField] = trim((string) $this->request->getPost('snomed_code'));
+        }
+        if ($atcField !== null) {
+            $data[$atcField] = strtoupper(trim((string) $this->request->getPost('atc_code')));
         }
 
         foreach (['dosage', 'dosage_when', 'dosage_freq', 'dosage_where', 'no_of_days', 'qty', 'remark'] as $dosageField) {
@@ -3957,16 +4249,68 @@ class Opd_prescription extends BaseController
         $result = [];
 
         foreach ($rows as $row) {
+            $rowSessionId = (int) ($row['opd_session_id'] ?? 0);
             $result[] = [
                 'id' => (int) ($row['id'] ?? 0),
-                'opd_session_id' => (int) ($row['opd_session_id'] ?? 0),
+                'opd_session_id' => $rowSessionId,
                 'generated_at' => (string) ($row['generated_at'] ?? ''),
                 'generated_by' => (string) ($row['generated_by'] ?? ''),
-                'download_url' => base_url('Opd_prescription/fhir_bundle/' . (int) $opdId . '/' . (int) ($row['opd_session_id'] ?? 0)),
+                'download_url' => base_url('Opd_prescription/fhir_bundle/' . (int) $opdId . '/' . $rowSessionId),
+                'preview_url' => base_url('Opd_prescription/fhir_bundle_preview/' . (int) $opdId . '/' . $rowSessionId),
+                'preview_latest_url' => base_url('Opd_prescription/fhir_bundle_preview/' . (int) $opdId),
             ];
         }
 
         return $this->response->setJSON(['rows' => $result]);
+    }
+
+    public function fhir_bundle_preview(int $opdId, int $sessionId = 0)
+    {
+        if (! $this->db->tableExists('opd_fhir_documents')) {
+            return $this->response->setStatusCode(404)->setJSON([
+                'status' => 'error',
+                'message' => 'FHIR bundle storage not available.',
+            ]);
+        }
+
+        $builder = $this->db->table('opd_fhir_documents')
+            ->where('opd_id', (int) $opdId)
+            ->where('bundle_type', 'MedicationRequestBundle');
+
+        if ($sessionId > 0) {
+            $builder->where('opd_session_id', (int) $sessionId);
+        }
+
+        $row = $builder->orderBy('id', 'DESC')->get(1)->getRowArray();
+        if (empty($row)) {
+            return $this->response->setStatusCode(404)->setJSON([
+                'status' => 'error',
+                'message' => 'FHIR bundle not found.',
+                'opd_id' => (int) $opdId,
+                'opd_session_id' => (int) $sessionId,
+            ]);
+        }
+
+        $bundleJson = (string) ($row['bundle_json'] ?? '{}');
+        $bundle = json_decode($bundleJson, true);
+        if (! is_array($bundle)) {
+            return $this->response->setStatusCode(500)->setJSON([
+                'status' => 'error',
+                'message' => 'Stored FHIR bundle JSON is invalid.',
+                'document_id' => (int) ($row['id'] ?? 0),
+            ]);
+        }
+
+        return $this->response->setJSON([
+            'status' => 'ok',
+            'document_id' => (int) ($row['id'] ?? 0),
+            'opd_id' => (int) ($row['opd_id'] ?? 0),
+            'opd_session_id' => (int) ($row['opd_session_id'] ?? 0),
+            'bundle_type' => (string) ($row['bundle_type'] ?? ''),
+            'generated_at' => (string) ($row['generated_at'] ?? ''),
+            'generated_by' => (string) ($row['generated_by'] ?? ''),
+            'bundle' => $bundle,
+        ]);
     }
 
     public function advice_search()
@@ -4083,14 +4427,79 @@ class Opd_prescription extends BaseController
         }
 
         $q = trim((string) $this->request->getGet('q'));
-        if ($q === '' || ! $this->db->tableExists('disease_master')) {
+        if ($q === '') {
             return $this->response->setJSON(['rows' => []]);
+        }
+
+        $out = [];
+        $seen = [];
+        $needle = mb_strtolower($this->normalizeAutocompleteSuggestionText($q));
+
+        $csnotkRows = (new CsnotkTerminologyService())->searchDiagnosis($q, 20);
+        foreach ($csnotkRows as $row) {
+            $name = $this->normalizeAutocompleteSuggestionText((string) ($row['term'] ?? ''));
+            if ($name === '') {
+                continue;
+            }
+            if ($needle !== '' && mb_stripos($name, $needle) === false) {
+                continue;
+            }
+
+            $conceptId = trim((string) ($row['concept_id'] ?? ''));
+            $source = trim((string) ($row['source'] ?? 'csnotk'));
+            $k = mb_strtoupper($name) . '|' . $conceptId;
+            if (isset($seen[$k])) {
+                continue;
+            }
+            $seen[$k] = true;
+
+            $out[] = [
+                'name' => $name,
+                'snomed_concept_id' => $conceptId,
+                'snomed_term' => $name,
+                'source' => $source,
+            ];
+
+            if (count($out) >= 20) {
+                return $this->response->setJSON(['rows' => array_slice($out, 0, 20)]);
+            }
+        }
+
+        $snomedRows = $this->fetchSnomedDiagnosisRows($q, 20);
+        foreach ($snomedRows as $row) {
+            $name = $this->normalizeAutocompleteSuggestionText((string) ($row['term'] ?? ''));
+            if ($name === '') {
+                continue;
+            }
+            if ($needle !== '' && mb_stripos($name, $needle) === false) {
+                continue;
+            }
+
+            $k = mb_strtoupper($name);
+            if (isset($seen[$k])) {
+                continue;
+            }
+            $seen[$k] = true;
+            $out[] = [
+                'name' => $name,
+                'snomed_concept_id' => (string) ($row['concept_id'] ?? ''),
+                'snomed_term' => $name,
+                'source' => 'snomed',
+            ];
+
+            if (count($out) >= 20) {
+                return $this->response->setJSON(['rows' => array_slice($out, 0, 20)]);
+            }
+        }
+
+        if (! $this->db->tableExists('disease_master')) {
+            return $this->response->setJSON(['rows' => array_slice($out, 0, 20)]);
         }
 
         $fields = $this->db->getFieldNames('disease_master') ?? [];
         $nameField = in_array('Name', $fields, true) ? 'Name' : (in_array('name', $fields, true) ? 'name' : null);
         if ($nameField === null) {
-            return $this->response->setJSON(['rows' => []]);
+            return $this->response->setJSON(['rows' => array_slice($out, 0, 20)]);
         }
 
         $rows = $this->db->table('disease_master')
@@ -4107,10 +4516,6 @@ class Opd_prescription extends BaseController
             max(0, (int) ($this->getCurrentUserId() ?? 0)),
             20
         );
-
-        $out = [];
-        $seen = [];
-        $needle = mb_strtolower($this->normalizeAutocompleteSuggestionText($q));
         foreach ($rows as $row) {
             $name = $this->normalizeAutocompleteSuggestionText((string) ($row['name'] ?? ''));
             if ($name === '') {
@@ -4124,7 +4529,12 @@ class Opd_prescription extends BaseController
                 continue;
             }
             $seen[$k] = true;
-            $out[] = ['name' => $name];
+            $out[] = [
+                'name' => $name,
+                'snomed_concept_id' => '',
+                'snomed_term' => '',
+                'source' => 'disease_master',
+            ];
         }
         foreach ($keywordRows as $keyword) {
             $name = $this->normalizeAutocompleteSuggestionText((string) $keyword);
@@ -4139,10 +4549,195 @@ class Opd_prescription extends BaseController
                 continue;
             }
             $seen[$k] = true;
-            $out[] = ['name' => $name];
+            $out[] = [
+                'name' => $name,
+                'snomed_concept_id' => '',
+                'snomed_term' => '',
+                'source' => 'keyword',
+            ];
         }
 
         return $this->response->setJSON(['rows' => array_slice($out, 0, 20)]);
+    }
+
+    private function fetchSnomedDiagnosisRows(string $query, int $limit = 20): array
+    {
+        $q = trim($query);
+        if ($q === '') {
+            return [];
+        }
+
+        if (! $this->db->tableExists('snomed_concept') || ! $this->db->tableExists('snomed_description')) {
+            return [];
+        }
+
+        $normalized = mb_strtolower($this->normalizeAutocompleteSuggestionText($q));
+        if ($normalized === '') {
+            return [];
+        }
+
+        $builder = $this->db->table('snomed_description d')
+            ->select('d.concept_id, d.term, MAX(CASE WHEN lr.acceptability_id = "900000000000548007" THEN 2 WHEN lr.acceptability_id = "900000000000549004" THEN 1 ELSE 0 END) AS accept_rank', false)
+            ->join('snomed_concept c', 'c.concept_id = d.concept_id AND c.active = 1', 'inner')
+            ->join('snomed_language_refset lr', 'lr.referenced_component_id = d.description_id AND lr.active = 1 AND lr.refset_id IN ("900000000000508004", "900000000000509007")', 'left')
+            ->where('d.active', 1)
+            ->where('d.language_code', 'en')
+            ->groupStart()
+                ->like('d.term_normalized', $normalized, 'after')
+                ->orLike('d.term_normalized', ' ' . $normalized, 'both')
+            ->groupEnd()
+            ->groupBy('d.description_id')
+            ->orderBy('accept_rank', 'DESC')
+            ->orderBy('CHAR_LENGTH(d.term)', 'ASC', false)
+            ->orderBy('d.term', 'ASC')
+            ->limit(max(1, min(100, $limit)));
+
+        return $builder->get()->getResultArray();
+    }
+
+    private function resolveProvisionalDiagnosisSnomedMatch(string $text): array
+    {
+        $term = trim($text);
+        if ($term === '') {
+            return [];
+        }
+
+        if (! $this->db->tableExists('snomed_description')) {
+            return [];
+        }
+
+        $row = $this->db->table('snomed_description d')
+            ->select('d.concept_id, d.term')
+            ->join('snomed_concept c', 'c.concept_id = d.concept_id AND c.active = 1', 'inner')
+            ->where('d.active', 1)
+            ->where('d.language_code', 'en')
+            ->where('d.term', $term)
+            ->orderBy('d.term', 'ASC')
+            ->get(1)
+            ->getRowArray();
+
+        if (! is_array($row) || empty($row['concept_id'])) {
+            return [];
+        }
+
+        return [
+            'concept_id' => (string) ($row['concept_id'] ?? ''),
+            'term' => (string) ($row['term'] ?? $term),
+            'source' => 'snomed-exact',
+        ];
+    }
+
+    private function getSnomedPreferredTermByConcept(string $conceptId): string
+    {
+        if (! $this->db->tableExists('snomed_description')) {
+            return '';
+        }
+
+        $preferred = $this->db->table('snomed_description d')
+            ->select('d.term')
+            ->join('snomed_language_refset lr', 'lr.referenced_component_id = d.description_id AND lr.active = 1 AND lr.acceptability_id = "900000000000548007"', 'inner')
+            ->where('d.active', 1)
+            ->where('d.concept_id', $conceptId)
+            ->where('d.language_code', 'en')
+            ->orderBy('d.term', 'ASC')
+            ->get(1)
+            ->getRowArray();
+
+        if (is_array($preferred) && ! empty($preferred['term'])) {
+            return trim((string) $preferred['term']);
+        }
+
+        $fallback = $this->db->table('snomed_description')
+            ->select('term')
+            ->where('active', 1)
+            ->where('concept_id', $conceptId)
+            ->where('language_code', 'en')
+            ->orderBy('term', 'ASC')
+            ->get(1)
+            ->getRowArray();
+
+        return trim((string) ($fallback['term'] ?? ''));
+    }
+
+    private function fetchSnomedIcdMapRows(string $conceptId): array
+    {
+        $out = [];
+        $seen = [];
+
+        if ($this->db->tableExists('snomed_map_extended')) {
+            $extended = $this->db->table('snomed_map_extended')
+                ->select('map_target,map_group,map_priority,map_rule,map_advice')
+                ->where('active', 1)
+                ->where('referenced_component_id', $conceptId)
+                ->where('map_target IS NOT NULL', null, false)
+                ->where('map_target <>', '')
+                ->orderBy('map_group', 'ASC')
+                ->orderBy('map_priority', 'ASC')
+                ->limit(50)
+                ->get()
+                ->getResultArray();
+
+            foreach ($extended as $row) {
+                $code = trim((string) ($row['map_target'] ?? ''));
+                if ($code === '' || isset($seen['E:' . $code])) {
+                    continue;
+                }
+                $seen['E:' . $code] = true;
+                $out[] = [
+                    'icd_code' => $code,
+                    'source' => 'extended_map',
+                    'map_group' => (int) ($row['map_group'] ?? 0),
+                    'map_priority' => (int) ($row['map_priority'] ?? 0),
+                    'map_rule' => (string) ($row['map_rule'] ?? ''),
+                    'map_advice' => (string) ($row['map_advice'] ?? ''),
+                ];
+            }
+        }
+
+        if ($this->db->tableExists('snomed_map_simple')) {
+            $simple = $this->db->table('snomed_map_simple')
+                ->select('map_target')
+                ->where('active', 1)
+                ->where('referenced_component_id', $conceptId)
+                ->where('map_target IS NOT NULL', null, false)
+                ->where('map_target <>', '')
+                ->orderBy('map_target', 'ASC')
+                ->limit(50)
+                ->get()
+                ->getResultArray();
+
+            foreach ($simple as $row) {
+                $code = trim((string) ($row['map_target'] ?? ''));
+                if ($code === '' || isset($seen['E:' . $code]) || isset($seen['S:' . $code])) {
+                    continue;
+                }
+                $seen['S:' . $code] = true;
+                $out[] = [
+                    'icd_code' => $code,
+                    'source' => 'simple_map',
+                    'map_group' => 0,
+                    'map_priority' => 0,
+                    'map_rule' => '',
+                    'map_advice' => '',
+                ];
+            }
+        }
+
+        return $out;
+    }
+
+    private function countTableRows(string $table): int
+    {
+        if (! preg_match('/^[a-zA-Z0-9_]+$/', $table)) {
+            return 0;
+        }
+
+        if (! $this->db->tableExists($table)) {
+            return 0;
+        }
+
+        $row = $this->db->query('SELECT COUNT(*) AS row_count FROM ' . $table)->getRowArray();
+        return (int) ($row['row_count'] ?? 0);
     }
 
     public function finding_exam_search()
@@ -7000,6 +7595,154 @@ class Opd_prescription extends BaseController
     }
 
     /**
+     * @param array<string, mixed> $payload
+     * @param array<int, string> $fields
+     * @param array<string, string> $input
+     * @return array<string, string>
+     */
+    private function mapComplaintStructuredToExistingColumns(array &$payload, array $fields, array $input): array
+    {
+        $mapping = [
+            'complaint_onset' => ['complaint_onset', 'symptom_onset', 'onset'],
+            'complaint_duration_days' => ['complaint_duration_days', 'symptom_duration_days', 'duration_days', 'complaint_duration'],
+            'complaint_severity' => ['complaint_severity', 'symptom_severity', 'severity'],
+        ];
+
+        $unmapped = [];
+        foreach ($mapping as $logical => $candidates) {
+            $value = trim((string) ($input[$logical] ?? ''));
+            $target = null;
+            foreach ($candidates as $candidate) {
+                if (in_array($candidate, $fields, true)) {
+                    $target = $candidate;
+                    break;
+                }
+            }
+
+            if ($target !== null) {
+                $payload[$target] = $value;
+            } else {
+                $unmapped[$logical] = $value;
+            }
+        }
+
+        return $unmapped;
+    }
+
+    /**
+     * @param array<string, string> $input
+     */
+    private function upsertComplaintStructuredIntoComplaints(string $complaints, array $input): string
+    {
+        $clean = $this->stripComplaintStructuredFromComplaints($complaints);
+
+        $lines = [];
+        if (trim((string) ($input['complaint_onset'] ?? '')) !== '') {
+            $lines[] = 'Complaint Onset: ' . trim((string) ($input['complaint_onset'] ?? ''));
+        }
+        if (trim((string) ($input['complaint_duration_days'] ?? '')) !== '') {
+            $lines[] = 'Complaint Duration (Days): ' . trim((string) ($input['complaint_duration_days'] ?? ''));
+        }
+        if (trim((string) ($input['complaint_severity'] ?? '')) !== '') {
+            $lines[] = 'Complaint Severity: ' . trim((string) ($input['complaint_severity'] ?? ''));
+        }
+
+        if (empty($lines)) {
+            return $clean;
+        }
+
+        if ($clean !== '') {
+            return $clean . "\n" . implode("\n", $lines);
+        }
+
+        return implode("\n", $lines);
+    }
+
+    private function stripComplaintStructuredFromComplaints(string $complaints): string
+    {
+        $clean = trim($complaints);
+        $clean = preg_replace('/\n?\s*Complaint\s*Onset\s*:\s*.+$/im', '', $clean) ?? $clean;
+        $clean = preg_replace('/\n?\s*Complaint\s*Duration\s*\(\s*Days\s*\)\s*:\s*.+$/im', '', $clean) ?? $clean;
+        $clean = preg_replace('/\n?\s*Complaint\s*Severity\s*:\s*.+$/im', '', $clean) ?? $clean;
+
+        return trim($clean);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @param array<int, string> $fields
+     * @param array<string, string> $input
+     * @return array<string, string>
+     */
+    private function mapDiagnosisCodingToExistingColumns(array &$payload, array $fields, array $input): array
+    {
+        $mapping = [
+            'diagnosis_snomed_id' => ['diagnosis_snomed_id', 'diagnosis_sctid', 'diagnosis_concept_id'],
+            'diagnosis_snomed_term' => ['diagnosis_snomed_term', 'diagnosis_sct_term', 'diagnosis_concept_term'],
+            'diagnosis_snomed_source' => ['diagnosis_snomed_source', 'diagnosis_sct_source', 'diagnosis_concept_source'],
+        ];
+
+        $unmapped = [];
+        foreach ($mapping as $logical => $candidates) {
+            $value = trim((string) ($input[$logical] ?? ''));
+            $target = null;
+            foreach ($candidates as $candidate) {
+                if (in_array($candidate, $fields, true)) {
+                    $target = $candidate;
+                    break;
+                }
+            }
+
+            if ($target !== null) {
+                $payload[$target] = $value;
+            } else {
+                $unmapped[$logical] = $value;
+            }
+        }
+
+        return $unmapped;
+    }
+
+    /**
+     * @param array<string, string> $input
+     */
+    private function upsertDiagnosisCodingIntoRemarks(string $remarks, array $input): string
+    {
+        $clean = $this->stripDiagnosisCodingFromRemarks($remarks);
+
+        $lines = [];
+        if (trim((string) ($input['diagnosis_snomed_id'] ?? '')) !== '') {
+            $lines[] = 'Diagnosis SNOMED ID: ' . trim((string) ($input['diagnosis_snomed_id'] ?? ''));
+        }
+        if (trim((string) ($input['diagnosis_snomed_term'] ?? '')) !== '') {
+            $lines[] = 'Diagnosis SNOMED Term: ' . trim((string) ($input['diagnosis_snomed_term'] ?? ''));
+        }
+        if (trim((string) ($input['diagnosis_snomed_source'] ?? '')) !== '') {
+            $lines[] = 'Diagnosis SNOMED Source: ' . trim((string) ($input['diagnosis_snomed_source'] ?? ''));
+        }
+
+        if (empty($lines)) {
+            return $clean;
+        }
+
+        if ($clean !== '') {
+            return $clean . "\n" . implode("\n", $lines);
+        }
+
+        return implode("\n", $lines);
+    }
+
+    private function stripDiagnosisCodingFromRemarks(string $remarks): string
+    {
+        $clean = trim($remarks);
+        $clean = preg_replace('/\n?\s*Diagnosis\s*SNOMED\s*ID\s*:\s*.+$/im', '', $clean) ?? $clean;
+        $clean = preg_replace('/\n?\s*Diagnosis\s*SNOMED\s*Term\s*:\s*.+$/im', '', $clean) ?? $clean;
+        $clean = preg_replace('/\n?\s*Diagnosis\s*SNOMED\s*Source\s*:\s*.+$/im', '', $clean) ?? $clean;
+
+        return trim($clean);
+    }
+
+    /**
      * @param array<string, string> $input
      */
     private function upsertPatientHistoryFieldsIntoRemarks(string $remarks, array $input): string
@@ -7215,6 +7958,167 @@ class Opd_prescription extends BaseController
     private function isTemplateSectionAllowed(string $section): bool
     {
         return in_array($section, ['finding_examinations', 'diagnosis', 'provisional_diagnosis', 'prescriber_remarks', 'advice'], true);
+    }
+
+    /**
+     * @param array<int, string> $candidateColumns
+     * @return array<int, string>
+     */
+    private function collectRecentPrescriptionEntries(int $patientId, int $currentOpdId, array $candidateColumns, int $limit = 8): array
+    {
+        if ($patientId <= 0 || ! $this->db->tableExists('opd_prescription')) {
+            return [];
+        }
+
+        $fields = $this->db->getFieldNames('opd_prescription') ?? [];
+        $column = $this->resolveFirstField($fields, $candidateColumns);
+        if ($column === null) {
+            return [];
+        }
+
+        $rows = $this->db->table('opd_prescription')
+            ->select($column . ' as section_text')
+            ->where('p_id', $patientId)
+            ->where('opd_id !=', $currentOpdId)
+            ->where($column . ' IS NOT NULL', null, false)
+            ->where($column . ' !=', '')
+            ->orderBy('id', 'DESC')
+            ->limit(40)
+            ->get()
+            ->getResultArray();
+
+        $out = [];
+        $seen = [];
+        foreach ($rows as $row) {
+            $sectionText = trim((string) ($row['section_text'] ?? ''));
+            if ($sectionText === '') {
+                continue;
+            }
+
+            $parts = $this->splitRecentEntryText($sectionText);
+            foreach ($parts as $part) {
+                $normalized = $this->normalizeRecentEntryText($part);
+                if ($normalized === '') {
+                    continue;
+                }
+
+                $key = strtolower($normalized);
+                if (isset($seen[$key])) {
+                    continue;
+                }
+
+                $seen[$key] = true;
+                $out[] = $normalized;
+                if (count($out) >= $limit) {
+                    return $out;
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function collectRecentInvestigationEntries(int $patientId, int $currentOpdId, int $limit = 8): array
+    {
+        $out = $this->collectRecentPrescriptionEntries($patientId, $currentOpdId, ['investigation'], $limit);
+        $seen = [];
+        foreach ($out as $item) {
+            $seen[strtolower($item)] = true;
+        }
+
+        if (! $this->db->tableExists('opd_prescription_investigation') || ! $this->db->tableExists('opd_master')) {
+            return array_slice($out, 0, $limit);
+        }
+
+        $fields = $this->db->getFieldNames('opd_prescription_investigation') ?? [];
+        $nameField = $this->resolveFirstField($fields, ['investigation_name', 'name', 'test_name']);
+        $opdField = $this->resolveFirstField($fields, ['opd_id', 'opdid']);
+        if ($nameField === null || $opdField === null) {
+            return array_slice($out, 0, $limit);
+        }
+
+        $builder = $this->db->table('opd_prescription_investigation i')
+            ->select('i.`' . $nameField . '` as investigation_name')
+            ->join('opd_master o', 'o.opd_id = i.`' . $opdField . '`', 'inner')
+            ->where('o.p_id', $patientId)
+            ->where('i.`' . $opdField . '` !=', $currentOpdId)
+            ->where('i.`' . $nameField . '` IS NOT NULL', null, false)
+            ->where('i.`' . $nameField . '` !=', '')
+            ->limit(60);
+
+        $idField = $this->resolveFirstField($fields, ['id', 'investigation_id']);
+        if ($idField !== null) {
+            $builder->orderBy('i.`' . $idField . '`', 'DESC');
+        } else {
+            $builder->orderBy('i.`' . $opdField . '`', 'DESC');
+        }
+
+        $rows = $builder->get()->getResultArray();
+        foreach ($rows as $row) {
+            $name = $this->normalizeRecentEntryText((string) ($row['investigation_name'] ?? ''));
+            if ($name === '') {
+                continue;
+            }
+
+            $key = strtolower($name);
+            if (isset($seen[$key])) {
+                continue;
+            }
+
+            $seen[$key] = true;
+            $out[] = $name;
+            if (count($out) >= $limit) {
+                break;
+            }
+        }
+
+        return array_slice($out, 0, $limit);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function splitRecentEntryText(string $text): array
+    {
+        $normalized = trim(str_replace(["\r\n", "\r"], "\n", $text));
+        if ($normalized === '') {
+            return [];
+        }
+
+        $parts = preg_split('/[\n;]+/', $normalized) ?: [];
+        if (count($parts) <= 1 && substr_count($normalized, ',') > 0 && strlen($normalized) <= 220) {
+            $parts = preg_split('/,/', $normalized) ?: [];
+        }
+
+        if (empty($parts)) {
+            return [$normalized];
+        }
+
+        return $parts;
+    }
+
+    private function normalizeRecentEntryText(string $value, int $maxLen = 110): string
+    {
+        $text = trim($value);
+        if ($text === '') {
+            return '';
+        }
+
+        $text = preg_replace('/^[\-\*\x{2022}\s]+/u', '', $text) ?? $text;
+        $text = preg_replace('/\s+/', ' ', $text) ?? $text;
+        $text = trim($text);
+        if ($text === '') {
+            return '';
+        }
+
+        if (strlen($text) > $maxLen) {
+            $text = rtrim(substr($text, 0, $maxLen - 3)) . '...';
+        }
+
+        return $text;
     }
 
     private function resolveSectionColumn(string $section): ?string
@@ -7990,10 +8894,14 @@ class Opd_prescription extends BaseController
         $encounter = [
             'id' => (string) ($opdRow['opd_id'] ?? $opdId),
             'status' => 'finished',
+            'period_start' => Time::now('Asia/Kolkata')->toDateTimeString(),
+            'period_end' => Time::now('Asia/Kolkata')->toDateTimeString(),
         ];
 
         $medications = $this->getPrescriptionMedicines($sessionId);
-        $bundle = $this->fhirR4Builder->buildPrescriptionBundle($patient, $encounter, $medications);
+        $conditions = $this->getPrescriptionConditions($sessionId);
+        $clinicalContext = $this->getPrescriptionClinicalContext($sessionId, $opdRow);
+        $bundle = $this->fhirR4Builder->buildPrescriptionBundle($patient, $encounter, $medications, $conditions, $clinicalContext);
         $bundleJson = (string) json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
         $user = auth()->user();
@@ -8046,6 +8954,57 @@ class Opd_prescription extends BaseController
         }
 
         $rows = $this->db->table($table)->where('opd_pre_id', $sessionId)->get()->getResultArray();
+        $masterTable = $this->findExistingTable(['opd_med_master']);
+
+        $masterById = [];
+        if ($masterTable !== null) {
+            $masterFields = $this->db->getFieldNames($masterTable) ?? [];
+            $masterNameField = $this->resolveFirstField($masterFields, ['item_name', 'med_name']);
+            $masterGenericField = $this->resolveFirstField($masterFields, ['genericname', 'generic_name']);
+            $masterTypeField = $this->resolveFirstField($masterFields, ['formulation']);
+            $masterSnomedField = $this->resolveFirstField($masterFields, ['snomed_code', 'medicine_snomed_code', 'snomed_ct_code', 'sctid']);
+            $masterAtcField = $this->resolveFirstField($masterFields, ['atc_code', 'who_atc_code']);
+
+            $medIds = [];
+            foreach ($rows as $row) {
+                $mid = (int) ($row['med_id'] ?? 0);
+                if ($mid > 0) {
+                    $medIds[$mid] = $mid;
+                }
+            }
+
+            if (! empty($medIds)) {
+                $select = ['id'];
+                if ($masterNameField !== null) {
+                    $select[] = $masterNameField . ' as item_name';
+                }
+                if ($masterGenericField !== null) {
+                    $select[] = $masterGenericField . ' as genericname';
+                }
+                if ($masterTypeField !== null) {
+                    $select[] = $masterTypeField . ' as formulation';
+                }
+                if ($masterSnomedField !== null) {
+                    $select[] = $masterSnomedField . ' as snomed_code';
+                }
+                if ($masterAtcField !== null) {
+                    $select[] = $masterAtcField . ' as atc_code';
+                }
+
+                $masterRows = $this->db->table($masterTable)
+                    ->select(implode(',', $select))
+                    ->whereIn('id', array_values($medIds))
+                    ->get()
+                    ->getResultArray();
+
+                foreach ($masterRows as $mrow) {
+                    $mid = (int) ($mrow['id'] ?? 0);
+                    if ($mid > 0) {
+                        $masterById[$mid] = $mrow;
+                    }
+                }
+            }
+        }
 
         $medications = [];
         foreach ($rows as $row) {
@@ -8056,14 +9015,409 @@ class Opd_prescription extends BaseController
                 trim((string) ($row['no_of_days'] ?? '')) !== '' ? ('for ' . trim((string) $row['no_of_days']) . ' days') : '',
             ]);
 
+            $mid = (int) ($row['med_id'] ?? 0);
+            $master = $mid > 0 ? ($masterById[$mid] ?? []) : [];
+            $drugName = trim((string) ($row['med_name'] ?? ''));
+            if ($drugName === '') {
+                $drugName = trim((string) ($master['item_name'] ?? ''));
+            }
+
+            $genericName = trim((string) ($master['genericname'] ?? ''));
+            $medType = trim((string) ($row['med_type'] ?? ''));
+            if ($medType === '') {
+                $medType = trim((string) ($master['formulation'] ?? ''));
+            }
+
             $medications[] = [
-                'drug_name' => (string) ($row['med_name'] ?? ''),
+                'drug_name' => $drugName,
                 'status' => 'active',
                 'dosage' => implode(' | ', $dosageParts),
+                'route_text' => trim((string) ($row['dosage_where'] ?? '')),
+                'frequency_text' => trim((string) ($row['dosage_freq'] ?? '')),
+                'med_id' => $mid,
+                'generic_name' => $genericName,
+                'med_type' => $medType,
+                'snomed_code' => trim((string) ($master['snomed_code'] ?? '')),
+                'atc_code' => strtoupper(trim((string) ($master['atc_code'] ?? ''))),
             ];
         }
 
         return $medications;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function getPrescriptionConditions(int $sessionId): array
+    {
+        if (! $this->db->tableExists('opd_prescription') || $sessionId <= 0) {
+            return [];
+        }
+
+        $fields = $this->db->getFieldNames('opd_prescription') ?? [];
+        $selectFields = ['id'];
+        foreach (['diagnosis', 'diagnosis_snomed_id', 'diagnosis_snomed_term', 'Provisional_diagnosis', 'provisional_diagnosis_snomed_id', 'provisional_diagnosis_snomed_term'] as $field) {
+            if (in_array($field, $fields, true)) {
+                $selectFields[] = $field;
+            }
+        }
+
+        $row = $this->db->table('opd_prescription')
+            ->select(implode(',', $selectFields))
+            ->where('id', $sessionId)
+            ->get(1)
+            ->getRowArray();
+
+        if (! is_array($row) || empty($row)) {
+            return [];
+        }
+
+        $diagnosis = trim((string) ($row['diagnosis'] ?? ''));
+        $diagnosisSnomedId = trim((string) ($row['diagnosis_snomed_id'] ?? ''));
+        $diagnosisSnomedTerm = trim((string) ($row['diagnosis_snomed_term'] ?? ''));
+        $provisional = trim((string) ($row['Provisional_diagnosis'] ?? ''));
+        $snomedId = trim((string) ($row['provisional_diagnosis_snomed_id'] ?? ''));
+        $snomedTerm = trim((string) ($row['provisional_diagnosis_snomed_term'] ?? ''));
+
+        if ($diagnosisSnomedId === '' && $diagnosis !== '' && strpos($diagnosis, ',') === false) {
+            $resolvedDiagnosis = $this->resolveProvisionalDiagnosisSnomedMatch($diagnosis);
+            if (! empty($resolvedDiagnosis['concept_id'])) {
+                $diagnosisSnomedId = (string) ($resolvedDiagnosis['concept_id'] ?? '');
+                $diagnosisSnomedTerm = (string) ($resolvedDiagnosis['term'] ?? $diagnosis);
+            }
+        }
+
+        if ($snomedId === '' && $provisional !== '' && strpos($provisional, ',') === false) {
+            $resolved = $this->resolveProvisionalDiagnosisSnomedMatch($provisional);
+            if (! empty($resolved['concept_id'])) {
+                $snomedId = (string) ($resolved['concept_id'] ?? '');
+                $snomedTerm = (string) ($resolved['term'] ?? $provisional);
+            }
+        }
+
+        $out = [];
+        $seen = [];
+
+        if ($diagnosis !== '') {
+            $k = strtoupper($diagnosis) . '|' . $diagnosisSnomedId;
+            $seen[$k] = true;
+            $out[] = [
+                'text' => $diagnosis,
+                'verification_status' => 'confirmed',
+                'snomed_code' => $diagnosisSnomedId,
+                'snomed_display' => $diagnosisSnomedTerm !== '' ? $diagnosisSnomedTerm : $diagnosis,
+            ];
+        }
+
+        if ($provisional !== '') {
+            $k = strtoupper($provisional) . '|' . $snomedId;
+            if (! isset($seen[$k])) {
+                $seen[$k] = true;
+                $out[] = [
+                    'text' => $provisional,
+                    'verification_status' => 'provisional',
+                    'snomed_code' => $snomedId,
+                    'snomed_display' => $snomedTerm !== '' ? $snomedTerm : $provisional,
+                ];
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param array<string, mixed> $opdRow
+     * @return array<string, mixed>
+     */
+    private function getPrescriptionClinicalContext(int $sessionId, array $opdRow): array
+    {
+        if ($sessionId <= 0 || ! $this->db->tableExists('opd_prescription')) {
+            return [];
+        }
+
+        $row = $this->db->table('opd_prescription')->where('id', $sessionId)->get(1)->getRowArray() ?? [];
+        if (empty($row)) {
+            return [];
+        }
+
+        $remarks = (string) ($row['Prescriber_Remarks'] ?? '');
+        $nabh = $this->hydrateNabhPrescriptionFields($row, $remarks);
+
+        $complaintsText = trim((string) ($row['complaints'] ?? ''));
+        $complaints = [];
+        if ($complaintsText !== '') {
+            $parts = preg_split('/[,;\n\r]+/', $complaintsText) ?: [];
+            $seen = [];
+            foreach ($parts as $part) {
+                $part = trim((string) $part);
+                if ($part === '' || preg_match('/^Complaint\s*(Onset|Duration|Severity)\s*:/i', $part) === 1) {
+                    continue;
+                }
+                $k = strtoupper($part);
+                if (isset($seen[$k])) {
+                    continue;
+                }
+                $seen[$k] = true;
+                $complaint = [
+                    'text' => $part,
+                ];
+
+                $resolvedComplaint = $this->resolveProvisionalDiagnosisSnomedMatch($part);
+                if (! empty($resolvedComplaint['code'])) {
+                    $complaint['snomed_code'] = (string) $resolvedComplaint['code'];
+                    $complaint['snomed_display'] = (string) ($resolvedComplaint['display'] ?? $part);
+                }
+
+                $complaints[] = $complaint;
+            }
+        }
+
+        $observations = [];
+        $observationMap = [
+            'pulse' => ['loinc' => '8867-4', 'display' => 'Heart rate', 'unit' => '/min', 'ucum' => '/min'],
+            'spo2' => ['loinc' => '59408-5', 'display' => 'Oxygen saturation in Arterial blood by Pulse oximetry', 'unit' => '%', 'ucum' => '%'],
+            'bp' => ['loinc' => '8480-6', 'display' => 'Systolic blood pressure', 'unit' => 'mmHg', 'ucum' => 'mm[Hg]'],
+            'diastolic' => ['loinc' => '8462-4', 'display' => 'Diastolic blood pressure', 'unit' => 'mmHg', 'ucum' => 'mm[Hg]'],
+            'temp' => ['loinc' => '8310-5', 'display' => 'Body temperature', 'unit' => 'Cel', 'ucum' => 'Cel'],
+            'rr_min' => ['loinc' => '9279-1', 'display' => 'Respiratory rate', 'unit' => '/min', 'ucum' => '/min'],
+            'height' => ['loinc' => '8302-2', 'display' => 'Body height', 'unit' => 'cm', 'ucum' => 'cm'],
+            'weight' => ['loinc' => '29463-7', 'display' => 'Body weight', 'unit' => 'kg', 'ucum' => 'kg'],
+        ];
+
+        foreach ($observationMap as $field => $meta) {
+            $value = $this->parseNumericFromText((string) ($row[$field] ?? ''));
+            if ($value === null) {
+                continue;
+            }
+
+            $observations[] = [
+                'loinc' => (string) ($meta['loinc'] ?? ''),
+                'display' => (string) ($meta['display'] ?? ''),
+                'value' => $value,
+                'unit' => (string) ($meta['unit'] ?? ''),
+                'ucum' => (string) ($meta['ucum'] ?? ''),
+            ];
+        }
+
+        $allergies = [];
+        $allergyStatus = strtolower(trim((string) ($nabh['drug_allergy_status'] ?? '')));
+        $allergyDetails = trim((string) ($nabh['drug_allergy_details'] ?? ''));
+        $adrHistory = trim((string) ($nabh['adr_history'] ?? ''));
+
+        if ($allergyStatus === 'known' && $allergyDetails !== '') {
+            $allergies[] = [
+                'code_text' => $allergyDetails,
+                'reaction_text' => $adrHistory,
+                'clinical_status' => 'active',
+                'verification_status' => 'confirmed',
+            ];
+        }
+
+        $serviceRequests = [];
+        $investigationText = trim((string) ($row['investigation'] ?? ''));
+        if ($investigationText !== '') {
+            $tests = preg_split('/[,;\n\r]+/', $investigationText) ?: [];
+            $seenTests = [];
+            foreach ($tests as $test) {
+                $test = trim((string) $test);
+                if ($test === '') {
+                    continue;
+                }
+                $k = strtoupper($test);
+                if (isset($seenTests[$k])) {
+                    continue;
+                }
+                $seenTests[$k] = true;
+                $serviceRequests[] = [
+                    'code_text' => $test,
+                    'status' => 'active',
+                    'intent' => 'order',
+                ];
+            }
+        }
+
+        $appointments = [];
+        $nextVisit = trim((string) ($row['next_visit'] ?? ''));
+        $referTo = trim((string) ($row['refer_to'] ?? ''));
+        if ($nextVisit !== '' || $referTo !== '') {
+            $descParts = [];
+            if ($nextVisit !== '') {
+                $descParts[] = 'Follow-up: ' . $nextVisit;
+            }
+            if ($referTo !== '') {
+                $descParts[] = 'Refer to: ' . $referTo;
+            }
+            $appointments[] = [
+                'status' => 'proposed',
+                'description' => implode(' | ', $descParts),
+            ];
+        }
+
+        $hospitalProfile = $this->getHospitalProfileForFhir();
+        $practitionerName = trim((string) ($opdRow['doc_name'] ?? ''));
+        $practitionerId = trim((string) ($opdRow['doc_id'] ?? ''));
+        $doctorIdentity = $this->getDoctorAbdmIdentity((int) ($opdRow['doc_id'] ?? 0));
+
+        return [
+            'complaints' => $complaints,
+            'observations' => $observations,
+            'allergies' => $allergies,
+            'service_requests' => $serviceRequests,
+            'appointments' => $appointments,
+            'practitioner' => [
+                'id' => $practitionerId !== '' ? $practitionerId : 'doctor-unknown',
+                'name' => $practitionerName,
+                'registration_number' => trim((string) ($doctorIdentity['registration_number'] ?? ($hospitalProfile['doctor_registration'] ?? ''))),
+            ],
+            'organization' => [
+                'id' => trim((string) ($hospitalProfile['hfr_id'] ?? '')) !== '' ? preg_replace('/[^A-Za-z0-9\-]/', '-', (string) ($hospitalProfile['hfr_id'] ?? '')) : 'facility-unknown',
+                'name' => (string) ($hospitalProfile['name'] ?? ''),
+                'hfr_id' => (string) ($hospitalProfile['hfr_id'] ?? ''),
+            ],
+        ];
+    }
+
+    /**
+     * @return array{name:string,hfr_id:string,doctor_registration:string}
+     */
+    private function getHospitalProfileForFhir(): array
+    {
+        $defaults = [
+            'name' => '',
+            'hfr_id' => '',
+            'doctor_registration' => '',
+        ];
+
+        if (! $this->db->tableExists('hospital_setting')) {
+            return $defaults;
+        }
+
+        $rows = $this->db->table('hospital_setting')
+            ->select('s_name,s_value')
+            ->whereIn('s_name', ['H_name', 'H_HFR_ID', 'HPR_ID', 'DOCTOR_REG_NO'])
+            ->get()
+            ->getResultArray();
+
+        $map = [];
+        foreach ($rows as $row) {
+            $key = trim((string) ($row['s_name'] ?? ''));
+            if ($key === '') {
+                continue;
+            }
+            $map[$key] = trim((string) ($row['s_value'] ?? ''));
+        }
+
+        return [
+            'name' => (string) ($map['H_name'] ?? ''),
+            'hfr_id' => (string) ($map['H_HFR_ID'] ?? ''),
+            'doctor_registration' => (string) (($map['HPR_ID'] ?? $map['DOCTOR_REG_NO'] ?? '')),
+        ];
+    }
+
+    /**
+     * @return array{hpr_id:string,registration_number:string}
+     */
+    private function getDoctorAbdmIdentity(int $docId): array
+    {
+        $out = [
+            'hpr_id' => '',
+            'registration_number' => '',
+        ];
+
+        if ($docId <= 0 || ! $this->db->tableExists('doctor_master')) {
+            return $out;
+        }
+
+        $fields = $this->db->getFieldNames('doctor_master') ?? [];
+        $select = ['id'];
+        foreach (['hpr_id', 'hpr_no', 'hpr_number', 'doctor_reg_no', 'registration_no', 'reg_no', 'doc_reg_no'] as $field) {
+            if (in_array($field, $fields, true)) {
+                $select[] = $field;
+            }
+        }
+
+        $row = $this->db->table('doctor_master')
+            ->select(implode(',', $select))
+            ->where('id', $docId)
+            ->get(1)
+            ->getRowArray() ?? [];
+
+        if (empty($row)) {
+            return $out;
+        }
+
+        foreach (['hpr_id', 'hpr_no', 'hpr_number'] as $field) {
+            if (! empty($row[$field])) {
+                $out['hpr_id'] = strtoupper(trim((string) $row[$field]));
+                break;
+            }
+        }
+
+        foreach (['doctor_reg_no', 'registration_no', 'reg_no', 'doc_reg_no'] as $field) {
+            if (! empty($row[$field])) {
+                $out['registration_number'] = trim((string) $row[$field]);
+                break;
+            }
+        }
+
+        if ($out['registration_number'] === '' && $out['hpr_id'] !== '') {
+            $out['registration_number'] = $out['hpr_id'];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @param array<string, mixed> $patientRow
+     * @param array<string, mixed> $opdRow
+     * @return array<int, string>
+     */
+    private function validateAbdmReadinessForConsult(array $payload, array $patientRow, array $opdRow): array
+    {
+        $errors = [];
+
+        $abhaField = $this->resolvePatientAbhaField();
+        $abha = $abhaField !== null ? trim((string) ($patientRow[$abhaField] ?? '')) : '';
+        if ($abha === '') {
+            $errors[] = 'ABDM requires ABHA Address before saving consult.';
+        }
+
+        $diagnosisCode = trim((string) ($payload['diagnosis_snomed_id'] ?? ''));
+        $provisionalCode = trim((string) ($payload['provisional_diagnosis_snomed_id'] ?? ''));
+        if ($diagnosisCode === '' && $provisionalCode === '') {
+            $errors[] = 'ABDM requires at least one SNOMED-coded diagnosis (Diagnosis or Provisional Diagnosis).';
+        }
+
+        $complaints = trim((string) ($payload['complaints'] ?? ''));
+        if ($complaints === '') {
+            $errors[] = 'ABDM OP consult requires chief complaints.';
+        }
+
+        $hasAnyVital = false;
+        foreach (['bp', 'diastolic', 'pulse', 'temp', 'spo2', 'rr_min', 'height', 'weight'] as $vitalField) {
+            if ($this->parseNumericFromText((string) ($payload[$vitalField] ?? '')) !== null) {
+                $hasAnyVital = true;
+                break;
+            }
+        }
+        if (! $hasAnyVital) {
+            $errors[] = 'ABDM OP consult requires at least one numeric vital observation.';
+        }
+
+        $hospitalProfile = $this->getHospitalProfileForFhir();
+        if (trim((string) ($hospitalProfile['hfr_id'] ?? '')) === '') {
+            $errors[] = 'Hospital HFR ID is required for ABDM document structure.';
+        }
+
+        $doctorIdentity = $this->getDoctorAbdmIdentity((int) ($opdRow['doc_id'] ?? 0));
+        $doctorReg = trim((string) ($doctorIdentity['registration_number'] ?? ''));
+        $fallbackDoctorReg = trim((string) ($hospitalProfile['doctor_registration'] ?? ''));
+        if ($doctorReg === '' && $fallbackDoctorReg === '') {
+            $errors[] = 'Doctor HPR/registration ID is required for ABDM practitioner mapping.';
+        }
+
+        return $errors;
     }
 
     private function normalizeGender(string $value): string

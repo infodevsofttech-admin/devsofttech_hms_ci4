@@ -3,9 +3,9 @@
 namespace App\Controllers;
 
 use App\Controllers\BaseController;
+use App\Libraries\Abdm\AbdmConnectorFactory;
 use App\Libraries\AbdmWorkTaskService;
 use App\Libraries\BridgeSyncService;
-use App\Libraries\HealthplixService;
 use App\Models\BloodGroupModel;
 use App\Models\PatientModel;
 
@@ -301,10 +301,117 @@ class Patient extends BaseController
 		]);
 	}
 
+	// -------------------------------------------------------------------------
+	// ABHA M1 OTP Flows — accessible to billing staff (no abdm.* permission needed)
+	// -------------------------------------------------------------------------
+
+	public function abhaAadhaarGenerateOtp()
+	{
+		if (! $this->request->isAJAX()) {
+			return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+		}
+
+		$isJson  = str_contains($this->request->getHeaderLine('Content-Type'), 'application/json');
+		$body    = $isJson ? ($this->request->getJSON(true) ?? []) : [];
+		$loginId = trim((string) ($body['loginId'] ?? $body['aadhaar'] ?? $this->request->getPost('loginId') ?? $this->request->getPost('aadhaar') ?? ''));
+
+		if ($loginId === '' || ! preg_match('/^\d{12}$/', $loginId)) {
+			return $this->response->setJSON(['ok' => 0, 'error_text' => 'Valid 12-digit Aadhaar number is required']);
+		}
+
+		try {
+			$result = AbdmConnectorFactory::make()->abhaAadhaarGenerateOtp(['aadhaar' => $loginId]);
+		} catch (\Throwable $e) {
+			return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => $e->getMessage()]);
+		}
+
+		return $this->response->setJSON($result);
+	}
+
+	public function abhaAadhaarVerifyOtp()
+	{
+		if (! $this->request->isAJAX()) {
+			return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+		}
+
+		$isJson = str_contains($this->request->getHeaderLine('Content-Type'), 'application/json');
+		$body   = $isJson ? ($this->request->getJSON(true) ?? []) : [];
+		$txnId  = trim((string) ($body['txnId'] ?? $body['txn_id'] ?? $this->request->getPost('txnId') ?? $this->request->getPost('txn_id') ?? ''));
+		$otp    = trim((string) ($body['otp'] ?? $this->request->getPost('otp') ?? ''));
+		$mobile = trim((string) ($body['mobile'] ?? $this->request->getPost('mobile') ?? ''));
+
+		if ($txnId === '' || $otp === '') {
+			return $this->response->setJSON(['ok' => 0, 'error_text' => 'txnId and otp are required']);
+		}
+
+		try {
+			$result = AbdmConnectorFactory::make()->abhaAadhaarVerifyOtp(['txnId' => $txnId, 'otp' => $otp, 'mobile' => $mobile]);
+		} catch (\Throwable $e) {
+			return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => $e->getMessage()]);
+		}
+
+		return $this->response->setJSON($result);
+	}
+
+	public function abhaMobileGenerateOtp()
+	{
+		if (! $this->request->isAJAX()) {
+			return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+		}
+
+		$isJson  = str_contains($this->request->getHeaderLine('Content-Type'), 'application/json');
+		$body    = $isJson ? ($this->request->getJSON(true) ?? []) : [];
+		$loginId = trim((string) ($body['loginId'] ?? $body['mobile'] ?? $this->request->getPost('loginId') ?? $this->request->getPost('mobile') ?? ''));
+
+		if ($loginId === '' || ! preg_match('/^\d{10}$/', $loginId)) {
+			return $this->response->setJSON(['ok' => 0, 'error_text' => 'Valid 10-digit mobile number is required']);
+		}
+
+		try {
+			$result = AbdmConnectorFactory::make()->abhaMobileGenerateOtp(['mobile' => $loginId]);
+		} catch (\Throwable $e) {
+			return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => $e->getMessage()]);
+		}
+
+		return $this->response->setJSON($result);
+	}
+
+	public function abhaMobileVerifyOtp()
+	{
+		if (! $this->request->isAJAX()) {
+			return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+		}
+
+		$isJson = str_contains($this->request->getHeaderLine('Content-Type'), 'application/json');
+		$body   = $isJson ? ($this->request->getJSON(true) ?? []) : [];
+		$txnId  = trim((string) ($body['txnId'] ?? $body['txn_id'] ?? $this->request->getPost('txnId') ?? $this->request->getPost('txn_id') ?? ''));
+		$otp    = trim((string) ($body['otp'] ?? $this->request->getPost('otp') ?? ''));
+
+		if ($txnId === '' || $otp === '') {
+			return $this->response->setJSON(['ok' => 0, 'error_text' => 'txnId and otp are required']);
+		}
+
+		try {
+			$result = AbdmConnectorFactory::make()->abhaMobileVerifyOtp(['txnId' => $txnId, 'otp' => $otp]);
+		} catch (\Throwable $e) {
+			return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => $e->getMessage()]);
+		}
+
+		return $this->response->setJSON($result);
+	}
+
+
 	public function search()
 	{
 		$sdata = (string) $this->request->getPost('txtsearch');
 		$sdata = preg_replace('/[^A-Za-z0-9 _.@\-]/', '', trim($sdata ?? ''));
+
+		// Detect ABHA column name in patient_master
+		$abhaField = null;
+		$pmFields  = $this->db->getFieldNames('patient_master') ?? [];
+		foreach (['abha_id', 'abha_no', 'abha', 'abha_address'] as $f) {
+			if (in_array($f, $pmFields, true)) { $abhaField = $f; break; }
+		}
 
 		if (strlen($sdata) === 0) {
 			$sql = "SELECT p.*, 
@@ -323,16 +430,22 @@ class Patient extends BaseController
 				}
 
 				if (is_numeric($rowData)) {
+					$abhaClause = $abhaField ? " or p.{$abhaField} = '$rowData'" : '';
 					$searchString .= " and (p.p_code like '%$rowData' 
 									or p.mphone1 = '$rowData' 
-									or p.udai='$rowData' )";
+									or p.udai='$rowData'$abhaClause)";
 				} elseif (ctype_alpha($rowData)) {
 					$searchString .= " and (p.p_fname like '%$rowData%' 
 						or p.email1 = '$rowData' 
 						or SUBSTRING_INDEX(p.p_fname,' ',1) sounds like '$rowData')";
 				} else {
+					// Handle dashed ABHA format: XX-XXXX-XXXX-XXXX
+					$rawDigits = preg_replace('/\D/', '', $rowData);
+					$abhaElse  = ($abhaField && strlen($rawDigits) === 14)
+						? " or p.{$abhaField} = '$rawDigits' or p.{$abhaField} = '$rowData'"
+						: '';
 					$searchString .= " and (p.p_code like '$rowData' 
-						or p.email1 = '$rowData' )";
+						or p.email1 = '$rowData'$abhaElse)";
 				}
 			}
 
@@ -382,7 +495,7 @@ class Patient extends BaseController
 		}
 
 		$sql = "select o.opd_id,o.opd_code,o.doc_name,o.apointment_date,o.p_id,
-		p.p_fname,if(date(o.apointment_date)=curdate(),1,0) as new_opd,
+		p.p_fname,if(o.apointment_date=curdate(),1,0) as new_opd,
 		date_format(o.apointment_date,'%d-%m-%Y') as str_apointment_date
 		from opd_master o join patient_master p on o.p_id=p.id
 		where o.p_id=$pno
@@ -717,23 +830,11 @@ class Patient extends BaseController
 			return $this->response->setStatusCode(404)->setBody('Patient not found');
 		}
 
-		$defaultBackUrl = base_url('billing/patient/person_record') . '/' . (int) ($patient->id ?? 0) . '/0';
-		$backUrl = trim((string) $this->request->getGet('back_url'));
-		$backTitle = trim((string) $this->request->getGet('back_title'));
-		if ($backUrl === '') {
-			$backUrl = $defaultBackUrl;
-		}
-		if ($backTitle === '') {
-			$backTitle = 'Profile';
-		}
-
 		$profileFilePath = $this->getProfileFilePath((int) ($patient->profile_file_id ?? 0));
 
 		return view('billing/Patient_Profile_Image_V', [
 			'patient' => $patient,
 			'profileFilePath' => $profileFilePath,
-			'backUrl' => $backUrl,
-			'backTitle' => $backTitle,
 		]);
 	}
 
@@ -744,14 +845,8 @@ class Patient extends BaseController
 			return $this->response->setStatusCode(404)->setBody('Patient not found');
 		}
 
-		$opdFields = $this->db->getFieldNames('opd_master') ?? [];
-		$opdSelect = ['opd_id', 'opd_code', 'doc_name', 'apointment_date'];
-		if (in_array('queue_no', $opdFields, true)) {
-			$opdSelect[] = 'queue_no';
-		}
-
 		$opdList = $this->db->table('opd_master')
-			->select(implode(', ', $opdSelect))
+			->select('opd_id, opd_code, doc_name, apointment_date, queue_no')
 			->where('p_id', $pno)
 			->orderBy('opd_id', 'DESC')
 			->get()
@@ -760,7 +855,6 @@ class Patient extends BaseController
 		$opdIds = array_column($opdList, 'opd_id');
 		$filesByOpd = [];
 		$rxByOpd = [];
-		$medicinesBySession = [];
 
 		if ($opdIds && $this->db->tableExists('file_upload_data')) {
 			$fields = $this->db->getFieldNames('file_upload_data') ?? [];
@@ -810,7 +904,7 @@ class Patient extends BaseController
 			if (in_array('opd_id', $rxFields, true)) {
 				$selectParts[] = 'opd_id';
 			}
-			foreach (['date_opd_visit', 'queue_no', 'bp', 'diastolic', 'pulse', 'temp', 'spo2', 'complaints', 'diagnosis', 'investigation', 'advice', 'next_visit', 'refer_to'] as $col) {
+			foreach (['date_opd_visit', 'queue_no', 'bp', 'diastolic', 'pulse', 'temp', 'spo2', 'complaints', 'diagnosis', 'investigation', 'advice'] as $col) {
 				if (in_array($col, $rxFields, true)) {
 					$selectParts[] = $col;
 				}
@@ -831,55 +925,6 @@ class Patient extends BaseController
 					}
 					$rxByOpd[$opdId] = $rxRow;
 				}
-			}
-		}
-
-		$medicineTable = $this->findExistingTable(['opd_prescrption_prescribed', 'opd_prescription_prescribed']);
-		$rxSessionIds = array_values(array_filter(array_map(static fn(array $row): int => (int) ($row['id'] ?? 0), $rxByOpd), static fn(int $id): bool => $id > 0));
-		if ($medicineTable !== null && $this->db->tableExists($medicineTable) && $rxSessionIds !== []) {
-			$medicineBuilder = $this->db->table($medicineTable . ' pt')
-				->select('pt.id, pt.opd_pre_id, pt.med_type, pt.med_name, pt.dosage, pt.dosage_when, pt.dosage_freq, pt.dosage_where, pt.no_of_days, pt.qty, pt.remark');
-
-			if ($this->db->tableExists('opd_dose_shed')) {
-				$medicineBuilder->select('d.dose_show_sign AS dose_shed', false)
-					->join('opd_dose_shed d', 'pt.dosage = d.dose_shed_id', 'left');
-			}
-			if ($this->db->tableExists('opd_dose_when')) {
-				$medicineBuilder->select('dw.dose_sign_desc AS dose_when_label', false)
-					->join('opd_dose_when dw', 'pt.dosage_when = dw.dose_when_id', 'left');
-			}
-			if ($this->db->tableExists('opd_dose_frequency')) {
-				$medicineBuilder->select('df.dose_sign_desc AS dose_frequency_label', false)
-					->join('opd_dose_frequency df', 'pt.dosage_freq = df.dose_freq_id', 'left');
-			}
-			if ($this->db->tableExists('opd_dose_where')) {
-				$medicineBuilder->select('d_on.dose_sign_desc AS dose_where_label', false)
-					->join('opd_dose_where d_on', 'pt.dosage_where = d_on.dose_where_id', 'left');
-			}
-
-			$medicineRows = $medicineBuilder
-				->whereIn('pt.opd_pre_id', $rxSessionIds)
-				->orderBy('pt.id', 'ASC')
-				->get()
-				->getResultArray();
-
-			foreach ($medicineRows as $medicineRow) {
-				$sessionId = (int) ($medicineRow['opd_pre_id'] ?? 0);
-				if ($sessionId <= 0) {
-					continue;
-				}
-
-				$medicinesBySession[$sessionId][] = [
-					'med_type' => trim((string) ($medicineRow['med_type'] ?? '')),
-					'med_name' => trim((string) ($medicineRow['med_name'] ?? '')),
-					'dose' => trim((string) ($medicineRow['dose_shed'] ?? '')),
-					'timing' => trim((string) ($medicineRow['dose_when_label'] ?? '')),
-					'frequency' => trim((string) ($medicineRow['dose_frequency_label'] ?? '')),
-					'where' => trim((string) ($medicineRow['dose_where_label'] ?? '')),
-					'days' => trim((string) ($medicineRow['no_of_days'] ?? '')),
-					'qty' => trim((string) ($medicineRow['qty'] ?? '')),
-					'remark' => trim((string) ($medicineRow['remark'] ?? '')),
-				];
 			}
 		}
 
@@ -907,52 +952,14 @@ class Patient extends BaseController
 				'diagnosis' => (string) ($rx['diagnosis'] ?? ''),
 				'investigation' => (string) ($rx['investigation'] ?? ''),
 				'advice' => (string) ($rx['advice'] ?? ''),
-				'next_visit' => (string) ($rx['next_visit'] ?? ''),
-				'refer_to' => (string) ($rx['refer_to'] ?? ''),
-				'medicines' => $medicinesBySession[$rxSessionId] ?? [],
 				'files' => $filesByOpd[$opdId] ?? [],
 			];
-		}
-
-		// Resolve patient profile picture
-		$profileFilePath = '/assets/images/no_image.svg';
-		$profilePicturePath = '';
-		if ($this->db->fieldExists('profile_picture', 'patient_master')) {
-			$profilePicturePath = trim((string) ($patient->profile_picture ?? ''));
-		}
-		$profileFileId = (int) ($patient->profile_file_id ?? 0);
-		if ($profileFileId > 0 && $this->db->tableExists('file_upload_data')) {
-			$fileRow = $this->db->table('file_upload_data')
-				->select('full_path')
-				->where('id', $profileFileId)
-				->get(1)
-				->getRow();
-			$fullPath = trim((string) ($fileRow->full_path ?? ''));
-			if ($fullPath !== '') {
-				$pos = strpos($fullPath, '/uploads/', 1);
-				$profileFilePath = $pos !== false ? substr($fullPath, $pos) : $fullPath;
-			}
-		} elseif ($profilePicturePath !== '') {
-			$pos = strpos($profilePicturePath, '/uploads/', 1);
-			$profileFilePath = $pos !== false ? substr($profilePicturePath, $pos) : $profilePicturePath;
 		}
 
 		return view('billing/Patient_Profile_Opd_V', [
 			'patient' => $patient,
 			'opdGroups' => $opdGroups,
-			'profile_file_path' => $profileFilePath,
 		]);
-	}
-
-	private function findExistingTable(array $candidates): ?string
-	{
-		foreach ($candidates as $table) {
-			if ($this->db->tableExists($table)) {
-				return $table;
-			}
-		}
-
-		return null;
 	}
 
 	public function save_profile_image(int $pid)
@@ -1366,65 +1373,6 @@ class Patient extends BaseController
 				'trigger' => 'patient.created',
 			]
 		);
-	}
-
-	private function syncPatientToHealthplix(int $patientId, string $trigger): void
-	{
-		if ($patientId <= 0 || ! $this->db->tableExists('patient_master')) {
-			return;
-		}
-
-		try {
-			$row = $this->db->table('patient_master')
-				->where('id', $patientId)
-				->get(1)
-				->getRowArray();
-
-			if (! is_array($row) || empty($row)) {
-				return;
-			}
-
-			$abhaField = $this->resolvePatientAbhaIdField();
-			$abhaId = $abhaField !== null ? trim((string) ($row[$abhaField] ?? '')) : '';
-
-			$payload = [
-				'external_patient_id' => (string) $patientId,
-				'patient_code' => trim((string) ($row['p_code'] ?? '')),
-				'full_name' => trim((string) ($row['p_fname'] ?? '')),
-				'mobile' => trim((string) ($row['mphone1'] ?? '')),
-				'email' => trim((string) ($row['email1'] ?? '')),
-				'gender' => $this->mapPatientGenderToHealthplix((string) ($row['gender'] ?? '')),
-				'dob' => trim((string) ($row['dob'] ?? '')),
-				'age_years' => trim((string) ($row['age'] ?? '')),
-				'age_months' => trim((string) ($row['age_in_month'] ?? '')),
-				'address_line1' => trim((string) ($row['add1'] ?? '')),
-				'city' => trim((string) ($row['city'] ?? '')),
-				'district' => trim((string) ($row['district'] ?? '')),
-				'state' => trim((string) ($row['state'] ?? '')),
-				'zip' => trim((string) ($row['zip'] ?? '')),
-				'aadhar' => trim((string) ($row['udai'] ?? '')),
-				'abha_id' => $abhaId,
-				'trigger' => $trigger,
-			];
-
-			$service = new HealthplixService();
-			$service->registerPatient($payload);
-		} catch (\Throwable $e) {
-			// Never block patient workflows due to external integration failures.
-		}
-	}
-
-	private function mapPatientGenderToHealthplix(string $gender): string
-	{
-		$gender = trim(strtolower($gender));
-		if ($gender === '1' || $gender === 'male' || $gender === 'm') {
-			return 'male';
-		}
-		if ($gender === '2' || $gender === 'female' || $gender === 'f') {
-			return 'female';
-		}
-
-		return 'other';
 	}
 
 

@@ -1,0 +1,5 @@
+set timeout 300
+spawn scp -o StrictHostKeyChecking=no "d:\\Workplace\\HMS_CI4_OLD\\abdm-bridge-le-ssl.conf" root@159.89.175.190:/etc/apache2/sites-enabled/abdm-bridge-le-ssl.conf
+expect \"password:\"
+send \"bishT@9720958717H\r\"
+expect eof

@@ -22,6 +22,7 @@ class AbdmTaskBoard extends BaseController
 
         return view('abdm/task_board', [
             'tasks' => $tasks,
+            'today_credit_opd_rows' => $this->getTodayCreditOpdConsultRows(),
         ]);
     }
 
@@ -304,5 +305,134 @@ class AbdmTaskBoard extends BaseController
                 ]
             );
         }
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function getTodayCreditOpdConsultRows(): array
+    {
+        if (! $this->db->tableExists('opd_master')) {
+            return [];
+        }
+
+        $opdFields = $this->db->getFieldNames('opd_master') ?? [];
+        $opdIdCol = $this->resolveExistingColumn($opdFields, ['opd_id']);
+        $patientFkCol = $this->resolveExistingColumn($opdFields, ['p_id', 'patient_id']);
+        $dateCol = $this->resolveExistingColumn($opdFields, ['apointment_date', 'appointment_date', 'created_at', 'entry_date']);
+        if ($opdIdCol === null || $patientFkCol === null || $dateCol === null) {
+            return [];
+        }
+
+        $patientNameCol = $this->resolveExistingColumn($opdFields, ['P_name', 'p_name', 'patient_name']);
+        $creditCaseCol = $this->resolveExistingColumn($opdFields, ['insurance_case_id', 'organization_case_id']);
+        $paymentModeCol = $this->resolveExistingColumn($opdFields, ['payment_mode']);
+
+        $builder = $this->db->table('opd_master o')
+            ->select('o.' . $opdIdCol . ' as opd_id', false)
+            ->select('o.' . $patientFkCol . ' as patient_id', false)
+            ->select('o.' . $dateCol . ' as consult_datetime', false)
+            ->where('DATE(o.' . $dateCol . ') =', date('Y-m-d'), false)
+            ->orderBy('o.' . $opdIdCol, 'DESC')
+            ->limit(300);
+
+        if ($patientNameCol !== null) {
+            $builder->select('o.' . $patientNameCol . ' as opd_patient_name', false);
+        } else {
+            $builder->select("'' as opd_patient_name", false);
+        }
+
+        if ($creditCaseCol !== null) {
+            $builder->where('COALESCE(o.' . $creditCaseCol . ',0) >', 0, false);
+            $builder->select('o.' . $creditCaseCol . ' as credit_ref', false);
+        } else {
+            $builder->select('0 as credit_ref', false);
+            if ($paymentModeCol !== null) {
+                $builder->where('COALESCE(o.' . $paymentModeCol . ',0) >', 1, false);
+            }
+        }
+
+        $patientFields = $this->db->tableExists('patient_master') ? ($this->db->getFieldNames('patient_master') ?? []) : [];
+        $patientPkCol = $this->resolveExistingColumn($patientFields, ['id']);
+        $patientNameJoinCol = $this->resolveExistingColumn($patientFields, ['p_fname', 'patient_name', 'name']);
+        $abhaCol = $this->resolveExistingColumn($patientFields, ['abha_id', 'abha_no', 'abha_address', 'abha']);
+
+        if ($patientPkCol !== null && $patientNameJoinCol !== null) {
+            $builder->join('patient_master p', 'p.' . $patientPkCol . ' = o.' . $patientFkCol, 'left');
+            $builder->select('p.' . $patientNameJoinCol . ' as patient_name', false);
+            if ($abhaCol !== null) {
+                $builder->select('p.' . $abhaCol . ' as patient_abha', false);
+            } else {
+                $builder->select("'' as patient_abha", false);
+            }
+        } else {
+            $builder->select("'' as patient_name", false);
+            $builder->select("'' as patient_abha", false);
+        }
+
+        $rows = $builder->get()->getResultArray();
+        if (empty($rows)) {
+            return [];
+        }
+
+        $opdIds = array_values(array_unique(array_map(static fn ($r) => (int) ($r['opd_id'] ?? 0), $rows)));
+        $latestDocByOpd = [];
+        if (! empty($opdIds) && $this->db->tableExists('opd_fhir_documents')) {
+            $docRows = $this->db->table('opd_fhir_documents')
+                ->select('id, opd_id, opd_session_id, generated_at')
+                ->whereIn('opd_id', $opdIds)
+                ->where('bundle_type', 'MedicationRequestBundle')
+                ->orderBy('id', 'DESC')
+                ->get()
+                ->getResultArray();
+
+            foreach ($docRows as $doc) {
+                $k = (int) ($doc['opd_id'] ?? 0);
+                if ($k <= 0 || isset($latestDocByOpd[$k])) {
+                    continue;
+                }
+                $latestDocByOpd[$k] = $doc;
+            }
+        }
+
+        $out = [];
+        foreach ($rows as $row) {
+            $opdId = (int) ($row['opd_id'] ?? 0);
+            if ($opdId <= 0) {
+                continue;
+            }
+            $doc = $latestDocByOpd[$opdId] ?? null;
+            $sessionId = (int) ($doc['opd_session_id'] ?? 0);
+
+            $previewUrl = $sessionId > 0
+                ? base_url('Opd_prescription/fhir_bundle_preview/' . $opdId . '/' . $sessionId)
+                : base_url('Opd_prescription/fhir_bundle_preview/' . $opdId);
+
+            $out[] = [
+                'opd_id' => $opdId,
+                'patient_id' => (int) ($row['patient_id'] ?? 0),
+                'patient_name' => trim((string) ($row['patient_name'] ?? $row['opd_patient_name'] ?? '')),
+                'abha_id' => trim((string) ($row['patient_abha'] ?? '')),
+                'consult_datetime' => (string) ($row['consult_datetime'] ?? ''),
+                'credit_ref' => (string) ($row['credit_ref'] ?? ''),
+                'opd_session_id' => $sessionId,
+                'fhir_generated_at' => (string) ($doc['generated_at'] ?? ''),
+                'has_fhir' => $doc !== null,
+                'preview_url' => $previewUrl,
+            ];
+        }
+
+        return $out;
+    }
+
+    private function resolveExistingColumn(array $fields, array $candidates): ?string
+    {
+        foreach ($candidates as $candidate) {
+            if (in_array($candidate, $fields, true)) {
+                return $candidate;
+            }
+        }
+
+        return null;
     }
 }

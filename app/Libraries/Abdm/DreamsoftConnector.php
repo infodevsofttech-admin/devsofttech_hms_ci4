@@ -122,6 +122,42 @@ class DreamsoftConnector implements AbdmConnectorInterface
     }
 
     // -------------------------------------------------------------------------
+    // M1 ABHA OTP Flows — not queue-able; throw so callers fall back to sync connector
+    // -------------------------------------------------------------------------
+
+    public function abhaAadhaarGenerateOtp(array $payload): array
+    {
+        throw new \RuntimeException(
+            'DreamsoftConnector does not support synchronous M1 OTP flows. '
+            . 'Set abdm.connector = eatria_bridge in .env to use M1 endpoints.'
+        );
+    }
+
+    public function abhaAadhaarVerifyOtp(array $payload): array
+    {
+        throw new \RuntimeException(
+            'DreamsoftConnector does not support synchronous M1 OTP flows. '
+            . 'Set abdm.connector = eatria_bridge in .env to use M1 endpoints.'
+        );
+    }
+
+    public function abhaMobileGenerateOtp(array $payload): array
+    {
+        throw new \RuntimeException(
+            'DreamsoftConnector does not support synchronous M1 OTP flows. '
+            . 'Set abdm.connector = eatria_bridge in .env to use M1 endpoints.'
+        );
+    }
+
+    public function abhaMobileVerifyOtp(array $payload): array
+    {
+        throw new \RuntimeException(
+            'DreamsoftConnector does not support synchronous M1 OTP flows. '
+            . 'Set abdm.connector = eatria_bridge in .env to use M1 endpoints.'
+        );
+    }
+
+    // -------------------------------------------------------------------------
     // NHCX Claims
     // -------------------------------------------------------------------------
 

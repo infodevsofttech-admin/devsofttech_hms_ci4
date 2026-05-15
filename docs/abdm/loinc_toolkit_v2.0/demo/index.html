@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Clinical Lab Report</title>
+    <!--Import Google Icon Font-->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <!--Import materialize.css-->
+    <!-- Latest compiled and minified CSS -->
+    <link data-require="bootstrap-css@3.*" data-semver="3.3.7" rel="stylesheet" href="css/bootstrap.css" />
+    <link type="text/css" rel="stylesheet" href="css/materialize.css" media="screen,projection" />
+    <link type="text/css" rel="stylesheet" href="css/all.min.css" />
+    <link type="text/css" rel="stylesheet" href="css/style.css" />
+    <!--Let browser know website is optimized for mobile-->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script type="text/javascript" src="js/jquery.min.js"></script>
+    <script type="text/javascript" src="js/angular.js"></script>
+    <script type="text/javascript" src="js/angular-animate.js"></script>
+    <script type="text/javascript" src="js/ui-bootstrap-tpls-2.5.0.min.js"></script>
+    <script type="text/javascript" src="js/materialize.min.js"></script>
+    <script type="text/javascript" src="js/labReportDemo.js"></script>
+    <script type="text/javascript" src="js/app.js"></script>
+    <script type="text/javascript" src="js/Directives.js"></script>
+    <script type="text/javascript" src="js/pdfmake.js"></script>
+    <script type="text/javascript" src="js/vfs_fonts.js"></script>
+    <script type="text/javascript" src="js/labReportController.js"></script>
+</head>
+
+<body ng-app="labReportApp" ng-controller="labtestController" class="teal lighten-5">
+    <header>
+        <nav class="navbar-header teal darken-3" style="height: 75px;">
+            <h3 class="center-align" style="margin-top:10px;">Clinical Lab Report</h3>
+        </nav>
+    </header>
+    <div class="progress blue" ng-if="showProgessbar">
+        <div class="indeterminate blue lighten-5"></div>
+    </div>
+    <div class="container white" ng-form name="reportForm">
+        <div class="row" style="margin-bottom: 0px;">
+            <span class="col s12 xl3">
+                <h3 class="col s12 xl3"><img class="responsive-img" src="images/NRCeS-logo.png"
+                        style="margin-top: -10px;" width="150" alt="nrces-logo"></i></h3>
+                <h5 class="col s12 xl7">Laboratory Name</h5>
+            </span>
+            <div class="col s12 xl9 border-left">
+
+                <div class="row">
+                    <div class="col s12 xl4 input-field">
+                        <!-- <em class="material-icons prefix red-text text-darken-4">account_circle</em> -->
+                        <input id="patientname" name="patientname" type="text" class="validate" pattern="[a-zA-Z][a-zA-Z ]+" title="Only characters allowed" ng-Class="{'valid': patient.gender}"
+                            ng-model="patient.patientName" required>
+                        <label for="patientname" ng-class="{'active':patient.name}">Patient Name<span
+                                class="red-text">*</span></label>
+                    </div>
+                    <div class="col s12 xl4 input-field">
+                        <em class="fas fa-address-card prefix red-text text-darken-4"></em>
+                        <input id="registrationnumber" name="registrationnumber" type="text" ng-model="patient.registrationNo"
+                            ng-class="{'valid':patient.registrationNo}" class="validate" required>
+                        <label for="registrationnumber" ng-class="{'active':patient.registrationNo}">Registration
+                            number<span class="red-text">*</span></label>
+                    </div>
+                    <div class="col s12 xl4 input-field">
+                        <em class="fas fa-mobile-alt prefix red-text text-darken-4"></em>
+                        <input id="contactnumber" name="contactnumber" type="number" 
+                                ng-model="patient.contactNo"                                
+                                ng-maxlength="10" 
+                                ng-class="{'valid':patient.contactNo}" class="validate" required pattern="^((\\+91-?)|0)?[0-9]{10}$" title="Only numeric value allowed">
+                        <label for="contactnumber" ng-class="{'active':patient.contactNo}">Contact
+                            number<span class="red-text">*</span></label>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col s12 xl4 input-field">
+                        <div class="col s2 input-field " style="margin-top: 1px;">
+                            <label>Age: </label>
+                        </div>
+                        <div class="col s3 input-field" style="margin-top: 1px;">
+                            <input id="ageyear" name="ageyear" type="number" class="validate" min="0" max="120"
+                                ng-class="{'valid':patient.age.year  || patient.age.year==0}" ng-model="patient.age.year" required>
+                            <label for="ageyear" ng-class="{'active':patient.age.year  || patient.age.year==0}">Year</label>
+                        </div>
+                        <div class="col s3 input-field" style="margin-top: 1px;">
+                            <input id="agemonth" name="agemonth" type="number" class="validate" min="0" max="11"
+                                ng-class="{'valid':patient.age.month  || patient.age.month==0}"
+                                ng-model="patient.age.month" required>
+                            <label for="agemonth"
+                                ng-class="{'active':patient.age.month  || patient.age.month==0}">Month</label>
+                        </div>
+                        <div class="col s3 input-field" style="margin-top: 1px;">
+                            <input id="ageday" name="ageday"type="number" class="validate" min="0" max="30"
+                                ng-class="{'valid':patient.age.days  || patient.age.days==0}" ng-model="patient.age.days" required>
+                            <label for="ageday" ng-class="{'active':patient.age.days || patient.age.days==0}">Days</label>
+                        </div>
+                    </div>
+                    <div class="col s12 xl4 input-field">
+                        <em class="fas fa-venus-mars prefix red-text text-darken-4"></em>
+                        <select id="gender" name="gender" class="validate" ng-Class="{'valid': patient.gender}" ng-model="patient.gender">
+                            <option value="Male">Male</option>
+                            <option value="Female" selected>Female</option>
+                            <option value="Transgender">Other</option>
+                        </select>
+                        <label for="gender">Sex<span class="red-text">*</span></label>
+                    </div>
+
+                    <div class="col s12 xl4 input-field">
+                        <!-- <em class="material-icons prefix red-text text-darken-4">add_location</em> -->
+                        <textarea id="address" class="materialize-textarea" ng-Class="{'valid': patient.address}"
+                            ng-model="patient.address"></textarea>
+                        <label for="address" ng-class="{'active':patient.address}">Address<span
+                                class="red-text"></span></label>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+        <div class="divider"></div>
+        <div class="row" style="margin-bottom: 0px;">
+            <div class="col s12">
+                <div class="row">
+                    <span class="col s12 xl6">
+                        <h6>Other Information</h6>
+                    </span>
+
+                </div>
+                <div class="row" style="margin-bottom: 0px;">
+                    <div class="col s12">
+                        <div class="col s12 xl6 input-field">
+                            <em class="fas fa-user-md prefix red-text text-darken-4"></em>
+                            <input id="doctorname" type="text" ng-model="patient.orderingDoctor" class="validate" pattern="[a-zA-Z][a-zA-Z ]+" title="Only characters allowed" 
+                                ng-Class="{'valid': patient.orderingDoctor}" required>
+                            <label for="doctorname" ng-Class="{'active': patient.orderingDoctor}">Ref.Doctor Name<span
+                                    class="red-text">*</span></label>
+                        </div>
+                        <div class="col s12 xl2 input-field">
+                            <input id="collectionDate" name="collectionDate" type="date" class="validate" max="{{test.maxReportingDate | date:'yyyy-MM-dd'}}"
+                                ng-Class="{'valid': patient.collectionDate}" ng-model="patient.collectionDate">
+                            <label for="collectionDate" ng-class="{'active':patient.collectionDate}">
+                                Sample Collected On
+                            </label>
+                        </div>
+
+                        <div class="col s12 xl2 input-field">
+                            <input id="reportedOn" type="date" class="validate" ng-Class="{'valid': patient.reportedOn}"
+                                ng-model="patient.reportDate" min="{{test.maxReportingDate | date:'yyyy-MM-dd'}}">
+                            <label for="reportedOn" ng-class="{'active':patient.reportedOn}">Reported
+                                On</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+                
+        <!-- Test selection -->
+        <div class="row" style="margin-bottom: 0px;">
+            <div class="col s12">
+                <div class="col s12 xl11 input-field">
+                    <em class="fa fa-flask  prefix red-text text-darken-4" aria-hidden="true"></em>
+                    <input id="labTestName" type="text" class="validate form-control" ng-class="{'valid':test.name}"
+                        ng-model="test.name" uib-typeahead="labtest for labtest in test.search($viewValue)"
+                        typeahead-on-select="test.filltextbox(labtest.LONG_COMMON_NAME,labtest.LOINC_NUMBER)"
+                        autocomplete="off" typeahead-loading="loadingLabTestName" typeahead-no-results="noResults"
+                        maxlength="255" minlength="3" ng-model-options="{debounce: 30}" removestartingspace><b
+                        ng-show="loadingLabTestName" class="glyphicon glyphicon-refresh">Loading</b>
+                    <label for="labTestName" ng-class="{'active':test.name}">Lab Test<span
+                            class="red-text">*</span></label>
+                    <ul class="list-group" data-ng-model="hidethis" data-ng-hide="hidethis" style="height: auto;max-height:500px; overflow-y: scroll; width: calc(100% - 3rem); margin-left: 3rem;" ng-if="labtests.length && test.name.length">
+                        <li class="list-group-item" data-ng-repeat="labtest in labtests"
+                            data-ng-click="test.selectTestName(labtest.LONG_COMMON_NAME,labtest.LOINC_NUMBER)">
+                            {{labtest.LONG_COMMON_NAME}}
+                            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{{labtest.ExampleUnits}}
+                        </li>
+                    </ul>
+                </div>
+                <div class="col s12 xl1 input-field center-align">
+                    <button class="btn waves-effect waves-light" type="submit" id="addLabTest" name="addLabTest"
+                        ng-disabled="test.name =='' || test.name ==null" data-ng-click="test.filltextbox()">Add
+                        <i class="material-icons right">add</i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Test Report section -->
+        <div class="row" style="margin: 1.2rem">
+            <div data-ng-if="selectedTests.length > 0">
+                <div class="row tableHeader">
+                    <div class="col-md-6 test_table_header"><h6>Name</h6></div>
+                    <div class="col-md-3 test_table_header"><h6>Value</h6></div>
+                    <div class="col-md-3 test_table_header"><h6>Units</h6></div>
+                </div>
+                <div data-ng-repeat="selTest in selectedTests">
+                    <div class="row" data-ng-repeat="lab in selTest.labInfo">
+                        <div class="col-sm-12 col-xl-12 test_name_header">
+                            <div class="col-sm-11 col-xl-11 align-self-center font-weight-bold">    
+                               <a data-ng-if="selTest.name!=null" data-ng-click="test.showDetails(lab.LOINC_NUMBER)" uib-tooltip="Click for more information" tooltip-placement="top" tooltip-trigger="mouseenter" class="teal-text text-darken-1 hand-Symbol ng-scope">
+                                        <i class="ng-binding">{{lab.LOINC_NUMBER}}
+                            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{{lab.LONG_COMMON_NAME}}.</i>
+                                    </a>
+                            </div>
+                            <div class="col-sm-1 col-xl-1">
+                                <em class="material-icons right"
+                                    data-ng-click="test.deleteReport(selTest.code)">delete</em>
+                            </div>
+                        </div>
+                        
+                        <div class="col-sm-12 col-xl-12 test_record" data-ng-if="lab.Children.length == 0">
+                            <div class="col-md-6 align-self-center">    
+                                {{ lab.ShortName }}
+                            </div>
+                            <div class="col-md-3 align-self-center">
+                                <input type="number"  min="1" name="testValue" data-ng-model="lab.testValue" data-ng-if="lab.ExampleUnits.length>=0" style="width:100px;height: auto;" required>
+                            </div>
+                            <div class="col-md-3 align-self-center unit-text-div" ng-if="lab.units.length == 1" >                                
+                                {{ lab.ExampleUnits }}
+                            </div>
+                            <div class="col-md-3 align-self-center unit-text-div" ng-if="lab.units.length > 1" >
+                                <select id="unit" class="validate unit-select" data-ng-model="lab.selUnit">
+                                    <option ng-repeat="option in lab.units" 
+                                            ng-selected="{{$index == 0 }}"
+                                            value="{{option}}">
+                                        {{option}}
+                                    </option>                                    
+                                </select>                                
+                            </div>
+                        </div>
+
+                        <!--Child tests -->
+						 <div class="row" data-ng-repeat="child in lab.Children">
+                        <div class="col-sm-12 col-xl-12 test_record" >
+                            <!--
+                            <div class="row" data-ng-if="!!child.grandChildren && child.grandChildren.length > 0">
+                                <div class="col-md-6 align-self-center child-having-grandchild">
+                                    {{ child.Name }}
+                                </div>
+                            </div>
+                            -->
+
+                            <!-- <div class="row" data-ng-if="child.grandChildren == null"> --> 
+                                <div class="col-md-6 align-self-center">
+                                    <a data-ng-if="child.Name!=null" data-ng-click="test.showDetails(child.LOINC_NUMBER)" uib-tooltip="Click for more information" tooltip-placement="top" tooltip-trigger="mouseenter" class="teal-text text-darken-1 hand-Symbol ng-scope">
+                                        <em class="ng-binding">{{child.LOINC_NUMBER}}
+                            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{{child.Name}}.</em>
+                                    </a>
+                                </div>
+                                <div class="col-md-3 align-self-center">
+                                    <input type="number"  min="1" name="testValue" data-ng-model="child.testValue" data-ng-if="child.Example_UCUM_UNITS.length>=0" style="width:100px;height: auto;" required>
+                                </div>
+                                <div class="col-md-3 align-self-center unit-text-div" ng-if="child.units.length == 1" >                                
+                                    {{ child.Example_UCUM_UNITS }}
+                                </div>
+                                <div class="col-md-3 align-self-center" ng-if="child.units.length > 1" >
+                                    <select id="childUnit" class="validate unit-select" data-ng-model="child.selUnit">
+                                        <option ng-repeat="option in child.units" 
+                                                ng-selected="{{$index == 0 }}"
+                                                value="{{option}}">
+                                            {{option}}
+                                        </option>                                
+                                    </select>                                
+                                </div>   
+								</div>
+                            <!-- </div> -->
+                            
+                            <!--Grand child tests -->
+                            <div class="row" data-ng-repeat="grandChildren in child.grandChildren">
+                                <div class="col-md-6 align-self-center grand-child-div">
+                                   <a data-ng-if="grandChildren.Name!=null" data-ng-click="test.showDetails(grandChildren.LOINC_NUMBER)" uib-tooltip="Click for more information" tooltip-placement="top" tooltip-trigger="mouseenter" class="teal-text text-darken-1 hand-Symbol ng-scope">
+                                        <em class="ng-binding">{{grandChildren.LOINC_NUMBER}}
+                            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{{grandChildren.Name}}.</em>
+                                    </a>
+                                </div>
+                                <div class="col-md-3 align-self-center">
+                                    <input type="number"  min="1" name="testValue" data-ng-model="grandChildren.testValue" data-ng-if="grandChildren.Example_UCUM_UNITS.length>=0"
+                                        style="width:100px;height: auto;" required>
+                                </div>
+                                <div class="col-md 3 align-self-center unit-text-div" ng-if="grandChildren.units.length == 1">
+                                    {{ grandChildren.Example_UCUM_UNITS }}
+                                </div>                               
+                                <div class="col-md-3 align-self-center" ng-if="grandChildren.units.length > 1" >
+                                    <select id="grandChildUnit" class="validate unit-select" data-ng-model="grandChildren.selUnit">
+                                        <option ng-repeat="option in grandChildren.units" 
+                                                ng-selected="{{$index == 0 }}"
+                                                value="{{option}}">
+                                            {{option}}
+                                        </option>                                    
+                                    </select>                                
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+            </div>           
+        </div>
+        
+        <div class="row" style="margin-bottom: 0px;">
+            <div class="row" style="margin-bottom: 0px;">
+                <div class="col s12 input-field center-align">
+                    <button class="btn waves-effect waves-light" type="button" id="addcheifcomplaints"
+                        name="addcheifcomplaints" 
+                        ng-disabled="selectedTests.length == 0 || reportForm.contactnumber.$invalid || reportForm.patientname.$invalid
+                         || reportForm.registrationnumber.$invalid || reportForm.ageyear.$invalid || reportForm.agemonth.$invalid || reportForm.testValue.$invalid ||
+                          reportForm.ageday.$invalid"
+                        data-ng-click="test.downloadPdf()">
+                            Download Report
+                        <em class="material-icons right">download</em>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="fixed-action-btn">
+        <a class="btn-floating btn-large teal">
+            <em class="large material-icons">arrow_upward</em>
+        </a>
+    </div>
+    <footer class="page-footer teal darken-3" style="padding-top: 0px;">
+        <div class="footer-copyright">
+            <div class="container center-align">
+                Copyright &copy; 2021 <br>
+                NRCeS @ C-DAC Pune, India
+
+            </div>
+        </div>
+    </footer>
+</body>
+
+</html>

@@ -191,6 +191,17 @@
             margin-left: .35rem;
             line-height: 1;
         }
+        .rx-recent-chip-box {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .35rem;
+            margin-top: .35rem;
+        }
+        .rx-recent-chip-label {
+            font-size: .78rem;
+            color: #6c757d;
+            margin-top: .3rem;
+        }
         .rx-predefined-advice-box {
             background: #f8f4e8;
             border: 1px solid #efe2bf;
@@ -417,9 +428,10 @@
                             <div class="rx-meta-line"><strong>UHID:</strong> <?= esc($patient_master[0]->p_code ?? '') ?></div>
                             <div class="rx-meta-line"><strong>Age:</strong> <?= esc($patient_master[0]->str_age ?? '') ?></div>
                             <div class="rx-meta-line"><strong>Gender:</strong> <?= esc($patient_master[0]->xgender ?? '') ?></div>
-                            <?php if ($patientAbhaAddress !== '') { ?>
-                                <div class="rx-meta-line"><strong>ABHA Address:</strong> <?= esc($patientAbhaAddress) ?></div>
-                            <?php } ?>
+                            <div class="rx-meta-line">
+                                <label for="abha_address" class="form-label mb-1"><strong>ABHA Address:</strong></label>
+                                <input type="text" class="form-control form-control-sm rx-instant" id="abha_address" value="<?= esc($patientAbhaAddress) ?>" placeholder="name@abdm" autocomplete="off">
+                            </div>
                             <div class="rx-meta-line"><strong>OPD:</strong> <?= esc($opd_master[0]->opd_code ?? '') ?></div>
                             <div class="rx-meta-line"><strong>Date:</strong> <?= esc($opd_master[0]->apointment_date ?? '') ?></div>
                             <div class="rx-meta-line mb-0"><strong>Doctor:</strong> <?= esc($opd_master[0]->doc_name ?? '') ?></div>
@@ -501,7 +513,10 @@
                 <div class="card mt-3" id="fhir_history_card" style="display:none;">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <strong>FHIR Export History (Latest 5)</strong>
-                        <button type="button" class="btn btn-outline-success btn-sm" id="btn_download_fhir">Download FHIR JSON</button>
+                        <div class="d-flex gap-1">
+                            <button type="button" class="btn btn-outline-primary btn-sm" id="btn_preview_fhir">Preview FHIR JSON</button>
+                            <button type="button" class="btn btn-outline-success btn-sm" id="btn_download_fhir">Download FHIR JSON</button>
+                        </div>
                     </div>
                     <div class="card-body p-0">
                         <div class="table-responsive">
@@ -536,6 +551,7 @@
                         </div>
                         <div class="d-flex align-items-center gap-2">
                             <span class="badge bg-light text-dark border">Doctor View</span>
+                            <button type="button" class="btn btn-outline-primary btn-sm" id="btn_quick_preview_fhir">Preview FHIR JSON</button>
                             <button type="button" class="btn btn-outline-primary btn-sm" id="btn_toggle_consult_view_settings">Customize Sections</button>
                             <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_manage_autotype_keywords">Manage Keywords</button>
                         </div>
@@ -596,15 +612,16 @@
                                 <h6 class="mb-2">General Examination</h6>
                                 <div class="mb-3" id="rx_sec_vitals">
                                     <h6 class="mb-2">Vitals</h6>
+                                    <small class="text-muted d-block mb-2">Use normalized units: Pulse/RR in /min, SpO2 in %, BP in mmHg, Temp in deg C, Height in cm, Weight in kg.</small>
                                     <div class="row g-2">
-                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="pulse" placeholder="Pulse" value="<?= esc($opd_prescription[0]->pulse ?? '') ?>"></div>
-                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="spo2" placeholder="SPO2" value="<?= esc($opd_prescription[0]->spo2 ?? '') ?>"></div>
-                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="bp" placeholder="BP Systolic" value="<?= esc($opd_prescription[0]->bp ?? '') ?>"></div>
-                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="diastolic" placeholder="Diastolic" value="<?= esc($opd_prescription[0]->diastolic ?? '') ?>"></div>
-                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="temp" placeholder="Temp" value="<?= esc($opd_prescription[0]->temp ?? '') ?>"></div>
-                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="rr_min" placeholder="RR/min" value="<?= esc($opd_prescription[0]->rr_min ?? '') ?>"></div>
-                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="height" placeholder="Height" value="<?= esc($opd_prescription[0]->height ?? '') ?>"></div>
-                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="weight" placeholder="Weight" value="<?= esc($opd_prescription[0]->weight ?? '') ?>"></div>
+                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="pulse" placeholder="Pulse (/min) e.g. 72" value="<?= esc($opd_prescription[0]->pulse ?? '') ?>"></div>
+                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="spo2" placeholder="SpO2 (%) e.g. 98" value="<?= esc($opd_prescription[0]->spo2 ?? '') ?>"></div>
+                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="bp" placeholder="BP Systolic (mmHg)" value="<?= esc($opd_prescription[0]->bp ?? '') ?>"></div>
+                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="diastolic" placeholder="BP Diastolic (mmHg)" value="<?= esc($opd_prescription[0]->diastolic ?? '') ?>"></div>
+                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="temp" placeholder="Temp (deg C) e.g. 37" value="<?= esc($opd_prescription[0]->temp ?? '') ?>"></div>
+                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="rr_min" placeholder="RR (/min) e.g. 18" value="<?= esc($opd_prescription[0]->rr_min ?? '') ?>"></div>
+                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="height" placeholder="Height (cm)" value="<?= esc($opd_prescription[0]->height ?? '') ?>"></div>
+                                        <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="weight" placeholder="Weight (kg)" value="<?= esc($opd_prescription[0]->weight ?? '') ?>"></div>
                                         <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="waist" placeholder="Waist" value="<?= esc($opd_prescription[0]->waist ?? '') ?>"></div>
                                         <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="pallor" placeholder="Pallor" value="<?= esc($opd_prescription[0]->pallor ?? '') ?>"></div>
                                         <div class="col-md-2"><input class="form-control form-control-sm rx-instant" id="icterus" placeholder="Icterus" value="<?= esc($opd_prescription[0]->Icterus ?? '') ?>"></div>
@@ -785,6 +802,28 @@
                                         <button type="button" class="btn btn-outline-secondary btn-sm rx-ai-btn btn-save-autotype-keyword" data-section="complaints" data-target="complaints" title="Save keyword for autocomplete">Save keyword</button>
                                     </label>
                                     <textarea class="form-control rx-field" id="complaints" rows="4" maxlength="4000"><?= esc($opd_prescription[0]->complaints ?? '') ?></textarea>
+                                    <div class="rx-recent-chip-label">Recent complaints</div>
+                                    <div class="rx-recent-chip-box" id="recent_chips_complaints"><span class="text-muted small">Loading...</span></div>
+                                    <div class="row g-2 mt-2">
+                                        <div class="col-md-4">
+                                            <label class="form-label mb-1">Onset</label>
+                                            <input type="text" class="form-control form-control-sm rx-instant" id="complaint_onset" placeholder="e.g. Sudden / 2 days ago" value="<?= esc($opd_prescription[0]->complaint_onset ?? '') ?>">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label mb-1">Duration (days)</label>
+                                            <input type="number" min="0" step="1" class="form-control form-control-sm rx-instant" id="complaint_duration_days" placeholder="e.g. 3" value="<?= esc($opd_prescription[0]->complaint_duration_days ?? '') ?>">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label mb-1">Severity</label>
+                                            <?php $complaintSeverity = strtolower(trim((string) ($opd_prescription[0]->complaint_severity ?? ''))); ?>
+                                            <select class="form-select form-select-sm rx-instant" id="complaint_severity">
+                                                <option value="" <?= $complaintSeverity === '' ? 'selected' : '' ?>>Not specified</option>
+                                                <option value="mild" <?= $complaintSeverity === 'mild' ? 'selected' : '' ?>>Mild</option>
+                                                <option value="moderate" <?= $complaintSeverity === 'moderate' ? 'selected' : '' ?>>Moderate</option>
+                                                <option value="severe" <?= $complaintSeverity === 'severe' ? 'selected' : '' ?>>Severe</option>
+                                            </select>
+                                        </div>
+                                    </div>
                                     <div id="complaints_interim_preview" style="display:none;font-size:.8rem;color:#6c757d;padding:2px 4px;font-style:italic;"></div>
                                     <div class="rx-counter" id="counter_complaints">0/4000</div>
                                 </div>
@@ -816,6 +855,11 @@
                                     <button type="button" class="btn btn-outline-secondary btn-sm btn-field-clear" data-target="diagnosis">Clear</button>
                                 </div>
                                 <textarea class="form-control rx-field" id="diagnosis" rows="4" maxlength="4000"><?= esc($opd_prescription[0]->diagnosis ?? '') ?></textarea>
+                                <div class="rx-recent-chip-label">Recent diagnosis</div>
+                                <div class="rx-recent-chip-box" id="recent_chips_diagnosis"><span class="text-muted small">Loading...</span></div>
+                                <input type="hidden" id="diagnosis_snomed_id" value="<?= esc($opd_prescription[0]->diagnosis_snomed_id ?? '') ?>">
+                                <input type="hidden" id="diagnosis_snomed_term" value="<?= esc($opd_prescription[0]->diagnosis_snomed_term ?? '') ?>">
+                                <input type="hidden" id="diagnosis_snomed_source" value="<?= esc($opd_prescription[0]->diagnosis_snomed_source ?? '') ?>">
                                 <div class="rx-counter" id="counter_diagnosis">0/4000</div>
                             </div>
 
@@ -831,6 +875,11 @@
                                     <button type="button" class="btn btn-outline-secondary btn-sm btn-field-clear" data-target="provisional_diagnosis">Clear</button>
                                 </div>
                                 <textarea class="form-control rx-field" id="provisional_diagnosis" rows="4" maxlength="4000"><?= esc($opd_prescription[0]->Provisional_diagnosis ?? '') ?></textarea>
+                                <div class="rx-recent-chip-label">Recent provisional diagnosis</div>
+                                <div class="rx-recent-chip-box" id="recent_chips_provisional_diagnosis"><span class="text-muted small">Loading...</span></div>
+                                <input type="hidden" id="provisional_diagnosis_snomed_id" value="<?= esc($opd_prescription[0]->provisional_diagnosis_snomed_id ?? '') ?>">
+                                <input type="hidden" id="provisional_diagnosis_snomed_term" value="<?= esc($opd_prescription[0]->provisional_diagnosis_snomed_term ?? '') ?>">
+                                <input type="hidden" id="provisional_diagnosis_snomed_source" value="<?= esc($opd_prescription[0]->provisional_diagnosis_snomed_source ?? '') ?>">
                                 <div class="rx-counter" id="counter_provisional_diagnosis">0/4000</div>
                             </div>
 
@@ -922,6 +971,8 @@
                             <div class="mb-2">
                                 <label class="form-label"><strong>Advise Investigation</strong></label>
                                 <textarea class="form-control form-control-sm" id="advise_investigation_notes" rows="2" placeholder="Optional notes for investigation advice..."></textarea>
+                                <div class="rx-recent-chip-label">Recent investigations</div>
+                                <div class="rx-recent-chip-box" id="recent_chips_investigation"><span class="text-muted small">Loading...</span></div>
                             </div>
 
                             <div class="mb-2">
@@ -1022,9 +1073,9 @@
                                 </div>
                                 <div class="row g-3 align-items-end">
                                     <div class="col-md-3">
-                                        <label class="form-label fw-semibold mb-1">Where:</label>
+                                        <label class="form-label fw-semibold mb-1">Route:</label>
                                         <select class="form-select" id="med_where">
-                                            <option value="">Body place</option>
+                                            <option value="">Select route</option>
                                         </select>
                                     </div>
                                     <div class="col-md-2">
@@ -1067,7 +1118,7 @@
                                 <table class="table table-bordered table-sm rx-list-table" id="tbl_medicine">
                                     <thead>
                                         <tr>
-                                            <th>Medicine</th><th>Type</th><th>Dose</th><th>When</th><th>Frequency</th><th>Where</th><th>Duration</th><th>Qty</th><th>Medicine Advice</th><th width="170">Action</th>
+                                            <th>Medicine</th><th>Type</th><th>Dose</th><th>When</th><th>Frequency</th><th>Route</th><th>Duration</th><th>Qty</th><th>Medicine Advice</th><th width="170">Action</th>
                                         </tr>
                                     </thead>
                                     <tbody><tr><td colspan="10" class="text-muted">No medicine added</td></tr></tbody>
@@ -1329,7 +1380,7 @@
                             <div class="row g-1 mb-2">
                                 <div class="col-3"><input type="text" class="form-control form-control-sm" id="crgc_med_days" placeholder="Days"></div>
                                 <div class="col-3"><input type="text" class="form-control form-control-sm" id="crgc_med_qty" placeholder="Qty"></div>
-                                <div class="col-6"><select class="form-select form-select-sm" id="crgc_med_where"><option value="">Where</option></select></div>
+                                <div class="col-6"><select class="form-select form-select-sm" id="crgc_med_where"><option value="">Route</option></select></div>
                             </div>
                             <div class="mb-2">
                                 <input type="text" class="form-control form-control-sm" id="crgc_med_remark" placeholder="Remark">
@@ -1347,7 +1398,7 @@
                         <div class="fw-semibold mb-1">Medicines to Add <span class="badge bg-secondary" id="crgc_med_count">0</span></div>
                         <div class="table-responsive">
                             <table class="table table-sm table-bordered mb-0" id="crgc_med_table">
-                                <thead><tr><th>Medicine</th><th>Type</th><th>Dose</th><th>When</th><th>Freq</th><th>Days</th><th>Where</th><th width="60"></th></tr></thead>
+                                <thead><tr><th>Medicine</th><th>Type</th><th>Dose</th><th>When</th><th>Freq</th><th>Days</th><th>Route</th><th width="60"></th></tr></thead>
                                 <tbody></tbody>
                             </table>
                         </div>
@@ -1823,7 +1874,7 @@
             renderMedicineMasterSelectOptions($('#med_dosage'), medicineDoseMasterCache.dose, 'Dose');
             renderMedicineMasterSelectOptions($('#med_when'), medicineDoseMasterCache.when, 'When');
             renderMedicineMasterSelectOptions($('#med_freq'), medicineDoseMasterCache.freq, 'Freq');
-            renderMedicineMasterSelectOptions($('#med_where'), medicineDoseMasterCache.where, 'Where');
+            renderMedicineMasterSelectOptions($('#med_where'), medicineDoseMasterCache.where, 'Route');
 
             if (typeof done === 'function') {
                 done();
@@ -2150,11 +2201,12 @@
         persistAutotypeSuggestCache();
     }
 
-    function bindLegacyCommaAutocomplete(selector, endpointUrl, extractValue) {
+    function bindLegacyCommaAutocomplete(selector, endpointUrl, extractValue, options) {
         var $field = $(selector);
         if (!$field.length || !($.ui && $.ui.autocomplete)) {
             return;
         }
+        options = options || {};
 
         function hasOpenAutocompleteMenu() {
             var ac = $field.autocomplete('instance');
@@ -2216,7 +2268,7 @@
                                 value = (row && (row.value || row.label || row.name || row.finding_examinations)) ? (row.value || row.label || row.name || row.finding_examinations).toString().trim() : '';
                             }
                             if (value) {
-                                out.push({ label: value, value: value });
+                                out.push({ label: value, value: value, raw: row || {} });
                             }
                         });
                         autotypeSuggestCache[cacheKey] = { ts: Date.now(), rows: out };
@@ -2238,12 +2290,21 @@
                     terms.push((ui.item && ui.item.value) ? ui.item.value : '');
                     terms.push('');
                     this.value = terms.join(', ');
+                    if (typeof options.onSelect === 'function') {
+                        options.onSelect(ui && ui.item ? ui.item.raw || {} : {}, this.value || '');
+                    }
                     markDirty('Suggestion inserted');
                     scheduleAutoSave();
                     refreshCounters();
                     return false;
                 }
             });
+
+        $field.on('input', function() {
+            if (typeof options.onInput === 'function') {
+                options.onInput(this.value || '');
+            }
+        });
 
         $field.on('keyup click focus', function() {
             var $self = $(this);
@@ -3356,7 +3417,44 @@
         });
     });
 
+    function normalizeNumericInputValue(raw) {
+        var text = (raw || '').toString().trim();
+        if (!text) {
+            return '';
+        }
+
+        text = text.replace(/,/g, '.');
+        var match = text.match(/-?\d+(?:\.\d+)?/);
+        if (!match) {
+            return '';
+        }
+
+        return match[0];
+    }
+
+    function normalizeVitalsInputs(updateDom) {
+        var fields = ['bp', 'diastolic', 'pulse', 'temp', 'spo2', 'rr_min', 'height', 'weight'];
+        var out = {};
+
+        fields.forEach(function(fieldId) {
+            var $field = $('#' + fieldId);
+            if (!$field.length) {
+                out[fieldId] = '';
+                return;
+            }
+
+            var normalized = normalizeNumericInputValue($field.val());
+            out[fieldId] = normalized;
+            if (updateDom) {
+                $field.val(normalized);
+            }
+        });
+
+        return out;
+    }
+
     function getPayload() {
+        var normalizedVitals = normalizeVitalsInputs(true);
         var morbidities = [];
         var morbiditiesText = [];
         $('input[name="morbidities"]:checked').each(function() {
@@ -3372,9 +3470,18 @@
             opd_session_id: $('#opd_session_id').val(),
             abha_address: $('#abha_address').val(),
             complaints: $('#complaints').val(),
+            complaint_onset: $('#complaint_onset').length ? $('#complaint_onset').val() : '',
+            complaint_duration_days: $('#complaint_duration_days').length ? $('#complaint_duration_days').val() : '',
+            complaint_severity: $('#complaint_severity').length ? $('#complaint_severity').val() : '',
             finding_examinations: $('#finding_examinations').val(),
             diagnosis: $('#diagnosis').val(),
+            diagnosis_snomed_id: $('#diagnosis_snomed_id').val(),
+            diagnosis_snomed_term: $('#diagnosis_snomed_term').val(),
+            diagnosis_snomed_source: $('#diagnosis_snomed_source').val(),
             provisional_diagnosis: $('#provisional_diagnosis').val(),
+            provisional_diagnosis_snomed_id: $('#provisional_diagnosis_snomed_id').val(),
+            provisional_diagnosis_snomed_term: $('#provisional_diagnosis_snomed_term').val(),
+            provisional_diagnosis_snomed_source: $('#provisional_diagnosis_snomed_source').val(),
             prescriber_remarks: $('#prescriber_remarks').val(),
             women_related_problems: $('#women_related_problems').length ? $('#women_related_problems').val() : '',
             women_lmp: $('#women_lmp').length ? $('#women_lmp').val() : '',
@@ -3394,14 +3501,14 @@
             advice: $('#advice').val(),
             next_visit: $('#next_visit').val(),
             refer_to: $('#refer_to').val(),
-            bp: $('#bp').val(),
-            diastolic: $('#diastolic').val(),
-            pulse: $('#pulse').val(),
-            temp: $('#temp').val(),
-            spo2: $('#spo2').val(),
-            rr_min: $('#rr_min').val(),
-            height: $('#height').val(),
-            weight: $('#weight').val(),
+            bp: normalizedVitals.bp,
+            diastolic: normalizedVitals.diastolic,
+            pulse: normalizedVitals.pulse,
+            temp: normalizedVitals.temp,
+            spo2: normalizedVitals.spo2,
+            rr_min: normalizedVitals.rr_min,
+            height: normalizedVitals.height,
+            weight: normalizedVitals.weight,
             waist: $('#waist').val(),
             pallor: $('#pallor').val(),
             icterus: $('#icterus').val(),
@@ -3443,9 +3550,24 @@
             }
 
             $('#complaints').val(data.complaints || '');
+            if ($('#complaint_onset').length) {
+                $('#complaint_onset').val(data.complaint_onset || '');
+            }
+            if ($('#complaint_duration_days').length) {
+                $('#complaint_duration_days').val(data.complaint_duration_days || '');
+            }
+            if ($('#complaint_severity').length) {
+                $('#complaint_severity').val(data.complaint_severity || '');
+            }
             $('#finding_examinations').val(data.finding_examinations || '');
             $('#diagnosis').val(data.diagnosis || '');
+            $('#diagnosis_snomed_id').val(data.diagnosis_snomed_id || '');
+            $('#diagnosis_snomed_term').val(data.diagnosis_snomed_term || '');
+            $('#diagnosis_snomed_source').val(data.diagnosis_snomed_source || '');
             $('#provisional_diagnosis').val(data.provisional_diagnosis || '');
+            $('#provisional_diagnosis_snomed_id').val(data.provisional_diagnosis_snomed_id || '');
+            $('#provisional_diagnosis_snomed_term').val(data.provisional_diagnosis_snomed_term || '');
+            $('#provisional_diagnosis_snomed_source').val(data.provisional_diagnosis_snomed_source || '');
             $('#prescriber_remarks').val(data.prescriber_remarks || '');
             if ($('#women_related_problems').length) {
                 $('#women_related_problems').val(data.women_related_problems || '');
@@ -3631,6 +3753,11 @@
         if (this.id === 'drug_allergy_details') {
             $('#drug_allergy_details_error').text('').hide();
         }
+    });
+
+    $('#bp,#diastolic,#pulse,#temp,#spo2,#rr_min,#height,#weight').on('blur change', function() {
+        var normalized = normalizeNumericInputValue($(this).val());
+        $(this).val(normalized);
     });
 
     function ensureSession(done) {
@@ -3869,6 +3996,52 @@
         }
 
         openBundle($('#opd_session_id').val());
+    });
+
+    $('#btn_preview_fhir').on('click', function() {
+        var openBundlePreview = function(sessionId) {
+            var opdId = $('#opd_id').val() || '0';
+            var sid = parseInt(sessionId || '0', 10);
+            var url = sid > 0
+                ? '<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId + '/' + sid
+                : '<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId;
+            window.open(url, '_blank');
+        };
+
+        if (isDirty || parseInt($('#opd_session_id').val() || '0', 10) <= 0) {
+            savePrescription(false, function(ok, data) {
+                if (!ok) {
+                    return;
+                }
+                openBundlePreview((data && data.opd_session_id) ? data.opd_session_id : $('#opd_session_id').val());
+            });
+            return;
+        }
+
+        openBundlePreview($('#opd_session_id').val());
+    });
+
+    $('#btn_quick_preview_fhir').on('click', function() {
+        var openBundlePreview = function(sessionId) {
+            var opdId = $('#opd_id').val() || '0';
+            var sid = parseInt(sessionId || '0', 10);
+            var url = sid > 0
+                ? '<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId + '/' + sid
+                : '<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId;
+            window.open(url, '_blank');
+        };
+
+        if (isDirty || parseInt($('#opd_session_id').val() || '0', 10) <= 0) {
+            savePrescription(false, function(ok, data) {
+                if (!ok) {
+                    return;
+                }
+                openBundlePreview((data && data.opd_session_id) ? data.opd_session_id : $('#opd_session_id').val());
+            });
+            return;
+        }
+
+        openBundlePreview($('#opd_session_id').val());
     });
 
     $('#btn_restore_draft').on('click', function() {
@@ -4239,6 +4412,116 @@
         });
     });
 
+    function renderRecentEntryChips(section, rows) {
+        var $box = $('#recent_chips_' + section);
+        if (!$box.length) {
+            return;
+        }
+
+        rows = Array.isArray(rows) ? rows : [];
+        $box.empty();
+
+        if (!rows.length) {
+            $box.html('<span class="text-muted small">No recent entry</span>');
+            return;
+        }
+
+        rows.forEach(function(entry) {
+            var val = (entry || '').toString().trim();
+            if (!val) {
+                return;
+            }
+
+            $box.append('<button type="button" class="btn btn-outline-secondary btn-sm btn-recent-entry-chip" data-section="' + $('<div>').text(section).html() + '" data-value="' + $('<div>').text(val).html() + '">' + $('<div>').text(val).html() + '</button>');
+        });
+    }
+
+    function appendRecentEntryToField(targetId, value) {
+        var $target = $('#' + targetId);
+        if (!$target.length) {
+            return false;
+        }
+
+        var incoming = (value || '').toString().trim();
+        if (!incoming) {
+            return false;
+        }
+
+        var current = ($target.val() || '').toString();
+        var existingTokens = current.toLowerCase().split(/[\n;,]+/).map(function(token) {
+            return (token || '').toString().trim();
+        }).filter(function(token) {
+            return token !== '';
+        });
+
+        if (existingTokens.indexOf(incoming.toLowerCase()) !== -1) {
+            return false;
+        }
+
+        var next = current.trim();
+        if (next !== '') {
+            if (next.slice(-1) !== '\n') {
+                next += '\n';
+            }
+            next += incoming;
+        } else {
+            next = incoming;
+        }
+
+        $target.val(next);
+        refreshCounters();
+        markDirty('Recent entry added');
+        return true;
+    }
+
+    function loadRecentEntryChips() {
+        var opdId = parseInt($('#opd_id').val() || '0', 10);
+        if (opdId <= 0) {
+            return;
+        }
+
+        ['complaints', 'diagnosis', 'provisional_diagnosis', 'investigation'].forEach(function(section) {
+            var $box = $('#recent_chips_' + section);
+            if ($box.length) {
+                $box.html('<span class="text-muted small">Loading...</span>');
+            }
+        });
+
+        var url = '<?= base_url('Opd_prescription/section_recent_entries') ?>?opd_id=' + encodeURIComponent(opdId);
+        apiGet(url, function(data) {
+            var sections = (data && data.sections) ? data.sections : {};
+            renderRecentEntryChips('complaints', sections.complaints || []);
+            renderRecentEntryChips('diagnosis', sections.diagnosis || []);
+            renderRecentEntryChips('provisional_diagnosis', sections.provisional_diagnosis || []);
+            renderRecentEntryChips('investigation', sections.investigation || []);
+        });
+    }
+
+    $(document).on('click', '.btn-recent-entry-chip', function() {
+        var section = ($(this).data('section') || '').toString().trim();
+        var value = ($(this).data('value') || '').toString().trim();
+        if (!section || !value) {
+            return;
+        }
+
+        if (section === 'investigation') {
+            batchAddInvestigations([value]);
+            return;
+        }
+
+        var targetMap = {
+            complaints: 'complaints',
+            diagnosis: 'diagnosis',
+            provisional_diagnosis: 'provisional_diagnosis'
+        };
+        var targetId = targetMap[section] || '';
+        if (!targetId) {
+            return;
+        }
+
+        appendRecentEntryToField(targetId, value);
+    });
+
     $('#btn_toggle_fhir_history').on('click', function() {
         var $card = $('#fhir_history_card');
         $card.toggle();
@@ -4443,7 +4726,12 @@
             var generatedBy = $('<div>').text(row.generated_by || 'system').html();
             var sessionId = parseInt(row.opd_session_id || 0, 10);
             var downloadUrl = row.download_url || '';
-            var btn = '<a class="btn btn-sm btn-outline-success" target="_blank" href="' + $('<div>').text(downloadUrl).html() + '">JSON</a>';
+            var previewUrl = row.preview_url || row.preview_latest_url || '';
+            var btn = '';
+            if (previewUrl) {
+                btn += '<a class="btn btn-sm btn-outline-primary me-1" target="_blank" href="' + $('<div>').text(previewUrl).html() + '">Preview</a>';
+            }
+            btn += '<a class="btn btn-sm btn-outline-success" target="_blank" href="' + $('<div>').text(downloadUrl).html() + '">JSON</a>';
             $tb.append('<tr><td>' + generatedAt + '</td><td>' + generatedBy + '</td><td>' + sessionId + '</td><td>' + btn + '</td></tr>');
         });
     }
@@ -5870,7 +6158,7 @@
         fill('crgc_med_dose', cache.dose, 'Dose');
         fill('crgc_med_when', cache.when, 'When');
         fill('crgc_med_freq', cache.freq, 'Freq');
-        fill('crgc_med_where', cache.where, 'Where');
+        fill('crgc_med_where', cache.where, 'Route');
     }
 
     function renderCrgcMedicineTable() {
@@ -6800,8 +7088,41 @@
     bindLegacyCommaAutocomplete('#complaints', '<?= base_url('Opd_prescription/complaints_search') ?>', function(row) {
         return (row && row.name) ? row.name : '';
     });
+    bindLegacyCommaAutocomplete('#diagnosis', '<?= base_url('Opd_prescription/provisional_diagnosis_search') ?>', function(row) {
+        return (row && row.name) ? row.name : '';
+    }, {
+        onSelect: function(row) {
+            $('#diagnosis_snomed_id').val((row && row.snomed_concept_id) ? row.snomed_concept_id : '');
+            $('#diagnosis_snomed_term').val((row && row.snomed_term) ? row.snomed_term : '');
+            $('#diagnosis_snomed_source').val((row && row.source) ? row.source : '');
+        },
+        onInput: function(value) {
+            var text = (value || '').toString().trim();
+            var selectedTerm = ($('#diagnosis_snomed_term').val() || '').toString().trim();
+            if (text.indexOf(',') !== -1 || text === '' || (selectedTerm && text !== selectedTerm)) {
+                $('#diagnosis_snomed_id').val('');
+                $('#diagnosis_snomed_term').val('');
+                $('#diagnosis_snomed_source').val('');
+            }
+        }
+    });
     bindLegacyCommaAutocomplete('#provisional_diagnosis', '<?= base_url('Opd_prescription/provisional_diagnosis_search') ?>', function(row) {
         return (row && row.name) ? row.name : '';
+    }, {
+        onSelect: function(row) {
+            $('#provisional_diagnosis_snomed_id').val((row && row.snomed_concept_id) ? row.snomed_concept_id : '');
+            $('#provisional_diagnosis_snomed_term').val((row && row.snomed_term) ? row.snomed_term : '');
+            $('#provisional_diagnosis_snomed_source').val((row && row.source) ? row.source : '');
+        },
+        onInput: function(value) {
+            var text = (value || '').toString().trim();
+            var selectedTerm = ($('#provisional_diagnosis_snomed_term').val() || '').toString().trim();
+            if (text.indexOf(',') !== -1 || text === '' || (selectedTerm && text !== selectedTerm)) {
+                $('#provisional_diagnosis_snomed_id').val('');
+                $('#provisional_diagnosis_snomed_term').val('');
+                $('#provisional_diagnosis_snomed_source').val('');
+            }
+        }
     });
     bindLegacyCommaAutocomplete('#finding_examinations', '<?= base_url('Opd_prescription/finding_exam_search') ?>', function(row) {
         return (row && row.finding_examinations) ? row.finding_examinations : '';
@@ -6812,6 +7133,7 @@
     }
 
     loadAdviceList();
+    loadRecentEntryChips();
     loadInvestigationList();
     loadMedicineList();
     loadOldPrescribedPanel();

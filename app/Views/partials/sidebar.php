@@ -303,18 +303,6 @@ if (! $canChargesSettings && $user && method_exists($user, 'inGroup')) {
                         <span>OPD Consult Payout</span>
                     </a>
                 </li>
-                <li>
-                    <a href="javascript:load_form('<?= base_url('Finance/payout/doctor-charges') ?>','Doctor Charges Payout')">
-                        <i class="bi bi-circle"></i>
-                        <span>Doctor Charges Payout</span>
-                    </a>
-                </li>
-                <li>
-                    <a href="javascript:load_form('<?= base_url('Finance/medical_store_credit_account') ?>','Medical Store Credit Account')">
-                        <i class="bi bi-circle"></i>
-                        <span>Medical Store Credit Account</span>
-                    </a>
-                </li>
             </ul>
         </li>
     <?php } ?>
@@ -373,12 +361,6 @@ if (! $canChargesSettings && $user && method_exists($user, 'inGroup')) {
             </a>
         </li>
         <li class="nav-item">
-        <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('doctor_work/patient_search') ?>','Doctor Patient Search')">
-            <i class="bi bi-search"></i>
-            <span>Patient Search</span>
-        </a>
-    </li>
-        <li class="nav-item">
         <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('doctor_work/document_workspace') ?>','Doctor Documents Workspace')">
             <i class="bi bi-file-earmark-text"></i>
             <span>Document Issue </span>
@@ -411,6 +393,12 @@ if (! $canChargesSettings && $user && method_exists($user, 'inGroup')) {
             <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('AbdmTaskBoard') ?>','ABDM Task Board')">
                 <i class="bi bi-shield-check"></i>
                 <span>ABDM Task Board</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('AbdmOpdQueue') ?>','ABDM OPD Queue')">
+                <i class="bi bi-people"></i>
+                <span>ABDM OPD Queue</span>
             </a>
         </li>
     <?php } ?>

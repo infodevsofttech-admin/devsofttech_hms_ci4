@@ -35,10 +35,14 @@ class AbdmConnectorFactory
             case 'direct':
                 return new DirectAbdmConnector();
 
+            case 'eatria_bridge':
+            case 'eatria':
+                return new EAtriaBridgeConnector();
+
             default:
                 throw new \InvalidArgumentException(
                     "AbdmConnectorFactory: unknown connector '{$connector}'. "
-                    . "Valid values: 'dreamsoft', 'direct_abdm'."
+                    . "Valid values: 'dreamsoft', 'direct_abdm', 'eatria_bridge'."
                 );
         }
     }

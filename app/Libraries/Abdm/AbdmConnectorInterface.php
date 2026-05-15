@@ -56,6 +56,43 @@ interface AbdmConnectorInterface
     ): array;
 
     // -------------------------------------------------------------------------
+    // M1 ABHA OTP Flows (ABHA creation & linking via Aadhaar / Mobile)
+    // These require synchronous HTTP calls — not suitable for async queue.
+    // -------------------------------------------------------------------------
+
+    /**
+     * ABDM M1: Initiate ABHA creation/link via Aadhaar OTP.
+     * Calls gateway POST /api/v3/abha/aadhaar/generate-otp
+     *
+     * @param array<string, mixed> $payload  Must contain 'aadhaar' key (12-digit)
+     */
+    public function abhaAadhaarGenerateOtp(array $payload): array;
+
+    /**
+     * ABDM M1: Verify Aadhaar OTP and complete ABHA flow.
+     * Calls gateway POST /api/v3/abha/aadhaar/verify-otp
+     *
+     * @param array<string, mixed> $payload  Must contain 'txn_id' and 'otp' keys
+     */
+    public function abhaAadhaarVerifyOtp(array $payload): array;
+
+    /**
+     * ABDM M1: Generate mobile OTP for ABHA verification.
+     * Calls gateway POST /api/v3/abha/mobile/generate-otp
+     *
+     * @param array<string, mixed> $payload  Must contain 'mobile' key (10-digit)
+     */
+    public function abhaMobileGenerateOtp(array $payload): array;
+
+    /**
+     * ABDM M1: Verify mobile OTP and complete ABHA flow.
+     * Calls gateway POST /api/v3/abha/mobile/verify-otp
+     *
+     * @param array<string, mixed> $payload  Must contain 'txn_id' and 'otp' keys
+     */
+    public function abhaMobileVerifyOtp(array $payload): array;
+
+    // -------------------------------------------------------------------------
     // Health Record Sharing
     // -------------------------------------------------------------------------
 
@@ -130,4 +167,9 @@ interface AbdmConnectorInterface
         string $currentStatus,
         array  $fullPayload = []
     ): array;
+
+    // OPD Queue
+    public function opdQueueFetch(string $date = '', string $status = '', int $page = 1, int $limit = 100): array;
+    public function opdTokenCreate(array $payload): array;
+    public function opdTokenUpdateStatus(int $tokenId, string $status): array;
 }

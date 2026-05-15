@@ -27,8 +27,10 @@ class AbdmGateway extends BaseController
         }
 
         $abhaId = trim((string) $this->request->getPost('abha_id'));
-        if ($abhaId === '' || preg_match('/^\d{14}$/', $abhaId) !== 1) {
-            return $this->response->setJSON(['ok' => 0, 'error_text' => 'ABHA ID must be a 14-digit number.']);
+        // Accept both dash-format (14-1234-5678-9012) and raw 14-digit format
+        $abhaDigits = str_replace('-', '', $abhaId);
+        if ($abhaId === '' || strlen($abhaDigits) !== 14 || ! ctype_digit($abhaDigits)) {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'ABHA ID must be 14 digits (e.g. 14-1234-5678-9012).']);
         }
 
         $payload = [
@@ -49,6 +51,50 @@ class AbdmGateway extends BaseController
             'queue_id' => $queueId,
             'message' => 'ABHA validation request queued to center server.',
         ]);
+    }
+
+    public function bridgeTestEvent()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $abhaId = trim((string) $this->request->getPost('abha_id'));
+        if ($abhaId === '') {
+            $abhaId = '14-1234-5678-9012';
+        }
+
+        // Accept both dash-format (14-1234-5678-9012) and raw 14-digit format
+        $abhaDigits = str_replace('-', '', $abhaId);
+        if (strlen($abhaDigits) !== 14 || ! ctype_digit($abhaDigits)) {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'ABHA ID must be 14 digits (e.g. 14-1234-5678-9012).']);
+        }
+
+        $payload = [
+            'abha_id' => $abhaId,
+            'requested_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
+            'source' => 'billing.patient.ui',
+            'test_ping' => 1,
+        ];
+
+        try {
+            $result = $this->connector->validateAbha($abhaId, $payload);
+            $cfg = config('AbdmConnector');
+
+            return $this->response->setJSON([
+                'ok' => 1,
+                'message' => 'Bridge test queued successfully.',
+                'connector' => $this->connector->getConnectorName(),
+                'bridge_url' => (string) ($cfg->dreamsoftBridgeUrl ?? ''),
+                'queue_id' => $result['queue_id'] ?? null,
+                'result' => $result,
+            ]);
+        } catch (\Throwable $e) {
+            return $this->response->setStatusCode(500)->setJSON([
+                'ok' => 0,
+                'error_text' => $e->getMessage(),
+            ]);
+        }
     }
 
     public function consentRequest()
@@ -760,4 +806,124 @@ class AbdmGateway extends BaseController
         $row = $builder->orderBy('id', 'DESC')->get(1)->getRowArray();
         return ! empty($row) ? $row : null;
     }
+
+    // =========================================================================
+    // M1 ABHA OTP Flows
+    // Calls EAtriaBridgeConnector synchronously — requires eatria_bridge connector.
+    // =========================================================================
+
+    /**
+     * POST /abdm/abha/aadhaar/generate-otp
+     * Initiates ABHA creation/linking flow using Aadhaar OTP.
+     * Body: { aadhaar: "123456789012" }
+     */
+    public function abhaAadhaarGenerateOtp()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $body    = $this->request->getJSON(true) ?? [];
+        // Accept loginId (API native) or aadhaar (HMS form shorthand)
+        $loginId = trim((string) ($body['loginId'] ?? $body['aadhaar'] ?? $this->request->getPost('loginId') ?? $this->request->getPost('aadhaar') ?? ''));
+
+        if ($loginId === '' || ! preg_match('/^\d{12}$/', $loginId)) {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'Valid 12-digit Aadhaar number is required']);
+        }
+
+        try {
+            $result = $this->connector->abhaAadhaarGenerateOtp(['aadhaar' => $loginId]);
+        } catch (\Throwable $e) {
+            return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => $e->getMessage()]);
+        }
+
+        return $this->response->setJSON($result);
+    }
+
+    /**
+     * POST /abdm/abha/aadhaar/verify-otp
+     * Verifies Aadhaar OTP and returns ABHA profile.
+     * Body: { txn_id: "...", otp: "123456" }
+     */
+    public function abhaAadhaarVerifyOtp()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $body  = $this->request->getJSON(true) ?? [];
+        // Accept txnId (API native) or txn_id (HMS form shorthand)
+        $txnId = trim((string) ($body['txnId'] ?? $body['txn_id'] ?? $this->request->getPost('txnId') ?? $this->request->getPost('txn_id') ?? ''));
+        $otp   = trim((string) ($body['otp']   ?? $this->request->getPost('otp') ?? ''));
+
+        if ($txnId === '' || $otp === '') {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'txnId and otp are required']);
+        }
+
+        try {
+            $result = $this->connector->abhaAadhaarVerifyOtp(['txnId' => $txnId, 'otp' => $otp]);
+        } catch (\Throwable $e) {
+            return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => $e->getMessage()]);
+        }
+
+        return $this->response->setJSON($result);
+    }
+
+    /**
+     * POST /abdm/abha/mobile/generate-otp
+     * Sends OTP to mobile for ABHA linking.
+     * Body: { mobile: "9876543210" }
+     */
+    public function abhaMobileGenerateOtp()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $body    = $this->request->getJSON(true) ?? [];
+        // Accept loginId (API native) or mobile (HMS form shorthand)
+        $loginId = trim((string) ($body['loginId'] ?? $body['mobile'] ?? $this->request->getPost('loginId') ?? $this->request->getPost('mobile') ?? ''));
+
+        if ($loginId === '' || ! preg_match('/^\d{10}$/', $loginId)) {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'Valid 10-digit mobile number is required']);
+        }
+
+        try {
+            $result = $this->connector->abhaMobileGenerateOtp(['mobile' => $loginId]);
+        } catch (\Throwable $e) {
+            return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => $e->getMessage()]);
+        }
+
+        return $this->response->setJSON($result);
+    }
+
+    /**
+     * POST /abdm/abha/mobile/verify-otp
+     * Verifies mobile OTP and returns ABHA profile.
+     * Body: { txn_id: "...", otp: "123456" }
+     */
+    public function abhaMobileVerifyOtp()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $body  = $this->request->getJSON(true) ?? [];
+        // Accept txnId (API native) or txn_id (HMS form shorthand)
+        $txnId = trim((string) ($body['txnId'] ?? $body['txn_id'] ?? $this->request->getPost('txnId') ?? $this->request->getPost('txn_id') ?? ''));
+        $otp   = trim((string) ($body['otp']   ?? $this->request->getPost('otp') ?? ''));
+
+        if ($txnId === '' || $otp === '') {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'txnId and otp are required']);
+        }
+
+        try {
+            $result = $this->connector->abhaMobileVerifyOtp(['txnId' => $txnId, 'otp' => $otp]);
+        } catch (\Throwable $e) {
+            return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => $e->getMessage()]);
+        }
+
+        return $this->response->setJSON($result);
+    }
 }
+
