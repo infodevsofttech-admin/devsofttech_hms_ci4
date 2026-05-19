@@ -916,36 +916,38 @@
                             </div>
 
                             <div class="mb-3" id="rx_sec_diagnosis">
-                                <h6 class="mb-2">Diagnosis</h6>
-
-                                <!-- Search -->
-                                <div class="mb-2 position-relative">
-                                    <div class="input-group input-group-sm">
-                                        <input type="text" class="form-control" id="diagnosis_lookup"
-                                               autocomplete="off"
-                                               placeholder="Type diagnosis: diabetes, hypertension...">
-                                        <button type="button" class="btn btn-outline-secondary btn-save-autotype-keyword"
-                                                data-section="diagnosis" data-target="diagnosis" title="Save as custom keyword">+keyword</button>
-                                    </div>
-                                    <div id="diagnosis_dropdown" class="border rounded bg-white shadow-sm"
-                                         style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1060;max-height:260px;overflow-y:auto;"></div>
+                                <div class="d-flex align-items-center justify-content-between mb-2">
+                                    <h6 class="mb-0">Diagnosis</h6>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary btn-save-autotype-keyword"
+                                            data-section="diagnosis" data-target="diagnosis"
+                                            style="font-size:.75rem" title="Save as custom keyword">+keyword</button>
                                 </div>
 
-                                <!-- Diagnosis rows table -->
-                                <table class="table table-sm table-bordered align-middle mb-1" id="diagnosis_table" style="display:none;font-size:.82rem">
+                                <!-- Healthplix-style inline diagnosis table -->
+                                <table class="table table-sm table-bordered align-middle mb-1" id="diagnosis_table" style="font-size:.82rem">
                                     <thead class="table-light" style="font-size:.75rem">
                                         <tr>
-                                            <th style="width:24px">#</th>
+                                            <th style="width:28px">#</th>
                                             <th>Diagnosis</th>
-                                            <th style="width:100px">Code</th>
                                             <th style="width:120px">Duration</th>
                                             <th style="width:110px">Date</th>
                                             <th style="width:24px"></th>
                                         </tr>
                                     </thead>
                                     <tbody id="diagnosis_tbody"></tbody>
+                                    <tfoot>
+                                        <tr>
+                                            <td></td>
+                                            <td colspan="3" class="p-1 position-relative">
+                                                <input type="text" class="form-control form-control-sm" id="diagnosis_lookup"
+                                                       autocomplete="off" placeholder="Type diagnosis to add…">
+                                                <div id="diagnosis_dropdown" class="border rounded bg-white shadow-sm"
+                                                     style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1060;max-height:260px;overflow-y:auto;"></div>
+                                            </td>
+                                            <td></td>
+                                        </tr>
+                                    </tfoot>
                                 </table>
-                                <div id="diagnosis_empty_hint" class="text-muted small mb-1">No diagnosis selected yet</div>
 
                                 <!-- Fixed dropdown for duration -->
                                 <div id="diagnosis_dur_dd" style="display:none;position:fixed;z-index:1090;min-width:160px;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:180px;overflow-y:auto;"></div>
@@ -5263,45 +5265,25 @@
         var $tbody = $('#diagnosis_tbody');
         $tbody.empty();
 
-        if (!selectedDiagnosisItems.length) {
-            $('#diagnosis_table').hide();
-            $('#diagnosis_empty_hint').show();
-            syncDiagnosisJson();
-            return;
-        }
-
-        $('#diagnosis_empty_hint').hide();
-        $('#diagnosis_table').show();
-
         selectedDiagnosisItems.forEach(function(item, idx) {
             var isSnomed = !!(item.concept_id);
-            var nameColor = isSnomed ? 'color:#0d6efd;font-weight:600' : 'color:#6c757d;font-weight:600';
             var $tr = $('<tr>').attr('data-idx', idx);
 
-            // Row number
-            $tr.append($('<td class="text-center text-muted" style="width:24px">').text(idx + 1));
+            // # column
+            $tr.append($('<td class="text-center text-muted" style="font-size:.75rem">').text(idx + 1));
 
             // Diagnosis name
             var $nameTd = $('<td>');
-            $nameTd.append($('<div class="text-truncate" style="max-width:260px;' + nameColor + '">').text(item.term));
+            var nameStyle = isSnomed ? 'color:#0d6efd;font-weight:600;max-width:260px' : 'max-width:260px';
+            var $nameDiv = $('<div class="text-truncate" style="' + nameStyle + ';">').text(item.term);
+            if (item.concept_id) { $nameDiv.attr('title', 'SNOMED/ICD: ' + item.concept_id); }
+            $nameTd.append($nameDiv);
             $tr.append($nameTd);
-
-            // SNOMED code
-            var codeText = item.concept_id || '';
-            var $codeTd = $('<td class="text-center" style="width:100px">');
-            if (codeText) {
-                $codeTd.append(
-                    $('<span class="badge text-bg-light border" style="font-size:.7rem;font-family:monospace;letter-spacing:.02em">').text(codeText)
-                );
-            } else {
-                $codeTd.append($('<span class="text-muted" style="font-size:.75rem">').text('—'));
-            }
-            $tr.append($codeTd);
 
             // Duration input
             $tr.append(
                 $('<td class="p-1">').append(
-                    $('<input type="text" class="form-control form-control-sm diag-dur-input" autocomplete="off" placeholder="1 month...">')
+                    $('<input type="text" class="form-control form-control-sm diag-dur-input" autocomplete="off" placeholder="1 month…">')
                         .val(item.duration || '').attr('data-idx', idx)
                 )
             );
@@ -5367,7 +5349,8 @@
                     syncDiagnosisJson();
                 }
                 $dd.hide().empty();
-                $inp.closest('tr').find('.diag-date-input').trigger('focus');
+                // Done with this row — move to lookup for next diagnosis
+                $('#diagnosis_lookup').val('').trigger('focus');
             }));
         });
         _positionDd($dd, $inp);
@@ -5394,14 +5377,14 @@
         if (e.key === 'Enter') {
             e.preventDefault();
             if ($dd.is(':visible') && _diagDurDdIdx >= 0) { $items.eq(_diagDurDdIdx).trigger('click'); }
-            else { $(this).closest('tr').find('.diag-date-input').trigger('focus'); }
+            else { $('#diagnosis_lookup').val('').trigger('focus'); }
             _diagDurDdIdx = -1;
         }
         if (e.key === 'Escape') { $dd.hide(); _diagDurDdIdx = -1; }
     });
 
-    // Date blur: save date value
-    $(document).on('change blur', '.diag-date-input', function() {
+    // Date change: save and move to lookup
+    $(document).on('change', '.diag-date-input', function() {
         var idx = parseInt($(this).attr('data-idx'), 10);
         if (idx >= 0 && idx < selectedDiagnosisItems.length) {
             selectedDiagnosisItems[idx].date = ($(this).val() || '').trim();
@@ -5409,11 +5392,18 @@
             markDirty('Diagnosis detail updated');
         }
     });
+    $(document).on('blur', '.diag-date-input', function() {
+        var idx = parseInt($(this).attr('data-idx'), 10);
+        if (idx >= 0 && idx < selectedDiagnosisItems.length) {
+            selectedDiagnosisItems[idx].date = ($(this).val() || '').trim();
+            syncDiagnosisJson();
+        }
+    });
 
     // Remove diagnosis row
     $(document).on('click', '.btn-remove-diagnosis', function() {
-        var idx = parseInt($(this).data('idx') || '-1', 10);
-        if (idx < 0 || idx >= selectedDiagnosisItems.length) return;
+        var idx = parseInt($(this).attr('data-idx'), 10);
+        if (isNaN(idx) || idx < 0 || idx >= selectedDiagnosisItems.length) return;
         selectedDiagnosisItems.splice(idx, 1);
         renderDiagnosisTable();
         markDirty('Diagnosis removed');
@@ -5497,7 +5487,7 @@
     // Hide diagnosis dur dd on outside click
     // Close diagnosis dropdown when clicking outside the search area
     $(document).on('click', function(e) {
-        if (!$(e.target).closest('#rx_sec_diagnosis .position-relative, #diagnosis_dropdown').length) {
+        if (!$(e.target).closest('#rx_sec_diagnosis tfoot, #diagnosis_dropdown').length) {
             var $dd = $('#diagnosis_dropdown');
             if ($dd.is(':visible')) {
                 $dd.closest('.rx-foldable').removeClass('dropdown-open');
