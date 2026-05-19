@@ -542,9 +542,21 @@ $routes->post('AbdmGateway/abha_validate', 'AbdmGateway::abhaValidate', ['filter
 $routes->post('AbdmGateway/scan_share_lookup', 'AbdmGateway::scanShareLookup', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmGateway/consent_request', 'AbdmGateway::consentRequest', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmGateway/consent_callback', 'AbdmGateway::consentCallback');
+$routes->post('AbdmGateway/consent_revoked_callback', 'AbdmGateway::consentRevokedCallback');
+$routes->post('AbdmGateway/record_linked_callback', 'AbdmGateway::recordLinkedCallback');
 $routes->post('AbdmGateway/share_prescription_bundle', 'AbdmGateway::sharePrescriptionBundle', ['filter' => $abdmPermFilter]);
+// SNOMED Coding Panel
+$routes->get('AbdmCodingPanel', 'AbdmCodingPanel::index', ['filter' => $abdmPermFilter]);
+$routes->get('AbdmCodingPanel/review/(:num)', 'AbdmCodingPanel::review/$1', ['filter' => $abdmPermFilter]);
+$routes->post('AbdmCodingPanel/confirm', 'AbdmCodingPanel::confirm', ['filter' => $abdmPermFilter]);
+$routes->post('AbdmCodingPanel/reject', 'AbdmCodingPanel::reject', ['filter' => $abdmPermFilter]);
+$routes->post('AbdmCodingPanel/correct', 'AbdmCodingPanel::correct', ['filter' => $abdmPermFilter]);
+$routes->post('AbdmCodingPanel/mark_fhir_ready', 'AbdmCodingPanel::markFhirReady', ['filter' => $abdmPermFilter]);
+$routes->get('AbdmCodingPanel/tip_check', 'AbdmCodingPanel::tipCheck');
 $routes->post('AbdmGateway/share_ipd_discharge_bundle', 'AbdmGateway::shareIpdDischargeBundle', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmGateway/share_diagnosis_report_bundle', 'AbdmGateway::shareDiagnosisReportBundle', ['filter' => $abdmPermFilter]);
+$routes->post('AbdmGateway/push_health_record', 'AbdmGateway::pushHealthRecord', ['filter' => $abdmPermFilter]);
+$routes->get('AbdmGateway/health_records_list', 'AbdmGateway::healthRecordsList', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmGateway/nhcx_claim_create', 'AbdmGateway::nhcxClaimCreate', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmGateway/nhcx_claim_status_request', 'AbdmGateway::nhcxClaimStatusRequest', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmGateway/nhcx_claim_status_callback', 'AbdmGateway::nhcxClaimStatusCallback');
@@ -576,8 +588,12 @@ $routes->get('Opd_prescription/fhir_bundle/(:num)', 'Opd_prescription::fhir_bund
 $routes->get('Opd_prescription/fhir_bundle/(:num)/(:num)', 'Opd_prescription::fhir_bundle/$1/$2');
 $routes->get('Opd_prescription/fhir_bundle_history/(:num)', 'Opd_prescription::fhir_bundle_history/$1');
 $routes->get('Opd_prescription/fhir_bundle_history/(:num)/(:num)', 'Opd_prescription::fhir_bundle_history/$1/$2');
+$routes->get('Opd_prescription/fhir_bundle_preview/(:num)', 'Opd_prescription::fhir_bundle_preview/$1');
+$routes->get('Opd_prescription/fhir_bundle_preview/(:num)/(:num)', 'Opd_prescription::fhir_bundle_preview/$1/$2');
 $routes->get('Opd_prescription/complaints_search', 'Opd_prescription::complaints_search');
+$routes->get('Opd_prescription/section_recent_entries', 'Opd_prescription::section_recent_entries');
 $routes->get('Opd_prescription/provisional_diagnosis_search', 'Opd_prescription::provisional_diagnosis_search');
+$routes->get('Opd_prescription/diagnosis_search', 'Opd_prescription::provisional_diagnosis_search');
 $routes->get('Opd_prescription/finding_exam_search', 'Opd_prescription::finding_exam_search');
 $routes->get('Opd_prescription/get_complaints', 'Opd_prescription::get_complaints');
 $routes->get('Opd_prescription/get_disease', 'Opd_prescription::get_disease');
@@ -680,6 +696,7 @@ $routes->post('Opd_prescription/investigation_remove/(:num)', 'Opd_prescription:
 $routes->get('Opd_prescription/opd_invest_master', 'Opd_prescription::opd_invest_master', ['filter' => 'permission:doctor_work.medicine.manage,doctor_work.access']);
 $routes->get('Opd_prescription/opd_invest_master_specs', 'Opd_prescription::opd_invest_master_specs');
 $routes->get('Opd_prescription/opd_invest_master_data', 'Opd_prescription::opd_invest_master_data');
+$routes->get('Opd_prescription/opd_invest_snomed_search', 'Opd_prescription::opd_invest_snomed_search');
 $routes->get('Opd_prescription/opd_invest_master_get/(:num)', 'Opd_prescription::opd_invest_master_get/$1');
 $routes->post('Opd_prescription/opd_invest_master_save', 'Opd_prescription::opd_invest_master_save');
 $routes->post('Opd_prescription/opd_invest_master_remove/(:num)', 'Opd_prescription::opd_invest_master_remove/$1');

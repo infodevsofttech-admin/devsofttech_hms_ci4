@@ -39,6 +39,8 @@ $med_specs = $med_specs ?? [];
                                 <tr>
                                     <th width="32"></th>
                                     <th>Name</th>
+                                    <th width="100">SNOMED CT</th>
+                                    <th width="70">LOINC</th>
                                     <th width="90">Code</th>
                                     <th width="80">Short</th>
                                     <th width="110">Category</th>
@@ -47,7 +49,7 @@ $med_specs = $med_specs ?? [];
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr><td colspan="7" class="text-muted text-center py-3">Loading…</td></tr>
+                                <tr><td colspan="9" class="text-muted text-center py-3">Loading…</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -67,6 +69,24 @@ $med_specs = $med_specs ?? [];
                         <label class="form-label">Name <span class="text-danger">*</span></label>
                         <input type="text" id="inv_name" class="form-control form-control-sm" placeholder="e.g. CBC, LFT, ECG">
                     </div>
+
+                    <div class="mb-2">
+                        <label class="form-label">SNOMED CT <small class="text-muted">(procedure / observable)</small></label>
+                        <div class="position-relative">
+                            <input type="text" id="inv_snomed_search" class="form-control form-control-sm" placeholder="Type to search SNOMED CT…" autocomplete="off">
+                            <div id="inv_snomed_dropdown" class="list-group shadow position-absolute w-100" style="z-index:1060;display:none;max-height:200px;overflow-y:auto;"></div>
+                        </div>
+                        <div id="inv_snomed_selected" class="mt-1 small text-success" style="display:none;"></div>
+                        <input type="hidden" id="inv_snomed_concept_id" value="">
+                        <input type="hidden" id="inv_snomed_term" value="">
+                        <button type="button" class="btn btn-link btn-sm p-0 mt-1" id="btn_inv_snomed_clear" style="display:none;font-size:.75rem;">&#x2715; Clear SNOMED</button>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label">LOINC Code <small class="text-muted">(optional)</small></label>
+                        <input type="text" id="inv_loinc_code" class="form-control form-control-sm" placeholder="e.g. 58410-2">
+                    </div>
+
                     <div class="mb-2">
                         <label class="form-label">Code <small class="text-muted">(auto if blank)</small></label>
                         <input type="text" id="inv_code" class="form-control form-control-sm" placeholder="e.g. CBC01">
@@ -180,6 +200,9 @@ $med_specs = $med_specs ?? [];
     function clearForm() {
         $('#inv_id').val('0');
         $('#inv_name,#inv_code,#inv_short_name,#inv_category_name').val('');
+        $('#inv_snomed_concept_id,#inv_snomed_term,#inv_snomed_search,#inv_loinc_code').val('');
+        $('#inv_snomed_selected').hide().text('');
+        $('#btn_inv_snomed_clear').hide();
         $('.inv-spec-cb').prop('checked', false);
         $('#inv_is_favourite').prop('checked', false);
         $('#inv_form_title').text('New Investigation');
@@ -193,6 +216,21 @@ $med_specs = $med_specs ?? [];
         $('#inv_code').val(row.code || '');
         $('#inv_short_name').val(row.short_name || '');
         $('#inv_category_name').val(row.category_name || '');
+        $('#inv_loinc_code').val(row.loinc_code || '');
+        // SNOMED
+        var scid = row.snomed_concept_id || '';
+        var sterm = row.snomed_term || '';
+        $('#inv_snomed_concept_id').val(scid);
+        $('#inv_snomed_term').val(sterm);
+        if (scid) {
+            $('#inv_snomed_search').val(scid);
+            $('#inv_snomed_selected').show().text(sterm || scid);
+            $('#btn_inv_snomed_clear').show();
+        } else {
+            $('#inv_snomed_search').val('');
+            $('#inv_snomed_selected').hide().text('');
+            $('#btn_inv_snomed_clear').hide();
+        }
         $('#inv_is_favourite').prop('checked', parseInt(row.is_favourite || 0) === 1);
         $('.inv-spec-cb').prop('checked', false);
         var specIds = (row.spec_ids || '').split(',').map(function(s) { return s.trim(); }).filter(Boolean);
@@ -204,13 +242,16 @@ $med_specs = $med_specs ?? [];
 
     function buildPayload() {
         return {
-            id:            parseInt($('#inv_id').val() || '0', 10),
-            name:          ($('#inv_name').val() || '').trim(),
-            code:          ($('#inv_code').val() || '').trim(),
-            short_name:    ($('#inv_short_name').val() || '').trim(),
-            category_name: ($('#inv_category_name').val() || '').trim(),
-            spec_ids:      getCheckedSpecIds(),
-            is_favourite:  $('#inv_is_favourite').is(':checked') ? 1 : 0
+            id:                 parseInt($('#inv_id').val() || '0', 10),
+            name:               ($('#inv_name').val() || '').trim(),
+            code:               ($('#inv_code').val() || '').trim(),
+            short_name:         ($('#inv_short_name').val() || '').trim(),
+            category_name:      ($('#inv_category_name').val() || '').trim(),
+            snomed_concept_id:  ($('#inv_snomed_concept_id').val() || '').trim(),
+            snomed_term:        ($('#inv_snomed_term').val() || '').trim(),
+            loinc_code:         ($('#inv_loinc_code').val() || '').trim(),
+            spec_ids:           getCheckedSpecIds(),
+            is_favourite:       $('#inv_is_favourite').is(':checked') ? 1 : 0
         };
     }
 
@@ -255,6 +296,23 @@ $med_specs = $med_specs ?? [];
                     }
                 },
                 { data: 'name' },
+                {
+                    data: 'snomed_concept_id', defaultContent: '', orderable: false, className: 'text-center',
+                    render: function(val, type, row) {
+                        if (!val) return '<span class="text-muted small">—</span>';
+                        var tip = row.snomed_term ? ' title="' + $('<div>').text(row.snomed_term).html() + '"' : '';
+                        return '<span class="badge text-bg-light border font-monospace small" style="font-size:.68rem;cursor:default"' + tip + '>'
+                            + $('<div>').text(val).html() + '</span>';
+                    }
+                },
+                {
+                    data: 'loinc_code', defaultContent: '', orderable: false, className: 'text-center',
+                    render: function(val) {
+                        if (!val) return '<span class="text-muted small">—</span>';
+                        return '<span class="badge text-bg-info text-white font-monospace small" style="font-size:.68rem;">'
+                            + $('<div>').text(val).html() + '</span>';
+                    }
+                },
                 { data: 'code', orderable: false },
                 { data: 'short_name', defaultContent: '', orderable: false },
                 { data: 'category_name', defaultContent: '', orderable: false },
@@ -379,9 +437,9 @@ $med_specs = $med_specs ?? [];
         $.get(url, function(data) {
             var rows = (data && data.data) ? data.data : [];
             if (!rows.length) { showToast('No data to export', 'err'); return; }
-            var csv = 'Name,Code,Short Name,Category,Specialization IDs,Favourite\n';
+            var csv = 'Name,SNOMED Code,SNOMED Term,LOINC,Code,Short Name,Category,Specialization IDs,Favourite\n';
             rows.forEach(function(r) {
-                csv += [r.name, r.code, r.short_name || '', r.category_name || '', r.spec_ids || '', r.is_favourite || 0]
+                csv += [r.name, r.snomed_concept_id || '', r.snomed_term || '', r.loinc_code || '', r.code, r.short_name || '', r.category_name || '', r.spec_ids || '', r.is_favourite || 0]
                     .map(function(v) { return '"' + String(v).replace(/"/g, '""') + '"'; })
                     .join(',') + '\n';
             });
@@ -392,6 +450,69 @@ $med_specs = $med_specs ?? [];
             a.click();
         }, 'json');
     });
+
+    /* ── SNOMED CT search autocomplete ─────────────────────────────── */
+    (function() {
+        var snomedTimer = null;
+        var SNOMED_URL = '<?= base_url('Opd_prescription/opd_invest_snomed_search') ?>';
+
+        $('#inv_snomed_search').on('input', function() {
+            var q = $(this).val().trim();
+            $('#inv_snomed_dropdown').hide().empty();
+            clearTimeout(snomedTimer);
+            if (q.length < 2) return;
+            snomedTimer = setTimeout(function() {
+                $.get(SNOMED_URL, { q: q }, function(data) {
+                    var rows = (data && data.rows) ? data.rows : [];
+                    var $dd = $('#inv_snomed_dropdown').empty();
+                    if (!rows.length) {
+                        $dd.append('<button type="button" class="list-group-item list-group-item-action small text-muted disabled">No SNOMED results</button>');
+                    } else {
+                        rows.forEach(function(r) {
+                            var cid  = r.concept_id || '';
+                            var term = r.term || r.fsn || cid;
+                            var $btn = $('<button type="button" class="list-group-item list-group-item-action small">')
+                                .attr('data-cid', cid)
+                                .attr('data-term', term);
+                            var label = $('<span>').text(term);
+                            if (cid) {
+                                label = $('<span>').append($('<span>').text(term)).append(
+                                    $('<span class="text-muted font-monospace ms-1" style="font-size:.7rem;">').text('(' + cid + ')')
+                                );
+                            }
+                            $btn.append(label);
+                            $dd.append($btn);
+                        });
+                    }
+                    $dd.show();
+                }, 'json').fail(function() { $('#inv_snomed_dropdown').hide(); });
+            }, 320);
+        });
+
+        $(document).on('click', '#inv_snomed_dropdown button[data-cid]', function() {
+            var cid  = $(this).attr('data-cid') || '';
+            var term = $(this).attr('data-term') || '';
+            $('#inv_snomed_concept_id').val(cid);
+            $('#inv_snomed_term').val(term);
+            $('#inv_snomed_search').val(cid ? cid : term);
+            $('#inv_snomed_selected').show().text(term || cid);
+            $('#btn_inv_snomed_clear').show();
+            $('#inv_snomed_dropdown').hide().empty();
+        });
+
+        $('#btn_inv_snomed_clear').on('click', function() {
+            $('#inv_snomed_concept_id,#inv_snomed_term').val('');
+            $('#inv_snomed_search').val('');
+            $('#inv_snomed_selected').hide().text('');
+            $(this).hide();
+        });
+
+        $(document).on('click.snomedDd', function(e) {
+            if (!$(e.target).closest('#inv_snomed_search, #inv_snomed_dropdown').length) {
+                $('#inv_snomed_dropdown').hide();
+            }
+        });
+    })();
 
     /* ── Init ───────────────────────────────────────────────────────── */
     $(function() {

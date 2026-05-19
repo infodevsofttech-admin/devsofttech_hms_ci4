@@ -14,6 +14,7 @@
 	    <th>Age</th>
       <th>Last Visit</th>
       <th>Insurance</th>
+      <th>ABHA</th>
       <th>Patient History</th>
     </tr>
     </thead>
@@ -26,6 +27,19 @@
       <td><?= esc(get_age_1($data[$i]->dob ?? null, $data[$i]->age ?? '', $data[$i]->age_in_month ?? '', $data[$i]->estimate_dob ?? '', $data[$i]->Last_Visit ?? null)) ?></td>
       <td><?=$data[$i]->Last_Visit ?></td>
       <td><?php echo ($data[$i]->insurance_id==0 ? 'Self': 'Insuranced'); ?></td>
+      <td><?php
+        $abhaId   = trim((string)($data[$i]->abha_id ?? ''));
+        $linkedAt = $data[$i]->abdm_linked_at ?? null;
+        if ($abhaId !== '') {
+            if (!empty($linkedAt)) {
+                echo '<span class="label label-success"><i class="fa fa-check-circle"></i> Verified ABHA</span>';
+            } else {
+                echo '<span class="label label-warning"><i class="fa fa-exclamation-triangle"></i> Has ABHA</span>';
+            }
+        } else {
+            echo '<span class="label label-default">No ABHA</span>';
+        }
+      ?></td>
       <td>
         <a href="javascript:load_form('<?= base_url('billing/patient/show_profile_opd') ?>/<?=$data[$i]->id ?>/1');" class="btn btn-info btn-xs">
           <span class="fa fa-history"></span> Patient History
@@ -42,6 +56,7 @@
 	    <th>Age</th>
       <th>Last Visit</th>
       <th>Insurance</th>
+      <th>ABHA</th>
       <th>Patient History</th>
     </tr>
     </tfoot>

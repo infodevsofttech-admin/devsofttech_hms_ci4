@@ -270,6 +270,39 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
     }
 
     // -------------------------------------------------------------------------
+    // Health Records — store-and-link flow  POST /api/v3/records/push
+    // -------------------------------------------------------------------------
+
+    public function pushRecord(array $data): array
+    {
+        // Map HMS hi_type → gateway record_type enum
+        $hiType     = (string) ($data['hi_type'] ?? '');
+        $recordType = match (true) {
+            in_array($hiType, ['OPConsultRecord', 'PrescriptionRecord', 'OPConsultation'], true) => 'prescription',
+            in_array($hiType, ['DiagnosticReport', 'DiagnosticReportRecord'], true)             => 'lab_report',
+            in_array($hiType, ['DischargeSummary', 'DischargeSummaryRecord'], true)             => 'discharge_summary',
+            $hiType === 'WellnessRecord'                                                          => 'wellness_record',
+            default                                                                               => 'health_document',
+        };
+
+        $body = [
+            'patient_id'   => (string) ($data['patient_id'] ?? ''),
+            'patient_name' => (string) ($data['patient_name'] ?? ''),
+            'record_type'  => $recordType,
+            'visit_date'   => (string) ($data['visit_date'] ?? date('Y-m-d')),
+            'record_data'  => $data['record_data'] ?? $data['bundle'] ?? (object) [],
+        ];
+
+        foreach (['abha_id', 'abha_address', 'doctor_name', 'department', 'care_context_reference', 'notes', 'queue_id'] as $optional) {
+            if (! empty($data[$optional])) {
+                $body[$optional] = (string) $data[$optional];
+            }
+        }
+
+        return $this->post('/v3/records/push', $body);
+    }
+
+    // -------------------------------------------------------------------------
     // Scan & Share
     // -------------------------------------------------------------------------
 

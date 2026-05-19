@@ -174,6 +174,16 @@ class AbdmOpdQueue extends BaseController
             return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => $e->getMessage()]);
         }
 
+        // Mirror status to local DB so list() stays consistent
+        try {
+            \Config\Database::connect()
+                ->table('abdm_opd_tokens')
+                ->where('gateway_token_id', $tokenId)
+                ->update(['status' => $status, 'updated_at' => date('Y-m-d H:i:s')]);
+        } catch (\Throwable $e) {
+            // non-critical — gateway update already succeeded
+        }
+
         return $this->response->setJSON($result);
     }
 

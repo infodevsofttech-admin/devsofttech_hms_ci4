@@ -697,8 +697,9 @@ class Patient extends BaseController
 				->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
 		}
 
-		$pid = (int) $this->request->getPost('p_id');
-		$abhaId = trim((string) $this->request->getPost('abha_id'));
+		$pid      = (int) $this->request->getPost('p_id');
+		$abhaId   = trim((string) $this->request->getPost('abha_id'));
+		$verified = (int) $this->request->getPost('verified'); // 1 = came from OTP flow
 
 		if ($abhaId !== '' && ! $this->isValidAbhaId($abhaId)) {
 			return $this->response->setJSON([
@@ -716,13 +717,20 @@ class Patient extends BaseController
 			]);
 		}
 
+		// Set abdm_linked_at when ABHA is verified via OTP; clear when manually entered
+		$pmFields = $this->db->getFieldNames('patient_master') ?? [];
+		if (in_array('abdm_linked_at', $pmFields, true)) {
+			$data['abdm_linked_at'] = ($verified === 1 && $abhaId !== '') ? date('Y-m-d H:i:s') : null;
+		}
+
 		$patientModel = new PatientModel();
 		$patientModel->updatePatient($data, $pid);
 		$this->enqueuePatientAbhaSync($pid, $data, 'patient.abha.updated');
 
 		return $this->response->setJSON([
-			'update' => 1,
-			'showcontent' => 'Data Saved successfully',
+			'update'       => 1,
+			'showcontent'  => 'Data Saved successfully',
+			'verified'     => $verified === 1 && $abhaId !== '' ? 1 : 0,
 		]);
 	}
 

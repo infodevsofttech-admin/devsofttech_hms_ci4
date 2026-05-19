@@ -204,7 +204,7 @@
     /* ---- save ABHA to patient ---- */
     function saveAbhaToPatient(abhaId) {
         var csrf = csrfPair();
-        var payload = { p_id: _patientId, abha_id: abhaId };
+        var payload = { p_id: _patientId, abha_id: abhaId, verified: 1 };
         payload[csrf.name] = csrf.value;
         $.post('<?= base_url('billing/patient/update_abha') ?>', payload, function (res) {
             updateCsrf(res);

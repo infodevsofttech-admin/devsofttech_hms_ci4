@@ -136,4 +136,12 @@ class AbdmConnector extends BaseConfig
 
     /** HTTP timeout in seconds for direct ABDM API calls. */
     public int $directAbdmTimeoutSec = 30;
+
+    // ------------------------------------------------------------------
+    // FHIR record encryption key (AES-256-GCM)
+    // Set in .env: ABDM_FHIR_ENCRYPTION_KEY = <64-char hex string>
+    // Generate: php -r "echo bin2hex(random_bytes(32));"
+    // REQUIRED on production; falls back to a derived key in development.
+    // ------------------------------------------------------------------
+    // ABDM_FHIR_ENCRYPTION_KEY =
 }

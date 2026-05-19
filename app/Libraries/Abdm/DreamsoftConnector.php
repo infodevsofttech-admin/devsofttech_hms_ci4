@@ -182,6 +182,13 @@ class DreamsoftConnector implements AbdmConnectorInterface
         return ['ok' => 1, 'queue_id' => $queueId, 'status' => 'queued'];
     }
 
+    public function pushRecord(array $data): array
+    {
+        // Dreamsoft bridge does not support store-and-link flow.
+        // Delegate to sharePrescriptionBundle as a best-effort fallback.
+        return $this->sharePrescriptionBundle($data, (string) ($data['entity_id'] ?? ''));
+    }
+
     public function nhcxClaimStatusRequest(
         int    $documentId,
         string $externalRef,

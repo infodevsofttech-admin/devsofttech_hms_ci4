@@ -415,7 +415,9 @@ class Opd_prescription extends BaseController
             'complaint_onset' => trim((string) $this->request->getPost('complaint_onset')),
             'complaint_duration_days' => trim((string) $this->request->getPost('complaint_duration_days')),
             'complaint_severity' => trim((string) $this->request->getPost('complaint_severity')),
-            'diagnosis' => trim((string) $this->request->getPost('diagnosis')),
+            'complaint_snomed_json' => trim((string) $this->request->getPost('complaint_snomed_json')),
+            'diagnosis'      => trim((string) $this->request->getPost('diagnosis')),
+            'diagnosis_json' => trim((string) $this->request->getPost('diagnosis_json')),
             'diagnosis_snomed_id' => trim((string) $this->request->getPost('diagnosis_snomed_id')),
             'diagnosis_snomed_term' => trim((string) $this->request->getPost('diagnosis_snomed_term')),
             'diagnosis_snomed_source' => trim((string) $this->request->getPost('diagnosis_snomed_source')),
@@ -613,15 +615,8 @@ class Opd_prescription extends BaseController
             }
         }
 
+        // ABDM readiness is collected as non-blocking warnings; save proceeds regardless.
         $abdmValidationErrors = $this->validateAbdmReadinessForConsult($payload, $patientRow, (array) $opdRow);
-        if (! empty($abdmValidationErrors)) {
-            return $this->response->setJSON([
-                'update' => 0,
-                'error_text' => implode(' ', $abdmValidationErrors),
-                'csrfName' => csrf_token(),
-                'csrfHash' => csrf_hash(),
-            ]);
-        }
 
         foreach ($payload as $value) {
             if (mb_strlen($value) > 4000) {
@@ -704,11 +699,26 @@ class Opd_prescription extends BaseController
 
         $this->markOpdVisitedOnConsultCompletion((int) $opdId);
 
+        // Queue background SNOMED coding (fail-open — do not block save response)
+        try {
+            if ($this->db->tableExists('opd_coding_queue') && $recordId > 0) {
+                $this->db->query(
+                    "INSERT INTO opd_coding_queue (opd_id, opd_session_id, status, queued_at)"
+                    . " VALUES (?, ?, 'pending', NOW())"
+                    . " ON DUPLICATE KEY UPDATE status = 'pending', queued_at = NOW()",
+                    [(int) $opdId, (int) $recordId]
+                );
+            }
+        } catch (\Throwable $queueEx) {
+            log_message('error', 'SNOMED coding queue insert failed: ' . $queueEx->getMessage());
+        }
+
         return $this->response->setJSON([
             'update' => 1,
             'opd_session_id' => $recordId,
             'error_text' => 'Prescription saved',
             'fhir_stored' => $fhirStored ? 1 : 0,
+            'abdm_warnings' => $abdmValidationErrors,
             'saved_at' => date('d-m-Y H:i:s'),
             'csrfName' => csrf_token(),
             'csrfHash' => csrf_hash(),
@@ -3538,7 +3548,7 @@ class Opd_prescription extends BaseController
         }
 
         $selectCols = $keyField . ' as id, ' . $codeField . ' as code, ' . $nameField . ' as name';
-        foreach (['short_name', 'is_favourite', 'spec_ids', 'category_name'] as $f) {
+        foreach (['short_name', 'is_favourite', 'spec_ids', 'category_name', 'snomed_concept_id', 'snomed_term', 'loinc_code'] as $f) {
             if (in_array($f, $fields, true)) {
                 $selectCols .= ', ' . $f;
             }
@@ -3608,13 +3618,16 @@ class Opd_prescription extends BaseController
         return $this->response->setJSON([
             'update' => 1,
             'row'    => [
-                'id'            => (int) ($row[$keyField] ?? 0),
-                'code'          => (string) ($row[$codeField ?? 'code'] ?? ''),
-                'name'          => (string) ($row[$nameField ?? 'name'] ?? ''),
-                'short_name'    => (string) ($row['short_name'] ?? ''),
-                'category_name' => (string) ($row['category_name'] ?? ''),
-                'is_favourite'  => (int) ($row['is_favourite'] ?? 0),
-                'spec_ids'      => (string) ($row['spec_ids'] ?? ''),
+                'id'                => (int) ($row[$keyField] ?? 0),
+                'code'              => (string) ($row[$codeField ?? 'code'] ?? ''),
+                'name'              => (string) ($row[$nameField ?? 'name'] ?? ''),
+                'short_name'        => (string) ($row['short_name'] ?? ''),
+                'category_name'     => (string) ($row['category_name'] ?? ''),
+                'is_favourite'      => (int) ($row['is_favourite'] ?? 0),
+                'spec_ids'          => (string) ($row['spec_ids'] ?? ''),
+                'snomed_concept_id' => (string) ($row['snomed_concept_id'] ?? ''),
+                'snomed_term'       => (string) ($row['snomed_term'] ?? ''),
+                'loinc_code'        => (string) ($row['loinc_code'] ?? ''),
             ],
             'csrfName' => csrf_token(),
             'csrfHash' => csrf_hash(),
@@ -3653,7 +3666,7 @@ class Opd_prescription extends BaseController
             $nameField => $name,
             $codeField => $code,
         ];
-        foreach (['short_name', 'category_name', 'spec_ids'] as $f) {
+        foreach (['short_name', 'category_name', 'spec_ids', 'snomed_concept_id', 'snomed_term', 'loinc_code'] as $f) {
             if (in_array($f, $fields, true)) {
                 $data[$f] = trim((string) $this->request->getPost($f));
             }
@@ -3731,6 +3744,17 @@ class Opd_prescription extends BaseController
             'csrfName'     => csrf_token(),
             'csrfHash'     => csrf_hash(),
         ]);
+    }
+
+    public function opd_invest_snomed_search()
+    {
+        $q = trim((string) $this->request->getGet('q'));
+        if ($q === '' || strlen($q) < 2) {
+            return $this->response->setJSON(['rows' => []]);
+        }
+        $svc  = new \App\Libraries\CsnotkTerminologyService();
+        $rows = $svc->searchProcedure($q, 20);
+        return $this->response->setJSON(['rows' => $rows]);
     }
 
     public function opd_invest_shortcuts_manager()
@@ -4301,16 +4325,31 @@ class Opd_prescription extends BaseController
             ]);
         }
 
-        return $this->response->setJSON([
-            'status' => 'ok',
-            'document_id' => (int) ($row['id'] ?? 0),
-            'opd_id' => (int) ($row['opd_id'] ?? 0),
-            'opd_session_id' => (int) ($row['opd_session_id'] ?? 0),
-            'bundle_type' => (string) ($row['bundle_type'] ?? ''),
-            'generated_at' => (string) ($row['generated_at'] ?? ''),
-            'generated_by' => (string) ($row['generated_by'] ?? ''),
-            'bundle' => $bundle,
-        ]);
+        $prettyJson = (string) json_encode($bundle, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $prettyJsonJs = json_encode($prettyJson);
+        $docId = (int) ($row['id'] ?? 0);
+        $generatedAt = htmlspecialchars((string) ($row['generated_at'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $bundleType = htmlspecialchars((string) ($row['bundle_type'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $entryCount = isset($bundle['entry']) && is_array($bundle['entry']) ? count($bundle['entry']) : 0;
+
+        $html = '<!DOCTYPE html><html lang="en"><head>'
+            . '<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+            . '<title>FHIR Bundle Preview &mdash; OPD #' . $opdId . '</title>'
+            . '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">'
+            . '<style>pre{background:#f8f9fa;border:1px solid #dee2e6;border-radius:6px;padding:1rem;font-size:.8rem;max-height:80vh;overflow:auto}</style>'
+            . '</head><body class="p-3"><div class="container-fluid">'
+            . '<div class="d-flex align-items-center justify-content-between mb-3">'
+            . '<h5 class="mb-0">FHIR Bundle Preview</h5>'
+            . '<div><span class="badge bg-secondary me-1">' . $bundleType . '</span>'
+            . '<span class="badge bg-info text-dark me-1">' . $entryCount . ' entries</span>'
+            . '<span class="text-muted small">Generated: ' . $generatedAt
+            . ' &nbsp;|&nbsp; Doc #' . $docId . ' &nbsp;|&nbsp; OPD #' . $opdId . ' / Session #' . $sessionId . '</span>'
+            . '</div></div>'
+            . '<pre id="bj"></pre>'
+            . '</div><script>document.getElementById("bj").textContent=' . $prettyJsonJs . ';</script>'
+            . '</body></html>';
+
+        return $this->response->setHeader('Content-Type', 'text/html; charset=UTF-8')->setBody($html);
     }
 
     public function advice_search()
@@ -4351,70 +4390,100 @@ class Opd_prescription extends BaseController
             return $this->response->setJSON(['rows' => []]);
         }
 
-        $rows = [];
+        $out  = [];
+        $seen = [];
+        $needle = mb_strtolower($this->normalizeAutocompleteSuggestionText($q));
+
+        // 1. SNOMED CT via CSNOtk (finding / disorder semantic tags)
+        $csnotkRows = (new CsnotkTerminologyService())->searchFinding($q, 20);
+        foreach ($csnotkRows as $row) {
+            $name = $this->normalizeAutocompleteSuggestionText((string) ($row['term'] ?? ''));
+            if ($name === '') {
+                continue;
+            }
+            $conceptId = trim((string) ($row['concept_id'] ?? ''));
+            $hierarchy = trim((string) ($row['hierarchy'] ?? ''));
+            $k = mb_strtoupper($name) . '|' . $conceptId;
+            if (isset($seen[$k])) {
+                continue;
+            }
+            $seen[$k] = true;
+            $out[] = [
+                'name'       => $name,
+                'concept_id' => $conceptId,
+                'hierarchy'  => $hierarchy,
+                'source'     => 'snomed',
+            ];
+            if (count($out) >= 20) {
+                return $this->response->setJSON(['rows' => array_slice($out, 0, 20)]);
+            }
+        }
+
+        // 2. Local complaints_master fallback
         if ($this->db->tableExists('complaints_master')) {
-            $rows = $this->db->table('complaints_master')
+            $localRows = $this->db->table('complaints_master')
                 ->select('Code as code, Name as name, name_hinglish, show_in_short, ai_hint')
                 ->where('is_active', 1)
                 ->groupStart()
-                ->like('Name', $q)
-                ->orLike('name_hinglish', $q)
-                ->orLike('keywords', $q)
+                    ->like('Name', $q)
+                    ->orLike('name_hinglish', $q)
+                    ->orLike('keywords', $q)
                 ->groupEnd()
                 ->orderBy('show_in_short', 'DESC')
                 ->orderBy('Name', 'ASC')
                 ->limit(20)
                 ->get()
                 ->getResultArray();
+
+            foreach ($localRows as $row) {
+                $name = $this->normalizeAutocompleteSuggestionText((string) ($row['name'] ?? ''));
+                if ($name === '' || ($needle !== '' && mb_stripos($name, $needle) === false)) {
+                    continue;
+                }
+                $k = mb_strtoupper($name) . '|';
+                if (isset($seen[$k])) {
+                    continue;
+                }
+                $seen[$k] = true;
+                $out[] = [
+                    'name'          => $name,
+                    'concept_id'    => '',
+                    'hierarchy'     => '',
+                    'source'        => 'local',
+                    'name_hinglish' => (string) ($row['name_hinglish'] ?? ''),
+                ];
+                if (count($out) >= 20) {
+                    return $this->response->setJSON(['rows' => array_slice($out, 0, 20)]);
+                }
+            }
         }
 
+        // 3. User autotype keywords
         $keywordRows = $this->fetchAutotypeKeywords(
             'complaints',
             $q,
             max(0, (int) ($this->getCurrentUserId() ?? 0)),
-            20
+            10
         );
-
-        $out = [];
-        $seen = [];
-        $needle = mb_strtolower($this->normalizeAutocompleteSuggestionText($q));
-        foreach ($rows as $row) {
-            $name = $this->normalizeAutocompleteSuggestionText((string) ($row['name'] ?? ''));
-            if ($name === '') {
-                continue;
-            }
-            if ($needle !== '' && mb_stripos($name, $needle) === false) {
-                continue;
-            }
-            $k = mb_strtoupper($name);
-            if (isset($seen[$k])) {
-                continue;
-            }
-            $seen[$k] = true;
-            $row['name'] = $name;
-            $out[] = $row;
-        }
-
         foreach ($keywordRows as $keyword) {
             $name = $this->normalizeAutocompleteSuggestionText((string) $keyword);
-            if ($name === '') {
+            if ($name === '' || ($needle !== '' && mb_stripos($name, $needle) === false)) {
                 continue;
             }
-            if ($needle !== '' && mb_stripos($name, $needle) === false) {
-                continue;
-            }
-            $k = mb_strtoupper($name);
+            $k = mb_strtoupper($name) . '|';
             if (isset($seen[$k])) {
                 continue;
             }
             $seen[$k] = true;
             $out[] = [
-                'code' => '',
-                'name' => $name,
-                'name_hinglish' => '',
-                'show_in_short' => 0,
-                'ai_hint' => '',
+                'name'       => $name,
+                'concept_id' => '',
+                'hierarchy'  => '',
+                'source'     => 'keyword',
             ];
+            if (count($out) >= 20) {
+                break;
+            }
         }
 
         return $this->response->setJSON(['rows' => array_slice($out, 0, 20)]);
@@ -4422,10 +4491,6 @@ class Opd_prescription extends BaseController
 
     public function provisional_diagnosis_search()
     {
-        if (! $this->canAccessPrescription()) {
-            return $this->response->setStatusCode(403)->setJSON(['rows' => []]);
-        }
-
         $q = trim((string) $this->request->getGet('q'));
         if ($q === '') {
             return $this->response->setJSON(['rows' => []]);
@@ -9079,22 +9144,7 @@ class Opd_prescription extends BaseController
         $snomedId = trim((string) ($row['provisional_diagnosis_snomed_id'] ?? ''));
         $snomedTerm = trim((string) ($row['provisional_diagnosis_snomed_term'] ?? ''));
 
-        if ($diagnosisSnomedId === '' && $diagnosis !== '' && strpos($diagnosis, ',') === false) {
-            $resolvedDiagnosis = $this->resolveProvisionalDiagnosisSnomedMatch($diagnosis);
-            if (! empty($resolvedDiagnosis['concept_id'])) {
-                $diagnosisSnomedId = (string) ($resolvedDiagnosis['concept_id'] ?? '');
-                $diagnosisSnomedTerm = (string) ($resolvedDiagnosis['term'] ?? $diagnosis);
-            }
-        }
-
-        if ($snomedId === '' && $provisional !== '' && strpos($provisional, ',') === false) {
-            $resolved = $this->resolveProvisionalDiagnosisSnomedMatch($provisional);
-            if (! empty($resolved['concept_id'])) {
-                $snomedId = (string) ($resolved['concept_id'] ?? '');
-                $snomedTerm = (string) ($resolved['term'] ?? $provisional);
-            }
-        }
-
+        // Do not perform reverse SNOMED lookups here; use only pre-stored codes to keep save fast.
         $out = [];
         $seen = [];
 
@@ -9158,17 +9208,7 @@ class Opd_prescription extends BaseController
                     continue;
                 }
                 $seen[$k] = true;
-                $complaint = [
-                    'text' => $part,
-                ];
-
-                $resolvedComplaint = $this->resolveProvisionalDiagnosisSnomedMatch($part);
-                if (! empty($resolvedComplaint['code'])) {
-                    $complaint['snomed_code'] = (string) $resolvedComplaint['code'];
-                    $complaint['snomed_display'] = (string) ($resolvedComplaint['display'] ?? $part);
-                }
-
-                $complaints[] = $complaint;
+                $complaints[] = ['text' => $part];
             }
         }
 

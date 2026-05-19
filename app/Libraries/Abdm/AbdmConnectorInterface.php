@@ -168,6 +168,25 @@ interface AbdmConnectorInterface
         array  $fullPayload = []
     ): array;
 
+    // -------------------------------------------------------------------------
+    // Health Records — store-and-link flow (POST /api/v3/records/push)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Push a health record to the bridge using the store-and-link flow.
+     * The bridge stores the record; ABDM links it when the patient uses their PHR app
+     * (user-initiated) or when HMS calls shareRecord().
+     * Returns ['ok'=>1, 'queue_id'=>'REC-...', 'id'=>42, 'status'=>'pending'] on success.
+     *
+     * Required keys in $data:
+     *   patient_id, patient_name, hi_type, visit_date, record_data (FHIR bundle or raw JSON)
+     * Optional:
+     *   abha_id, abha_address, doctor_name, department, care_context_reference, notes
+     *
+     * @param array<string, mixed> $data
+     */
+    public function pushRecord(array $data): array;
+
     // OPD Queue
     public function opdQueueFetch(string $date = '', string $status = '', int $page = 1, int $limit = 100): array;
     public function opdTokenCreate(array $payload): array;
