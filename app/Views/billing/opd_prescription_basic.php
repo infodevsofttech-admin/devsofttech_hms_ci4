@@ -4927,8 +4927,8 @@
                     syncComplaintSnomedJson();
                 }
                 $dd.hide().empty();
-                // Move focus to severity input in same row
-                $inp.closest('tr').find('.complaint-sev-input').trigger('focus');
+                // Done with this row — move to lookup for next complaint
+                $('#complaint_lookup').val('').trigger('focus');
             }));
         });
         _positionDd($dd, $inp);
@@ -4957,7 +4957,8 @@
             if ($dd.is(':visible') && _durDdIdx >= 0 && _durDdIdx < $items.length) {
                 $items.eq(_durDdIdx).trigger('click');
             } else {
-                $(this).closest('tr').find('.complaint-sev-input').trigger('focus');
+                // Done with this row — move to lookup for next complaint
+                $('#complaint_lookup').val('').trigger('focus');
             }
             _durDdIdx = -1;
         }
