@@ -297,13 +297,32 @@
                     <span class="badge bg-secondary" id="fhirModalDataBadge">CHECKING</span>
                     <span class="badge bg-secondary" id="fhirModalHttpBadge">HTTP -</span>
                 </div>
-                <div class="d-flex gap-2 ms-auto">
+                <div class="d-flex gap-2 ms-auto flex-wrap">
+                    <div class="dropdown">
+                        <button type="button" class="btn btn-sm btn-outline-success dropdown-toggle" id="btnFhirUpdateCodes" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-pencil-square"></i> Update Codes
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><h6 class="dropdown-header">Assign SNOMED / LOINC</h6></li>
+                            <li>
+                                <a class="dropdown-item" href="#" id="btnGoInvestMaster">
+                                    <i class="bi bi-clipboard2-pulse me-1"></i> Investigation Master <small class="text-muted">(LOINC codes)</small>
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="#" id="btnGoClinicalMaster">
+                                    <i class="bi bi-heart-pulse me-1"></i> Clinical Master <small class="text-muted">(Complaints &amp; Diagnosis SNOMED)</small>
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
                     <button type="button" class="btn btn-sm btn-outline-secondary" id="btnCopyFhirModal">Copy JSON</button>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
             </div>
             <div class="modal-body p-0">
                 <div class="px-3 py-2 small" id="fhirModalMeta">Loading...</div>
+                <div class="px-3 pb-2" id="fhirModalQuality" style="display:none;"></div>
                 <pre id="fhirModalJson" style="margin:0; max-height:65vh; overflow:auto; background:#0b1020; color:#d9e2ff; padding:16px; border-radius:0;">{}</pre>
             </div>
         </div>
@@ -936,13 +955,58 @@
     var fhirPreviewModal   = new bootstrap.Modal(fhirPreviewModalEl);
     var fhirModalTitle     = document.getElementById('fhirModalTitle');
     var fhirModalMeta      = document.getElementById('fhirModalMeta');
+    var fhirModalQuality   = document.getElementById('fhirModalQuality');
     var fhirModalJson      = document.getElementById('fhirModalJson');
     var fhirModalDataBadge = document.getElementById('fhirModalDataBadge');
     var fhirModalHttpBadge = document.getElementById('fhirModalHttpBadge');
 
+    function fhirCodeQuality(bundle) {
+        var entries = (bundle && bundle.entry) ? bundle.entry : [];
+        var complaints = [], diagnoses = [], services = [], obs = [], meds = [];
+        entries.forEach(function(e) {
+            var r = e.resource;
+            if (!r) return;
+            if (r.resourceType === 'Observation')       { obs.push(r); return; }
+            if (r.resourceType === 'MedicationRequest') { meds.push(r); return; }
+            if (r.resourceType === 'ServiceRequest')    { services.push(r); return; }
+            if (r.resourceType === 'Condition') {
+                var cats = r.category || [];
+                var isComplaint = cats.some(function(c) { return (c.text || '').toLowerCase().includes('complaint'); });
+                if (isComplaint) complaints.push(r); else diagnoses.push(r);
+            }
+        });
+        function hasSnomedCoding(r) {
+            return (((r.code || {}).coding) || []).some(function(c) { return c.code && c.code !== ''; });
+        }
+        function hasLoincCoding(r) {
+            return (((r.code || {}).coding) || []).some(function(c) { return (c.system || '').includes('loinc') && c.code; });
+        }
+        var items = [];
+        if (complaints.length) {
+            var n = complaints.filter(hasSnomedCoding).length;
+            items.push('<span class="badge ' + (n === complaints.length ? 'bg-success' : 'bg-warning text-dark') + ' me-1">Complaints ' + n + '/' + complaints.length + ' SNOMED</span>');
+        }
+        if (diagnoses.length) {
+            var n = diagnoses.filter(hasSnomedCoding).length;
+            items.push('<span class="badge ' + (n === diagnoses.length ? 'bg-success' : 'bg-warning text-dark') + ' me-1">Diagnoses ' + n + '/' + diagnoses.length + ' SNOMED</span>');
+        }
+        if (obs.length) {
+            items.push('<span class="badge bg-success me-1">Vitals ' + obs.length + ' LOINC</span>');
+        }
+        if (services.length) {
+            var n = services.filter(hasLoincCoding).length;
+            items.push('<span class="badge ' + (n === services.length ? 'bg-success' : 'bg-warning text-dark') + ' me-1">Investigations ' + n + '/' + services.length + ' LOINC</span>');
+        }
+        if (meds.length) {
+            items.push('<span class="badge bg-secondary me-1">Medications ' + meds.length + '</span>');
+        }
+        return items.length ? '<small class="text-muted me-1">Code quality:</small>' + items.join('') : '';
+    }
+
     function openFhirModal(url, title) {
         if (fhirModalTitle)     fhirModalTitle.textContent = title || 'FHIR Preview';
         if (fhirModalMeta)      { fhirModalMeta.textContent = 'Loading...'; fhirModalMeta.className = 'px-3 py-2 small text-muted'; }
+        if (fhirModalQuality)   { fhirModalQuality.innerHTML = ''; fhirModalQuality.style.display = 'none'; }
         if (fhirModalJson)      fhirModalJson.textContent = '{\n  "loading": true\n}';
         if (fhirModalDataBadge) { fhirModalDataBadge.className = 'badge bg-warning text-dark'; fhirModalDataBadge.textContent = 'CHECKING'; }
         if (fhirModalHttpBadge) { fhirModalHttpBadge.className = 'badge bg-warning text-dark'; fhirModalHttpBadge.textContent = 'HTTP ...'; }
@@ -953,11 +1017,16 @@
             .then(function (res) {
                 var parsed = null;
                 try { parsed = JSON.parse(res.body || '{}'); } catch (e) { parsed = { raw: res.body || '' }; }
-                var hasFhir = parsed && (parsed.resourceType === 'Bundle' || (parsed.status === 'ok' && parsed.bundle));
+                var bundle = (parsed && parsed.resourceType === 'Bundle') ? parsed : ((parsed && parsed.bundle) ? parsed.bundle : null);
+                var hasFhir = bundle !== null;
                 if (fhirModalJson)      fhirModalJson.textContent = JSON.stringify(parsed, null, 2);
                 if (fhirModalMeta)      { fhirModalMeta.textContent = res.ok ? 'Loaded (' + res.status + ')' : 'Error (' + res.status + ')'; fhirModalMeta.className = 'px-3 py-2 small ' + (res.ok ? 'text-success' : 'text-danger'); }
                 if (fhirModalDataBadge) { fhirModalDataBadge.className = 'badge ' + (hasFhir ? 'bg-success' : 'bg-danger'); fhirModalDataBadge.textContent = hasFhir ? 'HAS FHIR' : 'NOT GENERATED'; }
                 if (fhirModalHttpBadge) { fhirModalHttpBadge.className = 'badge ' + (res.ok ? 'bg-success' : 'bg-danger'); fhirModalHttpBadge.textContent = 'HTTP ' + res.status; }
+                if (fhirModalQuality && hasFhir) {
+                    var qs = fhirCodeQuality(bundle);
+                    if (qs) { fhirModalQuality.innerHTML = qs; fhirModalQuality.style.display = 'block'; }
+                }
             })
             .catch(function (e) {
                 if (fhirModalMeta)      { fhirModalMeta.textContent = 'Request failed: ' + e.message; fhirModalMeta.className = 'px-3 py-2 small text-danger'; }
@@ -965,6 +1034,28 @@
                 if (fhirModalHttpBadge) { fhirModalHttpBadge.className = 'badge bg-danger'; fhirModalHttpBadge.textContent = 'HTTP ERR'; }
             });
     }
+
+    // Update Codes dropdown — navigate to master workspaces
+    (function () {
+        function navTo(url, label) {
+            fhirPreviewModal.hide();
+            if (typeof window.load_form === 'function') {
+                window.load_form(url, label);
+            } else {
+                window.location.href = url;
+            }
+        }
+        var btnInvest = document.getElementById('btnGoInvestMaster');
+        var btnClinical = document.getElementById('btnGoClinicalMaster');
+        if (btnInvest) btnInvest.addEventListener('click', function(e) {
+            e.preventDefault();
+            navTo('<?= base_url('Opd_prescription/opd_invest_master') ?>', 'Investigation Master');
+        });
+        if (btnClinical) btnClinical.addEventListener('click', function(e) {
+            e.preventDefault();
+            navTo('<?= base_url('Opd_prescription/clinical_master_workspace') ?>', 'Clinical Master');
+        });
+    })();
 
     document.getElementById('btnCopyFhirModal').addEventListener('click', function () {
         var btn = this;
