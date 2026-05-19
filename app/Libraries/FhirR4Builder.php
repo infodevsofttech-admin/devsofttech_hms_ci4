@@ -16,201 +16,206 @@ class FhirR4Builder
      */
     public function buildPrescriptionBundle(array $patient, array $encounter, array $medications, array $conditions = [], array $context = []): array
     {
-        $issuedAt = Time::now('Asia/Kolkata')->toDateTimeString();
-        $bundleId = 'bundle-opd-' . (string) ($encounter['id'] ?? 'unknown') . '-' . date('YmdHis');
-        $patientRef = 'Patient/' . (string) ($patient['id'] ?? 'unknown');
-        $encounterRef = 'Encounter/' . (string) ($encounter['id'] ?? 'unknown');
-        $practitioner = is_array($context['practitioner'] ?? null) ? (array) $context['practitioner'] : [];
-        $organization = is_array($context['organization'] ?? null) ? (array) $context['organization'] : [];
-        $observations = is_array($context['observations'] ?? null) ? (array) $context['observations'] : [];
-        $allergies = is_array($context['allergies'] ?? null) ? (array) $context['allergies'] : [];
-        $complaints = is_array($context['complaints'] ?? null) ? (array) $context['complaints'] : [];
+        $issuedAt        = $this->isoTimestamp();
+        $practitioner    = is_array($context['practitioner'] ?? null) ? (array) $context['practitioner'] : [];
+        $organization    = is_array($context['organization'] ?? null) ? (array) $context['organization'] : [];
+        $observations    = is_array($context['observations'] ?? null) ? (array) $context['observations'] : [];
+        $allergies       = is_array($context['allergies'] ?? null) ? (array) $context['allergies'] : [];
+        $complaints      = is_array($context['complaints'] ?? null) ? (array) $context['complaints'] : [];
         $serviceRequests = is_array($context['service_requests'] ?? null) ? (array) $context['service_requests'] : [];
-        $appointments = is_array($context['appointments'] ?? null) ? (array) $context['appointments'] : [];
+        $appointments    = is_array($context['appointments'] ?? null) ? (array) $context['appointments'] : [];
 
-        $practitionerId = trim((string) ($practitioner['id'] ?? ''));
-        $organizationId = trim((string) ($organization['id'] ?? ''));
-        $practitionerRef = $practitionerId !== '' ? ('Practitioner/' . $practitionerId) : '';
-        $organizationRef = $organizationId !== '' ? ('Organization/' . $organizationId) : '';
+        // UUID-based identity for every resource (ABDM IG v6.5.0 requirement)
+        $bundleUuid      = $this->generateUuid();
+        $compositionUuid = $this->generateUuid();
+        $patientUuid     = $this->generateUuid();
+        $encounterUuid   = $this->generateUuid();
 
+        $hasPractitioner  = trim((string) ($practitioner['id'] ?? '')) !== '' || trim((string) ($practitioner['name'] ?? '')) !== '';
+        $hasOrganization  = trim((string) ($organization['id'] ?? '')) !== '' || trim((string) ($organization['name'] ?? '')) !== '';
+        $practitionerUuid = $hasPractitioner ? $this->generateUuid() : '';
+        $organizationUuid = $hasOrganization ? $this->generateUuid() : '';
+
+        $patientRef      = 'urn:uuid:' . $patientUuid;
+        $encounterRef    = 'urn:uuid:' . $encounterUuid;
+        $practitionerRef = $hasPractitioner ? ('urn:uuid:' . $practitionerUuid) : '';
+        $organizationRef = $hasOrganization ? ('urn:uuid:' . $organizationUuid) : '';
+
+        // ── Tracking arrays ──────────────────────────────────────────────────
+        $encounterDiagnosisRefs = [];
+        $complaintRefs          = [];
+        $observationRefs        = [];
+        $allergyRefs            = [];
+        $medicationRefs         = [];
+        $serviceRequestRefs     = [];
+        $appointmentRefs        = [];
+
+        // Resource entries collected here; Composition prepended at the end.
+        $resourceEntries = [];
+
+        // ── Practitioner ─────────────────────────────────────────────────────
+        if ($hasPractitioner) {
+            $practResource = [
+                'resourceType' => 'Practitioner',
+                'id'           => $practitionerUuid,
+                'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Practitioner']],
+                'name'         => [['text' => trim((string) ($practitioner['name'] ?? ''))]],
+            ];
+            $regNumber = trim((string) ($practitioner['registration_number'] ?? ''));
+            if ($regNumber !== '') {
+                $practResource['identifier'] = [[
+                    'type'   => ['coding' => [[
+                        'system'  => 'http://terminology.hl7.org/CodeSystem/v2-0203',
+                        'code'    => 'MD',
+                        'display' => 'Medical License number',
+                    ]]],
+                    'system' => 'https://doctor.ndhm.gov.in',
+                    'value'  => $regNumber,
+                ]];
+            }
+            $resourceEntries[] = ['fullUrl' => 'urn:uuid:' . $practitionerUuid, 'resource' => $practResource];
+        }
+
+        // ── Organization ─────────────────────────────────────────────────────
+        if ($hasOrganization) {
+            $orgResource = [
+                'resourceType' => 'Organization',
+                'id'           => $organizationUuid,
+                'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Organization']],
+                'name'         => trim((string) ($organization['name'] ?? '')),
+            ];
+            $hfrId = trim((string) ($organization['hfr_id'] ?? ''));
+            if ($hfrId !== '') {
+                $orgResource['identifier'] = [[
+                    'type'   => ['coding' => [[
+                        'system'  => 'http://terminology.hl7.org/CodeSystem/v2-0203',
+                        'code'    => 'PRN',
+                        'display' => 'Provider number',
+                    ]]],
+                    'system' => 'https://facility.ndhm.gov.in',
+                    'value'  => $hfrId,
+                ]];
+            }
+            $resourceEntries[] = ['fullUrl' => 'urn:uuid:' . $organizationUuid, 'resource' => $orgResource];
+        }
+
+        // ── Patient ───────────────────────────────────────────────────────────
+        $patientResource       = $this->buildPatientResource($patient);
+        $patientResource['id'] = $patientUuid;  // override DB id with UUID
+        $resourceEntries[]     = ['fullUrl' => $patientRef, 'resource' => $patientResource];
+
+        // ── Encounter (built here, appended after conditions loop) ──────────
         $encounterResource = [
             'resourceType' => 'Encounter',
-            'id' => (string) ($encounter['id'] ?? 'unknown'),
-            'status' => (string) ($encounter['status'] ?? 'finished'),
-            'class' => [
-                'system' => 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
-                'code' => 'AMB',
+            'id'           => $encounterUuid,
+            'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Encounter']],
+            'identifier'   => [['system' => 'https://ndhm.in', 'value' => (string) ($encounter['id'] ?? $encounterUuid)]],
+            'status'       => (string) ($encounter['status'] ?? 'finished'),
+            'class'        => [
+                'system'  => 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
+                'code'    => 'AMB',
                 'display' => 'ambulatory',
             ],
-            'subject' => ['reference' => $patientRef],
+            'subject' => ['reference' => $patientRef, 'display' => 'Patient'],
+            'period'  => ['start' => trim((string) ($encounter['period_start'] ?? '')) !== '' ? (string) $encounter['period_start'] : $issuedAt],
         ];
         if ($practitionerRef !== '') {
-            $encounterResource['participant'] = [[
-                'individual' => ['reference' => $practitionerRef],
-            ]];
+            $encounterResource['participant'] = [['individual' => ['reference' => $practitionerRef]]];
         }
         if ($organizationRef !== '') {
             $encounterResource['serviceProvider'] = ['reference' => $organizationRef];
         }
-        if (! empty($encounter['period_start']) || ! empty($encounter['period_end'])) {
-            $encounterResource['period'] = [
-                'start' => (string) ($encounter['period_start'] ?? $issuedAt),
-                'end' => (string) ($encounter['period_end'] ?? $issuedAt),
-            ];
-        }
 
-        $conditionRefs = [];
-        $observationRefs = [];
-        $allergyRefs = [];
-        $medicationRefs = [];
-        $complaintRefs = [];
-        $serviceRequestRefs = [];
-        $appointmentRefs = [];
-
-        $entries = [[
-            'resource' => $this->buildPatientResource($patient),
-        ], [
-            'resource' => $encounterResource,
-        ]];
-
-        if ($organizationRef !== '') {
-            $organizationResource = [
-                'resourceType' => 'Organization',
-                'id' => $organizationId,
-                'name' => trim((string) ($organization['name'] ?? '')),
-            ];
-            $hfrId = trim((string) ($organization['hfr_id'] ?? ''));
-            if ($hfrId !== '') {
-                $organizationResource['identifier'] = [[
-                    'system' => 'https://facility.abdm.gov.in/hfr',
-                    'value' => $hfrId,
-                ]];
-            }
-            $entries[] = ['resource' => $organizationResource];
-        }
-
-        if ($practitionerRef !== '') {
-            $practitionerResource = [
-                'resourceType' => 'Practitioner',
-                'id' => $practitionerId,
-                'name' => [[
-                    'text' => trim((string) ($practitioner['name'] ?? '')),
-                ]],
-            ];
-            $regNumber = trim((string) ($practitioner['registration_number'] ?? ''));
-            if ($regNumber !== '') {
-                $practitionerResource['identifier'] = [[
-                    'system' => 'https://hpr.abdm.gov.in/hpr-id',
-                    'value' => $regNumber,
-                ]];
-            }
-            $entries[] = ['resource' => $practitionerResource];
-        }
-
+        // ── Conditions (diagnoses) ────────────────────────────────────────────
         foreach ($conditions as $index => $condition) {
             $text = trim((string) ($condition['text'] ?? ''));
             if ($text === '') {
                 continue;
             }
 
-            $conditionId = 'cond-' . ($index + 1);
-            $conditionRefs[] = [
-                'condition' => [
-                    'reference' => 'Condition/' . $conditionId,
-                ],
-            ];
-
-            $verification = trim((string) ($condition['verification_status'] ?? 'provisional'));
+            $condUuid         = $this->generateUuid();
+            $condRef          = 'urn:uuid:' . $condUuid;
+            $verification     = trim((string) ($condition['verification_status'] ?? 'provisional'));
             $verificationCode = strtolower($verification) === 'confirmed' ? 'confirmed' : 'provisional';
+            $useSnomedCode    = $verificationCode === 'confirmed' ? '39154008' : '148006';
+            $useSnomedDisplay = $verificationCode === 'confirmed' ? 'Clinical diagnosis' : 'Preliminary diagnosis';
 
-            $code = [
-                'text' => $text,
+            $encounterDiagnosisRefs[] = [
+                'condition' => ['reference' => $condRef, 'display' => 'Condition'],
+                'use'       => ['coding' => [[
+                    'system'  => 'http://snomed.info/sct',
+                    'code'    => $useSnomedCode,
+                    'display' => $useSnomedDisplay,
+                ]]],
             ];
 
+            $code       = ['text' => $text];
             $snomedCode = trim((string) ($condition['snomed_code'] ?? ''));
             if ($snomedCode !== '') {
                 $code['coding'] = [[
-                    'system' => 'http://snomed.info/sct',
-                    'code' => $snomedCode,
+                    'system'  => 'http://snomed.info/sct',
+                    'code'    => $snomedCode,
                     'display' => trim((string) ($condition['snomed_display'] ?? $text)),
                 ]];
             }
 
-            $entries[] = [
-                'resource' => [
-                    'resourceType' => 'Condition',
-                    'id' => $conditionId,
-                    'clinicalStatus' => [
-                        'coding' => [[
-                            'system' => 'http://terminology.hl7.org/CodeSystem/condition-clinical',
-                            'code' => 'active',
-                        ]],
-                    ],
-                    'verificationStatus' => [
-                        'coding' => [[
-                            'system' => 'http://terminology.hl7.org/CodeSystem/condition-ver-status',
-                            'code' => $verificationCode,
-                        ]],
-                    ],
-                    'category' => [[
-                        'coding' => [[
-                            'system' => 'http://terminology.hl7.org/CodeSystem/condition-category',
-                            'code' => 'encounter-diagnosis',
-                        ]],
-                    ]],
-                    'code' => $code,
-                    'subject' => ['reference' => $patientRef],
-                    'encounter' => ['reference' => $encounterRef],
-                    'recordedDate' => $issuedAt,
-                ],
-            ];
+            $resourceEntries[] = ['fullUrl' => $condRef, 'resource' => [
+                'resourceType'       => 'Condition',
+                'id'                 => $condUuid,
+                'meta'               => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition']],
+                'clinicalStatus'     => ['coding' => [[
+                    'system'  => 'http://terminology.hl7.org/CodeSystem/condition-clinical',
+                    'code'    => 'active',
+                    'display' => 'Active',
+                ]]],
+                'verificationStatus' => ['coding' => [[
+                    'system'  => 'http://terminology.hl7.org/CodeSystem/condition-ver-status',
+                    'code'    => $verificationCode,
+                    'display' => ucfirst($verificationCode),
+                ]]],
+                'code'    => $code,
+                'subject' => ['reference' => $patientRef, 'display' => 'Patient'],
+            ]];
         }
 
+        // Append Encounter (now has diagnosis refs)
+        if (! empty($encounterDiagnosisRefs)) {
+            $encounterResource['diagnosis'] = $encounterDiagnosisRefs;
+        }
+        $resourceEntries[] = ['fullUrl' => $encounterRef, 'resource' => $encounterResource];
+
+        // ── Complaints (Chief Complaints) ─────────────────────────────────
         foreach ($complaints as $index => $complaint) {
             $text = trim((string) ($complaint['text'] ?? ''));
             if ($text === '') {
                 continue;
             }
 
-            $complaintId = 'complaint-' . ($index + 1);
-            $complaintRefs[] = ['reference' => 'Condition/' . $complaintId];
-            $code = ['text' => $text];
+            $complaintUuid   = $this->generateUuid();
+            $complaintRef    = 'urn:uuid:' . $complaintUuid;
+            $complaintRefs[] = ['reference' => $complaintRef, 'display' => 'Condition'];
+            $code            = ['text' => $text];
 
             $snomedCode = trim((string) ($complaint['snomed_code'] ?? ''));
             if ($snomedCode !== '') {
                 $code['coding'] = [[
-                    'system' => 'http://snomed.info/sct',
-                    'code' => $snomedCode,
+                    'system'  => 'http://snomed.info/sct',
+                    'code'    => $snomedCode,
                     'display' => trim((string) ($complaint['snomed_display'] ?? $text)),
                 ]];
             }
 
             $complaintResource = [
-                'resourceType' => 'Condition',
-                'id' => $complaintId,
-                'clinicalStatus' => [
-                    'coding' => [[
-                        'system' => 'http://terminology.hl7.org/CodeSystem/condition-clinical',
-                        'code' => 'active',
-                    ]],
-                ],
-                'verificationStatus' => [
-                    'coding' => [[
-                        'system' => 'http://terminology.hl7.org/CodeSystem/condition-ver-status',
-                        'code' => 'unconfirmed',
-                    ]],
-                ],
-                'category' => [[
-                    'coding' => [[
-                        'system' => 'http://terminology.hl7.org/CodeSystem/condition-category',
-                        'code' => 'problem-list-item',
-                    ]],
-                    'text' => 'Chief Complaint',
-                ]],
-                'code' => $code,
-                'subject' => ['reference' => $patientRef],
-                'encounter' => ['reference' => $encounterRef],
-                'recordedDate' => $issuedAt,
+                'resourceType'   => 'Condition',
+                'id'             => $complaintUuid,
+                'meta'           => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition']],
+                'clinicalStatus' => ['coding' => [[
+                    'system'  => 'http://terminology.hl7.org/CodeSystem/condition-clinical',
+                    'code'    => 'active',
+                    'display' => 'Active',
+                ]]],
+                'code'    => $code,
+                'subject' => ['reference' => $patientRef, 'display' => 'Patient'],
             ];
 
             // Severity (High/Moderate/Low → SNOMED coded)
@@ -237,54 +242,52 @@ class FhirR4Builder
             }
 
             // Duration → note
-            $durationText = trim((string) ($complaint['duration'] ?? ''));
+            $durationText  = trim((string) ($complaint['duration'] ?? ''));
             $frequencyText = trim((string) ($complaint['frequency'] ?? ''));
-            $noteParts = array_filter([$durationText, $frequencyText]);
+            $noteParts     = array_filter([$durationText, $frequencyText]);
             if (! empty($noteParts)) {
                 $complaintResource['note'] = [['text' => implode(' | ', $noteParts)]];
             }
 
-            $entries[] = ['resource' => $complaintResource];
+            $resourceEntries[] = ['fullUrl' => $complaintRef, 'resource' => $complaintResource];
         }
 
+        // ── Observations (Vitals / Physical Examination) ──────────────────────
         foreach ($observations as $index => $observation) {
             $value = $observation['value'] ?? null;
             if (! is_numeric($value)) {
                 continue;
             }
 
-            $observationId = 'obs-' . ($index + 1);
-            $observationRefs[] = ['reference' => 'Observation/' . $observationId];
-            $entries[] = [
-                'resource' => [
-                    'resourceType' => 'Observation',
-                    'id' => $observationId,
-                    'status' => 'final',
-                    'category' => [[
-                        'coding' => [[
-                            'system' => 'http://terminology.hl7.org/CodeSystem/observation-category',
-                            'code' => 'vital-signs',
-                        ]],
+            $obsUuid           = $this->generateUuid();
+            $observationRefs[] = ['reference' => 'urn:uuid:' . $obsUuid, 'display' => 'Observation'];
+            $resourceEntries[] = ['fullUrl' => 'urn:uuid:' . $obsUuid, 'resource' => [
+                'resourceType'      => 'Observation',
+                'id'                => $obsUuid,
+                'meta'              => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/ObservationVitalSigns']],
+                'status'            => 'final',
+                'category'          => [['coding' => [[
+                    'system' => 'http://terminology.hl7.org/CodeSystem/observation-category',
+                    'code'   => 'vital-signs',
+                ]]]],
+                'code'              => [
+                    'coding' => [[
+                        'system'  => 'http://loinc.org',
+                        'code'    => (string) ($observation['loinc'] ?? ''),
+                        'display' => (string) ($observation['display'] ?? ''),
                     ]],
-                    'code' => [
-                        'coding' => [[
-                            'system' => 'http://loinc.org',
-                            'code' => (string) ($observation['loinc'] ?? ''),
-                            'display' => (string) ($observation['display'] ?? ''),
-                        ]],
-                        'text' => (string) ($observation['display'] ?? ''),
-                    ],
-                    'subject' => ['reference' => $patientRef],
-                    'encounter' => ['reference' => $encounterRef],
-                    'effectiveDateTime' => $issuedAt,
-                    'valueQuantity' => [
-                        'value' => (float) $value,
-                        'unit' => (string) ($observation['unit'] ?? ''),
-                        'system' => 'http://unitsofmeasure.org',
-                        'code' => (string) ($observation['ucum'] ?? ''),
-                    ],
+                    'text' => (string) ($observation['display'] ?? ''),
                 ],
-            ];
+                'subject'           => ['reference' => $patientRef, 'display' => 'Patient'],
+                'encounter'         => ['reference' => $encounterRef],
+                'effectiveDateTime' => $issuedAt,
+                'valueQuantity'     => [
+                    'value'  => (float) $value,
+                    'unit'   => (string) ($observation['unit'] ?? ''),
+                    'system' => 'http://unitsofmeasure.org',
+                    'code'   => (string) ($observation['ucum'] ?? ''),
+                ],
+            ]];
         }
 
         foreach ($allergies as $index => $allergy) {
@@ -293,231 +296,280 @@ class FhirR4Builder
                 continue;
             }
 
-            $allergyId = 'allergy-' . ($index + 1);
-            $allergyRefs[] = ['reference' => 'AllergyIntolerance/' . $allergyId];
+            $allergyUuid   = $this->generateUuid();
+            $allergyRefs[] = ['reference' => 'urn:uuid:' . $allergyUuid, 'display' => 'AllergyIntolerance'];
 
             $allergyResource = [
-                'resourceType' => 'AllergyIntolerance',
-                'id' => $allergyId,
-                'clinicalStatus' => [
-                    'coding' => [[
-                        'system' => 'http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical',
-                        'code' => (string) ($allergy['clinical_status'] ?? 'active'),
-                    ]],
-                ],
-                'verificationStatus' => [
-                    'coding' => [[
-                        'system' => 'http://terminology.hl7.org/CodeSystem/allergyintolerance-verification',
-                        'code' => (string) ($allergy['verification_status'] ?? 'confirmed'),
-                    ]],
-                ],
-                'patient' => ['reference' => $patientRef],
-                'code' => [
-                    'text' => $codeText,
-                ],
+                'resourceType'       => 'AllergyIntolerance',
+                'id'                 => $allergyUuid,
+                'meta'               => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/AllergyIntolerance']],
+                'clinicalStatus'     => ['coding' => [[
+                    'system' => 'http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical',
+                    'code'   => (string) ($allergy['clinical_status'] ?? 'active'),
+                ]]],
+                'verificationStatus' => ['coding' => [[
+                    'system' => 'http://terminology.hl7.org/CodeSystem/allergyintolerance-verification',
+                    'code'   => (string) ($allergy['verification_status'] ?? 'confirmed'),
+                ]]],
+                'code'    => ['text' => $codeText],
+                'patient' => ['reference' => $patientRef, 'display' => 'Patient'],
                 'recordedDate' => $issuedAt,
             ];
 
             $reaction = trim((string) ($allergy['reaction_text'] ?? ''));
             if ($reaction !== '') {
-                $allergyResource['reaction'] = [[
-                    'description' => $reaction,
-                ]];
+                $allergyResource['reaction'] = [['description' => $reaction]];
             }
 
-            $entries[] = ['resource' => $allergyResource];
+            $resourceEntries[] = ['fullUrl' => 'urn:uuid:' . $allergyUuid, 'resource' => $allergyResource];
         }
 
-        if (! empty($conditionRefs)) {
-            $entries[1]['resource']['diagnosis'] = $conditionRefs;
-        }
-
+        // ── Medications ───────────────────────────────────────────────────────
         foreach ($medications as $index => $medication) {
-            $entryId = 'medreq-' . ($index + 1);
-            $medicationRefs[] = ['reference' => 'MedicationRequest/' . $entryId];
+            $medUuid          = $this->generateUuid();
+            $medicationRefs[] = ['reference' => 'urn:uuid:' . $medUuid, 'display' => 'MedicationRequest'];
 
-            $drugName = trim((string) ($medication['drug_name'] ?? ''));
+            $drugName    = trim((string) ($medication['drug_name'] ?? ''));
             $genericName = trim((string) ($medication['generic_name'] ?? ''));
-            $medType = trim((string) ($medication['med_type'] ?? ''));
+            $medType     = trim((string) ($medication['med_type'] ?? ''));
             $displayText = $drugName;
             if ($genericName !== '' && stripos($drugName, $genericName) === false) {
                 $displayText = trim($drugName . ' (' . $genericName . ')');
             }
 
-            $medicationCodeableConcept = [
-                'text' => $displayText !== '' ? $displayText : (string) ($medication['drug_name'] ?? ''),
-            ];
+            $medicationCodeableConcept = ['text' => $displayText !== '' ? $displayText : $drugName];
 
             $snomedCode = trim((string) ($medication['snomed_code'] ?? ''));
-            $atcCode = strtoupper(trim((string) ($medication['atc_code'] ?? '')));
+            $atcCode    = strtoupper(trim((string) ($medication['atc_code'] ?? '')));
             if ($snomedCode !== '') {
                 $medicationCodeableConcept['coding'] = [[
-                    'system' => 'http://snomed.info/sct',
-                    'code' => $snomedCode,
+                    'system'  => 'http://snomed.info/sct',
+                    'code'    => $snomedCode,
                     'display' => $displayText !== '' ? $displayText : $drugName,
                 ]];
             } elseif ($atcCode !== '') {
                 $medicationCodeableConcept['coding'] = [[
-                    'system' => 'http://www.whocc.no/atc',
-                    'code' => $atcCode,
+                    'system'  => 'http://www.whocc.no/atc',
+                    'code'    => $atcCode,
                     'display' => $displayText !== '' ? $displayText : $drugName,
                 ]];
             }
 
-            $dosageInstruction = [
-                'text' => (string) ($medication['dosage'] ?? ''),
-            ];
-
+            $dosageInstruction = ['text' => (string) ($medication['dosage'] ?? '')];
             $routeText = trim((string) ($medication['route_text'] ?? ''));
             if ($routeText !== '') {
-                $dosageInstruction['route'] = [
-                    'text' => $routeText,
-                ];
+                $dosageInstruction['route'] = ['text' => $routeText];
             }
             if ($medType !== '') {
-                $dosageInstruction['method'] = [
-                    'text' => $medType,
-                ];
+                $dosageInstruction['method'] = ['text' => $medType];
             }
 
-            $entries[] = [
-                'resource' => [
-                    'resourceType' => 'MedicationRequest',
-                    'id' => $entryId,
-                    'status' => (string) ($medication['status'] ?? 'active'),
-                    'intent' => 'order',
-                    'subject' => ['reference' => $patientRef],
-                    'encounter' => ['reference' => $encounterRef],
-                    'authoredOn' => $issuedAt,
-                    'medicationCodeableConcept' => $medicationCodeableConcept,
-                    'dosageInstruction' => [$dosageInstruction],
-                ],
+            $medRes = [
+                'resourceType'              => 'MedicationRequest',
+                'id'                        => $medUuid,
+                'meta'                      => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/MedicationRequest']],
+                'status'                    => (string) ($medication['status'] ?? 'active'),
+                'intent'                    => 'order',
+                'medicationCodeableConcept' => $medicationCodeableConcept,
+                'subject'                   => ['reference' => $patientRef, 'display' => 'Patient'],
+                'encounter'                 => ['reference' => $encounterRef],
+                'authoredOn'                => $issuedAt,
+                'dosageInstruction'         => [$dosageInstruction],
             ];
+            if ($practitionerRef !== '') {
+                $medRes['requester'] = ['reference' => $practitionerRef];
+            }
+            $resourceEntries[] = ['fullUrl' => 'urn:uuid:' . $medUuid, 'resource' => $medRes];
         }
 
+        // ── ServiceRequests (Investigation Advice) ────────────────────────────
         foreach ($serviceRequests as $index => $serviceRequest) {
             $codeText = trim((string) ($serviceRequest['code_text'] ?? ''));
             if ($codeText === '') {
                 continue;
             }
 
-            $serviceRequestId = 'svc-' . ($index + 1);
-            $serviceRequestRefs[] = ['reference' => 'ServiceRequest/' . $serviceRequestId];
-            $entries[] = [
-                'resource' => [
-                    'resourceType' => 'ServiceRequest',
-                    'id' => $serviceRequestId,
-                    'status' => (string) ($serviceRequest['status'] ?? 'active'),
-                    'intent' => (string) ($serviceRequest['intent'] ?? 'order'),
-                    'subject' => ['reference' => $patientRef],
-                    'encounter' => ['reference' => $encounterRef],
-                    'authoredOn' => $issuedAt,
-                    'code' => [
-                        'text' => $codeText,
-                    ],
-                ],
+            $svcUuid              = $this->generateUuid();
+            $serviceRequestRefs[] = ['reference' => 'urn:uuid:' . $svcUuid, 'display' => 'ServiceRequest'];
+            $svcRes = [
+                'resourceType' => 'ServiceRequest',
+                'id'           => $svcUuid,
+                'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/ServiceRequest']],
+                'status'       => (string) ($serviceRequest['status'] ?? 'active'),
+                'intent'       => (string) ($serviceRequest['intent'] ?? 'order'),
+                'code'         => ['text' => $codeText],
+                'subject'      => ['reference' => $patientRef, 'display' => 'Patient'],
+                'encounter'    => ['reference' => $encounterRef],
+                'authoredOn'   => $issuedAt,
             ];
+            if ($practitionerRef !== '') {
+                $svcRes['requester'] = ['reference' => $practitionerRef];
+            }
+            $resourceEntries[] = ['fullUrl' => 'urn:uuid:' . $svcUuid, 'resource' => $svcRes];
         }
 
+        // ── Appointments (Follow Up) ──────────────────────────────────────────
         foreach ($appointments as $index => $appointment) {
             $description = trim((string) ($appointment['description'] ?? ''));
             if ($description === '') {
                 continue;
             }
 
-            $appointmentId = 'appt-' . ($index + 1);
-            $appointmentRefs[] = ['reference' => 'Appointment/' . $appointmentId];
-            $appointmentResource = [
+            $apptUuid        = $this->generateUuid();
+            $appointmentRefs[] = ['reference' => 'urn:uuid:' . $apptUuid, 'display' => 'Appointment'];
+            $apptRes = [
                 'resourceType' => 'Appointment',
-                'id' => $appointmentId,
-                'status' => (string) ($appointment['status'] ?? 'proposed'),
-                'description' => $description,
-                'participant' => [[
-                    'actor' => ['reference' => $patientRef],
+                'id'           => $apptUuid,
+                'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Appointment']],
+                'status'       => (string) ($appointment['status'] ?? 'proposed'),
+                'description'  => $description,
+                'participant'  => [[
+                    'actor'  => ['reference' => $patientRef, 'display' => 'Patient'],
                     'status' => 'accepted',
                 ]],
             ];
             if ($practitionerRef !== '') {
-                $appointmentResource['participant'][] = [
-                    'actor' => ['reference' => $practitionerRef],
+                $apptRes['participant'][] = [
+                    'actor'  => ['reference' => $practitionerRef],
                     'status' => 'accepted',
                 ];
             }
-            $entries[] = ['resource' => $appointmentResource];
+            $resourceEntries[] = ['fullUrl' => 'urn:uuid:' . $apptUuid, 'resource' => $apptRes];
         }
 
+        // ── Composition sections (ABDM SNOMED section codes) ─────────────────
         $compositionSections = [];
-        if (! empty($conditionRefs) || ! empty($complaintRefs)) {
+        if (! empty($complaintRefs)) {
             $compositionSections[] = [
-                'title' => 'Problems and Diagnoses',
-                'entry' => array_values(array_merge($conditionRefs, $complaintRefs)),
-            ];
-        }
-        if (! empty($observationRefs)) {
-            $compositionSections[] = [
-                'title' => 'Vitals',
-                'entry' => $observationRefs,
+                'title' => 'Chief complaints',
+                'code'  => ['coding' => [[
+                    'system'  => 'http://snomed.info/sct',
+                    'code'    => '422843007',
+                    'display' => 'Chief complaint section',
+                ]]],
+                'entry' => $complaintRefs,
             ];
         }
         if (! empty($allergyRefs)) {
             $compositionSections[] = [
                 'title' => 'Allergies',
+                'code'  => ['coding' => [[
+                    'system'  => 'http://snomed.info/sct',
+                    'code'    => '722446000',
+                    'display' => 'Allergy record',
+                ]]],
                 'entry' => $allergyRefs,
+            ];
+        }
+        if (! empty($observationRefs)) {
+            $compositionSections[] = [
+                'title' => 'Physical Examination',
+                'code'  => ['coding' => [[
+                    'system'  => 'http://snomed.info/sct',
+                    'code'    => '425044008',
+                    'display' => 'Physical exam section',
+                ]]],
+                'entry' => $observationRefs,
+            ];
+        }
+        if (! empty($encounterDiagnosisRefs)) {
+            // Diagnoses section — conditions referenced from Encounter.diagnosis
+            $diagSectionEntries = array_map(static fn ($d) => $d['condition'], $encounterDiagnosisRefs);
+            $compositionSections[] = [
+                'title' => 'Problems and Diagnoses',
+                'code'  => ['coding' => [[
+                    'system'  => 'http://snomed.info/sct',
+                    'code'    => '439401001',
+                    'display' => 'Diagnosis',
+                ]]],
+                'entry' => $diagSectionEntries,
             ];
         }
         if (! empty($medicationRefs)) {
             $compositionSections[] = [
                 'title' => 'Medications',
+                'code'  => ['coding' => [[
+                    'system'  => 'http://snomed.info/sct',
+                    'code'    => '721912009',
+                    'display' => 'Medication summary document',
+                ]]],
                 'entry' => $medicationRefs,
             ];
         }
         if (! empty($serviceRequestRefs)) {
             $compositionSections[] = [
-                'title' => 'Investigations',
+                'title' => 'Investigation Advice',
+                'code'  => ['coding' => [[
+                    'system'  => 'http://snomed.info/sct',
+                    'code'    => '721963009',
+                    'display' => 'Order document',
+                ]]],
                 'entry' => $serviceRequestRefs,
             ];
         }
         if (! empty($appointmentRefs)) {
             $compositionSections[] = [
                 'title' => 'Follow Up',
+                'code'  => ['coding' => [[
+                    'system'  => 'http://snomed.info/sct',
+                    'code'    => '736271009',
+                    'display' => 'Outpatient care plan',
+                ]]],
                 'entry' => $appointmentRefs,
             ];
         }
 
+        // ── Composition (first entry per ABDM spec) ───────────────────────────
         $composition = [
             'resourceType' => 'Composition',
-            'id' => 'composition-' . (string) ($encounter['id'] ?? 'unknown'),
-            'status' => 'final',
-            'type' => [
+            'id'           => $compositionUuid,
+            'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/OPConsultRecord']],
+            'language'     => 'en-IN',
+            'identifier'   => ['system' => 'https://ndhm.in/phr', 'value' => $compositionUuid],
+            'status'       => 'final',
+            'type'         => [
                 'coding' => [[
-                    'system' => 'http://loinc.org',
-                    'code' => '34133-9',
-                    'display' => 'Summarization of Episode Note',
+                    'system'  => 'http://snomed.info/sct',
+                    'code'    => '371530004',
+                    'display' => 'Clinical consultation report',
                 ]],
-                'text' => 'OP Consultation Record',
+                'text' => 'Clinical Consultation report',
             ],
-            'subject' => ['reference' => $patientRef],
-            'encounter' => ['reference' => $encounterRef],
-            'date' => $issuedAt,
-            'title' => 'OP Consultation and Prescription',
-            'section' => $compositionSections,
+            'subject'   => ['reference' => $patientRef, 'display' => 'Patient'],
+            'encounter' => ['reference' => $encounterRef, 'display' => 'Encounter'],
+            'date'      => $issuedAt,
+            'author'    => $practitionerRef !== ''
+                ? [['reference' => $practitionerRef, 'display' => 'Practitioner']]
+                : [['display' => 'Unknown']],
+            'title'     => 'Consultation Report',
+            'section'   => $compositionSections,
         ];
-        if ($practitionerRef !== '') {
-            $composition['author'] = [[
-                'reference' => $practitionerRef,
-            ]];
+        if ($organizationRef !== '') {
+            $composition['custodian'] = ['reference' => $organizationRef, 'display' => 'Organization'];
         }
-        $entries[] = ['resource' => $composition];
 
+        // Composition first, then all resource entries
+        $allEntries = array_merge(
+            [['fullUrl' => 'urn:uuid:' . $compositionUuid, 'resource' => $composition]],
+            $resourceEntries
+        );
+
+        // ── Bundle ────────────────────────────────────────────────────────────
         return [
             'resourceType' => 'Bundle',
-            'identifier' => [
-                'system' => 'urn:ietf:rfc:3986',
-                'value' => 'urn:uuid:' . $bundleId,
+            'id'           => $bundleUuid,
+            'meta'         => [
+                'profile'  => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle'],
+                'security' => [[
+                    'system'  => 'http://terminology.hl7.org/CodeSystem/v3-Confidentiality',
+                    'code'    => 'V',
+                    'display' => 'very restricted',
+                ]],
             ],
-            'type' => 'document',
-            'timestamp' => $issuedAt,
-            'entry' => $entries,
+            'identifier' => ['system' => 'http://hip.in', 'value' => $bundleUuid],
+            'type'       => 'document',
+            'timestamp'  => $issuedAt,
+            'entry'      => $allEntries,
         ];
     }
 
@@ -717,6 +769,22 @@ class FhirR4Builder
         ];
     }
 
+    /** Generate a cryptographically random UUID v4. */
+    private function generateUuid(): string
+    {
+        $data    = random_bytes(16);
+        $data[6] = chr(ord($data[6]) & 0x0f | 0x40);
+        $data[8] = chr(ord($data[8]) & 0x3f | 0x80);
+
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
+    }
+
+    /** ISO 8601 timestamp with India Standard Time offset (+05:30). */
+    private function isoTimestamp(): string
+    {
+        return (new \DateTime('now', new \DateTimeZone('Asia/Kolkata')))->format('Y-m-d\TH:i:sP');
+    }
+
     /**
      * @param array<string, mixed> $patient
      *
@@ -742,9 +810,15 @@ class FhirR4Builder
 
         $abhaAddress = trim((string) ($patient['abhaAddress'] ?? ''));
         if ($abhaAddress !== '') {
+            $resource['meta']       = ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Patient']];
             $resource['identifier'] = [[
-                'system' => 'https://healthid.abdm.gov.in/abha-address',
-                'value' => $abhaAddress,
+                'type'   => ['coding' => [[
+                    'system'  => 'http://terminology.hl7.org/CodeSystem/v2-0203',
+                    'code'    => 'MR',
+                    'display' => 'Medical record number',
+                ]]],
+                'system' => 'https://healthid.ndhm.gov.in',
+                'value'  => $abhaAddress,
             ]];
         }
 
