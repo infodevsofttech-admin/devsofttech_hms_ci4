@@ -1,661 +1,653 @@
-<section class="container-fluid py-3">
+﻿<section class="container-fluid py-3">
+
+<style>
+.cm-table td, .cm-table th { vertical-align: middle; }
+.cm-table .cm-expand-row td { padding: .5rem .75rem; background: #f7faff; }
+.cm-snomed-chip {
+    display: inline-flex; align-items: center; gap: .3rem;
+    background: #dbeafe; border: 1px solid #93c5fd; color: #1d4ed8;
+    border-radius: 999px; padding: .1rem .55rem; font-size: .78rem; max-width: 100%;
+}
+.cm-snomed-chip .chip-code { font-family: monospace; color: #6b7280; font-size: .72rem; }
+.cm-snomed-chip.chip-none { background: #f3f4f6; border-color: #d1d5db; color: #9ca3af; font-style: italic; }
+.cm-lookup-dd { display: none; position: absolute; left: 0; right: 0; top: 100%; z-index: 1060;
+    background: #fff; border: 1px solid #dee2e6; border-radius: .375rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,.1); max-height: 240px; overflow-y: auto; }
+.cm-lookup-dd .cm-dd-item { display: block; width: 100%; text-align: left;
+    padding: .35rem .6rem; border: 0; background: none; font-size: .82rem;
+    cursor: pointer; border-bottom: 1px solid #f0f0f0; }
+.cm-lookup-dd .cm-dd-item:hover, .cm-lookup-dd .cm-dd-item:focus { background: #f0f4ff; outline: none; }
+.cm-source-badge { display: inline-block; padding: .05rem .35rem; border-radius: 3px;
+    font-size: .68rem; font-weight: 600; }
+.src-snomed, .src-csnotk { background: #d1fae5; color: #065f46; }
+.src-local, .src-disease_master { background: #fef3c7; color: #92400e; }
+.src-keyword { background: #ede9fe; color: #5b21b6; }
+.cm-assign-panel { border: 1px solid #bfdbfe; border-radius: .4rem;
+    background: #f0f7ff; padding: .6rem .75rem; }
+</style>
 
     <div class="d-flex align-items-center gap-2 mb-3">
-        <h5 class="mb-0">Clinical Master</h5>
-        <span class="text-muted small">Manage Chief Complaints &amp; Diagnosis options with SNOMED CT coding</span>
+        <h5 class="mb-0">Clinical Master — SNOMED CT Coding</h5>
+        <small class="text-muted">Assign SNOMED codes to Complaint &amp; Diagnosis options</small>
     </div>
 
     <!-- Tab nav -->
-    <ul class="nav nav-tabs mb-3" id="clinicalMasterTabs">
+    <ul class="nav nav-tabs mb-0" id="cmsTabNav">
         <li class="nav-item">
-            <button class="nav-link active" data-tab="complaints" type="button">
+            <button class="nav-link active" data-cms-tab="complaint" type="button">
                 <i class="bi bi-chat-left-text me-1"></i> Chief Complaints
             </button>
         </li>
         <li class="nav-item">
-            <button class="nav-link" data-tab="diagnosis" type="button">
+            <button class="nav-link" data-cms-tab="disease" type="button">
                 <i class="bi bi-clipboard2-pulse me-1"></i> Diagnosis / Disease
             </button>
         </li>
     </ul>
 
-    <!-- ══════════════ COMPLAINTS TAB ══════════════ -->
-    <div id="tab_complaints">
-        <div class="row g-3">
+    <!-- ══ COMPLAINTS ══════════════════════════════════════════════════ -->
+    <div id="cms_tab_complaint" class="border border-top-0 rounded-bottom p-3 mb-3">
 
-            <!-- List -->
-            <div class="col-md-8">
-                <div class="card">
-                    <div class="card-header d-flex flex-wrap gap-2 align-items-center">
-                        <input type="text" id="cm_filter" class="form-control form-control-sm" style="max-width:220px;" placeholder="Search name / keyword…">
-                        <div class="form-check ms-2 mb-0">
-                            <input class="form-check-input" type="checkbox" id="cm_snomed_only">
-                            <label class="form-check-label small" for="cm_snomed_only">SNOMED coded only</label>
-                        </div>
-                        <button type="button" class="btn btn-success btn-sm ms-auto" id="btn_cm_new">
-                            <i class="bi bi-plus-lg"></i> New Complaint
-                        </button>
-                        <span class="badge bg-secondary" id="cm_total_badge">—</span>
-                    </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table id="tbl_cm" class="table table-bordered table-sm table-hover mb-0">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th>Name</th>
-                                        <th width="160">SNOMED CT</th>
-                                        <th width="80" class="text-center">Short</th>
-                                        <th width="70" class="text-center">Active</th>
-                                        <th width="90" class="text-center">Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="cm_tbody">
-                                    <tr><td colspan="5" class="text-muted text-center py-3">Loading…</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        <div class="d-flex align-items-center gap-3 px-3 py-2 border-top small">
-                            <button type="button" class="btn btn-outline-secondary btn-sm" id="cm_prev">‹ Prev</button>
-                            <span id="cm_page_info">—</span>
-                            <button type="button" class="btn btn-outline-secondary btn-sm" id="cm_next">Next ›</button>
-                        </div>
-                    </div>
-                </div>
+        <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+            <input type="text" id="cm_search" class="form-control form-control-sm" style="max-width:200px;" placeholder="Filter list…">
+            <div class="form-check mb-0 ms-1">
+                <input class="form-check-input" type="checkbox" id="cm_snomed_only">
+                <label class="form-check-label small" for="cm_snomed_only">SNOMED coded only</label>
             </div>
+            <span class="badge bg-secondary ms-auto" id="cm_count_badge">—</span>
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="cm_prev_btn">‹</button>
+            <span class="small" id="cm_pager">—</span>
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="cm_next_btn">›</button>
+        </div>
 
-            <!-- Form -->
-            <div class="col-md-4">
-                <div class="card">
-                    <div class="card-header"><strong id="cm_form_title">New Complaint</strong></div>
-                    <div class="card-body">
+        <div class="table-responsive">
+        <table class="table table-sm table-bordered cm-table" id="tbl_cm">
+            <thead class="table-light" style="font-size:.78rem">
+                <tr>
+                    <th width="30">#</th>
+                    <th>Complaint Name</th>
+                    <th width="220">SNOMED CT</th>
+                    <th width="65" class="text-center">Short</th>
+                    <th width="65" class="text-center">Active</th>
+                    <th width="120" class="text-center">Action</th>
+                </tr>
+            </thead>
+            <tbody id="cm_tbody">
+                <tr><td colspan="6" class="text-muted text-center py-3">Loading…</td></tr>
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td></td>
+                    <td colspan="4" class="p-1 position-relative">
                         <?= csrf_field() ?>
-                        <input type="hidden" id="cm_code" value="0">
-
-                        <div class="mb-2">
-                            <label class="form-label">Name <span class="text-danger">*</span></label>
-                            <input type="text" id="cm_name" class="form-control form-control-sm"
-                                placeholder="e.g. FEVER, HEADACHE" style="text-transform:uppercase;">
-                        </div>
-
-                        <div class="mb-2">
-                            <label class="form-label">SNOMED CT <small class="text-muted">(finding / symptom)</small></label>
-                            <div class="position-relative">
-                                <input type="text" id="cm_snomed_search" class="form-control form-control-sm"
-                                    placeholder="Type to search SNOMED…" autocomplete="off">
-                                <div id="cm_snomed_dd" class="list-group shadow position-absolute w-100"
-                                    style="z-index:1060;display:none;max-height:210px;overflow-y:auto;"></div>
+                        <input type="text" class="form-control form-control-sm" id="cm_add_lookup"
+                            autocomplete="off" placeholder="Type complaint name to add…">
+                        <div id="cm_add_dd" class="cm-lookup-dd"></div>
+                    </td>
+                    <td></td>
+                </tr>
+                <tr id="cm_add_form_row" style="display:none;">
+                    <td></td>
+                    <td colspan="5">
+                        <div class="cm-assign-panel">
+                            <div class="row g-2 align-items-end">
+                                <div class="col-auto">
+                                    <label class="form-label mb-0 small fw-semibold">Name</label>
+                                    <input type="text" id="cm_add_name" class="form-control form-control-sm"
+                                        style="width:180px;text-transform:uppercase;">
+                                </div>
+                                <div class="col-auto">
+                                    <label class="form-label mb-0 small">Hinglish</label>
+                                    <input type="text" id="cm_add_hinglish" class="form-control form-control-sm"
+                                        style="width:120px;" placeholder="e.g. bukhar">
+                                </div>
+                                <div class="col-auto">
+                                    <label class="form-label mb-0 small">SNOMED (pre-filled)</label>
+                                    <div id="cm_add_snomed_display"></div>
+                                </div>
+                                <div class="col-auto d-flex gap-2 align-items-end">
+                                    <div class="form-check form-check-sm mb-0">
+                                        <input class="form-check-input" type="checkbox" id="cm_add_short" value="1">
+                                        <label class="form-check-label small" for="cm_add_short">Short list</label>
+                                    </div>
+                                    <button type="button" class="btn btn-primary btn-sm" id="btn_cm_add_save">Add</button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_cm_add_cancel">✕</button>
+                                </div>
                             </div>
-                            <div id="cm_snomed_selected" class="mt-1 small text-success" style="display:none;"></div>
-                            <input type="hidden" id="cm_snomed_concept_id" value="">
-                            <input type="hidden" id="cm_snomed_term" value="">
-                            <button type="button" class="btn btn-link btn-sm p-0 mt-1" id="btn_cm_snomed_clear"
-                                style="display:none;font-size:.75rem;">&#x2715; Clear SNOMED</button>
+                            <input type="hidden" id="cm_add_snomed_id" value="">
+                            <input type="hidden" id="cm_add_snomed_term_val" value="">
                         </div>
-
-                        <div class="mb-2">
-                            <label class="form-label">Hinglish Name</label>
-                            <input type="text" id="cm_name_hinglish" class="form-control form-control-sm" placeholder="e.g. bukhar">
-                        </div>
-
-                        <div class="mb-2">
-                            <label class="form-label">Keywords <small class="text-muted">(comma separated)</small></label>
-                            <input type="text" id="cm_keywords" class="form-control form-control-sm"
-                                placeholder="e.g. fever,bukhar,taap">
-                        </div>
-
-                        <div class="mb-2">
-                            <label class="form-label">AI Hint</label>
-                            <input type="text" id="cm_ai_hint" class="form-control form-control-sm"
-                                placeholder="e.g. fever with duration and pattern">
-                        </div>
-
-                        <div class="mb-2 d-flex gap-3">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="cm_show_in_short" value="1">
-                                <label class="form-check-label small" for="cm_show_in_short">Show in Short List</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="cm_is_active" value="1" checked>
-                                <label class="form-check-label small" for="cm_is_active">Active</label>
-                            </div>
-                        </div>
-
-                        <div class="d-flex gap-2 mt-3">
-                            <button type="button" class="btn btn-primary btn-sm" id="btn_cm_save">Save</button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_cm_reset">Reset</button>
-                        </div>
-                        <div class="small mt-2" id="cm_msg">Ready.</div>
-                    </div>
-                </div>
-            </div>
+                    </td>
+                </tr>
+            </tfoot>
+        </table>
         </div>
-    </div><!-- /tab_complaints -->
+    </div><!-- /cms_tab_complaint -->
 
-    <!-- ══════════════ DIAGNOSIS TAB ══════════════ -->
-    <div id="tab_diagnosis" style="display:none;">
-        <div class="row g-3">
+    <!-- ══ DISEASE ════════════════════════════════════════════════════ -->
+    <div id="cms_tab_disease" style="display:none;"
+        class="border border-top-0 rounded-bottom p-3 mb-3">
 
-            <!-- List -->
-            <div class="col-md-8">
-                <div class="card">
-                    <div class="card-header d-flex flex-wrap gap-2 align-items-center">
-                        <input type="text" id="dm_filter" class="form-control form-control-sm" style="max-width:220px;" placeholder="Search diagnosis name…">
-                        <div class="form-check ms-2 mb-0">
-                            <input class="form-check-input" type="checkbox" id="dm_snomed_only">
-                            <label class="form-check-label small" for="dm_snomed_only">SNOMED coded only</label>
-                        </div>
-                        <button type="button" class="btn btn-success btn-sm ms-auto" id="btn_dm_new">
-                            <i class="bi bi-plus-lg"></i> New Diagnosis
-                        </button>
-                        <span class="badge bg-secondary" id="dm_total_badge">—</span>
-                    </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table id="tbl_dm" class="table table-bordered table-sm table-hover mb-0">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th>Name</th>
-                                        <th width="180">SNOMED CT</th>
-                                        <th width="70" class="text-center">Active</th>
-                                        <th width="90" class="text-center">Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="dm_tbody">
-                                    <tr><td colspan="4" class="text-muted text-center py-3">Loading…</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        <div class="d-flex align-items-center gap-3 px-3 py-2 border-top small">
-                            <button type="button" class="btn btn-outline-secondary btn-sm" id="dm_prev">‹ Prev</button>
-                            <span id="dm_page_info">—</span>
-                            <button type="button" class="btn btn-outline-secondary btn-sm" id="dm_next">Next ›</button>
-                        </div>
-                    </div>
-                </div>
+        <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+            <input type="text" id="dm_search" class="form-control form-control-sm" style="max-width:200px;" placeholder="Filter list…">
+            <div class="form-check mb-0 ms-1">
+                <input class="form-check-input" type="checkbox" id="dm_snomed_only">
+                <label class="form-check-label small" for="dm_snomed_only">SNOMED coded only</label>
             </div>
-
-            <!-- Form -->
-            <div class="col-md-4">
-                <div class="card">
-                    <div class="card-header"><strong id="dm_form_title">New Diagnosis</strong></div>
-                    <div class="card-body">
-                        <input type="hidden" id="dm_code" value="0">
-
-                        <div class="mb-2">
-                            <label class="form-label">Name <span class="text-danger">*</span></label>
-                            <input type="text" id="dm_name" class="form-control form-control-sm"
-                                placeholder="e.g. DIABETES MELLITUS TYPE 2" style="text-transform:uppercase;">
-                        </div>
-
-                        <div class="mb-2">
-                            <label class="form-label">SNOMED CT <small class="text-muted">(disorder / clinical finding)</small></label>
-                            <div class="position-relative">
-                                <input type="text" id="dm_snomed_search" class="form-control form-control-sm"
-                                    placeholder="Type to search SNOMED…" autocomplete="off">
-                                <div id="dm_snomed_dd" class="list-group shadow position-absolute w-100"
-                                    style="z-index:1060;display:none;max-height:210px;overflow-y:auto;"></div>
-                            </div>
-                            <div id="dm_snomed_selected" class="mt-1 small text-success" style="display:none;"></div>
-                            <input type="hidden" id="dm_snomed_concept_id" value="">
-                            <input type="hidden" id="dm_snomed_term" value="">
-                            <button type="button" class="btn btn-link btn-sm p-0 mt-1" id="btn_dm_snomed_clear"
-                                style="display:none;font-size:.75rem;">&#x2715; Clear SNOMED</button>
-                        </div>
-
-                        <div class="mb-2">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="dm_is_active" value="1" checked>
-                                <label class="form-check-label small" for="dm_is_active">Active</label>
-                            </div>
-                        </div>
-
-                        <div class="d-flex gap-2 mt-3">
-                            <button type="button" class="btn btn-primary btn-sm" id="btn_dm_save">Save</button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_dm_reset">Reset</button>
-                        </div>
-                        <div class="small mt-2" id="dm_msg">Ready.</div>
-                    </div>
-                </div>
-            </div>
+            <span class="badge bg-secondary ms-auto" id="dm_count_badge">—</span>
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="dm_prev_btn">‹</button>
+            <span class="small" id="dm_pager">—</span>
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="dm_next_btn">›</button>
         </div>
-    </div><!-- /tab_diagnosis -->
+
+        <div class="table-responsive">
+        <table class="table table-sm table-bordered cm-table" id="tbl_dm">
+            <thead class="table-light" style="font-size:.78rem">
+                <tr>
+                    <th width="30">#</th>
+                    <th>Diagnosis Name</th>
+                    <th width="240">SNOMED CT</th>
+                    <th width="65" class="text-center">Active</th>
+                    <th width="120" class="text-center">Action</th>
+                </tr>
+            </thead>
+            <tbody id="dm_tbody">
+                <tr><td colspan="5" class="text-muted text-center py-3">Loading…</td></tr>
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td></td>
+                    <td colspan="2" class="p-1 position-relative">
+                        <input type="text" class="form-control form-control-sm" id="dm_add_lookup"
+                            autocomplete="off" placeholder="Type diagnosis name to add…">
+                        <div id="dm_add_dd" class="cm-lookup-dd"></div>
+                    </td>
+                    <td></td>
+                    <td></td>
+                </tr>
+                <tr id="dm_add_form_row" style="display:none;">
+                    <td></td>
+                    <td colspan="4">
+                        <div class="cm-assign-panel">
+                            <div class="row g-2 align-items-end">
+                                <div class="col-auto">
+                                    <label class="form-label mb-0 small fw-semibold">Name</label>
+                                    <input type="text" id="dm_add_name" class="form-control form-control-sm"
+                                        style="width:220px;text-transform:uppercase;">
+                                </div>
+                                <div class="col-auto">
+                                    <label class="form-label mb-0 small">SNOMED (pre-filled)</label>
+                                    <div id="dm_add_snomed_display"></div>
+                                </div>
+                                <div class="col-auto d-flex gap-2 align-items-end">
+                                    <button type="button" class="btn btn-primary btn-sm" id="btn_dm_add_save">Add</button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_dm_add_cancel">✕</button>
+                                </div>
+                            </div>
+                            <input type="hidden" id="dm_add_snomed_id" value="">
+                            <input type="hidden" id="dm_add_snomed_term_val" value="">
+                        </div>
+                    </td>
+                </tr>
+            </tfoot>
+        </table>
+        </div>
+    </div><!-- /cms_tab_disease -->
 
 </section>
 
 <script>
 (function () {
-    /* ── helpers ────────────────────────────────────────────────────── */
-    function esc(t) { return $('<div>').text((t||'').toString()).html(); }
+    /* ── helpers ─────────────────────────────────────────────────────── */
+    function esc(t) { return $('<div>').text((t || '').toString()).html(); }
 
     function getCsrf() {
         var inp = document.querySelector('input[name="<?= csrf_token() ?>"]');
         return inp ? { name: inp.getAttribute('name'), value: inp.value }
                    : { name: '<?= csrf_token() ?>', value: '<?= csrf_hash() ?>' };
     }
-    function updateCsrf(data) {
-        if (!data || !data.csrfName) return;
-        var inp = document.querySelector('input[name="' + data.csrfName + '"]');
-        if (inp) inp.value = data.csrfHash || '';
+    function updateCsrf(d) {
+        if (!d || !d.csrfName) return;
+        var inp = document.querySelector('input[name="' + d.csrfName + '"]');
+        if (inp) inp.value = d.csrfHash || '';
     }
     function apiPost(url, payload, cb) {
-        var csrf = getCsrf();
-        payload = payload || {};
+        var csrf = getCsrf(); payload = payload || {};
         payload[csrf.name] = csrf.value;
         $.post(url, payload, function (d) { updateCsrf(d); cb(d || {}); }, 'json')
-         .fail(function (xhr) { cb({ update: 0, error_text: 'Request failed (' + xhr.status + ')' }); });
+         .fail(function (xhr) { cb({ update: 0, error_text: 'HTTP ' + xhr.status }); });
     }
     function apiGet(url, cb) {
         $.get(url, function (d) { cb(d || {}); }, 'json')
-         .fail(function (xhr) { cb({ error: 'Request failed (' + xhr.status + ')' }); });
+         .fail(function (xhr) { cb({ error: 'HTTP ' + xhr.status }); });
     }
-    function snomedBadge(conceptId, term) {
-        if (!conceptId) return '<span class="text-muted small">—</span>';
-        var label = esc(term || conceptId);
-        return '<span class="badge bg-info text-dark" title="' + esc(conceptId) + '">' + label + '</span>';
-    }
+
     function toast(msg, type) {
         var cls = type === 'ok' ? 'alert-success' : type === 'err' ? 'alert-danger' : 'alert-info';
-        var id = 'ct_' + Date.now();
-        $('body').append('<div id="' + id + '" class="alert ' + cls + ' shadow-sm alert-dismissible"'
-            + ' style="position:fixed;top:20px;right:20px;z-index:9999;min-width:260px;max-width:400px;">'
+        var id = 'cmt_' + Date.now();
+        $('body').append('<div id="' + id + '" class="alert ' + cls + ' alert-dismissible shadow-sm"'
+            + ' style="position:fixed;top:18px;right:18px;z-index:9999;min-width:240px;max-width:380px;">'
             + esc(msg) + '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>');
-        setTimeout(function () { $('#' + id).fadeOut(300, function () { $(this).remove(); }); }, 4000);
+        setTimeout(function () { $('#' + id).fadeOut(300, function () { $(this).remove(); }); }, 3800);
     }
 
-    /* ── Tab switching ──────────────────────────────────────────────── */
-    $(document).on('click', '#clinicalMasterTabs .nav-link', function () {
-        $('#clinicalMasterTabs .nav-link').removeClass('active');
+    function snomedChip(cid, term) {
+        if (!cid) return '<span class="cm-snomed-chip chip-none">not coded</span>';
+        return '<span class="cm-snomed-chip">' + esc(term || cid)
+            + ' <span class="chip-code">' + esc(cid) + '</span></span>';
+    }
+
+    function srcBadge(src) {
+        var cls = (src === 'snomed' || src === 'csnotk') ? 'src-snomed'
+                : (src === 'local' || src === 'disease_master') ? 'src-local' : 'src-keyword';
+        return '<span class="cm-source-badge ' + cls + '">' + esc(src || '') + '</span>';
+    }
+
+    /* ══ TAB SWITCH ════════════════════════════════════════════════════ */
+    $(document).on('click', '#cmsTabNav .nav-link', function () {
+        $('#cmsTabNav .nav-link').removeClass('active');
         $(this).addClass('active');
-        var tab = $(this).data('tab');
-        $('#tab_complaints, #tab_diagnosis').hide();
-        $('#tab_' + tab).show();
-        if (tab === 'complaints') { cmLoad(); }
-        if (tab === 'diagnosis')  { dmLoad(); }
+        var t = $(this).data('cms-tab');
+        $('#cms_tab_complaint, #cms_tab_disease').hide();
+        $('#cms_tab_' + t).show();
+        if (t === 'complaint') cmLoad();
+        if (t === 'disease')   dmLoad();
     });
 
-    /* ══════════════════════════════════════════════════════════════════
-       COMPLAINTS MASTER
-    ══════════════════════════════════════════════════════════════════ */
-    var cmState = { start: 0, length: 25, total: 0 };
-    var cmFilterTimer = null;
+    /* ══ SNOMED EXPAND PANEL BUILDER ═══════════════════════════════════ */
+    function buildAssignPanel(prefix, code, cid, term) {
+        var inputId = prefix + '_s_input_' + code;
+        var ddId    = prefix + '_s_dd_' + code;
+        var hidCid  = prefix + '_s_cid_' + code;
+        var hidTerm = prefix + '_s_term_' + code;
+        var dispId  = prefix + '_s_disp_' + code;
+        return '<div class="cm-assign-panel">'
+            + '<div class="d-flex flex-wrap gap-2 align-items-end">'
+            + '<div style="min-width:260px;position:relative;">'
+            + '<label class="form-label mb-1 small fw-semibold">Search SNOMED CT</label>'
+            + '<input type="text" id="' + inputId + '" class="form-control form-control-sm cm-panel-snomed-input"'
+            + '  data-code="' + esc(code) + '" data-prefix="' + esc(prefix) + '"'
+            + '  placeholder="Type to search…" autocomplete="off"'
+            + '  value="' + esc(term || (cid ? cid : '')) + '">'
+            + '<div id="' + ddId + '" class="cm-lookup-dd" style="min-width:320px;"></div>'
+            + '</div>'
+            + '<div><label class="form-label mb-1 small">Selected</label>'
+            + '<div id="' + dispId + '">' + snomedChip(cid, term) + '</div></div>'
+            + '<input type="hidden" id="' + hidCid + '" value="' + esc(cid || '') + '">'
+            + '<input type="hidden" id="' + hidTerm + '" value="' + esc(term || '') + '">'
+            + '<div class="d-flex gap-2 align-items-end">'
+            + '<button type="button" class="btn btn-primary btn-sm btn-cms-save"'
+            + '  data-code="' + esc(code) + '" data-prefix="' + esc(prefix) + '">Save SNOMED</button>'
+            + '<button type="button" class="btn btn-outline-secondary btn-sm btn-cms-clear-snomed"'
+            + '  data-code="' + esc(code) + '" data-prefix="' + esc(prefix) + '">Clear</button>'
+            + '<button type="button" class="btn btn-link btn-sm text-secondary btn-cms-close"'
+            + '  data-code="' + esc(code) + '" data-prefix="' + esc(prefix) + '">Close</button>'
+            + '</div></div></div>';
+    }
+
+    /* SNOMED panel search (delegated) */
+    $(document).on('input', '.cm-panel-snomed-input', function () {
+        var $inp   = $(this);
+        var code   = $inp.data('code');
+        var prefix = $inp.data('prefix');
+        var q      = $inp.val().trim();
+        var ddSel  = '#' + prefix + '_s_dd_' + code;
+        if (q.length < 2) { $(ddSel).hide().empty(); return; }
+        var url = prefix === 'cm'
+            ? '<?= base_url('Opd_prescription/complaints_search') ?>'
+            : '<?= base_url('Opd_prescription/provisional_diagnosis_search') ?>';
+        $.getJSON(url + '?q=' + encodeURIComponent(q), function (data) {
+            var rows = data.rows || [];
+            var $dd = $(ddSel).empty();
+            if (!rows.length) { $dd.hide(); return; }
+            rows.forEach(function (r) {
+                var cid  = r.concept_id || r.snomed_concept_id || '';
+                var name = r.name || '';
+                var src  = r.source || '';
+                $dd.append('<button type="button" class="cm-dd-item cm-panel-pick"'
+                    + ' data-code="' + esc(code) + '" data-prefix="' + esc(prefix) + '"'
+                    + ' data-cid="' + esc(cid) + '" data-name="' + esc(name) + '">'
+                    + esc(name) + (cid ? ' <span class="chip-code">' + esc(cid) + '</span>' : '')
+                    + ' ' + srcBadge(src) + '</button>');
+            });
+            $dd.show();
+        });
+    });
+
+    $(document).on('mousedown', '.cm-panel-pick', function (e) {
+        e.preventDefault();
+        var code   = $(this).data('code');
+        var prefix = $(this).data('prefix');
+        var cid    = $(this).data('cid');
+        var name   = $(this).data('name');
+        $('#' + prefix + '_s_cid_' + code).val(cid || '');
+        $('#' + prefix + '_s_term_' + code).val(name || '');
+        $('#' + prefix + '_s_input_' + code).val(name || '');
+        $('#' + prefix + '_s_disp_' + code).html(snomedChip(cid, name));
+        $('#' + prefix + '_s_dd_' + code).hide().empty();
+    });
+
+    $(document).on('click', function (e) {
+        if (!$(e.target).closest('.cm-panel-snomed-input, .cm-lookup-dd, #cm_add_dd, #dm_add_dd').length) {
+            $('.cm-lookup-dd').hide();
+        }
+    });
+
+    /* Toggle expand row — complaints */
+    $(document).on('click', '.btn-cm-snomed', function () {
+        var code = $(this).data('code');
+        var $exp = $('#cm_exp_' + code);
+        var open = $exp.is(':visible');
+        $('.cm-expand-row').hide();
+        if (!open) { $exp.show(); $exp.find('.cm-panel-snomed-input').trigger('focus'); }
+    });
+
+    /* Toggle expand row — disease */
+    $(document).on('click', '.btn-dm-snomed', function () {
+        var code = $(this).data('code');
+        var $exp = $('#dm_exp_' + code);
+        var open = $exp.is(':visible');
+        $('.cm-expand-row').hide();
+        if (!open) { $exp.show(); $exp.find('.cm-panel-snomed-input').trigger('focus'); }
+    });
+
+    /* Close / Clear SNOMED in panel */
+    $(document).on('click', '.btn-cms-close', function () {
+        var code   = $(this).data('code');
+        var prefix = $(this).data('prefix');
+        $('#' + prefix + '_exp_' + code).hide();
+    });
+    $(document).on('click', '.btn-cms-clear-snomed', function () {
+        var code   = $(this).data('code');
+        var prefix = $(this).data('prefix');
+        $('#' + prefix + '_s_cid_' + code).val('');
+        $('#' + prefix + '_s_term_' + code).val('');
+        $('#' + prefix + '_s_input_' + code).val('');
+        $('#' + prefix + '_s_disp_' + code).html(snomedChip('', ''));
+    });
+
+    /* Save SNOMED from panel */
+    $(document).on('click', '.btn-cms-save', function () {
+        var code   = $(this).data('code');
+        var prefix = $(this).data('prefix');
+        var cid    = $('#' + prefix + '_s_cid_' + code).val().trim();
+        var term   = $('#' + prefix + '_s_term_' + code).val().trim();
+        var $btn   = $(this);
+        var $row   = $('[data-code="' + code + '"].cm-data-row');
+        var name   = $row.find('td:eq(1) .fw-semibold').first().text().trim();
+        var url    = prefix === 'cm'
+            ? '<?= base_url('Opd_prescription/complaints_master_save') ?>'
+            : '<?= base_url('Opd_prescription/disease_master_save') ?>';
+        $btn.prop('disabled', true).text('Saving…');
+        apiPost(url, { Code: code, Name: name, snomed_concept_id: cid, snomed_term: term }, function (d) {
+            $btn.prop('disabled', false).text('Save SNOMED');
+            if (parseInt(d.update || 0)) {
+                toast('SNOMED updated', 'ok');
+                $('#' + prefix + '_chip_' + code).html(snomedChip(cid, term));
+                $('#' + prefix + '_exp_' + code).hide();
+            } else {
+                toast(d.error_text || 'Save failed', 'err');
+            }
+        });
+    });
+
+    /* ══ COMPLAINTS ════════════════════════════════════════════════════ */
+    var cmState = { start: 0, len: 25, total: 0 };
+    var cmSearchTimer = null;
 
     function cmLoad() {
-        var filter    = ($('#cm_filter').val() || '').trim();
-        var snomedOnly = $('#cm_snomed_only').is(':checked') ? 1 : 0;
-        var url = '<?= base_url('Opd_prescription/complaints_master_data') ?>?start=' + cmState.start
-            + '&length=' + cmState.length + '&filter=' + encodeURIComponent(filter)
-            + '&snomed_only=' + snomedOnly;
-
-        $('#cm_tbody').html('<tr><td colspan="5" class="text-muted text-center">Loading…</td></tr>');
-        apiGet(url, function (data) {
-            cmState.total = parseInt(data.recordsTotal || 0);
-            $('#cm_total_badge').text(cmState.total);
-            var rows = data.data || [];
-            if (!rows.length) {
-                $('#cm_tbody').html('<tr><td colspan="5" class="text-muted text-center">No records found.</td></tr>');
-                $('#cm_page_info').text('0 records');
-                return;
-            }
-            var html = '';
-            rows.forEach(function (r) {
-                var active = parseInt(r.is_active || 0) === 1;
-                html += '<tr>'
-                    + '<td>' + esc(r.Name || '') + '</td>'
-                    + '<td>' + snomedBadge(r.snomed_concept_id, r.snomed_term) + '</td>'
-                    + '<td class="text-center">' + (parseInt(r.show_in_short || 0) === 1
-                        ? '<span class="badge bg-primary">Yes</span>'
-                        : '<span class="text-muted">—</span>') + '</td>'
-                    + '<td class="text-center">' + (active
-                        ? '<span class="badge bg-success">Yes</span>'
-                        : '<span class="badge bg-secondary">No</span>') + '</td>'
-                    + '<td class="text-center">'
-                    + '<button class="btn btn-outline-primary btn-xs btn-cm-edit px-1 py-0 me-1" data-code="' + esc(r.Code) + '" title="Edit">Edit</button>'
-                    + '<button class="btn btn-outline-danger btn-xs btn-cm-del px-1 py-0" data-code="' + esc(r.Code) + '" title="Deactivate">Del</button>'
-                    + '</td></tr>';
+        var f = ($('#cm_search').val() || '').trim();
+        var s = $('#cm_snomed_only').is(':checked') ? 1 : 0;
+        apiGet('<?= base_url('Opd_prescription/complaints_master_data') ?>?start=' + cmState.start
+            + '&length=' + cmState.len + '&filter=' + encodeURIComponent(f) + '&snomed_only=' + s,
+            function (data) {
+                cmState.total = parseInt(data.recordsTotal || 0);
+                $('#cm_count_badge').text(cmState.total + ' items');
+                var rows = data.data || [];
+                if (!rows.length) {
+                    $('#cm_tbody').html('<tr><td colspan="6" class="text-muted text-center py-3">No complaints found.</td></tr>');
+                    $('#cm_pager').text('0'); return;
+                }
+                var html = '', i = cmState.start;
+                rows.forEach(function (r) {
+                    i++;
+                    var coded  = !!r.snomed_concept_id;
+                    var active = parseInt(r.is_active || 0) === 1;
+                    html += '<tr class="cm-data-row" data-code="' + esc(r.Code) + '">'
+                        + '<td class="text-muted small">' + i + '</td>'
+                        + '<td><span class="fw-semibold">' + esc(r.Name || '') + '</span>'
+                        + (r.name_hinglish ? '<br><small class="text-muted">' + esc(r.name_hinglish) + '</small>' : '')
+                        + '</td>'
+                        + '<td id="cm_chip_' + esc(r.Code) + '">' + snomedChip(r.snomed_concept_id, r.snomed_term) + '</td>'
+                        + '<td class="text-center">' + (parseInt(r.show_in_short || 0)
+                            ? '<span class="badge bg-primary">✓</span>' : '<span class="text-muted small">—</span>') + '</td>'
+                        + '<td class="text-center">' + (active
+                            ? '<span class="badge bg-success">✓</span>' : '<span class="badge bg-secondary">off</span>') + '</td>'
+                        + '<td class="text-center">'
+                        + '<button class="btn btn-outline-primary btn-sm py-0 px-1 me-1 btn-cm-snomed"'
+                        + '  data-code="' + esc(r.Code) + '" style="font-size:.72rem;">'
+                        + (coded ? '⟳' : '+') + ' SNOMED</button>'
+                        + '<button class="btn btn-outline-danger btn-sm py-0 px-1 btn-cm-del"'
+                        + '  data-code="' + esc(r.Code) + '" style="font-size:.72rem;">✕</button>'
+                        + '</td></tr>'
+                        + '<tr class="cm-expand-row" id="cm_exp_' + esc(r.Code) + '" style="display:none;">'
+                        + '<td></td><td colspan="5">'
+                        + buildAssignPanel('cm', r.Code, r.snomed_concept_id, r.snomed_term)
+                        + '</td></tr>';
+                });
+                $('#cm_tbody').html(html);
+                var from = cmState.start + 1;
+                var to   = Math.min(cmState.start + rows.length, cmState.total);
+                $('#cm_pager').text(from + '–' + to + ' / ' + cmState.total);
+                $('#cm_prev_btn').prop('disabled', cmState.start === 0);
+                $('#cm_next_btn').prop('disabled', cmState.start + cmState.len >= cmState.total);
             });
-            $('#cm_tbody').html(html);
-
-            var from = cmState.start + 1;
-            var to   = Math.min(cmState.start + rows.length, cmState.total);
-            $('#cm_page_info').text(from + '–' + to + ' of ' + cmState.total);
-            $('#cm_prev').prop('disabled', cmState.start === 0);
-            $('#cm_next').prop('disabled', cmState.start + cmState.length >= cmState.total);
-        });
     }
 
-    $('#cm_filter').on('input', function () {
-        clearTimeout(cmFilterTimer);
-        cmFilterTimer = setTimeout(function () { cmState.start = 0; cmLoad(); }, 300);
-    });
+    $('#cm_prev_btn').on('click', function () { if (cmState.start >= cmState.len) { cmState.start -= cmState.len; cmLoad(); } });
+    $('#cm_next_btn').on('click', function () { if (cmState.start + cmState.len < cmState.total) { cmState.start += cmState.len; cmLoad(); } });
+    $('#cm_search').on('input', function () { clearTimeout(cmSearchTimer); cmSearchTimer = setTimeout(function () { cmState.start = 0; cmLoad(); }, 300); });
     $('#cm_snomed_only').on('change', function () { cmState.start = 0; cmLoad(); });
-    $('#cm_prev').on('click', function () { if (cmState.start >= cmState.length) { cmState.start -= cmState.length; cmLoad(); } });
-    $('#cm_next').on('click', function () { if (cmState.start + cmState.length < cmState.total) { cmState.start += cmState.length; cmLoad(); } });
 
-    // Edit row
-    $(document).on('click', '.btn-cm-edit', function () {
-        var code = $(this).data('code');
-        apiGet('<?= base_url('Opd_prescription/complaints_master_get') ?>/' + code, function (data) {
-            if (!data.row) { toast('Could not load record', 'err'); return; }
-            cmFillForm(data.row);
-        });
-    });
-
-    // Delete row
+    /* Delete complaint */
     $(document).on('click', '.btn-cm-del', function () {
         var code = $(this).data('code');
         if (!confirm('Deactivate this complaint?')) return;
-        apiPost('<?= base_url('Opd_prescription/complaints_master_remove') ?>/' + code, {}, function (data) {
-            if (parseInt(data.update || 0)) { toast('Complaint deactivated', 'ok'); cmLoad(); }
-            else { toast(data.error_text || 'Failed', 'err'); }
+        apiPost('<?= base_url('Opd_prescription/complaints_master_remove') ?>/' + code, {}, function (d) {
+            if (parseInt(d.update || 0)) { toast('Deactivated', 'ok'); cmLoad(); }
+            else toast(d.error_text || 'Failed', 'err');
         });
     });
 
-    // New button
-    $('#btn_cm_new').on('click', cmClearForm);
+    /* ── Add complaint via footer lookup ─────────────────────────────── */
+    var cmAddTimer = null;
 
-    function cmClearForm() {
-        $('#cm_code').val('0');
-        $('#cm_name,#cm_name_hinglish,#cm_keywords,#cm_ai_hint').val('');
-        $('#cm_snomed_search,#cm_snomed_concept_id,#cm_snomed_term').val('');
-        $('#cm_snomed_selected').hide().text('');
-        $('#btn_cm_snomed_clear').hide();
-        $('#cm_show_in_short').prop('checked', false);
-        $('#cm_is_active').prop('checked', true);
-        $('#cm_form_title').text('New Complaint');
-        $('#cm_msg').removeClass('text-success text-danger').addClass('text-muted').text('Ready.');
-    }
-
-    function cmFillForm(r) {
-        $('#cm_code').val(r.Code || 0);
-        $('#cm_name').val((r.Name || '').toUpperCase());
-        $('#cm_name_hinglish').val(r.name_hinglish || '');
-        $('#cm_keywords').val(r.keywords || '');
-        $('#cm_ai_hint').val(r.ai_hint || '');
-        $('#cm_show_in_short').prop('checked', parseInt(r.show_in_short || 0) === 1);
-        $('#cm_is_active').prop('checked', parseInt(r.is_active || 1) === 1);
-        // SNOMED
-        var scid = r.snomed_concept_id || '';
-        var sterm = r.snomed_term || '';
-        $('#cm_snomed_concept_id').val(scid);
-        $('#cm_snomed_term').val(sterm);
-        if (scid) {
-            $('#cm_snomed_search').val(sterm || scid);
-            $('#cm_snomed_selected').show().html('<i class="bi bi-check-circle text-success"></i> ' + esc(sterm || scid) + ' <small class="text-muted">(' + esc(scid) + ')</small>');
-            $('#btn_cm_snomed_clear').show();
-        } else {
-            $('#cm_snomed_search').val('');
-            $('#cm_snomed_selected').hide().text('');
-            $('#btn_cm_snomed_clear').hide();
-        }
-        $('#cm_form_title').text('Edit: ' + esc(r.Name || ''));
-        $('#cm_msg').removeClass('text-success text-danger').addClass('text-muted').text('Loaded.');
-        $('html,body').animate({ scrollTop: $('#cm_form_title').offset().top - 80 }, 200);
-    }
-
-    // Save
-    $('#btn_cm_save').on('click', function () {
-        var name = $('#cm_name').val().trim().toUpperCase();
-        if (!name) { $('#cm_msg').removeClass('text-muted text-success').addClass('text-danger').text('Name is required.'); return; }
-        var payload = {
-            Code:              $('#cm_code').val(),
-            Name:              name,
-            name_hinglish:     $('#cm_name_hinglish').val().trim(),
-            keywords:          $('#cm_keywords').val().trim(),
-            ai_hint:           $('#cm_ai_hint').val().trim(),
-            show_in_short:     $('#cm_show_in_short').is(':checked') ? 1 : 0,
-            is_active:         $('#cm_is_active').is(':checked') ? 1 : 0,
-            snomed_concept_id: $('#cm_snomed_concept_id').val().trim(),
-            snomed_term:       $('#cm_snomed_term').val().trim(),
-        };
-        $('#btn_cm_save').prop('disabled', true).text('Saving…');
-        apiPost('<?= base_url('Opd_prescription/complaints_master_save') ?>', payload, function (data) {
-            $('#btn_cm_save').prop('disabled', false).text('Save');
-            if (parseInt(data.update || 0)) {
-                $('#cm_msg').removeClass('text-muted text-danger').addClass('text-success').text(data.error_text || 'Saved');
-                toast(data.error_text || 'Saved', 'ok');
-                cmLoad();
-            } else {
-                $('#cm_msg').removeClass('text-muted text-success').addClass('text-danger').text(data.error_text || 'Failed');
-                toast(data.error_text || 'Failed', 'err');
-            }
-        });
-    });
-
-    $('#btn_cm_reset').on('click', cmClearForm);
-
-    // SNOMED search for Complaints (uses complaints_search → searchFinding)
-    var cmSnomedTimer = null;
-    $('#cm_snomed_search').on('input', function () {
+    $('#cm_add_lookup').on('input', function () {
         var q = $(this).val().trim();
-        if (q.length < 2) { $('#cm_snomed_dd').hide().empty(); return; }
-        clearTimeout(cmSnomedTimer);
-        cmSnomedTimer = setTimeout(function () {
+        $('#cm_add_form_row').hide();
+        if (q.length < 1) { $('#cm_add_dd').hide().empty(); return; }
+        clearTimeout(cmAddTimer);
+        cmAddTimer = setTimeout(function () {
             $.getJSON('<?= base_url('Opd_prescription/complaints_search') ?>?q=' + encodeURIComponent(q), function (data) {
-                var rows = data.rows || [];
-                var $dd = $('#cm_snomed_dd').empty();
-                if (!rows.length) { $dd.hide(); return; }
-                rows.forEach(function (r) {
-                    var cid   = r.concept_id || '';
-                    var name  = r.name || '';
-                    var src   = r.source || '';
-                    var label = esc(name) + (cid ? ' <small class="text-muted">(' + esc(cid) + ')</small>' : '')
-                        + ' <small class="badge bg-' + (src === 'snomed' ? 'info text-dark' : 'secondary') + ' ms-1">' + esc(src) + '</small>';
-                    $dd.append('<button type="button" class="list-group-item list-group-item-action py-1 px-2 small"'
-                        + ' data-name="' + esc(name) + '" data-cid="' + esc(cid) + '">' + label + '</button>');
+                var $dd = $('#cm_add_dd').empty();
+                $dd.append('<button type="button" class="cm-dd-item fw-semibold text-success cm-add-pick"'
+                    + ' data-name="' + esc(q.toUpperCase()) + '" data-cid="" data-term="">+ New: "' + esc(q.toUpperCase()) + '"</button>');
+                (data.rows || []).forEach(function (r) {
+                    var cid = r.concept_id || ''; var name = r.name || ''; var src = r.source || '';
+                    $dd.append('<button type="button" class="cm-dd-item cm-add-pick"'
+                        + ' data-name="' + esc(name.toUpperCase()) + '" data-cid="' + esc(cid) + '" data-term="' + esc(name) + '">'
+                        + esc(name) + (cid ? ' <span class="chip-code">' + esc(cid) + '</span>' : '')
+                        + ' ' + srcBadge(src) + '</button>');
                 });
                 $dd.show();
-                // Position relative to the input
-                var $input = $('#cm_snomed_search');
-                $dd.css({ top: $input.outerHeight(true), left: 0 });
             });
-        }, 280);
-    });
-    $(document).on('click', '#cm_snomed_dd .list-group-item', function () {
-        var name = $(this).data('name');
-        var cid  = $(this).data('cid');
-        $('#cm_snomed_concept_id').val(cid || '');
-        $('#cm_snomed_term').val(name || '');
-        $('#cm_snomed_search').val(cid ? cid + ' — ' + name : name);
-        if (name || cid) {
-            $('#cm_snomed_selected').show().html('<i class="bi bi-check-circle text-success"></i> ' + esc(name) + (cid ? ' <small class="text-muted">(' + esc(cid) + ')</small>' : ''));
-            $('#btn_cm_snomed_clear').show();
-        }
-        $('#cm_snomed_dd').hide().empty();
-    });
-    $(document).on('click', function (e) {
-        if (!$(e.target).closest('#cm_snomed_search, #cm_snomed_dd').length) { $('#cm_snomed_dd').hide(); }
-    });
-    $('#btn_cm_snomed_clear').on('click', function () {
-        $('#cm_snomed_concept_id,#cm_snomed_term,#cm_snomed_search').val('');
-        $('#cm_snomed_selected').hide().text('');
-        $(this).hide();
+        }, 250);
     });
 
-    /* ══════════════════════════════════════════════════════════════════
-       DIAGNOSIS / DISEASE MASTER
-    ══════════════════════════════════════════════════════════════════ */
-    var dmState = { start: 0, length: 25, total: 0 };
-    var dmFilterTimer = null;
+    $(document).on('mousedown', '#cm_add_dd .cm-add-pick', function (e) {
+        e.preventDefault();
+        var name = $(this).data('name'); var cid = $(this).data('cid'); var term = $(this).data('term');
+        $('#cm_add_lookup').val(name);
+        $('#cm_add_dd').hide().empty();
+        $('#cm_add_name').val(name);
+        $('#cm_add_hinglish').val('');
+        $('#cm_add_short').prop('checked', false);
+        $('#cm_add_snomed_id').val(cid || '');
+        $('#cm_add_snomed_term_val').val(term || '');
+        $('#cm_add_snomed_display').html(cid ? snomedChip(cid, term) : '<span class="text-muted small">none</span>');
+        $('#cm_add_form_row').show();
+        $('#cm_add_name').trigger('focus');
+    });
+
+    $('#btn_cm_add_cancel').on('click', function () {
+        $('#cm_add_form_row').hide();
+        $('#cm_add_lookup').val('');
+    });
+
+    $('#btn_cm_add_save').on('click', function () {
+        var name = $('#cm_add_name').val().trim().toUpperCase();
+        if (!name) { toast('Name is required', 'err'); return; }
+        apiPost('<?= base_url('Opd_prescription/complaints_master_save') ?>', {
+            Code: 0, Name: name,
+            name_hinglish: $('#cm_add_hinglish').val().trim(),
+            show_in_short: $('#cm_add_short').is(':checked') ? 1 : 0,
+            is_active: 1,
+            snomed_concept_id: $('#cm_add_snomed_id').val().trim(),
+            snomed_term: $('#cm_add_snomed_term_val').val().trim(),
+        }, function (d) {
+            if (parseInt(d.update || 0)) {
+                toast('Complaint added', 'ok');
+                $('#cm_add_form_row').hide(); $('#cm_add_lookup').val('');
+                cmLoad();
+            } else toast(d.error_text || 'Failed', 'err');
+        });
+    });
+
+    /* ══ DISEASE ═══════════════════════════════════════════════════════ */
+    var dmState = { start: 0, len: 25, total: 0 };
+    var dmSearchTimer = null;
 
     function dmLoad() {
-        var filter    = ($('#dm_filter').val() || '').trim();
-        var snomedOnly = $('#dm_snomed_only').is(':checked') ? 1 : 0;
-        var url = '<?= base_url('Opd_prescription/disease_master_data') ?>?start=' + dmState.start
-            + '&length=' + dmState.length + '&filter=' + encodeURIComponent(filter)
-            + '&snomed_only=' + snomedOnly;
-
-        $('#dm_tbody').html('<tr><td colspan="4" class="text-muted text-center">Loading…</td></tr>');
-        apiGet(url, function (data) {
-            dmState.total = parseInt(data.recordsTotal || 0);
-            $('#dm_total_badge').text(dmState.total);
-            var rows = data.data || [];
-            if (!rows.length) {
-                $('#dm_tbody').html('<tr><td colspan="4" class="text-muted text-center">No records found.</td></tr>');
-                $('#dm_page_info').text('0 records');
-                return;
-            }
-            var html = '';
-            rows.forEach(function (r) {
-                var active = (r.is_active === undefined) ? true : parseInt(r.is_active || 0) === 1;
-                html += '<tr>'
-                    + '<td>' + esc(r.Name || '') + '</td>'
-                    + '<td>' + snomedBadge(r.snomed_concept_id, r.snomed_term) + '</td>'
-                    + '<td class="text-center">' + (active
-                        ? '<span class="badge bg-success">Yes</span>'
-                        : '<span class="badge bg-secondary">No</span>') + '</td>'
-                    + '<td class="text-center">'
-                    + '<button class="btn btn-outline-primary btn-xs btn-dm-edit px-1 py-0 me-1" data-code="' + esc(r.Code) + '" title="Edit">Edit</button>'
-                    + '<button class="btn btn-outline-danger btn-xs btn-dm-del px-1 py-0" data-code="' + esc(r.Code) + '" title="Deactivate">Del</button>'
-                    + '</td></tr>';
+        var f = ($('#dm_search').val() || '').trim();
+        var s = $('#dm_snomed_only').is(':checked') ? 1 : 0;
+        apiGet('<?= base_url('Opd_prescription/disease_master_data') ?>?start=' + dmState.start
+            + '&length=' + dmState.len + '&filter=' + encodeURIComponent(f) + '&snomed_only=' + s,
+            function (data) {
+                dmState.total = parseInt(data.recordsTotal || 0);
+                $('#dm_count_badge').text(dmState.total + ' items');
+                var rows = data.data || [];
+                if (!rows.length) {
+                    $('#dm_tbody').html('<tr><td colspan="5" class="text-muted text-center py-3">No diagnoses found.</td></tr>');
+                    $('#dm_pager').text('0'); return;
+                }
+                var html = '', i = dmState.start;
+                rows.forEach(function (r) {
+                    i++;
+                    var coded  = !!r.snomed_concept_id;
+                    var active = (r.is_active === undefined) ? true : parseInt(r.is_active || 0) === 1;
+                    html += '<tr class="cm-data-row" data-code="' + esc(r.Code) + '">'
+                        + '<td class="text-muted small">' + i + '</td>'
+                        + '<td><span class="fw-semibold">' + esc(r.Name || '') + '</span></td>'
+                        + '<td id="dm_chip_' + esc(r.Code) + '">' + snomedChip(r.snomed_concept_id, r.snomed_term) + '</td>'
+                        + '<td class="text-center">' + (active
+                            ? '<span class="badge bg-success">✓</span>' : '<span class="badge bg-secondary">off</span>') + '</td>'
+                        + '<td class="text-center">'
+                        + '<button class="btn btn-outline-primary btn-sm py-0 px-1 me-1 btn-dm-snomed"'
+                        + '  data-code="' + esc(r.Code) + '" style="font-size:.72rem;">'
+                        + (coded ? '⟳' : '+') + ' SNOMED</button>'
+                        + '<button class="btn btn-outline-danger btn-sm py-0 px-1 btn-dm-del"'
+                        + '  data-code="' + esc(r.Code) + '" style="font-size:.72rem;">✕</button>'
+                        + '</td></tr>'
+                        + '<tr class="cm-expand-row" id="dm_exp_' + esc(r.Code) + '" style="display:none;">'
+                        + '<td></td><td colspan="4">'
+                        + buildAssignPanel('dm', r.Code, r.snomed_concept_id, r.snomed_term)
+                        + '</td></tr>';
+                });
+                $('#dm_tbody').html(html);
+                var from = dmState.start + 1;
+                var to   = Math.min(dmState.start + rows.length, dmState.total);
+                $('#dm_pager').text(from + '–' + to + ' / ' + dmState.total);
+                $('#dm_prev_btn').prop('disabled', dmState.start === 0);
+                $('#dm_next_btn').prop('disabled', dmState.start + dmState.len >= dmState.total);
             });
-            $('#dm_tbody').html(html);
-
-            var from = dmState.start + 1;
-            var to   = Math.min(dmState.start + rows.length, dmState.total);
-            $('#dm_page_info').text(from + '–' + to + ' of ' + dmState.total);
-            $('#dm_prev').prop('disabled', dmState.start === 0);
-            $('#dm_next').prop('disabled', dmState.start + dmState.length >= dmState.total);
-        });
     }
 
-    $('#dm_filter').on('input', function () {
-        clearTimeout(dmFilterTimer);
-        dmFilterTimer = setTimeout(function () { dmState.start = 0; dmLoad(); }, 300);
-    });
+    $('#dm_prev_btn').on('click', function () { if (dmState.start >= dmState.len) { dmState.start -= dmState.len; dmLoad(); } });
+    $('#dm_next_btn').on('click', function () { if (dmState.start + dmState.len < dmState.total) { dmState.start += dmState.len; dmLoad(); } });
+    $('#dm_search').on('input', function () { clearTimeout(dmSearchTimer); dmSearchTimer = setTimeout(function () { dmState.start = 0; dmLoad(); }, 300); });
     $('#dm_snomed_only').on('change', function () { dmState.start = 0; dmLoad(); });
-    $('#dm_prev').on('click', function () { if (dmState.start >= dmState.length) { dmState.start -= dmState.length; dmLoad(); } });
-    $('#dm_next').on('click', function () { if (dmState.start + dmState.length < dmState.total) { dmState.start += dmState.length; dmLoad(); } });
 
-    // Edit row
-    $(document).on('click', '.btn-dm-edit', function () {
-        var code = $(this).data('code');
-        apiGet('<?= base_url('Opd_prescription/disease_master_get') ?>/' + code, function (data) {
-            if (!data.row) { toast('Could not load record', 'err'); return; }
-            dmFillForm(data.row);
-        });
-    });
-
-    // Delete row
+    /* Delete diagnosis */
     $(document).on('click', '.btn-dm-del', function () {
         var code = $(this).data('code');
         if (!confirm('Deactivate this diagnosis?')) return;
-        apiPost('<?= base_url('Opd_prescription/disease_master_remove') ?>/' + code, {}, function (data) {
-            if (parseInt(data.update || 0)) { toast('Diagnosis deactivated', 'ok'); dmLoad(); }
-            else { toast(data.error_text || 'Failed', 'err'); }
+        apiPost('<?= base_url('Opd_prescription/disease_master_remove') ?>/' + code, {}, function (d) {
+            if (parseInt(d.update || 0)) { toast('Deactivated', 'ok'); dmLoad(); }
+            else toast(d.error_text || 'Failed', 'err');
         });
     });
 
-    // New button
-    $('#btn_dm_new').on('click', dmClearForm);
+    /* ── Add diagnosis via footer lookup ─────────────────────────────── */
+    var dmAddTimer = null;
 
-    function dmClearForm() {
-        $('#dm_code').val('0');
-        $('#dm_name').val('');
-        $('#dm_snomed_search,#dm_snomed_concept_id,#dm_snomed_term').val('');
-        $('#dm_snomed_selected').hide().text('');
-        $('#btn_dm_snomed_clear').hide();
-        $('#dm_is_active').prop('checked', true);
-        $('#dm_form_title').text('New Diagnosis');
-        $('#dm_msg').removeClass('text-success text-danger').addClass('text-muted').text('Ready.');
-    }
-
-    function dmFillForm(r) {
-        $('#dm_code').val(r.Code || 0);
-        $('#dm_name').val((r.Name || '').toUpperCase());
-        $('#dm_is_active').prop('checked', (r.is_active === undefined) ? true : parseInt(r.is_active || 1) === 1);
-        // SNOMED
-        var scid = r.snomed_concept_id || '';
-        var sterm = r.snomed_term || '';
-        $('#dm_snomed_concept_id').val(scid);
-        $('#dm_snomed_term').val(sterm);
-        if (scid) {
-            $('#dm_snomed_search').val(sterm || scid);
-            $('#dm_snomed_selected').show().html('<i class="bi bi-check-circle text-success"></i> ' + esc(sterm || scid) + ' <small class="text-muted">(' + esc(scid) + ')</small>');
-            $('#btn_dm_snomed_clear').show();
-        } else {
-            $('#dm_snomed_search').val('');
-            $('#dm_snomed_selected').hide().text('');
-            $('#btn_dm_snomed_clear').hide();
-        }
-        $('#dm_form_title').text('Edit: ' + esc(r.Name || ''));
-        $('#dm_msg').removeClass('text-success text-danger').addClass('text-muted').text('Loaded.');
-        $('html,body').animate({ scrollTop: $('#dm_form_title').offset().top - 80 }, 200);
-    }
-
-    // Save
-    $('#btn_dm_save').on('click', function () {
-        var name = $('#dm_name').val().trim().toUpperCase();
-        if (!name) { $('#dm_msg').removeClass('text-muted text-success').addClass('text-danger').text('Name is required.'); return; }
-        var payload = {
-            Code:              $('#dm_code').val(),
-            Name:              name,
-            snomed_concept_id: $('#dm_snomed_concept_id').val().trim(),
-            snomed_term:       $('#dm_snomed_term').val().trim(),
-            is_active:         $('#dm_is_active').is(':checked') ? 1 : 0,
-        };
-        $('#btn_dm_save').prop('disabled', true).text('Saving…');
-        apiPost('<?= base_url('Opd_prescription/disease_master_save') ?>', payload, function (data) {
-            $('#btn_dm_save').prop('disabled', false).text('Save');
-            if (parseInt(data.update || 0)) {
-                $('#dm_msg').removeClass('text-muted text-danger').addClass('text-success').text(data.error_text || 'Saved');
-                toast(data.error_text || 'Saved', 'ok');
-                dmLoad();
-            } else {
-                $('#dm_msg').removeClass('text-muted text-success').addClass('text-danger').text(data.error_text || 'Failed');
-                toast(data.error_text || 'Failed', 'err');
-            }
-        });
-    });
-
-    $('#btn_dm_reset').on('click', dmClearForm);
-
-    // SNOMED search for Diagnosis (uses provisional_diagnosis_search → searchDiagnosis)
-    var dmSnomedTimer = null;
-    $('#dm_snomed_search').on('input', function () {
+    $('#dm_add_lookup').on('input', function () {
         var q = $(this).val().trim();
-        if (q.length < 2) { $('#dm_snomed_dd').hide().empty(); return; }
-        clearTimeout(dmSnomedTimer);
-        dmSnomedTimer = setTimeout(function () {
+        $('#dm_add_form_row').hide();
+        if (q.length < 1) { $('#dm_add_dd').hide().empty(); return; }
+        clearTimeout(dmAddTimer);
+        dmAddTimer = setTimeout(function () {
             $.getJSON('<?= base_url('Opd_prescription/provisional_diagnosis_search') ?>?q=' + encodeURIComponent(q), function (data) {
-                var rows = data.rows || [];
-                var $dd = $('#dm_snomed_dd').empty();
-                if (!rows.length) { $dd.hide(); return; }
-                rows.forEach(function (r) {
-                    var cid   = r.snomed_concept_id || '';
-                    var name  = r.name || '';
-                    var src   = r.source || '';
-                    var label = esc(name) + (cid ? ' <small class="text-muted">(' + esc(cid) + ')</small>' : '')
-                        + ' <small class="badge bg-' + (src === 'csnotk' || src === 'snomed' ? 'info text-dark' : 'secondary') + ' ms-1">' + esc(src) + '</small>';
-                    $dd.append('<button type="button" class="list-group-item list-group-item-action py-1 px-2 small"'
-                        + ' data-name="' + esc(name) + '" data-cid="' + esc(cid) + '">' + label + '</button>');
+                var $dd = $('#dm_add_dd').empty();
+                $dd.append('<button type="button" class="cm-dd-item fw-semibold text-success dm-add-pick"'
+                    + ' data-name="' + esc(q.toUpperCase()) + '" data-cid="" data-term="">+ New: "' + esc(q.toUpperCase()) + '"</button>');
+                (data.rows || []).forEach(function (r) {
+                    var cid = r.snomed_concept_id || ''; var name = r.name || ''; var src = r.source || '';
+                    $dd.append('<button type="button" class="cm-dd-item dm-add-pick"'
+                        + ' data-name="' + esc(name.toUpperCase()) + '" data-cid="' + esc(cid) + '" data-term="' + esc(name) + '">'
+                        + esc(name) + (cid ? ' <span class="chip-code">' + esc(cid) + '</span>' : '')
+                        + ' ' + srcBadge(src) + '</button>');
                 });
                 $dd.show();
             });
-        }, 280);
-    });
-    $(document).on('click', '#dm_snomed_dd .list-group-item', function () {
-        var name = $(this).data('name');
-        var cid  = $(this).data('cid');
-        $('#dm_snomed_concept_id').val(cid || '');
-        $('#dm_snomed_term').val(name || '');
-        $('#dm_snomed_search').val(cid ? cid + ' — ' + name : name);
-        if (name || cid) {
-            $('#dm_snomed_selected').show().html('<i class="bi bi-check-circle text-success"></i> ' + esc(name) + (cid ? ' <small class="text-muted">(' + esc(cid) + ')</small>' : ''));
-            $('#btn_dm_snomed_clear').show();
-        }
-        $('#dm_snomed_dd').hide().empty();
-    });
-    $(document).on('click', function (e) {
-        if (!$(e.target).closest('#dm_snomed_search, #dm_snomed_dd').length) { $('#dm_snomed_dd').hide(); }
-    });
-    $('#btn_dm_snomed_clear').on('click', function () {
-        $('#dm_snomed_concept_id,#dm_snomed_term,#dm_snomed_search').val('');
-        $('#dm_snomed_selected').hide().text('');
-        $(this).hide();
+        }, 250);
     });
 
-    /* ── Init ───────────────────────────────────────────────────────── */
+    $(document).on('mousedown', '#dm_add_dd .dm-add-pick', function (e) {
+        e.preventDefault();
+        var name = $(this).data('name'); var cid = $(this).data('cid'); var term = $(this).data('term');
+        $('#dm_add_lookup').val(name);
+        $('#dm_add_dd').hide().empty();
+        $('#dm_add_name').val(name);
+        $('#dm_add_snomed_id').val(cid || '');
+        $('#dm_add_snomed_term_val').val(term || '');
+        $('#dm_add_snomed_display').html(cid ? snomedChip(cid, term) : '<span class="text-muted small">none</span>');
+        $('#dm_add_form_row').show();
+        $('#dm_add_name').trigger('focus');
+    });
+
+    $('#btn_dm_add_cancel').on('click', function () {
+        $('#dm_add_form_row').hide(); $('#dm_add_lookup').val('');
+    });
+
+    $('#btn_dm_add_save').on('click', function () {
+        var name = $('#dm_add_name').val().trim().toUpperCase();
+        if (!name) { toast('Name is required', 'err'); return; }
+        apiPost('<?= base_url('Opd_prescription/disease_master_save') ?>', {
+            Code: 0, Name: name, is_active: 1,
+            snomed_concept_id: $('#dm_add_snomed_id').val().trim(),
+            snomed_term: $('#dm_add_snomed_term_val').val().trim(),
+        }, function (d) {
+            if (parseInt(d.update || 0)) {
+                toast('Diagnosis added', 'ok');
+                $('#dm_add_form_row').hide(); $('#dm_add_lookup').val('');
+                dmLoad();
+            } else toast(d.error_text || 'Failed', 'err');
+        });
+    });
+
+    /* ── Init ─────────────────────────────────────────────────────────── */
     cmLoad();
 
 }());
 </script>
+
