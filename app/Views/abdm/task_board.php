@@ -999,15 +999,39 @@
         var saveBtn  = e.target.closest('.fhir-complaint-save');
         var ddItem   = e.target.closest('.fhir-snomed-dd-item');
 
+        var diagEditBtn  = e.target.closest('.fhir-diag-edit');
+        var diagCancelBtn = e.target.closest('.fhir-diag-cancel');
+        var diagSaveBtn   = e.target.closest('.fhir-diag-save');
+        var diagDdItem    = e.target.closest('.fhir-diag-dd-item');
+
         if (editBtn) {
             var panel = fhirFormView.querySelector('.fhir-edit-panel[data-idx="' + editBtn.dataset.idx + '"]');
             if (!panel) return;
             // Close others
-            fhirFormView.querySelectorAll('.fhir-edit-panel').forEach(function(p) { if (p !== panel) p.style.display = 'none'; });
+            fhirFormView.querySelectorAll('.fhir-edit-panel,.fhir-diag-panel').forEach(function(p) { if (p !== panel) p.style.display = 'none'; });
             panel.style.display = panel.style.display === 'none' ? '' : 'none';
+        }
+        if (diagEditBtn) {
+            var dPanel = fhirFormView.querySelector('.fhir-diag-panel[data-didx="' + diagEditBtn.dataset.didx + '"]');
+            if (!dPanel) return;
+            fhirFormView.querySelectorAll('.fhir-edit-panel,.fhir-diag-panel').forEach(function(p) { if (p !== dPanel) p.style.display = 'none'; });
+            dPanel.style.display = dPanel.style.display === 'none' ? '' : 'none';
         }
         if (cancelBtn) {
             cancelBtn.closest('.fhir-edit-panel').style.display = 'none';
+        }
+        if (diagCancelBtn) {
+            diagCancelBtn.closest('.fhir-diag-panel').style.display = 'none';
+        }
+        if (diagDdItem) {
+            var dPanel2 = diagDdItem.closest('.fhir-diag-panel');
+            dPanel2.querySelector('.fhir-diag-id').value     = diagDdItem.dataset.id   || '';
+            dPanel2.querySelector('.fhir-diag-term').value   = diagDdItem.dataset.term || '';
+            dPanel2.querySelector('.fhir-diag-search').value = diagDdItem.dataset.term || '';
+            dPanel2.querySelector('.fhir-diag-dd').style.display = 'none';
+            var dSel = dPanel2.querySelector('.fhir-diag-selected');
+            dSel.textContent = '\u2713 ' + (diagDdItem.dataset.id || '') + ' \u2014 ' + (diagDdItem.dataset.term || '');
+            dSel.style.display = '';
         }
         if (ddItem) {
             var panel2 = ddItem.closest('.fhir-edit-panel');
@@ -1065,7 +1089,6 @@
                         }
                     }
                     panel3.style.display = 'none';
-                    // Refresh quality badges
                 } else {
                     alert(res.error_text || 'Save failed');
                 }
@@ -1073,9 +1096,91 @@
             .catch(function(e){ alert('Error: ' + e.message); })
             .finally(function(){ saveBtn.disabled = false; saveBtn.textContent = 'Save'; });
         }
+        if (diagSaveBtn) {
+            var dPanel3  = diagSaveBtn.closest('.fhir-diag-panel');
+            var dId      = dPanel3.querySelector('.fhir-diag-id').value.trim();
+            var dTerm    = dPanel3.querySelector('.fhir-diag-term').value.trim();
+            var dText    = dPanel3.dataset.diagText || '';
+            var dType    = dPanel3.dataset.diagType || 'provisional';
+            if (!dId && !dTerm) { dTerm = dPanel3.querySelector('.fhir-diag-search').value.trim(); }
+            var dBody = new URLSearchParams({
+                opd_id: _fhirOpdId,
+                opd_session_id: _fhirSessionId,
+                diagnosis_type: dType,
+                diagnosis_text: dText,
+                snomed_concept_id: dId,
+                snomed_term: dTerm
+            });
+            dBody.append(csrfName, csrfHash);
+            diagSaveBtn.disabled = true;
+            diagSaveBtn.textContent = 'Saving\u2026';
+            fetch('<?= base_url('Opd_prescription/fhir_diagnosis_recode') ?>', {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: dBody.toString()
+            })
+            .then(function(r){ return r.json(); })
+            .then(function(res){
+                if (res.update == 1) {
+                    if (res.csrfName && res.csrfHash) { csrfName = res.csrfName; csrfHash = res.csrfHash; }
+                    var dLi = dPanel3.closest('li');
+                    if (dLi && dId) {
+                        var dExisting = dLi.querySelector('.fhir-diag-snomed-badge');
+                        if (dExisting) { dExisting.textContent = 'SNOMED\u00a0' + dId; }
+                        else {
+                            var dBadge = document.createElement('span');
+                            dBadge.className = 'badge bg-success ms-1 fhir-diag-snomed-badge';
+                            dBadge.style.fontSize = '.7rem';
+                            dBadge.textContent = 'SNOMED\u00a0' + dId;
+                            var dStrong = dLi.querySelector('strong');
+                            if (dStrong) dStrong.insertAdjacentElement('afterend', dBadge);
+                        }
+                    }
+                    dPanel3.style.display = 'none';
+                } else {
+                    alert(res.error_text || 'Save failed');
+                }
+            })
+            .catch(function(e){ alert('Error: ' + e.message); })
+            .finally(function(){ diagSaveBtn.disabled = false; diagSaveBtn.textContent = 'Save'; });
+        }
     });
     fhirFormView.addEventListener('input', function(e) {
         var searchInput = e.target.closest('.fhir-snomed-search');
+        var diagSearch  = e.target.closest('.fhir-diag-search');
+        if (!searchInput && !diagSearch) return;
+        if (diagSearch) {
+            var dPanel4 = diagSearch.closest('.fhir-diag-panel');
+            var dDd     = dPanel4.querySelector('.fhir-diag-dd');
+            var dQ      = diagSearch.value.trim();
+            if (dQ.length < 2) { dDd.style.display = 'none'; return; }
+            clearTimeout(_editTimer);
+            _editTimer = setTimeout(function() {
+                fetch('<?= base_url('Opd_prescription/complaints_search') ?>?q=' + encodeURIComponent(dQ), {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                .then(function(r){ return r.json(); })
+                .then(function(res){
+                    dDd.innerHTML = '';
+                    var rows = (res.rows || res.results || []);
+                    if (!rows.length) { dDd.style.display = 'none'; return; }
+                    rows.slice(0, 10).forEach(function(row) {
+                        var id   = row.concept_id || row.snomed_concept_id || '';
+                        var name = row.name || row.term || row.snomed_term || '';
+                        var btn  = document.createElement('button');
+                        btn.type = 'button';
+                        btn.className = 'list-group-item list-group-item-action py-1 px-2 fhir-diag-dd-item';
+                        btn.dataset.id   = id;
+                        btn.dataset.term = name;
+                        btn.innerHTML = '<small>' + hesc(name) + (id ? ' <span class="text-muted">' + hesc(id) + '</span>' : '') + '</small>';
+                        dDd.appendChild(btn);
+                    });
+                    dDd.style.display = '';
+                })
+                .catch(function(){ dDd.style.display = 'none'; });
+            }, 280);
+            return;
+        }
         if (!searchInput) return;
         var panel = searchInput.closest('.fhir-edit-panel');
         var dd    = panel.querySelector('.fhir-snomed-dd');
@@ -1108,11 +1213,12 @@
         }, 280);
     });
     fhirFormView.addEventListener('focusout', function(e) {
-        if (!e.target.closest('.fhir-edit-panel')) return;
-        // Delay hiding so click on dd item registers first
+        var inPanel  = e.target.closest('.fhir-edit-panel');
+        var inDPanel = e.target.closest('.fhir-diag-panel');
+        if (!inPanel && !inDPanel) return;
         setTimeout(function() {
-            var dd = e.target.closest('.fhir-edit-panel');
-            if (dd) { var d = dd.querySelector('.fhir-snomed-dd'); if (d) d.style.display = 'none'; }
+            if (inPanel) { var d = inPanel.querySelector('.fhir-snomed-dd'); if (d) d.style.display = 'none'; }
+            if (inDPanel) { var dd2 = inDPanel.querySelector('.fhir-diag-dd'); if (dd2) dd2.style.display = 'none'; }
         }, 200);
     });
 
@@ -1185,23 +1291,24 @@
                 html += '<li class="mb-2">';
                 html += '<div class="d-flex align-items-start gap-2">';
                 html += '<div class="flex-grow-1">';
-                html += '<strong>' + hesc(display || codeText) + '</strong>';
+                html += '<strong>' + hesc(codeText) + '</strong>';
                 if (snomed)  html += ' <span class="badge bg-info text-dark fhir-snomed-badge" style="font-size:.7rem;">SNOMED&nbsp;' + hesc(snomed) + '</span>';
                 if (sevText) html += ' <span class="badge bg-secondary" style="font-size:.7rem;">' + hesc(sevText) + '</span>';
                 if (note)    html += ' <small class="text-muted">(' + hesc(note) + ')</small>';
+                if (display && display !== codeText) html += ' <small class="text-secondary d-block">SNOMED term: ' + hesc(display) + '</small>';
                 html += '</div>';
                 html += '<button type="button" class="btn btn-outline-secondary fhir-complaint-edit flex-shrink-0" data-idx="' + idx + '" style="font-size:.7rem;padding:1px 6px;">Edit</button>';
                 html += '</div>';
                 // inline edit panel
-                html += '<div class="fhir-edit-panel border rounded p-2 mt-1 bg-light" data-idx="' + idx + '" data-complaint-text="' + hesc(display || codeText) + '" style="display:none;">';
-                html += '<div class="mb-1 small text-muted">Search SNOMED CT and assign code:</div>';
+                html += '<div class="fhir-edit-panel border rounded p-2 mt-1 bg-light" data-idx="' + idx + '" data-complaint-text="' + hesc(codeText) + '" style="display:none;">';
+                html += '<div class="mb-1 small text-muted">Doctor wrote: <em>' + hesc(codeText) + '</em> &mdash; assign SNOMED code:</div>';
                 html += '<div class="position-relative mb-1">';
-                html += '<input type="text" class="form-control form-control-sm fhir-snomed-search" placeholder="Type to search SNOMED…" value="' + hesc(display || codeText) + '">';
+                html += '<input type="text" class="form-control form-control-sm fhir-snomed-search" placeholder="Type to search SNOMED…" value="' + hesc(codeText) + '">';
                 html += '<div class="list-group shadow position-absolute w-100 fhir-snomed-dd" style="z-index:2000;display:none;max-height:180px;overflow-y:auto;"></div>';
                 html += '</div>';
                 html += '<div class="fhir-snomed-selected small text-success mb-1" style="display:none;"></div>';
                 html += '<input type="hidden" class="fhir-snomed-id" value="' + hesc(snomed) + '">';
-                html += '<input type="hidden" class="fhir-snomed-term" value="' + hesc(display || codeText) + '">';
+                html += '<input type="hidden" class="fhir-snomed-term" value="' + hesc(codeText) + '">';
                 html += '<div class="d-flex gap-2"><button type="button" class="btn btn-sm btn-primary fhir-complaint-save">Save</button>';
                 html += '<button type="button" class="btn btn-sm btn-outline-secondary fhir-complaint-cancel">Cancel</button></div>';
                 html += '</div>';
@@ -1214,12 +1321,36 @@
         if (diagnoses.length) {
             html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">Diagnosis</small></div><div class="card-body py-2">';
             html += '<ul class="mb-0 ps-3">';
-            diagnoses.forEach(function(c) {
-                var text   = (c.code || {}).text || '';
-                var coding = (((c.code || {}).coding) || [])[0] || {};
-                var snomed = coding.code || '';
-                html += '<li class="mb-1"><strong>' + hesc(text) + '</strong>';
-                if (snomed) html += ' <span class="badge bg-success" style="font-size:.7rem;">SNOMED&nbsp;' + hesc(snomed) + '</span>';
+            diagnoses.forEach(function(c, didx) {
+                var text    = (c.code || {}).text || '';
+                var coding  = (((c.code || {}).coding) || [])[0] || {};
+                var snomed  = coding.code || '';
+                var display = coding.display || text;
+                var verif   = (((c.verificationStatus || {}).coding) || [])[0] || {};
+                var isProvisional = (verif.code || 'provisional') !== 'confirmed';
+                var diagType = isProvisional ? 'provisional' : 'confirmed';
+                html += '<li class="mb-2">';
+                html += '<div class="d-flex align-items-start gap-2">';
+                html += '<div class="flex-grow-1">';
+                html += '<strong>' + hesc(text) + '</strong>';
+                if (snomed)  html += ' <span class="badge bg-success fhir-diag-snomed-badge" style="font-size:.7rem;">SNOMED&nbsp;' + hesc(snomed) + '</span>';
+                html += ' <span class="badge ' + (isProvisional ? 'bg-warning text-dark' : 'bg-success-subtle text-success-emphasis border border-success') + '" style="font-size:.7rem;">' + (isProvisional ? 'Provisional' : 'Confirmed') + '</span>';
+                if (display && display !== text) html += ' <small class="text-secondary d-block">SNOMED term: ' + hesc(display) + '</small>';
+                html += '</div>';
+                html += '<button type="button" class="btn btn-outline-secondary fhir-diag-edit flex-shrink-0" data-didx="' + didx + '" style="font-size:.7rem;padding:1px 6px;">Edit</button>';
+                html += '</div>';
+                html += '<div class="fhir-diag-panel border rounded p-2 mt-1 bg-light" data-didx="' + didx + '" data-diag-text="' + hesc(text) + '" data-diag-type="' + hesc(diagType) + '" style="display:none;">';
+                html += '<div class="mb-1 small text-muted">Doctor wrote: <em>' + hesc(text) + '</em> &mdash; assign SNOMED code:</div>';
+                html += '<div class="position-relative mb-1">';
+                html += '<input type="text" class="form-control form-control-sm fhir-diag-search" placeholder="Type to search SNOMED\u2026" value="' + hesc(text) + '">';
+                html += '<div class="list-group shadow position-absolute w-100 fhir-diag-dd" style="z-index:2000;display:none;max-height:180px;overflow-y:auto;"></div>';
+                html += '</div>';
+                html += '<div class="fhir-diag-selected small text-success mb-1" style="display:none;"></div>';
+                html += '<input type="hidden" class="fhir-diag-id" value="' + hesc(snomed) + '">';
+                html += '<input type="hidden" class="fhir-diag-term" value="' + hesc(display || text) + '">';
+                html += '<div class="d-flex gap-2"><button type="button" class="btn btn-sm btn-primary fhir-diag-save">Save</button>';
+                html += '<button type="button" class="btn btn-sm btn-outline-secondary fhir-diag-cancel">Cancel</button></div>';
+                html += '</div>';
                 html += '</li>';
             });
             html += '</ul></div></div>';

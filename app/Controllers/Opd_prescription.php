@@ -4728,6 +4728,75 @@ class Opd_prescription extends BaseController
         ]);
     }
 
+    public function fhir_diagnosis_recode()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(403)->setJSON(['error_text' => 'Forbidden']);
+        }
+        $opdId      = (int) $this->request->getPost('opd_id');
+        $sessionId  = (int) $this->request->getPost('opd_session_id');
+        $diagType   = trim((string) $this->request->getPost('diagnosis_type')); // confirmed|provisional
+        $diagText   = trim((string) $this->request->getPost('diagnosis_text'));
+        $snomedId   = trim((string) $this->request->getPost('snomed_concept_id'));
+        $snomedTerm = trim((string) $this->request->getPost('snomed_term'));
+
+        if ($opdId <= 0 || $diagText === '') {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid parameters']);
+        }
+        if (! $this->db->tableExists('opd_prescription')) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Table missing']);
+        }
+
+        $row = [];
+        if ($sessionId > 0) {
+            $row = $this->db->table('opd_prescription')
+                ->where('opd_session_id', $sessionId)->where('opd_id', $opdId)
+                ->get(1)->getRowArray() ?? [];
+        }
+        if (empty($row)) {
+            $row = $this->db->table('opd_prescription')
+                ->where('opd_id', $opdId)->orderBy('id', 'DESC')
+                ->get(1)->getRowArray() ?? [];
+        }
+        if (empty($row)) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Prescription not found']);
+        }
+
+        $prescId = (int) $row['id'];
+        $fields  = $this->db->getFieldNames('opd_prescription') ?? [];
+
+        if ($diagType === 'provisional') {
+            $idCol   = 'provisional_diagnosis_snomed_id';
+            $termCol = 'provisional_diagnosis_snomed_term';
+            $srcCol  = 'provisional_diagnosis_snomed_source';
+        } else {
+            $idCol   = 'diagnosis_snomed_id';
+            $termCol = 'diagnosis_snomed_term';
+            $srcCol  = 'diagnosis_snomed_source';
+        }
+
+        $update = [];
+        if (in_array($idCol, $fields, true))   $update[$idCol]   = $snomedId;
+        if (in_array($termCol, $fields, true)) $update[$termCol] = $snomedTerm !== '' ? $snomedTerm : $diagText;
+        if (in_array($srcCol, $fields, true))  $update[$srcCol]  = $snomedId !== '' ? 'snomed' : 'local';
+
+        if (empty($update)) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'No columns to update']);
+        }
+
+        $this->db->table('opd_prescription')->where('id', $prescId)->update($update);
+
+        return $this->response->setJSON([
+            'update'           => 1,
+            'error_text'       => 'Saved',
+            'presc_id'         => $prescId,
+            'snomed_concept_id'=> $snomedId,
+            'snomed_term'      => $snomedTerm,
+            'csrfName'         => csrf_token(),
+            'csrfHash'         => csrf_hash(),
+        ]);
+    }
+
     public function advice_search()
     {
         $q = trim((string) $this->request->getGet('q'));
