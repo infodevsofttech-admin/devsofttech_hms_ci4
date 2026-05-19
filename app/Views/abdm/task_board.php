@@ -321,9 +321,20 @@
                 </div>
             </div>
             <div class="modal-body p-0">
-                <div class="px-3 py-2 small" id="fhirModalMeta">Loading...</div>
-                <div class="px-3 pb-2" id="fhirModalQuality" style="display:none;"></div>
-                <pre id="fhirModalJson" style="margin:0; max-height:65vh; overflow:auto; background:#0b1020; color:#d9e2ff; padding:16px; border-radius:0;">{}</pre>
+                <div class="d-flex align-items-center gap-3 px-3 pt-2 pb-0 border-bottom">
+                    <div class="flex-grow-1 small" id="fhirModalMeta">Loading...</div>
+                    <ul class="nav nav-tabs border-0" id="fhirViewTabs" style="margin-bottom:-1px;">
+                        <li class="nav-item">
+                            <button class="nav-link active py-1 px-3" id="fhirTabForm" type="button">Form View</button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link py-1 px-3" id="fhirTabJson" type="button">JSON</button>
+                        </li>
+                    </ul>
+                </div>
+                <div class="px-3 pb-2 pt-1" id="fhirModalQuality" style="display:none;"></div>
+                <div id="fhirFormView" style="overflow-y:auto;max-height:62vh;padding:16px;"></div>
+                <pre id="fhirModalJson" style="display:none;margin:0;max-height:62vh;overflow:auto;background:#0b1020;color:#d9e2ff;padding:16px;border-radius:0;">{}</pre>
             </div>
         </div>
     </div>
@@ -957,8 +968,169 @@
     var fhirModalMeta      = document.getElementById('fhirModalMeta');
     var fhirModalQuality   = document.getElementById('fhirModalQuality');
     var fhirModalJson      = document.getElementById('fhirModalJson');
+    var fhirFormView       = document.getElementById('fhirFormView');
+    var fhirTabForm        = document.getElementById('fhirTabForm');
+    var fhirTabJson        = document.getElementById('fhirTabJson');
     var fhirModalDataBadge = document.getElementById('fhirModalDataBadge');
     var fhirModalHttpBadge = document.getElementById('fhirModalHttpBadge');
+
+    // ── Tab switching ──────────────────────────────────────────────────
+    fhirTabForm.addEventListener('click', function () {
+        fhirTabForm.classList.add('active');
+        fhirTabJson.classList.remove('active');
+        fhirFormView.style.display = '';
+        fhirModalJson.style.display = 'none';
+    });
+    fhirTabJson.addEventListener('click', function () {
+        fhirTabJson.classList.add('active');
+        fhirTabForm.classList.remove('active');
+        fhirModalJson.style.display = '';
+        fhirFormView.style.display = 'none';
+    });
+
+    // ── Render FHIR bundle as human-readable form ──────────────────────
+    function hesc(s) {
+        return String(s || '')
+            .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function fmtDate(s) {
+        if (!s) return '';
+        var d = s.toString().substring(0, 10).split('-');
+        return d.length === 3 ? d[2]+'/'+d[1]+'/'+d[0] : s.toString().substring(0,16);
+    }
+    function renderFhirBundleForm(bundle) {
+        var resources = (bundle.entry || []).map(function(e) { return e.resource; }).filter(Boolean);
+        function byType(t) { return resources.filter(function(r){ return r.resourceType === t; }); }
+        var patient       = byType('Patient')[0];
+        var encounter     = byType('Encounter')[0];
+        var practitioner  = byType('Practitioner')[0];
+        var organization  = byType('Organization')[0];
+        var allConditions = byType('Condition');
+        var observations  = byType('Observation');
+        var medications   = byType('MedicationRequest');
+        var serviceReqs   = byType('ServiceRequest');
+
+        var complaints = allConditions.filter(function(c) {
+            return (c.category || []).some(function(cat) { return (cat.text || '').toLowerCase().includes('complaint'); });
+        });
+        var diagnoses = allConditions.filter(function(c) {
+            return !(c.category || []).some(function(cat) { return (cat.text || '').toLowerCase().includes('complaint'); });
+        });
+
+        var html = '';
+
+        // ── Patient header
+        if (patient) {
+            var pname = ((patient.name || [{}])[0].text || '').trim();
+            var gender = (patient.gender || '').toUpperCase().charAt(0);
+            var dob = fmtDate(patient.birthDate);
+            var abha = (patient.identifier || []).find(function(i){ return (i.system||'').includes('abha'); });
+            var docName = practitioner ? ((practitioner.name || [{}])[0].text || '') : '';
+            var orgName = organization ? (organization.name || '') : '';
+            var encStart = encounter ? fmtDate((encounter.period || {}).start || '') : '';
+            html += '<div class="card border-primary mb-3">';
+            html += '<div class="card-header bg-primary text-white py-2 d-flex flex-wrap gap-2 align-items-center">';
+            html += '<strong class="fs-6">' + hesc(pname || 'Unknown Patient') + '</strong>';
+            if (gender) html += '<span class="badge bg-white text-primary">' + hesc(gender) + '</span>';
+            if (dob)    html += '<small class="opacity-75">DOB: ' + hesc(dob) + '</small>';
+            if (abha)   html += '<span class="badge bg-warning text-dark ms-auto">ABHA: ' + hesc(abha.value) + '</span>';
+            html += '</div>';
+            html += '<div class="card-body py-2 d-flex flex-wrap gap-3 small">';
+            if (docName) html += '<span><i class="bi bi-person-badge me-1"></i><strong>' + hesc(docName) + '</strong></span>';
+            if (encStart) html += '<span><i class="bi bi-calendar2 me-1"></i>' + hesc(encStart) + '</span>';
+            if (orgName) html += '<span><i class="bi bi-hospital me-1"></i>' + hesc(orgName) + '</span>';
+            html += '</div></div>';
+        }
+
+        // ── Complaints
+        if (complaints.length) {
+            html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">Chief Complaints</small></div><div class="card-body py-2">';
+            html += '<ul class="mb-0 ps-3">';
+            complaints.forEach(function(c) {
+                var codeText = (c.code || {}).text || '';
+                var coding   = (((c.code || {}).coding) || [])[0] || {};
+                var snomed   = coding.code || '';
+                var display  = coding.display || codeText;
+                var sev      = ((c.severity || {}).coding || [{}])[0];
+                var sevText  = (sev && sev.display) ? sev.display : ((c.severity || {}).text || '');
+                var note     = ((c.note || [{}])[0] || {}).text || '';
+                html += '<li class="mb-1">';
+                html += '<strong>' + hesc(display || codeText) + '</strong>';
+                if (snomed)  html += ' <span class="badge bg-info text-dark" style="font-size:.7rem;">SNOMED&nbsp;' + hesc(snomed) + '</span>';
+                if (sevText) html += ' <span class="badge bg-secondary" style="font-size:.7rem;">' + hesc(sevText) + '</span>';
+                if (note)    html += ' <small class="text-muted">(' + hesc(note) + ')</small>';
+                html += '</li>';
+            });
+            html += '</ul></div></div>';
+        }
+
+        // ── Diagnoses
+        if (diagnoses.length) {
+            html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">Diagnosis</small></div><div class="card-body py-2">';
+            html += '<ul class="mb-0 ps-3">';
+            diagnoses.forEach(function(c) {
+                var text   = (c.code || {}).text || '';
+                var coding = (((c.code || {}).coding) || [])[0] || {};
+                var snomed = coding.code || '';
+                html += '<li class="mb-1"><strong>' + hesc(text) + '</strong>';
+                if (snomed) html += ' <span class="badge bg-success" style="font-size:.7rem;">SNOMED&nbsp;' + hesc(snomed) + '</span>';
+                html += '</li>';
+            });
+            html += '</ul></div></div>';
+        }
+
+        // ── Vitals
+        if (observations.length) {
+            var loincLabel = { '8867-4':'HR','59408-5':'SpO₂','8480-6':'BP Sys','8462-4':'BP Dia','8310-5':'Temp','9279-1':'RR','8302-2':'Height','29463-7':'Weight' };
+            html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">Vitals</small></div><div class="card-body py-2"><div class="d-flex flex-wrap gap-2">';
+            observations.forEach(function(o) {
+                var loinc = (((o.code || {}).coding) || [])[0] || {};
+                var label = loincLabel[loinc.code] || (o.code || {}).text || loinc.display || '';
+                var val   = (o.valueQuantity || {}).value;
+                var unit  = (o.valueQuantity || {}).unit || '';
+                if (val === undefined || val === null) return;
+                html += '<div class="border rounded px-2 py-1 text-center" style="min-width:80px;">';
+                html += '<div class="small text-muted" style="font-size:.7rem;">' + hesc(label) + '</div>';
+                html += '<div class="fw-bold">' + hesc(val) + '</div>';
+                html += '<div class="text-muted" style="font-size:.7rem;">' + hesc(unit);
+                if (loinc.code) html += ' <span class="text-secondary" style="font-size:.65rem;">'+hesc(loinc.code)+'</span>';
+                html += '</div></div>';
+            });
+            html += '</div></div></div>';
+        }
+
+        // ── Medications
+        if (medications.length) {
+            html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">Medications</small></div><div class="card-body py-2">';
+            html += '<ol class="mb-0 ps-3">';
+            medications.forEach(function(m) {
+                var drug   = (m.medicationCodeableConcept || {}).text || '';
+                var di     = (m.dosageInstruction || [{}])[0] || {};
+                var dosage = di.text || '';
+                var method = (di.method || {}).text || '';
+                html += '<li class="mb-1"><strong>' + hesc(drug) + '</strong>';
+                if (dosage) html += ' <span class="text-muted small">— ' + hesc(dosage) + (method ? ' (' + hesc(method) + ')' : '') + '</span>';
+                html += '</li>';
+            });
+            html += '</ol></div></div>';
+        }
+
+        // ── Investigations
+        if (serviceReqs.length) {
+            html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">Investigations</small></div><div class="card-body py-2">';
+            html += '<ul class="mb-0 ps-3">';
+            serviceReqs.forEach(function(s) {
+                var text  = (s.code || {}).text || '';
+                var loinc = (((s.code || {}).coding) || [])[0] || {};
+                html += '<li class="mb-1"><strong>' + hesc(text) + '</strong>';
+                if (loinc.code) html += ' <span class="badge bg-info text-dark" style="font-size:.7rem;">LOINC&nbsp;' + hesc(loinc.code) + '</span>';
+                html += '</li>';
+            });
+            html += '</ul></div></div>';
+        }
+
+        return html || '<p class="text-muted p-3">No structured clinical data found in bundle.</p>';
+    }
 
     function fhirCodeQuality(bundle) {
         var entries = (bundle && bundle.entry) ? bundle.entry : [];
@@ -1004,10 +1176,14 @@
     }
 
     function openFhirModal(url, title) {
-        if (fhirModalTitle)     fhirModalTitle.textContent = title || 'FHIR Preview';
-        if (fhirModalMeta)      { fhirModalMeta.textContent = 'Loading...'; fhirModalMeta.className = 'px-3 py-2 small text-muted'; }
-        if (fhirModalQuality)   { fhirModalQuality.innerHTML = ''; fhirModalQuality.style.display = 'none'; }
-        if (fhirModalJson)      fhirModalJson.textContent = '{\n  "loading": true\n}';
+        if (fhirModalTitle)   fhirModalTitle.textContent = title || 'FHIR Preview';
+        if (fhirModalMeta)    { fhirModalMeta.textContent = 'Loading...'; fhirModalMeta.className = 'flex-grow-1 small text-muted'; }
+        if (fhirModalQuality) { fhirModalQuality.innerHTML = ''; fhirModalQuality.style.display = 'none'; }
+        if (fhirFormView)     fhirFormView.innerHTML = '<p class="text-muted p-3">Loading...</p>';
+        if (fhirModalJson)    fhirModalJson.textContent = '{\n  "loading": true\n}';
+        // Reset to Form View tab
+        fhirTabForm.classList.add('active');    fhirTabJson.classList.remove('active');
+        fhirFormView.style.display = '';        fhirModalJson.style.display = 'none';
         if (fhirModalDataBadge) { fhirModalDataBadge.className = 'badge bg-warning text-dark'; fhirModalDataBadge.textContent = 'CHECKING'; }
         if (fhirModalHttpBadge) { fhirModalHttpBadge.className = 'badge bg-warning text-dark'; fhirModalHttpBadge.textContent = 'HTTP ...'; }
         fhirPreviewModal.show();
@@ -1019,8 +1195,9 @@
                 try { parsed = JSON.parse(res.body || '{}'); } catch (e) { parsed = { raw: res.body || '' }; }
                 var bundle = (parsed && parsed.resourceType === 'Bundle') ? parsed : ((parsed && parsed.bundle) ? parsed.bundle : null);
                 var hasFhir = bundle !== null;
-                if (fhirModalJson)      fhirModalJson.textContent = JSON.stringify(parsed, null, 2);
-                if (fhirModalMeta)      { fhirModalMeta.textContent = res.ok ? 'Loaded (' + res.status + ')' : 'Error (' + res.status + ')'; fhirModalMeta.className = 'px-3 py-2 small ' + (res.ok ? 'text-success' : 'text-danger'); }
+                if (fhirModalJson)  fhirModalJson.textContent = JSON.stringify(parsed, null, 2);
+                if (fhirFormView)   fhirFormView.innerHTML = hasFhir ? renderFhirBundleForm(bundle) : '<p class="text-muted p-3">No FHIR bundle generated yet.</p>';
+                if (fhirModalMeta)  { fhirModalMeta.textContent = res.ok ? 'Loaded (' + res.status + ')' : 'Error (' + res.status + ')'; fhirModalMeta.className = 'flex-grow-1 small ' + (res.ok ? 'text-success' : 'text-danger'); }
                 if (fhirModalDataBadge) { fhirModalDataBadge.className = 'badge ' + (hasFhir ? 'bg-success' : 'bg-danger'); fhirModalDataBadge.textContent = hasFhir ? 'HAS FHIR' : 'NOT GENERATED'; }
                 if (fhirModalHttpBadge) { fhirModalHttpBadge.className = 'badge ' + (res.ok ? 'bg-success' : 'bg-danger'); fhirModalHttpBadge.textContent = 'HTTP ' + res.status; }
                 if (fhirModalQuality && hasFhir) {
@@ -1029,7 +1206,8 @@
                 }
             })
             .catch(function (e) {
-                if (fhirModalMeta)      { fhirModalMeta.textContent = 'Request failed: ' + e.message; fhirModalMeta.className = 'px-3 py-2 small text-danger'; }
+                if (fhirFormView)   fhirFormView.innerHTML = '<p class="text-danger p-3">Request failed: ' + hesc(e.message) + '</p>';
+                if (fhirModalMeta)  { fhirModalMeta.textContent = 'Request failed: ' + e.message; fhirModalMeta.className = 'flex-grow-1 small text-danger'; }
                 if (fhirModalDataBadge) { fhirModalDataBadge.className = 'badge bg-danger'; fhirModalDataBadge.textContent = 'ERROR'; }
                 if (fhirModalHttpBadge) { fhirModalHttpBadge.className = 'badge bg-danger'; fhirModalHttpBadge.textContent = 'HTTP ERR'; }
             });
