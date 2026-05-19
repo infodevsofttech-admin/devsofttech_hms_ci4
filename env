@@ -127,13 +127,13 @@
 #--------------------------------------------------------------------
 
 # Enable CSNOtk lookup support. HMS also auto-enables when a base URL is configured.
-# snomed.csnotk.enabled = true
+snomed.csnotk.enabled = true
 
 # Preferred key used in code.
-# snomed.csnotk.baseUrl = https://csnotk.e-atria.in
+snomed.csnotk.baseUrl = https://csnotk.e-atria.in
 
 # Backward-compatible alternative key.
-# CSNOTK_BASE_URL = https://csnotk.e-atria.in
+CSNOTK_BASE_URL = https://csnotk.e-atria.in
 
 # Request timeout in seconds.
-# snomed.csnotk.timeoutSec = 5
+snomed.csnotk.timeoutSec = 8
