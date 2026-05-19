@@ -7,13 +7,13 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body { background: #f5f7fb; }
-        .container-wrap { max-width: 1280px; margin: 24px auto; }
+        .container-wrap { width: 100%; margin: 0; padding: 20px 24px; box-sizing: border-box; }
         .table td, .table th { vertical-align: middle; }
         .status-pill { text-transform: uppercase; font-size: 11px; letter-spacing: .4px; }
     </style>
 </head>
 <body>
-<div class="container-wrap px-3">
+<div class="container-wrap">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
             <h4 class="mb-0">ABDM Work Task Board</h4>
