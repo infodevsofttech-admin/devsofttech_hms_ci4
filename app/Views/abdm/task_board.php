@@ -352,8 +352,8 @@
     var sandboxConsentExpiresInput = document.getElementById('tb_abdm_consent_expires_at');
     var sandboxConsentHandleInput = document.getElementById('tb_abdm_consent_handle');
     var sandboxClaimDocumentInput = document.getElementById('tb_abdm_claim_document_id');
-    var quickOpdInput = document.getElementById('tb_quick_opd_id');
-    var quickSessionInput = document.getElementById('tb_quick_session_id');
+    var quickOpdInput = null;
+    var quickSessionInput = null;
     var fhirDebugCard = document.getElementById('fhirDebugCard');
     var fhirDebugTitle = document.getElementById('fhirDebugTitle');
     var fhirDebugMeta = document.getElementById('fhirDebugMeta');
@@ -861,20 +861,6 @@
             }
             setSandboxStatus('Claim status queued. Queue ID: ' + (res.queue_id || '-'), 'success');
         });
-    });
-
-    document.getElementById('btn_quick_fhir_preview').addEventListener('click', function () {
-        var opdId = parseInt((quickOpdInput.value || '0').toString(), 10) || 0;
-        var sessionId = parseInt((quickSessionInput.value || '0').toString(), 10) || 0;
-        if (opdId <= 0) {
-            setStatus('Enter a valid OPD ID for quick preview.', true);
-            return;
-        }
-
-        var url = sessionId > 0
-            ? '<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId + '/' + sessionId
-            : '<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId;
-        showInlineFhirPreview(url, 'Quick Preview OPD ' + opdId + (sessionId > 0 ? (' / Session ' + sessionId) : ''));
     });
 
     document.getElementById('btnHideFhirDebug').addEventListener('click', function () {
