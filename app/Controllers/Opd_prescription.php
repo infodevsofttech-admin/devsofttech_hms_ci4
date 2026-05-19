@@ -4550,7 +4550,7 @@ class Opd_prescription extends BaseController
      */
     private function parseComplaintFreeText(string $text): array
     {
-        $durationRe = '/(?:since\s+|for\s+the\s+last\s+|for\s+last\s+|for\s+)?(\d+[\s\u00a0]*(?:hour|day|week|month|year)s?|since\s+(?:yesterday|morning|evening|last\s+\w+)|past\s+\d+\s*(?:day|week|month|year)s?)/iu';
+        $durationRe = '/(?:since\s+|for\s+the\s+last\s+|for\s+last\s+|for\s+)?(\d+\s*(?:hour|day|week|month|year)s?|since\s+(?:yesterday|morning|evening|last\s+\w+)|past\s+\d+\s*(?:day|week|month|year)s?)/iu';
         $severityRe = '/\b(mild|moderate|severe|slight|intense|chronic|acute|persistent|intermittent|recurrent)\b/iu';
 
         // Split on common delimiters
