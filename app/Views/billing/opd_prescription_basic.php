@@ -4839,15 +4839,17 @@
     // ─── Frequency: event delegation on table rows ────────────────────
     var _FREQUENCY_OPTIONS = ['daily', 'twice daily', 'weekly', 'intermittent', 'continuous', 'occasional'];
 
+    var _freqDdIdx = -1;
+
     $(document).on('input focus', '.complaint-freq-input', function() {
+        _freqDdIdx = -1;
         var $inp = $(this);
         var q    = ($inp.val() || '').trim().toLowerCase();
         var sugs = q ? _FREQUENCY_OPTIONS.filter(function(s) { return s.indexOf(q) !== -1; }) : _FREQUENCY_OPTIONS;
         var idx  = parseInt($inp.attr('data-idx'), 10);
-        if (!sugs.length) { return; }
-        // reuse complaint_sev_dd div as a floating list (same fixed-position technique)
-        var $dd = $('<div style="position:fixed;z-index:1095;min-width:160px;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:180px;overflow-y:auto;" id="_freq_dd"></div>');
         $('#_freq_dd').remove();
+        if (!sugs.length) { return; }
+        var $dd = $('<div style="position:fixed;z-index:1095;min-width:160px;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:180px;overflow-y:auto;" id="_freq_dd"></div>');
         sugs.forEach(function(s) {
             $dd.append(buildSmartDdItem(s, function(val) {
                 $inp.val(val);
@@ -4856,12 +4858,34 @@
                     syncComplaintSnomedJson();
                 }
                 $('#_freq_dd').remove();
+                _freqDdIdx = -1;
                 $inp.closest('tr').find('.complaint-sev-input').trigger('focus');
             }));
         });
         var r = $inp[0].getBoundingClientRect();
         $dd.css({ top: (r.bottom + 2) + 'px', left: r.left + 'px', width: Math.max(r.width, 160) + 'px' });
         $('body').append($dd);
+    });
+    $(document).on('keydown', '.complaint-freq-input', function(e) {
+        var $dd = $('#_freq_dd');
+        var $items = $dd.find('div');
+        if ($dd.is(':visible') && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+            e.preventDefault();
+            _freqDdIdx = e.key === 'ArrowDown' ? Math.min(_freqDdIdx + 1, $items.length - 1) : Math.max(_freqDdIdx - 1, 0);
+            $items.css('background', '').eq(_freqDdIdx).css('background', '#f0f4ff');
+            return;
+        }
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if ($dd.is(':visible') && _freqDdIdx >= 0 && _freqDdIdx < $items.length) {
+                $items.eq(_freqDdIdx).trigger('click');
+            } else {
+                $('#_freq_dd').remove(); _freqDdIdx = -1;
+                $(this).closest('tr').find('.complaint-sev-input').trigger('focus');
+            }
+            return;
+        }
+        if (e.key === 'Escape') { $('#_freq_dd').remove(); _freqDdIdx = -1; }
     });
     $(document).on('blur', '.complaint-freq-input', function() {
         var idx = parseInt($(this).attr('data-idx'), 10);
@@ -4965,8 +4989,8 @@
                     syncComplaintSnomedJson();
                 }
                 $dd.hide().empty();
-                // Move focus back to lookup for next complaint
-                $('#complaint_lookup').trigger('focus');
+                // Move focus to Duration input in same row
+                $inp.closest('tr').find('.complaint-dur-input').trigger('focus');
             }));
         });
         _positionDd($dd, $inp);
@@ -4995,7 +5019,7 @@
             if ($dd.is(':visible') && _sevDdIdx >= 0 && _sevDdIdx < $items.length) {
                 $items.eq(_sevDdIdx).trigger('click');
             } else {
-                $('#complaint_lookup').trigger('focus');
+                $(this).closest('tr').find('.complaint-dur-input').trigger('focus');
             }
             _sevDdIdx = -1;
         }
@@ -5179,8 +5203,8 @@
     };
 
     $(document).on('click', '.btn-remove-complaint', function() {
-        var idx = parseInt($(this).data('idx') || '-1', 10);
-        if (idx < 0 || idx >= selectedComplaintItems.length) {
+        var idx = parseInt($(this).attr('data-idx'), 10);
+        if (isNaN(idx) || idx < 0 || idx >= selectedComplaintItems.length) {
             return;
         }
         selectedComplaintItems.splice(idx, 1);
