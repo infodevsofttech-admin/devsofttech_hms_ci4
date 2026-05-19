@@ -294,6 +294,33 @@
             background: #2b6cb0;
             color: #fff;
         }
+        /* SNOMED extract chips */
+        .snomed-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 999px;
+            padding: 3px 8px 3px 10px;
+            font-size: .8rem;
+            transition: background .15s, border-color .15s;
+        }
+        .snomed-chip.chip-confirmed {
+            background: #dcfce7;
+            border-color: #86efac;
+        }
+        .snomed-chip.chip-rejected { display: none; }
+        .snomed-chip .chip-term { font-weight: 600; color: #1d4ed8; }
+        .snomed-chip .chip-code { font-family: monospace; color: #6b7280; font-size: .7rem; }
+        .snomed-chip .chip-meta { color: #059669; font-size: .75rem; }
+        .snomed-chip .chip-conf { background: #e0e7ff; color: #3730a3; border-radius: 3px; padding: 0 4px; font-size: .68rem; margin-left: 2px; }
+        .chip-btn { background: none; border: none; padding: 0 2px; cursor: pointer; line-height: 1; font-size: .9rem; }
+        .chip-btn-confirm { color: #16a34a; }
+        .chip-btn-confirm:hover { color: #15803d; }
+        .chip-btn-reject  { color: #dc2626; }
+        .chip-btn-reject:hover  { color: #b91c1c; }
+        .chip-btn:disabled { opacity: .4; cursor: default; }
         .btn-complaints-mic {
             border-color: #13795b;
             color: #13795b;
@@ -831,12 +858,24 @@
                                     <div class="input-group input-group-sm">
                                         <input type="text" class="form-control" id="complaint_lookup"
                                                autocomplete="off"
-                                               placeholder="Type symptom: headache, fever, chest pain...">
+                                               placeholder="Type symptom or free text: headache 3 days moderate, fever 1 day...">
+                                        <button type="button" class="btn btn-outline-primary" id="btn_extract_complaint_codes"
+                                                title="Extract SNOMED codes from typed text with duration &amp; severity">Extract Codes</button>
                                         <button type="button" class="btn btn-outline-secondary btn-save-autotype-keyword"
                                                 data-section="complaints" data-target="complaints" title="Save as custom keyword">+keyword</button>
                                     </div>
                                     <div id="complaint_dropdown" class="border rounded bg-white shadow-sm"
                                          style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1060;max-height:260px;overflow-y:auto;"></div>
+                                </div>
+
+                                <!-- SNOMED Extract chips panel -->
+                                <div id="complaint_extract_panel" class="mb-2 p-2 border rounded" style="display:none;background:#f8faff;">
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <span class="small fw-semibold text-primary">💡 Code Suggestions</span>
+                                        <button type="button" class="btn btn-sm btn-success py-0 px-2" id="btn_confirm_all_chips" style="font-size:.75rem">✓ Confirm All</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" id="btn_dismiss_extract" style="font-size:.75rem">Dismiss</button>
+                                    </div>
+                                    <div id="complaint_chips_wrap" class="d-flex flex-wrap gap-2"></div>
                                 </div>
 
                                 <!-- Complaint rows table -->
@@ -4756,6 +4795,106 @@
         }, 60);
         return true;
     }
+
+    // ─── Extract Codes from free-text (SNOMED chips review) ─────────────────
+    $('#btn_extract_complaint_codes').on('click', function () {
+        var text = $.trim($('#complaint_lookup').val());
+        if (!text) { $('#complaint_lookup').trigger('focus'); return; }
+
+        var $btn   = $(this);
+        var $panel = $('#complaint_extract_panel');
+        var $wrap  = $('#complaint_chips_wrap');
+
+        $btn.prop('disabled', true).text('Extracting…');
+        $panel.show();
+        $wrap.html('<span class="text-muted small">Searching SNOMED…</span>');
+
+        $.get('<?= base_url('Opd_prescription/complaints_extract') ?>', { q: text })
+            .done(function (data) {
+                $btn.prop('disabled', false).text('Extract Codes');
+                var rows = (data && data.rows) ? data.rows : [];
+
+                if (!rows.length) {
+                    $wrap.html('<span class="text-muted small">No SNOMED match. Added as free text.</span>');
+                    addComplaintItem({ name: text, concept_id: '', source: 'local' });
+                    setTimeout(function () { $panel.hide(); $wrap.empty(); }, 1800);
+                    return;
+                }
+
+                $wrap.empty();
+                rows.forEach(function (r) {
+                    var pct  = Math.round((parseFloat(r.confidence) || 0) * 100);
+                    var meta = [r.duration, r.severity].filter(Boolean).join(' · ');
+
+                    var $chip = $('<span class="snomed-chip"></span>');
+                    $chip.append($('<span class="chip-term"></span>').text(r.term || r.snomed_term || ''));
+                    if (r.concept_id) {
+                        $chip.append($('<span class="chip-code"></span>').text(' ' + r.concept_id));
+                    }
+                    if (meta) {
+                        $chip.append($('<span class="chip-meta"></span>').text(' · ' + meta));
+                    }
+                    if (pct > 0) {
+                        $chip.append($('<span class="chip-conf"></span>').text(pct + '%'));
+                    }
+
+                    var $bConfirm = $('<button type="button" class="chip-btn chip-btn-confirm" title="Add complaint">✓</button>');
+                    var $bReject  = $('<button type="button" class="chip-btn chip-btn-reject"  title="Dismiss">✕</button>');
+
+                    $bConfirm.on('click', function () {
+                        var added = addComplaintItem({
+                            name:      r.term || r.snomed_term || text,
+                            concept_id: r.concept_id || '',
+                            source:    r.concept_id ? 'snomed' : 'local',
+                            hierarchy: r.hierarchy || r.semantic_tag || ''
+                        });
+                        // Pre-fill duration & severity on the new table row
+                        var newIdx = selectedComplaintItems.length - 1;
+                        if (newIdx >= 0) {
+                            if (r.duration) {
+                                selectedComplaintItems[newIdx].duration = r.duration;
+                                $('#complaint_tbody .complaint-dur-input[data-idx="' + newIdx + '"]').val(r.duration);
+                            }
+                            if (r.severity) {
+                                selectedComplaintItems[newIdx].severity = r.severity;
+                                $('#complaint_tbody .complaint-sev-input[data-idx="' + newIdx + '"]').val(r.severity);
+                            }
+                            syncComplaintSnomedJson();
+                        }
+                        $chip.addClass('chip-confirmed');
+                        $bConfirm.prop('disabled', true);
+                        $bReject.hide();
+                        // Clear the lookup input after first confirmation
+                        $('#complaint_lookup').val('');
+                    });
+
+                    $bReject.on('click', function () {
+                        $chip.addClass('chip-rejected');
+                        if (!$wrap.find('.snomed-chip:not(.chip-rejected)').length) {
+                            $panel.hide(); $wrap.empty();
+                        }
+                    });
+
+                    $chip.append($bConfirm).append($bReject);
+                    $wrap.append($chip);
+                });
+            })
+            .fail(function () {
+                $btn.prop('disabled', false).text('Extract Codes');
+                $wrap.html('<span class="text-danger small">Search failed.</span>');
+            });
+    });
+
+    $('#btn_confirm_all_chips').on('click', function () {
+        $('#complaint_chips_wrap .snomed-chip:not(.chip-rejected):not(.chip-confirmed) .chip-btn-confirm').each(function () {
+            $(this).trigger('click');
+        });
+    });
+
+    $('#btn_dismiss_extract').on('click', function () {
+        $('#complaint_extract_panel').hide();
+        $('#complaint_chips_wrap').empty();
+    });
 
     // ─── Per-complaint inline editor — stubs (table replaced the panel) ─────
     function openComplaintInlineEditor(idx) {

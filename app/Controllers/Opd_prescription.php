@@ -4489,6 +4489,112 @@ class Opd_prescription extends BaseController
         return $this->response->setJSON(['rows' => array_slice($out, 0, 20)]);
     }
 
+    /**
+     * Extract SNOMED codes from free-text complaint string.
+     * Parses duration/severity from each phrase, searches local SNOMED FULLTEXT.
+     *
+     * GET Opd_prescription/complaints_extract?q=headache+3+days+moderate,+fever+mild
+     */
+    public function complaints_extract()
+    {
+        $q = trim((string) $this->request->getGet('q'));
+        if ($q === '') {
+            return $this->response->setJSON(['rows' => []]);
+        }
+
+        $phrases = $this->parseComplaintFreeText($q);
+        $svc     = new CsnotkTerminologyService();
+        $out     = [];
+        $seen    = [];
+
+        foreach ($phrases as $p) {
+            $cleanTerm = trim($p['term']);
+            if (mb_strlen($cleanTerm) < 2) {
+                continue;
+            }
+
+            $results = $svc->searchFinding($cleanTerm, 3);
+            foreach ($results as $r) {
+                $cid = trim((string) ($r['concept_id'] ?? ''));
+                $dedupeKey = mb_strtoupper($r['term'] ?? '') . '|' . $cid;
+                if (isset($seen[$dedupeKey])) {
+                    continue;
+                }
+                $seen[$dedupeKey] = true;
+
+                $out[] = [
+                    'term'         => (string) ($r['term'] ?? ''),
+                    'concept_id'   => $cid,
+                    'semantic_tag' => (string) ($r['hierarchy'] ?? ''),
+                    'confidence'   => round(0.75, 3), // local FULLTEXT match scores high by default
+                    'duration'     => $p['duration'],
+                    'severity'     => $p['severity'],
+                    'source_phrase'=> $p['original'],
+                ];
+            }
+
+            if (count($out) >= 8) {
+                break;
+            }
+        }
+
+        return $this->response->setJSON(['rows' => $out]);
+    }
+
+    /**
+     * Parse a free-text complaint string into structured phrases.
+     * Extracts duration (e.g. "3 days", "since yesterday") and severity (mild/moderate/severe)
+     * from each comma/semicolon-delimited phrase.
+     *
+     * @return array<int,array{term:string,duration:string,severity:string,original:string}>
+     */
+    private function parseComplaintFreeText(string $text): array
+    {
+        $durationRe = '/(?:since\s+|for\s+the\s+last\s+|for\s+last\s+|for\s+)?(\d+[\s\u00a0]*(?:hour|day|week|month|year)s?|since\s+(?:yesterday|morning|evening|last\s+\w+)|past\s+\d+\s*(?:day|week|month|year)s?)/iu';
+        $severityRe = '/\b(mild|moderate|severe|slight|intense|chronic|acute|persistent|intermittent|recurrent)\b/iu';
+
+        // Split on common delimiters
+        $parts = preg_split('/[,;\/\n]|\s+and\s+|\s+with\s+/iu', $text) ?: [$text];
+
+        $result = [];
+        foreach ($parts as $part) {
+            $part = trim($part);
+            if ($part === '') {
+                continue;
+            }
+            $original = $part;
+
+            $duration = '';
+            if (preg_match($durationRe, $part, $m)) {
+                $duration = trim($m[0]);
+                $part = trim((string) preg_replace($durationRe, ' ', $part, 1));
+            }
+
+            $severity = '';
+            if (preg_match($severityRe, $part, $m)) {
+                $severity = mb_strtolower($m[1]);
+                $part = trim((string) preg_replace($severityRe, ' ', $part, 1));
+            }
+
+            $cleanTerm = trim((string) preg_replace('/\s+/', ' ', $part));
+            if (mb_strlen($cleanTerm) >= 2) {
+                $result[] = [
+                    'term'     => $cleanTerm,
+                    'duration' => $duration,
+                    'severity' => $severity,
+                    'original' => $original,
+                ];
+            }
+        }
+
+        // If parsing produced nothing usable, fall back to original string
+        if (empty($result)) {
+            $result[] = ['term' => $text, 'duration' => '', 'severity' => '', 'original' => $text];
+        }
+
+        return $result;
+    }
+
     public function provisional_diagnosis_search()
     {
         $q = trim((string) $this->request->getGet('q'));
