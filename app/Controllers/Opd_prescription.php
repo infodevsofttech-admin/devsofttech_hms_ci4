@@ -598,12 +598,10 @@ class Opd_prescription extends BaseController
             );
         }
 
-        if ($this->hasAnyPatientHistoryField($unmappedDiagnosisCoding)) {
-            $payload['Prescriber_Remarks'] = $this->upsertDiagnosisCodingIntoRemarks(
-                (string) ($payload['Prescriber_Remarks'] ?? ''),
-                $unmappedDiagnosisCoding
-            );
-        }
+        // Strip any legacy SNOMED lines previously embedded in remarks (no longer injected)
+        $payload['Prescriber_Remarks'] = $this->stripDiagnosisCodingFromRemarks(
+            (string) ($payload['Prescriber_Remarks'] ?? '')
+        );
 
         if (!in_array('women_related_problems', $fields, true)) {
             $womenText = trim((string) ($payload['women_related_problems'] ?? ''));
