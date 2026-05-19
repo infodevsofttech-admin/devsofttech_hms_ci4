@@ -4324,6 +4324,20 @@ class Opd_prescription extends BaseController
         }
 
         $prettyJson = (string) json_encode($bundle, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        // AJAX callers (modal preview) get JSON directly
+        if ($this->request->isAJAX()) {
+            return $this->response->setJSON([
+                'status'        => 'ok',
+                'bundle'        => $bundle,
+                'document_id'   => (int) ($row['id'] ?? 0),
+                'generated_at'  => (string) ($row['generated_at'] ?? ''),
+                'bundle_type'   => (string) ($row['bundle_type'] ?? ''),
+                'opd_id'        => (int) $opdId,
+                'opd_session_id' => (int) $sessionId,
+            ]);
+        }
+
         $prettyJsonJs = json_encode($prettyJson);
         $docId = (int) ($row['id'] ?? 0);
         $generatedAt = htmlspecialchars((string) ($row['generated_at'] ?? ''), ENT_QUOTES, 'UTF-8');
