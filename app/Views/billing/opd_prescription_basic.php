@@ -5156,32 +5156,27 @@
     }
     $('#complaint_lookup').on('keydown', function(e) {
         var $dd = $('#complaint_dropdown');
-        if (!$dd.is(':visible')) {
-            return;
-        }
         var $items = $dd.find('.complaint-dd-item');
-        if (e.key === 'ArrowDown') {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            if (!$dd.is(':visible')) { return; }
             e.preventDefault();
-            _complaintDdIdx = Math.min(_complaintDdIdx + 1, $items.length - 1);
-            _highlightComplaintDdItem($dd, _complaintDdIdx);
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            _complaintDdIdx = Math.max(_complaintDdIdx - 1, 0);
+            _complaintDdIdx = e.key === 'ArrowDown'
+                ? Math.min(_complaintDdIdx + 1, $items.length - 1)
+                : Math.max(_complaintDdIdx - 1, 0);
             _highlightComplaintDdItem($dd, _complaintDdIdx);
         } else if (e.key === 'Escape') {
             _complaintDdIdx = -1;
             closeComplaintDropdown();
         } else if (e.key === 'Enter') {
             e.preventDefault();
-            if (_complaintDdIdx >= 0 && _complaintDdIdx < $items.length) {
+            // Pick dropdown item only when user explicitly arrow-keyed to one
+            if ($dd.is(':visible') && _complaintDdIdx >= 0 && _complaintDdIdx < $items.length) {
                 $items.eq(_complaintDdIdx).trigger('click');
-            } else if ($items.length) {
-                $items.first().trigger('click');
             } else {
-                // Add free-text if no suggestion available
+                // Add whatever is typed as free text
                 var val = ($(this).val() || '').trim();
                 if (val) {
-                    addComplaintItem({ name: val.toUpperCase(), concept_id: '', source: 'keyword', hierarchy: '' });
+                    addComplaintItem({ name: val, concept_id: '', source: 'local', hierarchy: '' });
                     $(this).val('');
                     closeComplaintDropdown();
                 }
@@ -5467,11 +5462,29 @@
         }
         if (e.key === 'Enter') {
             e.preventDefault();
-            if ($dd.is(':visible') && _diagDdIdx >= 0) { $items.eq(_diagDdIdx).trigger('click'); }
-            else if ($items.length) { $items.first().trigger('click'); }
+            // Pick dropdown item only when user explicitly arrow-keyed to one
+            if ($dd.is(':visible') && _diagDdIdx >= 0 && _diagDdIdx < $items.length) {
+                $items.eq(_diagDdIdx).trigger('click');
+            } else {
+                // Add whatever is typed as free text
+                var val = ($(this).val() || '').trim();
+                if (val) {
+                    addDiagnosisItem({ name: val, concept_id: '', source: 'local' });
+                    $(this).val('');
+                    if (_diagSearchTimer) { clearTimeout(_diagSearchTimer); _diagSearchTimer = null; }
+                    $dd.closest('.rx-foldable').removeClass('dropdown-open');
+                    $dd.hide().empty();
+                    _diagDdIdx = -1;
+                }
+            }
             _diagDdIdx = -1;
         }
-        if (e.key === 'Escape') { if (_diagSearchTimer) { clearTimeout(_diagSearchTimer); _diagSearchTimer = null; } $dd.closest('.rx-foldable').removeClass('dropdown-open'); $dd.hide().empty(); _diagDdIdx = -1; }
+        if (e.key === 'Escape') {
+            if (_diagSearchTimer) { clearTimeout(_diagSearchTimer); _diagSearchTimer = null; }
+            $dd.closest('.rx-foldable').removeClass('dropdown-open');
+            $dd.hide().empty();
+            _diagDdIdx = -1;
+        }
     });
     $('#diagnosis_lookup').on('blur', function() {
         setTimeout(function() {
