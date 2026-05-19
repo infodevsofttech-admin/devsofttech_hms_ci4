@@ -990,6 +990,7 @@
 
     // ── Track current bundle context for edits ──────────────────────
     var _fhirOpdId = 0, _fhirSessionId = 0;
+    var _fhirLiveComplaints = [], _fhirLiveDiagnoses = [];
 
     // ── Inline complaint SNOMED edit (event delegation on fhirFormView) ─
     var _editTimer = null;
@@ -1232,7 +1233,9 @@
         var d = s.toString().substring(0, 10).split('-');
         return d.length === 3 ? d[2]+'/'+d[1]+'/'+d[0] : s.toString().substring(0,16);
     }
-    function renderFhirBundleForm(bundle) {
+    function renderFhirBundleForm(bundle, liveComplaints, liveDiagnoses) {
+        liveComplaints = liveComplaints || [];
+        liveDiagnoses  = liveDiagnoses  || [];
         var resources = (bundle.entry || []).map(function(e) { return e.resource; }).filter(Boolean);
         function byType(t) { return resources.filter(function(r){ return r.resourceType === t; }); }
         var patient       = byType('Patient')[0];
@@ -1288,27 +1291,37 @@
                 var sev      = ((c.severity || {}).coding || [{}])[0];
                 var sevText  = (sev && sev.display) ? sev.display : ((c.severity || {}).text || '');
                 var note     = ((c.note || [{}])[0] || {}).text || '';
+                // Resolve doctor's original text from live complaint_snomed_json
+                var doctorText = codeText;
+                var liveItem = null;
+                if (snomed && liveComplaints.length) {
+                    for (var li = 0; li < liveComplaints.length; li++) {
+                        if ((liveComplaints[li].concept_id || '') === snomed) { liveItem = liveComplaints[li]; break; }
+                    }
+                }
+                if (!liveItem && liveComplaints.length > idx) { liveItem = liveComplaints[idx]; }
+                if (liveItem) { doctorText = liveItem.original_term || liveItem.term || codeText; }
                 html += '<li class="mb-2">';
                 html += '<div class="d-flex align-items-start gap-2">';
                 html += '<div class="flex-grow-1">';
-                html += '<strong>' + hesc(codeText) + '</strong>';
+                html += '<strong>' + hesc(doctorText) + '</strong>';
                 if (snomed)  html += ' <span class="badge bg-info text-dark fhir-snomed-badge" style="font-size:.7rem;">SNOMED&nbsp;' + hesc(snomed) + '</span>';
                 if (sevText) html += ' <span class="badge bg-secondary" style="font-size:.7rem;">' + hesc(sevText) + '</span>';
                 if (note)    html += ' <small class="text-muted">(' + hesc(note) + ')</small>';
-                if (display && display !== codeText) html += ' <small class="text-secondary d-block">SNOMED term: ' + hesc(display) + '</small>';
+                if (display && display !== doctorText) html += ' <small class="text-secondary d-block">SNOMED: ' + hesc(display) + '</small>';
                 html += '</div>';
                 html += '<button type="button" class="btn btn-outline-secondary fhir-complaint-edit flex-shrink-0" data-idx="' + idx + '" style="font-size:.7rem;padding:1px 6px;">Edit</button>';
                 html += '</div>';
                 // inline edit panel
-                html += '<div class="fhir-edit-panel border rounded p-2 mt-1 bg-light" data-idx="' + idx + '" data-complaint-text="' + hesc(codeText) + '" style="display:none;">';
-                html += '<div class="mb-1 small text-muted">Doctor wrote: <em>' + hesc(codeText) + '</em> &mdash; assign SNOMED code:</div>';
+                html += '<div class="fhir-edit-panel border rounded p-2 mt-1 bg-light" data-idx="' + idx + '" data-complaint-text="' + hesc(doctorText) + '" style="display:none;">';
+                html += '<div class="mb-1 small text-muted">Doctor wrote: <em>' + hesc(doctorText) + '</em> &mdash; assign SNOMED code:</div>';
                 html += '<div class="position-relative mb-1">';
-                html += '<input type="text" class="form-control form-control-sm fhir-snomed-search" placeholder="Type to search SNOMED…" value="' + hesc(codeText) + '">';
+                html += '<input type="text" class="form-control form-control-sm fhir-snomed-search" placeholder="Type to search SNOMED…" value="' + hesc(doctorText) + '">';
                 html += '<div class="list-group shadow position-absolute w-100 fhir-snomed-dd" style="z-index:2000;display:none;max-height:180px;overflow-y:auto;"></div>';
                 html += '</div>';
                 html += '<div class="fhir-snomed-selected small text-success mb-1" style="display:none;"></div>';
                 html += '<input type="hidden" class="fhir-snomed-id" value="' + hesc(snomed) + '">';
-                html += '<input type="hidden" class="fhir-snomed-term" value="' + hesc(codeText) + '">';
+                html += '<input type="hidden" class="fhir-snomed-term" value="' + hesc(doctorText) + '">';
                 html += '<div class="d-flex gap-2"><button type="button" class="btn btn-sm btn-primary fhir-complaint-save">Save</button>';
                 html += '<button type="button" class="btn btn-sm btn-outline-secondary fhir-complaint-cancel">Cancel</button></div>';
                 html += '</div>';
@@ -1329,25 +1342,35 @@
                 var verif   = (((c.verificationStatus || {}).coding) || [])[0] || {};
                 var isProvisional = (verif.code || 'provisional') !== 'confirmed';
                 var diagType = isProvisional ? 'provisional' : 'confirmed';
+                // Resolve doctor's original text from live diagnosis data
+                var doctorDiagText = text;
+                var liveDiag = null;
+                if (liveDiagnoses.length) {
+                    for (var ldi = 0; ldi < liveDiagnoses.length; ldi++) {
+                        if ((liveDiagnoses[ldi].type || '') === diagType) { liveDiag = liveDiagnoses[ldi]; break; }
+                    }
+                    if (!liveDiag && liveDiagnoses.length > didx) { liveDiag = liveDiagnoses[didx]; }
+                }
+                if (liveDiag) { doctorDiagText = liveDiag.term || text; }
                 html += '<li class="mb-2">';
                 html += '<div class="d-flex align-items-start gap-2">';
                 html += '<div class="flex-grow-1">';
-                html += '<strong>' + hesc(text) + '</strong>';
+                html += '<strong>' + hesc(doctorDiagText) + '</strong>';
                 if (snomed)  html += ' <span class="badge bg-success fhir-diag-snomed-badge" style="font-size:.7rem;">SNOMED&nbsp;' + hesc(snomed) + '</span>';
                 html += ' <span class="badge ' + (isProvisional ? 'bg-warning text-dark' : 'bg-success-subtle text-success-emphasis border border-success') + '" style="font-size:.7rem;">' + (isProvisional ? 'Provisional' : 'Confirmed') + '</span>';
-                if (display && display !== text) html += ' <small class="text-secondary d-block">SNOMED term: ' + hesc(display) + '</small>';
+                if (display && display !== doctorDiagText) html += ' <small class="text-secondary d-block">SNOMED: ' + hesc(display) + '</small>';
                 html += '</div>';
                 html += '<button type="button" class="btn btn-outline-secondary fhir-diag-edit flex-shrink-0" data-didx="' + didx + '" style="font-size:.7rem;padding:1px 6px;">Edit</button>';
                 html += '</div>';
-                html += '<div class="fhir-diag-panel border rounded p-2 mt-1 bg-light" data-didx="' + didx + '" data-diag-text="' + hesc(text) + '" data-diag-type="' + hesc(diagType) + '" style="display:none;">';
-                html += '<div class="mb-1 small text-muted">Doctor wrote: <em>' + hesc(text) + '</em> &mdash; assign SNOMED code:</div>';
+                html += '<div class="fhir-diag-panel border rounded p-2 mt-1 bg-light" data-didx="' + didx + '" data-diag-text="' + hesc(doctorDiagText) + '" data-diag-type="' + hesc(diagType) + '" style="display:none;">';
+                html += '<div class="mb-1 small text-muted">Doctor wrote: <em>' + hesc(doctorDiagText) + '</em> &mdash; assign SNOMED code:</div>';
                 html += '<div class="position-relative mb-1">';
-                html += '<input type="text" class="form-control form-control-sm fhir-diag-search" placeholder="Type to search SNOMED\u2026" value="' + hesc(text) + '">';
+                html += '<input type="text" class="form-control form-control-sm fhir-diag-search" placeholder="Type to search SNOMED\u2026" value="' + hesc(doctorDiagText) + '">';
                 html += '<div class="list-group shadow position-absolute w-100 fhir-diag-dd" style="z-index:2000;display:none;max-height:180px;overflow-y:auto;"></div>';
                 html += '</div>';
                 html += '<div class="fhir-diag-selected small text-success mb-1" style="display:none;"></div>';
                 html += '<input type="hidden" class="fhir-diag-id" value="' + hesc(snomed) + '">';
-                html += '<input type="hidden" class="fhir-diag-term" value="' + hesc(display || text) + '">';
+                html += '<input type="hidden" class="fhir-diag-term" value="' + hesc(display || doctorDiagText) + '">';
                 html += '<div class="d-flex gap-2"><button type="button" class="btn btn-sm btn-primary fhir-diag-save">Save</button>';
                 html += '<button type="button" class="btn btn-sm btn-outline-secondary fhir-diag-cancel">Cancel</button></div>';
                 html += '</div>';
@@ -1475,8 +1498,10 @@
                 var hasFhir = bundle !== null;
                 _fhirOpdId     = parseInt(parsed.opd_id     || '0', 10) || 0;
                 _fhirSessionId = parseInt(parsed.opd_session_id || '0', 10) || 0;
+                _fhirLiveComplaints = Array.isArray(parsed.live_complaints) ? parsed.live_complaints : [];
+                _fhirLiveDiagnoses  = Array.isArray(parsed.live_diagnoses)  ? parsed.live_diagnoses  : [];
                 if (fhirModalJson)  fhirModalJson.textContent = JSON.stringify(parsed, null, 2);
-                if (fhirFormView)   fhirFormView.innerHTML = hasFhir ? renderFhirBundleForm(bundle) : '<p class="text-muted p-3">No FHIR bundle generated yet.</p>';
+                if (fhirFormView)   fhirFormView.innerHTML = hasFhir ? renderFhirBundleForm(bundle, _fhirLiveComplaints, _fhirLiveDiagnoses) : '<p class="text-muted p-3">No FHIR bundle generated yet.</p>';
                 if (fhirModalMeta)  { fhirModalMeta.textContent = res.ok ? 'Loaded (' + res.status + ')' : 'Error (' + res.status + ')'; fhirModalMeta.className = 'flex-grow-1 small ' + (res.ok ? 'text-success' : 'text-danger'); }
                 if (fhirModalDataBadge) { fhirModalDataBadge.className = 'badge ' + (hasFhir ? 'bg-success' : 'bg-danger'); fhirModalDataBadge.textContent = hasFhir ? 'HAS FHIR' : 'NOT GENERATED'; }
                 if (fhirModalHttpBadge) { fhirModalHttpBadge.className = 'badge ' + (res.ok ? 'bg-success' : 'bg-danger'); fhirModalHttpBadge.textContent = 'HTTP ' + res.status; }

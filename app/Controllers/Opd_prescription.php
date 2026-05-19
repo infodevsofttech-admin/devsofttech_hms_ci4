@@ -4603,14 +4603,52 @@ class Opd_prescription extends BaseController
 
         // AJAX callers (modal preview) get JSON directly
         if ($this->request->isAJAX()) {
+            // Fetch live complaint and diagnosis terms from current prescription row
+            $liveComplaints = [];
+            $liveDiagnoses  = [];
+            $storedSessionId = (int) ($row['opd_session_id'] ?? 0);
+            if ($this->db->tableExists('opd_prescription') && ($storedSessionId > 0 || $opdId > 0)) {
+                $prescBuilder = $this->db->table('opd_prescription');
+                if ($storedSessionId > 0) {
+                    $prescBuilder->where('id', $storedSessionId);
+                } else {
+                    $prescBuilder->where('opd_id', (int) $opdId)->orderBy('id', 'DESC');
+                }
+                $pRow = $prescBuilder->get(1)->getRowArray() ?? [];
+                if (! empty($pRow)) {
+                    $sj = trim((string) ($pRow['complaint_snomed_json'] ?? ''));
+                    if ($sj !== '' && $sj !== '[]') {
+                        $sit = json_decode($sj, true);
+                        if (is_array($sit)) { $liveComplaints = array_values($sit); }
+                    }
+                    $diagText  = trim((string) ($pRow['diagnosis'] ?? ''));
+                    $provText  = trim((string) ($pRow['Provisional_diagnosis'] ?? ''));
+                    if ($diagText !== '') {
+                        $liveDiagnoses[] = [
+                            'term'       => $diagText,
+                            'concept_id' => trim((string) ($pRow['diagnosis_snomed_id'] ?? '')),
+                            'type'       => 'confirmed',
+                        ];
+                    }
+                    if ($provText !== '') {
+                        $liveDiagnoses[] = [
+                            'term'       => $provText,
+                            'concept_id' => trim((string) ($pRow['provisional_diagnosis_snomed_id'] ?? '')),
+                            'type'       => 'provisional',
+                        ];
+                    }
+                }
+            }
             return $this->response->setJSON([
-                'status'        => 'ok',
-                'bundle'        => $bundle,
-                'document_id'   => (int) ($row['id'] ?? 0),
-                'generated_at'  => (string) ($row['generated_at'] ?? ''),
-                'bundle_type'   => (string) ($row['bundle_type'] ?? ''),
-                'opd_id'        => (int) $opdId,
-                'opd_session_id' => (int) $sessionId,
+                'status'          => 'ok',
+                'bundle'          => $bundle,
+                'document_id'     => (int) ($row['id'] ?? 0),
+                'generated_at'    => (string) ($row['generated_at'] ?? ''),
+                'bundle_type'     => (string) ($row['bundle_type'] ?? ''),
+                'opd_id'          => (int) $opdId,
+                'opd_session_id'  => (int) $sessionId,
+                'live_complaints' => $liveComplaints,
+                'live_diagnoses'  => $liveDiagnoses,
             ]);
         }
 
@@ -4699,9 +4737,14 @@ class Opd_prescription extends BaseController
         $found = false;
         foreach ($items as &$item) {
             if (strtolower(trim((string) ($item['term'] ?? ''))) === strtolower($complaintText)) {
-                $item['concept_id'] = $snomedId;
-                $item['term']       = $snomedTerm ?: $complaintText;
-                $item['source']     = $snomedId !== '' ? 'snomed' : ($item['source'] ?? 'local');
+                // Preserve original term (what doctor typed)
+                if (! isset($item['original_term']) || (string) ($item['original_term'] ?? '') === '') {
+                    $item['original_term'] = $item['term'];
+                }
+                $item['concept_id']    = $snomedId;
+                $item['snomed_display'] = $snomedTerm ?: $item['term'];
+                // Do NOT overwrite term — keep doctor's original text
+                $item['source']        = $snomedId !== '' ? 'snomed' : ($item['source'] ?? 'local');
                 $found = true;
                 break;
             }
@@ -4709,10 +4752,14 @@ class Opd_prescription extends BaseController
         unset($item);
 
         if (! $found) {
-            $items[] = ['term' => $snomedTerm ?: $complaintText, 'concept_id' => $snomedId,
+            $items[] = ['term' => $complaintText, 'original_term' => $complaintText,
+                        'concept_id' => $snomedId, 'snomed_display' => $snomedTerm ?: $complaintText,
                         'source' => $snomedId !== '' ? 'snomed' : 'local',
                         'hierarchy' => '', 'severity' => '', 'duration' => '', 'frequency' => '', 'date' => ''];
         }
+
+        // Also update getPrescriptionClinicalContext — use snomed_display for FHIR coding
+        // (handled in getPrescriptionClinicalContext via snomed_display field)
 
         $newJson = (string) json_encode(array_values($items), JSON_UNESCAPED_UNICODE);
         $this->db->table('opd_prescription')->where('id', $prescId)->update(['complaint_snomed_json' => $newJson]);
@@ -4723,6 +4770,7 @@ class Opd_prescription extends BaseController
             'presc_id'         => $prescId,
             'snomed_concept_id'=> $snomedId,
             'snomed_term'      => $snomedTerm,
+            'original_term'    => $complaintText,
             'csrfName'         => csrf_token(),
             'csrfHash'         => csrf_hash(),
         ]);
@@ -9747,6 +9795,7 @@ class Opd_prescription extends BaseController
         // Primary: use structured complaint_snomed_json (has SNOMED codes, severity, duration)
         $complaints = [];
         $snomedJson = trim((string) ($row['complaint_snomed_json'] ?? ''));
+        // Also use snomed_display for FHIR coding display
         if ($snomedJson !== '' && $snomedJson !== '[]') {
             $items = json_decode($snomedJson, true);
             if (is_array($items)) {
@@ -9761,10 +9810,13 @@ class Opd_prescription extends BaseController
                         continue;
                     }
                     $seen[$k] = true;
+                    // Use original_term if available (preserves doctor's original text)
+                    $displayText = trim((string) ($item['original_term'] ?? $text));
+                    $snomedDisplay = trim((string) ($item['snomed_display'] ?? $text));
                     $complaints[] = [
-                        'text'           => $text,
+                        'text'           => $displayText,
                         'snomed_code'    => trim((string) ($item['concept_id'] ?? '')),
-                        'snomed_display' => $text,
+                        'snomed_display' => $snomedDisplay,
                         'severity'       => trim((string) ($item['severity']   ?? '')),
                         'duration'       => trim((string) ($item['duration']   ?? '')),
                         'frequency'      => trim((string) ($item['frequency']  ?? '')),
