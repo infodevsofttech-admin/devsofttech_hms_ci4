@@ -1223,6 +1223,66 @@
         }, 200);
     });
 
+    // ── Arrow-key / Enter navigation for SNOMED dropdowns ─────────────
+    fhirFormView.addEventListener('keydown', function(e) {
+        var key = e.key;
+        if (key !== 'ArrowDown' && key !== 'ArrowUp' && key !== 'Enter' && key !== 'Escape') return;
+
+        var searchInput = e.target.closest('.fhir-snomed-search, .fhir-diag-search');
+        var ddItem      = e.target.closest('.fhir-snomed-dd-item, .fhir-diag-dd-item');
+        if (!searchInput && !ddItem) return;
+
+        // Determine which dropdown container we're in
+        var panel = e.target.closest('.fhir-edit-panel, .fhir-diag-panel');
+        if (!panel) return;
+        var dd = panel.querySelector('.fhir-snomed-dd, .fhir-diag-dd');
+        if (!dd) return;
+        var input = panel.querySelector('.fhir-snomed-search, .fhir-diag-search');
+        var items = Array.prototype.slice.call(dd.querySelectorAll('.list-group-item'));
+        if (!items.length && key !== 'Escape') return;
+
+        if (key === 'Escape') {
+            dd.style.display = 'none';
+            if (input) input.focus();
+            e.preventDefault();
+            return;
+        }
+
+        if (key === 'Enter' && ddItem) {
+            e.preventDefault();
+            ddItem.click();
+            return;
+        }
+
+        if (key === 'Enter' && searchInput) {
+            // Select first visible item on Enter if dropdown open
+            if (dd.style.display !== 'none' && items.length) {
+                e.preventDefault();
+                items[0].click();
+            }
+            return;
+        }
+
+        if (key === 'ArrowDown') {
+            e.preventDefault();
+            if (searchInput) {
+                // From input: focus first item
+                if (dd.style.display !== 'none' && items.length) { items[0].focus(); }
+            } else if (ddItem) {
+                var idx = items.indexOf(ddItem);
+                if (idx < items.length - 1) { items[idx + 1].focus(); } else { items[0].focus(); }
+            }
+        }
+
+        if (key === 'ArrowUp') {
+            e.preventDefault();
+            if (ddItem) {
+                var idx2 = items.indexOf(ddItem);
+                if (idx2 > 0) { items[idx2 - 1].focus(); } else { if (input) input.focus(); }
+            }
+        }
+    });
+
     // ── Render FHIR bundle as human-readable form ──────────────────────
     function hesc(s) {
         return String(s || '')
