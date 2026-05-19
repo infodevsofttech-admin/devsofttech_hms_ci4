@@ -590,6 +590,7 @@ $routes->get('Opd_prescription/fhir_bundle_history/(:num)', 'Opd_prescription::f
 $routes->get('Opd_prescription/fhir_bundle_history/(:num)/(:num)', 'Opd_prescription::fhir_bundle_history/$1/$2');
 $routes->get('Opd_prescription/fhir_bundle_preview/(:num)', 'Opd_prescription::fhir_bundle_preview/$1');
 $routes->get('Opd_prescription/fhir_bundle_preview/(:num)/(:num)', 'Opd_prescription::fhir_bundle_preview/$1/$2');
+$routes->post('Opd_prescription/fhir_complaint_recode', 'Opd_prescription::fhir_complaint_recode');
 $routes->get('Opd_prescription/complaints_search', 'Opd_prescription::complaints_search');
 $routes->get('Opd_prescription/complaints_extract', 'Opd_prescription::complaints_extract');
 $routes->get('Opd_prescription/section_recent_entries', 'Opd_prescription::section_recent_entries');

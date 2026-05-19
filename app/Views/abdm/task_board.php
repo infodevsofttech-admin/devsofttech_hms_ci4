@@ -988,6 +988,134 @@
         fhirFormView.style.display = 'none';
     });
 
+    // ── Track current bundle context for edits ──────────────────────
+    var _fhirOpdId = 0, _fhirSessionId = 0;
+
+    // ── Inline complaint SNOMED edit (event delegation on fhirFormView) ─
+    var _editTimer = null;
+    fhirFormView.addEventListener('click', function(e) {
+        var editBtn  = e.target.closest('.fhir-complaint-edit');
+        var cancelBtn = e.target.closest('.fhir-complaint-cancel');
+        var saveBtn  = e.target.closest('.fhir-complaint-save');
+        var ddItem   = e.target.closest('.fhir-snomed-dd-item');
+
+        if (editBtn) {
+            var panel = fhirFormView.querySelector('.fhir-edit-panel[data-idx="' + editBtn.dataset.idx + '"]');
+            if (!panel) return;
+            // Close others
+            fhirFormView.querySelectorAll('.fhir-edit-panel').forEach(function(p) { if (p !== panel) p.style.display = 'none'; });
+            panel.style.display = panel.style.display === 'none' ? '' : 'none';
+        }
+        if (cancelBtn) {
+            cancelBtn.closest('.fhir-edit-panel').style.display = 'none';
+        }
+        if (ddItem) {
+            var panel2 = ddItem.closest('.fhir-edit-panel');
+            panel2.querySelector('.fhir-snomed-id').value    = ddItem.dataset.id  || '';
+            panel2.querySelector('.fhir-snomed-term').value  = ddItem.dataset.term || '';
+            panel2.querySelector('.fhir-snomed-search').value = ddItem.dataset.term || '';
+            panel2.querySelector('.fhir-snomed-dd').style.display = 'none';
+            var sel = panel2.querySelector('.fhir-snomed-selected');
+            sel.textContent = '✓ ' + (ddItem.dataset.id || '') + ' — ' + (ddItem.dataset.term || '');
+            sel.style.display = '';
+        }
+        if (saveBtn) {
+            var panel3 = saveBtn.closest('.fhir-edit-panel');
+            var sId   = panel3.querySelector('.fhir-snomed-id').value.trim();
+            var sTerm = panel3.querySelector('.fhir-snomed-term').value.trim();
+            var cText = panel3.dataset.complaintText || '';
+            if (!sId && !sTerm) {
+                // Try the search field text as the term if nothing selected
+                sTerm = panel3.querySelector('.fhir-snomed-search').value.trim();
+            }
+            var csrfN = document.querySelector('meta[name="csrf-token-name"]');
+            var csrfH = document.querySelector('meta[name="csrf-token-hash"]');
+            var body  = new URLSearchParams({
+                opd_id: _fhirOpdId,
+                opd_session_id: _fhirSessionId,
+                complaint_text: cText,
+                snomed_concept_id: sId,
+                snomed_term: sTerm
+            });
+            body.append(csrfName, csrfHash);
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Saving…';
+            fetch('<?= base_url('Opd_prescription/fhir_complaint_recode') ?>', {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: body.toString()
+            })
+            .then(function(r){ return r.json(); })
+            .then(function(res){
+                if (res.update == 1) {
+                    // Update the CSRF token for next request
+                    if (res.csrfName && res.csrfHash) { csrfName = res.csrfName; csrfHash = res.csrfHash; }
+                    // Update the displayed complaint badge inline
+                    var li = panel3.closest('li');
+                    if (li && sId) {
+                        var existing = li.querySelector('.fhir-snomed-badge');
+                        if (existing) { existing.textContent = 'SNOMED\u00a0' + sId; }
+                        else {
+                            var badge = document.createElement('span');
+                            badge.className = 'badge bg-info text-dark ms-1 fhir-snomed-badge';
+                            badge.style.fontSize = '.7rem';
+                            badge.textContent = 'SNOMED\u00a0' + sId;
+                            var strong = li.querySelector('strong');
+                            if (strong) strong.insertAdjacentElement('afterend', badge);
+                        }
+                    }
+                    panel3.style.display = 'none';
+                    // Refresh quality badges
+                } else {
+                    alert(res.error_text || 'Save failed');
+                }
+            })
+            .catch(function(e){ alert('Error: ' + e.message); })
+            .finally(function(){ saveBtn.disabled = false; saveBtn.textContent = 'Save'; });
+        }
+    });
+    fhirFormView.addEventListener('input', function(e) {
+        var searchInput = e.target.closest('.fhir-snomed-search');
+        if (!searchInput) return;
+        var panel = searchInput.closest('.fhir-edit-panel');
+        var dd    = panel.querySelector('.fhir-snomed-dd');
+        var q     = searchInput.value.trim();
+        if (q.length < 2) { dd.style.display = 'none'; return; }
+        clearTimeout(_editTimer);
+        _editTimer = setTimeout(function() {
+            fetch('<?= base_url('Opd_prescription/complaints_search') ?>?q=' + encodeURIComponent(q), {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(function(r){ return r.json(); })
+            .then(function(res){
+                dd.innerHTML = '';
+                var rows = (res.rows || res.results || []);
+                if (!rows.length) { dd.style.display = 'none'; return; }
+                rows.slice(0, 10).forEach(function(row) {
+                    var id   = row.concept_id || row.snomed_concept_id || '';
+                    var name = row.name || row.term || row.snomed_term || '';
+                    var btn  = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'list-group-item list-group-item-action py-1 px-2 fhir-snomed-dd-item';
+                    btn.dataset.id   = id;
+                    btn.dataset.term = name;
+                    btn.innerHTML = '<small>' + hesc(name) + (id ? ' <span class="text-muted">' + hesc(id) + '</span>' : '') + '</small>';
+                    dd.appendChild(btn);
+                });
+                dd.style.display = '';
+            })
+            .catch(function(){ dd.style.display = 'none'; });
+        }, 280);
+    });
+    fhirFormView.addEventListener('focusout', function(e) {
+        if (!e.target.closest('.fhir-edit-panel')) return;
+        // Delay hiding so click on dd item registers first
+        setTimeout(function() {
+            var dd = e.target.closest('.fhir-edit-panel');
+            if (dd) { var d = dd.querySelector('.fhir-snomed-dd'); if (d) d.style.display = 'none'; }
+        }, 200);
+    });
+
     // ── Render FHIR bundle as human-readable form ──────────────────────
     function hesc(s) {
         return String(s || '')
@@ -1046,7 +1174,7 @@
         if (complaints.length) {
             html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">Chief Complaints</small></div><div class="card-body py-2">';
             html += '<ul class="mb-0 ps-3">';
-            complaints.forEach(function(c) {
+            complaints.forEach(function(c, idx) {
                 var codeText = (c.code || {}).text || '';
                 var coding   = (((c.code || {}).coding) || [])[0] || {};
                 var snomed   = coding.code || '';
@@ -1054,11 +1182,29 @@
                 var sev      = ((c.severity || {}).coding || [{}])[0];
                 var sevText  = (sev && sev.display) ? sev.display : ((c.severity || {}).text || '');
                 var note     = ((c.note || [{}])[0] || {}).text || '';
-                html += '<li class="mb-1">';
+                html += '<li class="mb-2">';
+                html += '<div class="d-flex align-items-start gap-2">';
+                html += '<div class="flex-grow-1">';
                 html += '<strong>' + hesc(display || codeText) + '</strong>';
-                if (snomed)  html += ' <span class="badge bg-info text-dark" style="font-size:.7rem;">SNOMED&nbsp;' + hesc(snomed) + '</span>';
+                if (snomed)  html += ' <span class="badge bg-info text-dark fhir-snomed-badge" style="font-size:.7rem;">SNOMED&nbsp;' + hesc(snomed) + '</span>';
                 if (sevText) html += ' <span class="badge bg-secondary" style="font-size:.7rem;">' + hesc(sevText) + '</span>';
                 if (note)    html += ' <small class="text-muted">(' + hesc(note) + ')</small>';
+                html += '</div>';
+                html += '<button type="button" class="btn btn-outline-secondary fhir-complaint-edit flex-shrink-0" data-idx="' + idx + '" style="font-size:.7rem;padding:1px 6px;">Edit</button>';
+                html += '</div>';
+                // inline edit panel
+                html += '<div class="fhir-edit-panel border rounded p-2 mt-1 bg-light" data-idx="' + idx + '" data-complaint-text="' + hesc(display || codeText) + '" style="display:none;">';
+                html += '<div class="mb-1 small text-muted">Search SNOMED CT and assign code:</div>';
+                html += '<div class="position-relative mb-1">';
+                html += '<input type="text" class="form-control form-control-sm fhir-snomed-search" placeholder="Type to search SNOMED…" value="' + hesc(display || codeText) + '">';
+                html += '<div class="list-group shadow position-absolute w-100 fhir-snomed-dd" style="z-index:2000;display:none;max-height:180px;overflow-y:auto;"></div>';
+                html += '</div>';
+                html += '<div class="fhir-snomed-selected small text-success mb-1" style="display:none;"></div>';
+                html += '<input type="hidden" class="fhir-snomed-id" value="' + hesc(snomed) + '">';
+                html += '<input type="hidden" class="fhir-snomed-term" value="' + hesc(display || codeText) + '">';
+                html += '<div class="d-flex gap-2"><button type="button" class="btn btn-sm btn-primary fhir-complaint-save">Save</button>';
+                html += '<button type="button" class="btn btn-sm btn-outline-secondary fhir-complaint-cancel">Cancel</button></div>';
+                html += '</div>';
                 html += '</li>';
             });
             html += '</ul></div></div>';
@@ -1176,6 +1322,7 @@
     }
 
     function openFhirModal(url, title) {
+        _fhirOpdId = 0; _fhirSessionId = 0;
         if (fhirModalTitle)   fhirModalTitle.textContent = title || 'FHIR Preview';
         if (fhirModalMeta)    { fhirModalMeta.textContent = 'Loading...'; fhirModalMeta.className = 'flex-grow-1 small text-muted'; }
         if (fhirModalQuality) { fhirModalQuality.innerHTML = ''; fhirModalQuality.style.display = 'none'; }
@@ -1195,6 +1342,8 @@
                 try { parsed = JSON.parse(res.body || '{}'); } catch (e) { parsed = { raw: res.body || '' }; }
                 var bundle = (parsed && parsed.resourceType === 'Bundle') ? parsed : ((parsed && parsed.bundle) ? parsed.bundle : null);
                 var hasFhir = bundle !== null;
+                _fhirOpdId     = parseInt(parsed.opd_id     || '0', 10) || 0;
+                _fhirSessionId = parseInt(parsed.opd_session_id || '0', 10) || 0;
                 if (fhirModalJson)  fhirModalJson.textContent = JSON.stringify(parsed, null, 2);
                 if (fhirFormView)   fhirFormView.innerHTML = hasFhir ? renderFhirBundleForm(bundle) : '<p class="text-muted p-3">No FHIR bundle generated yet.</p>';
                 if (fhirModalMeta)  { fhirModalMeta.textContent = res.ok ? 'Loaded (' + res.status + ')' : 'Error (' + res.status + ')'; fhirModalMeta.className = 'flex-grow-1 small ' + (res.ok ? 'text-success' : 'text-danger'); }

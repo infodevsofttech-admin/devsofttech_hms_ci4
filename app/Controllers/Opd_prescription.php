@@ -4640,7 +4640,93 @@ class Opd_prescription extends BaseController
         return $this->response->setHeader('Content-Type', 'text/html; charset=UTF-8')->setBody($html);
     }
 
-    public function advice_search()
+    public function fhir_complaint_recode()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0]);
+        }
+
+        $opdId         = (int)    $this->request->getPost('opd_id');
+        $sessionId     = (int)    $this->request->getPost('opd_session_id');
+        $complaintText = trim((string) $this->request->getPost('complaint_text'));
+        $snomedId      = trim((string) $this->request->getPost('snomed_concept_id'));
+        $snomedTerm    = trim((string) $this->request->getPost('snomed_term'));
+
+        if ($opdId <= 0 || $complaintText === '') {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Missing required fields']);
+        }
+        if (! $this->db->tableExists('opd_prescription')) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Table not found']);
+        }
+
+        // Resolve the prescription row
+        $prescRow = null;
+        if ($sessionId > 0) {
+            $prescRow = $this->db->table('opd_prescription')
+                ->where('id', $sessionId)->where('opd_id', $opdId)->get(1)->getRowArray();
+        }
+        if (empty($prescRow)) {
+            $prescRow = $this->db->table('opd_prescription')
+                ->where('opd_id', $opdId)->orderBy('id', 'DESC')->get(1)->getRowArray();
+        }
+        if (empty($prescRow)) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Prescription record not found']);
+        }
+
+        $prescId   = (int) $prescRow['id'];
+        $snomedJson = trim((string) ($prescRow['complaint_snomed_json'] ?? ''));
+        $items = [];
+        if ($snomedJson !== '' && $snomedJson !== '[]') {
+            $decoded = json_decode($snomedJson, true);
+            if (is_array($decoded)) {
+                $items = $decoded;
+            }
+        }
+
+        // Bootstrap from free-text if no structured items yet
+        if (empty($items)) {
+            $parts = preg_split('/[,;\n\r]+/', (string) ($prescRow['complaints'] ?? '')) ?: [];
+            foreach ($parts as $part) {
+                $part = trim((string) $part);
+                if ($part !== '' && preg_match('/^Complaint\s*(Onset|Duration|Severity)\s*:/i', $part) !== 1) {
+                    $items[] = ['term' => $part, 'concept_id' => '', 'source' => 'local',
+                                'hierarchy' => '', 'severity' => '', 'duration' => '', 'frequency' => '', 'date' => ''];
+                }
+            }
+        }
+
+        // Find and update matching complaint (case-insensitive)
+        $found = false;
+        foreach ($items as &$item) {
+            if (strtolower(trim((string) ($item['term'] ?? ''))) === strtolower($complaintText)) {
+                $item['concept_id'] = $snomedId;
+                $item['term']       = $snomedTerm ?: $complaintText;
+                $item['source']     = $snomedId !== '' ? 'snomed' : ($item['source'] ?? 'local');
+                $found = true;
+                break;
+            }
+        }
+        unset($item);
+
+        if (! $found) {
+            $items[] = ['term' => $snomedTerm ?: $complaintText, 'concept_id' => $snomedId,
+                        'source' => $snomedId !== '' ? 'snomed' : 'local',
+                        'hierarchy' => '', 'severity' => '', 'duration' => '', 'frequency' => '', 'date' => ''];
+        }
+
+        $newJson = (string) json_encode(array_values($items), JSON_UNESCAPED_UNICODE);
+        $this->db->table('opd_prescription')->where('id', $prescId)->update(['complaint_snomed_json' => $newJson]);
+
+        return $this->response->setJSON([
+            'update'           => 1,
+            'error_text'       => 'Saved',
+            'presc_id'         => $prescId,
+            'snomed_concept_id'=> $snomedId,
+            'snomed_term'      => $snomedTerm,
+            'csrfName'         => csrf_token(),
+            'csrfHash'         => csrf_hash(),
+        ]);
+    }
     {
         $q = trim((string) $this->request->getGet('q'));
         if (! $this->db->tableExists('opd_advice')) {
