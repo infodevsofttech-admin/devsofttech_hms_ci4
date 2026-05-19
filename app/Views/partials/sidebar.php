@@ -343,6 +343,12 @@ if (! $canChargesSettings && $user && method_exists($user, 'inGroup')) {
             </a>
         </li>
         <li class="nav-item">
+            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Opd_prescription/clinical_master_workspace') ?>','Clinical Master')">
+                <i class="bi bi-heart-pulse"></i>
+                <span>Clinical Master</span>
+            </a>
+        </li>
+        <li class="nav-item">
             <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Opd_prescription/opd_invest_profile_master') ?>','Investigation Profile Master')">
                 <i class="bi bi-collection"></i>
                 <span>Investigation Profile Master</span>

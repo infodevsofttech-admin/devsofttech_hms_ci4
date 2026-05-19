@@ -4052,6 +4052,282 @@ class Opd_prescription extends BaseController
 
     // ─────────────────────────────────────────────────────────────────────────
 
+    // ─── Clinical Master Workspace (Complaints + Diagnosis/Disease) ────────
+
+    public function clinical_master_workspace(): string
+    {
+        return view('billing/opd_clinical_master_workspace');
+    }
+
+    // --- Complaints Master -------------------------------------------------
+
+    public function complaints_master_data(): \CodeIgniter\HTTP\ResponseInterface
+    {
+        if (! $this->db->tableExists('complaints_master')) {
+            return $this->response->setJSON(['data' => [], 'recordsTotal' => 0, 'recordsFiltered' => 0]);
+        }
+
+        $start   = (int) ($this->request->getGet('start') ?? 0);
+        $length  = (int) ($this->request->getGet('length') ?? 25);
+        $filter  = trim((string) ($this->request->getGet('filter') ?? ''));
+        $snomed  = (int) ($this->request->getGet('snomed_only') ?? 0);
+
+        $qb = $this->db->table('complaints_master');
+
+        if ($filter !== '') {
+            $qb->groupStart()
+               ->like('Name', $filter)
+               ->orLike('name_hinglish', $filter)
+               ->orLike('keywords', $filter)
+               ->groupEnd();
+        }
+        if ($snomed === 1) {
+            $qb->where('snomed_concept_id IS NOT NULL')->where("snomed_concept_id != ''");
+        }
+
+        $total = (clone $qb)->countAllResults(false);
+        $rows  = $qb->select('Code, Name, show_in_short, name_hinglish, ai_hint, is_active, snomed_concept_id, snomed_term')
+                    ->orderBy('show_in_short', 'DESC')
+                    ->orderBy('Name', 'ASC')
+                    ->limit($length, $start)
+                    ->get()
+                    ->getResultArray();
+
+        return $this->response->setJSON([
+            'recordsTotal'    => $total,
+            'recordsFiltered' => $total,
+            'data'            => $rows,
+        ]);
+    }
+
+    public function complaints_master_get(int $code): \CodeIgniter\HTTP\ResponseInterface
+    {
+        if (! $this->db->tableExists('complaints_master')) {
+            return $this->response->setStatusCode(404)->setJSON(['error' => 'Table not found']);
+        }
+        $row = $this->db->table('complaints_master')
+            ->where('Code', $code)
+            ->get(1)
+            ->getRowArray();
+        if (! $row) {
+            return $this->response->setStatusCode(404)->setJSON(['error' => 'Not found']);
+        }
+        return $this->response->setJSON(['row' => $row]);
+    }
+
+    public function complaints_master_save(): \CodeIgniter\HTTP\ResponseInterface
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0]);
+        }
+        if (! $this->db->tableExists('complaints_master')) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Table not found']);
+        }
+
+        $code            = (int) ($this->request->getPost('Code') ?? 0);
+        $name            = strtoupper(trim((string) ($this->request->getPost('Name') ?? '')));
+        $nameHinglish    = trim((string) ($this->request->getPost('name_hinglish') ?? ''));
+        $keywords        = trim((string) ($this->request->getPost('keywords') ?? ''));
+        $aiHint          = trim((string) ($this->request->getPost('ai_hint') ?? ''));
+        $showInShort     = (int) ($this->request->getPost('show_in_short') ?? 0);
+        $isActive        = (int) ($this->request->getPost('is_active') ?? 1);
+        $snomedConceptId = trim((string) ($this->request->getPost('snomed_concept_id') ?? ''));
+        $snomedTerm      = trim((string) ($this->request->getPost('snomed_term') ?? ''));
+
+        if ($name === '') {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Name is required']);
+        }
+
+        $payload = [
+            'Name'             => $name,
+            'name_hinglish'    => $nameHinglish !== '' ? $nameHinglish : null,
+            'keywords'         => $keywords !== '' ? $keywords : null,
+            'ai_hint'          => $aiHint !== '' ? $aiHint : null,
+            'show_in_short'    => $showInShort ? 1 : 0,
+            'is_active'        => $isActive ? 1 : 0,
+            'snomed_concept_id'=> $snomedConceptId !== '' ? $snomedConceptId : null,
+            'snomed_term'      => $snomedTerm !== '' ? $snomedTerm : null,
+            'updated_at'       => date('Y-m-d H:i:s'),
+        ];
+
+        if ($code > 0) {
+            $this->db->table('complaints_master')->where('Code', $code)->update($payload);
+            $newCode = $code;
+            $msg = 'Complaint updated';
+        } else {
+            // auto Code
+            $maxCode = (int) ($this->db->table('complaints_master')->selectMax('Code')->get()->getRowArray()['Code'] ?? 0);
+            $newCode = $maxCode + 1;
+            $payload['Code']       = $newCode;
+            $payload['created_at'] = date('Y-m-d H:i:s');
+            $this->db->table('complaints_master')->insert($payload);
+            $msg = 'Complaint added';
+        }
+
+        return $this->response->setJSON([
+            'update'     => 1,
+            'error_text' => $msg,
+            'code'       => $newCode,
+            'csrfName'   => csrf_token(),
+            'csrfHash'   => csrf_hash(),
+        ]);
+    }
+
+    public function complaints_master_remove(int $code): \CodeIgniter\HTTP\ResponseInterface
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0]);
+        }
+        if (! $this->db->tableExists('complaints_master')) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Table not found']);
+        }
+
+        // Soft-delete: set is_active = 0
+        $this->db->table('complaints_master')
+            ->where('Code', $code)
+            ->update(['is_active' => 0, 'updated_at' => date('Y-m-d H:i:s')]);
+
+        return $this->response->setJSON([
+            'update'     => 1,
+            'error_text' => 'Complaint deactivated',
+            'csrfName'   => csrf_token(),
+            'csrfHash'   => csrf_hash(),
+        ]);
+    }
+
+    // --- Disease/Diagnosis Master ------------------------------------------
+
+    public function disease_master_data(): \CodeIgniter\HTTP\ResponseInterface
+    {
+        if (! $this->db->tableExists('disease_master')) {
+            return $this->response->setJSON(['data' => [], 'recordsTotal' => 0, 'recordsFiltered' => 0]);
+        }
+
+        $start  = (int) ($this->request->getGet('start') ?? 0);
+        $length = (int) ($this->request->getGet('length') ?? 25);
+        $filter = trim((string) ($this->request->getGet('filter') ?? ''));
+        $snomed = (int) ($this->request->getGet('snomed_only') ?? 0);
+
+        $fields = $this->db->getFieldNames('disease_master') ?? [];
+        $hasIsActive = in_array('is_active', $fields, true);
+
+        $qb = $this->db->table('disease_master');
+
+        if ($filter !== '') {
+            $qb->groupStart()->like('Name', $filter)->groupEnd();
+        }
+        if ($snomed === 1) {
+            $qb->where('snomed_concept_id IS NOT NULL')->where("snomed_concept_id != ''");
+        }
+
+        $total  = (clone $qb)->countAllResults(false);
+        $select = 'Code, Name' . ($hasIsActive ? ', is_active' : '') . ', snomed_concept_id, snomed_term';
+        $rows   = $qb->select($select)
+                     ->orderBy('Name', 'ASC')
+                     ->limit($length, $start)
+                     ->get()
+                     ->getResultArray();
+
+        return $this->response->setJSON([
+            'recordsTotal'    => $total,
+            'recordsFiltered' => $total,
+            'data'            => $rows,
+        ]);
+    }
+
+    public function disease_master_get(int $code): \CodeIgniter\HTTP\ResponseInterface
+    {
+        if (! $this->db->tableExists('disease_master')) {
+            return $this->response->setStatusCode(404)->setJSON(['error' => 'Table not found']);
+        }
+        $row = $this->db->table('disease_master')
+            ->where('Code', $code)
+            ->get(1)
+            ->getRowArray();
+        if (! $row) {
+            return $this->response->setStatusCode(404)->setJSON(['error' => 'Not found']);
+        }
+        return $this->response->setJSON(['row' => $row]);
+    }
+
+    public function disease_master_save(): \CodeIgniter\HTTP\ResponseInterface
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0]);
+        }
+        if (! $this->db->tableExists('disease_master')) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Table not found']);
+        }
+
+        $code            = (int) ($this->request->getPost('Code') ?? 0);
+        $name            = strtoupper(trim((string) ($this->request->getPost('Name') ?? '')));
+        $snomedConceptId = trim((string) ($this->request->getPost('snomed_concept_id') ?? ''));
+        $snomedTerm      = trim((string) ($this->request->getPost('snomed_term') ?? ''));
+        $isActive        = (int) ($this->request->getPost('is_active') ?? 1);
+
+        if ($name === '') {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Name is required']);
+        }
+
+        $fields = $this->db->getFieldNames('disease_master') ?? [];
+        $hasIsActive = in_array('is_active', $fields, true);
+
+        $payload = [
+            'Name'              => $name,
+            'snomed_concept_id' => $snomedConceptId !== '' ? $snomedConceptId : null,
+            'snomed_term'       => $snomedTerm !== '' ? $snomedTerm : null,
+        ];
+        if ($hasIsActive) {
+            $payload['is_active'] = $isActive ? 1 : 0;
+        }
+
+        if ($code > 0) {
+            $this->db->table('disease_master')->where('Code', $code)->update($payload);
+            $newCode = $code;
+            $msg = 'Diagnosis updated';
+        } else {
+            $maxCode = (int) ($this->db->table('disease_master')->selectMax('Code')->get()->getRowArray()['Code'] ?? 0);
+            $newCode = $maxCode + 1;
+            $payload['Code'] = $newCode;
+            $this->db->table('disease_master')->insert($payload);
+            $msg = 'Diagnosis added';
+        }
+
+        return $this->response->setJSON([
+            'update'     => 1,
+            'error_text' => $msg,
+            'code'       => $newCode,
+            'csrfName'   => csrf_token(),
+            'csrfHash'   => csrf_hash(),
+        ]);
+    }
+
+    public function disease_master_remove(int $code): \CodeIgniter\HTTP\ResponseInterface
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0]);
+        }
+        if (! $this->db->tableExists('disease_master')) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Table not found']);
+        }
+
+        $fields = $this->db->getFieldNames('disease_master') ?? [];
+        if (in_array('is_active', $fields, true)) {
+            $this->db->table('disease_master')->where('Code', $code)->update(['is_active' => 0]);
+        } else {
+            $this->db->table('disease_master')->where('Code', $code)->delete();
+        }
+
+        return $this->response->setJSON([
+            'update'     => 1,
+            'error_text' => 'Diagnosis deactivated',
+            'csrfName'   => csrf_token(),
+            'csrfHash'   => csrf_hash(),
+        ]);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+
     public function opd_medicince_duplicate_report()
     {
         $medicineModel = new OpdMedicineModel($this->db);

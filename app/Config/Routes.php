@@ -712,6 +712,17 @@ $routes->get('Opd_prescription/opd_invest_profile_master_get/(:num)', 'Opd_presc
 $routes->post('Opd_prescription/opd_invest_profile_master_save', 'Opd_prescription::opd_invest_profile_master_save');
 $routes->post('Opd_prescription/opd_invest_profile_master_remove/(:num)', 'Opd_prescription::opd_invest_profile_master_remove/$1');
 
+// Clinical Master (Complaints + Diagnosis)
+$routes->get('Opd_prescription/clinical_master_workspace', 'Opd_prescription::clinical_master_workspace', ['filter' => 'permission:doctor_work.medicine.manage,doctor_work.access']);
+$routes->get('Opd_prescription/complaints_master_data', 'Opd_prescription::complaints_master_data');
+$routes->get('Opd_prescription/complaints_master_get/(:num)', 'Opd_prescription::complaints_master_get/$1');
+$routes->post('Opd_prescription/complaints_master_save', 'Opd_prescription::complaints_master_save');
+$routes->post('Opd_prescription/complaints_master_remove/(:num)', 'Opd_prescription::complaints_master_remove/$1');
+$routes->get('Opd_prescription/disease_master_data', 'Opd_prescription::disease_master_data');
+$routes->get('Opd_prescription/disease_master_get/(:num)', 'Opd_prescription::disease_master_get/$1');
+$routes->post('Opd_prescription/disease_master_save', 'Opd_prescription::disease_master_save');
+$routes->post('Opd_prescription/disease_master_remove/(:num)', 'Opd_prescription::disease_master_remove/$1');
+
 $routes->get('Opd_prescription/medicine_search', 'Opd_prescription::medicine_search');
 $routes->get('Opd_prescription/medicine_substitutes', 'Opd_prescription::medicine_substitutes');
 $routes->get('Opd_prescription/medicine_list/(:num)', 'Opd_prescription::medicine_list/$1');
