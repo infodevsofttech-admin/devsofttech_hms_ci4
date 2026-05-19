@@ -23,10 +23,9 @@
     </div>
 
     <div class="d-flex flex-wrap gap-2 mb-3" id="taskFilters">
-        <button class="btn btn-sm btn-primary filter-btn" data-filter="all">All</button>
-        <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="patient_abha_create">Unupdated ABHA</button>
-        <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="patient_abha_update">ABHA Update</button>
-        <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="opd_prescription_publish">OPD Publish</button>
+        <button class="btn btn-sm btn-primary filter-btn" data-filter="patient_abha_create">Unupdated ABHA</button>
+        <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="patient_abha_update">ABHA Verify Pending</button>
+        <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="opd_book">OPD Book</button>
         <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="opd_consult_publish">OPD Consult Publish</button>
         <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="lab_report_publish">Lab Reports</button>
         <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="radiology_report_publish">Radiology Reports</button>
@@ -126,7 +125,7 @@
         </div>
     </div>
 
-    <div class="card shadow-sm">
+    <div class="card shadow-sm" id="taskTableCard">
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-sm table-striped mb-0" id="taskTable">
@@ -266,6 +265,99 @@
         </div>
     </div>
 
+    <!-- OPD Book Card -->
+    <div class="card shadow-sm mt-3 d-none" id="opdBookCard">
+        <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <strong>OPD Book — ABDM Patients</strong>
+                <span class="badge bg-primary ms-2" id="hmsOpdBadge"><?= count($opd_book_rows ?? []) ?></span>
+            </div>
+            <div class="d-flex gap-2 align-items-center">
+                <input type="date" class="form-control form-control-sm" id="opdBookDate" value="<?= date('Y-m-d') ?>" style="width:145px">
+                <button type="button" class="btn btn-sm btn-outline-info" id="btnFetchAbdmQueue">Fetch ABDM Queue</button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="px-3 pt-2 pb-1 bg-light border-bottom d-flex align-items-center gap-2">
+                <strong class="small">ABDM Gateway Queue</strong>
+                <span class="badge bg-secondary" id="abdmQueueBadge">-</span>
+                <span class="text-muted small" id="abdmQueueStatus">Click "Fetch ABDM Queue" to load</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead class="table-light">
+                        <tr><th>Token</th><th>ABHA</th><th>Name</th><th>Status</th><th>Time</th><th>HMS Patient</th></tr>
+                    </thead>
+                    <tbody id="abdmQueueTbody"><tr><td colspan="6" class="text-muted px-2 py-2">Not loaded yet.</td></tr></tbody>
+                </table>
+            </div>
+            <div class="px-3 pt-2 pb-1 bg-light border-bottom border-top d-flex align-items-center gap-2 mt-1">
+                <strong class="small">HMS Direct OPD with ABHA</strong>
+                <span class="badge bg-success"><?= count($opd_book_rows ?? []) ?></span>
+                <span class="text-muted small">Last 7 days · patient has 14-digit ABHA</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead class="table-light">
+                        <tr><th>OPD ID</th><th>Patient</th><th>ABHA</th><th>Date</th><th>Doctor</th><th>Status</th></tr>
+                    </thead>
+                    <tbody>
+                    <?php if (! empty($opd_book_rows ?? [])): ?>
+                        <?php foreach (($opd_book_rows ?? []) as $r): ?>
+                        <tr>
+                            <td>#<?= (int) ($r['opd_id'] ?? 0) ?></td>
+                            <td><?= esc((string) ($r['P_name'] ?? '')) ?></td>
+                            <td><span class="text-primary small"><?= esc((string) ($r['abha_id'] ?? '')) ?></span></td>
+                            <td><?= esc(substr((string) ($r['apointment_date'] ?? ''), 0, 16)) ?></td>
+                            <td><?= esc((string) ($r['doc_name'] ?? '')) ?></td>
+                            <td><span class="badge bg-<?= (int) ($r['opd_status'] ?? 0) >= 2 ? 'success' : 'warning text-dark' ?>"><?= (int) ($r['opd_status'] ?? 0) >= 2 ? 'Done' : 'Pending' ?></span></td>
+                        </tr>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <tr><td colspan="6" class="text-muted px-2 py-2">No OPD with ABHA found in last 7 days.</td></tr>
+                    <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- OPD Consult Publish Card -->
+    <div class="card shadow-sm mt-3 d-none" id="opdConsultCard">
+        <div class="card-header py-2 d-flex align-items-center gap-2">
+            <strong>OPD Consult Publish — Done Appointments with ABHA</strong>
+            <span class="badge bg-success"><?= count($opd_consult_rows ?? []) ?></span>
+            <small class="text-muted ms-1">Last 30 days · opd_status=Done · ABHA linked</small>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead class="table-light">
+                        <tr><th>OPD ID</th><th>Patient</th><th>ABHA</th><th>Consult Date</th><th>Doctor</th><th>Action</th></tr>
+                    </thead>
+                    <tbody>
+                    <?php if (! empty($opd_consult_rows ?? [])): ?>
+                        <?php foreach (($opd_consult_rows ?? []) as $r): ?>
+                        <tr>
+                            <td>#<?= (int) ($r['opd_id'] ?? 0) ?></td>
+                            <td><?= esc((string) ($r['P_name'] ?? '')) ?></td>
+                            <td><span class="text-primary small"><?= esc((string) ($r['abha_id'] ?? '')) ?></span></td>
+                            <td><?= esc(substr((string) ($r['apointment_date'] ?? ''), 0, 16)) ?></td>
+                            <td><?= esc((string) ($r['doc_name'] ?? '')) ?></td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-outline-primary btn-opd-consult-fhir" data-opd-id="<?= (int) ($r['opd_id'] ?? 0) ?>">Preview FHIR</button>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <tr><td colspan="6" class="text-muted px-2 py-2">No done OPD with ABHA found in last 30 days.</td></tr>
+                    <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <div class="small text-muted mt-2" id="statusBox">Ready</div>
 </div>
 
@@ -340,17 +432,29 @@
         el.textContent = text;
     }
 
-    function applyFilter(filter) {
-        var appliedFilter = filter;
-        if ((filter || '').toLowerCase() === 'opd_consult_publish') {
-            appliedFilter = 'opd_prescription_publish';
-        }
+    var opdBookCard    = document.getElementById('opdBookCard');
+    var opdConsultCard = document.getElementById('opdConsultCard');
+    var taskTableCard  = document.getElementById('taskTableCard');
 
-        var rows = document.querySelectorAll('#taskTable tbody tr');
-        rows.forEach(function (row) {
-            var type = (row.getAttribute('data-task-type') || '').toLowerCase();
-            row.style.display = (appliedFilter === 'all' || type === appliedFilter.toLowerCase()) ? '' : 'none';
-        });
+    function applyFilter(filter) {
+        // Hide dedicated section cards
+        if (opdBookCard)    opdBookCard.classList.add('d-none');
+        if (opdConsultCard) opdConsultCard.classList.add('d-none');
+
+        if (filter === 'opd_book') {
+            if (taskTableCard) taskTableCard.classList.add('d-none');
+            if (opdBookCard)   opdBookCard.classList.remove('d-none');
+        } else if (filter === 'opd_consult_publish') {
+            if (taskTableCard)  taskTableCard.classList.add('d-none');
+            if (opdConsultCard) opdConsultCard.classList.remove('d-none');
+        } else {
+            if (taskTableCard) taskTableCard.classList.remove('d-none');
+            var rows = document.querySelectorAll('#taskTable tbody tr');
+            rows.forEach(function (row) {
+                var type = (row.getAttribute('data-task-type') || '').toLowerCase();
+                row.style.display = (type === filter.toLowerCase()) ? '' : 'none';
+            });
+        }
 
         document.querySelectorAll('.filter-btn').forEach(function (btn) {
             btn.classList.remove('btn-primary');
@@ -849,6 +953,55 @@
             }, 1500);
         }).catch(function (e) {
             setStatus('Copy failed: ' + e.message, true);
+        });
+    });
+
+    // ABDM Gateway Queue fetch for OPD Book
+    document.getElementById('btnFetchAbdmQueue').addEventListener('click', function () {
+        var date = (document.getElementById('opdBookDate').value || '').trim() || '<?= date('Y-m-d') ?>';
+        var statusEl = document.getElementById('abdmQueueStatus');
+        var badge    = document.getElementById('abdmQueueBadge');
+        var tbody    = document.getElementById('abdmQueueTbody');
+        if (statusEl) statusEl.textContent = 'Fetching...';
+        fetch('<?= base_url('AbdmOpdQueue/fetch') ?>?date=' + encodeURIComponent(date) + '&status=PENDING', {
+            method: 'GET',
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+        }).then(function (r) { return r.json(); }).then(function (data) {
+            var tokens = data.data || data.tokens || [];
+            if (badge)    badge.textContent = tokens.length;
+            if (statusEl) statusEl.textContent = 'Loaded ' + tokens.length + ' token(s)';
+            if (! tbody)  return;
+            if (! tokens.length) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-muted px-2 py-2">No PENDING tokens for ' + date + '.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = tokens.map(function (t) {
+                var abha  = (t.abha_id || t.abha_number || t.abhaId || '').toString().trim();
+                var name  = (t.patient_name || t.name || t.patientName || '').toString();
+                var stat  = (t.status || t.queue_status || '').toString();
+                var token = (t.token_number || t.tokenNumber || t.gateway_token_id || t.id || '').toString();
+                var time  = (t.created_at || t.token_time || t.arrival_time || '').toString();
+                var hms   = t.patient_id ? ('#' + t.patient_id + (t.p_fname ? ' ' + t.p_fname : '')) : '<span class="text-muted">—</span>';
+                return '<tr>' +
+                    '<td>' + (token || '—') + '</td>' +
+                    '<td><span class="text-primary small">' + (abha || '<span class="text-muted">—</span>') + '</span></td>' +
+                    '<td>' + (name || '—') + '</td>' +
+                    '<td><span class="badge bg-' + (stat === 'PENDING' ? 'warning text-dark' : 'secondary') + '">' + (stat || '—') + '</span></td>' +
+                    '<td class="small">' + (time ? time.substring(0, 16) : '—') + '</td>' +
+                    '<td>' + hms + '</td>' +
+                    '</tr>';
+            }).join('');
+        }).catch(function (e) {
+            if (statusEl) statusEl.textContent = 'Fetch failed: ' + e.message;
+        });
+    });
+
+    // OPD Consult Publish — FHIR preview buttons
+    document.querySelectorAll('.btn-opd-consult-fhir').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var opdId = parseInt(btn.getAttribute('data-opd-id') || '0', 10);
+            if (opdId <= 0) return;
+            showInlineFhirPreview('<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId, 'OPD Consult FHIR ' + opdId);
         });
     });
 

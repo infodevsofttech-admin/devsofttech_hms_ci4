@@ -21,8 +21,10 @@ class AbdmTaskBoard extends BaseController
         $tasks = $this->taskService->getOpenTasks(300);
 
         return view('abdm/task_board', [
-            'tasks' => $tasks,
-            'today_credit_opd_rows' => $this->getTodayCreditOpdConsultRows(),
+            'tasks'                  => $tasks,
+            'today_credit_opd_rows'  => $this->getTodayCreditOpdConsultRows(),
+            'opd_book_rows'          => $this->getOpdBookRows(),
+            'opd_consult_rows'       => $this->getOpdConsultPublishRows(),
         ]);
     }
 
@@ -434,5 +436,66 @@ class AbdmTaskBoard extends BaseController
         }
 
         return null;
+    }
+
+    /**
+     * OPD Book rows: HMS OPD appointments (last 7 days) where patient has ABHA.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function getOpdBookRows(): array
+    {
+        if (! $this->db->tableExists('opd_master') || ! $this->db->tableExists('patient_master')) {
+            return [];
+        }
+
+        $patientFields = $this->db->getFieldNames('patient_master') ?? [];
+        $abhaCol = $this->resolveExistingColumn($patientFields, ['abha_id', 'abha_no', 'abha_address', 'abha']);
+        if ($abhaCol === null) {
+            return [];
+        }
+
+        $rows = $this->db->table('opd_master o')
+            ->select('o.opd_id, o.p_id, o.P_name, o.apointment_date, o.opd_status, o.doc_name, p.' . $abhaCol . ' as abha_id', false)
+            ->join('patient_master p', 'p.id = o.p_id', 'left')
+            ->where('DATE(o.apointment_date) >=', date('Y-m-d', strtotime('-7 days')), false)
+            ->where('p.' . $abhaCol . ' !=', '')
+            ->orderBy('o.opd_id', 'DESC')
+            ->limit(200)
+            ->get()
+            ->getResultArray();
+
+        return array_values(array_filter($rows, static fn ($r) => preg_match('/^\d{14}$/', trim((string) ($r['abha_id'] ?? ''))) === 1));
+    }
+
+    /**
+     * OPD Consult Publish rows: done OPD (opd_status=2) with ABHA, last 30 days.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function getOpdConsultPublishRows(): array
+    {
+        if (! $this->db->tableExists('opd_master') || ! $this->db->tableExists('patient_master')) {
+            return [];
+        }
+
+        $patientFields = $this->db->getFieldNames('patient_master') ?? [];
+        $abhaCol = $this->resolveExistingColumn($patientFields, ['abha_id', 'abha_no', 'abha_address', 'abha']);
+        if ($abhaCol === null) {
+            return [];
+        }
+
+        $rows = $this->db->table('opd_master o')
+            ->select('o.opd_id, o.p_id, o.P_name, o.apointment_date, o.opd_status, o.doc_name, p.' . $abhaCol . ' as abha_id', false)
+            ->join('patient_master p', 'p.id = o.p_id', 'left')
+            ->where('o.opd_status', 2)
+            ->where('DATE(o.apointment_date) >=', date('Y-m-d', strtotime('-30 days')), false)
+            ->where('p.' . $abhaCol . ' !=', '')
+            ->orderBy('o.opd_id', 'DESC')
+            ->limit(300)
+            ->get()
+            ->getResultArray();
+
+        return array_values(array_filter($rows, static fn ($r) => preg_match('/^\d{14}$/', trim((string) ($r['abha_id'] ?? ''))) === 1));
     }
 }
