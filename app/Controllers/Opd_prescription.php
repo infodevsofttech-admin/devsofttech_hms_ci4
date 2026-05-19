@@ -4727,6 +4727,8 @@ class Opd_prescription extends BaseController
             'csrfHash'         => csrf_hash(),
         ]);
     }
+
+    public function advice_search()
     {
         $q = trim((string) $this->request->getGet('q'));
         if (! $this->db->tableExists('opd_advice')) {
