@@ -287,6 +287,29 @@
     <div class="small text-muted mt-2" id="statusBox">Ready</div>
 </div>
 
+<!-- FHIR Preview Modal -->
+<div class="modal fade" id="fhirPreviewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <h6 class="modal-title mb-0" id="fhirModalTitle">FHIR Preview</h6>
+                    <span class="badge bg-secondary" id="fhirModalDataBadge">CHECKING</span>
+                    <span class="badge bg-secondary" id="fhirModalHttpBadge">HTTP -</span>
+                </div>
+                <div class="d-flex gap-2 ms-auto">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="btnCopyFhirModal">Copy JSON</button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+            </div>
+            <div class="modal-body p-0">
+                <div class="px-3 py-2 small" id="fhirModalMeta">Loading...</div>
+                <pre id="fhirModalJson" style="margin:0; max-height:65vh; overflow:auto; background:#0b1020; color:#d9e2ff; padding:16px; border-radius:0;">{}</pre>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="modal fade" id="taskActionModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -922,12 +945,57 @@
         });
     });
 
-    // OPD Consult Publish — FHIR preview buttons
+    // FHIR Preview Modal
+    var fhirPreviewModalEl = document.getElementById('fhirPreviewModal');
+    var fhirPreviewModal   = new bootstrap.Modal(fhirPreviewModalEl);
+    var fhirModalTitle     = document.getElementById('fhirModalTitle');
+    var fhirModalMeta      = document.getElementById('fhirModalMeta');
+    var fhirModalJson      = document.getElementById('fhirModalJson');
+    var fhirModalDataBadge = document.getElementById('fhirModalDataBadge');
+    var fhirModalHttpBadge = document.getElementById('fhirModalHttpBadge');
+
+    function openFhirModal(url, title) {
+        if (fhirModalTitle)     fhirModalTitle.textContent = title || 'FHIR Preview';
+        if (fhirModalMeta)      { fhirModalMeta.textContent = 'Loading...'; fhirModalMeta.className = 'px-3 py-2 small text-muted'; }
+        if (fhirModalJson)      fhirModalJson.textContent = '{\n  "loading": true\n}';
+        if (fhirModalDataBadge) { fhirModalDataBadge.className = 'badge bg-warning text-dark'; fhirModalDataBadge.textContent = 'CHECKING'; }
+        if (fhirModalHttpBadge) { fhirModalHttpBadge.className = 'badge bg-warning text-dark'; fhirModalHttpBadge.textContent = 'HTTP ...'; }
+        fhirPreviewModal.show();
+
+        fetch(url, { method: 'GET', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } })
+            .then(function (r) { return r.text().then(function (b) { return { ok: r.ok, status: r.status, body: b }; }); })
+            .then(function (res) {
+                var parsed = null;
+                try { parsed = JSON.parse(res.body || '{}'); } catch (e) { parsed = { raw: res.body || '' }; }
+                var hasFhir = parsed && (parsed.resourceType === 'Bundle' || (parsed.status === 'ok' && parsed.bundle));
+                if (fhirModalJson)      fhirModalJson.textContent = JSON.stringify(parsed, null, 2);
+                if (fhirModalMeta)      { fhirModalMeta.textContent = res.ok ? 'Loaded (' + res.status + ')' : 'Error (' + res.status + ')'; fhirModalMeta.className = 'px-3 py-2 small ' + (res.ok ? 'text-success' : 'text-danger'); }
+                if (fhirModalDataBadge) { fhirModalDataBadge.className = 'badge ' + (hasFhir ? 'bg-success' : 'bg-danger'); fhirModalDataBadge.textContent = hasFhir ? 'HAS FHIR' : 'NOT GENERATED'; }
+                if (fhirModalHttpBadge) { fhirModalHttpBadge.className = 'badge ' + (res.ok ? 'bg-success' : 'bg-danger'); fhirModalHttpBadge.textContent = 'HTTP ' + res.status; }
+            })
+            .catch(function (e) {
+                if (fhirModalMeta)      { fhirModalMeta.textContent = 'Request failed: ' + e.message; fhirModalMeta.className = 'px-3 py-2 small text-danger'; }
+                if (fhirModalDataBadge) { fhirModalDataBadge.className = 'badge bg-danger'; fhirModalDataBadge.textContent = 'ERROR'; }
+                if (fhirModalHttpBadge) { fhirModalHttpBadge.className = 'badge bg-danger'; fhirModalHttpBadge.textContent = 'HTTP ERR'; }
+            });
+    }
+
+    document.getElementById('btnCopyFhirModal').addEventListener('click', function () {
+        var btn = this;
+        var jsonText = fhirModalJson ? (fhirModalJson.textContent || '{}') : '{}';
+        if (! navigator.clipboard || ! navigator.clipboard.writeText) { setStatus('Clipboard API unavailable.', true); return; }
+        navigator.clipboard.writeText(jsonText).then(function () {
+            var orig = btn.textContent; btn.textContent = 'Copied ✓'; btn.className = 'btn btn-sm btn-success';
+            window.setTimeout(function () { btn.textContent = orig; btn.className = 'btn btn-sm btn-outline-secondary'; }, 1500);
+        }).catch(function (e) { setStatus('Copy failed: ' + e.message, true); });
+    });
+
+    // OPD Consult Publish — FHIR preview buttons → open in modal
     document.querySelectorAll('.btn-opd-consult-fhir').forEach(function (btn) {
         btn.addEventListener('click', function () {
             var opdId = parseInt(btn.getAttribute('data-opd-id') || '0', 10);
             if (opdId <= 0) return;
-            showInlineFhirPreview('<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId, 'OPD Consult FHIR ' + opdId);
+            openFhirModal('<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId, 'FHIR Preview — OPD #' + opdId);
         });
     });
 
