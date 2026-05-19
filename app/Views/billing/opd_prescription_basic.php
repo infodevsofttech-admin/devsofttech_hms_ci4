@@ -851,47 +851,40 @@
                                 </div>
                             </div>
                             <div class="mb-3" id="rx_sec_complaints">
-                                <h6 class="mb-2">Chief Complaints</h6>
-
-                                <!-- Search -->
-                                <div class="mb-2 position-relative">
-                                    <div class="input-group input-group-sm">
-                                        <input type="text" class="form-control" id="complaint_lookup"
-                                               autocomplete="off"
-                                               placeholder="Type symptom or free text: headache 3 days moderate, fever 1 day...">
-                                        <button type="button" class="btn btn-outline-primary" id="btn_extract_complaint_codes"
-                                                title="Extract SNOMED codes from typed text with duration &amp; severity">Extract Codes</button>
-                                        <button type="button" class="btn btn-outline-secondary btn-save-autotype-keyword"
-                                                data-section="complaints" data-target="complaints" title="Save as custom keyword">+keyword</button>
-                                    </div>
-                                    <div id="complaint_dropdown" class="border rounded bg-white shadow-sm"
-                                         style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1060;max-height:260px;overflow-y:auto;"></div>
+                                <div class="d-flex align-items-center justify-content-between mb-2">
+                                    <h6 class="mb-0">Chief Complaints</h6>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary btn-save-autotype-keyword"
+                                            data-section="complaints" data-target="complaints"
+                                            style="font-size:.75rem" title="Save as custom keyword">+keyword</button>
                                 </div>
 
-                                <!-- SNOMED Extract chips panel -->
-                                <div id="complaint_extract_panel" class="mb-2 p-2 border rounded" style="display:none;background:#f8faff;">
-                                    <div class="d-flex align-items-center gap-2 mb-2">
-                                        <span class="small fw-semibold text-primary">💡 Code Suggestions</span>
-                                        <button type="button" class="btn btn-sm btn-success py-0 px-2" id="btn_confirm_all_chips" style="font-size:.75rem">✓ Confirm All</button>
-                                        <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" id="btn_dismiss_extract" style="font-size:.75rem">Dismiss</button>
-                                    </div>
-                                    <div id="complaint_chips_wrap" class="d-flex flex-wrap gap-2"></div>
-                                </div>
-
-                                <!-- Complaint rows table -->
-                                <table class="table table-sm table-bordered align-middle mb-1" id="complaint_table" style="display:none;font-size:.82rem">
+                                <!-- Healthplix-style inline complaint table -->
+                                <table class="table table-sm table-bordered align-middle mb-1" id="complaint_table" style="font-size:.82rem">
                                     <thead class="table-light" style="font-size:.75rem">
                                         <tr>
+                                            <th style="width:28px">#</th>
                                             <th>Complaint</th>
-                                            <th style="width:100px">Code</th>
-                                            <th style="width:120px">Duration</th>
+                                            <th style="width:110px">Frequency</th>
                                             <th style="width:100px">Severity</th>
+                                            <th style="width:120px">Duration</th>
+                                            <th style="width:105px">Date</th>
                                             <th style="width:24px"></th>
                                         </tr>
                                     </thead>
                                     <tbody id="complaint_tbody"></tbody>
+                                    <tfoot>
+                                        <tr>
+                                            <td></td>
+                                            <td colspan="5" class="p-1 position-relative">
+                                                <input type="text" class="form-control form-control-sm" id="complaint_lookup"
+                                                       autocomplete="off" placeholder="Type complaint to add…">
+                                                <div id="complaint_dropdown" class="border rounded bg-white shadow-sm"
+                                                     style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1060;max-height:260px;overflow-y:auto;"></div>
+                                            </td>
+                                            <td></td>
+                                        </tr>
+                                    </tfoot>
                                 </table>
-                                <div id="complaint_empty_hint" class="text-muted small mb-1">No complaint selected yet</div>
 
                                 <!-- Fixed dropdowns for table cell inputs -->
                                 <div id="complaint_dur_dd" style="display:none;position:fixed;z-index:1090;min-width:160px;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:180px;overflow-y:auto;"></div>
@@ -4687,8 +4680,10 @@
                 concept_id: item.concept_id || '',
                 source:     item.source     || '',
                 hierarchy:  item.hierarchy  || '',
+                frequency:  item.frequency  || '',
+                severity:   item.severity   || '',
                 duration:   item.duration   || '',
-                severity:   item.severity   || ''
+                date:       item.date       || ''
             };
         }));
         $('#complaint_snomed_json').val(json);
@@ -4702,50 +4697,50 @@
         var $tbody = $('#complaint_tbody');
         $tbody.empty();
 
-        if (!selectedComplaintItems.length) {
-            $('#complaint_table').hide();
-            $('#complaint_empty_hint').show();
-            syncComplaintSnomedJson();
-            return;
-        }
-
-        $('#complaint_empty_hint').hide();
-        $('#complaint_table').show();
-
         selectedComplaintItems.forEach(function(item, idx) {
             var isSnomed = !!(item.concept_id);
             var $tr = $('<tr>').attr('data-idx', idx);
 
-            // Complaint name — SNOMED = blue text, local = muted gray
-            var $nameTd = $('<td style="max-width:200px">');
-            var nameColor = isSnomed ? 'color:#0d6efd;font-weight:600' : 'color:#6c757d;font-weight:600';
-            $nameTd.append($('<div class="text-truncate" style="max-width:190px;' + nameColor + '">').text(item.term));
+            // # column
+            $tr.append($('<td class="text-center text-muted" style="font-size:.75rem">').text(idx + 1));
+
+            // Complaint name — SNOMED = blue, local = default
+            var $nameTd = $('<td style="max-width:220px">');
+            var nameStyle = isSnomed ? 'color:#0d6efd;font-weight:600;max-width:210px' : 'max-width:210px';
+            var $nameDiv = $('<div class="text-truncate" style="' + nameStyle + ';">').text(item.term);
+            if (item.concept_id) { $nameDiv.attr('title', 'SNOMED: ' + item.concept_id); }
+            $nameTd.append($nameDiv);
             $tr.append($nameTd);
 
-            // SNOMED code
-            var $codeComplaintTd = $('<td class="text-center" style="width:100px">');
-            if (item.concept_id) {
-                $codeComplaintTd.append(
-                    $('<span class="badge text-bg-light border" style="font-size:.7rem;font-family:monospace;letter-spacing:.02em">').text(item.concept_id)
-                );
-            } else {
-                $codeComplaintTd.append($('<span class="text-muted" style="font-size:.75rem">').text('\u2014'));
-            }
-            $tr.append($codeComplaintTd);
-
-            // Duration input
+            // Frequency input
             $tr.append(
                 $('<td class="p-1">').append(
-                    $('<input type="text" class="form-control form-control-sm complaint-dur-input" autocomplete="off" placeholder="2 days...">')
-                        .val(item.duration || '').attr('data-idx', idx)
+                    $('<input type="text" class="form-control form-control-sm complaint-freq-input" autocomplete="off" placeholder="daily…">')
+                        .val(item.frequency || '').attr('data-idx', idx)
                 )
             );
 
             // Severity input
             $tr.append(
                 $('<td class="p-1">').append(
-                    $('<input type="text" class="form-control form-control-sm complaint-sev-input" autocomplete="off" placeholder="mild...">')
+                    $('<input type="text" class="form-control form-control-sm complaint-sev-input" autocomplete="off" placeholder="mild…">')
                         .val(item.severity || '').attr('data-idx', idx)
+                )
+            );
+
+            // Duration input
+            $tr.append(
+                $('<td class="p-1">').append(
+                    $('<input type="text" class="form-control form-control-sm complaint-dur-input" autocomplete="off" placeholder="2 days…">')
+                        .val(item.duration || '').attr('data-idx', idx)
+                )
+            );
+
+            // Date input
+            $tr.append(
+                $('<td class="p-1">').append(
+                    $('<input type="date" class="form-control form-control-sm complaint-date-input">')
+                        .val(item.date || '').attr('data-idx', idx)
                 )
             );
 
@@ -4783,123 +4778,24 @@
             return false;
         }
 
-        selectedComplaintItems.push({ term: term, concept_id: conceptId, source: source, hierarchy: hierarchy, duration: '', severity: '' });
+        selectedComplaintItems.push({ term: term, concept_id: conceptId, source: source, hierarchy: hierarchy,
+            frequency: '', severity: '', duration: '', date: '' });
         var newIdx = selectedComplaintItems.length - 1;
         renderComplaintTable();
         appendComplaintToTextarea(term);
         refreshCounters();
         markDirty('Complaint added');
-        // Focus the new row's Duration input
+        // Focus the new row's Frequency input
         setTimeout(function() {
-            $('#complaint_tbody').find('.complaint-dur-input[data-idx="' + newIdx + '"]').trigger('focus');
+            $('#complaint_tbody').find('.complaint-freq-input[data-idx="' + newIdx + '"]').trigger('focus');
         }, 60);
         return true;
     }
 
-    // ─── Extract Codes from free-text (SNOMED chips review) ─────────────────
-    $('#btn_extract_complaint_codes').on('click', function () {
-        var text = $.trim($('#complaint_lookup').val());
-        if (!text) { $('#complaint_lookup').trigger('focus'); return; }
-
-        var $btn   = $(this);
-        var $panel = $('#complaint_extract_panel');
-        var $wrap  = $('#complaint_chips_wrap');
-
-        $btn.prop('disabled', true).text('Extracting…');
-        $panel.show();
-        $wrap.html('<span class="text-muted small">Searching SNOMED…</span>');
-
-        $.get('<?= base_url('Opd_prescription/complaints_extract') ?>', { q: text })
-            .done(function (data) {
-                $btn.prop('disabled', false).text('Extract Codes');
-                var rows = (data && data.rows) ? data.rows : [];
-
-                if (!rows.length) {
-                    $wrap.html('<span class="text-muted small">No SNOMED match. Added as free text.</span>');
-                    addComplaintItem({ name: text, concept_id: '', source: 'local' });
-                    setTimeout(function () { $panel.hide(); $wrap.empty(); }, 1800);
-                    return;
-                }
-
-                $wrap.empty();
-                rows.forEach(function (r) {
-                    var pct  = Math.round((parseFloat(r.confidence) || 0) * 100);
-                    var meta = [r.duration, r.severity].filter(Boolean).join(' · ');
-
-                    var $chip = $('<span class="snomed-chip"></span>');
-                    $chip.append($('<span class="chip-term"></span>').text(r.term || r.snomed_term || ''));
-                    if (r.concept_id) {
-                        $chip.append($('<span class="chip-code"></span>').text(' ' + r.concept_id));
-                    }
-                    if (meta) {
-                        $chip.append($('<span class="chip-meta"></span>').text(' · ' + meta));
-                    }
-                    if (pct > 0) {
-                        $chip.append($('<span class="chip-conf"></span>').text(pct + '%'));
-                    }
-
-                    var $bConfirm = $('<button type="button" class="chip-btn chip-btn-confirm" title="Add complaint">✓</button>');
-                    var $bReject  = $('<button type="button" class="chip-btn chip-btn-reject"  title="Dismiss">✕</button>');
-
-                    $bConfirm.on('click', function () {
-                        var added = addComplaintItem({
-                            name:      r.term || r.snomed_term || text,
-                            concept_id: r.concept_id || '',
-                            source:    r.concept_id ? 'snomed' : 'local',
-                            hierarchy: r.hierarchy || r.semantic_tag || ''
-                        });
-                        // Pre-fill duration & severity on the new table row
-                        var newIdx = selectedComplaintItems.length - 1;
-                        if (newIdx >= 0) {
-                            if (r.duration) {
-                                selectedComplaintItems[newIdx].duration = r.duration;
-                                $('#complaint_tbody .complaint-dur-input[data-idx="' + newIdx + '"]').val(r.duration);
-                            }
-                            if (r.severity) {
-                                selectedComplaintItems[newIdx].severity = r.severity;
-                                $('#complaint_tbody .complaint-sev-input[data-idx="' + newIdx + '"]').val(r.severity);
-                            }
-                            syncComplaintSnomedJson();
-                        }
-                        $chip.addClass('chip-confirmed');
-                        $bConfirm.prop('disabled', true);
-                        $bReject.hide();
-                        // Clear the lookup input after first confirmation
-                        $('#complaint_lookup').val('');
-                    });
-
-                    $bReject.on('click', function () {
-                        $chip.addClass('chip-rejected');
-                        if (!$wrap.find('.snomed-chip:not(.chip-rejected)').length) {
-                            $panel.hide(); $wrap.empty();
-                        }
-                    });
-
-                    $chip.append($bConfirm).append($bReject);
-                    $wrap.append($chip);
-                });
-            })
-            .fail(function () {
-                $btn.prop('disabled', false).text('Extract Codes');
-                $wrap.html('<span class="text-danger small">Search failed.</span>');
-            });
-    });
-
-    $('#btn_confirm_all_chips').on('click', function () {
-        $('#complaint_chips_wrap .snomed-chip:not(.chip-rejected):not(.chip-confirmed) .chip-btn-confirm').each(function () {
-            $(this).trigger('click');
-        });
-    });
-
-    $('#btn_dismiss_extract').on('click', function () {
-        $('#complaint_extract_panel').hide();
-        $('#complaint_chips_wrap').empty();
-    });
-
     // ─── Per-complaint inline editor — stubs (table replaced the panel) ─────
     function openComplaintInlineEditor(idx) {
         setTimeout(function() {
-            $('#complaint_tbody').find('.complaint-dur-input[data-idx="' + idx + '"]').trigger('focus');
+            $('#complaint_tbody').find('.complaint-freq-input[data-idx="' + idx + '"]').trigger('focus');
         }, 60);
     }
     function closeComplaintInlineEditor() { /* no-op: table is always visible */ }
@@ -4939,6 +4835,57 @@
             .on('mousedown', function(e) { e.preventDefault(); })
             .on('click', function() { onSelect(text); });
     }
+
+    // ─── Frequency: event delegation on table rows ────────────────────
+    var _FREQUENCY_OPTIONS = ['daily', 'twice daily', 'weekly', 'intermittent', 'continuous', 'occasional'];
+
+    $(document).on('input focus', '.complaint-freq-input', function() {
+        var $inp = $(this);
+        var q    = ($inp.val() || '').trim().toLowerCase();
+        var sugs = q ? _FREQUENCY_OPTIONS.filter(function(s) { return s.indexOf(q) !== -1; }) : _FREQUENCY_OPTIONS;
+        var idx  = parseInt($inp.attr('data-idx'), 10);
+        if (!sugs.length) { return; }
+        // reuse complaint_sev_dd div as a floating list (same fixed-position technique)
+        var $dd = $('<div style="position:fixed;z-index:1095;min-width:160px;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:180px;overflow-y:auto;" id="_freq_dd"></div>');
+        $('#_freq_dd').remove();
+        sugs.forEach(function(s) {
+            $dd.append(buildSmartDdItem(s, function(val) {
+                $inp.val(val);
+                if (idx >= 0 && idx < selectedComplaintItems.length) {
+                    selectedComplaintItems[idx].frequency = val;
+                    syncComplaintSnomedJson();
+                }
+                $('#_freq_dd').remove();
+                $inp.closest('tr').find('.complaint-sev-input').trigger('focus');
+            }));
+        });
+        var r = $inp[0].getBoundingClientRect();
+        $dd.css({ top: (r.bottom + 2) + 'px', left: r.left + 'px', width: Math.max(r.width, 160) + 'px' });
+        $('body').append($dd);
+    });
+    $(document).on('blur', '.complaint-freq-input', function() {
+        var idx = parseInt($(this).attr('data-idx'), 10);
+        if (idx >= 0 && idx < selectedComplaintItems.length) {
+            selectedComplaintItems[idx].frequency = ($(this).val() || '').trim();
+            syncComplaintSnomedJson();
+        }
+        setTimeout(function() { $('#_freq_dd').remove(); }, 150);
+    });
+    $(document).on('click', function(e) {
+        if (!$(e.target).closest('.complaint-freq-input, #_freq_dd').length) {
+            $('#_freq_dd').remove();
+        }
+    });
+
+    // Date input save
+    $(document).on('change', '.complaint-date-input', function() {
+        var idx = parseInt($(this).attr('data-idx'), 10);
+        if (idx >= 0 && idx < selectedComplaintItems.length) {
+            selectedComplaintItems[idx].date = ($(this).val() || '').trim();
+            syncComplaintSnomedJson();
+            markDirty('Complaint date updated');
+        }
+    });
 
     // ─── Duration: event delegation on table rows ────────────────────────────
     $(document).on('input focus', '.complaint-dur-input', function() {
@@ -5258,8 +5205,10 @@
                             concept_id: (item.concept_id || '').toString(),
                             source:     (item.source     || '').toString(),
                             hierarchy:  (item.hierarchy  || '').toString(),
+                            frequency:  (item.frequency  || '').toString(),
+                            severity:   (item.severity   || '').toString(),
                             duration:   (item.duration   || '').toString(),
-                            severity:   (item.severity   || '').toString()
+                            date:       (item.date       || '').toString()
                         });
                     }
                 });
