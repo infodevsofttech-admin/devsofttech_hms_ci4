@@ -9587,22 +9587,59 @@ class Opd_prescription extends BaseController
         $remarks = (string) ($row['Prescriber_Remarks'] ?? '');
         $nabh = $this->hydrateNabhPrescriptionFields($row, $remarks);
 
-        $complaintsText = trim((string) ($row['complaints'] ?? ''));
+        // Primary: use structured complaint_snomed_json (has SNOMED codes, severity, duration)
         $complaints = [];
-        if ($complaintsText !== '') {
-            $parts = preg_split('/[,;\n\r]+/', $complaintsText) ?: [];
-            $seen = [];
-            foreach ($parts as $part) {
-                $part = trim((string) $part);
-                if ($part === '' || preg_match('/^Complaint\s*(Onset|Duration|Severity)\s*:/i', $part) === 1) {
-                    continue;
+        $snomedJson = trim((string) ($row['complaint_snomed_json'] ?? ''));
+        if ($snomedJson !== '' && $snomedJson !== '[]') {
+            $items = json_decode($snomedJson, true);
+            if (is_array($items)) {
+                $seen = [];
+                foreach ($items as $item) {
+                    $text = trim((string) ($item['term'] ?? ''));
+                    if ($text === '') {
+                        continue;
+                    }
+                    $k = strtoupper($text);
+                    if (isset($seen[$k])) {
+                        continue;
+                    }
+                    $seen[$k] = true;
+                    $complaints[] = [
+                        'text'           => $text,
+                        'snomed_code'    => trim((string) ($item['concept_id'] ?? '')),
+                        'snomed_display' => $text,
+                        'severity'       => trim((string) ($item['severity']   ?? '')),
+                        'duration'       => trim((string) ($item['duration']   ?? '')),
+                        'frequency'      => trim((string) ($item['frequency']  ?? '')),
+                    ];
                 }
-                $k = strtoupper($part);
-                if (isset($seen[$k])) {
-                    continue;
+            }
+        }
+        // Fallback: plain-text complaints field
+        if (empty($complaints)) {
+            $complaintsText = trim((string) ($row['complaints'] ?? ''));
+            if ($complaintsText !== '') {
+                $parts = preg_split('/[,;\n\r]+/', $complaintsText) ?: [];
+                $seen = [];
+                foreach ($parts as $part) {
+                    $part = trim((string) $part);
+                    if ($part === '' || preg_match('/^Complaint\s*(Onset|Duration|Severity)\s*:/i', $part) === 1) {
+                        continue;
+                    }
+                    $k = strtoupper($part);
+                    if (isset($seen[$k])) {
+                        continue;
+                    }
+                    $seen[$k] = true;
+                    $complaints[] = [
+                        'text'           => $part,
+                        'snomed_code'    => '',
+                        'snomed_display' => $part,
+                        'severity'       => '',
+                        'duration'       => '',
+                        'frequency'      => '',
+                    ];
                 }
-                $seen[$k] = true;
-                $complaints[] = ['text' => $part];
             }
         }
 

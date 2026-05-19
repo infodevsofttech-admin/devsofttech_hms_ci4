@@ -185,35 +185,66 @@ class FhirR4Builder
                 ]];
             }
 
-            $entries[] = [
-                'resource' => [
-                    'resourceType' => 'Condition',
-                    'id' => $complaintId,
-                    'clinicalStatus' => [
-                        'coding' => [[
-                            'system' => 'http://terminology.hl7.org/CodeSystem/condition-clinical',
-                            'code' => 'active',
-                        ]],
-                    ],
-                    'verificationStatus' => [
-                        'coding' => [[
-                            'system' => 'http://terminology.hl7.org/CodeSystem/condition-ver-status',
-                            'code' => 'unconfirmed',
-                        ]],
-                    ],
-                    'category' => [[
-                        'coding' => [[
-                            'system' => 'http://terminology.hl7.org/CodeSystem/condition-category',
-                            'code' => 'problem-list-item',
-                        ]],
-                        'text' => 'Chief Complaint',
+            $complaintResource = [
+                'resourceType' => 'Condition',
+                'id' => $complaintId,
+                'clinicalStatus' => [
+                    'coding' => [[
+                        'system' => 'http://terminology.hl7.org/CodeSystem/condition-clinical',
+                        'code' => 'active',
                     ]],
-                    'code' => $code,
-                    'subject' => ['reference' => $patientRef],
-                    'encounter' => ['reference' => $encounterRef],
-                    'recordedDate' => $issuedAt,
                 ],
+                'verificationStatus' => [
+                    'coding' => [[
+                        'system' => 'http://terminology.hl7.org/CodeSystem/condition-ver-status',
+                        'code' => 'unconfirmed',
+                    ]],
+                ],
+                'category' => [[
+                    'coding' => [[
+                        'system' => 'http://terminology.hl7.org/CodeSystem/condition-category',
+                        'code' => 'problem-list-item',
+                    ]],
+                    'text' => 'Chief Complaint',
+                ]],
+                'code' => $code,
+                'subject' => ['reference' => $patientRef],
+                'encounter' => ['reference' => $encounterRef],
+                'recordedDate' => $issuedAt,
             ];
+
+            // Severity (High/Moderate/Low → SNOMED coded)
+            $severityText = trim((string) ($complaint['severity'] ?? ''));
+            if ($severityText !== '') {
+                $severityMap = [
+                    'high'     => ['24484000', 'Severe'],
+                    'severe'   => ['24484000', 'Severe'],
+                    'moderate' => ['6736007',  'Moderate'],
+                    'mild'     => ['255604002', 'Mild'],
+                    'low'      => ['255604002', 'Mild'],
+                ];
+                $severityKey = strtolower($severityText);
+                [$sevCode, $sevDisplay] = $severityMap[$severityKey] ?? ['', $severityText];
+                $severityCoding = ['text' => ucfirst($severityText)];
+                if ($sevCode !== '') {
+                    $severityCoding['coding'] = [[
+                        'system'  => 'http://snomed.info/sct',
+                        'code'    => $sevCode,
+                        'display' => $sevDisplay,
+                    ]];
+                }
+                $complaintResource['severity'] = $severityCoding;
+            }
+
+            // Duration → note
+            $durationText = trim((string) ($complaint['duration'] ?? ''));
+            $frequencyText = trim((string) ($complaint['frequency'] ?? ''));
+            $noteParts = array_filter([$durationText, $frequencyText]);
+            if (! empty($noteParts)) {
+                $complaintResource['note'] = [['text' => implode(' | ', $noteParts)]];
+            }
+
+            $entries[] = ['resource' => $complaintResource];
         }
 
         foreach ($observations as $index => $observation) {
