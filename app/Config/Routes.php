@@ -590,6 +590,7 @@ $routes->get('Opd_prescription/fhir_bundle_history/(:num)', 'Opd_prescription::f
 $routes->get('Opd_prescription/fhir_bundle_history/(:num)/(:num)', 'Opd_prescription::fhir_bundle_history/$1/$2');
 $routes->get('Opd_prescription/fhir_bundle_preview/(:num)', 'Opd_prescription::fhir_bundle_preview/$1');
 $routes->get('Opd_prescription/fhir_bundle_preview/(:num)/(:num)', 'Opd_prescription::fhir_bundle_preview/$1/$2');
+$routes->post('Opd_prescription/fhir_bundle_submit', 'Opd_prescription::fhir_bundle_submit');
 $routes->post('Opd_prescription/fhir_complaint_recode', 'Opd_prescription::fhir_complaint_recode');
 $routes->post('Opd_prescription/fhir_diagnosis_recode', 'Opd_prescription::fhir_diagnosis_recode');
 $routes->get('Opd_prescription/complaints_search', 'Opd_prescription::complaints_search');
@@ -667,6 +668,7 @@ $routes->get('Opd_prescription/opd_medicince_data', 'Opd_prescription::opd_medic
 $routes->get('Opd_prescription/opd_medicince_export', 'Opd_prescription::opd_medicince_export');
 $routes->get('Opd_prescription/opd_medicince_company_suggest', 'Opd_prescription::opd_medicince_company_suggest');
 $routes->get('Opd_prescription/opd_medicince_get/(:num)', 'Opd_prescription::opd_medicince_get/$1');
+$routes->get('Opd_prescription/opd_medicince_snomed_lookup', 'Opd_prescription::opd_medicince_snomed_lookup');
 $routes->post('Opd_prescription/opd_medicince_save', 'Opd_prescription::opd_medicince_save');
 $routes->post('Opd_prescription/opd_medicince_ai_details', 'Opd_prescription::opd_medicince_ai_details');
 $routes->post('Opd_prescription/opd_medicince_remove/(:num)', 'Opd_prescription::opd_medicince_remove/$1');

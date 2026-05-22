@@ -316,6 +316,7 @@
                             </li>
                         </ul>
                     </div>
+                    <button type="button" class="btn btn-sm btn-outline-success" id="btnSubmitFhirToAbdm" title="Push FHIR bundle to ABDM bridge"><i class="bi bi-cloud-upload"></i> Submit to ABDM</button>
                     <button type="button" class="btn btn-sm btn-outline-secondary" id="btnCopyFhirModal">Copy JSON</button>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
@@ -1599,6 +1600,41 @@
             navTo('<?= base_url('Opd_prescription/clinical_master_workspace') ?>', 'Clinical Master');
         });
     })();
+
+    document.getElementById('btnSubmitFhirToAbdm').addEventListener('click', function () {
+        var btn = this;
+        if (_fhirOpdId <= 0) { alert('No FHIR bundle loaded.'); return; }
+        if (!confirm('Submit FHIR bundle for OPD #' + _fhirOpdId + ' to ABDM bridge?')) return;
+        var origHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.textContent = 'Submitting…';
+        var body = new URLSearchParams({ opd_id: _fhirOpdId, opd_session_id: _fhirSessionId });
+        body.append(csrfName, csrfHash);
+        fetch('<?= base_url('Opd_prescription/fhir_bundle_submit') ?>', {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body.toString()
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+            if (res.csrfName && res.csrfHash) { csrfName = res.csrfName; csrfHash = res.csrfHash; }
+            if (res.ok == 1) {
+                btn.className = 'btn btn-sm btn-success';
+                btn.innerHTML = '<i class="bi bi-check-circle"></i> Submitted ✓';
+                var qInfo = res.queue_id ? ' Queue ID: ' + res.queue_id : '';
+                alert('✅ Bundle submitted to ABDM bridge.\n' + (res.message || '') + qInfo);
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = origHtml;
+                alert('❌ Submission failed:\n' + (res.message || res.error_text || 'Check bridge configuration.') + (res.http_code ? ' (HTTP ' + res.http_code + ')' : ''));
+            }
+        })
+        .catch(function (e) {
+            btn.disabled = false;
+            btn.innerHTML = origHtml;
+            alert('❌ Error: ' + e.message);
+        });
+    });
 
     document.getElementById('btnCopyFhirModal').addEventListener('click', function () {
         var btn = this;
