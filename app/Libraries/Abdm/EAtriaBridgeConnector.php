@@ -20,6 +20,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
 {
     private string $baseUrl;
     private string $token;
+    private string $hfrId;
     private int    $timeoutSec;
 
     public function __construct()
@@ -28,31 +29,36 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
 
         $this->baseUrl    = rtrim((string) ($config->eatriaBridgeUrl ?? 'https://abdm-bridge.e-atria.in/api'), '/');
         $this->token      = (string) ($config->eatriaBridgeToken ?? '');
+        $this->hfrId      = '';
         $this->timeoutSec = (int) ($config->eatriaBridgeTimeoutSec ?? 30);
 
-        // Fall back to hospital_setting DB (written by Admin Panel → ABDM Gateway Config)
-        if ($this->token === '' || $this->baseUrl === '') {
-            try {
-                $db = \Config\Database::connect();
-                if ($db->tableExists('hospital_setting')) {
-                    $rows = $db->table('hospital_setting')
-                        ->select('s_name, s_value')
-                        ->whereIn('s_name', ['EATRIA_BRIDGE_TOKEN', 'EATRIA_BRIDGE_URL'])
-                        ->get()
-                        ->getResultArray();
+        // DB (Admin Panel → ABDM Gateway Config) is the authoritative source for
+        // the token, URL, and HFR ID. Always read from DB so that saving a new key
+        // in HMS settings takes effect immediately without a server restart or
+        // .env change. Fall back to config/env only if DB is unavailable.
+        try {
+            $db = \Config\Database::connect();
+            if ($db->tableExists('hospital_setting')) {
+                $rows = $db->table('hospital_setting')
+                    ->select('s_name, s_value')
+                    ->whereIn('s_name', ['EATRIA_BRIDGE_TOKEN', 'EATRIA_BRIDGE_URL', 'ABDM_HFR_ID'])
+                    ->get()
+                    ->getResultArray();
 
-                    $dbSettings = array_column($rows, 's_value', 's_name');
+                $dbSettings = array_column($rows, 's_value', 's_name');
 
-                    if ($this->token === '' && ! empty($dbSettings['EATRIA_BRIDGE_TOKEN'])) {
-                        $this->token = trim($dbSettings['EATRIA_BRIDGE_TOKEN']);
-                    }
-                    if (! empty($dbSettings['EATRIA_BRIDGE_URL'])) {
-                        $this->baseUrl = rtrim(trim($dbSettings['EATRIA_BRIDGE_URL']), '/');
-                    }
+                if (! empty($dbSettings['EATRIA_BRIDGE_TOKEN'])) {
+                    $this->token = trim($dbSettings['EATRIA_BRIDGE_TOKEN']);
                 }
-            } catch (\Throwable $e) {
-                // DB unavailable — continue with config values
+                if (! empty($dbSettings['EATRIA_BRIDGE_URL'])) {
+                    $this->baseUrl = rtrim(trim($dbSettings['EATRIA_BRIDGE_URL']), '/');
+                }
+                if (! empty($dbSettings['ABDM_HFR_ID'])) {
+                    $this->hfrId = trim($dbSettings['ABDM_HFR_ID']);
+                }
             }
+        } catch (\Throwable $e) {
+            // DB unavailable — continue with config/env values
         }
     }
 
@@ -139,16 +145,73 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
 
         if ($curlErr !== '') {
             log_message('error', '[EAtriaBridge] cURL error on ' . $url . ': ' . $curlErr);
+            $this->dbLog($method, $path, $url, $body, 0, '', 'error', 'cURL error: ' . $curlErr);
             return ['ok' => 0, 'error_text' => 'cURL error: ' . $curlErr, 'http_code' => 0];
         }
 
         $decoded = json_decode((string) $raw, true);
         if (!is_array($decoded)) {
+            $this->dbLog($method, $path, $url, $body, $httpCode, (string) $raw, 'error', 'Non-JSON response');
             return ['ok' => 0, 'error_text' => 'Non-JSON response', 'http_code' => $httpCode, 'raw' => (string) $raw];
         }
 
         $ok = ($httpCode >= 200 && $httpCode < 300) ? (int) ($decoded['ok'] ?? 1) : 0;
+        $this->dbLog($method, $path, $url, $body, $httpCode, (string) $raw, $ok === 1 ? 'success' : 'error', $ok === 0 ? (string) ($decoded['message'] ?? $decoded['error_text'] ?? '') : '');
         return array_merge($decoded, ['ok' => $ok, 'http_code' => $httpCode]);
+    }
+
+    // -------------------------------------------------------------------------
+    // DB Audit Log
+    // -------------------------------------------------------------------------
+
+    /**
+     * Write one row to abdm_api_logs (fail-open — never throws).
+     *
+     * @param array<string, mixed> $requestBody
+     */
+    private function dbLog(
+        string $method,
+        string $path,
+        string $fullUrl,
+        array  $requestBody,
+        int    $httpCode,
+        string $rawResponse,
+        string $status,
+        string $errorMessage
+    ): void {
+        try {
+            $db = \Config\Database::connect();
+            if (! $db->tableExists('abdm_api_logs')) {
+                return;
+            }
+
+            // Derive a human-readable event type from the path, e.g. /v3/records/push → records.push
+            $eventType = ltrim($path, '/');
+            $eventType = preg_replace('#^v\d+/#', '', $eventType) ?? $eventType; // strip version prefix
+            $eventType = str_replace('/', '.', $eventType);
+
+            $decodedResp = json_decode($rawResponse, true);
+            $responseJson = is_array($decodedResp)
+                ? (string) json_encode($decodedResp, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+                : (trim($rawResponse) !== '' ? $rawResponse : null);
+
+            $db->table('abdm_api_logs')->insert([
+                'channel'       => 'eatria_bridge',
+                'event_type'    => $eventType !== '' ? $eventType : $path,
+                'endpoint'      => $fullUrl,
+                'http_method'   => strtoupper($method),
+                'entity_type'   => null,
+                'entity_id'     => null,
+                'request_json'  => (string) json_encode($requestBody, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'response_code' => $httpCode > 0 ? $httpCode : null,
+                'response_json' => $responseJson,
+                'status'        => $status,
+                'error_message' => $errorMessage !== '' ? mb_substr($errorMessage, 0, 1000) : null,
+                'created_at'    => date('Y-m-d H:i:s'),
+            ]);
+        } catch (\Throwable $e) {
+            log_message('warning', '[EAtriaBridge] dbLog failed: ' . $e->getMessage());
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -275,23 +338,66 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
 
     public function pushRecord(array $data): array
     {
-        // Map HMS hi_type → gateway record_type enum
-        $hiType     = (string) ($data['hi_type'] ?? '');
-        $recordType = match (true) {
-            in_array($hiType, ['OPConsultRecord', 'PrescriptionRecord', 'OPConsultation'], true) => 'prescription',
-            in_array($hiType, ['DiagnosticReport', 'DiagnosticReportRecord'], true)             => 'lab_report',
-            in_array($hiType, ['DischargeSummary', 'DischargeSummaryRecord'], true)             => 'discharge_summary',
-            $hiType === 'WellnessRecord'                                                          => 'wellness_record',
-            default                                                                               => 'health_document',
+        // Normalise to the 8 official ABDM HI types that the gateway validates.
+        // Valid values: OPConsultRecord, PrescriptionRecord, DiagnosticReportRecord,
+        //               DischargeSummaryRecord, ImmunizationRecord, WellnessRecord,
+        //               HealthDocumentRecord, InvoiceRecord
+        $hiTypeRaw = (string) ($data['hi_type'] ?? '');
+        $hiType    = match ($hiTypeRaw) {
+            'OPConsultRecord', 'OPConsultation'  => 'OPConsultRecord',
+            'PrescriptionRecord'                 => 'PrescriptionRecord',
+            'DiagnosticReportRecord', 'DiagnosticReport' => 'DiagnosticReportRecord',
+            'DischargeSummaryRecord', 'DischargeSummary' => 'DischargeSummaryRecord',
+            'WellnessRecord'                     => 'WellnessRecord',
+            'ImmunizationRecord'                 => 'ImmunizationRecord',
+            'InvoiceRecord'                      => 'InvoiceRecord',
+            'HealthDocumentRecord'               => 'HealthDocumentRecord',
+            ''                                   => '',
+            default                              => $hiTypeRaw,
         };
 
+        // Bridge internal record_type enum (sent alongside hi_type for categorisation)
+        $recordTypeIn = (string) ($data['record_type'] ?? '');
+        $validRecordTypes = ['prescription', 'lab_report', 'discharge_summary', 'wellness_record', 'health_document'];
+        if (in_array($recordTypeIn, $validRecordTypes, true)) {
+            $recordType = $recordTypeIn;
+        } else {
+            // Derive record_type from hi_type
+            $recordType = match ($hiType) {
+                'OPConsultRecord', 'PrescriptionRecord' => 'prescription',
+                'DiagnosticReportRecord'                => 'lab_report',
+                'DischargeSummaryRecord'                => 'discharge_summary',
+                'WellnessRecord', 'ImmunizationRecord'  => 'wellness_record',
+                default                                 => 'health_document',
+            };
+        }
+
+        // Derive hi_type from record_type if still empty.
+        // Gateway requires hi_type with the exact ABDM HI type name.
+        if ($hiType === '') {
+            $hiType = match ($recordType) {
+                'prescription'      => 'OPConsultRecord',
+                'lab_report'        => 'DiagnosticReportRecord',
+                'discharge_summary' => 'DischargeSummaryRecord',
+                'wellness_record'   => 'WellnessRecord',
+                default             => 'HealthDocumentRecord',
+            };
+        }
+
+        // Gateway requires BOTH record_type (lowercase alias) and hi_type (official ABDM name).
         $body = [
             'patient_id'   => (string) ($data['patient_id'] ?? ''),
             'patient_name' => (string) ($data['patient_name'] ?? ''),
             'record_type'  => $recordType,
+            'hi_type'      => $hiType,
             'visit_date'   => (string) ($data['visit_date'] ?? date('Y-m-d')),
             'record_data'  => $data['record_data'] ?? $data['bundle'] ?? (object) [],
         ];
+
+        // hfr_id is required in every push request alongside the Bearer token.
+        if ($this->hfrId !== '') {
+            $body['hfr_id'] = $this->hfrId;
+        }
 
         foreach (['abha_id', 'abha_address', 'doctor_name', 'department', 'care_context_reference', 'notes', 'queue_id'] as $optional) {
             if (! empty($data[$optional])) {
@@ -308,10 +414,13 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
 
     public function scanShareLookup(string $qrPayload, string $abhaIdHint = '', array $fullPayload = []): array
     {
-        // Scan & Share uses SNOMED search endpoint as the gateway proxy
-        return $this->get('/v3/snomed/search', [
-            'term'         => $qrPayload,
-            'return_limit' => '10',
+        // Per API docs: scan & share uses POST /api/v1/bridge with event_type abdm.scan_share.lookup
+        return $this->post('/v1/bridge', [
+            'event_type' => 'abdm.scan_share.lookup',
+            'payload'    => [
+                'term'         => $qrPayload,
+                'return_limit' => (int) ($fullPayload['return_limit'] ?? 10),
+            ],
         ]);
     }
 
@@ -347,6 +456,16 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
     // OPD Queue (Scan & Share + Manual walk-in tokens)
     // -------------------------------------------------------------------------
 
+    public function getRecord(int $bridgeId): array
+    {
+        return $this->get('/v3/records/' . $bridgeId);
+    }
+
+    public function triggerShare(int $bridgeId): array
+    {
+        return $this->post('/v3/records/' . $bridgeId . '/share', []);
+    }
+
     public function opdQueueFetch(string $date = '', string $status = '', int $page = 1, int $limit = 100): array
     {
         $params = ['limit' => $limit, 'page' => $page];
@@ -367,5 +486,57 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
     public function opdTokenUpdateStatus(int $tokenId, string $status): array
     {
         return $this->patch('/v3/opd/token/' . $tokenId, ['status' => $status]);
+    }
+
+    public function opdRunningTokenStatus(): array
+    {
+        return $this->get('/v3/opd/running-token-status');
+    }
+
+    // -------------------------------------------------------------------------
+    // Bridge Records — list
+    // -------------------------------------------------------------------------
+
+    public function getRecords(array $filters = []): array
+    {
+        return $this->get('/v3/records', $filters);
+    }
+
+    // -------------------------------------------------------------------------
+    // System / Hospital Info
+    // -------------------------------------------------------------------------
+
+    public function gatewayStatus(): array
+    {
+        return $this->get('/v3/gateway/status');
+    }
+
+    // -------------------------------------------------------------------------
+    // HIP-Initiated Linking
+    // -------------------------------------------------------------------------
+
+    public function hipLinkToken(array $payload): array
+    {
+        return $this->post('/v3/hip/link-token', $payload);
+    }
+
+    public function hipLinkCareContext(array $payload): array
+    {
+        return $this->post('/v3/hip/link/carecontext', $payload);
+    }
+
+    public function hipGetPatientLinks(array $filters = []): array
+    {
+        return $this->get('/v3/hip/link/patient/links', $filters);
+    }
+
+    public function hipLinkNotify(array $payload): array
+    {
+        return $this->post('/v3/hip/link/notify', $payload);
+    }
+
+    public function hipSmsNotify(array $payload): array
+    {
+        return $this->post('/v3/hip/link/sms-notify', $payload);
     }
 }

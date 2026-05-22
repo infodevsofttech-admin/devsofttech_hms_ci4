@@ -381,9 +381,9 @@ class AbdmGateway extends BaseController
             return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
         }
 
-        $ipdId = (int) $this->request->getPost('ipd_id');
-        $patientId = (int) $this->request->getPost('patient_id');
-        $abhaId = trim((string) $this->request->getPost('abha_id'));
+        $ipdId         = (int) $this->request->getPost('ipd_id');
+        $patientId     = (int) $this->request->getPost('patient_id');
+        $abhaId        = trim((string) $this->request->getPost('abha_id'));
         $consentHandle = trim((string) $this->request->getPost('consent_handle'));
 
         if ($ipdId <= 0 || $patientId <= 0 || $abhaId === '') {
@@ -393,11 +393,12 @@ class AbdmGateway extends BaseController
         $consent = $this->getActiveConsentRecord($patientId, $abhaId, $consentHandle);
         if ($consent === null) {
             return $this->response->setJSON([
-                'ok' => 0,
+                'ok'         => 0,
                 'error_text' => 'No active consent found. Share blocked due to expiry/not-approved consent.',
             ]);
         }
 
+        // ── Load IPD data ──────────────────────────────────────────────────────
         $ipdRow = $this->db->tableExists('ipd_master')
             ? ($this->db->table('ipd_master')->where('id', $ipdId)->get(1)->getRowArray() ?? [])
             : [];
@@ -413,40 +414,124 @@ class AbdmGateway extends BaseController
             $summaryHtml = trim((string) ($summaryRow['content'] ?? ''));
         }
 
-        $payload = [
-            'ipd_id' => $ipdId,
-            'patient_id' => $patientId,
-            'abha_id' => $abhaId,
-            'consent_handle' => (string) ($consent['consent_handle'] ?? ''),
-            'ipd_code' => trim((string) ($ipdRow['ipd_code'] ?? '')),
-            'register_date' => trim((string) ($ipdRow['register_date'] ?? '')),
-            'discharge_date' => trim((string) ($ipdRow['discharge_date'] ?? '')),
-            'discharge_time' => trim((string) ($ipdRow['discharge_time'] ?? '')),
-            'summary_html' => $summaryHtml,
+        // ── Load patient data ──────────────────────────────────────────────────
+        $patientRow = [];
+        if ($this->db->tableExists('patient_master')) {
+            $patientRow = $this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray() ?? [];
+        }
+        $patName = trim(
+            trim((string) ($patientRow['p_fname'] ?? '')) . ' ' .
+            trim((string) ($patientRow['p_lname'] ?? ''))
+        ) ?: trim((string) ($ipdRow['P_name'] ?? ''));
+
+        // ── Load hospital profile (HFR ID, name) ──────────────────────────────
+        $hospitalProfile = $this->getHospitalProfileForFhir();
+
+        // ── Load attending doctor ─────────────────────────────────────────────
+        $doctorId   = (int) ($ipdRow['r_doc_id'] ?? 0);
+        $doctorName = trim((string) ($ipdRow['r_doc_name'] ?? ''));
+        $doctorRegNo = '';
+        if ($doctorId > 0 && $this->db->tableExists('doctor_master')) {
+            $dFields = $this->db->getFieldNames('doctor_master') ?? [];
+            $dSelect = ['id'];
+            foreach (['p_fname', 'p_lname', 'doctor_reg_no', 'registration_no', 'reg_no'] as $f) {
+                if (in_array($f, $dFields, true)) {
+                    $dSelect[] = $f;
+                }
+            }
+            $dRow = $this->db->table('doctor_master')->select(implode(',', $dSelect))->where('id', $doctorId)->get(1)->getRowArray() ?? [];
+            if ($dRow !== [] && $doctorName === '') {
+                $doctorName = trim(trim((string) ($dRow['p_fname'] ?? '')) . ' ' . trim((string) ($dRow['p_lname'] ?? '')));
+            }
+            foreach (['doctor_reg_no', 'registration_no', 'reg_no'] as $f) {
+                if (! empty($dRow[$f])) {
+                    $doctorRegNo = trim((string) $dRow[$f]);
+                    break;
+                }
+            }
+        }
+
+        // ── Parse dates ───────────────────────────────────────────────────────
+        $admissionRaw  = trim((string) ($ipdRow['register_date'] ?? ''));
+        $dischargeRaw  = trim((string) ($ipdRow['discharge_date'] ?? ''));
+        $admissionDate = $admissionRaw !== '' ? (new \DateTime($admissionRaw, new \DateTimeZone('Asia/Kolkata')))->format('Y-m-d\TH:i:sP') : '';
+        $dischargeDate = $dischargeRaw !== '' ? (new \DateTime($dischargeRaw, new \DateTimeZone('Asia/Kolkata')))->format('Y-m-d\TH:i:sP') : '';
+        $visitDate     = $dischargeRaw !== '' ? date('Y-m-d', strtotime($dischargeRaw)) : ($admissionRaw !== '' ? date('Y-m-d', strtotime($admissionRaw)) : date('Y-m-d'));
+
+        // ── Build FHIR DischargeSummaryRecord bundle ────────────────────────────
+        $fhir = new FhirR4Builder();
+
+        $patient = [
+            'id'          => (string) $patientId,
+            'name'        => $patName,
+            'gender'      => trim((string) ($patientRow['gender'] ?? '')),
+            'birthDate'   => ! empty($patientRow['dob']) ? date('Y-m-d', strtotime((string) $patientRow['dob'])) : '',
+            'abhaAddress' => $abhaId,
         ];
 
-        // Store in health_records
+        $encounter = [
+            'id'             => (string) $ipdId,
+            'admission_date' => $admissionDate,
+            'discharge_date' => $dischargeDate,
+            'ipd_code'       => trim((string) ($ipdRow['ipd_code'] ?? '')),
+        ];
+
+        // Parse summary HTML into structured sections where possible
+        $chiefComplaints = trim((string) ($ipdRow['problem'] ?? ''));
+        $summary = [
+            'title'                 => 'Discharge Summary',
+            'chief_complaints'      => $chiefComplaints,
+            'clinical_summary_html' => $summaryHtml,
+        ];
+
+        $practitioner = $doctorName !== ''
+            ? ['name' => $doctorName, 'registration_number' => $doctorRegNo]
+            : null;
+        $organization = $hospitalProfile['name'] !== ''
+            ? ['name' => $hospitalProfile['name'], 'hfr_id' => $hospitalProfile['hfr_id']]
+            : null;
+
+        $bundle     = $fhir->buildDischargeSummaryBundle($patient, $encounter, $summary, $practitioner, $organization);
+        $bundleJson = (string) json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        // ── Store health_record ───────────────────────────────────────────────
+        $ipdCode = trim((string) ($ipdRow['ipd_code'] ?? ''));
+        $ccRef   = 'IPD-' . $ipdId . ($ipdCode !== '' ? '-' . $ipdCode : '') . '-' . $visitDate;
         $healthRecordId = $this->storeHealthRecord([
             'patient_id'     => $patientId,
             'abha_id'        => $abhaId,
-            'hi_type'        => 'DischargeSummary',
+            'hi_type'        => 'DischargeSummaryRecord',
             'entity_type'    => 'ipd',
             'entity_id'      => (string) $ipdId,
-            'fhir_bundle'    => json_encode($payload),
+            'fhir_bundle'    => $bundleJson,
             'consent_handle' => (string) ($consent['consent_handle'] ?? ''),
         ]);
 
-        $queueId = null;
+        // ── Push via pushRecord() (POST /v3/records/push) ─────────────────────
+        $queueId       = null;
+        $bridgeRecordId = 0;
         $connectorError = null;
         try {
-            $result  = $this->connector->shareIpdDischargeBundle($payload, (string) $ipdId);
-            $queueId = $result['queue_id'] ?? null;
+            $result = $this->connector->pushRecord([
+                'patient_id'             => (string) $patientId,
+                'patient_name'           => $patName,
+                'abha_id'                => $abhaId,
+                'hi_type'                => 'DischargeSummaryRecord',
+                'record_type'            => 'discharge_summary',
+                'visit_date'             => $visitDate,
+                'doctor_name'            => $doctorName,
+                'care_context_reference' => $ccRef,
+                'notes'                  => 'Discharge Summary - ' . ($ipdCode !== '' ? 'IPD#' . $ipdCode : 'IPD#' . $ipdId),
+                'record_data'            => $bundle,
+            ]);
+            $queueId        = (string) ($result['queue_id'] ?? '');
+            $bridgeRecordId = (int) ($result['id'] ?? 0);
         } catch (\Throwable $e) {
             $connectorError = $e->getMessage();
         }
 
         if ($healthRecordId > 0) {
-            $this->updateHealthRecordTxn($healthRecordId, (string) ($queueId ?? ''), $connectorError);
+            $this->updateHealthRecordTxn($healthRecordId, $queueId ?? '', $connectorError, $bridgeRecordId);
         }
 
         $this->getAuditService()->log([
@@ -455,17 +540,18 @@ class AbdmGateway extends BaseController
             'entity_id'     => (string) $ipdId,
             'abha_id'       => $abhaId,
             'patient_id'    => $patientId,
-            'request'       => ['ipd_id' => $ipdId, 'hi_type' => 'DischargeSummary', 'consent_handle' => (string) ($consent['consent_handle'] ?? '')],
+            'request'       => ['ipd_id' => $ipdId, 'hi_type' => 'DischargeSummaryRecord', 'consent_handle' => (string) ($consent['consent_handle'] ?? '')],
             'response'      => ['queue_id' => $queueId],
             'outcome'       => $connectorError === null ? 'success' : 'failure',
             'error_message' => (string) ($connectorError ?? ''),
         ]);
 
         return $this->response->setJSON([
-            'ok' => 1,
-            'queue_id' => $queueId,
+            'ok'             => $connectorError === null ? 1 : 0,
+            'queue_id'       => $queueId,
             'consent_handle' => (string) ($consent['consent_handle'] ?? ''),
-            'status' => 'queued',
+            'status'         => $connectorError === null ? 'queued' : 'failed',
+            'error'          => $connectorError,
         ]);
     }
 
@@ -475,18 +561,17 @@ class AbdmGateway extends BaseController
             return $this->response->setStatusCode(403)->setJSON(['error' => 'AJAX only']);
         }
 
-        $labReqId  = (int) ($this->request->getPost('lab_req_id') ?? 0);
-        $patientId = (int) ($this->request->getPost('patient_id') ?? 0);
-        $abhaId    = trim((string) ($this->request->getPost('abha_id') ?? ''));
+        $labReqId      = (int) ($this->request->getPost('lab_req_id') ?? 0);
+        $patientId     = (int) ($this->request->getPost('patient_id') ?? 0);
+        $abhaId        = trim((string) ($this->request->getPost('abha_id') ?? ''));
         $consentHandle = trim((string) ($this->request->getPost('consent_handle') ?? ''));
 
         if ($labReqId <= 0 || $patientId <= 0 || $abhaId === '') {
             return $this->response->setJSON(['ok' => 0, 'error' => 'lab_req_id, patient_id and abha_id are required']);
         }
 
-        $db = \Config\Database::connect();
-
-        $labReq = $db->table('lab_request')
+        // ── Load lab request ──────────────────────────────────────────────────
+        $labReq = $this->db->table('lab_request')
             ->select('id, patient_name, lab_type, charge_id, Report_Data, report_data_Impression, status, reported_time')
             ->where('id', $labReqId)
             ->get(1)
@@ -497,43 +582,107 @@ class AbdmGateway extends BaseController
         }
 
         $consentRecord = $this->getActiveConsentRecord($patientId, $abhaId, $consentHandle);
+        $effectiveConsent = (string) ($consentRecord['consent_handle'] ?? $consentHandle);
 
-        $payload = [
-            'lab_req_id'       => $labReqId,
-            'patient_id'       => $patientId,
-            'patient_name'     => (string) ($labReq->patient_name ?? ''),
-            'abha_id'          => $abhaId,
-            'lab_type'         => (int) ($labReq->lab_type ?? 0),
-            'invoice_id'       => (int) ($labReq->charge_id ?? 0),
-            'report_html'      => (string) ($labReq->Report_Data ?? ''),
-            'impression'       => (string) ($labReq->report_data_Impression ?? ''),
-            'report_status'    => (int) ($labReq->status ?? 0),
-            'reported_time'    => (string) ($labReq->reported_time ?? ''),
-            'consent_handle'   => $consentRecord['consent_handle'] ?? $consentHandle,
+        // ── Load patient ──────────────────────────────────────────────────────
+        $patientRow = [];
+        if ($this->db->tableExists('patient_master')) {
+            $patientRow = $this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray() ?? [];
+        }
+        $patName = trim(
+            trim((string) ($patientRow['p_fname'] ?? '')) . ' ' .
+            trim((string) ($patientRow['p_lname'] ?? ''))
+        ) ?: trim((string) ($labReq->patient_name ?? ''));
+
+        // ── Load test / charge name ────────────────────────────────────────────
+        $testTitle = '';
+        $chargeId  = (int) ($labReq->charge_id ?? 0);
+        if ($chargeId > 0 && $this->db->tableExists('charge_master')) {
+            $chargeRow = $this->db->table('charge_master')->select('charge_name, charge_type')->where('id', $chargeId)->get(1)->getRowArray() ?? [];
+            $testTitle = trim((string) ($chargeRow['charge_name'] ?? ''));
+        }
+        if ($testTitle === '') {
+            $testTitle = $this->mapLabTypeToTitle((int) ($labReq->lab_type ?? 0));
+        }
+
+        // ── Load hospital profile ─────────────────────────────────────────────
+        $hospitalProfile = $this->getHospitalProfileForFhir();
+
+        // ── Parse reported time ───────────────────────────────────────────────
+        $reportedRaw  = trim((string) ($labReq->reported_time ?? ''));
+        $reportedAt   = $reportedRaw !== '' ? (new \DateTime($reportedRaw, new \DateTimeZone('Asia/Kolkata')))->format('Y-m-d\TH:i:sP') : '';
+        $visitDate    = $reportedRaw !== '' ? date('Y-m-d', strtotime($reportedRaw)) : date('Y-m-d');
+
+        // ── Build FHIR DiagnosticReportRecord bundle ───────────────────────────
+        $fhir = new FhirR4Builder();
+
+        $patient = [
+            'id'          => (string) $patientId,
+            'name'        => $patName,
+            'gender'      => trim((string) ($patientRow['gender'] ?? '')),
+            'birthDate'   => ! empty($patientRow['dob']) ? date('Y-m-d', strtotime((string) $patientRow['dob'])) : '',
+            'abhaAddress' => $abhaId,
         ];
 
-        // Store in health_records (report HTML as the FHIR payload placeholder)
+        $diagnosticReport = [
+            'id'           => (string) $labReqId,
+            'title'        => $testTitle ?: 'Laboratory Report',
+            'status'       => $labReq->status == 1 ? 'final' : 'preliminary',
+            'conclusion'   => trim((string) ($labReq->report_data_Impression ?? '')),
+            'reported_at'  => $reportedAt,
+            'report_html'  => trim((string) ($labReq->Report_Data ?? '')),
+        ];
+
+        $organization = $hospitalProfile['name'] !== ''
+            ? ['name' => $hospitalProfile['name'], 'hfr_id' => $hospitalProfile['hfr_id']]
+            : null;
+
+        $encounter = [
+            'id'           => 'LAB-' . $labReqId,
+            'status'       => 'finished',
+            'class_code'   => 'AMB',
+            'period_start' => $reportedAt,
+        ];
+
+        $bundle     = $fhir->buildLabReportBundle($patient, $diagnosticReport, [], null, $organization, $encounter);
+        $bundleJson = (string) json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        // ── Store health_record ───────────────────────────────────────────────
+        $ccRef = 'LAB-' . $labReqId . '-' . $visitDate;
         $healthRecordId = $this->storeHealthRecord([
             'patient_id'     => $patientId,
             'abha_id'        => $abhaId,
-            'hi_type'        => 'DiagnosticReport',
+            'hi_type'        => 'DiagnosticReportRecord',
             'entity_type'    => 'lab',
             'entity_id'      => (string) $labReqId,
-            'fhir_bundle'    => json_encode($payload),
-            'consent_handle' => $payload['consent_handle'],
+            'fhir_bundle'    => $bundleJson,
+            'consent_handle' => $effectiveConsent,
         ]);
 
-        $queueId = null;
+        // ── Push via pushRecord() (POST /v3/records/push) ─────────────────────
+        $queueId        = null;
+        $bridgeRecordId = 0;
         $connectorError = null;
         try {
-            $result  = $this->connector->shareDiagnosisReportBundle($payload, (string) $labReqId);
-            $queueId = $result['queue_id'] ?? null;
+            $result = $this->connector->pushRecord([
+                'patient_id'             => (string) $patientId,
+                'patient_name'           => $patName,
+                'abha_id'                => $abhaId,
+                'hi_type'                => 'DiagnosticReportRecord',
+                'record_type'            => 'lab_report',
+                'visit_date'             => $visitDate,
+                'care_context_reference' => $ccRef,
+                'notes'                  => $testTitle !== '' ? $testTitle : 'Lab Report',
+                'record_data'            => $bundle,
+            ]);
+            $queueId        = (string) ($result['queue_id'] ?? '');
+            $bridgeRecordId = (int) ($result['id'] ?? 0);
         } catch (\Throwable $e) {
             $connectorError = $e->getMessage();
         }
 
         if ($healthRecordId > 0) {
-            $this->updateHealthRecordTxn($healthRecordId, (string) ($queueId ?? ''), $connectorError);
+            $this->updateHealthRecordTxn($healthRecordId, $queueId ?? '', $connectorError, $bridgeRecordId);
         }
 
         $this->getAuditService()->log([
@@ -542,17 +691,18 @@ class AbdmGateway extends BaseController
             'entity_id'     => (string) $labReqId,
             'abha_id'       => $abhaId,
             'patient_id'    => $patientId,
-            'request'       => ['lab_req_id' => $labReqId, 'hi_type' => 'DiagnosticReport', 'consent_handle' => $payload['consent_handle']],
+            'request'       => ['lab_req_id' => $labReqId, 'hi_type' => 'DiagnosticReportRecord', 'consent_handle' => $effectiveConsent],
             'response'      => ['queue_id' => $queueId],
             'outcome'       => $connectorError === null ? 'success' : 'failure',
             'error_message' => (string) ($connectorError ?? ''),
         ]);
 
         return $this->response->setJSON([
-            'ok'             => 1,
+            'ok'             => $connectorError === null ? 1 : 0,
             'queue_id'       => $queueId,
-            'consent_handle' => $payload['consent_handle'],
-            'status'         => 'queued',
+            'consent_handle' => $effectiveConsent,
+            'status'         => $connectorError === null ? 'queued' : 'failed',
+            'error'          => $connectorError,
         ]);
     }
 
@@ -1019,20 +1169,22 @@ class AbdmGateway extends BaseController
                 'patient_name'           => $patientName,
                 'abha_id'                => $abhaId,
                 'hi_type'                => $hiType,
+                'record_type'            => $this->mapHiTypeToRecordType($hiType),
                 'visit_date'             => $visitDate !== '' ? $visitDate : date('Y-m-d'),
                 'doctor_name'            => $doctorName,
                 'department'             => $department,
-                'entity_type'            => $entityType,
-                'entity_id'              => $entityId,
                 'care_context_reference' => trim((string) ($hr['care_context_reference'] ?? '')),
+                'notes'                  => trim((string) ($storedPayload['care_context_display'] ?? '')),
                 'record_data'            => $fhirBundle,
             ]);
-            $queueId = $result['queue_id'] ?? null;
+            $queueId        = $result['queue_id'] ?? null;
+            $bridgeRecordId = (int) ($result['id'] ?? 0);
         } catch (\Throwable $e) {
-            $connectorErr = $e->getMessage();
+            $connectorErr   = $e->getMessage();
+            $bridgeRecordId = 0;
         }
 
-        $this->updateHealthRecordTxn($hrId, (string) ($queueId ?? ''), $connectorErr);
+        $this->updateHealthRecordTxn($hrId, (string) ($queueId ?? ''), $connectorErr, $bridgeRecordId);
 
         $this->getAuditService()->log([
             'action'        => 'push_record',
@@ -1091,6 +1243,51 @@ class AbdmGateway extends BaseController
         $rows = $builder->get()->getResultArray();
 
         return $this->response->setJSON(['ok' => 1, 'records' => $rows, 'total' => count($rows)]);
+    }
+
+    // =========================================================================
+    // Bridge record status — proxy to GET /api/v3/records/{id}
+    // GET /AbdmGateway/bridge_record_status/:id
+    // =========================================================================
+
+    public function bridgeRecordStatus(int $bridgeId)
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $result = $this->connector->getRecord($bridgeId);
+        return $this->response->setJSON($result);
+    }
+
+    // =========================================================================
+    // Trigger HIP-initiated ABDM linking — POST /api/v3/records/{id}/share
+    // POST /AbdmGateway/bridge_record_share/:id
+    // =========================================================================
+
+    public function bridgeRecordShare(int $bridgeId)
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $result = $this->connector->triggerShare($bridgeId);
+        return $this->response->setJSON($result);
+    }
+
+    // =========================================================================
+    // OPD running token status — GET /api/v3/opd/running-token-status
+    // GET /AbdmGateway/opd_running_token_status
+    // =========================================================================
+
+    public function opdRunningTokenStatus()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $result = $this->connector->opdRunningTokenStatus();
+        return $this->response->setJSON($result);
     }
 
     private function validateWebhookSignature()
@@ -1245,20 +1442,33 @@ class AbdmGateway extends BaseController
     /**
      * Update a health_record's push status and txn_id after getting a connector response.
      * Also creates a matching record_links row.
+     *
+     * @param int         $healthRecordId  Local health_records.id
+     * @param string      $queueId         Bridge queue_id (abdm_txn_id)
+     * @param string|null $error           Connector error message (null = success)
+     * @param int         $bridgeRecordId  Bridge record_id (from POST /v3/records/push response)
      */
-    private function updateHealthRecordTxn(int $healthRecordId, string $queueId, ?string $error): void
+    private function updateHealthRecordTxn(int $healthRecordId, string $queueId, ?string $error, int $bridgeRecordId = 0): void
     {
         try {
             $now = Time::now('Asia/Kolkata')->toDateTimeString();
 
             if ($this->db->tableExists('health_records')) {
+                $hrUpdate = [
+                    'abdm_txn_id'  => $queueId !== '' ? $queueId : null,
+                    'push_status'  => $error === null ? 'queued' : 'failed',
+                    'updated_at'   => $now,
+                ];
+                // Store bridge record_id when the column exists (migration adds it)
+                if ($bridgeRecordId > 0) {
+                    $hrFields = $this->db->getFieldNames('health_records') ?? [];
+                    if (in_array('bridge_record_id', $hrFields, true)) {
+                        $hrUpdate['bridge_record_id'] = $bridgeRecordId;
+                    }
+                }
                 $this->db->table('health_records')
                     ->where('id', $healthRecordId)
-                    ->update([
-                        'abdm_txn_id'  => $queueId !== '' ? $queueId : null,
-                        'push_status'  => $error === null ? 'queued' : 'failed',
-                        'updated_at'   => $now,
-                    ]);
+                    ->update($hrUpdate);
             }
 
             if ($queueId !== '' && $this->db->tableExists('record_links')) {
@@ -1289,6 +1499,46 @@ class AbdmGateway extends BaseController
     }
 
     /**
+     * Query hospital_setting for FHIR-required hospital profile fields.
+     *
+     * @return array{name: string, hfr_id: string}
+     */
+    private function getHospitalProfileForFhir(): array
+    {
+        try {
+            $rows = $this->db->table('hospital_setting')
+                ->select('s_name, s_value')
+                ->whereIn('s_name', ['ABDM_HMS_NAME', 'ABDM_HFR_ID', 'H_Name'])
+                ->get()->getResultArray();
+            $map   = array_column($rows, 's_value', 's_name');
+            $name  = trim((string) ($map['ABDM_HMS_NAME'] ?? $map['H_Name'] ?? ''));
+            $hfrId = trim((string) ($map['ABDM_HFR_ID'] ?? ''));
+        } catch (\Throwable $e) {
+            $name  = '';
+            $hfrId = '';
+        }
+        return ['name' => $name, 'hfr_id' => $hfrId];
+    }
+
+    /**
+     * Map numeric lab_type code to a human-readable title.
+     */
+    private function mapLabTypeToTitle(int $labType): string
+    {
+        return match ($labType) {
+            1 => 'Haematology',
+            2 => 'Biochemistry',
+            3 => 'Serology',
+            4 => 'Microbiology',
+            5 => 'Pathology / Cytology',
+            6 => 'Radiology',
+            7 => 'Urology',
+            8 => 'Molecular Diagnostics',
+            default => '',
+        };
+    }
+
+    /**
      * Returns a lazily-constructed AbdmAuditService instance.
      */
     private function getAuditService(): AbdmAuditService
@@ -1300,6 +1550,21 @@ class AbdmGateway extends BaseController
         return $svc;
     }
 
+    /**
+     * Maps HMS internal ABDM hi_type strings to bridge API record_type enum values.
+     * Bridge accepts: prescription | lab_report | discharge_summary | wellness_record | health_document
+     */
+    private function mapHiTypeToRecordType(string $hiType): string
+    {
+        return match (strtolower($hiType)) {
+            'opconsultrecord', 'prescriptionrecord' => 'prescription',
+            'diagnosticreportrecord'                => 'lab_report',
+            'dischargesummaryrecord'                => 'discharge_summary',
+            'wellnessrecord'                        => 'wellness_record',
+            default                                 => 'health_document',
+        };
+    }
+
     private function getActiveConsentRecord(int $patientId, string $abhaId, string $consentHandle = ''): ?array
     {
         if (! $this->db->tableExists('abdm_consent_records')) {
@@ -1307,14 +1572,12 @@ class AbdmGateway extends BaseController
         }
 
         $now = Time::now('Asia/Kolkata')->toDateTimeString();
+
         $builder = $this->db->table('abdm_consent_records')
             ->where('patient_id', $patientId)
             ->where('abha_id', $abhaId)
-            ->where('consent_status', 'approved')
-            ->groupStart()
-                ->where('expires_at IS NULL', null, false)
-                ->orWhere('expires_at >', $now)
-            ->groupEnd();
+            ->where('status', 'GRANTED')
+            ->where('expiry_date >=', $now);
 
         if ($consentHandle !== '') {
             $builder->where('consent_handle', $consentHandle);
@@ -1440,6 +1703,166 @@ class AbdmGateway extends BaseController
             return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => $e->getMessage()]);
         }
 
+        return $this->response->setJSON($result);
+    }
+
+    // =========================================================================
+    // Gateway status — hospital info + ABDM connectivity
+    // GET /AbdmGateway/gateway_status
+    // =========================================================================
+
+    public function gatewayStatus()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $result = $this->connector->gatewayStatus();
+        return $this->response->setJSON($result);
+    }
+
+    // =========================================================================
+    // Bridge records — list stored records from bridge
+    // GET /AbdmGateway/bridge_records_list
+    // =========================================================================
+
+    public function bridgeRecordsList()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $filters = array_filter([
+            'abha_id'      => $this->request->getGet('abha_id'),
+            'abha_address' => $this->request->getGet('abha_address'),
+            'status'       => $this->request->getGet('status'),
+            'record_type'  => $this->request->getGet('record_type'),
+            'page'         => $this->request->getGet('page'),
+            'per_page'     => $this->request->getGet('per_page'),
+        ]);
+
+        $result = $this->connector->getRecords($filters);
+        return $this->response->setJSON($result);
+    }
+
+    // =========================================================================
+    // HIP-Initiated Linking — Step 1: request link token
+    // POST /AbdmGateway/hip_link_token
+    // Body: { abha_address, name, gender, year_of_birth [, abha_number] }
+    // =========================================================================
+
+    public function hipLinkToken()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $body = $this->request->getJSON(true) ?? [];
+
+        $required = ['abha_address', 'name', 'gender', 'year_of_birth'];
+        foreach ($required as $key) {
+            if (empty($body[$key])) {
+                return $this->response->setJSON(['ok' => 0, 'error_text' => $key . ' is required']);
+            }
+        }
+
+        $result = $this->connector->hipLinkToken($body);
+        return $this->response->setJSON($result);
+    }
+
+    // =========================================================================
+    // HIP-Initiated Linking — Step 2: link care contexts
+    // POST /AbdmGateway/hip_link_carecontext
+    // Body: { abha_address, link_token_id, patient_ref, display, hi_type, care_contexts[] }
+    // =========================================================================
+
+    public function hipLinkCareContext()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $body = $this->request->getJSON(true) ?? [];
+
+        $required = ['abha_address', 'link_token_id', 'patient_ref', 'display', 'hi_type', 'care_contexts'];
+        foreach ($required as $key) {
+            if (empty($body[$key])) {
+                return $this->response->setJSON(['ok' => 0, 'error_text' => $key . ' is required']);
+            }
+        }
+
+        $result = $this->connector->hipLinkCareContext($body);
+        return $this->response->setJSON($result);
+    }
+
+    // =========================================================================
+    // HIP-Initiated Linking — fetch all linked care contexts for a patient
+    // GET /AbdmGateway/hip_patient_links?abha_address=xxx&limit=20
+    // =========================================================================
+
+    public function hipPatientLinks()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $filters = array_filter([
+            'abha_address' => $this->request->getGet('abha_address'),
+            'limit'        => $this->request->getGet('limit'),
+        ]);
+
+        if (empty($filters['abha_address'])) {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'abha_address is required']);
+        }
+
+        $result = $this->connector->hipGetPatientLinks($filters);
+        return $this->response->setJSON($result);
+    }
+
+    // =========================================================================
+    // HIP-Initiated Linking — notify ABDM of care-context update
+    // POST /AbdmGateway/hip_link_notify
+    // Body: { abha_address, care_context_reference, hi_type, date_of_record }
+    // =========================================================================
+
+    public function hipLinkNotify()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $body = $this->request->getJSON(true) ?? [];
+
+        $required = ['abha_address', 'care_context_reference', 'hi_type', 'date_of_record'];
+        foreach ($required as $key) {
+            if (empty($body[$key])) {
+                return $this->response->setJSON(['ok' => 0, 'error_text' => $key . ' is required']);
+            }
+        }
+
+        $result = $this->connector->hipLinkNotify($body);
+        return $this->response->setJSON($result);
+    }
+
+    // =========================================================================
+    // HIP-Initiated Linking — send ABDM deep-link SMS to patient
+    // POST /AbdmGateway/hip_sms_notify
+    // Body: { phone_number [, hip_name] }
+    // =========================================================================
+
+    public function hipSmsNotify()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $body = $this->request->getJSON(true) ?? [];
+
+        if (empty($body['phone_number'])) {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'phone_number is required']);
+        }
+
+        $result = $this->connector->hipSmsNotify($body);
         return $this->response->setJSON($result);
     }
 }

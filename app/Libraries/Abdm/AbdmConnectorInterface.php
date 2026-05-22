@@ -187,8 +187,97 @@ interface AbdmConnectorInterface
      */
     public function pushRecord(array $data): array;
 
+    /**
+     * GET /api/v3/records/{id} — fetch stored bridge record + abdm_status.
+     */
+    public function getRecord(int $bridgeId): array;
+
+    /**
+     * POST /api/v3/records/{id}/share — trigger HIP-initiated ABDM care-context linking.
+     */
+    public function triggerShare(int $bridgeId): array;
+
+    /**
+     * GET /api/v3/records — list stored bridge records with optional filters.
+     *
+     * Filters: abha_id, abha_address, status (pending|shared|linked|failed|revoked),
+     *          record_type, page, per_page
+     *
+     * @param array<string, mixed> $filters
+     */
+    public function getRecords(array $filters = []): array;
+
+    // -------------------------------------------------------------------------
+    // System / Hospital Info
+    // -------------------------------------------------------------------------
+
+    /**
+     * GET /api/v3/gateway/status — hospital info + ABDM upstream connectivity check.
+     * Returns HIP ID, hospital name, ABDM connection state, test mode flag.
+     */
+    public function gatewayStatus(): array;
+
+    // -------------------------------------------------------------------------
+    // HIP-Initiated Linking (HMS → Bridge → ABDM, 2-step async flow)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Step 1 — POST /api/v3/hip/link-token
+     * Request a one-time JWT link token for a patient from ABDM (async).
+     * Returns immediately with ['ok'=>1, 'link_token_id'=>N, 'request_id'=>'...']
+     * Token arrives asynchronously — use link_token_id in step 2 once delivered.
+     *
+     * Required keys: abha_address, name (First|Last), gender (M|F|O), year_of_birth
+     * Optional: abha_number
+     *
+     * @param array<string, mixed> $payload
+     */
+    public function hipLinkToken(array $payload): array;
+
+    /**
+     * Step 2 — POST /api/v3/hip/link/carecontext
+     * Link care contexts to patient's ABHA using link_token_id from step 1.
+     *
+     * Required keys: abha_address, link_token_id, patient_ref, display, hi_type
+     * care_contexts: [['ref' => '...', 'display' => '...']]
+     *
+     * @param array<string, mixed> $payload
+     */
+    public function hipLinkCareContext(array $payload): array;
+
+    /**
+     * GET /api/v3/hip/link/patient/links — fetch all ABDM-linked care contexts for a patient.
+     *
+     * @param array<string, mixed> $filters  e.g. ['abha_address' => 'p@abdm', 'limit' => 20]
+     */
+    public function hipGetPatientLinks(array $filters = []): array;
+
+    /**
+     * POST /api/v3/hip/link/notify — push care-context update notification to ABDM.
+     *
+     * Required keys: abha_address, care_context_reference, hi_type, date_of_record
+     *
+     * @param array<string, mixed> $payload
+     */
+    public function hipLinkNotify(array $payload): array;
+
+    /**
+     * POST /api/v3/hip/link/sms-notify — send ABDM deep-link SMS to patient's mobile.
+     *
+     * Required keys: phone_number
+     * Optional: hip_name
+     *
+     * @param array<string, mixed> $payload
+     */
+    public function hipSmsNotify(array $payload): array;
+
     // OPD Queue
     public function opdQueueFetch(string $date = '', string $status = '', int $page = 1, int $limit = 100): array;
     public function opdTokenCreate(array $payload): array;
     public function opdTokenUpdateStatus(int $tokenId, string $status): array;
+
+    /**
+     * GET /api/v3/opd/running-token-status — current token being served at this HIP.
+     */
+    public function opdRunningTokenStatus(): array;
 }

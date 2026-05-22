@@ -106,8 +106,15 @@
                         <datalist id="med_company_suggestions"></datalist>
                     </div>
                     <div class="mb-2">
-                        <label class="form-label">SNOMED CT Code <small class="text-muted">(optional)</small></label>
-                        <input type="text" id="med_snomed_code" class="form-control form-control-sm" placeholder="e.g. 372687004">
+                        <label class="form-label">SNOMED CT Code <small class="text-muted">(substance / product)</small></label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" id="med_snomed_code" class="form-control form-control-sm" placeholder="e.g. 372687004">
+                            <button type="button" class="btn btn-outline-info" id="btn_snomed_search" title="Search SNOMED CT substance concepts for this medicine name">
+                                <i class="fa fa-search"></i> SNOMED
+                            </button>
+                        </div>
+                        <div id="snomed_fsn_display" class="small text-info mt-1" style="display:none;"></div>
+                        <div id="snomed_suggest_panel" class="border rounded bg-white shadow-sm mt-1 p-0" style="display:none;max-height:240px;overflow-y:auto;position:relative;z-index:200;"></div>
                     </div>
                     <div class="mb-2">
                         <label class="form-label">ATC Code <small class="text-muted">(optional)</small></label>
@@ -282,6 +289,8 @@
         $('#med_item_name,#med_formulation,#med_genericname,#med_salt_name,#med_dosage_restriction,#med_company_name,#med_snomed_code,#med_atc_code').val('');
         $('#med_default_days,#med_default_qty,#med_default_remark').val('');
         $('#med_default_dosage,#med_default_when,#med_default_freq,#med_default_where').val('');
+        $('#snomed_fsn_display').hide().text('');
+        closeSnomedPanel();
     }
 
     function renderDefaultMasterSelect($select, rows, placeholder) {
@@ -421,6 +430,13 @@
         $('#med_dosage_restriction').val(row.dosage_restriction || row.dose_restriction || row.restriction_note || row.restriction || '');
         $('#med_company_name').val(row.company_name || '');
         $('#med_snomed_code').val(row.snomed_code || row.medicine_snomed_code || row.snomed_ct_code || row.sctid || '');
+        // Show FSN display if SNOMED code already set
+        var existingSnomed = ($('#med_snomed_code').val() || '').trim();
+        if (existingSnomed) {
+            $('#snomed_fsn_display').text('SNOMED: ' + existingSnomed + ' — click SNOMED to verify/update').show();
+        } else {
+            $('#snomed_fsn_display').hide();
+        }
         $('#med_atc_code').val(row.atc_code || row.who_atc_code || '');
         setDefaultMasterValue($('#med_default_dosage'), row.dosage || '');
         setDefaultMasterValue($('#med_default_when'), row.dosage_when || '');
@@ -783,6 +799,129 @@
         loadList();
     });
 
+    // ── SNOMED CT substance search ────────────────────────────────────────────
+    function closeSnomedPanel() {
+        $('#snomed_suggest_panel').hide().empty();
+    }
+
+    function renderSnomedPanel(rows) {
+        var $panel = $('#snomed_suggest_panel');
+        $panel.empty();
+
+        if (!rows || !rows.length) {
+            $panel.append('<div class="px-3 py-2 text-muted small">No SNOMED CT substance concepts found.</div>');
+            $panel.show();
+            return;
+        }
+
+        rows.forEach(function(row) {
+            var conceptId  = String(row.concept_id || '');
+            var displayTerm = String(row.display_term || row.term || '');
+            var fsn        = String(row.fsn || '');
+            var hierarchy  = String(row.hierarchy || '');
+            var source     = String(row.source || '');
+            var badgeCls   = (source === 'csnotk') ? 'bg-primary' : 'bg-secondary';
+            var badgeLabel = (source === 'csnotk') ? 'API' : 'local';
+
+            var $item = $('<div class="px-3 py-2 border-bottom snomed-suggest-item" style="cursor:pointer;">')
+                .data('concept-id', conceptId)
+                .data('display-term', displayTerm)
+                .data('fsn', fsn);
+
+            $item.html(
+                '<div class="d-flex justify-content-between align-items-start">'
+                + '<div>'
+                + '<span class="fw-semibold">' + $('<div>').text(displayTerm).html() + '</span>'
+                + (hierarchy ? ' <span class="badge bg-light text-dark border">' + $('<div>').text(hierarchy).html() + '</span>' : '')
+                + '</div>'
+                + '<span class="badge ' + badgeCls + ' ms-2 flex-shrink-0">' + badgeLabel + '</span>'
+                + '</div>'
+                + '<div class="text-muted small">' + $('<div>').text(conceptId).html() + (fsn && fsn !== displayTerm ? ' — ' + $('<div>').text(fsn).html() : '') + '</div>'
+            );
+
+            $item.on('mouseenter', function() { $(this).addClass('bg-light'); })
+                 .on('mouseleave', function() { $(this).removeClass('bg-light'); });
+
+            $item.on('click', function() {
+                var cid  = String($(this).data('concept-id') || '');
+                var dTerm = String($(this).data('display-term') || '');
+                var fsnVal = String($(this).data('fsn') || '');
+
+                $('#med_snomed_code').val(cid);
+
+                var fsnText = fsnVal || dTerm;
+                if (fsnText) {
+                    $('#snomed_fsn_display').text('▶ ' + fsnText).show();
+                } else {
+                    $('#snomed_fsn_display').hide();
+                }
+
+                // Auto-fill generic name if currently empty
+                if (dTerm && ($('#med_genericname').val() || '').trim() === '') {
+                    $('#med_genericname').val(dTerm);
+                    setMsg('normal', 'SNOMED concept selected. Generic name pre-filled — review before saving.');
+                } else {
+                    setMsg('normal', 'SNOMED concept selected (ID: ' + cid + ').');
+                }
+
+                closeSnomedPanel();
+            });
+
+            $panel.append($item);
+        });
+
+        $panel.show();
+    }
+
+    function snomedSearch(term) {
+        if (!term || term.length < 2) {
+            closeSnomedPanel();
+            return;
+        }
+        var $btn = $('#btn_snomed_search');
+        $btn.prop('disabled', true).text('...');
+        var url = '<?= base_url('Opd_prescription/opd_medicince_snomed_lookup') ?>?term=' + encodeURIComponent(term) + '&limit=12';
+        apiGet(url, function(data) {
+            $btn.prop('disabled', false).html('<i class="fa fa-search"></i> SNOMED');
+            if ((data.update || 0) != 1) {
+                setMsg('err', data.message || 'SNOMED lookup failed');
+                return;
+            }
+            renderSnomedPanel(data.rows || []);
+            if (data.message) {
+                setMsg('normal', data.message);
+            }
+        });
+    }
+
+    $('#btn_snomed_search').on('click', function() {
+        var term = ($('#med_item_name').val() || '').trim();
+        if (!term) {
+            // Fallback: try the SNOMED code field value as a term
+            term = ($('#med_snomed_code').val() || '').trim();
+        }
+        if (!term) {
+            setMsg('err', 'Enter a medicine name first, then click SNOMED to search.');
+            return;
+        }
+        snomedSearch(term);
+    });
+
+    // Close SNOMED panel on outside click
+    $(document).on('click', function(e) {
+        if (!$(e.target).closest('#snomed_suggest_panel, #btn_snomed_search, #med_snomed_code').length) {
+            closeSnomedPanel();
+        }
+    });
+
+    // Clear FSN display when SNOMED code is manually cleared
+    $('#med_snomed_code').on('input', function() {
+        if (!$(this).val().trim()) {
+            $('#snomed_fsn_display').hide();
+        }
+    });
+
+    // ── AI details button ─────────────────────────────────────────────────────
     $('#btn_med_ai_details').on('click', function() {
         var itemName = ($('#med_item_name').val() || '').trim();
         if (!itemName) {

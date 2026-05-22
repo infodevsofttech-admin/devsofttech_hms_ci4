@@ -557,6 +557,16 @@ $routes->post('AbdmGateway/share_ipd_discharge_bundle', 'AbdmGateway::shareIpdDi
 $routes->post('AbdmGateway/share_diagnosis_report_bundle', 'AbdmGateway::shareDiagnosisReportBundle', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmGateway/push_health_record', 'AbdmGateway::pushHealthRecord', ['filter' => $abdmPermFilter]);
 $routes->get('AbdmGateway/health_records_list', 'AbdmGateway::healthRecordsList', ['filter' => $abdmPermFilter]);
+$routes->get('AbdmGateway/bridge_record_status/(:num)', 'AbdmGateway::bridgeRecordStatus/$1', ['filter' => $abdmPermFilter]);
+$routes->post('AbdmGateway/bridge_record_share/(:num)', 'AbdmGateway::bridgeRecordShare/$1', ['filter' => $abdmPermFilter]);
+$routes->get('AbdmGateway/opd_running_token_status', 'AbdmGateway::opdRunningTokenStatus', ['filter' => $abdmPermFilter]);
+$routes->get('AbdmGateway/gateway_status', 'AbdmGateway::gatewayStatus', ['filter' => $abdmPermFilter]);
+$routes->get('AbdmGateway/bridge_records_list', 'AbdmGateway::bridgeRecordsList', ['filter' => $abdmPermFilter]);
+$routes->post('AbdmGateway/hip_link_token', 'AbdmGateway::hipLinkToken', ['filter' => $abdmPermFilter]);
+$routes->post('AbdmGateway/hip_link_carecontext', 'AbdmGateway::hipLinkCareContext', ['filter' => $abdmPermFilter]);
+$routes->get('AbdmGateway/hip_patient_links', 'AbdmGateway::hipPatientLinks', ['filter' => $abdmPermFilter]);
+$routes->post('AbdmGateway/hip_link_notify', 'AbdmGateway::hipLinkNotify', ['filter' => $abdmPermFilter]);
+$routes->post('AbdmGateway/hip_sms_notify', 'AbdmGateway::hipSmsNotify', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmGateway/nhcx_claim_create', 'AbdmGateway::nhcxClaimCreate', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmGateway/nhcx_claim_status_request', 'AbdmGateway::nhcxClaimStatusRequest', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmGateway/nhcx_claim_status_callback', 'AbdmGateway::nhcxClaimStatusCallback');
@@ -577,6 +587,10 @@ $routes->get('AbdmTaskBoard', 'AbdmTaskBoard::index', ['filter' => $abdmPermFilt
 $routes->get('AbdmTaskBoard/list', 'AbdmTaskBoard::list', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmTaskBoard/perform_action', 'AbdmTaskBoard::performAction', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmTaskBoard/mark_status', 'AbdmTaskBoard::markStatus', ['filter' => $abdmPermFilter]);
+// ABDM Bridge Log viewer
+$routes->get('AbdmBridgeLog', 'AbdmBridgeLog::index', ['filter' => 'permission:abdm.access,abdm.taskboard.access,abdm.gateway.use,abdm.bridge_log.view']);
+$routes->get('AbdmBridgeLog/list', 'AbdmBridgeLog::list', ['filter' => 'permission:abdm.access,abdm.taskboard.access,abdm.gateway.use,abdm.bridge_log.view']);
+$routes->get('AbdmBridgeLog/detail/(:num)', 'AbdmBridgeLog::detail/$1', ['filter' => 'permission:abdm.access,abdm.taskboard.access,abdm.gateway.use,abdm.bridge_log.view']);
 // OPD Queue (ABDM Scan & Share + Walk-in tokens)
 $routes->get('AbdmOpdQueue', 'AbdmOpdQueue::index', ['filter' => $abdmPermFilter]);
 $routes->get('AbdmOpdQueue/list', 'AbdmOpdQueue::list', ['filter' => $abdmPermFilter]);
@@ -591,6 +605,7 @@ $routes->get('Opd_prescription/fhir_bundle_history/(:num)/(:num)', 'Opd_prescrip
 $routes->get('Opd_prescription/fhir_bundle_preview/(:num)', 'Opd_prescription::fhir_bundle_preview/$1');
 $routes->get('Opd_prescription/fhir_bundle_preview/(:num)/(:num)', 'Opd_prescription::fhir_bundle_preview/$1/$2');
 $routes->post('Opd_prescription/fhir_bundle_submit', 'Opd_prescription::fhir_bundle_submit');
+$routes->post('Opd_prescription/fhir_bundle_regenerate', 'Opd_prescription::fhir_bundle_regenerate');
 $routes->post('Opd_prescription/fhir_complaint_recode', 'Opd_prescription::fhir_complaint_recode');
 $routes->post('Opd_prescription/fhir_diagnosis_recode', 'Opd_prescription::fhir_diagnosis_recode');
 $routes->get('Opd_prescription/complaints_search', 'Opd_prescription::complaints_search');

@@ -101,6 +101,51 @@ class CsnotkTerminologyService
     }
 
     /**
+     * Search for SNOMED CT substance / pharmaceutical product concepts.
+     * Used for medicine SNOMED CT coding on the opd_medicince page.
+     *
+     * Semantic tags searched: substance, product, medicinal product
+     * Local DB first (snomed_description), falls back to CSNOtk API.
+     *
+     * @return array<int, array{concept_id:string,term:string,fsn:string,hierarchy:string,source:string}>
+     */
+    public function searchSubstance(string $query, int $limit = 15): array
+    {
+        $q = trim($query);
+        if ($q === '') {
+            return [];
+        }
+        $limit = max(1, min(50, $limit));
+
+        $substanceTags = ['substance', 'product', 'medicinal product', 'clinical drug'];
+
+        $rows = $this->localSearch($q, $limit, $substanceTags);
+
+        if (count($rows) < $limit && $this->apiEnabled && $this->baseUrl !== '') {
+            // CSNOtk: search substance tag first, then product tag as fallback
+            $apiRows = $this->apiSearchBySemTag($q, $limit, ['substance', 'product']);
+            $rows = $this->mergeFallback($rows, $apiRows, $limit);
+        }
+
+        // If still empty try broader local search and filter post-hoc for drug-related terms
+        if (empty($rows) && $this->localAvailable) {
+            $broader = $this->localSearch($q, $limit, []);
+            $rows = array_filter($broader, static function (array $r) use ($substanceTags): bool {
+                $h = mb_strtolower((string) ($r['hierarchy'] ?? ''));
+                foreach ($substanceTags as $tag) {
+                    if ($h === $tag || str_contains($h, $tag)) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+            $rows = array_values($rows);
+        }
+
+        return array_slice($rows, 0, $limit);
+    }
+
+    /**
      * Search for procedures / observable entities (for investigation advice autocomplete).
      * @return array<int, array{concept_id:string,term:string,fsn:string,hierarchy:string,source:string}>
      */

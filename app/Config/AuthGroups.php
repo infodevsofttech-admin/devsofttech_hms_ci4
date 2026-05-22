@@ -171,6 +171,7 @@ class AuthGroups extends ShieldAuthGroups
         'abdm.access' => 'Can access ABDM module',
         'abdm.taskboard.access' => 'Can access ABDM task board',
         'abdm.gateway.use' => 'Can run ABDM gateway actions from UI',
+        'abdm.bridge_log.view' => 'Can view ABDM Bridge communication log',
     ];
 
     /**

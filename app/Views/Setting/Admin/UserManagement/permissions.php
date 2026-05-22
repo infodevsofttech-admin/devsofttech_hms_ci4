@@ -73,6 +73,7 @@
                                 'billing.charges' => 'Charges',
                                 'billing.ipd' => 'IPD Billing',
                                 'billing' => 'Billing',
+                                'abdm' => 'ABDM',
                                 'other' => 'Other',
                             ];
                             foreach ($permissions as $permissionKey => $permissionLabel) {
@@ -109,6 +110,7 @@
                                 'billing.charges',
                                 'billing.ipd',
                                 'billing',
+                                'abdm',
                                 'beta',
                                 'other',
                             ];

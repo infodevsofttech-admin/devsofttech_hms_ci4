@@ -55,11 +55,26 @@ class FhirR4Builder
 
         // ── Practitioner ─────────────────────────────────────────────────────
         if ($hasPractitioner) {
+            $practRawName = trim((string) ($practitioner['name'] ?? ''));
+            $practNameEntry = ['text' => $practRawName];
+            // Split "Dr. Ramesh Sharma" → prefix=["Dr."], given=["Ramesh"], family="Sharma"
+            $practParts = preg_split('/\s+/', $practRawName, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+            if (count($practParts) >= 2) {
+                if (preg_match('/^(Dr\.?|Prof\.?|Mr\.?|Mrs\.?|Ms\.?)$/i', $practParts[0])) {
+                    $practNameEntry['prefix'] = [array_shift($practParts)];
+                }
+                if (count($practParts) >= 1) {
+                    $practNameEntry['family'] = (string) array_pop($practParts);
+                }
+                if (! empty($practParts)) {
+                    $practNameEntry['given'] = $practParts;
+                }
+            }
             $practResource = [
                 'resourceType' => 'Practitioner',
                 'id'           => $practitionerUuid,
                 'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Practitioner']],
-                'name'         => [['text' => trim((string) ($practitioner['name'] ?? ''))]],
+                'name'         => [$practNameEntry],
             ];
             $regNumber = trim((string) ($practitioner['registration_number'] ?? ''));
             if ($regNumber !== '') {
@@ -114,7 +129,7 @@ class FhirR4Builder
             'class'        => [
                 'system'  => 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
                 'code'    => 'AMB',
-                'display' => 'ambulatory',
+                'display' => 'Ambulatory',
             ],
             'subject' => ['reference' => $patientRef, 'display' => 'Patient'],
             'period'  => ['start' => trim((string) ($encounter['period_start'] ?? '')) !== '' ? (string) $encounter['period_start'] : $issuedAt],
@@ -358,10 +373,33 @@ class FhirR4Builder
             $dosageInstruction = ['text' => (string) ($medication['dosage'] ?? '')];
             $routeText = trim((string) ($medication['route_text'] ?? ''));
             if ($routeText !== '') {
-                $dosageInstruction['route'] = ['text' => $routeText];
+                $routeEntry = ['text' => $routeText];
+                // Add SNOMED route code when we can resolve it from text or a pre-supplied code
+                $routeCode = trim((string) ($medication['route_code'] ?? ''));
+                if ($routeCode === '') {
+                    $routeCode = $this->resolveRouteSnomedCode($routeText);
+                }
+                if ($routeCode !== '') {
+                    $routeEntry['coding'] = [[
+                        'system'  => 'http://snomed.info/sct',
+                        'code'    => $routeCode,
+                        'display' => $routeText,
+                    ]];
+                }
+                $dosageInstruction['route'] = $routeEntry;
             }
-            if ($medType !== '') {
-                $dosageInstruction['method'] = ['text' => $medType];
+            $methodText = trim((string) ($medication['method_text'] ?? $medType));
+            $methodCode = trim((string) ($medication['method_code'] ?? ''));
+            if ($methodText !== '') {
+                $methodEntry = ['text' => $methodText];
+                if ($methodCode !== '') {
+                    $methodEntry['coding'] = [[
+                        'system'  => 'http://snomed.info/sct',
+                        'code'    => $methodCode,
+                        'display' => $methodText,
+                    ]];
+                }
+                $dosageInstruction['method'] = $methodEntry;
             }
 
             $medRes = [
@@ -555,6 +593,14 @@ class FhirR4Builder
         );
 
         // ── Bundle ────────────────────────────────────────────────────────────
+        $hfrId = trim((string) ($organization['hfr_id'] ?? ''));
+        $bundleIdSystem = $hfrId !== ''
+            ? 'https://' . strtolower(preg_replace('/[^A-Za-z0-9]/', '', $hfrId)) . '.hfr.abdm.gov.in'
+            : 'https://hfr.abdm.gov.in';
+        $bundleIdValue  = $hfrId !== ''
+            ? 'OPD-' . ($encounter['id'] ?? $bundleUuid) . '-' . date('Y-m-d')
+            : $bundleUuid;
+
         return [
             'resourceType' => 'Bundle',
             'id'           => $bundleUuid,
@@ -566,7 +612,7 @@ class FhirR4Builder
                     'display' => 'very restricted',
                 ]],
             ],
-            'identifier' => ['system' => 'http://hip.in', 'value' => $bundleUuid],
+            'identifier' => ['system' => $bundleIdSystem, 'value' => $bundleIdValue],
             'type'       => 'document',
             'timestamp'  => $issuedAt,
             'entry'      => $allEntries,
@@ -574,109 +620,576 @@ class FhirR4Builder
     }
 
     /**
-     * @param array<string, mixed> $patient
-     * @param array<string, mixed> $diagnosticReport
-     * @param array<int, array<string, mixed>> $observations
+     * Build a ABDM-compliant DiagnosticReportRecord FHIR DocumentBundle.
+     *
+     * Supports:
+     *  - LOINC-coded observations (valueQuantity) for structured lab results
+     *  - HTML report as presentedForm via Binary + DocumentReference
+     *  - Optional Practitioner, Organization, Encounter
+     *
+     * @param array<string, mixed>              $patient         {id, name, given_name, family_name, gender, birthDate, abhaAddress, phone}
+     * @param array<string, mixed>              $diagnosticReport {id, title, category_snomed_code, category_snomed_display,
+     *                                                             loinc_code, loinc_display, status, conclusion,
+     *                                                             reported_at, report_html, report_content_type}
+     * @param array<int, array<string, mixed>>  $observations    Each: {test_name, loinc_code, value, value_type (quantity|string),
+     *                                                             unit, ucum_code, ref_low, ref_high, interpretation, status}
+     * @param array<string, mixed>|null         $practitioner    {name, registration_number}
+     * @param array<string, mixed>|null         $organization    {name, hfr_id}
+     * @param array<string, mixed>|null         $encounter       {id, status, class_code (AMB|IMP|EMER), period_start, period_end}
      *
      * @return array<string, mixed>
      */
-    public function buildLabReportBundle(array $patient, array $diagnosticReport, array $observations): array
-    {
-        $issuedAt = Time::now('Asia/Kolkata')->toDateTimeString();
-        $patientRef = 'Patient/' . (string) ($patient['id'] ?? 'unknown');
-        $reportId = (string) ($diagnosticReport['id'] ?? 'lab-report-1');
+    public function buildLabReportBundle(
+        array  $patient,
+        array  $diagnosticReport,
+        array  $observations  = [],
+        ?array $practitioner  = null,
+        ?array $organization  = null,
+        ?array $encounter     = null
+    ): array {
+        $issuedAt        = $this->isoTimestamp();
+        $bundleUuid      = $this->generateUuid();
+        $compositionUuid = $this->generateUuid();
+        $patientUuid     = $this->generateUuid();
+        $reportUuid      = $this->generateUuid();
 
-        $entries = [[
-            'resource' => $this->buildPatientResource($patient),
-        ]];
+        $patientRef  = 'urn:uuid:' . $patientUuid;
+        $reportRef   = 'urn:uuid:' . $reportUuid;
+        $reportedAt  = trim((string) ($diagnosticReport['reported_at'] ?? '')) ?: $issuedAt;
+        $reportTitle = trim((string) ($diagnosticReport['title'] ?? 'Diagnostic Report'));
+        $reportStatus = trim((string) ($diagnosticReport['status'] ?? 'final'));
 
-        $observationRefs = [];
-        foreach ($observations as $index => $observation) {
-            $observationId = 'obs-' . ($index + 1);
-            $observationRefs[] = ['reference' => 'Observation/' . $observationId];
-            $entries[] = [
-                'resource' => [
-                    'resourceType' => 'Observation',
-                    'id' => $observationId,
-                    'status' => (string) ($observation['status'] ?? 'final'),
-                    'code' => [
-                        'text' => (string) ($observation['test_name'] ?? ''),
-                    ],
-                    'subject' => ['reference' => $patientRef],
-                    'valueString' => (string) ($observation['value'] ?? ''),
-                    'interpretation' => [[
-                        'text' => (string) ($observation['interpretation'] ?? ''),
-                    ]],
-                ],
+        $hasPractitioner  = $practitioner !== null && trim((string) ($practitioner['name'] ?? '')) !== '';
+        $hasOrganization  = $organization !== null && trim((string) ($organization['name'] ?? '')) !== '';
+        $hasEncounter     = $encounter !== null;
+        $practitionerUuid = $hasPractitioner ? $this->generateUuid() : '';
+        $organizationUuid = $hasOrganization ? $this->generateUuid() : '';
+        $encounterUuid    = $hasEncounter   ? $this->generateUuid() : '';
+
+        $practitionerRef = $hasPractitioner ? ('urn:uuid:' . $practitionerUuid) : '';
+        $organizationRef = $hasOrganization ? ('urn:uuid:' . $organizationUuid) : '';
+        $encounterRef    = $hasEncounter    ? ('urn:uuid:' . $encounterUuid)    : '';
+
+        $resourceEntries = [];
+
+        // ── Practitioner ──────────────────────────────────────────────────────
+        if ($hasPractitioner) {
+            $practRes = [
+                'resourceType' => 'Practitioner',
+                'id'           => $practitionerUuid,
+                'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Practitioner']],
+                'name'         => [['text' => trim((string) ($practitioner['name'] ?? ''))]],
             ];
+            $regNo = trim((string) ($practitioner['registration_number'] ?? ''));
+            if ($regNo !== '') {
+                $practRes['identifier'] = [[
+                    'type'   => ['coding' => [['system' => 'http://terminology.hl7.org/CodeSystem/v2-0203', 'code' => 'MD', 'display' => 'Medical License number']]],
+                    'system' => 'https://doctor.ndhm.gov.in',
+                    'value'  => $regNo,
+                ]];
+            }
+            $resourceEntries[] = ['fullUrl' => $practitionerRef, 'resource' => $practRes];
         }
 
-        $entries[] = [
-            'resource' => [
-                'resourceType' => 'DiagnosticReport',
-                'id' => $reportId,
-                'status' => (string) ($diagnosticReport['status'] ?? 'final'),
-                'code' => [
-                    'text' => (string) ($diagnosticReport['title'] ?? 'Laboratory Report'),
+        // ── Organization ──────────────────────────────────────────────────────
+        if ($hasOrganization) {
+            $orgRes = [
+                'resourceType' => 'Organization',
+                'id'           => $organizationUuid,
+                'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Organization']],
+                'name'         => trim((string) ($organization['name'] ?? '')),
+            ];
+            $hfrId = trim((string) ($organization['hfr_id'] ?? ''));
+            if ($hfrId !== '') {
+                $orgRes['identifier'] = [[
+                    'type'   => ['coding' => [['system' => 'http://terminology.hl7.org/CodeSystem/v2-0203', 'code' => 'PRN', 'display' => 'Provider number']]],
+                    'system' => 'https://facility.ndhm.gov.in',
+                    'value'  => $hfrId,
+                ]];
+            }
+            $resourceEntries[] = ['fullUrl' => $organizationRef, 'resource' => $orgRes];
+        }
+
+        // ── Patient ───────────────────────────────────────────────────────────
+        $patientResource       = $this->buildPatientResource($patient);
+        $patientResource['id'] = $patientUuid;
+        $resourceEntries[]     = ['fullUrl' => $patientRef, 'resource' => $patientResource];
+
+        // ── Encounter ─────────────────────────────────────────────────────────
+        if ($hasEncounter) {
+            $encounterRes = [
+                'resourceType' => 'Encounter',
+                'id'           => $encounterUuid,
+                'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Encounter']],
+                'identifier'   => [['system' => 'https://ndhm.in', 'value' => (string) ($encounter['id'] ?? $encounterUuid)]],
+                'status'       => (string) ($encounter['status'] ?? 'finished'),
+                'class'        => [
+                    'system'  => 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
+                    'code'    => (string) ($encounter['class_code'] ?? 'AMB'),
+                    'display' => (string) ($encounter['class_code'] ?? 'AMB') === 'IMP' ? 'inpatient encounter' : 'Ambulatory',
                 ],
-                'subject' => ['reference' => $patientRef],
-                'issued' => $issuedAt,
-                'result' => $observationRefs,
-                'conclusion' => (string) ($diagnosticReport['conclusion'] ?? ''),
-            ],
+                'subject' => ['reference' => $patientRef, 'display' => 'Patient'],
+            ];
+            $pStart = trim((string) ($encounter['period_start'] ?? ''));
+            if ($pStart !== '') {
+                $encounterRes['period'] = ['start' => $pStart];
+                $pEnd = trim((string) ($encounter['period_end'] ?? ''));
+                if ($pEnd !== '') {
+                    $encounterRes['period']['end'] = $pEnd;
+                }
+            }
+            if ($practitionerRef !== '') {
+                $encounterRes['participant'] = [['individual' => ['reference' => $practitionerRef]]];
+            }
+            if ($organizationRef !== '') {
+                $encounterRes['serviceProvider'] = ['reference' => $organizationRef];
+            }
+            $resourceEntries[] = ['fullUrl' => $encounterRef, 'resource' => $encounterRes];
+        }
+
+        // ── Observations (structured lab results) ─────────────────────────────
+        $observationEntries = [];
+        $observationRefs    = [];
+        foreach ($observations as $obs) {
+            $obsUuid           = $this->generateUuid();
+            $obsRef            = 'urn:uuid:' . $obsUuid;
+            $observationRefs[] = ['reference' => $obsRef];
+            $testName = trim((string) ($obs['test_name'] ?? ''));
+            $loincCode = trim((string) ($obs['loinc_code'] ?? ''));
+            $codeEntry = ['text' => $testName];
+            if ($loincCode !== '') {
+                $codeEntry['coding'] = [['system' => 'http://loinc.org', 'code' => $loincCode, 'display' => $testName]];
+            }
+            $obsResource = [
+                'resourceType'      => 'Observation',
+                'id'                => $obsUuid,
+                'meta'              => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation']],
+                'status'            => (string) ($obs['status'] ?? 'final'),
+                'code'              => $codeEntry,
+                'subject'           => ['reference' => $patientRef],
+                'effectiveDateTime' => $reportedAt,
+            ];
+            if ($encounterRef !== '') {
+                $obsResource['encounter'] = ['reference' => $encounterRef];
+            }
+            if ($practitionerRef !== '') {
+                $obsResource['performer'] = [['reference' => $practitionerRef]];
+            } elseif ($organizationRef !== '') {
+                $obsResource['performer'] = [['reference' => $organizationRef]];
+            }
+            // Value: quantity or string
+            $valueType = trim((string) ($obs['value_type'] ?? 'string'));
+            $rawValue  = $obs['value'] ?? '';
+            if ($valueType === 'quantity' && is_numeric($rawValue)) {
+                $ucum = trim((string) ($obs['ucum_code'] ?? ''));
+                $unit = trim((string) ($obs['unit'] ?? ''));
+                $obsResource['valueQuantity'] = [
+                    'value'  => (float) $rawValue,
+                    'unit'   => $unit !== '' ? $unit : $ucum,
+                    'system' => 'http://unitsofmeasure.org',
+                    'code'   => $ucum,
+                ];
+            } else {
+                $obsResource['valueString'] = (string) $rawValue;
+            }
+            // Reference range
+            $refLow  = $obs['ref_low'] ?? null;
+            $refHigh = $obs['ref_high'] ?? null;
+            if ($refLow !== null || $refHigh !== null) {
+                $rr = [];
+                $ucum = trim((string) ($obs['ucum_code'] ?? ''));
+                $unit = trim((string) ($obs['unit'] ?? ''));
+                if ($refLow !== null && is_numeric($refLow)) {
+                    $rr['low'] = ['value' => (float) $refLow, 'unit' => $unit ?: $ucum, 'system' => 'http://unitsofmeasure.org', 'code' => $ucum];
+                }
+                if ($refHigh !== null && is_numeric($refHigh)) {
+                    $rr['high'] = ['value' => (float) $refHigh, 'unit' => $unit ?: $ucum, 'system' => 'http://unitsofmeasure.org', 'code' => $ucum];
+                }
+                $obsResource['referenceRange'] = [$rr];
+            }
+            // Interpretation (H/L/N)
+            $interp = trim((string) ($obs['interpretation'] ?? ''));
+            if ($interp !== '') {
+                $interpCode = strtoupper($interp);
+                $interpCodeMap = ['H' => 'H', 'HIGH' => 'H', 'L' => 'L', 'LOW' => 'L', 'N' => 'N', 'NORMAL' => 'N'];
+                $obsResource['interpretation'] = [[
+                    'coding' => [[
+                        'system'  => 'http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation',
+                        'code'    => $interpCodeMap[$interpCode] ?? $interpCode,
+                        'display' => $interp,
+                    ]],
+                    'text' => $interp,
+                ]];
+            }
+            $observationEntries[] = ['fullUrl' => $obsRef, 'resource' => $obsResource];
+        }
+
+        // ── Binary + DocumentReference for HTML report ─────────────────────────
+        $docRefEntry = null;
+        $docRefRef   = null;
+        $reportHtml  = trim((string) ($diagnosticReport['report_html'] ?? ''));
+        if ($reportHtml !== '') {
+            $binaryUuid  = $this->generateUuid();
+            $docRefUuid  = $this->generateUuid();
+            $docRefRef   = 'urn:uuid:' . $docRefUuid;
+            $contentType = trim((string) ($diagnosticReport['report_content_type'] ?? 'text/html; charset=utf-8'));
+
+            $resourceEntries[] = ['fullUrl' => 'urn:uuid:' . $binaryUuid, 'resource' => [
+                'resourceType' => 'Binary',
+                'id'           => $binaryUuid,
+                'contentType'  => $contentType,
+                'data'         => base64_encode($reportHtml),
+            ]];
+
+            $docRefEntry = [
+                'resourceType'  => 'DocumentReference',
+                'id'            => $docRefUuid,
+                'meta'          => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentReference']],
+                'status'        => 'current',
+                'type'          => ['coding' => [['system' => 'http://snomed.info/sct', 'code' => '721981007', 'display' => 'Diagnostic studies report']]],
+                'subject'       => ['reference' => $patientRef],
+                'content'       => [['attachment' => ['contentType' => $contentType, 'url' => 'urn:uuid:' . $binaryUuid, 'title' => $reportTitle]]],
+            ];
+            $resourceEntries[] = ['fullUrl' => $docRefRef, 'resource' => $docRefEntry];
+        }
+
+        // ── DiagnosticReport ──────────────────────────────────────────────────
+        $reportRes = [
+            'resourceType' => 'DiagnosticReport',
+            'id'           => $reportUuid,
+            'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DiagnosticReportLab']],
+            'status'       => $reportStatus,
+            'code'         => array_filter([
+                'coding' => trim((string) ($diagnosticReport['loinc_code'] ?? '')) !== ''
+                    ? [['system' => 'http://loinc.org', 'code' => (string) $diagnosticReport['loinc_code'], 'display' => $reportTitle]]
+                    : null,
+                'text' => $reportTitle,
+            ]),
+            'subject' => ['reference' => $patientRef, 'display' => 'Patient'],
+            'issued'  => $reportedAt,
         ];
+        if (!empty($observationRefs)) {
+            $reportRes['result'] = $observationRefs;
+        }
+        if ($organizationRef !== '') {
+            $reportRes['performer'] = [['reference' => $organizationRef]];
+        } elseif ($practitionerRef !== '') {
+            $reportRes['performer'] = [['reference' => $practitionerRef]];
+        }
+        if ($encounterRef !== '') {
+            $reportRes['encounter'] = ['reference' => $encounterRef];
+        }
+        $catSnomedCode = trim((string) ($diagnosticReport['category_snomed_code'] ?? ''));
+        if ($catSnomedCode !== '') {
+            $reportRes['category'] = [['coding' => [['system' => 'http://snomed.info/sct', 'code' => $catSnomedCode, 'display' => trim((string) ($diagnosticReport['category_snomed_display'] ?? $catSnomedCode))]]]];
+        }
+        $conclusion = trim((string) ($diagnosticReport['conclusion'] ?? ''));
+        if ($conclusion !== '') {
+            $reportRes['conclusion'] = $conclusion;
+        }
+        $resourceEntries[] = ['fullUrl' => $reportRef, 'resource' => $reportRes];
+
+        // ── Composition section entries ────────────────────────────────────────
+        $sectionEntries = [['reference' => $reportRef]];
+        if ($docRefRef !== null) {
+            $sectionEntries[] = ['reference' => $docRefRef];
+        }
+
+        // ── Composition ───────────────────────────────────────────────────────
+        $authorEntry = $practitionerRef !== '' ? ['reference' => $practitionerRef] : ['display' => 'Unknown'];
+        $composition = [
+            'resourceType' => 'Composition',
+            'id'           => $compositionUuid,
+            'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DiagnosticReportRecord']],
+            'language'     => 'en-IN',
+            'identifier'   => ['system' => 'https://ndhm.in/phr', 'value' => $compositionUuid],
+            'status'       => 'final',
+            'type'         => [
+                'coding' => [['system' => 'http://snomed.info/sct', 'code' => '721981007', 'display' => 'Diagnostic studies report']],
+                'text'   => 'Diagnostic Report',
+            ],
+            'subject'   => ['reference' => $patientRef, 'display' => 'Patient'],
+            'date'      => $issuedAt,
+            'author'    => [[$authorEntry]],
+            'title'     => $reportTitle,
+            'section'   => [[
+                'title' => 'Diagnostic Report',
+                'code'  => ['coding' => [['system' => 'http://snomed.info/sct', 'code' => '721981007', 'display' => 'Diagnostic studies report']]],
+                'entry' => $sectionEntries,
+            ]],
+        ];
+        if ($encounterRef !== '') {
+            $composition['encounter'] = ['reference' => $encounterRef];
+        }
+        if ($organizationRef !== '') {
+            $composition['custodian'] = ['reference' => $organizationRef];
+        }
+
+        // ── Bundle identifier system: HFR ID based or fallback ────────────────
+        $hfrId = trim((string) ($organization['hfr_id'] ?? ''));
+        $bundleIdSystem = $hfrId !== ''
+            ? 'https://' . strtolower(preg_replace('/[^A-Za-z0-9]/', '', $hfrId)) . '.hfr.abdm.gov.in'
+            : 'https://hfr.abdm.gov.in';
+        $bundleIdValue = $hfrId !== ''
+            ? 'LAB-' . (string) ($diagnosticReport['id'] ?? $bundleUuid)
+            : $bundleUuid;
 
         return [
             'resourceType' => 'Bundle',
-            'type' => 'collection',
-            'timestamp' => $issuedAt,
-            'entry' => $entries,
+            'id'           => $bundleUuid,
+            'meta'         => [
+                'profile'  => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle'],
+                'security' => [['system' => 'http://terminology.hl7.org/CodeSystem/v3-Confidentiality', 'code' => 'V', 'display' => 'very restricted']],
+            ],
+            'identifier' => ['system' => $bundleIdSystem, 'value' => $bundleIdValue],
+            'type'       => 'document',
+            'timestamp'  => $issuedAt,
+            'entry'      => array_merge(
+                [['fullUrl' => 'urn:uuid:' . $compositionUuid, 'resource' => $composition]],
+                $resourceEntries,
+                $observationEntries
+            ),
         ];
     }
 
     /**
-     * @param array<string, mixed> $patient
-     * @param array<string, mixed> $encounter
-     * @param array<string, mixed> $summary
+     * Build an ABDM-compliant DischargeSummaryRecord FHIR DocumentBundle.
+     *
+     * @param array<string, mixed>              $patient       {id, name, given_name, family_name, gender, birthDate, abhaAddress, phone}
+     * @param array<string, mixed>              $encounter     {id, admission_date, discharge_date, ipd_code, discharge_disposition}
+     * @param array<string, mixed>              $summary       {title, clinical_summary_html, chief_complaints, diagnosis_text,
+     *                                                          investigations_text, procedures_text, medications_text, follow_up}
+     * @param array<string, mixed>|null         $practitioner  {name, registration_number}
+     * @param array<string, mixed>|null         $organization  {name, hfr_id}
      *
      * @return array<string, mixed>
      */
-    public function buildDischargeSummaryBundle(array $patient, array $encounter, array $summary): array
-    {
-        $issuedAt = Time::now('Asia/Kolkata')->toDateTimeString();
-        $patientId = (string) ($patient['id'] ?? 'unknown');
-        $encounterId = (string) ($encounter['id'] ?? 'unknown');
+    public function buildDischargeSummaryBundle(
+        array  $patient,
+        array  $encounter,
+        array  $summary,
+        ?array $practitioner = null,
+        ?array $organization = null
+    ): array {
+        $issuedAt        = $this->isoTimestamp();
+        $bundleUuid      = $this->generateUuid();
+        $compositionUuid = $this->generateUuid();
+        $patientUuid     = $this->generateUuid();
+        $encounterUuid   = $this->generateUuid();
+
+        $patientRef   = 'urn:uuid:' . $patientUuid;
+        $encounterRef = 'urn:uuid:' . $encounterUuid;
+
+        $hasPractitioner  = $practitioner !== null && trim((string) ($practitioner['name'] ?? '')) !== '';
+        $hasOrganization  = $organization !== null && trim((string) ($organization['name'] ?? '')) !== '';
+        $practitionerUuid = $hasPractitioner ? $this->generateUuid() : '';
+        $organizationUuid = $hasOrganization ? $this->generateUuid() : '';
+        $practitionerRef  = $hasPractitioner ? ('urn:uuid:' . $practitionerUuid) : '';
+        $organizationRef  = $hasOrganization ? ('urn:uuid:' . $organizationUuid) : '';
+
+        $resourceEntries = [];
+
+        // ── Practitioner ──────────────────────────────────────────────────────
+        if ($hasPractitioner) {
+            $practRes = [
+                'resourceType' => 'Practitioner',
+                'id'           => $practitionerUuid,
+                'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Practitioner']],
+                'name'         => [['text' => trim((string) ($practitioner['name'] ?? ''))]],
+            ];
+            $regNo = trim((string) ($practitioner['registration_number'] ?? ''));
+            if ($regNo !== '') {
+                $practRes['identifier'] = [[
+                    'type'   => ['coding' => [['system' => 'http://terminology.hl7.org/CodeSystem/v2-0203', 'code' => 'MD', 'display' => 'Medical License number']]],
+                    'system' => 'https://doctor.ndhm.gov.in',
+                    'value'  => $regNo,
+                ]];
+            }
+            $resourceEntries[] = ['fullUrl' => $practitionerRef, 'resource' => $practRes];
+        }
+
+        // ── Organization ──────────────────────────────────────────────────────
+        if ($hasOrganization) {
+            $orgRes = [
+                'resourceType' => 'Organization',
+                'id'           => $organizationUuid,
+                'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Organization']],
+                'name'         => trim((string) ($organization['name'] ?? '')),
+            ];
+            $hfrId = trim((string) ($organization['hfr_id'] ?? ''));
+            if ($hfrId !== '') {
+                $orgRes['identifier'] = [[
+                    'type'   => ['coding' => [['system' => 'http://terminology.hl7.org/CodeSystem/v2-0203', 'code' => 'PRN', 'display' => 'Provider number']]],
+                    'system' => 'https://facility.ndhm.gov.in',
+                    'value'  => $hfrId,
+                ]];
+            }
+            $resourceEntries[] = ['fullUrl' => $organizationRef, 'resource' => $orgRes];
+        }
+
+        // ── Patient ───────────────────────────────────────────────────────────
+        $patientResource       = $this->buildPatientResource($patient);
+        $patientResource['id'] = $patientUuid;
+        $resourceEntries[]     = ['fullUrl' => $patientRef, 'resource' => $patientResource];
+
+        // ── Encounter (inpatient) ─────────────────────────────────────────────
+        $admissionDate  = trim((string) ($encounter['admission_date'] ?? '')) ?: $issuedAt;
+        $dischargeDate  = trim((string) ($encounter['discharge_date'] ?? '')) ?: $issuedAt;
+        $encounterResource = [
+            'resourceType' => 'Encounter',
+            'id'           => $encounterUuid,
+            'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Encounter']],
+            'identifier'   => [['system' => 'https://ndhm.in', 'value' => trim((string) ($encounter['ipd_code'] ?? $encounterUuid))]],
+            'status'       => 'finished',
+            'class'        => [
+                'system'  => 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
+                'code'    => 'IMP',
+                'display' => 'inpatient encounter',
+            ],
+            'subject' => ['reference' => $patientRef, 'display' => 'Patient'],
+            'period'  => ['start' => $admissionDate, 'end' => $dischargeDate],
+        ];
+        $dispText = trim((string) ($encounter['discharge_disposition'] ?? ''));
+        if ($dispText !== '') {
+            $encounterResource['hospitalization'] = [
+                'dischargeDisposition' => [
+                    'coding' => [['system' => 'http://terminology.hl7.org/CodeSystem/discharge-disposition', 'code' => 'home', 'display' => 'Home']],
+                    'text'   => $dispText,
+                ],
+            ];
+        }
+        if ($practitionerRef !== '') {
+            $encounterResource['participant'] = [['individual' => ['reference' => $practitionerRef]]];
+        }
+        if ($organizationRef !== '') {
+            $encounterResource['serviceProvider'] = ['reference' => $organizationRef];
+        }
+        $resourceEntries[] = ['fullUrl' => $encounterRef, 'resource' => $encounterResource];
+
+        // ── Composition sections per DischargeSummaryRecord spec ──────────────
+        $sections = [];
+        $summaryHtml = trim((string) ($summary['clinical_summary_html'] ?? ''));
+
+        // Chief complaints section (SNOMED 422843007)
+        $chiefComplaints = trim((string) ($summary['chief_complaints'] ?? ''));
+        if ($chiefComplaints !== '' || $summaryHtml !== '') {
+            $ccSection = [
+                'title' => 'Chief complaints',
+                'code'  => ['coding' => [['system' => 'http://snomed.info/sct', 'code' => '422843007', 'display' => 'Chief complaint section']]],
+            ];
+            if ($chiefComplaints !== '') {
+                $ccSection['text'] = ['status' => 'generated', 'div' => '<div xmlns="http://www.w3.org/1999/xhtml">' . htmlspecialchars($chiefComplaints) . '</div>'];
+            }
+            $sections[] = $ccSection;
+        }
+
+        // Medical History section (SNOMED 1003642006)
+        $diagnosisText = trim((string) ($summary['diagnosis_text'] ?? ''));
+        if ($diagnosisText !== '') {
+            $sections[] = [
+                'title' => 'Medical History',
+                'code'  => ['coding' => [['system' => 'http://snomed.info/sct', 'code' => '1003642006', 'display' => 'Past medical history section']]],
+                'text'  => ['status' => 'generated', 'div' => '<div xmlns="http://www.w3.org/1999/xhtml">' . htmlspecialchars($diagnosisText) . '</div>'],
+            ];
+        }
+
+        // Investigations section (SNOMED 721981007)
+        $investigationsText = trim((string) ($summary['investigations_text'] ?? ''));
+        if ($investigationsText !== '') {
+            $sections[] = [
+                'title' => 'Investigations',
+                'code'  => ['coding' => [['system' => 'http://snomed.info/sct', 'code' => '721981007', 'display' => 'Diagnostic studies report']]],
+                'text'  => ['status' => 'generated', 'div' => '<div xmlns="http://www.w3.org/1999/xhtml">' . htmlspecialchars($investigationsText) . '</div>'],
+            ];
+        }
+
+        // Procedures section (SNOMED 1003640003)
+        $proceduresText = trim((string) ($summary['procedures_text'] ?? ''));
+        if ($proceduresText !== '') {
+            $sections[] = [
+                'title' => 'Procedures',
+                'code'  => ['coding' => [['system' => 'http://snomed.info/sct', 'code' => '1003640003', 'display' => 'Procedure report']]],
+                'text'  => ['status' => 'generated', 'div' => '<div xmlns="http://www.w3.org/1999/xhtml">' . htmlspecialchars($proceduresText) . '</div>'],
+            ];
+        }
+
+        // Medications section (SNOMED 721912009)
+        $medicationsText = trim((string) ($summary['medications_text'] ?? ''));
+        if ($medicationsText !== '') {
+            $sections[] = [
+                'title' => 'Medications',
+                'code'  => ['coding' => [['system' => 'http://snomed.info/sct', 'code' => '721912009', 'display' => 'Medication summary document']]],
+                'text'  => ['status' => 'generated', 'div' => '<div xmlns="http://www.w3.org/1999/xhtml">' . htmlspecialchars($medicationsText) . '</div>'],
+            ];
+        }
+
+        // Follow-up section (SNOMED 736271009)
+        $followUp = trim((string) ($summary['follow_up'] ?? ''));
+        if ($followUp !== '') {
+            $sections[] = [
+                'title' => 'Follow Up',
+                'code'  => ['coding' => [['system' => 'http://snomed.info/sct', 'code' => '736271009', 'display' => 'Outpatient care plan']]],
+                'text'  => ['status' => 'generated', 'div' => '<div xmlns="http://www.w3.org/1999/xhtml">' . htmlspecialchars($followUp) . '</div>'],
+            ];
+        }
+
+        // Fallback: one summary section if nothing else provided
+        if (empty($sections) && $summaryHtml !== '') {
+            $sections[] = [
+                'title' => 'Discharge Summary',
+                'code'  => ['coding' => [['system' => 'http://snomed.info/sct', 'code' => '373942005', 'display' => 'Discharge summary']]],
+                'text'  => ['status' => 'generated', 'div' => $summaryHtml],
+            ];
+        }
+
+        // ── Composition ───────────────────────────────────────────────────────
+        $authorEntry = $practitionerRef !== '' ? ['reference' => $practitionerRef] : ['display' => 'Unknown'];
+        $composition = [
+            'resourceType' => 'Composition',
+            'id'           => $compositionUuid,
+            'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DischargeSummaryRecord']],
+            'language'     => 'en-IN',
+            'identifier'   => ['system' => 'https://ndhm.in/phr', 'value' => $compositionUuid],
+            'status'       => 'final',
+            'type'         => [
+                'coding' => [['system' => 'http://snomed.info/sct', 'code' => '373942005', 'display' => 'Discharge summary']],
+                'text'   => 'Discharge Summary',
+            ],
+            'subject'   => ['reference' => $patientRef, 'display' => 'Patient'],
+            'encounter' => ['reference' => $encounterRef, 'display' => 'Encounter'],
+            'date'      => $issuedAt,
+            'author'    => [[$authorEntry]],
+            'title'     => (string) ($summary['title'] ?? 'Discharge Summary'),
+            'section'   => $sections,
+        ];
+        if ($organizationRef !== '') {
+            $composition['custodian'] = ['reference' => $organizationRef];
+        }
+
+        // ── Bundle identifier system: HFR ID based or fallback ────────────────
+        $hfrId = trim((string) ($organization['hfr_id'] ?? ''));
+        $bundleIdSystem = $hfrId !== ''
+            ? 'https://' . strtolower(preg_replace('/[^A-Za-z0-9]/', '', $hfrId)) . '.hfr.abdm.gov.in'
+            : 'https://hfr.abdm.gov.in';
+        $ipdCode = trim((string) ($encounter['ipd_code'] ?? ''));
+        $bundleIdValue = $hfrId !== ''
+            ? 'IPD-' . ($ipdCode !== '' ? $ipdCode : $bundleUuid)
+            : $bundleUuid;
 
         return [
             'resourceType' => 'Bundle',
-            'type' => 'document',
-            'timestamp' => $issuedAt,
-            'entry' => [[
-                'resource' => $this->buildPatientResource($patient),
-            ], [
-                'resource' => [
-                    'resourceType' => 'Composition',
-                    'status' => 'final',
-                    'type' => [
-                        'text' => 'Discharge Summary',
-                    ],
-                    'subject' => [
-                        'reference' => 'Patient/' . $patientId,
-                    ],
-                    'encounter' => [
-                        'reference' => 'Encounter/' . $encounterId,
-                    ],
-                    'date' => $issuedAt,
-                    'title' => (string) ($summary['title'] ?? 'Discharge Summary'),
-                    'section' => [[
-                        'title' => 'Clinical Summary',
-                        'text' => [
-                            'status' => 'generated',
-                            'div' => (string) ($summary['clinical_summary_html'] ?? ''),
-                        ],
-                    ]],
-                ],
-            ]],
+            'id'           => $bundleUuid,
+            'meta'         => [
+                'profile'  => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle'],
+                'security' => [['system' => 'http://terminology.hl7.org/CodeSystem/v3-Confidentiality', 'code' => 'V', 'display' => 'very restricted']],
+            ],
+            'identifier' => ['system' => $bundleIdSystem, 'value' => $bundleIdValue],
+            'type'       => 'document',
+            'timestamp'  => $issuedAt,
+            'entry'      => array_merge(
+                [['fullUrl' => 'urn:uuid:' . $compositionUuid, 'resource' => $composition]],
+                $resourceEntries
+            ),
         ];
     }
 
@@ -792,12 +1305,32 @@ class FhirR4Builder
      */
     private function buildPatientResource(array $patient): array
     {
+        // Build structured name: prefer explicit given_name/family_name fields;
+        // fall back to splitting the full 'name' string.
+        $fullText   = trim((string) ($patient['name'] ?? ''));
+        $givenName  = trim((string) ($patient['given_name']  ?? ''));
+        $familyName = trim((string) ($patient['family_name'] ?? ''));
+
+        if ($givenName === '' && $familyName === '' && $fullText !== '') {
+            // Try splitting: last word → family, rest → given
+            $parts      = preg_split('/\s+/', $fullText, -1, PREG_SPLIT_NO_EMPTY) ?: [$fullText];
+            $familyName = count($parts) > 1 ? (string) array_pop($parts) : '';
+            $givenName  = implode(' ', $parts);
+        }
+
+        $nameText  = $fullText !== '' ? $fullText : trim($givenName . ' ' . $familyName);
+        $nameEntry = ['text' => $nameText];
+        if ($givenName !== '') {
+            $nameEntry['given'] = [$givenName];
+        }
+        if ($familyName !== '') {
+            $nameEntry['family'] = $familyName;
+        }
+
         $resource = [
             'resourceType' => 'Patient',
-            'id' => (string) ($patient['id'] ?? 'unknown'),
-            'name' => [[
-                'text' => (string) ($patient['name'] ?? ''),
-            ]],
+            'id'           => (string) ($patient['id'] ?? 'unknown'),
+            'name'         => [$nameEntry],
         ];
 
         if (! empty($patient['gender'])) {
@@ -811,18 +1344,83 @@ class FhirR4Builder
         $abhaAddress = trim((string) ($patient['abhaAddress'] ?? ''));
         if ($abhaAddress !== '') {
             $resource['meta']       = ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Patient']];
+            // NI = National unique individual identifier (ABHA number / address)
             $resource['identifier'] = [[
                 'type'   => ['coding' => [[
                     'system'  => 'http://terminology.hl7.org/CodeSystem/v2-0203',
-                    'code'    => 'MR',
-                    'display' => 'Medical record number',
+                    'code'    => 'NI',
+                    'display' => 'National unique individual identifier',
                 ]]],
                 'system' => 'https://healthid.ndhm.gov.in',
                 'value'  => $abhaAddress,
             ]];
         }
 
+        // Phone / mobile telecom
+        $phone = trim((string) ($patient['phone'] ?? ''));
+        if ($phone !== '') {
+            $resource['telecom'] = [[
+                'system' => 'phone',
+                'value'  => $phone,
+                'use'    => 'mobile',
+            ]];
+        }
+
         return $resource;
+    }
+
+    /**
+     * Map common route-of-administration text to SNOMED CT codes.
+     * Returns empty string when no mapping is found.
+     */
+    private function resolveRouteSnomedCode(string $routeText): string
+    {
+        static $map = [
+            // Oral
+            'oral'             => '26643006',
+            'by mouth'         => '26643006',
+            'po'               => '26643006',
+            'per oral'         => '26643006',
+            // Intravenous
+            'intravenous'      => '47625008',
+            'iv'               => '47625008',
+            'i.v.'             => '47625008',
+            'intravenously'    => '47625008',
+            // Intramuscular
+            'intramuscular'    => '78421000',
+            'im'               => '78421000',
+            'i.m.'             => '78421000',
+            // Subcutaneous
+            'subcutaneous'     => '34206005',
+            'sc'               => '34206005',
+            's.c.'             => '34206005',
+            'subcut'           => '34206005',
+            // Topical
+            'topical'          => '6064005',
+            'locally'          => '6064005',
+            // Inhaled / nebulisation
+            'inhaled'          => '18679011000001101',
+            'inhalation'       => '18679011000001101',
+            'nebulisation'     => '18679011000001101',
+            'nebulizer'        => '18679011000001101',
+            // Sublingual
+            'sublingual'       => '37839007',
+            'sl'               => '37839007',
+            // Rectal
+            'rectal'           => '37161004',
+            'per rectal'       => '37161004',
+            'pr'               => '37161004',
+            // Nasal
+            'nasal'            => '46713006',
+            'intranasal'       => '46713006',
+            // Ophthalmic / eye
+            'ophthalmic'       => '54485002',
+            'eye'              => '54485002',
+            'otic'             => '10547007',
+            'ear'              => '10547007',
+        ];
+        $key = strtolower(trim($routeText));
+        return $map[$key] ?? '';
     }
 
     // =========================================================================

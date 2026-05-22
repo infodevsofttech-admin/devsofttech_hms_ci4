@@ -28,6 +28,18 @@
         </div>
 
         <hr>
+        <h6 class="mb-2">Medicine Details AI Endpoint <span class="badge bg-info text-white">SNOMED Enrichment</span></h6>
+        <div class="mb-3">
+            <label class="form-label">Medicine Details Endpoint</label>
+            <input type="text" class="form-control" id="diagnosis_ai_medicine_endpoint" placeholder="http://127.0.0.1:8000/medicine-details" value="<?= esc($diagnosis_ai_medicine_endpoint ?? '') ?>">
+            <div class="form-text">
+                Used for OPD Medicine master enrichment (<code>/Opd_prescription/opd_medicince</code>) — fills Generic Name, Dosage Restrictions and Caution notes via AI.<br>
+                Your Docker AI module (<code>D:\Workplace\AI_Module_HMS</code>) exposes <code>POST /medicine-details</code> on port 8000. Enter that URL here.<br>
+                Leave empty to use auto-discovery (probes <code>/medicine-details</code>, <code>/medicine/details</code>, etc. on the primary AI server URL).
+            </div>
+        </div>
+
+        <hr>
         <h6 class="mb-2">Diagnosis AI Parse Endpoint</h6>
         <div class="mb-3">
             <label class="form-label">Diagnosis Parse Endpoint</label>
@@ -149,7 +161,8 @@
             diagnosis_ai_parse_token: diagnosisToken,
             diagnosis_ai_timeout_seconds: diagnosisTimeout,
             diagnosis_ai_retry_attempts: diagnosisRetry,
-            diagnosis_ai_daily_limit: ($('#diagnosis_ai_daily_limit').val() || '').trim()
+            diagnosis_ai_daily_limit: ($('#diagnosis_ai_daily_limit').val() || '').trim(),
+            diagnosis_ai_medicine_endpoint: ($('#diagnosis_ai_medicine_endpoint').val() || '').trim()
         }, function(data) {
             if ((data.update || 0) !== 1) {
                 showMessage('error', data.error_text || 'Unable to save settings');

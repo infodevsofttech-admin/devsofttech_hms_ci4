@@ -22,6 +22,7 @@ class AiSettings extends BaseController
             'diagnosis_ai_daily_limit' => $this->readSettingValue('DIAGNOSIS_AI_DAILY_LIMIT') ?: '20',
             'diagnosis_ai_token_masked' => $this->maskKey($this->readSettingValue('DIAGNOSIS_AI_PARSE_TOKEN')),
             'diagnosis_ai_token_exists' => $this->readSettingValue('DIAGNOSIS_AI_PARSE_TOKEN') !== '',
+            'diagnosis_ai_medicine_endpoint' => $this->readSettingValue('DIAGNOSIS_AI_MEDICINE_ENDPOINT'),
         ]);
     }
 
@@ -48,6 +49,7 @@ class AiSettings extends BaseController
             'DIAGNOSIS_AI_TIMEOUT_SECONDS' => trim((string) $this->request->getPost('diagnosis_ai_timeout_seconds')),
             'DIAGNOSIS_AI_RETRY_ATTEMPTS' => trim((string) $this->request->getPost('diagnosis_ai_retry_attempts')),
             'DIAGNOSIS_AI_DAILY_LIMIT' => trim((string) $this->request->getPost('diagnosis_ai_daily_limit')),
+            'DIAGNOSIS_AI_MEDICINE_ENDPOINT' => trim((string) $this->request->getPost('diagnosis_ai_medicine_endpoint')),
         ];
 
         $savedCount = 0;

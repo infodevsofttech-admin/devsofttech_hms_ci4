@@ -16,11 +16,13 @@ class AbdmGatewaySettings extends BaseController
         $hfrId    = $this->readSettingValue('ABDM_HFR_ID');
         $hmsName  = $this->readSettingValue('ABDM_HMS_NAME');
         $gwUrl    = $this->readSettingValue('EATRIA_BRIDGE_URL') ?: 'https://abdm-bridge.e-atria.in/api';
+        $bridgeHospitalId = $this->readSettingValue('ABDM_BRIDGE_HOSPITAL_ID');
 
         return view('Setting/Admin/abdm_gateway_settings', [
             'gateway_url'          => $gwUrl,
             'hfr_id'               => $hfrId,
             'hms_name'             => $hmsName,
+            'bridge_hospital_id'   => $bridgeHospitalId,
             'token_masked'         => $this->maskKey($token),
             'token_exists'         => $token !== '',
             'connector'            => $this->readSettingValue('ABDM_CONNECTOR') ?: 'eatria_bridge',
@@ -117,6 +119,7 @@ class AbdmGatewaySettings extends BaseController
         // Use posted values first, then stored settings
         $gwUrl = trim((string) $this->request->getPost('gateway_url'));
         $token = trim((string) $this->request->getPost('api_token'));
+        $hfrId = trim((string) $this->request->getPost('hfr_id'));
 
         if ($gwUrl === '') {
             $gwUrl = $this->readSettingValue('EATRIA_BRIDGE_URL') ?: 'https://abdm-bridge.e-atria.in/api';
@@ -124,81 +127,223 @@ class AbdmGatewaySettings extends BaseController
         if ($token === '') {
             $token = $this->readSettingValue('EATRIA_BRIDGE_TOKEN');
         }
+        if ($hfrId === '') {
+            $hfrId = $this->readSettingValue('ABDM_HFR_ID');
+        }
 
         $gwUrl = rtrim($gwUrl, '/');
-        $healthUrl = $gwUrl . '/v3/health';
 
+        // ── Step 1: Health check — include Bearer if available (gateway may require auth even on /health) ──
+        $healthUrl     = $gwUrl . '/v3/health' . ($hfrId !== '' ? '?hfr_id=' . urlencode($hfrId) : '');
+        $healthHeaders = ['Accept: application/json'];
+        if ($token !== '') {
+            $healthHeaders[] = 'Authorization: Bearer ' . $token;
+        }
         $ch = curl_init();
         curl_setopt_array($ch, [
             CURLOPT_URL            => $healthUrl,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT        => 10,
             CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_HTTPHEADER     => ['Accept: application/json'],
+            CURLOPT_HTTPHEADER     => $healthHeaders,
         ]);
-        $raw     = curl_exec($ch);
-        $code    = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlErr = curl_error($ch);
+        $rawHealth     = (string) curl_exec($ch);
+        $codeHealth    = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErrHealth = curl_error($ch);
         curl_close($ch);
 
-        if ($curlErr !== '') {
+        if ($curlErrHealth !== '') {
+            $this->writeTestLog($healthUrl, 'GET', [], 0, '', 'error', 'cURL error: ' . $curlErrHealth);
             return $this->response->setJSON([
-                'update' => 0,
-                'error_text' => 'Connection failed: ' . $curlErr,
-                'csrfName' => csrf_token(),
-                'csrfHash' => csrf_hash(),
+                'update'     => 0,
+                'error_text' => 'Cannot reach gateway: ' . $curlErrHealth,
+                'csrfName'   => csrf_token(),
+                'csrfHash'   => csrf_hash(),
             ]);
         }
 
-        if ($code !== 200) {
+        $healthBody = json_decode($rawHealth, true);
+        $healthOk   = $codeHealth === 200 && is_array($healthBody) && ($healthBody['status'] ?? '') === 'ok';
+
+        // If health returned 401/403 with no token, report "no token" not "unreachable"
+        if (! $healthOk && in_array($codeHealth, [401, 403], true) && $token === '') {
+            $this->writeTestLog($healthUrl, 'GET', [], $codeHealth, $rawHealth, 'error', 'Health check HTTP ' . $codeHealth . ' — no token configured');
             return $this->response->setJSON([
-                'update' => 0,
-                'error_text' => 'Gateway returned HTTP ' . $code,
-                'csrfName' => csrf_token(),
-                'csrfHash' => csrf_hash(),
+                'update'     => 0,
+                'error_text' => 'Gateway reachable but API token required. Save your token first then re-test.',
+                'csrfName'   => csrf_token(),
+                'csrfHash'   => csrf_hash(),
             ]);
         }
 
-        $body = json_decode((string) $raw, true);
-        $mode = (string) ($body['mode'] ?? 'unknown');
-        $ver  = (string) ($body['version'] ?? '');
+        $hfrIdOk  = (bool) ($healthBody['hfr_id_ok'] ?? false);
+        $hfrIdMsg = (string) ($healthBody['hfr_id_msg'] ?? '');
+        $mode     = (string) ($healthBody['mode'] ?? 'unknown');
+        $version  = (string) ($healthBody['version'] ?? '');
 
-        // Test Bearer auth with /api/v3/gateway/status
-        $authOk = false;
-        $authMsg = '';
-        if ($token !== '') {
-            $ch2 = curl_init();
-            curl_setopt_array($ch2, [
-                CURLOPT_URL            => $gwUrl . '/v3/gateway/status',
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT        => 10,
-                CURLOPT_SSL_VERIFYPEER => true,
-                CURLOPT_HTTPHEADER     => [
-                    'Accept: application/json',
-                    'Authorization: Bearer ' . $token,
-                ],
+        $this->writeTestLog(
+            $healthUrl, 'GET', [], $codeHealth, $rawHealth,
+            $healthOk ? 'success' : 'error',
+            $healthOk ? '' : ('Health check HTTP ' . $codeHealth)
+        );
+
+        if (! $healthOk) {
+            return $this->response->setJSON([
+                'update'     => 0,
+                'error_text' => 'Gateway unreachable or health check failed (HTTP ' . $codeHealth . ')',
+                'csrfName'   => csrf_token(),
+                'csrfHash'   => csrf_hash(),
             ]);
-            $raw2  = curl_exec($ch2);
-            $code2 = (int) curl_getinfo($ch2, CURLINFO_HTTP_CODE);
-            curl_close($ch2);
-
-            $body2  = json_decode((string) $raw2, true);
-            $authOk = $code2 === 200 && isset($body2['ok']) && $body2['ok'] == 1;
-            $authMsg = $authOk
-                ? 'API key authenticated ✓'
-                : ('Auth check: HTTP ' . $code2 . ($code2 === 403 ? ' — invalid API key' : ''));
         }
 
-        return $this->response->setJSON([
-            'update' => 1,
-            'error_text' => 'Gateway reachable — mode: ' . $mode . ($ver !== '' ? ', v' . $ver : ''),
-            'mode'    => $mode,
-            'version' => $ver,
-            'auth_ok' => $authOk,
-            'auth_msg' => $authMsg,
-            'csrfName' => csrf_token(),
-            'csrfHash' => csrf_hash(),
+        // ── Step 2: Bearer auth check via /v3/gateway/status ───────────────
+        if ($token === '') {
+            return $this->response->setJSON([
+                'update'     => 0,
+                'error_text' => 'Gateway is reachable' . ($hfrIdMsg !== '' ? ' — ' . $hfrIdMsg : '') . '. But no API token configured — save your token first.',
+                'mode'       => $mode,
+                'version'    => $version,
+                'hfr_id_ok'  => $hfrIdOk,
+                'hfr_id_msg' => $hfrIdMsg,
+                'csrfName'   => csrf_token(),
+                'csrfHash'   => csrf_hash(),
+            ]);
+        }
+
+        $statusUrl = $gwUrl . '/v3/gateway/status';
+        $ch2 = curl_init();
+        curl_setopt_array($ch2, [
+            CURLOPT_URL            => $statusUrl,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 10,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_HTTPHEADER     => [
+                'Accept: application/json',
+                'Authorization: Bearer ' . $token,
+            ],
         ]);
+        $rawStatus     = (string) curl_exec($ch2);
+        $codeStatus    = (int) curl_getinfo($ch2, CURLINFO_HTTP_CODE);
+        $curlErrStatus = curl_error($ch2);
+        curl_close($ch2);
+
+        if ($curlErrStatus !== '') {
+            $this->writeTestLog($statusUrl, 'GET', [], 0, '', 'error', 'cURL error: ' . $curlErrStatus);
+            return $this->response->setJSON([
+                'update'     => 0,
+                'error_text' => 'Auth check failed: ' . $curlErrStatus,
+                'csrfName'   => csrf_token(),
+                'csrfHash'   => csrf_hash(),
+            ]);
+        }
+
+        $statusBody = json_decode($rawStatus, true);
+        // Token is valid when authenticated_as is present (ok:0 means ABDM upstream unreachable, not bad token)
+        // Per API docs: ok:1 = full success, ok:0+authenticated_as = token ok but ABDM upstream down
+        $abdmUpstreamOk = $codeStatus === 200 && is_array($statusBody) && (
+            (int) ($statusBody['ok'] ?? 0) === 1 ||
+            ($statusBody['status'] ?? '') === 'ok'
+        );
+        $authOk = $abdmUpstreamOk || (
+            $codeStatus === 200 && is_array($statusBody) && !empty($statusBody['authenticated_as'])
+        );
+        $authInfo = null;
+
+        if ($authOk && isset($statusBody['authenticated_as']) && is_array($statusBody['authenticated_as'])) {
+            $a = $statusBody['authenticated_as'];
+            $authInfo = [
+                'principal'   => (string) ($a['principal']   ?? ''),
+                'hospital_id' => (string) ($a['hospital_id'] ?? ''),
+                'hfr_id'      => (string) ($a['hfr_id']      ?? ''),
+                'type'        => (string) ($a['type']         ?? ''),
+            ];
+
+            // Auto-persist hfr_id and principal name if not already stored
+            if ($this->db->tableExists('hospital_setting')) {
+                if ($authInfo['hfr_id'] !== '' && $this->readSettingValue('ABDM_HFR_ID') === '') {
+                    $this->upsertSettingValue('ABDM_HFR_ID', $authInfo['hfr_id']);
+                }
+                if ($authInfo['hospital_id'] !== '') {
+                    $this->upsertSettingValue('ABDM_BRIDGE_HOSPITAL_ID', $authInfo['hospital_id']);
+                }
+                if ($authInfo['principal'] !== '' && $this->readSettingValue('ABDM_HMS_NAME') === '') {
+                    $this->upsertSettingValue('ABDM_HMS_NAME', $authInfo['principal']);
+                }
+            }
+        }
+
+        $authErrMsg = $authOk ? '' : ('HTTP ' . $codeStatus . ($codeStatus === 401 ? ' — invalid API key' : ($codeStatus === 403 ? ' — access denied' : ($codeStatus === 200 ? ' — unexpected response format: ' . mb_substr($rawStatus, 0, 120) : ''))));
+        $this->writeTestLog($statusUrl, 'GET', [], $codeStatus, $rawStatus, $authOk ? 'success' : 'error', $authErrMsg);
+
+        if (! $authOk) {
+            return $this->response->setJSON([
+                'update'     => 0,
+                'error_text' => 'Gateway reachable' . ($hfrIdMsg !== '' ? ' (' . $hfrIdMsg . ')' : '') . ' but auth failed: ' . $authErrMsg,
+                'mode'       => $mode,
+                'version'    => $version,
+                'hfr_id_ok'  => $hfrIdOk,
+                'hfr_id_msg' => $hfrIdMsg,
+                'auth_ok'    => false,
+                'csrfName'   => csrf_token(),
+                'csrfHash'   => csrf_hash(),
+            ]);
+        }
+
+        $abdmUpstreamNote = $abdmUpstreamOk ? '' : ' | ⚠ ABDM upstream: unreachable (gateway ok:0)';
+        return $this->response->setJSON([
+            'update'     => 1,
+            'error_text' => 'Gateway OK — ' . ($hfrIdMsg ?: 'connected') . ' | Token authenticated ✓' . $abdmUpstreamNote . ($mode !== 'unknown' ? ' | mode: ' . $mode : '') . ($version !== '' ? ', v' . $version : ''),
+            'mode'       => $mode,
+            'version'    => $version,
+            'hfr_id_ok'  => $hfrIdOk,
+            'hfr_id_msg' => $hfrIdMsg,
+            'auth_ok'    => true,
+            'abdm_upstream_ok' => $abdmUpstreamOk,
+            'auth_msg'   => 'API key authenticated ✓',
+            'auth_info'  => $authInfo,
+            'csrfName'   => csrf_token(),
+            'csrfHash'   => csrf_hash(),
+        ]);
+    }
+
+    /**
+     * Write a test-connection entry to abdm_api_logs (fail-open).
+     */
+    private function writeTestLog(
+        string $endpoint,
+        string $method,
+        array  $requestBody,
+        int    $httpCode,
+        string $rawResponse,
+        string $status,
+        string $errorMessage
+    ): void {
+        try {
+            if (! $this->db->tableExists('abdm_api_logs')) {
+                return;
+            }
+            $decoded      = json_decode($rawResponse, true);
+            $responseJson = is_array($decoded)
+                ? json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+                : (trim($rawResponse) !== '' ? $rawResponse : null);
+
+            $this->db->table('abdm_api_logs')->insert([
+                'channel'       => 'eatria_bridge',
+                'event_type'    => 'gateway.test_connection',
+                'endpoint'      => $endpoint,
+                'http_method'   => strtoupper($method),
+                'entity_type'   => null,
+                'entity_id'     => null,
+                'request_json'  => $requestBody !== [] ? json_encode($requestBody, JSON_UNESCAPED_UNICODE) : null,
+                'response_code' => $httpCode > 0 ? $httpCode : null,
+                'response_json' => $responseJson,
+                'status'        => $status,
+                'error_message' => $errorMessage !== '' ? mb_substr($errorMessage, 0, 1000) : null,
+                'created_at'    => date('Y-m-d H:i:s'),
+            ]);
+        } catch (\Throwable $e) {
+            log_message('warning', '[AbdmGatewaySettings] writeTestLog failed: ' . $e->getMessage());
+        }
     }
 
     // -------------------------------------------------------------------------

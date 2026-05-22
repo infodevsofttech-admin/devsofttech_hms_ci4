@@ -124,6 +124,7 @@ if ($user && method_exists($user, 'can')) {
     $canAbdm = $user->can('abdm.access')
         || $user->can('abdm.taskboard.access')
         || $user->can('abdm.gateway.use')
+        || $user->can('abdm.bridge_log.view')
         || $user->can('abdm.*');
 }
 
@@ -405,6 +406,12 @@ if (! $canChargesSettings && $user && method_exists($user, 'inGroup')) {
             <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('AbdmOpdQueue') ?>','ABDM OPD Queue')">
                 <i class="bi bi-people"></i>
                 <span>ABDM OPD Queue</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('AbdmBridgeLog') ?>','ABDM Bridge Log')">
+                <i class="bi bi-journal-text"></i>
+                <span>ABDM Bridge Log</span>
             </a>
         </li>
     <?php } ?>

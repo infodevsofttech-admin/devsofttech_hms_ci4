@@ -4624,6 +4624,145 @@ class Opd_prescription extends BaseController
         return $this->response->setJSON(['rows' => $result]);
     }
 
+    /**
+     * POST Opd_prescription/fhir_bundle_regenerate
+     *
+     * Rebuilds the FHIR bundle for an OPD session using the current builder
+     * and overwrites the stored bundle in opd_fhir_documents.
+     * Accepts: opd_id, opd_session_id (0 = latest)
+     * Returns JSON: {ok:1, message, document_id, generated_at} or {ok:0, message}
+     */
+    public function fhir_bundle_regenerate()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'message' => 'Invalid request']);
+        }
+
+        $opdId     = (int) $this->request->getPost('opd_id');
+        $sessionId = (int) $this->request->getPost('opd_session_id');
+
+        if ($opdId <= 0) {
+            return $this->response->setJSON(['ok' => 0, 'message' => 'opd_id is required']);
+        }
+
+        if (! $this->db->tableExists('opd_fhir_documents')) {
+            return $this->response->setJSON(['ok' => 0, 'message' => 'FHIR bundle storage not available']);
+        }
+
+        // Load the OPD row
+        if (! $this->db->tableExists('opd_master')) {
+            return $this->response->setJSON(['ok' => 0, 'message' => 'opd_master table not found']);
+        }
+        $opdRow = $this->db->table('opd_master')->where('opd_id', $opdId)->get(1)->getRowArray();
+        if (empty($opdRow)) {
+            return $this->response->setJSON(['ok' => 0, 'message' => 'OPD record not found']);
+        }
+
+        // If no session given, find the latest prescription session
+        if ($sessionId <= 0 && $this->db->tableExists('opd_prescription')) {
+            $pRow = $this->db->table('opd_prescription')
+                ->where('opd_id', $opdId)
+                ->orderBy('id', 'DESC')
+                ->get(1)->getRowArray();
+            $sessionId = (int) ($pRow['id'] ?? 0);
+        }
+
+        // Load patient row
+        $patientId = (int) ($opdRow['p_id'] ?? 0);
+        $patientRow = [];
+        if ($patientId > 0 && $this->db->tableExists('patient_master')) {
+            $patientRow = $this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray() ?? [];
+        }
+        if (empty($patientRow)) {
+            return $this->response->setJSON(['ok' => 0, 'message' => 'Patient record not found']);
+        }
+
+        try {
+            // Rebuild bundle using current builder
+            $abhaField   = $this->resolvePatientAbhaField();
+            $abhaAddress = $abhaField !== null ? trim((string) ($patientRow[$abhaField] ?? '')) : '';
+
+            $patFirstName = trim((string) ($patientRow['p_fname'] ?? ''));
+            $patLastName  = trim((string) ($patientRow['p_lname'] ?? ''));
+            $patFullName  = trim($patFirstName . ($patLastName !== '' ? ' ' . $patLastName : ''));
+            if ($patFullName === '') {
+                $patFullName = trim((string) ($opdRow['P_name'] ?? ''));
+            }
+
+            $patientFields = $this->db->getFieldNames('patient_master') ?? [];
+            $phoneField    = $this->resolveFirstField($patientFields, ['p_contact', 'phone', 'mobile', 'contact_no', 'mobile_no', 'p_phone']);
+            $patPhone      = $phoneField !== null ? trim((string) ($patientRow[$phoneField] ?? '')) : '';
+
+            $patient = [
+                'id'          => (string) $patientId,
+                'name'        => $patFullName,
+                'given_name'  => $patFirstName,
+                'family_name' => $patLastName,
+                'gender'      => $this->normalizeGender((string) ($patientRow['gender'] ?? '')),
+                'birthDate'   => ! empty($patientRow['dob']) ? date('Y-m-d', strtotime((string) $patientRow['dob'])) : '',
+                'abhaAddress' => $abhaAddress,
+                'phone'       => $patPhone,
+            ];
+
+            $encounter = [
+                'id'           => (string) $opdId,
+                'status'       => 'finished',
+                'period_start' => Time::now('Asia/Kolkata')->toDateTimeString(),
+            ];
+
+            $medications     = $this->getPrescriptionMedicines($sessionId);
+            $conditions      = $this->getPrescriptionConditions($sessionId);
+            $clinicalContext = $sessionId > 0 ? $this->getPrescriptionClinicalContext($sessionId, $opdRow) : [];
+            $bundle          = $this->fhirR4Builder->buildPrescriptionBundle($patient, $encounter, $medications, $conditions, $clinicalContext);
+            $bundleJson      = (string) json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+            $user        = auth()->user();
+            $generatedBy = (string) ($user->id ?? 'system');
+            $generatedAt = Time::now('Asia/Kolkata')->toDateTimeString();
+
+            // Overwrite the latest stored bundle for this opd_id / session
+            $existingBuilder = $this->db->table('opd_fhir_documents')
+                ->where('opd_id', $opdId)
+                ->where('bundle_type', 'MedicationRequestBundle');
+            if ($sessionId > 0) {
+                $existingBuilder->where('opd_session_id', $sessionId);
+            }
+            $existing = $existingBuilder->orderBy('id', 'DESC')->get(1)->getRowArray();
+
+            if (! empty($existing)) {
+                $this->db->table('opd_fhir_documents')
+                    ->where('id', (int) $existing['id'])
+                    ->update([
+                        'bundle_json'  => $bundleJson,
+                        'generated_by' => $generatedBy,
+                        'generated_at' => $generatedAt,
+                    ]);
+                $documentId = (int) $existing['id'];
+            } else {
+                $this->db->table('opd_fhir_documents')->insert([
+                    'opd_id'         => $opdId,
+                    'opd_session_id' => $sessionId,
+                    'bundle_type'    => 'MedicationRequestBundle',
+                    'bundle_json'    => $bundleJson,
+                    'generated_by'   => $generatedBy,
+                    'generated_at'   => $generatedAt,
+                ]);
+                $documentId = (int) $this->db->insertID();
+            }
+
+            return $this->response->setJSON([
+                'ok'           => 1,
+                'message'      => 'FHIR bundle regenerated successfully',
+                'document_id'  => $documentId,
+                'generated_at' => $generatedAt,
+                'entry_count'  => isset($bundle['entry']) ? count($bundle['entry']) : 0,
+            ]);
+        } catch (\Throwable $e) {
+            log_message('error', '[fhir_bundle_regenerate] ' . $e->getMessage());
+            return $this->response->setJSON(['ok' => 0, 'message' => 'Regeneration failed: ' . $e->getMessage()]);
+        }
+    }
+
     public function fhir_bundle_preview(int $opdId, int $sessionId = 0)
     {
         if (! $this->db->tableExists('opd_fhir_documents')) {
@@ -4714,63 +4853,336 @@ class Opd_prescription extends BaseController
             ]);
         }
 
-        $prettyJsonJs = json_encode($prettyJson);
-        $docId = (int) ($row['id'] ?? 0);
-        $generatedAt = htmlspecialchars((string) ($row['generated_at'] ?? ''), ENT_QUOTES, 'UTF-8');
-        $bundleType = htmlspecialchars((string) ($row['bundle_type'] ?? ''), ENT_QUOTES, 'UTF-8');
-        $entryCount = isset($bundle['entry']) && is_array($bundle['entry']) ? count($bundle['entry']) : 0;
+        // ── Full-page preview: also load patient / ABHA context ───────────────
+        $patientId   = 0;
+        $patientName = '';
+        $abhaId      = '';
+        $doctorName  = '';
+        $visitDate   = date('Y-m-d');
 
-        $csrfTokName = htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8');
-        $csrfTokHash = htmlspecialchars(csrf_hash(), ENT_QUOTES, 'UTF-8');
-        $submitUrl   = base_url('Opd_prescription/fhir_bundle_submit');
+        if ($this->db->tableExists('opd_master')) {
+            $opdRow = $this->db->table('opd_master')->where('opd_id', $opdId)->get(1)->getRowArray();
+            if (! empty($opdRow)) {
+                $patientId = (int) ($opdRow['p_id'] ?? 0);
+                $rawDate   = (string) ($opdRow['opd_date'] ?? '');
+                if ($rawDate !== '') {
+                    $ts = strtotime($rawDate);
+                    if ($ts !== false) {
+                        $visitDate = date('Y-m-d', $ts);
+                    }
+                }
+                $docId2 = (int) ($opdRow['doc_id'] ?? 0);
+                if ($docId2 > 0 && $this->db->tableExists('doctor_master')) {
+                    $dRow = $this->db->table('doctor_master')->where('id', $docId2)->get(1)->getRowArray();
+                    if (! empty($dRow)) {
+                        $doctorName = trim((string) ($dRow['p_fname'] ?? ''));
+                    }
+                }
+            }
+        }
 
-        $html = '<!DOCTYPE html><html lang="en"><head>'
+        if ($patientId > 0 && $this->db->tableExists('patient_master')) {
+            $pFields = $this->db->getFieldNames('patient_master');
+            $pRow = $this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray();
+            if (! empty($pRow)) {
+                $fname = trim((string) ($pRow['p_fname'] ?? ''));
+                $lname = trim((string) ($pRow['p_lname'] ?? ''));
+                $patientName = trim($fname . ' ' . $lname);
+                foreach (['abha_number', 'abha_id', 'abha_address'] as $abhaField) {
+                    if (in_array($abhaField, $pFields, true)) {
+                        $val = trim((string) ($pRow[$abhaField] ?? ''));
+                        if ($val !== '') {
+                            $abhaId = $val;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        $docId        = (int) ($row['id'] ?? 0);
+        $generatedAt  = htmlspecialchars((string) ($row['generated_at'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $bundleType   = htmlspecialchars((string) ($row['bundle_type'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $entryCount   = isset($bundle['entry']) && is_array($bundle['entry']) ? count($bundle['entry']) : 0;
+        $csrfTokName  = csrf_token();
+        $csrfTokHash  = csrf_hash();
+        $submitUrl    = base_url('Opd_prescription/fhir_bundle_submit');
+        $gatewayUrl   = base_url('AbdmGateway/gateway_status');
+        $regenerateUrl = base_url('Opd_prescription/fhir_bundle_regenerate');
+
+        // Count resource types inside the bundle
+        $resCounts = ['Composition' => 0, 'Patient' => 0, 'Practitioner' => 0,
+                      'MedicationRequest' => 0, 'Condition' => 0, 'Observation' => 0,
+                      'Encounter' => 0, 'AllergyIntolerance' => 0];
+        if (isset($bundle['entry']) && is_array($bundle['entry'])) {
+            foreach ($bundle['entry'] as $e) {
+                $rt = (string) ($e['resource']['resourceType'] ?? '');
+                if (isset($resCounts[$rt])) { $resCounts[$rt]++; }
+            }
+        }
+
+        // Encode data for JS
+        $jsBundle   = json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $jsContext  = json_encode([
+            'opdId'       => $opdId,
+            'sessionId'   => $sessionId,
+            'patientId'   => $patientId,
+            'patientName' => $patientName,
+            'abhaId'      => $abhaId,
+            'visitDate'   => $visitDate,
+            'doctorName'  => $doctorName,
+            'docId'       => $docId,
+        ], JSON_UNESCAPED_UNICODE);
+        $jsPretty = json_encode(json_encode($bundle, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+
+        // ── Build page ────────────────────────────────────────────────────────
+        $abhaDisplay  = htmlspecialchars($abhaId ?: '(no ABHA)', ENT_QUOTES, 'UTF-8');
+        $pNameDisplay = htmlspecialchars($patientName ?: '(unknown)', ENT_QUOTES, 'UTF-8');
+        $docDisplay   = htmlspecialchars($doctorName ?: '—', ENT_QUOTES, 'UTF-8');
+        $abhaClass    = $abhaId !== '' ? 'bg-success' : 'bg-danger';
+
+        $html  = '<!DOCTYPE html><html lang="en"><head>'
             . '<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-            . '<meta name="csrf-token-name" content="' . $csrfTokName . '">'
-            . '<meta name="csrf-token-hash" content="' . $csrfTokHash . '">'
-            . '<title>FHIR Bundle Preview &mdash; OPD #' . $opdId . '</title>'
+            . '<title>FHIR Preview — OPD #' . $opdId . '</title>'
             . '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">'
             . '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">'
-            . '<style>pre{background:#f8f9fa;border:1px solid #dee2e6;border-radius:6px;padding:1rem;font-size:.8rem;max-height:75vh;overflow:auto}</style>'
-            . '</head><body class="p-3"><div class="container-fluid">'
-            . '<div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">'
-            . '<h5 class="mb-0">FHIR Bundle Preview &mdash; OPD #' . $opdId . '</h5>'
-            . '<div class="d-flex align-items-center gap-2 flex-wrap">'
-            . '<span class="badge bg-secondary">' . $bundleType . '</span>'
-            . '<span class="badge bg-info text-dark">' . $entryCount . ' entries</span>'
-            . '<span class="text-muted small">Generated: ' . $generatedAt . ' | Doc #' . $docId . '</span>'
-            . '<button class="btn btn-sm btn-success" id="btnSubmitAbdm"><i class="bi bi-cloud-upload"></i> Submit to ABDM Bridge</button>'
-            . '</div></div>'
-            . '<div id="submitResult"></div>'
-            . '<pre id="bj"></pre>'
+            . '<style>'
+            . 'body{background:#f0f2f5;font-size:.9rem}'
+            . '.card{border:none;box-shadow:0 1px 4px rgba(0,0,0,.1)}'
+            . 'pre{background:#1e1e2e;color:#cdd6f4;border-radius:8px;padding:1.2rem;font-size:.78rem;max-height:65vh;overflow:auto;tab-size:2}'
+            . '.check-item{padding:.4rem .6rem;border-radius:6px;margin-bottom:.35rem;display:flex;align-items:center;gap:.5rem}'
+            . '.check-item.pass{background:#d1fae5;color:#065f46}'
+            . '.check-item.fail{background:#fee2e2;color:#991b1b}'
+            . '.check-item.pending{background:#f1f5f9;color:#64748b}'
+            . '.step-badge{width:1.6rem;height:1.6rem;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:.75rem;flex-shrink:0}'
+            . '#btnVerify:disabled,#btnSubmit:disabled{opacity:.5;cursor:not-allowed}'
+            . '</style>'
+            . '</head><body>'
+            . '<div class="container-xl py-3">'
+
+            // ── Header ──────────────────────────────────────────────────────
+            . '<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">'
+            . '<div>'
+            . '<h5 class="mb-0 fw-bold"><i class="bi bi-file-medical text-primary me-1"></i> FHIR Preview — OPD #' . $opdId . '</h5>'
+            . '<small class="text-muted">Doc #' . $docId . ' &middot; Generated: ' . $generatedAt . ' &middot; ' . $bundleType . ' &middot; ' . $entryCount . ' entries</small>'
             . '</div>'
+            . '<div class="d-flex gap-2 align-items-center">'
+            . '<button class="btn btn-sm btn-outline-warning" id="btnRegenerate" title="Rebuild bundle from prescription data (use after updating doctor or medication details)">'
+            . '<i class="bi bi-arrow-clockwise"></i> Regenerate'
+            . '</button>'
+            . '<a href="javascript:history.back()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>'
+            . '</div>'
+            . '</div>'
+
+            // ── Patient card ────────────────────────────────────────────────
+            . '<div class="card mb-3"><div class="card-body py-2 px-3 d-flex flex-wrap gap-3 align-items-center">'
+            . '<div><div class="fw-bold">' . $pNameDisplay . '</div><div class="text-muted small">Patient ID: ' . $patientId . '</div></div>'
+            . '<div class="vr"></div>'
+            . '<div><span class="badge ' . $abhaClass . '">' . $abhaDisplay . '</span></div>'
+            . '<div class="vr"></div>'
+            . '<div><i class="bi bi-person-badge text-muted me-1"></i><small>Dr. ' . $docDisplay . '</small></div>'
+            . '<div class="vr"></div>'
+            . '<div><i class="bi bi-calendar3 text-muted me-1"></i><small>Visit: ' . htmlspecialchars($visitDate, ENT_QUOTES, 'UTF-8') . '</small></div>'
+            . '</div></div>'
+
+            // ── Resource summary row ─────────────────────────────────────────
+            . '<div class="row g-2 mb-3">';
+
+        $rIcons = ['Composition' => ['bi-file-text', 'primary'],
+                   'Patient'     => ['bi-person', 'success'],
+                   'Encounter'   => ['bi-calendar2-check', 'info'],
+                   'Practitioner'=> ['bi-person-badge', 'secondary'],
+                   'MedicationRequest'  => ['bi-capsule', 'warning'],
+                   'Condition'   => ['bi-heart-pulse', 'danger'],
+                   'Observation' => ['bi-activity', 'info'],
+                   'AllergyIntolerance'=> ['bi-exclamation-triangle', 'danger']];
+        foreach ($rIcons as $rt => [$icon, $color]) {
+            $cnt   = $resCounts[$rt] ?? 0;
+            $alpha = $cnt > 0 ? '' : ' opacity-50';
+            $html .= '<div class="col-6 col-sm-3 col-md-auto">'
+                . '<div class="card text-center px-3 py-2' . $alpha . '">'
+                . '<i class="bi ' . $icon . ' text-' . $color . '"></i>'
+                . '<div class="small fw-bold">' . $cnt . '</div>'
+                . '<div class="text-muted" style="font-size:.7rem">' . $rt . '</div>'
+                . '</div></div>';
+        }
+        $html .= '</div>';
+
+        // ── Main content: 2-col layout ───────────────────────────────────────
+        $html .= '<div class="row g-3">'
+
+            // ── LEFT: JSON view ──────────────────────────────────────────────
+            . '<div class="col-lg-7">'
+            . '<div class="card h-100"><div class="card-header d-flex justify-content-between align-items-center py-2">'
+            . '<strong class="small">FHIR R4 Bundle JSON</strong>'
+            . '<button class="btn btn-sm btn-outline-secondary" id="btnCopy"><i class="bi bi-clipboard"></i> Copy</button>'
+            . '</div><div class="card-body p-0"><pre id="jsonOut"></pre></div></div>'
+            . '</div>'
+
+            // ── RIGHT: Verify + Submit panel ─────────────────────────────────
+            . '<div class="col-lg-5">'
+            . '<div class="card mb-3"><div class="card-body">'
+            . '<div class="d-flex align-items-center gap-2 mb-3">'
+            . '<span class="step-badge bg-primary text-white">1</span>'
+            . '<strong>Verify Submission Readiness</strong>'
+            . '</div>'
+            . '<p class="text-muted small mb-3">Run a pre-flight check before submitting to ABDM bridge. All items must pass.</p>'
+            . '<div id="checkList">'
+            . '<div class="check-item pending"><i class="bi bi-circle text-muted"></i><span>ABHA ID / Address present</span></div>'
+            . '<div class="check-item pending"><i class="bi bi-circle text-muted"></i><span>Bundle type is "document"</span></div>'
+            . '<div class="check-item pending"><i class="bi bi-circle text-muted"></i><span>First entry is Composition</span></div>'
+            . '<div class="check-item pending"><i class="bi bi-circle text-muted"></i><span>Patient resource present</span></div>'
+            . '<div class="check-item pending"><i class="bi bi-circle text-muted"></i><span>At least one clinical resource</span></div>'
+            . '<div class="check-item pending"><i class="bi bi-circle text-muted"></i><span>Visit date valid</span></div>'
+            . '<div class="check-item pending" id="chkBridge"><i class="bi bi-circle text-muted"></i><span>Bridge connection reachable</span></div>'
+            . '</div>'
+            . '<button class="btn btn-primary w-100 mt-3" id="btnVerify">'
+            . '<i class="bi bi-shield-check me-1"></i> Verify Data'
+            . '</button>'
+            . '</div></div>'
+
+            . '<div class="card" id="submitCard" style="display:none">'
+            . '<div class="card-body">'
+            . '<div class="d-flex align-items-center gap-2 mb-3">'
+            . '<span class="step-badge bg-success text-white">2</span>'
+            . '<strong>Submit to ABDM Bridge</strong>'
+            . '</div>'
+            . '<p class="text-muted small mb-3">All checks passed. This will store the FHIR record in the bridge. ABDM links it when the patient opens their PHR app.</p>'
+            . '<button class="btn btn-success w-100" id="btnSubmit">'
+            . '<i class="bi bi-cloud-upload me-1"></i> Submit to ABDM'
+            . '</button>'
+            . '<div id="submitResult" class="mt-2"></div>'
+            . '</div></div>'
+
+            . '</div>' // end right col
+            . '</div>'; // end row
+
+        $html .= '</div>' // end container
             . '<script>'
-            . 'document.getElementById("bj").textContent=' . $prettyJsonJs . ';'
-            . 'document.getElementById("btnSubmitAbdm").addEventListener("click",function(){'
-            . '  var btn=this,origHtml=btn.innerHTML;'
+            . 'const CTX=' . $jsContext . ';'
+            . 'const BUNDLE=' . $jsBundle . ';'
+            . 'const CSRF_NAME=' . json_encode($csrfTokName) . ';'
+            . 'const CSRF_HASH=' . json_encode($csrfTokHash) . ';'
+            . 'const SUBMIT_URL=' . json_encode($submitUrl) . ';'
+            . 'const GATEWAY_URL=' . json_encode($gatewayUrl) . ';'
+            . 'const REGENERATE_URL=' . json_encode($regenerateUrl) . ';'
+
+            // Render JSON
+            . 'document.getElementById("jsonOut").textContent=' . $jsPretty . ';'
+
+            // Copy button
+            . 'document.getElementById("btnCopy").addEventListener("click",function(){'
+            . '  navigator.clipboard.writeText(document.getElementById("jsonOut").textContent)'
+            . '  .then(()=>{this.innerHTML=\'<i class="bi bi-check2"></i> Copied\';setTimeout(()=>{this.innerHTML=\'<i class="bi bi-clipboard"></i> Copy\';},2000);})'
+            . '  .catch(()=>{});'
+            . '});'
+
+            // Verify button
+            . 'document.getElementById("btnVerify").addEventListener("click",async function(){'
+            . '  const btn=this;'
+            . '  btn.disabled=true;btn.innerHTML=\'<span class="spinner-border spinner-border-sm me-1"></span>Verifying\u2026\';'
+            . '  const checks=document.querySelectorAll("#checkList .check-item");'
+            . '  function setCheck(i,pass,msg){'
+            . '    checks[i].className="check-item "+(pass?"pass":"fail");'
+            . '    checks[i].innerHTML=(pass?\'<i class="bi bi-check-circle-fill text-success"></i>\':\'<i class="bi bi-x-circle-fill text-danger"></i>\')+\'<span>\'+msg+\'</span>\';'
+            . '  }'
+
+            // Check 1: ABHA
+            . '  const hasAbha=CTX.abhaId!=="";'
+            . '  setCheck(0,hasAbha,hasAbha?"ABHA: "+CTX.abhaId:"ABHA ID / Address missing — cannot push without ABHA");'
+
+            // Check 2: type=document
+            . '  const isDoc=BUNDLE.type==="document";'
+            . '  setCheck(1,isDoc,isDoc?"Bundle type: document":"Bundle type is \\""+BUNDLE.type+"\\" — must be \\"document\\"");'
+
+            // Check 3: First entry is Composition
+            . '  const firstRt=BUNDLE.entry&&BUNDLE.entry[0]&&BUNDLE.entry[0].resource?BUNDLE.entry[0].resource.resourceType:"";'
+            . '  const isComp=firstRt==="Composition";'
+            . '  setCheck(2,isComp,isComp?"First entry: Composition ✓":"First entry is "+firstRt+" — must be Composition");'
+
+            // Check 4: Patient resource
+            . '  const hasPatient=(BUNDLE.entry||[]).some(e=>e.resource&&e.resource.resourceType==="Patient");'
+            . '  setCheck(3,hasPatient,hasPatient?"Patient resource present":"Patient resource missing from bundle");'
+
+            // Check 5: Clinical resource
+            . '  const clinTypes=["MedicationRequest","Condition","Observation","AllergyIntolerance","DiagnosticReport"];'
+            . '  const clinCount=(BUNDLE.entry||[]).filter(e=>e.resource&&clinTypes.includes(e.resource.resourceType)).length;'
+            . '  setCheck(4,clinCount>0,"Clinical resources: "+clinCount+(clinCount>0?" present":" — bundle has no medications/conditions/observations"));'
+
+            // Check 6: visit date
+            . '  const dateOk=CTX.visitDate&&/^\d{4}-\d{2}-\d{2}$/.test(CTX.visitDate);'
+            . '  setCheck(5,dateOk,dateOk?"Visit date: "+CTX.visitDate:"Visit date missing or invalid");'
+
+            // Check 7: Bridge connectivity (AJAX)
+            . '  document.getElementById("chkBridge").className="check-item pending";'
+            . '  document.getElementById("chkBridge").innerHTML=\'<span class="spinner-border spinner-border-sm"></span><span>Checking bridge\u2026</span>\';'
+            . '  let bridgeOk=false;'
+            . '  try{'
+            . '    const r=await fetch(GATEWAY_URL,{headers:{"X-Requested-With":"XMLHttpRequest"},signal:AbortSignal.timeout(8000)});'
+            . '    const j=await r.json();'
+            . '    bridgeOk=r.ok&&(j.ok===1||j.status==="ok");'
+            . '    const info=bridgeOk?(j.authenticated_as?(" ("+j.authenticated_as+")"):""):" — "+( j.error_text||j.message||"unreachable");'
+            . '    setCheck(6,bridgeOk,bridgeOk?"Bridge connected"+info:"Bridge unreachable"+info);'
+            . '  }catch(e){setCheck(6,false,"Bridge check failed: "+e.message);}'
+
+            // Evaluate overall result
+            . '  const allPass=hasAbha&&isDoc&&isComp&&hasPatient&&clinCount>0&&dateOk&&bridgeOk;'
+            . '  btn.disabled=false;'
+            . '  if(allPass){'
+            . '    btn.className="btn btn-outline-success w-100 mt-3";'
+            . '    btn.innerHTML=\'<i class="bi bi-check-all me-1"></i>All Checks Passed — Re-verify\';'
+            . '    document.getElementById("submitCard").style.display="";'
+            . '    document.getElementById("btnSubmit").disabled=false;'
+            . '  }else{'
+            . '    btn.className="btn btn-warning w-100 mt-3";'
+            . '    btn.innerHTML=\'<i class="bi bi-exclamation-triangle me-1"></i>Issues Found — Fix &amp; Re-verify\';'
+            . '    document.getElementById("submitCard").style.display="none";'
+            . '  }'
+            . '});'
+
+            // Submit button
+            . 'document.getElementById("btnSubmit").addEventListener("click",function(){'
+            . '  const btn=this,origHtml=btn.innerHTML;'
             . '  if(!confirm("Submit FHIR bundle for OPD #' . $opdId . ' to ABDM bridge?"))return;'
-            . '  btn.disabled=true;btn.textContent="Submitting\u2026";'
-            . '  var csrfN=document.querySelector("meta[name=\'csrf-token-name\']").content;'
-            . '  var csrfH=document.querySelector("meta[name=\'csrf-token-hash\']").content;'
-            . '  var body=new URLSearchParams({opd_id:' . $opdId . ',opd_session_id:' . $sessionId . '});'
-            . '  body.append(csrfN,csrfH);'
-            . '  fetch("' . $submitUrl . '",{method:"POST",headers:{"X-Requested-With":"XMLHttpRequest","Content-Type":"application/x-www-form-urlencoded"},body:body.toString()})'
-            . '  .then(function(r){return r.json();})'
-            . '  .then(function(res){'
-            . '    if(res.ok==1){'
-            . '      btn.className="btn btn-sm btn-success";btn.innerHTML=\'<i class="bi bi-check-circle"></i> Submitted \u2713\';'
-            . '      var qInfo=res.queue_id?" | Queue ID: "+res.queue_id:"";'
-            . '      document.getElementById("submitResult").innerHTML=\'<div class="alert alert-success mt-2">\u2705 \''
-            . '        +(res.message||"Bundle submitted to ABDM bridge successfully.")+qInfo+\'</div>\';'
+            . '  btn.disabled=true;btn.innerHTML=\'<span class="spinner-border spinner-border-sm me-1"></span>Submitting\u2026\';'
+            . '  const body=new URLSearchParams({opd_id:CTX.opdId,opd_session_id:CTX.sessionId});'
+            . '  body.append(CSRF_NAME,CSRF_HASH);'
+            . '  fetch(SUBMIT_URL,{method:"POST",headers:{"X-Requested-With":"XMLHttpRequest","Content-Type":"application/x-www-form-urlencoded"},body:body.toString()})'
+            . '  .then(r=>r.json()).then(res=>{'
+            . '    const el=document.getElementById("submitResult");'
+            . '    if(res.ok===1||res.ok==="1"){'
+            . '      btn.className="btn btn-outline-success w-100";'
+            . '      btn.innerHTML=\'<i class="bi bi-check-circle me-1"></i>Submitted \u2713\';'
+            . '      const qPart=res.queue_id?" &middot; Queue: <code>"+res.queue_id+"</code>":"";'
+            . '      const idPart=res.bridge_id?" &middot; Bridge ID: <strong>"+res.bridge_id+"</strong>":"";'
+            . '      el.innerHTML=\'<div class="alert alert-success mt-2 py-2">\u2705 \'+(res.message||"Submitted successfully.")+qPart+idPart+\'</div>\';'
             . '    }else{'
             . '      btn.disabled=false;btn.innerHTML=origHtml;'
-            . '      document.getElementById("submitResult").innerHTML=\'<div class="alert alert-danger mt-2">\u274c \''
-            . '        +(res.message||res.error_text||"Submission failed.")+(res.http_code?" (HTTP "+res.http_code+")" :"")+\'</div>\';'
+            . '      el.innerHTML=\'<div class="alert alert-danger mt-2 py-2">\u274c \'+(res.message||res.error_text||"Submission failed.")+(res.http_code?" (HTTP "+res.http_code+")":"")+\'</div>\';'
             . '    }'
-            . '  })'
-            . '  .catch(function(e){btn.disabled=false;btn.innerHTML=origHtml;'
-            . '    document.getElementById("submitResult").innerHTML=\'<div class="alert alert-danger mt-2">\u274c Error: \'+e.message+\'</div>\';});'
+            . '  }).catch(e=>{btn.disabled=false;btn.innerHTML=origHtml;'
+            . '    document.getElementById("submitResult").innerHTML=\'<div class="alert alert-danger mt-2 py-2">\u274c \'+e.message+\'</div>\';});'
             . '});'
+
+            // Regenerate button
+            . 'document.getElementById("btnRegenerate").addEventListener("click",function(){'
+            . '  const btn=this,origHtml=btn.innerHTML;'
+            . '  if(!confirm("Rebuild FHIR bundle from current prescription data?\nThis will overwrite the stored bundle — any edits to the JSON will be lost."))return;'
+            . '  btn.disabled=true;btn.innerHTML=\'<span class="spinner-border spinner-border-sm me-1"></span>Rebuilding\u2026\';'
+            . '  const body=new URLSearchParams({opd_id:CTX.opdId,opd_session_id:CTX.sessionId});'
+            . '  body.append(CSRF_NAME,CSRF_HASH);'
+            . '  fetch(REGENERATE_URL,{method:"POST",headers:{"X-Requested-With":"XMLHttpRequest","Content-Type":"application/x-www-form-urlencoded"},body:body.toString()})'
+            . '  .then(r=>r.json()).then(res=>{'
+            . '    if(res.ok===1||res.ok==="1"){'
+            . '      btn.innerHTML=\'<i class="bi bi-check2 me-1"></i>Done — reloading\u2026\';'
+            . '      setTimeout(()=>location.reload(),900);'
+            . '    }else{'
+            . '      btn.disabled=false;btn.innerHTML=origHtml;'
+            . '      alert("\u274c Regeneration failed: "+(res.message||"unknown error"));'
+            . '    }'
+            . '  }).catch(e=>{btn.disabled=false;btn.innerHTML=origHtml;alert("\u274c "+e.message);});'
+            . '});'
+
             . '</script>'
             . '</body></html>';
 
@@ -4852,7 +5264,7 @@ class Opd_prescription extends BaseController
 
         if ($patientId > 0 && $this->db->tableExists('patient_master')) {
             $pFields = $this->db->getFieldNames('patient_master');
-            $pRow = $this->db->table('patient_master')->where('p_id', $patientId)->get(1)->getRowArray();
+            $pRow = $this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray();
             if (! empty($pRow)) {
                 $fname = trim((string) ($pRow['p_fname'] ?? ''));
                 $lname = trim((string) ($pRow['p_lname'] ?? ''));
@@ -4872,13 +5284,21 @@ class Opd_prescription extends BaseController
         try {
             $connector = new \App\Libraries\Abdm\EAtriaBridgeConnector();
 
+            $visitLabel = $visitDate !== '' ? date('d M Y', strtotime($visitDate)) : date('d M Y');
+            $displayLabel = 'OPD Consultation - ' . $visitLabel . ($doctorName !== '' ? ' - Dr. ' . $doctorName : '');
+
+            // care_context_reference must be unique per visit in ABDM spec.
+            // Use OPD-{id}-{date} so different visit dates generate distinct care contexts.
+            $ccRef = 'OPD-' . $opdId . '-' . ($visitDate !== '' ? $visitDate : date('Y-m-d'));
+
             $pushData = [
-                'patient_id'              => (string) $patientId,
-                'patient_name'            => $patientName,
-                'hi_type'                 => 'OPConsultRecord',
-                'visit_date'              => $visitDate,
-                'care_context_reference'  => 'OPD-' . $opdId,
-                'record_data'             => $bundle,
+                'patient_id'             => (string) $patientId,
+                'patient_name'           => $patientName,
+                'record_type'            => 'prescription',
+                'visit_date'             => $visitDate,
+                'care_context_reference' => $ccRef,
+                'notes'                  => $displayLabel,
+                'record_data'            => $bundle,
             ];
             if ($abhaId !== '') {
                 $pushData['abha_address'] = $abhaId;
@@ -4887,18 +5307,36 @@ class Opd_prescription extends BaseController
                 $pushData['doctor_name'] = $doctorName;
             }
 
-            $result  = $connector->pushRecord($pushData);
-            $ok      = (int) ($result['ok'] ?? 0);
-            $queueId = (string) ($result['queue_id'] ?? $result['record_id'] ?? $result['id'] ?? '');
-            $msg     = (string) ($result['message'] ?? ($ok === 1
+            $result   = $connector->pushRecord($pushData);
+            $httpCode = (int) ($result['http_code'] ?? 0);
+
+            // 409 = duplicate queue_id — record already stored in bridge
+            if ($httpCode === 409) {
+                return $this->response->setJSON([
+                    'ok'       => 1,
+                    'duplicate' => 1,
+                    'bridge_id' => (int) ($result['id'] ?? 0),
+                    'queue_id'  => (string) ($result['queue_id'] ?? ''),
+                    'message'  => 'Record already stored in bridge (duplicate queue_id). Use existing record.',
+                    'http_code' => $httpCode,
+                    'csrfName'  => csrf_token(),
+                    'csrfHash'  => csrf_hash(),
+                ]);
+            }
+
+            $ok       = (int) ($result['ok'] ?? 0);
+            $queueId  = (string) ($result['queue_id'] ?? '');
+            $bridgeId = (int) ($result['id'] ?? 0);
+            $msg      = (string) ($result['message'] ?? ($ok === 1
                 ? 'FHIR bundle submitted to ABDM bridge successfully.'
                 : ($result['error_text'] ?? 'Submission failed. Check bridge configuration.')));
 
             return $this->response->setJSON([
                 'ok'        => $ok,
                 'queue_id'  => $queueId,
+                'bridge_id' => $bridgeId,
                 'message'   => $msg,
-                'http_code' => (int) ($result['http_code'] ?? 0),
+                'http_code' => $httpCode,
                 'csrfName'  => csrf_token(),
                 'csrfHash'  => csrf_hash(),
             ]);
@@ -9782,12 +10220,27 @@ class Opd_prescription extends BaseController
         $abhaField = $this->resolvePatientAbhaField();
         $abhaAddress = $abhaField !== null ? trim((string) ($patientRow[$abhaField] ?? '')) : '';
 
+        $patFirstName = trim((string) ($patientRow['p_fname'] ?? ''));
+        $patLastName  = trim((string) ($patientRow['p_lname'] ?? ''));
+        $patFullName  = trim($patFirstName . ($patLastName !== '' ? ' ' . $patLastName : ''));
+        if ($patFullName === '') {
+            $patFullName = trim((string) ($opdRow['P_name'] ?? ''));
+        }
+
+        // Resolve phone field (patient_master may use p_contact, phone, mobile, etc.)
+        $patientFields = $this->db->tableExists('patient_master') ? ($this->db->getFieldNames('patient_master') ?? []) : [];
+        $phoneField = $this->resolveFirstField($patientFields, ['p_contact', 'phone', 'mobile', 'contact_no', 'mobile_no', 'p_phone']);
+        $patPhone = $phoneField !== null ? trim((string) ($patientRow[$phoneField] ?? '')) : '';
+
         $patient = [
-            'id' => (string) ($patientRow['id'] ?? ($opdRow['p_id'] ?? 0)),
-            'name' => (string) ($patientRow['p_fname'] ?? $opdRow['P_name'] ?? ''),
-            'gender' => $this->normalizeGender((string) ($patientRow['gender'] ?? '')),
-            'birthDate' => !empty($patientRow['dob']) ? date('Y-m-d', strtotime((string) $patientRow['dob'])) : '',
+            'id'          => (string) ($patientRow['id'] ?? ($opdRow['p_id'] ?? 0)),
+            'name'        => $patFullName,
+            'given_name'  => $patFirstName,
+            'family_name' => $patLastName,
+            'gender'      => $this->normalizeGender((string) ($patientRow['gender'] ?? '')),
+            'birthDate'   => ! empty($patientRow['dob']) ? date('Y-m-d', strtotime((string) $patientRow['dob'])) : '',
             'abhaAddress' => $abhaAddress,
+            'phone'       => $patPhone,
         ];
 
         $encounter = [
@@ -10209,7 +10662,7 @@ class Opd_prescription extends BaseController
 
         $rows = $this->db->table('hospital_setting')
             ->select('s_name,s_value')
-            ->whereIn('s_name', ['H_name', 'H_HFR_ID', 'HPR_ID', 'DOCTOR_REG_NO'])
+            ->whereIn('s_name', ['ABDM_HMS_NAME', 'ABDM_HFR_ID', 'H_Name', 'H_HFR_ID', 'HPR_ID', 'DOCTOR_REG_NO'])
             ->get()
             ->getResultArray();
 
@@ -10223,8 +10676,8 @@ class Opd_prescription extends BaseController
         }
 
         return [
-            'name' => (string) ($map['H_name'] ?? ''),
-            'hfr_id' => (string) ($map['H_HFR_ID'] ?? ''),
+            'name'                => (string) ($map['ABDM_HMS_NAME'] ?? $map['H_Name'] ?? $map['H_name'] ?? ''),
+            'hfr_id'              => (string) ($map['ABDM_HFR_ID']  ?? $map['H_HFR_ID'] ?? ''),
             'doctor_registration' => (string) (($map['HPR_ID'] ?? $map['DOCTOR_REG_NO'] ?? '')),
         ];
     }

@@ -316,6 +316,7 @@
                             </li>
                         </ul>
                     </div>
+                    <button type="button" class="btn btn-sm btn-outline-warning" id="btnRegenerateFhirModal" title="Rebuild FHIR bundle from current prescription data"><i class="bi bi-arrow-clockwise"></i> Regenerate</button>
                     <button type="button" class="btn btn-sm btn-outline-success" id="btnSubmitFhirToAbdm" title="Push FHIR bundle to ABDM bridge"><i class="bi bi-cloud-upload"></i> Submit to ABDM</button>
                     <button type="button" class="btn btn-sm btn-outline-secondary" id="btnCopyFhirModal">Copy JSON</button>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -1490,6 +1491,34 @@
             html += '</ul></div></div>';
         }
 
+        // ── Practitioner
+        if (practitioner) {
+            var pName  = ((practitioner.name || [{}])[0].text || '').trim();
+            var pGiven = (((practitioner.name || [{}])[0].given) || []).join(' ').trim();
+            var pFam   = ((practitioner.name || [{}])[0].family || '').trim();
+            var pPfx   = (((practitioner.name || [{}])[0].prefix) || []).join(' ').trim();
+            var pDisplay = pName || (pPfx ? pPfx + ' ' : '') + pGiven + (pFam ? ' ' + pFam : '');
+            var hprId  = ((practitioner.identifier || []).find(function(i){ return (i.system||'').includes('hpr'); }) || {}).value || '';
+            html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">Practitioner (Doctor)</small></div>';
+            html += '<div class="card-body py-2 small d-flex flex-wrap gap-3 align-items-center">';
+            html += '<span><i class="bi bi-person-badge me-1 text-primary"></i><strong>' + hesc(pDisplay || 'Unknown') + '</strong></span>';
+            if (hprId) html += '<span class="text-muted">HPR ID: <code>' + hesc(hprId) + '</code></span>';
+            html += '</div></div>';
+        }
+
+        // ── Organization
+        if (organization) {
+            var oName = (organization.name || '').trim();
+            var oIdent = (organization.identifier || []).find(function(i){ return (i.system||'').includes('facility') || (i.system||'').includes('hfr'); });
+            var oCode  = oIdent ? (oIdent.value || '') : '';
+            html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">Organization (Facility)</small></div>';
+            html += '<div class="card-body py-2 small d-flex flex-wrap gap-3 align-items-center">';
+            html += '<span><i class="bi bi-hospital me-1 text-primary"></i><strong>' + hesc(oName || '(Name not configured)') + '</strong></span>';
+            if (oCode) html += '<span class="text-muted">HFR ID: <code>' + hesc(oCode) + '</code></span>';
+            if (!oName) html += '<span class="badge bg-warning text-dark" style="font-size:.7rem;" title="Set H_name in Hospital Settings">Name missing</span>';
+            html += '</div></div>';
+        }
+
         return html || '<p class="text-muted p-3">No structured clinical data found in bundle.</p>';
     }
 
@@ -1578,6 +1607,41 @@
                 if (fhirModalHttpBadge) { fhirModalHttpBadge.className = 'badge bg-danger'; fhirModalHttpBadge.textContent = 'HTTP ERR'; }
             });
     }
+
+    // Regenerate FHIR bundle in modal
+    document.getElementById('btnRegenerateFhirModal').addEventListener('click', function () {
+        var btn = this;
+        if (_fhirOpdId <= 0) { alert('No FHIR bundle loaded.'); return; }
+        if (!confirm('Rebuild FHIR bundle for OPD #' + _fhirOpdId + '?\nThis overwrites the stored bundle with fresh data.')) return;
+        var origHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Rebuilding…';
+        var body = new URLSearchParams({ opd_id: _fhirOpdId, opd_session_id: _fhirSessionId });
+        body.append(csrfName, csrfHash);
+        fetch('<?= base_url('Opd_prescription/fhir_bundle_regenerate') ?>', {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body.toString()
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+            if (res.csrfName && res.csrfHash) { csrfName = res.csrfName; csrfHash = res.csrfHash; }
+            btn.disabled = false;
+            btn.innerHTML = origHtml;
+            if (res.ok === 1 || res.ok === '1') {
+                // Reload modal with fresh bundle
+                var reloadUrl = '<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + _fhirOpdId + (_fhirSessionId > 0 ? '/' + _fhirSessionId : '');
+                openFhirModal(reloadUrl, fhirModalTitle ? fhirModalTitle.textContent : 'FHIR Preview');
+            } else {
+                alert('\u274c Regeneration failed: ' + (res.message || 'unknown error'));
+            }
+        })
+        .catch(function (e) {
+            btn.disabled = false;
+            btn.innerHTML = origHtml;
+            alert('\u274c ' + e.message);
+        });
+    });
 
     // Update Codes dropdown — navigate to master workspaces
     (function () {

@@ -79,11 +79,51 @@
             <div class="d-flex flex-wrap gap-3">
                 <span><strong>Connector:</strong> <code><?= esc($connector ?? 'eatria_bridge') ?></code></span>
                 <span><strong>Sync Provider:</strong> <code><?= esc($abdm_sync_provider ?? 'eatria') ?></code></span>
+                <?php if (!empty($hfr_id)) : ?>
+                <span><strong>HFR ID:</strong> <code><?= esc($hfr_id) ?></code></span>
+                <?php endif; ?>
+                <?php if (!empty($bridge_hospital_id)) : ?>
+                <span><strong>Bridge Hospital ID:</strong> <code><?= esc($bridge_hospital_id) ?></code></span>
+                <?php endif; ?>
                 <span><strong>Gateway:</strong>
                     <a href="<?= esc($gateway_url ?? 'https://abdm-bridge.e-atria.in/api') ?>" target="_blank">
                         <?= esc($gateway_url ?? 'https://abdm-bridge.e-atria.in/api') ?>
                     </a>
                 </span>
+            </div>
+        </div>
+
+        <!-- Bridge hospital info panel (shown after successful Test Connection) -->
+        <div id="abdm_bridge_info_panel" class="mb-3 d-none">
+            <div class="card border-success">
+                <div class="card-header bg-success bg-opacity-10 py-2 d-flex align-items-center justify-content-between">
+                    <span class="fw-semibold text-success" style="font-size:13px;">
+                        <i class="bi bi-building-check me-1"></i>Hospital info from bridge
+                    </span>
+                    <button type="button" class="btn btn-sm btn-outline-success" id="btn_autofill_bridge">
+                        <i class="bi bi-arrow-down-circle me-1"></i>Auto-fill fields
+                    </button>
+                </div>
+                <div class="card-body py-2" style="font-size:13px;">
+                    <div class="row g-2">
+                        <div class="col-sm-4">
+                            <span class="text-muted">Authenticated as:</span><br>
+                            <strong id="bridge_info_principal">—</strong>
+                        </div>
+                        <div class="col-sm-3">
+                            <span class="text-muted">HFR ID:</span><br>
+                            <code id="bridge_info_hfr_id">—</code>
+                        </div>
+                        <div class="col-sm-3">
+                            <span class="text-muted">Bridge Hospital ID:</span><br>
+                            <code id="bridge_info_hospital_id">—</code>
+                        </div>
+                        <div class="col-sm-2">
+                            <span class="text-muted">Key type:</span><br>
+                            <code id="bridge_info_type">—</code>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -191,6 +231,7 @@
     $('#btn_test_abdm_gateway').on('click', function () {
         var $btn = $(this).prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>Testing…');
         $('#abdm_gateway_msg').html('');
+        $('#abdm_bridge_info_panel').addClass('d-none');
 
         postAjax('<?= base_url('setting/admin/abdm-gateway/test') ?>', getPayload(), function (res) {
             $btn.prop('disabled', false).html('<i class="bi bi-wifi me-1"></i>Test Connection');
@@ -205,10 +246,35 @@
                     $('<div>').text(res.error_text || 'Gateway reachable').html() +
                     modeBadge + authLine
                 );
+
+                // Show hospital info from bridge if authenticated_as present
+                if (res.auth_info && res.auth_info.principal) {
+                    $('#bridge_info_principal').text(res.auth_info.principal || '—');
+                    $('#bridge_info_hfr_id').text(res.auth_info.hfr_id || '—');
+                    $('#bridge_info_hospital_id').text(res.auth_info.hospital_id || '—');
+                    $('#bridge_info_type').text(res.auth_info.type || '—');
+                    $('#abdm_bridge_info_panel').removeClass('d-none');
+
+                    // Store for auto-fill
+                    $('#btn_autofill_bridge').data('auth_info', res.auth_info);
+                }
             } else {
                 showMsg('danger', '<i class="bi bi-x-circle me-1"></i>' + (res.error_text || 'Test failed.'));
             }
         });
+    });
+
+    // Auto-fill HFR ID and HMS Name from bridge
+    $(document).on('click', '#btn_autofill_bridge', function () {
+        var info = $(this).data('auth_info');
+        if (!info) return;
+        if (info.hfr_id && info.hfr_id !== '—') {
+            $('#abdm_hfr_id').val(info.hfr_id);
+        }
+        if (info.principal && info.principal !== '—') {
+            $('#abdm_hms_name').val(info.principal);
+        }
+        showMsg('success', '<i class="bi bi-check-circle me-1"></i>Fields populated from bridge. Click <strong>Save Settings</strong> to persist.');
     });
 }());
 </script>
