@@ -182,6 +182,12 @@
     function esc(s) {
         return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
+    function encodePayload(obj) {
+        return btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
+    }
+    function decodePayload(payload) {
+        return JSON.parse(decodeURIComponent(escape(atob(String(payload || '')))));
+    }
 
     function loadQueue() {
         const date   = document.getElementById('queueDate').value;
@@ -255,12 +261,12 @@
                 actions += `<button class="btn btn-xs btn-sm btn-outline-danger me-1" onclick="abdmQCancel(${id})">Cancel</button>`;
             }
             if (!isLinked && (isPend || isCalled)) {
-                const pl = JSON.stringify({
+                const pl = encodePayload({
                     id: t.id, abha_number: t.abha_number ?? '', abha_address: t.abha_address ?? '',
                     aadhaar_number: t.aadhaar_number ?? t.aadhar_number ?? t.udai ?? '',
                     patient_name: t.patient_name ?? '', phone: t.phone ?? '',
                     gender: t.gender ?? '', dob: t.dob ?? ''
-                }).replace(/'/g, '&#39;');
+                });
                 actions += `<button class="btn btn-xs btn-sm btn-primary" onclick="abdmQRegister('${pl}')">Register OPD</button>`;
             }
 
@@ -301,8 +307,8 @@
     window.abdmQComplete = id => setStatus(id, 'COMPLETED');
     window.abdmQCancel   = id => { if (confirm('Cancel token #' + id + '?')) setStatus(id, 'CANCELLED'); };
 
-    window.abdmQRegister = function (payloadJson) {
-        const t    = JSON.parse(payloadJson);
+    window.abdmQRegister = function (payloadEncoded) {
+        const t    = decodePayload(payloadEncoded);
         const body = document.getElementById('abdmProcessTokenBody');
         body.innerHTML = `
             <p class="mb-2 small">Processing ABHA Scan token for:</p>
@@ -341,7 +347,7 @@
                             <div class="fw-bold">${esc(m.p_code || 'UHID N/A')} - ${esc(m.p_fname || 'Unnamed')}</div>
                             <div class="text-muted">Phone: ${esc(m.mphone1 || '—')} | ABHA: ${esc(m.patient_abha || '—')} | Aadhaar: ${esc(m.patient_aadhaar || '—')}</div>
                             <div class="text-warning">Matched by: ${esc(reasons || 'Data match')}</div>
-                            <button class="btn btn-sm btn-outline-primary mt-2" onclick="abdmQResolveExisting(${Number(t.id) || 0}, ${Number(m.id) || 0}, '${encodeURIComponent(JSON.stringify(t))}')">Use This Patient</button>
+                            <button class="btn btn-sm btn-outline-primary mt-2" onclick="abdmQResolveExisting(${Number(t.id) || 0}, ${Number(m.id) || 0}, '${payloadEncoded}')">Use This Patient</button>
                         </div>
                     </div>`;
                 }).join('');
@@ -351,11 +357,11 @@
                         Similar patient records found. Confirm existing patient or create a new record.
                     </div>
                     ${cards}
-                    <button class="btn btn-sm btn-success w-100 mt-2" onclick="abdmQCreateNewPatient(${Number(t.id) || 0}, '${encodeURIComponent(JSON.stringify(t))}')">Create New Patient</button>
+                    <button class="btn btn-sm btn-success w-100 mt-2" onclick="abdmQCreateNewPatient(${Number(t.id) || 0}, '${payloadEncoded}')">Create New Patient</button>
                     <a href="${BASE}billing/patient" class="btn btn-sm btn-outline-secondary w-100 mt-2" target="_blank">Open Manual Patient Registration (/billing/patient)</a>
                     <button class="btn btn-sm btn-outline-secondary w-100 mt-2" data-bs-dismiss="modal">Close</button>`;
             } else {
-                abdmQCreateNewPatient(t.id, encodeURIComponent(JSON.stringify(t)), true);
+                abdmQCreateNewPatient(t.id, payloadEncoded, true);
             }
         }).catch(err => {
             body.innerHTML = `<div class="alert alert-danger small">Request error: ${esc(err.message)}</div>
@@ -364,7 +370,7 @@
     };
 
     window.abdmQResolveExisting = function (tokenId, patientId, encodedPayload) {
-        const t = JSON.parse(decodeURIComponent(encodedPayload));
+        const t = decodePayload(encodedPayload);
         const body = document.getElementById('abdmProcessTokenBody');
         body.innerHTML = '<p class="text-muted small mb-0">Linking token to selected patient…</p>';
 
@@ -381,7 +387,7 @@
     };
 
     window.abdmQCreateNewPatient = function (tokenId, encodedPayload, skipConfirm) {
-        const t = JSON.parse(decodeURIComponent(encodedPayload));
+        const t = decodePayload(encodedPayload);
         const body = document.getElementById('abdmProcessTokenBody');
         if (!skipConfirm && !confirm('Create a new patient record for this token?')) {
             return;
