@@ -265,7 +265,11 @@
                     id: t.id, abha_number: t.abha_number ?? '', abha_address: t.abha_address ?? '',
                     aadhaar_number: t.aadhaar_number ?? t.aadhar_number ?? t.udai ?? '',
                     patient_name: t.patient_name ?? '', phone: t.phone ?? '',
-                    gender: t.gender ?? '', dob: t.dob ?? ''
+                    gender: t.gender ?? '', dob: t.dob ?? '',
+                    relation_text: t.relation_text ?? '', relation_type: t.relation_type ?? '', relative_name: t.relative_name ?? '',
+                    email: t.email ?? t.email1 ?? '',
+                    address: t.address ?? t.add1 ?? '',
+                    city: t.city ?? '', district: t.district ?? '', state: t.state ?? '', zip: t.zip ?? ''
                 });
                 actions += `<button class="btn btn-xs btn-sm btn-primary" onclick="abdmQRegister('${pl}')">Register OPD</button>`;
             }
@@ -388,22 +392,143 @@
 
     window.abdmQCreateNewPatient = function (tokenId, encodedPayload, skipConfirm) {
         const t = decodePayload(encodedPayload);
-        const body = document.getElementById('abdmProcessTokenBody');
         if (!skipConfirm && !confirm('Create a new patient record for this token?')) {
             return;
         }
-
-        body.innerHTML = '<p class="text-muted small mb-0">Creating new patient record…</p>';
-        post(BASE + 'AbdmOpdQueue/process_token/' + tokenId, {
-            action: 'create_new',
-            abha_number: t.abha_number ?? '', abha_address: t.abha_address ?? '',
-            aadhaar_number: t.aadhaar_number ?? '',
-            patient_name: t.patient_name ?? '', phone: t.phone ?? '',
-            gender: t.gender ?? '', dob: t.dob ?? '',
-        }).then(handleProcessResult).catch(err => {
-            body.innerHTML = `<div class="alert alert-danger small">Request error: ${esc(err.message)}</div>`;
-        });
+        renderCreatePatientForm(tokenId, t);
     };
+
+    window.abdmQSubmitCreateNewPatient = function (tokenId) {
+        const body = document.getElementById('abdmProcessTokenBody');
+        const payload = {
+            action: 'create_new',
+            abha_number: document.getElementById('np_abha_number')?.value?.replace(/\D/g, '') || '',
+            abha_address: document.getElementById('np_abha_address')?.value?.trim() || '',
+            aadhaar_number: document.getElementById('np_aadhaar_number')?.value?.replace(/\D/g, '') || '',
+            patient_name: document.getElementById('np_patient_name')?.value?.trim() || '',
+            phone: document.getElementById('np_phone')?.value?.trim() || '',
+            gender: document.getElementById('np_gender')?.value || 'M',
+            dob: document.getElementById('np_dob')?.value || '',
+            relation_type: document.getElementById('np_relation_type')?.value?.trim() || '',
+            relative_name: document.getElementById('np_relative_name')?.value?.trim() || '',
+            relation_text: document.getElementById('np_relation_text')?.value?.trim() || '',
+            email: document.getElementById('np_email')?.value?.trim() || '',
+            address: document.getElementById('np_address')?.value?.trim() || '',
+            city: document.getElementById('np_city')?.value?.trim() || '',
+            district: document.getElementById('np_district')?.value?.trim() || '',
+            state: document.getElementById('np_state')?.value?.trim() || '',
+            zip: document.getElementById('np_zip')?.value?.trim() || '',
+        };
+
+        if (!payload.patient_name) {
+            alert('Patient name is required.');
+            return;
+        }
+
+        body.innerHTML = '<p class="text-muted small mb-0">Creating new patient record with provided details…</p>';
+        post(BASE + 'AbdmOpdQueue/process_token/' + tokenId, payload)
+            .then(handleProcessResult)
+            .catch(err => {
+                body.innerHTML = `<div class="alert alert-danger small">Request error: ${esc(err.message)}</div>`;
+            });
+    };
+
+    function renderCreatePatientForm(tokenId, t) {
+        const body = document.getElementById('abdmProcessTokenBody');
+        const relationType = (t.relation_type || '').toUpperCase();
+        const relationText = t.relation_text || '';
+        const relativeName = t.relative_name || '';
+
+        body.innerHTML = `
+            <div class="alert alert-info py-2 small mb-2">
+                Review and edit patient data before creating new record in patient_master.
+            </div>
+            <div class="row g-2">
+                <div class="col-md-6">
+                    <label class="form-label form-label-sm">Patient Name *</label>
+                    <input id="np_patient_name" class="form-control form-control-sm" value="${esc(t.patient_name || '')}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label form-label-sm">Gender</label>
+                    <select id="np_gender" class="form-select form-select-sm">
+                        <option value="M" ${(String(t.gender || 'M').toUpperCase().startsWith('M')) ? 'selected' : ''}>Male</option>
+                        <option value="F" ${(String(t.gender || '').toUpperCase().startsWith('F')) ? 'selected' : ''}>Female</option>
+                        <option value="O" ${(String(t.gender || '').toUpperCase().startsWith('O')) ? 'selected' : ''}>Other</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label form-label-sm">DOB</label>
+                    <input id="np_dob" type="date" class="form-control form-control-sm" value="${esc(t.dob || '')}">
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label form-label-sm">Phone</label>
+                    <input id="np_phone" class="form-control form-control-sm" value="${esc(t.phone || '')}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label form-label-sm">Email</label>
+                    <input id="np_email" class="form-control form-control-sm" value="${esc(t.email || '')}">
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label form-label-sm">ABHA Number</label>
+                    <input id="np_abha_number" class="form-control form-control-sm" value="${esc(t.abha_number || '')}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label form-label-sm">ABHA Address</label>
+                    <input id="np_abha_address" class="form-control form-control-sm" value="${esc(t.abha_address || '')}">
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label form-label-sm">Aadhaar No</label>
+                    <input id="np_aadhaar_number" class="form-control form-control-sm" value="${esc(t.aadhaar_number || '')}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label form-label-sm">Relation (Text)</label>
+                    <input id="np_relation_text" class="form-control form-control-sm" placeholder="Wife of XXXX / Son of YYYY" value="${esc(relationText)}">
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label form-label-sm">Relation Type</label>
+                    <select id="np_relation_type" class="form-select form-select-sm">
+                        <option value="" ${relationType === '' ? 'selected' : ''}>-- Select --</option>
+                        <option value="S/O" ${relationType === 'S/O' ? 'selected' : ''}>S/O</option>
+                        <option value="D/O" ${relationType === 'D/O' ? 'selected' : ''}>D/O</option>
+                        <option value="W/O" ${relationType === 'W/O' ? 'selected' : ''}>W/O</option>
+                        <option value="C/O" ${relationType === 'C/O' ? 'selected' : ''}>C/O</option>
+                    </select>
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label form-label-sm">Relative Name</label>
+                    <input id="np_relative_name" class="form-control form-control-sm" value="${esc(relativeName)}">
+                </div>
+
+                <div class="col-12">
+                    <label class="form-label form-label-sm">Address</label>
+                    <input id="np_address" class="form-control form-control-sm" value="${esc(t.address || '')}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label form-label-sm">City</label>
+                    <input id="np_city" class="form-control form-control-sm" value="${esc(t.city || '')}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label form-label-sm">District</label>
+                    <input id="np_district" class="form-control form-control-sm" value="${esc(t.district || '')}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label form-label-sm">State</label>
+                    <input id="np_state" class="form-control form-control-sm" value="${esc(t.state || '')}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label form-label-sm">Pin/Zip</label>
+                    <input id="np_zip" class="form-control form-control-sm" value="${esc(t.zip || '')}">
+                </div>
+            </div>
+            <div class="small text-muted mt-2">Profile picture upload is supported after creation from Edit Profile.</div>
+            <button class="btn btn-sm btn-success w-100 mt-3" onclick="abdmQSubmitCreateNewPatient(${Number(tokenId) || 0})">Create Patient Now</button>
+            <a href="${BASE}billing/patient" class="btn btn-sm btn-outline-secondary w-100 mt-2" target="_blank">Open Manual Patient Registration (/billing/patient)</a>
+            <button class="btn btn-sm btn-outline-secondary w-100 mt-2" data-bs-dismiss="modal">Close</button>`;
+    }
 
     function handleProcessResult(r) {
         const body = document.getElementById('abdmProcessTokenBody');
@@ -414,8 +539,11 @@
                 </div>
                 <div class="card mb-3"><div class="card-body py-2 small">
                     <div class="text-muted">HMS ID: <strong>${esc(r.p_code || '—')}</strong></div>
+                    ${r.saved_data ? `<div class="mt-2 text-muted">Saved: ${esc([r.saved_data.relation, r.saved_data.email, r.saved_data.address].filter(Boolean).join(' | ') || 'Basic fields')}</div>` : ''}
                 </div></div>
                 <a href="${r.redirect_url}" class="btn btn-sm btn-primary w-100">Open OPD Registration →</a>
+                <a href="${r.profile_url || ''}" class="btn btn-sm btn-outline-primary w-100 mt-2">Open Patient Profile</a>
+                <a href="${r.edit_url || ''}" class="btn btn-sm btn-outline-primary w-100 mt-2">Edit Person Profile (for photo/details)</a>
                 <button class="btn btn-sm btn-outline-secondary w-100 mt-2" data-bs-dismiss="modal" onclick="loadQueue()">Back to Queue</button>`;
             loadQueue();
             return;

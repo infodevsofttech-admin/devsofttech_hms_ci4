@@ -212,6 +212,15 @@ class AbdmOpdQueue extends BaseController
         $phone     = trim((string) ($this->request->getPost('phone') ?? ''));
         $gender    = strtoupper(trim((string) ($this->request->getPost('gender') ?? '')));
         $dob       = trim((string) ($this->request->getPost('dob') ?? ''));      // YYYY-MM-DD from gateway
+        $relationText = trim((string) ($this->request->getPost('relation_text') ?? ''));
+        $relationType = trim((string) ($this->request->getPost('relation_type') ?? ''));
+        $relationName = trim((string) ($this->request->getPost('relative_name') ?? ''));
+        $email      = trim((string) ($this->request->getPost('email') ?? ''));
+        $address    = trim((string) ($this->request->getPost('address') ?? ''));
+        $city       = trim((string) ($this->request->getPost('city') ?? ''));
+        $district   = trim((string) ($this->request->getPost('district') ?? ''));
+        $state      = trim((string) ($this->request->getPost('state') ?? ''));
+        $zip        = trim((string) ($this->request->getPost('zip') ?? ''));
         $existingPatientId = (int) ($this->request->getPost('existing_patient_id') ?? 0);
 
         if ($name === '' && $abhaRaw === '' && $phone === '') {
@@ -241,6 +250,15 @@ class AbdmOpdQueue extends BaseController
                     'phone'         => $phone,
                     'gender'        => $gender,
                     'dob'           => $dob,
+                    'relation_text' => $relationText,
+                    'relation_type' => $relationType,
+                    'relative_name' => $relationName,
+                    'email'         => $email,
+                    'address'       => $address,
+                    'city'          => $city,
+                    'district'      => $district,
+                    'state'         => $state,
+                    'zip'           => $zip,
                 ],
             ]);
         }
@@ -259,6 +277,15 @@ class AbdmOpdQueue extends BaseController
                     'phone'         => $phone,
                     'gender'        => $gender,
                     'dob'           => $dob,
+                    'relation_text' => $relationText,
+                    'relation_type' => $relationType,
+                    'relative_name' => $relationName,
+                    'email'         => $email,
+                    'address'       => $address,
+                    'city'          => $city,
+                    'district'      => $district,
+                    'state'         => $state,
+                    'zip'           => $zip,
                 ],
             ]);
         }
@@ -266,6 +293,7 @@ class AbdmOpdQueue extends BaseController
         $patientId = 0;
         $pCode     = '';
         $isNew = false;
+        $created = ['saved_data' => null];
 
         if ($action === 'link_existing') {
             if ($existingPatientId <= 0) {
@@ -300,7 +328,28 @@ class AbdmOpdQueue extends BaseController
             $patientId = (int) ($existing['id'] ?? 0);
             $pCode     = (string) ($existing['p_code'] ?? '');
         } else {
-            $created = $this->createPatientFromToken($db, $abhaField, $aadhaarField, $name, $phone, $gender, $dob, $abhaRaw, $aadhaarRaw);
+            $created = $this->createPatientFromToken(
+                $db,
+                $abhaField,
+                $aadhaarField,
+                $name,
+                $phone,
+                $gender,
+                $dob,
+                $abhaRaw,
+                $aadhaarRaw,
+                [
+                    'relation_text' => $relationText,
+                    'relation_type' => $relationType,
+                    'relative_name' => $relationName,
+                    'email'         => $email,
+                    'address'       => $address,
+                    'city'          => $city,
+                    'district'      => $district,
+                    'state'         => $state,
+                    'zip'           => $zip,
+                ]
+            );
             $patientId = (int) ($created['patient_id'] ?? 0);
             $pCode     = (string) ($created['p_code'] ?? '');
             $isNew     = true;
@@ -324,7 +373,10 @@ class AbdmOpdQueue extends BaseController
             'patient_id'   => $patientId,
             'p_code'       => $pCode,
             'is_new'       => $isNew,
+            'saved_data'   => $created['saved_data'] ?? null,
             'redirect_url' => base_url('Opd/addopd/' . $patientId),
+            'profile_url'  => base_url('Patient/person_record/' . $patientId),
+            'edit_url'     => base_url('Patient/person_record/' . $patientId . '/1'),
         ]);
     }
 
@@ -404,8 +456,10 @@ class AbdmOpdQueue extends BaseController
         string $gender,
         string $dob,
         string $abhaRaw,
-        string $aadhaarRaw
+        string $aadhaarRaw,
+        array $extra
     ): array {
+        $fields = $db->getFieldNames('patient_master') ?? [];
         $genderDb = ($gender === 'F' || $gender === '2') ? 2 : 1;
 
         $dobDb = '';
@@ -433,6 +487,36 @@ class AbdmOpdQueue extends BaseController
             $insertData[$aadhaarField] = $aadhaarRaw;
         }
 
+        $relationType = strtoupper(trim((string) ($extra['relation_type'] ?? '')));
+        $relationName = strtoupper(trim((string) ($extra['relative_name'] ?? '')));
+        $relationText = trim((string) ($extra['relation_text'] ?? ''));
+
+        if (($relationType === '' || $relationName === '') && $relationText !== '' && preg_match('/^(.+?)\s+of\s+(.+)$/i', $relationText, $m)) {
+            if ($relationType === '') {
+                $relationType = strtoupper(trim($m[1]));
+            }
+            if ($relationName === '') {
+                $relationName = strtoupper(trim($m[2]));
+            }
+        }
+
+        $optionalMap = [
+            'p_relative' => $relationType,
+            'p_rname'    => $relationName,
+            'email1'     => trim((string) ($extra['email'] ?? '')),
+            'add1'       => trim((string) ($extra['address'] ?? '')),
+            'city'       => trim((string) ($extra['city'] ?? '')),
+            'district'   => trim((string) ($extra['district'] ?? '')),
+            'state'      => trim((string) ($extra['state'] ?? '')),
+            'zip'        => trim((string) ($extra['zip'] ?? '')),
+        ];
+
+        foreach ($optionalMap as $col => $val) {
+            if ($val !== '' && in_array($col, $fields, true)) {
+                $insertData[$col] = $val;
+            }
+        }
+
         $today       = date('y') . date('m');
         $countRow    = $db->query("SELECT COUNT(*) as cnt FROM patient_master WHERE p_code LIKE 'P{$today}%'")->getRow();
         $seq         = str_pad(((int) ($countRow->cnt ?? 0)) + 1, 4, '0', STR_PAD_LEFT);
@@ -443,6 +527,21 @@ class AbdmOpdQueue extends BaseController
         return [
             'patient_id' => (int) $db->insertID(),
             'p_code'     => (string) $insertData['p_code'],
+            'saved_data' => [
+                'patient_name'  => (string) ($insertData['p_fname'] ?? ''),
+                'phone'         => (string) ($insertData['mphone1'] ?? ''),
+                'gender'        => $genderDb === 2 ? 'Female' : 'Male',
+                'dob'           => (string) ($insertData['dob'] ?? ''),
+                'abha'          => $abhaRaw,
+                'aadhaar'       => $aadhaarRaw,
+                'relation'      => trim($relationType . ($relationName !== '' ? ' of ' . $relationName : '')),
+                'email'         => (string) ($insertData['email1'] ?? ''),
+                'address'       => (string) ($insertData['add1'] ?? ''),
+                'city'          => (string) ($insertData['city'] ?? ''),
+                'district'      => (string) ($insertData['district'] ?? ''),
+                'state'         => (string) ($insertData['state'] ?? ''),
+                'zip'           => (string) ($insertData['zip'] ?? ''),
+            ],
         ];
     }
 
