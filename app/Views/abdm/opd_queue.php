@@ -287,6 +287,12 @@
             if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) {
                 return;
             }
+            const normalizedHref = normalizeOpdUrl(href);
+            if (/\.pdf(\?|$)/i.test(normalizedHref) || normalizedHref.indexOf('/opd_print/') !== -1) {
+                e.preventDefault();
+                window.open(normalizedHref, '_blank');
+                return;
+            }
             e.preventDefault();
             loadOpdModalContent(href, 'GET', null);
         });
