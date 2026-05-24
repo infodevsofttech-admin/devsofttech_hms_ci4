@@ -277,7 +277,7 @@
                                <span class="badge bg-success-subtle text-success border border-success-subtle">✓ ${lbl}</span>
                            </a>`;
                 if (t.hms_opd_url && !t.hms_opd_id) {
-                    hmsCell += `<br><a href="${esc(t.hms_opd_url)}" class="small text-primary">+ Add OPD Visit</a>`;
+                    hmsCell += `<br><a href="javascript:void(0)" onclick="abdmQOpenOpdInModal('${esc(t.hms_opd_url)}')" class="small text-primary">+ Add OPD Visit</a>`;
                 }
             }
 
