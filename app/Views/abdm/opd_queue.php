@@ -20,7 +20,7 @@
             <input type="date" id="queueDate" class="form-control form-control-sm" style="width:145px" value="<?= date('Y-m-d') ?>">
             <select id="queueStatus" class="form-select form-select-sm" style="width:130px">
                 <option value="">All Status</option>
-                <option value="PENDING" selected>Pending</option>
+                <option value="PENDING">Pending</option>
                 <option value="CALLED">Called</option>
                 <option value="COMPLETED">Completed</option>
                 <option value="CANCELLED">Cancelled</option>
@@ -283,7 +283,14 @@
     function setStatus(tokenId, status) {
         post(BASE + 'AbdmOpdQueue/token_status/' + tokenId, { status })
             .then(r => {
-                if (r.ok) { loadQueue(); }
+                if (r.ok) {
+                    const statusFilter = document.getElementById('queueStatus');
+                    // Keep newly called token visible instead of vanishing under Pending-only filter.
+                    if (status === 'CALLED' && statusFilter.value === 'PENDING') {
+                        statusFilter.value = '';
+                    }
+                    loadQueue();
+                }
                 else      { alert('Error: ' + (r.error_text ?? r.message ?? 'Unknown error')); }
             })
             .catch(err => alert('Request failed: ' + err.message));
