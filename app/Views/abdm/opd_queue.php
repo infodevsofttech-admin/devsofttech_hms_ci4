@@ -257,6 +257,7 @@
             if (!isLinked && (isPend || isCalled)) {
                 const pl = JSON.stringify({
                     id: t.id, abha_number: t.abha_number ?? '', abha_address: t.abha_address ?? '',
+                    aadhaar_number: t.aadhaar_number ?? t.aadhar_number ?? t.udai ?? '',
                     patient_name: t.patient_name ?? '', phone: t.phone ?? '',
                     gender: t.gender ?? '', dob: t.dob ?? ''
                 }).replace(/'/g, '&#39;');
@@ -314,36 +315,108 @@
             <div class="d-flex justify-content-center">
                 <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Processing…</span></div>
             </div>
-            <p class="text-center text-muted small mt-2">Finding / creating patient record…</p>`;
+            <p class="text-center text-muted small mt-2">Checking existing HMS patient records…</p>`;
 
         new bootstrap.Modal(document.getElementById('abdmQueueModalProcess')).show();
 
         post(BASE + 'AbdmOpdQueue/process_token/' + t.id, {
+            action: 'check',
             abha_number: t.abha_number ?? '', abha_address: t.abha_address ?? '',
+            aadhaar_number: t.aadhaar_number ?? '',
             patient_name: t.patient_name ?? '', phone: t.phone ?? '',
             gender: t.gender ?? '', dob: t.dob ?? '',
         }).then(r => {
-            if (r.ok) {
-                body.innerHTML = `
-                    <div class="alert alert-success py-2 small mb-2">
-                        ${r.is_new ? '<strong>New patient created.</strong>' : '<strong>Existing patient found.</strong>'}
-                    </div>
-                    <div class="card mb-3"><div class="card-body py-2 small">
-                        <div class="fw-bold">${esc(t.patient_name || '—')}</div>
-                        <div class="text-muted">HMS ID: <strong>${esc(r.p_code)}</strong></div>
-                    </div></div>
-                    <a href="${r.redirect_url}" class="btn btn-sm btn-primary w-100">Open OPD Registration →</a>
-                    <button class="btn btn-sm btn-outline-secondary w-100 mt-2" data-bs-dismiss="modal" onclick="loadQueue()">Back to Queue</button>`;
-                loadQueue();
-            } else {
+            if (!r.ok) {
                 body.innerHTML = `<div class="alert alert-danger small">${esc(r.error_text ?? 'Failed to process token')}</div>
                     <button class="btn btn-sm btn-secondary w-100" data-bs-dismiss="modal">Close</button>`;
+                return;
+            }
+
+            if (r.requires_confirmation) {
+                const matches = Array.isArray(r.matches) ? r.matches : [];
+                const cards = matches.map(m => {
+                    const reasons = Array.isArray(m.match_reasons) ? m.match_reasons.join(', ') : '';
+                    return `<div class="card mb-2 border-warning">
+                        <div class="card-body py-2 px-3 small">
+                            <div class="fw-bold">${esc(m.p_code || 'UHID N/A')} - ${esc(m.p_fname || 'Unnamed')}</div>
+                            <div class="text-muted">Phone: ${esc(m.mphone1 || '—')} | ABHA: ${esc(m.patient_abha || '—')} | Aadhaar: ${esc(m.patient_aadhaar || '—')}</div>
+                            <div class="text-warning">Matched by: ${esc(reasons || 'Data match')}</div>
+                            <button class="btn btn-sm btn-outline-primary mt-2" onclick="abdmQResolveExisting(${Number(t.id) || 0}, ${Number(m.id) || 0}, '${encodeURIComponent(JSON.stringify(t))}')">Use This Patient</button>
+                        </div>
+                    </div>`;
+                }).join('');
+
+                body.innerHTML = `
+                    <div class="alert alert-warning py-2 small mb-2">
+                        Similar patient records found. Confirm existing patient or create a new record.
+                    </div>
+                    ${cards}
+                    <button class="btn btn-sm btn-success w-100 mt-2" onclick="abdmQCreateNewPatient(${Number(t.id) || 0}, '${encodeURIComponent(JSON.stringify(t))}')">Create New Patient</button>
+                    <a href="${BASE}billing/patient" class="btn btn-sm btn-outline-secondary w-100 mt-2" target="_blank">Open Manual Patient Registration (/billing/patient)</a>
+                    <button class="btn btn-sm btn-outline-secondary w-100 mt-2" data-bs-dismiss="modal">Close</button>`;
+            } else {
+                abdmQCreateNewPatient(t.id, encodeURIComponent(JSON.stringify(t)), true);
             }
         }).catch(err => {
             body.innerHTML = `<div class="alert alert-danger small">Request error: ${esc(err.message)}</div>
                 <button class="btn btn-sm btn-secondary w-100" data-bs-dismiss="modal">Close</button>`;
         });
     };
+
+    window.abdmQResolveExisting = function (tokenId, patientId, encodedPayload) {
+        const t = JSON.parse(decodeURIComponent(encodedPayload));
+        const body = document.getElementById('abdmProcessTokenBody');
+        body.innerHTML = '<p class="text-muted small mb-0">Linking token to selected patient…</p>';
+
+        post(BASE + 'AbdmOpdQueue/process_token/' + tokenId, {
+            action: 'link_existing',
+            existing_patient_id: patientId,
+            abha_number: t.abha_number ?? '', abha_address: t.abha_address ?? '',
+            aadhaar_number: t.aadhaar_number ?? '',
+            patient_name: t.patient_name ?? '', phone: t.phone ?? '',
+            gender: t.gender ?? '', dob: t.dob ?? '',
+        }).then(handleProcessResult).catch(err => {
+            body.innerHTML = `<div class="alert alert-danger small">Request error: ${esc(err.message)}</div>`;
+        });
+    };
+
+    window.abdmQCreateNewPatient = function (tokenId, encodedPayload, skipConfirm) {
+        const t = JSON.parse(decodeURIComponent(encodedPayload));
+        const body = document.getElementById('abdmProcessTokenBody');
+        if (!skipConfirm && !confirm('Create a new patient record for this token?')) {
+            return;
+        }
+
+        body.innerHTML = '<p class="text-muted small mb-0">Creating new patient record…</p>';
+        post(BASE + 'AbdmOpdQueue/process_token/' + tokenId, {
+            action: 'create_new',
+            abha_number: t.abha_number ?? '', abha_address: t.abha_address ?? '',
+            aadhaar_number: t.aadhaar_number ?? '',
+            patient_name: t.patient_name ?? '', phone: t.phone ?? '',
+            gender: t.gender ?? '', dob: t.dob ?? '',
+        }).then(handleProcessResult).catch(err => {
+            body.innerHTML = `<div class="alert alert-danger small">Request error: ${esc(err.message)}</div>`;
+        });
+    };
+
+    function handleProcessResult(r) {
+        const body = document.getElementById('abdmProcessTokenBody');
+        if (r.ok) {
+            body.innerHTML = `
+                <div class="alert alert-success py-2 small mb-2">
+                    ${r.is_new ? '<strong>New patient created.</strong>' : '<strong>Existing patient linked.</strong>'}
+                </div>
+                <div class="card mb-3"><div class="card-body py-2 small">
+                    <div class="text-muted">HMS ID: <strong>${esc(r.p_code || '—')}</strong></div>
+                </div></div>
+                <a href="${r.redirect_url}" class="btn btn-sm btn-primary w-100">Open OPD Registration →</a>
+                <button class="btn btn-sm btn-outline-secondary w-100 mt-2" data-bs-dismiss="modal" onclick="loadQueue()">Back to Queue</button>`;
+            loadQueue();
+            return;
+        }
+        body.innerHTML = `<div class="alert alert-danger small">${esc(r.error_text ?? r.message ?? 'Failed to process token')}</div>
+            <button class="btn btn-sm btn-secondary w-100" data-bs-dismiss="modal">Close</button>`;
+    }
 
     document.getElementById('btnAddTokenSubmit').addEventListener('click', function () {
         const name      = document.getElementById('at_name').value.trim();

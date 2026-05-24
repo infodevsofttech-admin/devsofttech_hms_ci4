@@ -197,13 +197,22 @@ class AbdmOpdQueue extends BaseController
             return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'AJAX only']);
         }
 
+        $action = strtolower(trim((string) ($this->request->getPost('action') ?? 'auto')));
+
         // Fields come from the token row already rendered in the queue table
         $abhaRaw   = preg_replace('/\D/', '', (string) ($this->request->getPost('abha_number') ?? ''));
         $abhaAddr  = trim((string) ($this->request->getPost('abha_address') ?? ''));
+        $aadhaarRaw = preg_replace('/\D/', '', (string) (
+            $this->request->getPost('aadhaar_number')
+            ?? $this->request->getPost('aadhar_number')
+            ?? $this->request->getPost('udai')
+            ?? ''
+        ));
         $name      = trim((string) ($this->request->getPost('patient_name') ?? ''));
         $phone     = trim((string) ($this->request->getPost('phone') ?? ''));
         $gender    = strtoupper(trim((string) ($this->request->getPost('gender') ?? '')));
         $dob       = trim((string) ($this->request->getPost('dob') ?? ''));      // YYYY-MM-DD from gateway
+        $existingPatientId = (int) ($this->request->getPost('existing_patient_id') ?? 0);
 
         if ($name === '' && $abhaRaw === '' && $phone === '') {
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'Insufficient patient data in token']);
@@ -213,79 +222,87 @@ class AbdmOpdQueue extends BaseController
         $fields = $db->getFieldNames('patient_master') ?? [];
 
         // Detect ABHA column
-        $abhaField = null;
-        foreach (['abha_id', 'abha_no', 'abha', 'abha_address'] as $f) {
-            if (in_array($f, $fields, true)) { $abhaField = $f; break; }
+        $abhaField    = $this->resolveFirstExistingColumn($fields, ['abha_id', 'abha_no', 'abha', 'abha_address']);
+        $aadhaarField = $this->resolveFirstExistingColumn($fields, ['udai', 'aadhar_no', 'aadhaar_no', 'aadhaar', 'adhar_no']);
+
+        $matches = $this->findPatientMatches($db, $abhaField, $aadhaarField, $abhaRaw, $abhaAddr, $aadhaarRaw, $phone);
+
+        if ($action === 'check') {
+            return $this->response->setJSON([
+                'ok'                    => 1,
+                'requires_confirmation' => count($matches) > 0 ? 1 : 0,
+                'matches'               => $matches,
+                'token_data'            => [
+                    'id'            => $tokenId,
+                    'abha_number'   => $abhaRaw,
+                    'abha_address'  => $abhaAddr,
+                    'aadhaar_number'=> $aadhaarRaw,
+                    'patient_name'  => $name,
+                    'phone'         => $phone,
+                    'gender'        => $gender,
+                    'dob'           => $dob,
+                ],
+            ]);
         }
 
-        $existing = null;
-
-        // 1. Search by ABHA number (14-digit)
-        if ($abhaField && $abhaRaw !== '' && strlen($abhaRaw) === 14) {
-            $existing = $db->table('patient_master')
-                ->where($abhaField, $abhaRaw)
-                ->get()->getRowArray();
+        if (($action === '' || $action === 'auto') && count($matches) > 1) {
+            return $this->response->setJSON([
+                'ok'                    => 1,
+                'requires_confirmation' => 1,
+                'matches'               => $matches,
+                'token_data'            => [
+                    'id'            => $tokenId,
+                    'abha_number'   => $abhaRaw,
+                    'abha_address'  => $abhaAddr,
+                    'aadhaar_number'=> $aadhaarRaw,
+                    'patient_name'  => $name,
+                    'phone'         => $phone,
+                    'gender'        => $gender,
+                    'dob'           => $dob,
+                ],
+            ]);
         }
 
-        // 2. Search by ABHA address
-        if (! $existing && $abhaField && $abhaAddr !== '') {
-            $existing = $db->table('patient_master')
-                ->where($abhaField, $abhaAddr)
-                ->get()->getRowArray();
-        }
-
-        // 3. Fallback: mobile
-        if (! $existing && $phone !== '') {
-            $existing = $db->table('patient_master')
-                ->where('mphone1', $phone)
-                ->get()->getRowArray();
-        }
-
+        $patientId = 0;
+        $pCode     = '';
         $isNew = false;
 
-        if ($existing) {
+        if ($action === 'link_existing') {
+            if ($existingPatientId <= 0) {
+                return $this->response->setJSON(['ok' => 0, 'error_text' => 'Please select an existing patient']);
+            }
+            $existing = $db->table('patient_master')
+                ->select('id,p_code,mphone1' . ($abhaField ? ',' . $abhaField . ' AS patient_abha' : '') . ($aadhaarField ? ',' . $aadhaarField . ' AS patient_aadhaar' : ''))
+                ->where('id', $existingPatientId)
+                ->get()->getRowArray();
+            if (! $existing) {
+                return $this->response->setJSON(['ok' => 0, 'error_text' => 'Selected patient record not found']);
+            }
+
             $patientId = (int) ($existing['id'] ?? 0);
             $pCode     = (string) ($existing['p_code'] ?? '');
-            // Backfill ABHA if empty
-            if ($abhaField && empty($existing[$abhaField]) && $abhaRaw !== '') {
-                $db->table('patient_master')->where('id', $patientId)->update([$abhaField => $abhaRaw]);
+
+            $backfill = [];
+            if ($abhaField && trim((string) ($existing['patient_abha'] ?? '')) === '' && $abhaRaw !== '') {
+                $backfill[$abhaField] = $abhaRaw;
             }
+            if ($aadhaarField && trim((string) ($existing['patient_aadhaar'] ?? '')) === '' && $aadhaarRaw !== '') {
+                $backfill[$aadhaarField] = $aadhaarRaw;
+            }
+            if (trim((string) ($existing['mphone1'] ?? '')) === '' && $phone !== '') {
+                $backfill['mphone1'] = $phone;
+            }
+            if (! empty($backfill)) {
+                $db->table('patient_master')->where('id', $patientId)->update($backfill);
+            }
+        } elseif (($action === '' || $action === 'auto') && count($matches) === 1) {
+            $existing = $matches[0];
+            $patientId = (int) ($existing['id'] ?? 0);
+            $pCode     = (string) ($existing['p_code'] ?? '');
         } else {
-            // Create new patient
-            $genderDb = ($gender === 'F' || $gender === '2') ? 2 : 1;
-
-            // Convert DOB: YYYY-MM-DD (gateway) → already correct for MySQL
-            $dobDb = '';
-            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dob)) {
-                $dobDb = $dob;
-            }
-
-            $insertData = [
-                'p_fname'      => strtoupper($name !== '' ? $name : 'ABHA PATIENT'),
-                'mphone1'      => $phone,
-                'gender'       => $genderDb,
-                'blood_group'  => 'Not Define',
-                'estimate_dob' => $dobDb !== '' ? 0 : 1,
-            ];
-            if ($dobDb !== '') {
-                $insertData['dob'] = $dobDb;
-            } else {
-                $insertData['age'] = 0;
-                $insertData['age_in_month'] = 0;
-            }
-            if ($abhaField && $abhaRaw !== '') {
-                $insertData[$abhaField] = $abhaRaw;
-            }
-
-            // Generate p_code
-            $today       = date('y') . date('m');
-            $countRow    = $db->query("SELECT COUNT(*) as cnt FROM patient_master WHERE p_code LIKE 'P{$today}%'")->getRow();
-            $seq         = str_pad(((int) ($countRow->cnt ?? 0)) + 1, 4, '0', STR_PAD_LEFT);
-            $insertData['p_code'] = 'P' . $today . $seq;
-
-            $db->table('patient_master')->insert($insertData);
-            $patientId = (int) $db->insertID();
-            $pCode     = $insertData['p_code'];
+            $created = $this->createPatientFromToken($db, $abhaField, $aadhaarField, $name, $phone, $gender, $dob, $abhaRaw, $aadhaarRaw);
+            $patientId = (int) ($created['patient_id'] ?? 0);
+            $pCode     = (string) ($created['p_code'] ?? '');
             $isNew     = true;
         }
 
@@ -293,15 +310,7 @@ class AbdmOpdQueue extends BaseController
             return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => 'Failed to resolve patient record']);
         }
 
-        // Update local DB record: link patient
-        $db->table('abdm_opd_tokens')
-            ->where('gateway_token_id', $tokenId)
-            ->update([
-                'patient_id'   => $patientId,
-                'status'       => 'CALLED',
-                'processed_at' => date('Y-m-d H:i:s'),
-                'updated_at'   => date('Y-m-d H:i:s'),
-            ]);
+        $this->attachPatientToToken($db, $tokenId, $patientId);
 
         // Mark token as CALLED on gateway (non-blocking)
         try {
@@ -317,6 +326,136 @@ class AbdmOpdQueue extends BaseController
             'is_new'       => $isNew,
             'redirect_url' => base_url('Opd/addopd/' . $patientId),
         ]);
+    }
+
+    private function resolveFirstExistingColumn(array $fields, array $candidates): ?string
+    {
+        foreach ($candidates as $candidate) {
+            if (in_array($candidate, $fields, true)) {
+                return $candidate;
+            }
+        }
+        return null;
+    }
+
+    private function findPatientMatches(
+        \CodeIgniter\Database\BaseConnection $db,
+        ?string $abhaField,
+        ?string $aadhaarField,
+        string $abhaRaw,
+        string $abhaAddr,
+        string $aadhaarRaw,
+        string $phone
+    ): array {
+        $select = 'id,p_code,p_fname,mphone1';
+        if ($abhaField) {
+            $select .= ',' . $abhaField . ' AS patient_abha';
+        }
+        if ($aadhaarField) {
+            $select .= ',' . $aadhaarField . ' AS patient_aadhaar';
+        }
+
+        $bucket = [];
+        $append = static function (array $rows, string $reason) use (&$bucket): void {
+            foreach ($rows as $row) {
+                $id = (int) ($row['id'] ?? 0);
+                if ($id <= 0) {
+                    continue;
+                }
+                if (! isset($bucket[$id])) {
+                    $row['match_reasons'] = [];
+                    $bucket[$id] = $row;
+                }
+                if (! in_array($reason, $bucket[$id]['match_reasons'], true)) {
+                    $bucket[$id]['match_reasons'][] = $reason;
+                }
+            }
+        };
+
+        if ($abhaField && $abhaRaw !== '') {
+            $rows = $db->table('patient_master')->select($select)->where($abhaField, $abhaRaw)->limit(10)->get()->getResultArray();
+            $append($rows, 'ABHA No');
+        }
+
+        if ($abhaField && $abhaAddr !== '' && $abhaAddr !== $abhaRaw) {
+            $rows = $db->table('patient_master')->select($select)->where($abhaField, $abhaAddr)->limit(10)->get()->getResultArray();
+            $append($rows, 'ABHA Address');
+        }
+
+        if ($aadhaarField && $aadhaarRaw !== '') {
+            $rows = $db->table('patient_master')->select($select)->where($aadhaarField, $aadhaarRaw)->limit(10)->get()->getResultArray();
+            $append($rows, 'Aadhaar');
+        }
+
+        if ($phone !== '') {
+            $rows = $db->table('patient_master')->select($select)->where('mphone1', $phone)->limit(10)->get()->getResultArray();
+            $append($rows, 'Phone');
+        }
+
+        return array_values($bucket);
+    }
+
+    private function createPatientFromToken(
+        \CodeIgniter\Database\BaseConnection $db,
+        ?string $abhaField,
+        ?string $aadhaarField,
+        string $name,
+        string $phone,
+        string $gender,
+        string $dob,
+        string $abhaRaw,
+        string $aadhaarRaw
+    ): array {
+        $genderDb = ($gender === 'F' || $gender === '2') ? 2 : 1;
+
+        $dobDb = '';
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dob)) {
+            $dobDb = $dob;
+        }
+
+        $insertData = [
+            'p_fname'      => strtoupper($name !== '' ? $name : 'ABHA PATIENT'),
+            'mphone1'      => $phone,
+            'gender'       => $genderDb,
+            'blood_group'  => 'Not Define',
+            'estimate_dob' => $dobDb !== '' ? 0 : 1,
+        ];
+        if ($dobDb !== '') {
+            $insertData['dob'] = $dobDb;
+        } else {
+            $insertData['age'] = 0;
+            $insertData['age_in_month'] = 0;
+        }
+        if ($abhaField && $abhaRaw !== '') {
+            $insertData[$abhaField] = $abhaRaw;
+        }
+        if ($aadhaarField && $aadhaarRaw !== '') {
+            $insertData[$aadhaarField] = $aadhaarRaw;
+        }
+
+        $today       = date('y') . date('m');
+        $countRow    = $db->query("SELECT COUNT(*) as cnt FROM patient_master WHERE p_code LIKE 'P{$today}%'")->getRow();
+        $seq         = str_pad(((int) ($countRow->cnt ?? 0)) + 1, 4, '0', STR_PAD_LEFT);
+        $insertData['p_code'] = 'P' . $today . $seq;
+
+        $db->table('patient_master')->insert($insertData);
+
+        return [
+            'patient_id' => (int) $db->insertID(),
+            'p_code'     => (string) $insertData['p_code'],
+        ];
+    }
+
+    private function attachPatientToToken(\CodeIgniter\Database\BaseConnection $db, int $tokenId, int $patientId): void
+    {
+        $db->table('abdm_opd_tokens')
+            ->where('gateway_token_id', $tokenId)
+            ->update([
+                'patient_id'   => $patientId,
+                'status'       => 'CALLED',
+                'processed_at' => date('Y-m-d H:i:s'),
+                'updated_at'   => date('Y-m-d H:i:s'),
+            ]);
     }
 
     // -------------------------------------------------------------------------
