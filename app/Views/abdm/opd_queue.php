@@ -151,8 +151,8 @@
                 <h6 class="modal-title mb-0">OPD Registration</h6>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body p-0" style="min-height:70vh;">
-                <iframe id="abdmOpdRegisterFrame" src="about:blank" style="width:100%;height:70vh;border:0;"></iframe>
+            <div class="modal-body p-2" style="min-height:70vh;max-height:80vh;overflow:auto;" id="abdmOpdRegisterBody">
+                <div class="text-muted small">Loading OPD form…</div>
             </div>
             <div class="modal-footer py-2">
                 <a id="abdmOpdRegisterOpenTab" href="#" target="_blank" class="btn btn-sm btn-outline-primary">Open in New Tab</a>
@@ -170,6 +170,8 @@
     const CSRF_NAME    = '<?= csrf_token() ?>';
     const REFRESH_SECS = 30;
     let autoTimer      = null;
+    let opdModalCurrentUrl = '';
+    let originalLoadFormRef = null;
 
     function post(url, data) {
         const fd = new FormData();
@@ -207,15 +209,102 @@
     function decodePayload(payload) {
         return JSON.parse(decodeURIComponent(escape(atob(String(payload || '')))));
     }
-    function openOpdRegistrationModal(url) {
-        if (!url) {
+    function normalizeOpdUrl(url) {
+        if (!url) return '';
+        if (/^https?:\/\//i.test(url)) return url;
+        if (url.startsWith('/')) return BASE.replace(/\/$/, '') + url;
+        return BASE.replace(/\/$/, '') + '/' + String(url).replace(/^\/+/, '');
+    }
+    function isOpdModalOpen() {
+        const el = document.getElementById('abdmOpdRegisterModal');
+        return !!(el && el.classList.contains('show'));
+    }
+    function loadOpdModalContent(url, method = 'GET', data = null) {
+        const targetUrl = normalizeOpdUrl(url);
+        opdModalCurrentUrl = targetUrl;
+        document.getElementById('abdmOpdRegisterOpenTab').href = targetUrl || '#';
+
+        if (!window.jQuery) {
+            document.getElementById('abdmOpdRegisterBody').innerHTML = '<div class="alert alert-danger small mb-0">jQuery is required to load OPD form.</div>';
             return;
         }
-        const iframe = document.getElementById('abdmOpdRegisterFrame');
-        const tabBtn = document.getElementById('abdmOpdRegisterOpenTab');
-        iframe.src = url;
-        tabBtn.href = url;
-        new bootstrap.Modal(document.getElementById('abdmOpdRegisterModal')).show();
+
+        $.ajax({
+            url: targetUrl,
+            method: method,
+            data: data,
+            dataType: 'html',
+            beforeSend: function () {
+                document.getElementById('abdmOpdRegisterBody').innerHTML = '<div class="text-muted small">Loading OPD form…</div>';
+            }
+        }).done(function (html) {
+            $('#abdmOpdRegisterBody').html(html);
+        }).fail(function (jqXHR) {
+            const msg = jqXHR && jqXHR.status ? ('HTTP ' + jqXHR.status) : 'Failed to load OPD form';
+            document.getElementById('abdmOpdRegisterBody').innerHTML = '<div class="alert alert-danger small mb-0">' + esc(msg) + '</div>';
+        });
+    }
+    function openOpdRegistrationModal(url) {
+        const modalEl = document.getElementById('abdmOpdRegisterModal');
+        if (!modalEl) return;
+
+        if (originalLoadFormRef === null && typeof window.load_form === 'function') {
+            originalLoadFormRef = window.load_form;
+        }
+
+        if (typeof window.load_form === 'function') {
+            window.load_form = function (ourl, top_title = '') {
+                if (isOpdModalOpen()) {
+                    loadOpdModalContent(ourl, 'GET', null);
+                    if (top_title) {
+                        const titleEl = modalEl.querySelector('.modal-title');
+                        if (titleEl) titleEl.textContent = top_title;
+                    }
+                    return;
+                }
+                if (typeof originalLoadFormRef === 'function') {
+                    originalLoadFormRef(ourl, top_title);
+                }
+            };
+        }
+
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+        loadOpdModalContent(url, 'GET', null);
+    }
+
+    if (window.jQuery) {
+        $(document).on('submit', '#abdmOpdRegisterBody form', function (e) {
+            e.preventDefault();
+            const $form = $(this);
+            const action = $form.attr('action') || opdModalCurrentUrl || window.location.href;
+            const method = ($form.attr('method') || 'POST').toUpperCase();
+            loadOpdModalContent(action, method, $form.serialize());
+        });
+
+        $(document).on('click', '#abdmOpdRegisterBody a[href]', function (e) {
+            const href = $(this).attr('href') || '';
+            if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) {
+                return;
+            }
+            e.preventDefault();
+            loadOpdModalContent(href, 'GET', null);
+        });
+    }
+
+    const opdModalEl = document.getElementById('abdmOpdRegisterModal');
+    if (opdModalEl) {
+        opdModalEl.addEventListener('hidden.bs.modal', function () {
+            if (typeof originalLoadFormRef === 'function') {
+                window.load_form = originalLoadFormRef;
+            }
+            originalLoadFormRef = null;
+            opdModalCurrentUrl = '';
+            const body = document.getElementById('abdmOpdRegisterBody');
+            if (body) {
+                body.innerHTML = '<div class="text-muted small">Loading OPD form…</div>';
+            }
+        });
     }
 
     function loadQueue() {
