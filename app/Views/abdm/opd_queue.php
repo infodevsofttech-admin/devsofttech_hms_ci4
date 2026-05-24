@@ -143,6 +143,25 @@
     </div>
 </div>
 
+<!-- ===== OPD Registration in modal (iframe) ===== -->
+<div class="modal fade" id="abdmOpdRegisterModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white py-2">
+                <h6 class="modal-title mb-0">OPD Registration</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0" style="min-height:70vh;">
+                <iframe id="abdmOpdRegisterFrame" src="about:blank" style="width:100%;height:70vh;border:0;"></iframe>
+            </div>
+            <div class="modal-footer py-2">
+                <a id="abdmOpdRegisterOpenTab" href="#" target="_blank" class="btn btn-sm btn-outline-primary">Open in New Tab</a>
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 (function () {
     'use strict';
@@ -187,6 +206,16 @@
     }
     function decodePayload(payload) {
         return JSON.parse(decodeURIComponent(escape(atob(String(payload || '')))));
+    }
+    function openOpdRegistrationModal(url) {
+        if (!url) {
+            return;
+        }
+        const iframe = document.getElementById('abdmOpdRegisterFrame');
+        const tabBtn = document.getElementById('abdmOpdRegisterOpenTab');
+        iframe.src = url;
+        tabBtn.href = url;
+        new bootstrap.Modal(document.getElementById('abdmOpdRegisterModal')).show();
     }
 
     function loadQueue() {
@@ -541,7 +570,7 @@
                     <div class="text-muted">HMS ID: <strong>${esc(r.p_code || '—')}</strong></div>
                     ${r.saved_data ? `<div class="mt-2 text-muted">Saved: ${esc([r.saved_data.relation, r.saved_data.email, r.saved_data.address].filter(Boolean).join(' | ') || 'Basic fields')}</div>` : ''}
                 </div></div>
-                <a href="${r.redirect_url}" class="btn btn-sm btn-primary w-100">Open OPD Registration →</a>
+                <button class="btn btn-sm btn-primary w-100" onclick="abdmQOpenOpdInModal('${esc(r.redirect_url || '')}')">Open OPD Registration →</button>
                 <a href="${r.profile_url || ''}" class="btn btn-sm btn-outline-primary w-100 mt-2">Open Patient Profile</a>
                 <a href="${r.edit_url || ''}" class="btn btn-sm btn-outline-primary w-100 mt-2">Edit Person Profile (for photo/details)</a>
                 <button class="btn btn-sm btn-outline-secondary w-100 mt-2" data-bs-dismiss="modal" onclick="loadQueue()">Back to Queue</button>`;
@@ -600,6 +629,10 @@
     document.getElementById('btnRefresh').addEventListener('click', loadQueue);
     document.getElementById('queueDate').addEventListener('change', loadQueue);
     document.getElementById('queueStatus').addEventListener('change', loadQueue);
+
+    window.abdmQOpenOpdInModal = function (url) {
+        openOpdRegistrationModal(url);
+    };
 
     window.pageCleanup = function () { clearTimeout(autoTimer); };
 
