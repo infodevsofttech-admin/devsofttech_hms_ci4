@@ -737,6 +737,15 @@ $flag = static function ($v): string {
             return;
         }
 
+        if (evt.key === 'Tab' && !evt.shiftKey) {
+            if (!isOpen) {
+                return;
+            }
+            var tabIdx = activeSuggestionIndex >= 0 ? activeSuggestionIndex : 0;
+            chooseSuggestion(tabIdx);
+            return;
+        }
+
         if (evt.key === 'Escape') {
             if (!isOpen) {
                 return;
