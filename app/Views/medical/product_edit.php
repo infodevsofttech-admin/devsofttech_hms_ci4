@@ -214,7 +214,7 @@ $flag = static function ($v): string {
 
     function applyParsedLabelToForm(label) {
         var parsed = parseDrugLabel(label || '');
-        if (parsed.productName) {
+        if (parsed.productName && !isIdentifierLike(parsed.productName)) {
             $('#input_item_name').val(parsed.productName);
         }
         if (parsed.genericName) {
@@ -227,6 +227,24 @@ $flag = static function ($v): string {
 
     function normalizeSpace(text) {
         return String(text || '').replace(/\s+/g, ' ').trim();
+    }
+
+    function isIdentifierLike(text) {
+        var value = normalizeSpace(text);
+        if (!value) {
+            return false;
+        }
+
+        var compact = value.replace(/[\s\-_.]/g, '');
+        if (/^\d{8,}$/.test(compact)) {
+            return true;
+        }
+
+        if (/^[A-Z0-9]{10,}$/.test(compact) && !/[a-z]/.test(value)) {
+            return true;
+        }
+
+        return false;
     }
 
     function parseDrugLabel(rawLabel) {
@@ -613,6 +631,8 @@ $flag = static function ($v): string {
 
         var item = suggestionItems[index] || {};
         var label = item.label || '';
+        var displayName = item.display_name || '';
+        var genericName = item.generic_name || '';
         var type = item.type || '';
         var identifier = item.identifier || '';
 
@@ -620,6 +640,13 @@ $flag = static function ($v): string {
 
         // Apply parsed fields immediately so user sees direct form fill.
         applyParsedLabelToForm(label);
+
+        if (displayName && !isIdentifierLike(displayName)) {
+            $('#input_item_name').val(displayName);
+        }
+        if (genericName) {
+            $('#input_genericname').val(genericName);
+        }
 
         $('#abdm_drug_display').val(label);
         $('#abdm_drug_type').val(type);
@@ -645,6 +672,8 @@ $flag = static function ($v): string {
 
         items.forEach(function (item, idx) {
             var label = item.label || '';
+            var displayName = item.display_name || '';
+            var genericName = item.generic_name || '';
             var type = item.type || '';
             var identifier = item.identifier || '';
             if (!label && !identifier) {
@@ -653,7 +682,18 @@ $flag = static function ($v): string {
 
             var $a = $('<a href="#" class="list-group-item list-group-item-action py-1 px-2"></a>');
             $a.attr('data-idx', String(idx));
-            $a.text(label + (type ? ' [' + type + ']' : '') + (identifier ? ' (' + identifier + ')' : ''));
+            var mainText = displayName || label || identifier;
+            var detailParts = [];
+            if (genericName && genericName.toLowerCase() !== String(mainText).toLowerCase()) {
+                detailParts.push('Generic: ' + genericName);
+            }
+            if (type) {
+                detailParts.push('Type: ' + type);
+            }
+            if (identifier && identifier !== mainText) {
+                detailParts.push('ID: ' + identifier);
+            }
+            $a.text(mainText + (detailParts.length ? ' | ' + detailParts.join(' | ') : ''));
             $a.on('click', function (e) {
                 e.preventDefault();
                 chooseSuggestion(idx);

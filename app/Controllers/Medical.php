@@ -5116,19 +5116,41 @@ class Medical extends BaseController
                 continue;
             }
 
-            $label = $this->extractDrugText($row, ['label', 'name', 'display', 'term', 'title', 'drug_name']);
+            $displayName = $this->extractDrugText($row, [
+                'display_name', 'drug_display_name', 'product_name', 'medicine_name', 'med_name',
+                'brand_name', 'trade_name', 'drug_name', 'name', 'display', 'term', 'title', 'label',
+            ]);
+            $label = $this->extractDrugText($row, [
+                'label', 'name', 'display', 'term', 'title', 'drug_name', 'product_name',
+                'medicine_name', 'brand_name', 'trade_name',
+            ]);
             $identifier = $this->extractDrugText($row, ['identifier', 'id', 'code', 'concept_id', 'value']);
+            $generic = $this->extractDrugText($row, ['generic_name', 'genericname', 'generic', 'salt', 'molecule', 'composition']);
             $itemType = strtolower($this->extractDrugText($row, ['type', 'entity_type', 'category']));
             if ($itemType === '') {
                 $itemType = $type;
+            }
+
+            if ($this->isDrugIdentifierLike($label) && $displayName !== '' && ! $this->isDrugIdentifierLike($displayName)) {
+                $label = $displayName;
             }
 
             if ($label === '' && $identifier === '') {
                 continue;
             }
 
+            if ($label === '' && $displayName !== '') {
+                $label = $displayName;
+            }
+
+            if ($label === '') {
+                $label = $identifier;
+            }
+
             $suggestions[] = [
-                'label' => $label !== '' ? $label : $identifier,
+                'label' => $label,
+                'display_name' => $displayName,
+                'generic_name' => $generic,
                 'identifier' => $identifier,
                 'type' => $itemType,
             ];
@@ -5169,7 +5191,14 @@ class Medical extends BaseController
         }
 
         $record = $this->extractDrugResultObject($result);
-        $label = $this->extractDrugText($record, ['label', 'name', 'display', 'term', 'title', 'drug_name']);
+        $displayName = $this->extractDrugText($record, [
+            'display_name', 'drug_display_name', 'product_name', 'medicine_name', 'med_name',
+            'brand_name', 'trade_name', 'drug_name', 'name', 'display', 'term', 'title', 'label',
+        ]);
+        $label = $this->extractDrugText($record, [
+            'label', 'name', 'display', 'term', 'title', 'drug_name', 'product_name',
+            'medicine_name', 'brand_name', 'trade_name',
+        ]);
         $generic = $this->extractDrugText($record, ['generic_name', 'genericname', 'generic', 'salt', 'molecule']);
         $hsnCode = $this->extractDrugText($record, ['hsn_code', 'hsn', 'hscode']);
         $formulation = $this->extractDrugText($record, ['formulation', 'dosage_form', 'drug_form']);
@@ -5183,6 +5212,16 @@ class Medical extends BaseController
             $canonicalId = $identifier;
         }
 
+        if ($this->isDrugIdentifierLike($label) && $displayName !== '' && ! $this->isDrugIdentifierLike($displayName)) {
+            $label = $displayName;
+        }
+        if ($label === '' && $displayName !== '') {
+            $label = $displayName;
+        }
+        if ($label === '') {
+            $label = $canonicalId;
+        }
+
         $payloadJson = json_encode($record, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         if (! is_string($payloadJson)) {
             $payloadJson = '{}';
@@ -5192,6 +5231,7 @@ class Medical extends BaseController
             'ok' => (int) ($result['ok'] ?? 0),
             'selected' => [
                 'label' => $label,
+                'display_name' => $displayName,
                 'generic_name' => $generic,
                 'hsn_code' => $hsnCode,
                 'formulation' => $formulation,
@@ -5289,6 +5329,29 @@ class Medical extends BaseController
         }
 
         return '';
+    }
+
+    private function isDrugIdentifierLike(string $value): bool
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return false;
+        }
+
+        $compact = preg_replace('/[\s\-_.]+/', '', $value) ?? '';
+        if ($compact === '') {
+            return false;
+        }
+
+        if (preg_match('/^\d{8,}$/', $compact) === 1) {
+            return true;
+        }
+
+        if (preg_match('/^[A-Z0-9]{10,}$/', $compact) === 1 && preg_match('/[a-z]/', $value) !== 1) {
+            return true;
+        }
+
+        return false;
     }
 
     public function product_edit($productId = 0)
