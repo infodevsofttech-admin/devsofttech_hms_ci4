@@ -4944,6 +4944,99 @@ class Medical extends BaseController
             return $deny;
         }
 
+        $isDataTableRequest = $this->request->getPost('draw') !== null || $this->request->getGet('draw') !== null;
+
+        if ($isDataTableRequest) {
+            $draw = (int) ($this->request->getPost('draw') ?? $this->request->getGet('draw') ?? 1);
+            $start = max(0, (int) ($this->request->getPost('start') ?? $this->request->getGet('start') ?? 0));
+            $length = (int) ($this->request->getPost('length') ?? $this->request->getGet('length') ?? 25);
+            if ($length <= 0 || $length > 500) {
+                $length = 25;
+            }
+
+            if (! $this->db->tableExists('med_product_master')) {
+                return $this->response->setJSON([
+                    'draw' => $draw,
+                    'recordsTotal' => 0,
+                    'recordsFiltered' => 0,
+                    'data' => [],
+                ]);
+            }
+
+            $search = $this->request->getPost('search');
+            if (! is_array($search)) {
+                $search = ['value' => (string) ($this->request->getGet('search') ?? '')];
+            }
+            $globalSearch = trim((string) ($search['value'] ?? ''));
+            $manualSearch = trim((string) ($this->request->getPost('txtsearch') ?? $this->request->getGet('txtsearch') ?? ''));
+            $searchValue = $manualSearch !== '' ? $manualSearch : $globalSearch;
+            $searchValue = preg_replace('/[^A-Za-z0-9_ \-]/', '', $searchValue);
+
+            $order = $this->request->getPost('order');
+            if (! is_array($order)) {
+                $order = [];
+            }
+            $orderColIndex = isset($order[0]['column']) ? (int) $order[0]['column'] : 0;
+            $orderDir = strtolower((string) ($order[0]['dir'] ?? 'desc')) === 'asc' ? 'ASC' : 'DESC';
+            $orderableColumns = [
+                0 => 'id',
+                1 => 'item_name',
+                2 => 'formulation',
+                3 => 'genericname',
+                4 => 'packing',
+            ];
+            $orderBy = $orderableColumns[$orderColIndex] ?? 'id';
+
+            $recordsTotal = (int) ($this->db->table('med_product_master')->countAllResults());
+
+            $baseBuilder = $this->db->table('med_product_master')
+                ->select('id, item_name, formulation, genericname, packing');
+
+            if ($searchValue !== '') {
+                $baseBuilder->groupStart()
+                    ->like('item_name', $searchValue)
+                    ->orLike('genericname', $searchValue);
+
+                if (ctype_digit($searchValue)) {
+                    $baseBuilder->orWhere('id', (int) $searchValue);
+                }
+
+                $baseBuilder->groupEnd();
+            }
+
+            $countBuilder = clone $baseBuilder;
+            $recordsFiltered = (int) $countBuilder->countAllResults();
+
+            $rows = $baseBuilder
+                ->orderBy($orderBy, $orderDir)
+                ->limit($length, $start)
+                ->get()
+                ->getResultArray();
+
+            $data = [];
+            foreach ($rows as $row) {
+                $pid = (int) ($row['id'] ?? 0);
+                $editUrl = base_url('Product_master/Product_edit/' . $pid);
+                $data[] = [
+                    $pid,
+                    esc((string) ($row['item_name'] ?? '')),
+                    esc((string) ($row['formulation'] ?? '')),
+                    esc((string) ($row['genericname'] ?? '')),
+                    esc((string) ($row['packing'] ?? '')),
+                    '<button onclick="load_form_div(\'' . $editUrl . '\',\'searchresult\',\'Drug Master : Edit :Pharmacy\');" type="button" class="btn btn-warning btn-sm">Edit</button>',
+                ];
+            }
+
+            return $this->response->setJSON([
+                'draw' => $draw,
+                'recordsTotal' => $recordsTotal,
+                'recordsFiltered' => $recordsFiltered,
+                'data' => $data,
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
         if (! $this->db->tableExists('med_product_master')) {
             return view('medical/product_search_result', [
                 'product_list' => [],
