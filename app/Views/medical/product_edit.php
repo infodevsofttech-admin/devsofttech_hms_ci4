@@ -170,6 +170,8 @@ $flag = static function ($v): string {
 (function () {
     var suggestTimer = null;
     var lastQuery = '';
+    var suggestionItems = [];
+    var activeSuggestionIndex = -1;
 
     if (window.jQuery && $.fn.select2) {
         $('#med_cat_id').select2({
@@ -205,7 +207,22 @@ $flag = static function ($v): string {
     }
 
     function clearSuggestionBox() {
+        suggestionItems = [];
+        activeSuggestionIndex = -1;
         $('#abdm-drug-suggest').hide().empty();
+    }
+
+    function applyParsedLabelToForm(label) {
+        var parsed = parseDrugLabel(label || '');
+        if (parsed.productName) {
+            $('#input_item_name').val(parsed.productName);
+        }
+        if (parsed.genericName) {
+            $('#input_genericname').val(parsed.genericName);
+        }
+        if (parsed.formulation) {
+            setFormulationValue(parsed.formulation);
+        }
     }
 
     function normalizeSpace(text) {
@@ -554,6 +571,66 @@ $flag = static function ($v): string {
         });
     }
 
+    function setActiveSuggestion(index) {
+        var $links = $('#abdm-drug-suggest a.list-group-item');
+        if (!$links.length) {
+            activeSuggestionIndex = -1;
+            return;
+        }
+
+        if (index < 0) {
+            index = 0;
+        }
+        if (index >= $links.length) {
+            index = $links.length - 1;
+        }
+
+        activeSuggestionIndex = index;
+        $links.removeClass('active');
+        var $active = $links.eq(index).addClass('active');
+
+        var box = document.getElementById('abdm-drug-suggest');
+        if (box && $active.length) {
+            var node = $active.get(0);
+            var top = node.offsetTop;
+            var bottom = top + node.offsetHeight;
+            if (top < box.scrollTop) {
+                box.scrollTop = top;
+            } else if (bottom > box.scrollTop + box.clientHeight) {
+                box.scrollTop = bottom - box.clientHeight;
+            }
+        }
+    }
+
+    function chooseSuggestion(index) {
+        if (!Array.isArray(suggestionItems) || !suggestionItems.length) {
+            return;
+        }
+
+        if (index < 0 || index >= suggestionItems.length) {
+            return;
+        }
+
+        var item = suggestionItems[index] || {};
+        var label = item.label || '';
+        var type = item.type || '';
+        var identifier = item.identifier || '';
+
+        clearSuggestionBox();
+
+        // Apply parsed fields immediately so user sees direct form fill.
+        applyParsedLabelToForm(label);
+
+        $('#abdm_drug_display').val(label);
+        $('#abdm_drug_type').val(type);
+        $('#abdm_drug_identifier').val(identifier);
+        $('#abdm_drug_last_synced_at').val(new Date().toISOString().slice(0, 19).replace('T', ' '));
+        showSelectedDrugSummary();
+
+        // Fetch canonical details for richer metadata autofill.
+        fetchDrugDetail(type, identifier);
+    }
+
     function renderSuggestions(items) {
         var $box = $('#abdm-drug-suggest');
         $box.empty();
@@ -563,7 +640,10 @@ $flag = static function ($v): string {
             return;
         }
 
-        items.forEach(function (item) {
+        suggestionItems = items.slice();
+        activeSuggestionIndex = -1;
+
+        items.forEach(function (item, idx) {
             var label = item.label || '';
             var type = item.type || '';
             var identifier = item.identifier || '';
@@ -572,20 +652,18 @@ $flag = static function ($v): string {
             }
 
             var $a = $('<a href="#" class="list-group-item list-group-item-action py-1 px-2"></a>');
+            $a.attr('data-idx', String(idx));
             $a.text(label + (type ? ' [' + type + ']' : '') + (identifier ? ' (' + identifier + ')' : ''));
             $a.on('click', function (e) {
                 e.preventDefault();
-                clearSuggestionBox();
-                if (label) {
-                    $('#input_item_name').val(label);
-                }
-                fetchDrugDetail(type, identifier);
+                chooseSuggestion(idx);
             });
             $box.append($a);
         });
 
         if ($box.children().length > 0) {
             $box.show();
+            setActiveSuggestion(0);
         } else {
             clearSuggestionBox();
         }
@@ -624,6 +702,48 @@ $flag = static function ($v): string {
             clearTimeout(suggestTimer);
         }
         suggestTimer = setTimeout(fetchDrugSuggestions, 250);
+    });
+
+    $('#input_item_name').off('keydown.abdmDrug').on('keydown.abdmDrug', function (evt) {
+        var $box = $('#abdm-drug-suggest');
+        var isOpen = $box.is(':visible') && suggestionItems.length > 0;
+
+        if (evt.key === 'ArrowDown') {
+            if (!isOpen) {
+                fetchDrugSuggestions();
+                return;
+            }
+            evt.preventDefault();
+            setActiveSuggestion(activeSuggestionIndex + 1);
+            return;
+        }
+
+        if (evt.key === 'ArrowUp') {
+            if (!isOpen) {
+                return;
+            }
+            evt.preventDefault();
+            setActiveSuggestion(activeSuggestionIndex - 1);
+            return;
+        }
+
+        if (evt.key === 'Enter') {
+            if (!isOpen) {
+                return;
+            }
+            evt.preventDefault();
+            var idx = activeSuggestionIndex >= 0 ? activeSuggestionIndex : 0;
+            chooseSuggestion(idx);
+            return;
+        }
+
+        if (evt.key === 'Escape') {
+            if (!isOpen) {
+                return;
+            }
+            evt.preventDefault();
+            clearSuggestionBox();
+        }
     });
 
     $('#abdm_drug_search_type').off('change').on('change', function () {
