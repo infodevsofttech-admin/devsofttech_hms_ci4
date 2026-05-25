@@ -16,6 +16,12 @@ $shelfNo = (string) ($product->shelf_no ?? '');
 $coldStorage = (string) ($product->cold_storage ?? '');
 $companyId = (int) ($product->company_id ?? 0);
 $relatedDrugId = (int) ($product->related_drug_id ?? 0);
+$abdmDrugType = (string) ($product->abdm_drug_type ?? '');
+$abdmDrugIdentifier = (string) ($product->abdm_drug_identifier ?? '');
+$abdmDrugDisplay = (string) ($product->abdm_drug_display ?? '');
+$abdmDrugGeneric = (string) ($product->abdm_drug_generic ?? '');
+$abdmDrugPayloadJson = (string) ($product->abdm_drug_payload_json ?? '');
+$abdmDrugLastSyncedAt = (string) ($product->abdm_drug_last_synced_at ?? '');
 
 $flag = static function ($v): string {
     return ((int) $v === 1) ? 'checked' : '';
@@ -25,16 +31,47 @@ $flag = static function ($v): string {
 <div class="card">
     <div class="card-header">Product <?= $productId > 0 ? '<small class="text-muted">#' . $productId . '</small>' : '' ?></div>
     <div class="card-body pt-3">
+        <style>
+            #abdm-drug-suggest {
+                max-height: 260px;
+                overflow-y: auto;
+                z-index: 1055;
+                display: none;
+                width: 100%;
+            }
+            #abdm-drug-selected {
+                font-size: 12px;
+            }
+        </style>
         <div id="product-msg"></div>
 
         <form id="product-form" class="row g-2" method="post" action="javascript:void(0)">
             <?= csrf_field() ?>
             <input type="hidden" id="product_id" name="product_id" value="<?= esc((string) $productId) ?>">
             <input type="hidden" id="related_drug_id" name="related_drug_id" value="<?= esc((string) $relatedDrugId) ?>">
+            <input type="hidden" id="abdm_drug_type" name="abdm_drug_type" value="<?= esc($abdmDrugType) ?>">
+            <input type="hidden" id="abdm_drug_identifier" name="abdm_drug_identifier" value="<?= esc($abdmDrugIdentifier) ?>">
+            <input type="hidden" id="abdm_drug_display" name="abdm_drug_display" value="<?= esc($abdmDrugDisplay) ?>">
+            <input type="hidden" id="abdm_drug_generic" name="abdm_drug_generic" value="<?= esc($abdmDrugGeneric) ?>">
+            <input type="hidden" id="abdm_drug_payload_json" name="abdm_drug_payload_json" value="<?= esc($abdmDrugPayloadJson) ?>">
+            <input type="hidden" id="abdm_drug_last_synced_at" name="abdm_drug_last_synced_at" value="<?= esc($abdmDrugLastSyncedAt) ?>">
 
             <div class="col-md-6">
                 <label class="form-label">Product Name</label>
-                <input class="form-control" name="input_item_name" id="input_item_name" type="text" value="<?= esc($itemName) ?>">
+                <div class="position-relative">
+                    <input class="form-control" name="input_item_name" id="input_item_name" type="text" value="<?= esc($itemName) ?>" autocomplete="off">
+                    <div id="abdm-drug-suggest" class="list-group position-absolute shadow-sm"></div>
+                </div>
+                <div class="d-flex align-items-center gap-2 mt-1">
+                    <small class="text-muted">ABDM Drug Search</small>
+                    <select id="abdm_drug_search_type" class="form-select form-select-sm" style="width:auto;">
+                        <option value="generic" selected>Generic</option>
+                        <option value="brand">Brand</option>
+                        <option value="product">Product</option>
+                        <option value="substance">Substance</option>
+                    </select>
+                </div>
+                <div id="abdm-drug-selected" class="text-success mt-1"></div>
             </div>
             <div class="col-md-3">
                 <label class="form-label">Formulation</label>
@@ -131,6 +168,9 @@ $flag = static function ($v): string {
 
 <script>
 (function () {
+    var suggestTimer = null;
+    var lastQuery = '';
+
     if (window.jQuery && $.fn.select2) {
         $('#med_cat_id').select2({
             width: '100%',
@@ -141,6 +181,177 @@ $flag = static function ($v): string {
     function showMsg(html) {
         $('#product-msg').html(html || '');
     }
+
+    function showSelectedDrugSummary() {
+        var id = $('#abdm_drug_identifier').val() || '';
+        var label = $('#abdm_drug_display').val() || '';
+        var type = $('#abdm_drug_type').val() || '';
+        var generic = $('#abdm_drug_generic').val() || '';
+        var syncedAt = $('#abdm_drug_last_synced_at').val() || '';
+
+        if (!id && !label) {
+            $('#abdm-drug-selected').html('');
+            return;
+        }
+
+        var parts = [];
+        if (label) { parts.push(label); }
+        if (generic) { parts.push('Generic: ' + generic); }
+        if (type) { parts.push('Type: ' + type); }
+        if (id) { parts.push('Identifier: ' + id); }
+        if (syncedAt) { parts.push('Synced: ' + syncedAt); }
+
+        $('#abdm-drug-selected').text(parts.join(' | '));
+    }
+
+    function clearSuggestionBox() {
+        $('#abdm-drug-suggest').hide().empty();
+    }
+
+    function applyDrugDetail(detail) {
+        if (!detail || typeof detail !== 'object') {
+            return;
+        }
+
+        var label = detail.label || '';
+        var generic = detail.generic_name || '';
+        var hsnCode = detail.hsn_code || '';
+        var formulation = detail.formulation || '';
+        var packing = detail.packing || '';
+
+        if (label) {
+            $('#input_item_name').val(label);
+            $('#abdm_drug_display').val(label);
+        }
+        if (generic && !$('#input_genericname').val()) {
+            $('#input_genericname').val(generic);
+        }
+        if (hsnCode && !$('#input_HSNCODE').val()) {
+            $('#input_HSNCODE').val(hsnCode);
+        }
+
+        if (formulation) {
+            var $f = $('#input_formulation');
+            var exists = $f.find('option').filter(function () {
+                return String($(this).val()).toLowerCase() === String(formulation).toLowerCase();
+            }).length > 0;
+            if (exists) {
+                $f.val(formulation);
+            }
+        }
+
+        if (packing && !$('#input_packing_type').val()) {
+            $('#input_packing_type').val(packing);
+        }
+
+        $('#abdm_drug_type').val(detail.type || '');
+        $('#abdm_drug_identifier').val(detail.identifier || '');
+        $('#abdm_drug_generic').val(generic);
+        $('#abdm_drug_payload_json').val(detail.payload_json || '{}');
+        $('#abdm_drug_last_synced_at').val(detail.synced_at || '');
+        showSelectedDrugSummary();
+    }
+
+    function fetchDrugDetail(type, identifier) {
+        if (!identifier) {
+            return;
+        }
+
+        $.getJSON('<?= base_url('product_master/drug_terminology_detail') ?>', {
+            type: type || 'generic',
+            identifier: identifier
+        }, function (resp) {
+            if (!resp || Number(resp.ok || 0) !== 1 || !resp.selected) {
+                return;
+            }
+            applyDrugDetail(resp.selected);
+        });
+    }
+
+    function renderSuggestions(items) {
+        var $box = $('#abdm-drug-suggest');
+        $box.empty();
+
+        if (!Array.isArray(items) || items.length === 0) {
+            clearSuggestionBox();
+            return;
+        }
+
+        items.forEach(function (item) {
+            var label = item.label || '';
+            var type = item.type || '';
+            var identifier = item.identifier || '';
+            if (!label && !identifier) {
+                return;
+            }
+
+            var $a = $('<a href="#" class="list-group-item list-group-item-action py-1 px-2"></a>');
+            $a.text(label + (type ? ' [' + type + ']' : '') + (identifier ? ' (' + identifier + ')' : ''));
+            $a.on('click', function (e) {
+                e.preventDefault();
+                clearSuggestionBox();
+                if (label) {
+                    $('#input_item_name').val(label);
+                }
+                fetchDrugDetail(type, identifier);
+            });
+            $box.append($a);
+        });
+
+        if ($box.children().length > 0) {
+            $box.show();
+        } else {
+            clearSuggestionBox();
+        }
+    }
+
+    function fetchDrugSuggestions() {
+        var q = ($('#input_item_name').val() || '').trim();
+        var type = ($('#abdm_drug_search_type').val() || 'generic').trim();
+
+        if (q.length < 2) {
+            clearSuggestionBox();
+            return;
+        }
+        if (q === lastQuery) {
+            return;
+        }
+        lastQuery = q;
+
+        $.getJSON('<?= base_url('product_master/drug_terminology_autocomplete') ?>', {
+            q: q,
+            type: type,
+            limit: 10
+        }, function (resp) {
+            if (!resp || Number(resp.ok || 0) !== 1) {
+                clearSuggestionBox();
+                return;
+            }
+            renderSuggestions(resp.suggestions || []);
+        }).fail(function () {
+            clearSuggestionBox();
+        });
+    }
+
+    $('#input_item_name').off('input').on('input', function () {
+        if (suggestTimer) {
+            clearTimeout(suggestTimer);
+        }
+        suggestTimer = setTimeout(fetchDrugSuggestions, 250);
+    });
+
+    $('#abdm_drug_search_type').off('change').on('change', function () {
+        lastQuery = '';
+        fetchDrugSuggestions();
+    });
+
+    $(document).off('click.abdmDrug').on('click.abdmDrug', function (evt) {
+        if (!$(evt.target).closest('#abdm-drug-suggest, #input_item_name').length) {
+            clearSuggestionBox();
+        }
+    });
+
+    showSelectedDrugSummary();
 
     $('#btn_update_stock').off('click').on('click', function () {
         $.post('<?= base_url('product_master/product_master_update') ?>/' + ($('#product_id').val() || '0'), $('#product-form').serialize(), function (data) {

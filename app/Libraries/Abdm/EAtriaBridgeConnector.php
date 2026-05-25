@@ -539,4 +539,47 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
     {
         return $this->post('/v3/hip/link/sms-notify', $payload);
     }
+
+    // -------------------------------------------------------------------------
+    // Drug Terminology (CDCI)
+    // -------------------------------------------------------------------------
+
+    public function drugsAutocomplete(string $q, string $type = 'generic', int $limit = 10): array
+    {
+        $query = [
+            'q' => $q,
+            'type' => $type,
+            'limit' => max(1, min(50, $limit)),
+        ];
+
+        if ($this->hfrId !== '') {
+            $query['hfr_id'] = $this->hfrId;
+        }
+
+        return $this->get('/v3/drugs/autocomplete', $query);
+    }
+
+    public function drugsDetail(string $type, string $identifier): array
+    {
+        $query = [
+            'type' => $type,
+            'identifier' => $identifier,
+        ];
+
+        if ($this->hfrId !== '') {
+            $query['hfr_id'] = $this->hfrId;
+        }
+
+        return $this->get('/v3/drugs/detail', $query);
+    }
+
+    public function drugsVersion(): array
+    {
+        $query = [];
+        if ($this->hfrId !== '') {
+            $query['hfr_id'] = $this->hfrId;
+        }
+
+        return $this->get('/v3/drugs/version', $query);
+    }
 }

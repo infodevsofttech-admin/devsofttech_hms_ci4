@@ -5071,6 +5071,226 @@ class Medical extends BaseController
         ]);
     }
 
+    public function drug_terminology_autocomplete()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        $q = trim((string) ($this->request->getGet('q') ?? $this->request->getPost('q') ?? ''));
+        $q = preg_replace('/[^A-Za-z0-9_ \-]/', '', $q);
+        if (mb_strlen($q) < 2) {
+            return $this->response->setJSON([
+                'ok' => 1,
+                'suggestions' => [],
+                'error_text' => '',
+            ]);
+        }
+
+        $type = strtolower(trim((string) ($this->request->getGet('type') ?? $this->request->getPost('type') ?? 'generic')));
+        $allowedTypes = ['generic', 'brand', 'product', 'substance'];
+        if (! in_array($type, $allowedTypes, true)) {
+            $type = 'generic';
+        }
+
+        $limit = (int) ($this->request->getGet('limit') ?? $this->request->getPost('limit') ?? 10);
+        if ($limit <= 0 || $limit > 50) {
+            $limit = 10;
+        }
+
+        try {
+            $connector = new \App\Libraries\Abdm\EAtriaBridgeConnector();
+            $result = $connector->drugsAutocomplete($q, $type, $limit);
+        } catch (\Throwable $e) {
+            return $this->response->setJSON([
+                'ok' => 0,
+                'suggestions' => [],
+                'error_text' => $e->getMessage(),
+            ]);
+        }
+
+        $items = $this->extractDrugResultList($result);
+        $suggestions = [];
+        foreach ($items as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+
+            $label = $this->extractDrugText($row, ['label', 'name', 'display', 'term', 'title', 'drug_name']);
+            $identifier = $this->extractDrugText($row, ['identifier', 'id', 'code', 'concept_id', 'value']);
+            $itemType = strtolower($this->extractDrugText($row, ['type', 'entity_type', 'category']));
+            if ($itemType === '') {
+                $itemType = $type;
+            }
+
+            if ($label === '' && $identifier === '') {
+                continue;
+            }
+
+            $suggestions[] = [
+                'label' => $label !== '' ? $label : $identifier,
+                'identifier' => $identifier,
+                'type' => $itemType,
+            ];
+        }
+
+        return $this->response->setJSON([
+            'ok' => (int) ($result['ok'] ?? 0),
+            'suggestions' => $suggestions,
+            'error_text' => (string) ($result['error_text'] ?? $result['message'] ?? ''),
+        ]);
+    }
+
+    public function drug_terminology_detail()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        $type = strtolower(trim((string) ($this->request->getGet('type') ?? $this->request->getPost('type') ?? 'generic')));
+        $identifier = trim((string) ($this->request->getGet('identifier') ?? $this->request->getPost('identifier') ?? ''));
+        if ($identifier === '') {
+            return $this->response->setJSON([
+                'ok' => 0,
+                'selected' => null,
+                'error_text' => 'Identifier is required',
+            ]);
+        }
+
+        try {
+            $connector = new \App\Libraries\Abdm\EAtriaBridgeConnector();
+            $result = $connector->drugsDetail($type, $identifier);
+        } catch (\Throwable $e) {
+            return $this->response->setJSON([
+                'ok' => 0,
+                'selected' => null,
+                'error_text' => $e->getMessage(),
+            ]);
+        }
+
+        $record = $this->extractDrugResultObject($result);
+        $label = $this->extractDrugText($record, ['label', 'name', 'display', 'term', 'title', 'drug_name']);
+        $generic = $this->extractDrugText($record, ['generic_name', 'genericname', 'generic', 'salt', 'molecule']);
+        $hsnCode = $this->extractDrugText($record, ['hsn_code', 'hsn', 'hscode']);
+        $formulation = $this->extractDrugText($record, ['formulation', 'dosage_form', 'drug_form']);
+        $packing = $this->extractDrugText($record, ['packing', 'pack_size', 'package']);
+        $itemType = strtolower($this->extractDrugText($record, ['type', 'entity_type', 'category']));
+        if ($itemType === '') {
+            $itemType = $type;
+        }
+        $canonicalId = $this->extractDrugText($record, ['identifier', 'id', 'code', 'concept_id', 'value']);
+        if ($canonicalId === '') {
+            $canonicalId = $identifier;
+        }
+
+        $payloadJson = json_encode($record, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if (! is_string($payloadJson)) {
+            $payloadJson = '{}';
+        }
+
+        return $this->response->setJSON([
+            'ok' => (int) ($result['ok'] ?? 0),
+            'selected' => [
+                'label' => $label,
+                'generic_name' => $generic,
+                'hsn_code' => $hsnCode,
+                'formulation' => $formulation,
+                'packing' => $packing,
+                'type' => $itemType,
+                'identifier' => $canonicalId,
+                'payload_json' => $payloadJson,
+                'synced_at' => date('Y-m-d H:i:s'),
+            ],
+            'error_text' => (string) ($result['error_text'] ?? $result['message'] ?? ''),
+        ]);
+    }
+
+    /**
+     * @param array<string, mixed> $result
+     * @return array<int, array<string, mixed>>
+     */
+    private function extractDrugResultList(array $result): array
+    {
+        $candidate = $result['data'] ?? $result['result'] ?? $result;
+        if (! is_array($candidate)) {
+            return [];
+        }
+
+        if (array_is_list($candidate)) {
+            return array_values(array_filter($candidate, static fn ($v) => is_array($v)));
+        }
+
+        foreach (['items', 'suggestions', 'results', 'data', 'records'] as $key) {
+            if (isset($candidate[$key]) && is_array($candidate[$key]) && array_is_list($candidate[$key])) {
+                return array_values(array_filter($candidate[$key], static fn ($v) => is_array($v)));
+            }
+        }
+
+        if ($this->extractDrugText($candidate, ['identifier', 'id', 'code', 'concept_id', 'value']) !== '') {
+            return [$candidate];
+        }
+
+        return [];
+    }
+
+    /**
+     * @param array<string, mixed> $result
+     * @return array<string, mixed>
+     */
+    private function extractDrugResultObject(array $result): array
+    {
+        $candidate = $result['data'] ?? $result['result'] ?? $result;
+        if (! is_array($candidate)) {
+            return [];
+        }
+
+        if (array_is_list($candidate)) {
+            $first = $candidate[0] ?? [];
+            return is_array($first) ? $first : [];
+        }
+
+        foreach (['item', 'result', 'record', 'data'] as $key) {
+            if (isset($candidate[$key]) && is_array($candidate[$key])) {
+                return $candidate[$key];
+            }
+        }
+
+        return $candidate;
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @param array<int, string> $keys
+     */
+    private function extractDrugText(array $data, array $keys): string
+    {
+        $flat = [];
+        $walker = static function ($node) use (&$walker, &$flat): void {
+            if (! is_array($node)) {
+                return;
+            }
+            foreach ($node as $k => $v) {
+                if (is_array($v)) {
+                    $walker($v);
+                    continue;
+                }
+                if (is_scalar($v) || $v === null) {
+                    $flat[strtolower((string) $k)] = trim((string) $v);
+                }
+            }
+        };
+        $walker($data);
+
+        foreach ($keys as $key) {
+            $val = trim((string) ($flat[strtolower($key)] ?? ''));
+            if ($val !== '') {
+                return $val;
+            }
+        }
+
+        return '';
+    }
+
     public function product_edit($productId = 0)
     {
         if ($deny = $this->ensurePharmacyAccess()) {
@@ -5149,6 +5369,15 @@ class Medical extends BaseController
         $coldStorage = trim((string) ($this->request->getPost('input_cold_storage') ?? ''));
         $companyId = (int) ($this->request->getPost('input_company_name') ?? 0);
         $relatedDrugId = (int) ($this->request->getPost('related_drug_id') ?? 0);
+        $abdmDrugType = trim((string) ($this->request->getPost('abdm_drug_type') ?? ''));
+        $abdmDrugIdentifier = trim((string) ($this->request->getPost('abdm_drug_identifier') ?? ''));
+        $abdmDrugDisplay = trim((string) ($this->request->getPost('abdm_drug_display') ?? ''));
+        $abdmDrugGeneric = trim((string) ($this->request->getPost('abdm_drug_generic') ?? ''));
+        $abdmDrugPayloadJson = trim((string) ($this->request->getPost('abdm_drug_payload_json') ?? ''));
+        $abdmDrugLastSyncedAt = trim((string) ($this->request->getPost('abdm_drug_last_synced_at') ?? ''));
+        if (strlen($abdmDrugPayloadJson) > 65000) {
+            $abdmDrugPayloadJson = substr($abdmDrugPayloadJson, 0, 65000);
+        }
 
         $errors = [];
         if ($itemName === '' || mb_strlen($itemName) < 3) {
@@ -5193,6 +5422,12 @@ class Medical extends BaseController
             'shelf_no' => $shelfNo,
             'cold_storage' => $coldStorage,
             'company_id' => $companyId,
+            'abdm_drug_type' => $abdmDrugType,
+            'abdm_drug_identifier' => $abdmDrugIdentifier,
+            'abdm_drug_display' => $abdmDrugDisplay,
+            'abdm_drug_generic' => $abdmDrugGeneric,
+            'abdm_drug_payload_json' => $abdmDrugPayloadJson,
+            'abdm_drug_last_synced_at' => $abdmDrugLastSyncedAt,
             'ban_flag_id' => $flag('chk_ban_flag_id'),
             'batch_applicable' => $flag('chk_batch_applicable'),
             'is_continue' => $flag('chk_is_continue'),

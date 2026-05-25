@@ -85,10 +85,14 @@ $routes->get('Product_master/medicine_category_Sub', 'Medical::medicine_category
 $routes->post('Product_master/medicine_category_Update', 'Medical::medicine_category_update');
 $routes->get('product_master/drug_master_list', 'Medical::drug_master_list');
 $routes->post('product_master/Product_search', 'Medical::product_search');
+$routes->get('product_master/drug_terminology_autocomplete', 'Medical::drug_terminology_autocomplete');
+$routes->get('product_master/drug_terminology_detail', 'Medical::drug_terminology_detail');
 $routes->get('product_master/Product_edit/(:num)', 'Medical::product_edit/$1');
 $routes->post('product_master/product_master_update/(:num)', 'Medical::product_master_update/$1');
 $routes->get('Product_master/drug_master_list', 'Medical::drug_master_list');
 $routes->post('Product_master/Product_search', 'Medical::product_search');
+$routes->get('Product_master/drug_terminology_autocomplete', 'Medical::drug_terminology_autocomplete');
+$routes->get('Product_master/drug_terminology_detail', 'Medical::drug_terminology_detail');
 $routes->get('Product_master/Product_edit/(:num)', 'Medical::product_edit/$1');
 $routes->post('Product_master/product_master_update/(:num)', 'Medical::product_master_update/$1');
 $routes->get('Medical/Purchase', 'Medical::purchase');
