@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Libraries\Abdm\AbdmConnectorFactory;
 use App\Libraries\Abdm\EAtriaBridgeConnector;
+use App\Models\ClinicalAuditTrailModel;
 
 /**
  * AbdmOpdQueue
@@ -22,6 +23,19 @@ use App\Libraries\Abdm\EAtriaBridgeConnector;
 class AbdmOpdQueue extends BaseController
 {
     private EAtriaBridgeConnector $gw;
+
+    /**
+     * Allowed status transitions for OPD token lifecycle.
+     * PENDING -> CALLED/CANCELLED
+     * CALLED -> COMPLETED/CANCELLED/PENDING (revert)
+     * COMPLETED/CANCELLED -> PENDING (reopen)
+     */
+    private const STATUS_TRANSITIONS = [
+        'PENDING' => ['CALLED', 'CANCELLED'],
+        'CALLED' => ['COMPLETED', 'CANCELLED', 'PENDING'],
+        'COMPLETED' => ['PENDING'],
+        'CANCELLED' => ['PENDING'],
+    ];
 
     public function initController(
         \CodeIgniter\HTTP\RequestInterface  $request,
@@ -50,6 +64,10 @@ class AbdmOpdQueue extends BaseController
         if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
             $date = date('Y-m-d');
         }
+
+        // Keep token->appointment linkage up to date for history display.
+        $this->linkTokensToAppointments($date);
+        $this->syncCompletedTokensFromOpd($date);
 
         // Counts for summary badges
         $counts = $db->query(
@@ -110,6 +128,8 @@ class AbdmOpdQueue extends BaseController
         $tokens = $result['data'] ?? $result['tokens'] ?? [];
         if (is_array($tokens) && count($tokens) > 0) {
             $this->syncTokensToDb($tokens, $date);
+            $this->linkTokensToAppointments($date);
+            $this->syncCompletedTokensFromOpd($date);
             // Enrich tokens with HMS patient / OPD data from local DB
             $result['data'] = $this->enrichTokensFromDb($tokens, $date);
         }
@@ -168,6 +188,32 @@ class AbdmOpdQueue extends BaseController
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'Invalid status. Allowed: ' . implode(', ', $allowed)]);
         }
 
+        $db = \Config\Database::connect();
+        $current = $db->query(
+            "SELECT status
+             FROM abdm_opd_tokens
+             WHERE gateway_token_id = " . (int) $tokenId . "
+             ORDER BY id DESC
+             LIMIT 1"
+        )->getRowArray();
+        $currentStatus = strtoupper(trim((string) ($current['status'] ?? '')));
+
+        if ($currentStatus !== '' && $currentStatus === $status) {
+            return $this->response->setJSON([
+                'ok' => 1,
+                'token_id' => $tokenId,
+                'status' => $status,
+                'message' => 'Token is already in requested status',
+            ]);
+        }
+
+        if ($currentStatus !== '' && ! $this->canTransitionStatus($currentStatus, $status)) {
+            return $this->response->setStatusCode(409)->setJSON([
+                'ok' => 0,
+                'error_text' => 'Invalid transition: ' . $currentStatus . ' -> ' . $status,
+            ]);
+        }
+
         try {
             $result = $this->gw->opdTokenUpdateStatus($tokenId, $status);
         } catch (\Throwable $e) {
@@ -176,15 +222,42 @@ class AbdmOpdQueue extends BaseController
 
         // Mirror status to local DB so list() stays consistent
         try {
-            \Config\Database::connect()
-                ->table('abdm_opd_tokens')
+            $db->table('abdm_opd_tokens')
                 ->where('gateway_token_id', $tokenId)
                 ->update(['status' => $status, 'updated_at' => date('Y-m-d H:i:s')]);
+
+            if ($currentStatus !== '' && $currentStatus !== $status) {
+                $this->logTokenAudit(
+                    'abdm_opd_queue',
+                    (string) $tokenId,
+                    'status',
+                    $currentStatus,
+                    $status,
+                    [
+                        'source' => 'queue_action',
+                        'route' => 'AbdmOpdQueue/token_status',
+                    ]
+                );
+            }
         } catch (\Throwable $e) {
             // non-critical — gateway update already succeeded
         }
 
         return $this->response->setJSON($result);
+    }
+
+    private function canTransitionStatus(string $fromStatus, string $toStatus): bool
+    {
+        $from = strtoupper(trim($fromStatus));
+        $to = strtoupper(trim($toStatus));
+        if ($from === '' || $to === '') {
+            return false;
+        }
+        if ($from === $to) {
+            return true;
+        }
+
+        return in_array($to, self::STATUS_TRANSITIONS[$from] ?? [], true);
     }
 
     // -------------------------------------------------------------------------
@@ -359,6 +432,13 @@ class AbdmOpdQueue extends BaseController
             return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => 'Failed to resolve patient record']);
         }
 
+        $tokenBefore = $db->table('abdm_opd_tokens')
+            ->select('id,status,patient_id')
+            ->where('gateway_token_id', $tokenId)
+            ->orderBy('id', 'DESC')
+            ->get()
+            ->getRowArray();
+
         $this->attachPatientToToken($db, $tokenId, $patientId);
 
         // Mark token as CALLED on gateway (non-blocking)
@@ -366,6 +446,23 @@ class AbdmOpdQueue extends BaseController
             $this->gw->opdTokenUpdateStatus($tokenId, 'CALLED');
         } catch (\Throwable $e) {
             // non-critical
+        }
+
+        $oldStatus = strtoupper(trim((string) ($tokenBefore['status'] ?? '')));
+        if ($oldStatus !== 'CALLED') {
+            $this->logTokenAudit(
+                'abdm_opd_queue',
+                (string) $tokenId,
+                'status',
+                $oldStatus,
+                'CALLED',
+                [
+                    'source' => 'register_opd',
+                    'action' => $action,
+                    'patient_id' => $patientId,
+                    'is_new_patient' => $isNew ? 1 : 0,
+                ]
+            );
         }
 
         return $this->response->setJSON([
@@ -571,10 +668,12 @@ class AbdmOpdQueue extends BaseController
         }
 
         $rows = $db->query(
-            "SELECT t.gateway_token_id, t.patient_id, t.opd_id, t.processed_at,
-                    p.p_code, p.p_fname
+             "SELECT t.gateway_token_id, t.patient_id, t.opd_id, t.processed_at,
+                  p.p_code, p.p_fname,
+                  o.opd_code, o.opd_status
              FROM abdm_opd_tokens t
              LEFT JOIN patient_master p ON p.id = t.patient_id
+              LEFT JOIN opd_master o ON o.opd_id = t.opd_id
              WHERE t.queue_date = '" . $db->escapeString($date) . "'
                AND t.gateway_token_id IN (" . implode(',', $gids) . ")"
         )->getResultArray();
@@ -590,6 +689,8 @@ class AbdmOpdQueue extends BaseController
                 $local = $map[$gid];
                 $t['hms_patient_id']   = $local['patient_id'];
                 $t['hms_opd_id']       = $local['opd_id'];
+                $t['hms_opd_code']     = $local['opd_code'] ?? null;
+                $t['hms_opd_status']   = $local['opd_status'] ?? null;
                 $t['hms_processed_at'] = $local['processed_at'];
                 $t['hms_p_code']       = $local['p_code'];
                 $t['hms_p_name']       = $local['p_fname'];
@@ -597,7 +698,7 @@ class AbdmOpdQueue extends BaseController
                     ? base_url('Opd/addopd/' . (int) $local['patient_id'])
                     : null;
                 $t['hms_profile_url']  = $local['patient_id']
-                    ? base_url('Patient/person_profile/' . (int) $local['patient_id'])
+                    ? base_url('Patient/person_record/' . (int) $local['patient_id'])
                     : null;
             }
         }
@@ -660,6 +761,177 @@ class AbdmOpdQueue extends BaseController
                     // ignore duplicate on race
                 }
             }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Private: link processed ABDM tokens with created OPD appointments
+    // -------------------------------------------------------------------------
+    private function linkTokensToAppointments(string $date): void
+    {
+        $db = \Config\Database::connect();
+
+        if (! $db->tableExists('abdm_opd_tokens') || ! $db->tableExists('opd_master')) {
+            return;
+        }
+
+        $rows = $db->query(
+            "SELECT id, patient_id, processed_at
+             FROM abdm_opd_tokens
+             WHERE queue_date = '" . $db->escapeString($date) . "'
+               AND patient_id IS NOT NULL
+               AND (opd_id IS NULL OR opd_id = 0)
+             ORDER BY processed_at ASC, id ASC"
+        )->getResultArray();
+
+        if (empty($rows)) {
+            return;
+        }
+
+        foreach ($rows as $row) {
+            $tokenRowId = (int) ($row['id'] ?? 0);
+            $patientId  = (int) ($row['patient_id'] ?? 0);
+            if ($tokenRowId <= 0 || $patientId <= 0) {
+                continue;
+            }
+
+            $apdWhere = "p_id = " . $patientId . " AND DATE(apointment_date) = '" . $db->escapeString($date) . "'";
+
+            $opd = $db->query(
+                "SELECT opd_id
+                 FROM opd_master
+                 WHERE " . $apdWhere . "
+                 ORDER BY opd_id DESC
+                 LIMIT 1"
+            )->getRowArray();
+
+            $opdId = (int) ($opd['opd_id'] ?? 0);
+            if ($opdId <= 0) {
+                continue;
+            }
+
+            $db->table('abdm_opd_tokens')
+                ->where('id', $tokenRowId)
+                ->update([
+                    'opd_id' => $opdId,
+                    'updated_at' => date('Y-m-d H:i:s'),
+                ]);
+
+            $this->logTokenAudit(
+                'abdm_opd_queue',
+                (string) $tokenRowId,
+                'opd_id',
+                '',
+                (string) $opdId,
+                [
+                    'source' => 'link_tokens_to_appointments',
+                    'queue_date' => $date,
+                ]
+            );
+        }
+    }
+
+    private function syncCompletedTokensFromOpd(string $date): void
+    {
+        $db = \Config\Database::connect();
+        if (! $db->tableExists('abdm_opd_tokens') || ! $db->tableExists('opd_master')) {
+            return;
+        }
+
+        $rows = $db->query(
+            "SELECT t.id, t.gateway_token_id, t.status, t.opd_id
+             FROM abdm_opd_tokens t
+             JOIN opd_master o ON o.opd_id = t.opd_id
+             WHERE t.queue_date = '" . $db->escapeString($date) . "'
+               AND t.opd_id IS NOT NULL
+               AND t.status <> 'COMPLETED'
+               AND o.opd_status = 2"
+        )->getResultArray();
+
+        foreach ($rows as $row) {
+            $tokenId = (int) ($row['gateway_token_id'] ?? 0);
+            $localId = (int) ($row['id'] ?? 0);
+            $oldStatus = strtoupper(trim((string) ($row['status'] ?? '')));
+            if ($tokenId <= 0 || $localId <= 0 || $oldStatus === 'COMPLETED') {
+                continue;
+            }
+
+            $gatewayError = '';
+            try {
+                $this->gw->opdTokenUpdateStatus($tokenId, 'COMPLETED');
+            } catch (\Throwable $e) {
+                $gatewayError = $e->getMessage();
+            }
+
+            $db->table('abdm_opd_tokens')
+                ->where('id', $localId)
+                ->update([
+                    'status' => 'COMPLETED',
+                    'updated_at' => date('Y-m-d H:i:s'),
+                ]);
+
+            $this->logTokenAudit(
+                'abdm_opd_queue',
+                (string) $tokenId,
+                'status',
+                $oldStatus,
+                'COMPLETED',
+                [
+                    'source' => 'opd_visit_done_auto',
+                    'queue_date' => $date,
+                    'opd_id' => (int) ($row['opd_id'] ?? 0),
+                    'gateway_sync' => $gatewayError === '' ? 'ok' : 'failed',
+                    'gateway_error' => $gatewayError,
+                ]
+            );
+        }
+    }
+
+    private function logTokenAudit(
+        string $module,
+        string $recordId,
+        string $fieldName,
+        ?string $oldValue,
+        ?string $newValue,
+        array $actionMeta = []
+    ): void {
+        try {
+            $db = \Config\Database::connect();
+            if (! $db->tableExists('clinical_audit_trail')) {
+                return;
+            }
+
+            $user = auth()->user();
+            $userId = (string) ($user->id ?? 0);
+            $payload = [
+                'module' => $module,
+                'record_id' => $recordId,
+                'field_name' => $fieldName,
+                'old_value' => $oldValue,
+                'new_value' => $newValue,
+                'user_id' => $userId,
+                'action_at' => date('Y-m-d H:i:s'),
+            ];
+
+            if (! empty($actionMeta)) {
+                $payload['new_value'] = trim((string) $newValue) . ' | ' . json_encode($actionMeta, JSON_UNESCAPED_SLASHES);
+            }
+
+            $payload['hash'] = hash('sha256', implode('|', [
+                $payload['module'],
+                $payload['record_id'],
+                $payload['field_name'],
+                (string) $payload['old_value'],
+                (string) $payload['new_value'],
+                $payload['user_id'],
+                $payload['action_at'],
+                microtime(true),
+                random_int(1000, 999999),
+            ]));
+
+            (new ClinicalAuditTrailModel())->insert($payload);
+        } catch (\Throwable $e) {
+            // fail-open: audit should not break workflow
         }
     }
 }

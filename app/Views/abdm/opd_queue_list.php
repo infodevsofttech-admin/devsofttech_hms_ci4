@@ -140,7 +140,7 @@ function renderTokenTable(array $rows, string $ctx): string
         if ($pid > 0) {
             $pCode = esc((string) ($t['p_code'] ?? ''));
             $pName = esc((string) ($t['p_fname'] ?? $t['patient_name'] ?? '—'));
-            $hmsLink = '<a href="javascript:load_form(\'' . base_url('Patient/person_profile/' . $pid) . '\',\'Patient Profile\')">'
+                $hmsLink = '<a href="javascript:load_form(\'' . base_url('Patient/person_record/' . $pid) . '\',\'Patient Profile\')">'
                      . '<strong>' . $pCode . '</strong> ' . $pName . '</a>';
         } else {
             $hmsLink = '<span class="text-muted small">Not linked</span>';
