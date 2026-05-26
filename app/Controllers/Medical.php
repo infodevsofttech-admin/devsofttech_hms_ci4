@@ -9,6 +9,7 @@ use Mpdf\Mpdf;
 class Medical extends BaseController
 {
     protected $db;
+    private bool $drugMasterStandardized = false;
 
     public function __construct()
     {
@@ -4669,37 +4670,103 @@ class Medical extends BaseController
             return $deny;
         }
 
+        $this->runDrugMasterStandardizationOnce();
+
         if (! $this->db->tableExists('med_company')) {
             return view('medical/placeholder', ['title' => 'Company Master']);
         }
 
-        $companyData = $this->db->table('med_company')
-            ->orderBy('company_name', 'ASC')
-            ->get()
-            ->getResult();
-
-        return view('medical/company_master', [
-            'med_company' => $companyData,
-        ]);
+        return view('medical/company_master');
     }
 
     public function company_list_sub()
+    {
+        // Kept for backward compatibility. The table is now populated via
+        // server-side DataTables AJAX (CompanyListData) so this returns an
+        // empty shell that triggers a DataTable reload on the client.
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        return $this->response->setBody('');
+    }
+
+    /**
+     * Server-side DataTables AJAX endpoint for the company master list.
+     * Handles search, sort, and pagination entirely in SQL.
+     */
+    public function company_list_data()
     {
         if ($deny = $this->ensurePharmacyAccess()) {
             return $deny;
         }
 
-        if (! $this->db->tableExists('med_company')) {
-            return $this->response->setBody('');
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(403)->setJSON(['error' => 'Invalid request']);
         }
 
-        $companyData = $this->db->table('med_company')
-            ->orderBy('company_name', 'ASC')
-            ->get()
-            ->getResult();
+        $draw   = (int) ($this->request->getGet('draw')   ?? 1);
+        $start  = max(0, (int) ($this->request->getGet('start')  ?? 0));
+        $length = max(1, (int) ($this->request->getGet('length') ?? 25));
+        $search = trim((string) (($this->request->getGet('search') ?? [])['value'] ?? ''));
 
-        return view('medical/company_master_sub', [
-            'med_company' => $companyData,
+        $orderParams = $this->request->getGet('order') ?? [];
+        $orderColIdx = (int) (is_array($orderParams) ? ($orderParams[0]['column'] ?? 0) : 0);
+        $orderDir    = strtolower((string) (is_array($orderParams) ? ($orderParams[0]['dir'] ?? 'asc') : 'asc'));
+        if (! in_array($orderDir, ['asc', 'desc'], true)) {
+            $orderDir = 'asc';
+        }
+
+        $columnMap = [0 => 'company_name', 1 => 'contact_person_name', 2 => 'id'];
+        $orderCol  = $columnMap[$orderColIdx] ?? 'company_name';
+
+        if (! $this->db->tableExists('med_company')) {
+            return $this->response->setJSON([
+                'draw'            => $draw,
+                'recordsTotal'    => 0,
+                'recordsFiltered' => 0,
+                'data'            => [],
+            ]);
+        }
+
+        $totalRecords = (int) $this->db->table('med_company')->countAllResults(false);
+
+        $builder = $this->db->table('med_company');
+        if ($search !== '') {
+            $builder->groupStart()
+                ->like('company_name', $search)
+                ->orLike('contact_person_name', $search)
+                ->orLike('contact_phone_no', $search)
+                ->groupEnd();
+        }
+
+        $filteredCount = (int) $builder->countAllResults(false);
+
+        $rows = $builder
+            ->select('id, company_name, contact_person_name, contact_phone_no')
+            ->orderBy($orderCol, $orderDir)
+            ->limit($length, $start)
+            ->get()
+            ->getResultArray();
+
+        $data = [];
+        foreach ($rows as $row) {
+            $id          = (int) ($row['id'] ?? 0);
+            $companyName = esc($row['company_name'] ?? '');
+            $personPhone = esc(trim(($row['contact_person_name'] ?? '') . '/' . ($row['contact_phone_no'] ?? ''), '/'));
+            $editUrl     = base_url('Product_master/CompanyEdit/' . $id);
+            $data[] = [
+                $companyName,
+                $personPhone,
+                '<button onclick="load_form_div(\'' . $editUrl . '\',\'test_div\',\'Company :' . $companyName . ':Pharmacy\');" type="button" class="btn btn-primary btn-sm">Edit</button>',
+            ];
+        }
+
+        return $this->response->setJSON([
+            'draw'            => $draw,
+            'recordsTotal'    => $totalRecords,
+            'recordsFiltered' => $filteredCount,
+            'data'            => $data,
         ]);
     }
 
@@ -4730,6 +4797,8 @@ class Medical extends BaseController
             return $deny;
         }
 
+        $this->runDrugMasterStandardizationOnce();
+
         if (! $this->request->isAJAX() || ! $this->db->tableExists('med_company')) {
             return $this->response->setJSON([
                 'insertid' => 0,
@@ -4741,6 +4810,8 @@ class Medical extends BaseController
         $companyName = trim((string) ($this->request->getPost('input_company_name') ?? ''));
         $contactPersonName = trim((string) ($this->request->getPost('input_contact_person_name') ?? ''));
         $contactPhoneNo = trim((string) ($this->request->getPost('input_contact_phone_no') ?? ''));
+
+        $companyName = $this->normalizeCompanyNameText($companyName);
 
         $errors = [];
         if ($companyName === '' || mb_strlen($companyName) < 3) {
@@ -4797,6 +4868,721 @@ class Medical extends BaseController
         return $this->response->setJSON([
             'insertid' => $insertId,
             'show_text' => '<div class="alert alert-success mb-0">' . esc($message) . '</div>',
+        ]);
+    }
+
+    public function formulation_master_list()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        $this->runDrugMasterStandardizationOnce();
+
+        if (! $this->db->tableExists('med_formulation')) {
+            return view('medical/placeholder', ['title' => 'Formulation Master']);
+        }
+
+        return view('medical/formulation_master');
+    }
+
+    public function formulation_list_sub()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        return $this->response->setBody('');
+    }
+
+    /**
+     * Server-side DataTables AJAX endpoint for the formulation master list.
+     */
+    public function formulation_list_data()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(403)->setJSON(['error' => 'Invalid request']);
+        }
+
+        $draw   = (int) ($this->request->getGet('draw')   ?? 1);
+        $start  = max(0, (int) ($this->request->getGet('start')  ?? 0));
+        $length = max(1, (int) ($this->request->getGet('length') ?? 25));
+        $search = trim((string) (($this->request->getGet('search') ?? [])['value'] ?? ''));
+
+        $orderParams = $this->request->getGet('order') ?? [];
+        $orderColIdx = (int) (is_array($orderParams) ? ($orderParams[0]['column'] ?? 0) : 0);
+        $orderDir    = strtolower((string) (is_array($orderParams) ? ($orderParams[0]['dir'] ?? 'asc') : 'asc'));
+        if (! in_array($orderDir, ['asc', 'desc'], true)) {
+            $orderDir = 'asc';
+        }
+
+        if (! $this->db->tableExists('med_formulation')) {
+            return $this->response->setJSON([
+                'draw'            => $draw,
+                'recordsTotal'    => 0,
+                'recordsFiltered' => 0,
+                'data'            => [],
+            ]);
+        }
+
+        $fields    = $this->db->getFieldNames('med_formulation') ?? [];
+        $nameField = in_array('formulation_length', $fields, true)
+            ? 'formulation_length'
+            : (in_array('formulation', $fields, true) ? 'formulation' : null);
+
+        if ($nameField === null) {
+            return $this->response->setJSON(['draw' => $draw, 'recordsTotal' => 0, 'recordsFiltered' => 0, 'data' => []]);
+        }
+
+        $columnMap = [0 => $nameField, 1 => 'id'];
+        $orderCol  = $columnMap[$orderColIdx] ?? $nameField;
+
+        $totalRecords = (int) $this->db->table('med_formulation')->countAllResults(false);
+
+        $builder = $this->db->table('med_formulation');
+        if ($search !== '') {
+            $builder->like($nameField, $search);
+        }
+
+        $filteredCount = (int) $builder->countAllResults(false);
+
+        $rows = $builder
+            ->select('id, ' . $nameField)
+            ->orderBy($orderCol, $orderDir)
+            ->limit($length, $start)
+            ->get()
+            ->getResultArray();
+
+        $data = [];
+        foreach ($rows as $row) {
+            $id      = (int) ($row['id'] ?? 0);
+            $name    = esc($row[$nameField] ?? '');
+            $editUrl = base_url('Product_master/FormulationEdit/' . $id);
+            $data[]  = [
+                $name,
+                '<button onclick="load_form_div(\'' . $editUrl . '\',\'test_div_form\',\'Formulation :' . $name . ':Pharmacy\');" type="button" class="btn btn-primary btn-sm">Edit</button>',
+            ];
+        }
+
+        return $this->response->setJSON([
+            'draw'            => $draw,
+            'recordsTotal'    => $totalRecords,
+            'recordsFiltered' => $filteredCount,
+            'data'            => $data,
+        ]);
+    }
+
+    public function formulation_edit($fid = 0)
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        $fid      = (int) $fid;
+        $formData = [];
+
+        if ($fid > 0 && $this->db->tableExists('med_formulation')) {
+            $row = $this->db->table('med_formulation')->where('id', $fid)->get()->getRow();
+            if ($row) {
+                $formData = [$row];
+            }
+        }
+
+        return view('medical/formulation_edit', [
+            'med_formulation' => $formData,
+        ]);
+    }
+
+    public function formulation_update()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        $this->runDrugMasterStandardizationOnce();
+
+        if (! $this->request->isAJAX() || ! $this->db->tableExists('med_formulation')) {
+            return $this->response->setJSON([
+                'insertid' => 0,
+                'show_text' => '<div class="alert alert-danger mb-0">Invalid request.</div>',
+            ]);
+        }
+
+        $fid  = (int) ($this->request->getPost('hid_fid') ?? 0);
+        $name = trim((string) ($this->request->getPost('input_formulation_name') ?? ''));
+        $name = $this->normalizeDrugFormulationText($name);
+
+        $errors = [];
+        if ($name === '' || mb_strlen($name) < 2) {
+            $errors[] = 'Formulation Name is required (min 2 chars).';
+        }
+        if (mb_strlen($name) > 150) {
+            $errors[] = 'Formulation Name should be max 150 chars.';
+        }
+
+        if ($errors !== []) {
+            return $this->response->setJSON([
+                'insertid' => 0,
+                'show_text' => '<div class="alert alert-danger mb-0">' . implode('<br>', array_map('esc', $errors)) . '</div>',
+            ]);
+        }
+
+        $fields  = $this->db->getFieldNames('med_formulation') ?? [];
+        $payload = [];
+        if (in_array('formulation_length', $fields, true)) {
+            $payload['formulation_length'] = $name;
+        }
+        if (in_array('formulation', $fields, true)) {
+            $payload['formulation'] = $name;
+        }
+
+        if ($payload === []) {
+            return $this->response->setJSON([
+                'insertid' => 0,
+                'show_text' => '<div class="alert alert-danger mb-0">Formulation schema mismatch.</div>',
+            ]);
+        }
+
+        if ($fid > 0) {
+            $this->db->table('med_formulation')->where('id', $fid)->update($payload);
+            $insertId = $fid;
+            $message  = 'Saved Successfully';
+        } else {
+            $this->db->table('med_formulation')->insert($payload);
+            $insertId = (int) $this->db->insertID();
+            $message  = 'Added Successfully';
+        }
+
+        if ($insertId <= 0) {
+            return $this->response->setJSON([
+                'insertid' => 0,
+                'show_text' => '<div class="alert alert-danger mb-0">Unable to save formulation.</div>',
+            ]);
+        }
+
+        return $this->response->setJSON([
+            'insertid' => $insertId,
+            'show_text' => '<div class="alert alert-success mb-0">' . esc($message) . '</div>',
+        ]);
+    }
+
+    public function short_formulation_master_list()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        if (! $this->db->tableExists('med_short_formulation')) {
+            return view('medical/placeholder', ['title' => 'Short Formulation Master']);
+        }
+
+        return view('medical/short_formulation_master');
+    }
+
+    public function short_formulation_list_sub()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        return $this->response->setBody('');
+    }
+
+    /**
+     * Server-side DataTables AJAX endpoint for the short formulation master list.
+     */
+    public function short_formulation_list_data()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(403)->setJSON(['error' => 'Invalid request']);
+        }
+
+        $draw   = (int) ($this->request->getGet('draw')   ?? 1);
+        $start  = max(0, (int) ($this->request->getGet('start')  ?? 0));
+        $length = max(1, (int) ($this->request->getGet('length') ?? 25));
+        $search = trim((string) (($this->request->getGet('search') ?? [])['value'] ?? ''));
+
+        $orderParams = $this->request->getGet('order') ?? [];
+        $orderColIdx = (int) (is_array($orderParams) ? ($orderParams[0]['column'] ?? 0) : 0);
+        $orderDir    = strtolower((string) (is_array($orderParams) ? ($orderParams[0]['dir'] ?? 'asc') : 'asc'));
+        if (! in_array($orderDir, ['asc', 'desc'], true)) {
+            $orderDir = 'asc';
+        }
+
+        $columnMap = [0 => 'short_formulation', 1 => 'id'];
+        $orderCol  = $columnMap[$orderColIdx] ?? 'short_formulation';
+
+        if (! $this->db->tableExists('med_short_formulation')) {
+            return $this->response->setJSON([
+                'draw'            => $draw,
+                'recordsTotal'    => 0,
+                'recordsFiltered' => 0,
+                'data'            => [],
+            ]);
+        }
+
+        $totalRecords = (int) $this->db->table('med_short_formulation')->countAllResults(false);
+
+        $builder = $this->db->table('med_short_formulation');
+        if ($search !== '') {
+            $builder->like('short_formulation', $search);
+        }
+
+        $filteredCount = (int) $builder->countAllResults(false);
+
+        $rows = $builder
+            ->select('id, short_formulation')
+            ->orderBy($orderCol, $orderDir)
+            ->limit($length, $start)
+            ->get()
+            ->getResultArray();
+
+        $data = [];
+        foreach ($rows as $row) {
+            $id      = (int) ($row['id'] ?? 0);
+            $name    = esc($row['short_formulation'] ?? '');
+            $editUrl = base_url('Product_master/ShortFormulationEdit/' . $id);
+            $data[]  = [
+                $name,
+                '<button onclick="load_form_div(\'' . $editUrl . '\',\'test_div_sform\',\'Short Formulation :' . $name . ':Pharmacy\');" type="button" class="btn btn-primary btn-sm">Edit</button>',
+            ];
+        }
+
+        return $this->response->setJSON([
+            'draw'            => $draw,
+            'recordsTotal'    => $totalRecords,
+            'recordsFiltered' => $filteredCount,
+            'data'            => $data,
+        ]);
+    }
+
+    public function short_formulation_edit($sfid = 0)
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        $sfid     = (int) $sfid;
+        $formData = [];
+
+        if ($sfid > 0 && $this->db->tableExists('med_short_formulation')) {
+            $row = $this->db->table('med_short_formulation')->where('id', $sfid)->get()->getRow();
+            if ($row) {
+                $formData = [$row];
+            }
+        }
+
+        return view('medical/short_formulation_edit', [
+            'med_short_formulation' => $formData,
+        ]);
+    }
+
+    public function short_formulation_update()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        if (! $this->request->isAJAX() || ! $this->db->tableExists('med_short_formulation')) {
+            return $this->response->setJSON([
+                'insertid' => 0,
+                'show_text' => '<div class="alert alert-danger mb-0">Invalid request.</div>',
+            ]);
+        }
+
+        $sfid = (int) ($this->request->getPost('hid_sfid') ?? 0);
+        $name = trim((string) ($this->request->getPost('input_short_formulation_name') ?? ''));
+
+        $errors = [];
+        if ($name === '') {
+            $errors[] = 'Short Formulation Name is required.';
+        }
+        if (mb_strlen($name) > 100) {
+            $errors[] = 'Short Formulation Name should be max 100 chars.';
+        }
+
+        if ($errors !== []) {
+            return $this->response->setJSON([
+                'insertid' => 0,
+                'show_text' => '<div class="alert alert-danger mb-0">' . implode('<br>', array_map('esc', $errors)) . '</div>',
+            ]);
+        }
+
+        if ($sfid > 0) {
+            $this->db->table('med_short_formulation')->where('id', $sfid)->update(['short_formulation' => $name]);
+            $insertId = $sfid;
+            $message  = 'Saved Successfully';
+        } else {
+            $this->db->table('med_short_formulation')->insert([
+                'short_formulation' => $name,
+                'last_synced_at'    => null,
+            ]);
+            $insertId = (int) $this->db->insertID();
+            $message  = 'Added Successfully';
+        }
+
+        if ($insertId <= 0) {
+            return $this->response->setJSON([
+                'insertid' => 0,
+                'show_text' => '<div class="alert alert-danger mb-0">Unable to save short formulation.</div>',
+            ]);
+        }
+
+        return $this->response->setJSON([
+            'insertid' => $insertId,
+            'show_text' => '<div class="alert alert-success mb-0">' . esc($message) . '</div>',
+        ]);
+    }
+
+    public function sync_drug_masters()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        if (! $this->request->isAJAX()) {
+            return $this->response->setJSON([
+                'ok' => 0,
+                'show_text' => '<div class="alert alert-danger mb-0">Invalid request.</div>',
+            ]);
+        }
+
+        if (! $this->db->tableExists('med_product_master') || ! $this->db->tableExists('med_company') || ! $this->db->tableExists('med_formulation')) {
+            return $this->response->setJSON([
+                'ok' => 0,
+                'show_text' => '<div class="alert alert-danger mb-0">Required tables are missing.</div>',
+            ]);
+        }
+
+        $productFields = $this->db->getFieldNames('med_product_master') ?? [];
+        $companyFields = $this->db->getFieldNames('med_company') ?? [];
+        $formFields = $this->db->getFieldNames('med_formulation') ?? [];
+        $companyNameField = in_array('company_name', $companyFields, true) ? 'company_name' : null;
+        $formNameField = in_array('formulation_length', $formFields, true)
+            ? 'formulation_length'
+            : (in_array('formulation', $formFields, true) ? 'formulation' : null);
+
+        if ($companyNameField === null || $formNameField === null) {
+            return $this->response->setJSON([
+                'ok' => 0,
+                'show_text' => '<div class="alert alert-danger mb-0">Master schema mismatch.</div>',
+            ]);
+        }
+
+        $hasCompanyId = in_array('company_id', $productFields, true);
+        $hasFormulation = in_array('formulation', $productFields, true);
+        $productFormIdField = in_array('formulation_id', $productFields, true)
+            ? 'formulation_id'
+            : (in_array('formulationid', $productFields, true) ? 'formulationid' : null);
+        $hasPayload = in_array('abdm_drug_payload_json', $productFields, true);
+
+        // ── 1. Resolve gateway credentials ──────────────────────────────────
+        $gwUrl   = '';
+        $gwToken = '';
+        if ($this->db->tableExists('hospital_setting')) {
+            $hsRows = $this->db->table('hospital_setting')
+                ->select('s_name, s_value')
+                ->whereIn('s_name', ['EATRIA_BRIDGE_URL', 'EATRIA_BRIDGE_TOKEN'])
+                ->get()
+                ->getResultArray();
+            foreach ($hsRows as $hsRow) {
+                if ((string) ($hsRow['s_name'] ?? '') === 'EATRIA_BRIDGE_URL') {
+                    $gwUrl = trim((string) ($hsRow['s_value'] ?? ''));
+                }
+                if ((string) ($hsRow['s_name'] ?? '') === 'EATRIA_BRIDGE_TOKEN') {
+                    $gwToken = trim((string) ($hsRow['s_value'] ?? ''));
+                }
+            }
+        }
+        if ($gwUrl === '' || $gwToken === '') {
+            $cfg = config('AbdmConnector');
+            if ($gwUrl === '') {
+                $gwUrl = trim((string) ($cfg->eatriaBridgeUrl ?? ''));
+            }
+            if ($gwToken === '') {
+                $gwToken = trim((string) ($cfg->eatriaBridgeToken ?? ''));
+            }
+        }
+        $gwUrl = rtrim($gwUrl !== '' ? $gwUrl : 'https://abdm-bridge.e-atria.in/api', '/');
+
+        if ($gwToken === '') {
+            return $this->response->setJSON([
+                'ok' => 0,
+                'show_text' => '<div class="alert alert-danger mb-0">Gateway API token not configured. Go to ABDM Settings and save your API token first.</div>',
+            ]);
+        }
+
+        // ── 2. Fetch master lists from gateway (all pages) ───────────────────
+        $gatewayCompanyItems     = $this->fetchAllGatewayDrugMasters($gwUrl, $gwToken, 'company');
+        $gatewayFormulationItems = $this->fetchAllGatewayDrugMasters($gwUrl, $gwToken, 'formulation');
+        $gatewayShortFormItems   = $this->fetchAllGatewayDrugMasters($gwUrl, $gwToken, 'short_formulation');
+
+        if ($gatewayCompanyItems === null) {
+            return $this->response->setJSON([
+                'ok' => 0,
+                'show_text' => '<div class="alert alert-danger mb-0">Could not reach gateway. Check gateway URL and token in ABDM Settings.</div>',
+            ]);
+        }
+
+        $companySet     = [];
+        $companyCodeSet = [];
+        $formSet        = [];
+        $productCompanyName = [];
+        $productCompanyCode = [];
+        $productFormName    = [];
+
+        // Build sets from gateway data
+        foreach ($gatewayCompanyItems as $item) {
+            $rawName = is_array($item) ? (string) ($item['name'] ?? '') : '';
+            $rawCode = is_array($item) ? (string) ($item['identifier'] ?? '') : '';  // gateway uses 'identifier'
+            $name    = $this->normalizeCompanyNameText($rawName);
+            if ($name === '') {
+                continue;
+            }
+            $key  = strtolower($name);
+            $code = $this->normalizeApiCode($rawCode);
+            $companySet[$key] = $name;
+            if ($code !== '' || ! isset($companyCodeSet[$key])) {
+                $companyCodeSet[$key] = $code;
+            }
+        }
+
+        foreach (($gatewayFormulationItems ?? []) as $item) {
+            $rawName = is_array($item) ? (string) ($item['name'] ?? '') : '';
+            $name    = $this->normalizeDrugFormulationText($rawName);
+            if ($name !== '') {
+                $formSet[strtolower($name)] = $name;
+            }
+        }
+
+        $shortFormSet = [];
+        foreach (($gatewayShortFormItems ?? []) as $item) {
+            $rawName = is_array($item) ? (string) ($item['name'] ?? '') : '';
+            $name    = trim(preg_replace('/\s+/', ' ', $rawName) ?? '');
+            if ($name !== '') {
+                $shortFormSet[strtolower($name)] = $name;
+            }
+        }
+
+        // ── 3. Also scan any product payloads already stored, to link products ←→ masters ──
+        if ($hasPayload && ($hasCompanyId || $hasFormulation || $productFormIdField !== null)) {
+            $scanSelect = ['id', 'abdm_drug_payload_json'];
+            if ($hasFormulation) {
+                $scanSelect[] = 'formulation';
+            }
+            $products = $this->db->table('med_product_master')
+                ->select(implode(', ', $scanSelect))
+                ->where('abdm_drug_payload_json !=', '')
+                ->orderBy('id', 'ASC')
+                ->get()
+                ->getResultArray();
+
+            foreach ($products as $row) {
+                $productId   = (int) ($row['id'] ?? 0);
+                $payloadJson = (string) ($row['abdm_drug_payload_json'] ?? '');
+                if ($productId <= 0 || $payloadJson === '') {
+                    continue;
+                }
+
+                $companyCandidate = $this->normalizeCompanyNameText(
+                    $this->extractApiManufacturerNameFromPayload($payloadJson)
+                );
+                if ($companyCandidate !== '') {
+                    $companyKey = strtolower($companyCandidate);
+                    if (! isset($companySet[$companyKey])) {
+                        $code = $this->normalizeApiCode($this->extractApiManufacturerCodeFromPayload($payloadJson));
+                        $companySet[$companyKey]     = $companyCandidate;
+                        $companyCodeSet[$companyKey] = $code;
+                    }
+                    $productCompanyName[$productId] = $companyCandidate;
+                    $productCompanyCode[$productId] = $companyCodeSet[$companyKey] ?? '';
+                }
+
+                $formCandidate = $this->extractApiFormulationFromPayload($payloadJson);
+                if ($formCandidate === '' && $hasFormulation) {
+                    $formCandidate = (string) ($row['formulation'] ?? '');
+                }
+                $formCandidate = $this->normalizeDrugFormulationText($formCandidate);
+                if ($formCandidate !== '') {
+                    $formKey = strtolower($formCandidate);
+                    if (! isset($formSet[$formKey])) {
+                        $formSet[$formKey] = $formCandidate;
+                    }
+                    $productFormName[$productId] = $formCandidate;
+                }
+            }
+        }
+
+        if ($companySet === [] && $formSet === []) {
+            return $this->response->setJSON([
+                'ok' => 0,
+                'show_text' => '<div class="alert alert-warning mb-0">No master data returned from gateway. Verify gateway configuration in ABDM Settings.</div>',
+            ]);
+        }
+
+        $companyList = array_values($companySet);
+        sort($companyList, SORT_NATURAL | SORT_FLAG_CASE);
+        $formList = array_values($formSet);
+        sort($formList, SORT_NATURAL | SORT_FLAG_CASE);
+
+        $existingCompanyRows = $this->db->table('med_company')
+            ->select('id, company_name')
+            ->orderBy('id', 'ASC')
+            ->get()
+            ->getResultArray();
+        $existingCompanyMap = [];
+        foreach ($existingCompanyRows as $existingRow) {
+            $existingName = $this->normalizeCompanyNameText((string) ($existingRow['company_name'] ?? ''));
+            if ($existingName !== '') {
+                $existingCompanyMap[strtolower($existingName)] = (int) ($existingRow['id'] ?? 0);
+            }
+        }
+
+        $existingFormRows = $this->db->table('med_formulation')
+            ->select('id, ' . $formNameField)
+            ->orderBy('id', 'ASC')
+            ->get()
+            ->getResultArray();
+        $existingFormMap = [];
+        foreach ($existingFormRows as $existingRow) {
+            $existingName = $this->normalizeDrugFormulationText((string) ($existingRow[$formNameField] ?? ''));
+            if ($existingName !== '') {
+                $existingFormMap[strtolower($existingName)] = (int) ($existingRow['id'] ?? 0);
+            }
+        }
+
+        $this->db->transBegin();
+        try {
+            $companyIdMap = [];
+            foreach ($companyList as $name) {
+                $normalizedKey = strtolower($name);
+                $companyCode = (string) ($companyCodeSet[$normalizedKey] ?? '');
+                $gatewayIdentifier = $companyCode !== '' ? $companyCode : $this->normalizeCompactKey($name);
+                $payloadHash = hash('sha256', $gatewayIdentifier . '|' . $name . '|' . $companyCode);
+                $this->upsertGatewayCompanyMaster($name, $companyCode, null, $payloadHash);
+
+                if (isset($existingCompanyMap[$normalizedKey]) && (int) $existingCompanyMap[$normalizedKey] > 0) {
+                    $companyIdMap[$normalizedKey] = (int) $existingCompanyMap[$normalizedKey];
+                    continue;
+                }
+
+                $insert = ['company_name' => $name];
+                if (in_array('contact_person_name', $companyFields, true)) {
+                    $insert['contact_person_name'] = '';
+                }
+                if (in_array('contact_phone_no', $companyFields, true)) {
+                    $insert['contact_phone_no'] = '';
+                }
+                $this->db->table('med_company')->insert($insert);
+                $newId = (int) $this->db->insertID();
+                if ($newId > 0) {
+                    $companyIdMap[$normalizedKey] = $newId;
+                    $existingCompanyMap[$normalizedKey] = $newId;
+                }
+            }
+
+            $formIdMap = [];
+            foreach ($formList as $name) {
+                $normalizedKey = strtolower($name);
+                if (isset($existingFormMap[$normalizedKey]) && (int) $existingFormMap[$normalizedKey] > 0) {
+                    $formIdMap[$normalizedKey] = (int) $existingFormMap[$normalizedKey];
+                    continue;
+                }
+
+                $insert = [$formNameField => $name];
+                if ($formNameField !== 'formulation' && in_array('formulation', $formFields, true)) {
+                    $insert['formulation'] = $name;
+                }
+                if ($formNameField !== 'formulation_length' && in_array('formulation_length', $formFields, true)) {
+                    $insert['formulation_length'] = $name;
+                }
+                $this->db->table('med_formulation')->insert($insert);
+                $newId = (int) $this->db->insertID();
+                if ($newId > 0) {
+                    $formIdMap[$normalizedKey] = $newId;
+                    $existingFormMap[$normalizedKey] = $newId;
+                }
+            }
+
+            // ── Sync short formulations ─────────────────────────────────────
+            if ($this->db->tableExists('med_short_formulation') && $shortFormSet !== []) {
+                $shortFormList = array_values($shortFormSet);
+                sort($shortFormList, SORT_NATURAL | SORT_FLAG_CASE);
+                $syncNow = date('Y-m-d H:i:s');
+                foreach ($shortFormList as $sfName) {
+                    $existingSf = $this->db->table('med_short_formulation')
+                        ->where('short_formulation', $sfName)
+                        ->get()->getRowArray();
+                    if ($existingSf) {
+                        $this->db->table('med_short_formulation')
+                            ->where('id', (int) $existingSf['id'])
+                            ->update(['last_synced_at' => $syncNow]);
+                    } else {
+                        $this->db->table('med_short_formulation')->insert([
+                            'short_formulation' => $sfName,
+                            'last_synced_at'    => $syncNow,
+                        ]);
+                    }
+                }
+            }
+
+            if ($hasCompanyId || $hasFormulation || $productFormIdField !== null) {
+                foreach ($products as $row) {
+                    $productId = (int) ($row['id'] ?? 0);
+                    if ($productId <= 0) {
+                        continue;
+                    }
+
+                    $update = [];
+                    $companyName = (string) ($productCompanyName[$productId] ?? '');
+                    if ($hasCompanyId && $companyName !== '') {
+                        $update['company_id'] = (int) ($companyIdMap[strtolower($companyName)] ?? 0);
+                    }
+
+                    $formName = (string) ($productFormName[$productId] ?? '');
+                    if ($hasFormulation && $formName !== '') {
+                        $update['formulation'] = $formName;
+                    }
+                    if ($productFormIdField !== null && $formName !== '') {
+                        $update[$productFormIdField] = (int) ($formIdMap[strtolower($formName)] ?? 0);
+                    }
+
+                    if ($update !== []) {
+                        $this->db->table('med_product_master')->where('id', $productId)->update($update);
+                    }
+                }
+            }
+
+            if ($this->db->transStatus() === false) {
+                throw new \RuntimeException('Transaction failed while syncing masters.');
+            }
+
+            $this->db->transCommit();
+        } catch (\Throwable $e) {
+            $this->db->transRollback();
+            return $this->response->setJSON([
+                'ok' => 0,
+                'show_text' => '<div class="alert alert-danger mb-0">Sync failed: ' . esc($e->getMessage()) . '</div>',
+            ]);
+        }
+
+        return $this->response->setJSON([
+            'ok' => 1,
+            'show_text' => '<div class="alert alert-success mb-0">Synced master data from gateway. Companies: '
+                . (int) count($companyList)
+                . ', Formulations: '
+                . (int) count($formList)
+                . ', Short Formulations: '
+                . (int) count($shortFormSet)
+                . '.</div>',
         ]);
     }
 
@@ -5087,10 +5873,10 @@ class Medical extends BaseController
             ]);
         }
 
-        $type = strtolower(trim((string) ($this->request->getGet('type') ?? $this->request->getPost('type') ?? 'generic')));
+        $type = strtolower(trim((string) ($this->request->getGet('type') ?? $this->request->getPost('type') ?? 'brand')));
         $allowedTypes = ['generic', 'brand', 'product', 'substance'];
         if (! in_array($type, $allowedTypes, true)) {
-            $type = 'generic';
+            $type = 'brand';
         }
 
         $limit = (int) ($this->request->getGet('limit') ?? $this->request->getPost('limit') ?? 10);
@@ -5120,6 +5906,7 @@ class Medical extends BaseController
                 'display_name', 'drug_display_name', 'product_name', 'medicine_name', 'med_name',
                 'brand_name', 'trade_name', 'drug_name', 'name', 'display', 'term', 'title', 'label',
             ]);
+            $brandName = $this->extractDrugText($row, ['brand_name', 'trade_name']);
             $label = $this->extractDrugText($row, [
                 'label', 'name', 'display', 'term', 'title', 'drug_name', 'product_name',
                 'medicine_name', 'brand_name', 'trade_name',
@@ -5129,6 +5916,10 @@ class Medical extends BaseController
             $itemType = strtolower($this->extractDrugText($row, ['type', 'entity_type', 'category']));
             if ($itemType === '') {
                 $itemType = $type;
+            }
+
+            if ($itemType === 'brand' && $brandName !== '') {
+                $label = $brandName;
             }
 
             if ($this->isDrugIdentifierLike($label) && $displayName !== '' && ! $this->isDrugIdentifierLike($displayName)) {
@@ -5150,6 +5941,7 @@ class Medical extends BaseController
             $suggestions[] = [
                 'label' => $label,
                 'display_name' => $displayName,
+                'brand_name' => $brandName,
                 'generic_name' => $generic,
                 'identifier' => $identifier,
                 'type' => $itemType,
@@ -5169,7 +5961,7 @@ class Medical extends BaseController
             return $deny;
         }
 
-        $type = strtolower(trim((string) ($this->request->getGet('type') ?? $this->request->getPost('type') ?? 'generic')));
+        $type = strtolower(trim((string) ($this->request->getGet('type') ?? $this->request->getPost('type') ?? 'brand')));
         $identifier = trim((string) ($this->request->getGet('identifier') ?? $this->request->getPost('identifier') ?? ''));
         if ($identifier === '') {
             return $this->response->setJSON([
@@ -5195,6 +5987,7 @@ class Medical extends BaseController
             'display_name', 'drug_display_name', 'product_name', 'medicine_name', 'med_name',
             'brand_name', 'trade_name', 'drug_name', 'name', 'display', 'term', 'title', 'label',
         ]);
+        $brandName = $this->extractDrugText($record, ['brand_name', 'trade_name']);
         $label = $this->extractDrugText($record, [
             'label', 'name', 'display', 'term', 'title', 'drug_name', 'product_name',
             'medicine_name', 'brand_name', 'trade_name',
@@ -5202,6 +5995,7 @@ class Medical extends BaseController
         $generic = $this->extractDrugText($record, ['generic_name', 'genericname', 'generic', 'salt', 'molecule']);
         $hsnCode = $this->extractDrugText($record, ['hsn_code', 'hsn', 'hscode']);
         $formulation = $this->extractDrugText($record, ['formulation', 'dosage_form', 'drug_form']);
+        $route = $this->extractDrugText($record, ['route', 'administration_route']);
         $packing = $this->extractDrugText($record, ['packing', 'pack_size', 'package']);
         $itemType = strtolower($this->extractDrugText($record, ['type', 'entity_type', 'category']));
         if ($itemType === '') {
@@ -5210,6 +6004,10 @@ class Medical extends BaseController
         $canonicalId = $this->extractDrugText($record, ['identifier', 'id', 'code', 'concept_id', 'value']);
         if ($canonicalId === '') {
             $canonicalId = $identifier;
+        }
+
+        if ($itemType === 'brand' && $brandName !== '') {
+            $label = $brandName;
         }
 
         if ($this->isDrugIdentifierLike($label) && $displayName !== '' && ! $this->isDrugIdentifierLike($displayName)) {
@@ -5227,14 +6025,38 @@ class Medical extends BaseController
             $payloadJson = '{}';
         }
 
+        $manufacturerName = $this->extractDrugText($record, ['manufacturer_name', 'company_name', 'company', 'manufacturer', 'brand_owner', 'marketer']);
+        $manufacturerCode = $this->extractDrugText($record, ['manufacturer_code', 'company_code', 'brand_owner_code']);
+        if (isset($record['manufacturer']) && is_array($record['manufacturer'])) {
+            if ($manufacturerName === '') {
+                $manufacturerName = trim((string) ($record['manufacturer']['name'] ?? ''));
+            }
+            if ($manufacturerCode === '') {
+                $manufacturerCode = trim((string) ($record['manufacturer']['code'] ?? ''));
+            }
+        }
+        $dosageForm = $this->extractDrugText($record, ['dosage_form', 'formulation', 'drug_form', 'form', 'short_formulation', 'short_form', 'sf_name']);
+        $routeText = $this->extractDrugText($record, ['route', 'administration_route']);
+        $strengthText = $this->extractDrugText($record, ['strength_text', 'strength', 'dose_strength']);
+        $packSizeText = $this->extractDrugText($record, ['pack_size_text', 'pack_size', 'package', 'packing']);
+        $compositionText = $this->extractDrugText($record, ['composition_text', 'composition', 'generic_name', 'generic']);
+
         return $this->response->setJSON([
             'ok' => (int) ($result['ok'] ?? 0),
             'selected' => [
                 'label' => $label,
                 'display_name' => $displayName,
+                'brand_name' => $brandName,
                 'generic_name' => $generic,
+                'manufacturer_name' => $manufacturerName,
+                'manufacturer_code' => $manufacturerCode,
                 'hsn_code' => $hsnCode,
                 'formulation' => $formulation,
+                'dosage_form' => $dosageForm,
+                'route' => $routeText,
+                'strength_text' => $strengthText,
+                'pack_size_text' => $packSizeText,
+                'composition_text' => $compositionText,
                 'packing' => $packing,
                 'type' => $itemType,
                 'identifier' => $canonicalId,
@@ -5354,11 +6176,652 @@ class Medical extends BaseController
         return false;
     }
 
+    private function normalizeCompactKey(string $text): string
+    {
+        return strtolower((string) preg_replace('/[^a-z0-9]+/', '', trim($text)));
+    }
+
+    private function normalizeApiCode(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return '';
+        }
+
+        return (string) preg_replace('/\s+/', '', $value);
+    }
+
+    private function normalizeDrugFormulationText(string $value): string
+    {
+        $value = trim((string) preg_replace('/\s+/', ' ', str_replace(['_', '.'], ' ', $value)));
+        if ($value === '') {
+            return '';
+        }
+
+        $key = $this->normalizeCompactKey($value);
+        $map = [
+            'tab' => 'Tablet',
+            'tabs' => 'Tablet',
+            'tablet' => 'Tablet',
+            'tablets' => 'Tablet',
+            'oraltab' => 'Tablet',
+            'oraltablet' => 'Tablet',
+            'cap' => 'Capsule',
+            'caps' => 'Capsule',
+            'capsule' => 'Capsule',
+            'capsules' => 'Capsule',
+            'oralcapsule' => 'Capsule',
+            'inj' => 'Injection',
+            'injction' => 'Injection',
+            'injection' => 'Injection',
+            'syp' => 'Syrup',
+            'syr' => 'Syrup',
+            'syrup' => 'Syrup',
+            'susp' => 'Suspension',
+            'suspension' => 'Suspension',
+            'drop' => 'Drops',
+            'drops' => 'Drops',
+            'crm' => 'Cream',
+            'cream' => 'Cream',
+            'oint' => 'Ointment',
+            'ointment' => 'Ointment',
+            'gel' => 'Gel',
+            'lotion' => 'Lotion',
+            'powder' => 'Powder',
+            'respule' => 'Respule',
+            'respules' => 'Respule',
+        ];
+
+        if (isset($map[$key])) {
+            return $map[$key];
+        }
+
+        return ucwords(strtolower($value));
+    }
+
+    private function normalizeCompanyNameText(string $value): string
+    {
+        $value = trim((string) preg_replace('/\s+/', ' ', $value));
+        if ($value === '') {
+            return '';
+        }
+
+        $key = $this->normalizeCompactKey($value);
+        $map = [
+            'ipca' => 'Ipca Laboratories Limited',
+            'ipcalab' => 'Ipca Laboratories Limited',
+            'ipcalabs' => 'Ipca Laboratories Limited',
+            'ipcalaboratories' => 'Ipca Laboratories Limited',
+            'ipcalaboratoriesltd' => 'Ipca Laboratories Limited',
+            'ipcalaboratorieslimited' => 'Ipca Laboratories Limited',
+        ];
+
+        if (isset($map[$key])) {
+            return $map[$key];
+        }
+
+        $normalized = ucwords(strtolower($value));
+        $normalized = preg_replace('/\bPvt\b/i', 'Pvt', $normalized) ?? $normalized;
+        $normalized = preg_replace('/\bLtd\b/i', 'Ltd', $normalized) ?? $normalized;
+        $normalized = preg_replace('/\bLtd\.?\s*$/i', 'Limited', $normalized) ?? $normalized;
+        return trim($normalized);
+    }
+
+    private function extractApiManufacturerNameFromPayload(string $payloadJson): string
+    {
+        if ($payloadJson === '') {
+            return '';
+        }
+
+        $decoded = json_decode($payloadJson, true);
+        if (! is_array($decoded)) {
+            return '';
+        }
+
+        $manufacturerNode = $decoded['manufacturer'] ?? null;
+        if (is_array($manufacturerNode)) {
+            $name = trim((string) ($manufacturerNode['name'] ?? ''));
+            if ($name !== '') {
+                return $name;
+            }
+        } elseif (is_string($manufacturerNode)) {
+            $name = trim($manufacturerNode);
+            if ($name !== '') {
+                return $name;
+            }
+        }
+
+        return $this->extractDrugText($decoded, ['manufacturer_name', 'company_name', 'brand_owner', 'marketer', 'company']);
+    }
+
+    private function extractApiManufacturerCodeFromPayload(string $payloadJson): string
+    {
+        if ($payloadJson === '') {
+            return '';
+        }
+
+        $decoded = json_decode($payloadJson, true);
+        if (! is_array($decoded)) {
+            return '';
+        }
+
+        $manufacturerNode = $decoded['manufacturer'] ?? null;
+        if (is_array($manufacturerNode)) {
+            $code = trim((string) ($manufacturerNode['code'] ?? $manufacturerNode['id'] ?? ''));
+            if ($code !== '') {
+                return $code;
+            }
+        }
+
+        return $this->extractDrugText($decoded, ['manufacturer_code', 'company_code', 'brand_owner_code']);
+    }
+
+    private function extractApiFormulationFromPayload(string $payloadJson): string
+    {
+        if ($payloadJson === '') {
+            return '';
+        }
+
+        $decoded = json_decode($payloadJson, true);
+        if (! is_array($decoded)) {
+            return '';
+        }
+
+        return $this->extractDrugText($decoded, ['dosage_form', 'formulation', 'drug_form', 'form']);
+    }
+
+    private function upsertStandardCompanyByName(string $rawName, string $rawCode = ''): int
+    {
+        if (! $this->db->tableExists('med_company')) {
+            return 0;
+        }
+
+        $name = $this->normalizeCompanyNameText($rawName);
+        $code = $this->normalizeApiCode($rawCode);
+        if ($name === '') {
+            return 0;
+        }
+
+        $fields = $this->db->getFieldNames('med_company') ?? [];
+        if (! in_array('id', $fields, true) || ! in_array('company_name', $fields, true)) {
+            return 0;
+        }
+
+        $codeField = null;
+        foreach (['company_code', 'manufacturer_code', 'code'] as $candidateField) {
+            if (in_array($candidateField, $fields, true)) {
+                $codeField = $candidateField;
+                break;
+            }
+        }
+
+        if ($code !== '' && $codeField !== null) {
+            $exactCode = $this->db->table('med_company')
+                ->select('id, company_name')
+                ->where('UPPER(TRIM(' . $codeField . '))', strtoupper($code))
+                ->get()
+                ->getRowArray();
+            if (is_array($exactCode) && (int) ($exactCode['id'] ?? 0) > 0) {
+                $update = ['company_name' => $name];
+                if ($codeField !== null) {
+                    $update[$codeField] = $code;
+                }
+                $this->db->table('med_company')->where('id', (int) $exactCode['id'])->update($update);
+                return (int) $exactCode['id'];
+            }
+        }
+
+        $exact = $this->db->table('med_company')
+            ->select('id, company_name')
+            ->where('UPPER(TRIM(company_name))', strtoupper($name))
+            ->get()
+            ->getRowArray();
+        if (is_array($exact) && (int) ($exact['id'] ?? 0) > 0) {
+            $update = ['company_name' => $name];
+            if ($code !== '' && $codeField !== null) {
+                $update[$codeField] = $code;
+            }
+            $this->db->table('med_company')->where('id', (int) $exact['id'])->update($update);
+            return (int) $exact['id'];
+        }
+
+        $rows = $this->db->table('med_company')->select('id, company_name')->orderBy('id', 'ASC')->get()->getResultArray();
+        foreach ($rows as $row) {
+            $existingId = (int) ($row['id'] ?? 0);
+            $existingName = (string) ($row['company_name'] ?? '');
+            if ($existingId <= 0) {
+                continue;
+            }
+            if (strcasecmp($this->normalizeCompanyNameText($existingName), $name) === 0) {
+                $update = [];
+                if (strcasecmp(trim($existingName), $name) !== 0) {
+                    $update['company_name'] = $name;
+                }
+                if ($code !== '' && $codeField !== null) {
+                    $update[$codeField] = $code;
+                }
+                if ($update !== []) {
+                    $this->db->table('med_company')->where('id', $existingId)->update($update);
+                }
+                return $existingId;
+            }
+        }
+
+        $payload = ['company_name' => $name];
+        if ($code !== '' && $codeField !== null) {
+            $payload[$codeField] = $code;
+        }
+        if (in_array('contact_person_name', $fields, true)) {
+            $payload['contact_person_name'] = '';
+        }
+        if (in_array('contact_phone_no', $fields, true)) {
+            $payload['contact_phone_no'] = '';
+        }
+
+        $this->db->table('med_company')->insert($payload);
+        return (int) $this->db->insertID();
+    }
+
+    /**
+     * Fetches ALL pages from the gateway /v3/drugs/masters endpoint,
+     * paginating until total is exhausted. Returns null only on the very
+     * first request failure; returns partial results on later-page failures.
+     *
+     * @return array<int,mixed>|null
+     */
+    private function fetchAllGatewayDrugMasters(string $gwUrl, string $token, string $master): ?array
+    {
+        $pageSize = 500;
+        $offset   = 0;
+        $all      = [];
+
+        do {
+            $url = rtrim($gwUrl, '/') . '/v3/drugs/masters?master=' . urlencode($master)
+                 . '&limit=' . $pageSize . '&offset=' . $offset;
+
+            $ch = curl_init();
+            curl_setopt_array($ch, [
+                CURLOPT_URL            => $url,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT        => 30,
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_HTTPHEADER     => [
+                    'Accept: application/json',
+                    'Authorization: Bearer ' . $token,
+                ],
+            ]);
+            $raw  = (string) curl_exec($ch);
+            $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $err  = curl_error($ch);
+            curl_close($ch);
+
+            if ($err !== '' || $code < 200 || $code >= 300) {
+                return $offset === 0 ? null : $all;
+            }
+
+            $body = json_decode($raw, true);
+            if (! is_array($body) || (int) ($body['ok'] ?? 0) !== 1) {
+                return $offset === 0 ? [] : $all;
+            }
+
+            $items = $body['items'] ?? [];
+            if (! is_array($items) || $items === []) {
+                break;
+            }
+
+            $all    = array_merge($all, array_values($items));
+            $total  = (int) ($body['total'] ?? 0);
+            $offset += $pageSize;
+
+        } while ($offset < $total);
+
+        return $all;
+    }
+
+    /**
+     * Calls GET {gwUrl}/v3/drugs/masters?master={master}&limit={limit} on the
+     * e-Atria gateway and returns the normalised items array.
+     *
+     * Returns null on connectivity failure (caller should surface an error).
+     * Returns [] when the gateway responds OK but has no items.
+     *
+     * @return array<int,mixed>|null
+     */
+    private function callGatewayDrugMasters(string $gwUrl, string $token, string $master, int $limit): ?array
+    {
+        $url = rtrim($gwUrl, '/') . '/v3/drugs/masters?master=' . urlencode($master) . '&limit=' . (int) $limit;
+
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL            => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 30,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_HTTPHEADER     => [
+                'Accept: application/json',
+                'Authorization: Bearer ' . $token,
+            ],
+        ]);
+        $raw  = (string) curl_exec($ch);
+        $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $err  = curl_error($ch);
+        curl_close($ch);
+
+        if ($err !== '' || $code < 200 || $code >= 300) {
+            return null;
+        }
+
+        $body = json_decode($raw, true);
+        if (! is_array($body) || (int) ($body['ok'] ?? 0) !== 1) {
+            return [];
+        }
+
+        // Response contract: { ok, master, count, total, items[], request_id }
+        // items[]: { identifier, name, updated_at }
+        $items = $body['items'] ?? [];
+        return is_array($items) ? array_values($items) : [];
+    }
+
+    private function upsertGatewayCompanyMaster(string $rawName, string $rawCode = '', ?string $gatewayUpdatedAt = null, ?string $payloadHash = null): int
+    {
+        if (! $this->db->tableExists('hms_gateway_company_master')) {
+            return 0;
+        }
+
+        $companyName = $this->normalizeCompanyNameText($rawName);
+        if ($companyName === '') {
+            return 0;
+        }
+
+        $code = $this->normalizeApiCode($rawCode);
+        $identifier = $code !== '' ? strtolower($code) : $this->normalizeCompactKey($companyName);
+        if ($identifier === '' || strlen($identifier) > 100) {
+            $identifier = substr(hash('sha256', $companyName . '|' . $code), 0, 100);
+        }
+
+        $normalizedName = $this->normalizeCompactKey($companyName);
+        $existing = $this->db->table('hms_gateway_company_master')
+            ->where('gateway_company_identifier', $identifier)
+            ->get()
+            ->getRowArray();
+
+        $now = date('Y-m-d H:i:s');
+        $update = [
+            'company_name' => $companyName,
+            'name_normalized' => $normalizedName !== '' ? $normalizedName : null,
+            'payload_hash' => $payloadHash !== null && $payloadHash !== '' ? $payloadHash : hash('sha256', $identifier . '|' . $companyName),
+            'sync_status' => 'active',
+            'last_synced_at' => $now,
+        ];
+        if ($gatewayUpdatedAt !== null && $gatewayUpdatedAt !== '') {
+            $update['gateway_updated_at'] = $gatewayUpdatedAt;
+        }
+
+        if (is_array($existing) && (int) ($existing['id'] ?? 0) > 0) {
+            $this->db->table('hms_gateway_company_master')
+                ->where('id', (int) $existing['id'])
+                ->update($update);
+            return (int) $existing['id'];
+        }
+
+        $insert = [
+            'gateway_company_identifier' => $identifier,
+            'company_name' => $companyName,
+            'gateway_updated_at' => $gatewayUpdatedAt !== null && $gatewayUpdatedAt !== '' ? $gatewayUpdatedAt : null,
+            'first_synced_at' => $now,
+            'last_synced_at' => $now,
+            'sync_status' => 'active',
+            'name_normalized' => $normalizedName !== '' ? $normalizedName : null,
+            'payload_hash' => $payloadHash !== null && $payloadHash !== '' ? $payloadHash : hash('sha256', $identifier . '|' . $companyName),
+        ];
+
+        $this->db->table('hms_gateway_company_master')->insert($insert);
+        return (int) $this->db->insertID();
+    }
+
+    private function ensureFormulationInMaster(string $rawValue, string $rawCode = ''): string
+    {
+        $canonical = $this->normalizeDrugFormulationText($rawValue);
+        $code = $this->normalizeApiCode($rawCode);
+        if ($code === '' && $canonical !== '') {
+            $code = $this->normalizeCompactKey($canonical);
+        }
+        if ($canonical === '' || ! $this->db->tableExists('med_formulation')) {
+            return $canonical;
+        }
+
+        $fields = $this->db->getFieldNames('med_formulation') ?? [];
+        $idField = in_array('id', $fields, true) ? 'id' : null;
+        $nameField = in_array('formulation_length', $fields, true)
+            ? 'formulation_length'
+            : (in_array('formulation', $fields, true) ? 'formulation' : null);
+        if ($nameField === null) {
+            return $canonical;
+        }
+
+        $codeField = null;
+        foreach (['formulation_code', 'code'] as $candidateField) {
+            if (in_array($candidateField, $fields, true)) {
+                $codeField = $candidateField;
+                break;
+            }
+        }
+
+        if ($code !== '' && $codeField !== null) {
+            $existingByCode = $this->db->table('med_formulation')
+                ->select(($idField ?? $nameField) . ', ' . $nameField)
+                ->where('UPPER(TRIM(' . $codeField . '))', strtoupper($code))
+                ->get()
+                ->getRowArray();
+            if (is_array($existingByCode) && $idField !== null && (int) ($existingByCode[$idField] ?? 0) > 0) {
+                $update = [$nameField => $canonical];
+                if ($nameField !== 'formulation' && in_array('formulation', $fields, true)) {
+                    $update['formulation'] = $canonical;
+                }
+                if ($nameField !== 'formulation_length' && in_array('formulation_length', $fields, true)) {
+                    $update['formulation_length'] = $canonical;
+                }
+                $update[$codeField] = $code;
+                $this->db->table('med_formulation')->where($idField, (int) $existingByCode[$idField])->update($update);
+                return $canonical;
+            }
+        }
+
+        $existing = $this->db->table('med_formulation')
+            ->select(($idField ?? $nameField) . ', ' . $nameField)
+            ->where('UPPER(TRIM(' . $nameField . '))', strtoupper($canonical))
+            ->get()
+            ->getRowArray();
+
+        if (is_array($existing)) {
+            if ($code !== '' && $codeField !== null) {
+                $this->db->table('med_formulation')->where($idField ?? $nameField, (int) ($existing[$idField ?? $nameField] ?? 0))->update([$codeField => $code]);
+            }
+            return $canonical;
+        }
+
+        $rows = $this->db->table('med_formulation')->select(($idField ?? $nameField) . ', ' . $nameField)->orderBy($idField ?? $nameField, 'ASC')->get()->getResultArray();
+        foreach ($rows as $row) {
+            $existingName = (string) ($row[$nameField] ?? '');
+            if (strcasecmp($this->normalizeDrugFormulationText($existingName), $canonical) !== 0) {
+                continue;
+            }
+
+            if ($idField !== null) {
+                $fid = (int) ($row[$idField] ?? 0);
+                if ($fid > 0) {
+                    $update = [$nameField => $canonical];
+                    if ($nameField !== 'formulation' && in_array('formulation', $fields, true)) {
+                        $update['formulation'] = $canonical;
+                    }
+                    if ($nameField !== 'formulation_length' && in_array('formulation_length', $fields, true)) {
+                        $update['formulation_length'] = $canonical;
+                    }
+                    if ($code !== '' && $codeField !== null) {
+                        $update[$codeField] = $code;
+                    }
+                    $this->db->table('med_formulation')->where($idField, $fid)->update($update);
+                    return $canonical;
+                }
+            }
+        }
+
+        $insert = [$nameField => $canonical];
+        if ($nameField !== 'formulation' && in_array('formulation', $fields, true)) {
+            $insert['formulation'] = $canonical;
+        }
+        if ($nameField !== 'formulation_length' && in_array('formulation_length', $fields, true)) {
+            $insert['formulation_length'] = $canonical;
+        }
+        if ($code !== '' && $codeField !== null) {
+            $insert[$codeField] = $code;
+        }
+        $this->db->table('med_formulation')->insert($insert);
+
+        return $canonical;
+    }
+
+    private function standardizeCompanyMasterData(): void
+    {
+        if (! $this->db->tableExists('med_company')) {
+            return;
+        }
+
+        $fields = $this->db->getFieldNames('med_company') ?? [];
+        if (! in_array('id', $fields, true) || ! in_array('company_name', $fields, true)) {
+            return;
+        }
+
+        $rows = $this->db->table('med_company')->select('id, company_name')->orderBy('id', 'ASC')->get()->getResultArray();
+        $canonicalToKeepId = [];
+
+        $productFields = $this->db->tableExists('med_product_master') ? ($this->db->getFieldNames('med_product_master') ?? []) : [];
+        $canRepointProducts = in_array('company_id', $productFields, true);
+
+        foreach ($rows as $row) {
+            $id = (int) ($row['id'] ?? 0);
+            $name = (string) ($row['company_name'] ?? '');
+            if ($id <= 0) {
+                continue;
+            }
+
+            $canonical = $this->normalizeCompanyNameText($name);
+            if ($canonical === '') {
+                continue;
+            }
+
+            $key = strtolower($canonical);
+            if (! isset($canonicalToKeepId[$key])) {
+                $canonicalToKeepId[$key] = $id;
+                if (strcasecmp(trim($name), $canonical) !== 0) {
+                    $this->db->table('med_company')->where('id', $id)->update(['company_name' => $canonical]);
+                }
+                continue;
+            }
+
+            $keepId = (int) $canonicalToKeepId[$key];
+            if ($keepId === $id) {
+                continue;
+            }
+
+            if ($canRepointProducts) {
+                $this->db->table('med_product_master')->where('company_id', $id)->update(['company_id' => $keepId]);
+            }
+            $this->db->table('med_company')->where('id', $id)->delete();
+        }
+    }
+
+    private function standardizeFormulationMasterData(): void
+    {
+        if (! $this->db->tableExists('med_formulation')) {
+            return;
+        }
+
+        $fields = $this->db->getFieldNames('med_formulation') ?? [];
+        $idField = in_array('id', $fields, true) ? 'id' : null;
+        $nameField = in_array('formulation_length', $fields, true)
+            ? 'formulation_length'
+            : (in_array('formulation', $fields, true) ? 'formulation' : null);
+        if ($nameField === null) {
+            return;
+        }
+
+        $select = $idField !== null ? ($idField . ', ' . $nameField) : $nameField;
+        $rows = $this->db->table('med_formulation')->select($select)->orderBy($idField ?? $nameField, 'ASC')->get()->getResultArray();
+        $canonicalToKeepId = [];
+
+        $productFields = $this->db->tableExists('med_product_master') ? ($this->db->getFieldNames('med_product_master') ?? []) : [];
+        $productFormIdField = in_array('formulation_id', $productFields, true)
+            ? 'formulation_id'
+            : (in_array('formulationid', $productFields, true) ? 'formulationid' : null);
+
+        foreach ($rows as $row) {
+            $rawName = (string) ($row[$nameField] ?? '');
+            $canonical = $this->normalizeDrugFormulationText($rawName);
+            if ($canonical === '') {
+                continue;
+            }
+
+            $rowId = $idField !== null ? (int) ($row[$idField] ?? 0) : 0;
+            $key = strtolower($canonical);
+
+            if (! isset($canonicalToKeepId[$key])) {
+                if ($idField !== null && $rowId > 0) {
+                    $canonicalToKeepId[$key] = $rowId;
+                }
+
+                $update = [$nameField => $canonical];
+                if ($nameField !== 'formulation' && in_array('formulation', $fields, true)) {
+                    $update['formulation'] = $canonical;
+                }
+                if ($nameField !== 'formulation_length' && in_array('formulation_length', $fields, true)) {
+                    $update['formulation_length'] = $canonical;
+                }
+
+                if ($idField !== null && $rowId > 0) {
+                    $this->db->table('med_formulation')->where($idField, $rowId)->update($update);
+                }
+                continue;
+            }
+
+            if ($idField === null || $rowId <= 0) {
+                continue;
+            }
+
+            $keepId = (int) $canonicalToKeepId[$key];
+            if ($keepId === $rowId) {
+                continue;
+            }
+
+            if ($productFormIdField !== null && $this->db->tableExists('med_product_master')) {
+                $this->db->table('med_product_master')->where($productFormIdField, $rowId)->update([$productFormIdField => $keepId]);
+            }
+            $this->db->table('med_formulation')->where($idField, $rowId)->delete();
+        }
+    }
+
+    private function runDrugMasterStandardizationOnce(): void
+    {
+        if ($this->drugMasterStandardized) {
+            return;
+        }
+
+        $this->drugMasterStandardized = true;
+        try {
+            $this->standardizeFormulationMasterData();
+            $this->standardizeCompanyMasterData();
+        } catch (\Throwable $e) {
+            log_message('warning', '[Medical] Drug master standardization skipped: ' . $e->getMessage());
+        }
+    }
+
     public function product_edit($productId = 0)
     {
         if ($deny = $this->ensurePharmacyAccess()) {
             return $deny;
         }
+
+        $this->runDrugMasterStandardizationOnce();
 
         $productId = (int) $productId;
         $productData = [];
@@ -5371,8 +6834,10 @@ class Medical extends BaseController
         }
 
         $formulations = [];
-        if ($this->db->tableExists('med_formulation')) {
-            $formulations = $this->db->table('med_formulation')->orderBy('id', 'ASC')->get()->getResult();
+        if ($this->db->tableExists('med_short_formulation')) {
+            $formulations = $this->db->table('med_short_formulation')->orderBy('short_formulation', 'ASC')->get()->getResult();
+        } elseif ($this->db->tableExists('med_formulation')) {
+            $formulations = $this->db->table('med_formulation')->orderBy('formulation', 'ASC')->get()->getResult();
         }
 
         $companies = [];
@@ -5404,11 +6869,220 @@ class Medical extends BaseController
         ]);
     }
 
+    public function rebuild_drug_masters()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        if (! $this->request->isAJAX()) {
+            return $this->response->setJSON([
+                'ok' => 0,
+                'show_text' => '<div class="alert alert-danger mb-0">Invalid request.</div>',
+            ]);
+        }
+
+        $confirm = strtoupper(trim((string) ($this->request->getPost('confirm') ?? '')));
+        if ($confirm !== 'YES') {
+            return $this->response->setJSON([
+                'ok' => 0,
+                'show_text' => '<div class="alert alert-danger mb-0">Confirmation required. Send YES to rebuild masters.</div>',
+            ]);
+        }
+
+        if (! $this->db->tableExists('med_product_master') || ! $this->db->tableExists('med_company') || ! $this->db->tableExists('med_formulation')) {
+            return $this->response->setJSON([
+                'ok' => 0,
+                'show_text' => '<div class="alert alert-danger mb-0">Required tables are missing (med_product_master/med_company/med_formulation).</div>',
+            ]);
+        }
+
+        $productFields = $this->db->getFieldNames('med_product_master') ?? [];
+        $companyFields = $this->db->getFieldNames('med_company') ?? [];
+        $formFields = $this->db->getFieldNames('med_formulation') ?? [];
+
+        $hasProductCompanyId = in_array('company_id', $productFields, true);
+        $hasProductFormulation = in_array('formulation', $productFields, true);
+        $productFormIdField = in_array('formulation_id', $productFields, true)
+            ? 'formulation_id'
+            : (in_array('formulationid', $productFields, true) ? 'formulationid' : null);
+        $hasPayload = in_array('abdm_drug_payload_json', $productFields, true);
+
+        $formNameField = in_array('formulation_length', $formFields, true)
+            ? 'formulation_length'
+            : (in_array('formulation', $formFields, true) ? 'formulation' : null);
+        if ($formNameField === null || ! in_array('company_name', $companyFields, true) || ! in_array('id', $companyFields, true)) {
+            return $this->response->setJSON([
+                'ok' => 0,
+                'show_text' => '<div class="alert alert-danger mb-0">Master schema mismatch. Required fields not found.</div>',
+            ]);
+        }
+
+        $oldCompanyMap = [];
+        $oldCompanies = $this->db->table('med_company')->select('id, company_name')->get()->getResultArray();
+        foreach ($oldCompanies as $row) {
+            $oldCompanyMap[(int) ($row['id'] ?? 0)] = (string) ($row['company_name'] ?? '');
+        }
+
+        $selectParts = ['id'];
+        if ($hasProductCompanyId) {
+            $selectParts[] = 'company_id';
+        }
+        if ($hasProductFormulation) {
+            $selectParts[] = 'formulation';
+        }
+        if ($productFormIdField !== null) {
+            $selectParts[] = $productFormIdField;
+        }
+        if ($hasPayload) {
+            $selectParts[] = 'abdm_drug_payload_json';
+        }
+
+        $products = $this->db->table('med_product_master')->select(implode(', ', $selectParts))->orderBy('id', 'ASC')->get()->getResultArray();
+
+        $productCompanyName = [];
+        $productFormulationName = [];
+        $companySet = [];
+        $formSet = [];
+
+        foreach ($products as $row) {
+            $pid = (int) ($row['id'] ?? 0);
+            if ($pid <= 0) {
+                continue;
+            }
+
+            $payload = $hasPayload ? (string) ($row['abdm_drug_payload_json'] ?? '') : '';
+
+            $companyCandidate = $this->extractApiManufacturerNameFromPayload($payload);
+            if ($companyCandidate === '' && $hasProductCompanyId) {
+                $oldCid = (int) ($row['company_id'] ?? 0);
+                $companyCandidate = (string) ($oldCompanyMap[$oldCid] ?? '');
+            }
+            $canonicalCompany = $this->normalizeCompanyNameText($companyCandidate);
+            if ($canonicalCompany !== '') {
+                $productCompanyName[$pid] = $canonicalCompany;
+                $companySet[strtolower($canonicalCompany)] = $canonicalCompany;
+            }
+
+            $formCandidate = $hasProductFormulation ? (string) ($row['formulation'] ?? '') : '';
+            if (trim($formCandidate) === '') {
+                $formCandidate = $this->extractApiFormulationFromPayload($payload);
+            }
+            $canonicalForm = $this->normalizeDrugFormulationText($formCandidate);
+            if ($canonicalForm !== '') {
+                $productFormulationName[$pid] = $canonicalForm;
+                $formSet[strtolower($canonicalForm)] = $canonicalForm;
+            }
+        }
+
+        $companyList = array_values($companySet);
+        sort($companyList, SORT_NATURAL | SORT_FLAG_CASE);
+
+        $formList = array_values($formSet);
+        sort($formList, SORT_NATURAL | SORT_FLAG_CASE);
+
+        $this->db->transBegin();
+        try {
+            if ($hasProductCompanyId) {
+                $this->db->table('med_product_master')->set('company_id', 0)->update();
+            }
+            if ($productFormIdField !== null) {
+                $this->db->table('med_product_master')->set($productFormIdField, 0)->update();
+            }
+
+            $this->db->table('med_company')->emptyTable();
+            $this->db->table('med_formulation')->emptyTable();
+
+            $companyIdMap = [];
+            foreach ($companyList as $name) {
+                $insert = ['company_name' => $name];
+                if (in_array('contact_person_name', $companyFields, true)) {
+                    $insert['contact_person_name'] = '';
+                }
+                if (in_array('contact_phone_no', $companyFields, true)) {
+                    $insert['contact_phone_no'] = '';
+                }
+                $this->db->table('med_company')->insert($insert);
+                $newId = (int) $this->db->insertID();
+                if ($newId > 0) {
+                    $companyIdMap[strtolower($name)] = $newId;
+                }
+            }
+
+            $formIdMap = [];
+            foreach ($formList as $name) {
+                $insert = [$formNameField => $name];
+                if ($formNameField !== 'formulation' && in_array('formulation', $formFields, true)) {
+                    $insert['formulation'] = $name;
+                }
+                if ($formNameField !== 'formulation_length' && in_array('formulation_length', $formFields, true)) {
+                    $insert['formulation_length'] = $name;
+                }
+                $this->db->table('med_formulation')->insert($insert);
+                $newId = (int) $this->db->insertID();
+                if ($newId > 0) {
+                    $formIdMap[strtolower($name)] = $newId;
+                }
+            }
+
+            foreach ($products as $row) {
+                $pid = (int) ($row['id'] ?? 0);
+                if ($pid <= 0) {
+                    continue;
+                }
+
+                $update = [];
+                $cName = (string) ($productCompanyName[$pid] ?? '');
+                if ($hasProductCompanyId && $cName !== '') {
+                    $update['company_id'] = (int) ($companyIdMap[strtolower($cName)] ?? 0);
+                }
+
+                $fName = (string) ($productFormulationName[$pid] ?? '');
+                if ($hasProductFormulation && $fName !== '') {
+                    $update['formulation'] = $fName;
+                }
+                if ($productFormIdField !== null && $fName !== '') {
+                    $update[$productFormIdField] = (int) ($formIdMap[strtolower($fName)] ?? 0);
+                }
+
+                if ($update !== []) {
+                    $this->db->table('med_product_master')->where('id', $pid)->update($update);
+                }
+            }
+
+            if ($this->db->transStatus() === false) {
+                throw new \RuntimeException('Transaction failed while rebuilding masters.');
+            }
+
+            $this->db->transCommit();
+        } catch (\Throwable $e) {
+            $this->db->transRollback();
+            return $this->response->setJSON([
+                'ok' => 0,
+                'show_text' => '<div class="alert alert-danger mb-0">Rebuild failed: ' . esc($e->getMessage()) . '</div>',
+            ]);
+        }
+
+        return $this->response->setJSON([
+            'ok' => 1,
+            'show_text' => '<div class="alert alert-success mb-0">Company and Formulation masters rebuilt successfully. Companies: '
+                . (int) count($companyList)
+                . ', Formulations: '
+                . (int) count($formList)
+                . ', Products updated: '
+                . (int) count($products)
+                . '.</div>',
+        ]);
+    }
+
     public function product_master_update($productId = 0)
     {
         if ($deny = $this->ensurePharmacyAccess()) {
             return $deny;
         }
+
+
+        $this->runDrugMasterStandardizationOnce();
 
         if (! $this->request->isAJAX() || ! $this->db->tableExists('med_product_master')) {
             return $this->response->setJSON([
@@ -5438,6 +7112,17 @@ class Medical extends BaseController
         $abdmDrugGeneric = trim((string) ($this->request->getPost('abdm_drug_generic') ?? ''));
         $abdmDrugPayloadJson = trim((string) ($this->request->getPost('abdm_drug_payload_json') ?? ''));
         $abdmDrugLastSyncedAt = trim((string) ($this->request->getPost('abdm_drug_last_synced_at') ?? ''));
+        $formulation = $this->normalizeDrugFormulationText($formulation);
+
+        $apiManufacturerName = $this->extractApiManufacturerNameFromPayload($abdmDrugPayloadJson);
+        $apiManufacturerCode = $this->extractApiManufacturerCodeFromPayload($abdmDrugPayloadJson);
+        $resolvedCompanyId = $this->upsertStandardCompanyByName($apiManufacturerName, $apiManufacturerCode);
+        if ($resolvedCompanyId > 0) {
+            $companyId = $resolvedCompanyId;
+        }
+
+        $formulation = $this->ensureFormulationInMaster($formulation, $this->normalizeCompactKey($formulation));
+
         if (strlen($abdmDrugPayloadJson) > 65000) {
             $abdmDrugPayloadJson = substr($abdmDrugPayloadJson, 0, 65000);
         }

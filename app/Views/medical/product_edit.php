@@ -65,8 +65,8 @@ $flag = static function ($v): string {
                 <div class="d-flex align-items-center gap-2 mt-1">
                     <small class="text-muted">ABDM Drug Search</small>
                     <select id="abdm_drug_search_type" class="form-select form-select-sm" style="width:auto;">
-                        <option value="generic" selected>Generic</option>
-                        <option value="brand">Brand</option>
+                        <option value="generic">Generic</option>
+                        <option value="brand" selected>Brand</option>
                         <option value="product">Product</option>
                         <option value="substance">Substance</option>
                     </select>
@@ -79,10 +79,14 @@ $flag = static function ($v): string {
                     <option value="">Select</option>
                     <?php foreach (($med_formulation ?? []) as $row): ?>
                         <?php
-                        $v = (string) ($row->formulation ?? ($row->formulation_length ?? ''));
-                        $label = (string) ($row->formulation_length ?? $v);
+                        $v = (string) ($row->short_formulation ?? ($row->formulation ?? ($row->formulation_length ?? '')));
+                        $label = $v;
+                        $code = (string) ($row->short_formulation_code ?? ($row->formulation_code ?? ($row->code ?? '')));
+                        if ($code === '') {
+                            $code = preg_replace('/[^a-z0-9]+/i', '', strtolower($v));
+                        }
                         ?>
-                        <option value="<?= esc($v) ?>" <?= strcasecmp($v, $formulationValue) === 0 ? 'selected' : '' ?>><?= esc($label) ?></option>
+                        <option value="<?= esc($v) ?>" data-formulation-code="<?= esc($code) ?>" <?= strcasecmp($v, $formulationValue) === 0 ? 'selected' : '' ?>><?= esc($label) ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -91,7 +95,8 @@ $flag = static function ($v): string {
                 <select name="input_company_name" id="input_company_name" class="form-select">
                     <option value="0">Select</option>
                     <?php foreach (($med_company ?? []) as $row): ?>
-                        <option value="<?= (int) ($row->id ?? 0) ?>" <?= ((int) ($row->id ?? 0) === $companyId) ? 'selected' : '' ?>><?= esc($row->company_name ?? '') ?></option>
+                        <?php $companyCode = (string) ($row->company_code ?? ($row->manufacturer_code ?? ($row->code ?? ''))); ?>
+                        <option value="<?= (int) ($row->id ?? 0) ?>" data-company-code="<?= esc($companyCode) ?>" <?= ((int) ($row->id ?? 0) === $companyId) ? 'selected' : '' ?>><?= esc($row->company_name ?? '') ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -175,8 +180,21 @@ $flag = static function ($v): string {
 
     if (window.jQuery && $.fn.select2) {
         $('#med_cat_id').select2({
+            theme: 'bootstrap4',
             width: '100%',
             placeholder: 'Select categories'
+        });
+        $('#input_formulation').select2({
+            theme: 'bootstrap4',
+            width: '100%',
+            placeholder: 'Select formulation',
+            allowClear: true
+        });
+        $('#input_company_name').select2({
+            theme: 'bootstrap4',
+            width: '100%',
+            placeholder: 'Select company',
+            allowClear: true
         });
     }
 
@@ -189,7 +207,13 @@ $flag = static function ($v): string {
         var label = $('#abdm_drug_display').val() || '';
         var type = $('#abdm_drug_type').val() || '';
         var generic = $('#abdm_drug_generic').val() || '';
+        var route = '';
         var syncedAt = $('#abdm_drug_last_synced_at').val() || '';
+
+        var payloadObj = parseJsonObject($('#abdm_drug_payload_json').val() || '{}');
+        var flatMeta = flattenMeta(payloadObj, {});
+        route = getMetaText(flatMeta, ['route', 'administration_route']);
+        route = normalizeRoute(route);
 
         if (!id && !label) {
             $('#abdm-drug-selected').html('');
@@ -199,6 +223,7 @@ $flag = static function ($v): string {
         var parts = [];
         if (label) { parts.push(label); }
         if (generic) { parts.push('Generic: ' + generic); }
+        if (route) { parts.push('Route: ' + route); }
         if (type) { parts.push('Type: ' + type); }
         if (id) { parts.push('Identifier: ' + id); }
         if (syncedAt) { parts.push('Synced: ' + syncedAt); }
@@ -227,6 +252,148 @@ $flag = static function ($v): string {
 
     function normalizeSpace(text) {
         return String(text || '').replace(/\s+/g, ' ').trim();
+    }
+
+    function compactKey(text) {
+        return normalizeSpace(text).toLowerCase().replace(/[^a-z0-9]+/g, '');
+    }
+
+    function normalizeFormulationText(text) {
+        var raw = normalizeSpace(String(text || '').replace(/[_.]/g, ' '));
+        if (!raw) {
+            return '';
+        }
+
+        var key = compactKey(raw);
+        var map = {
+            tab: 'Tablet',
+            tabs: 'Tablet',
+            tablet: 'Tablet',
+            tablets: 'Tablet',
+            oraltablet: 'Tablet',
+            oraltablet: 'Tablet',
+            tabletoral: 'Tablet',
+            cap: 'Capsule',
+            caps: 'Capsule',
+            capsule: 'Capsule',
+            capsules: 'Capsule',
+            oralcapsule: 'Capsule',
+            inj: 'Injection',
+            injection: 'Injection',
+            syp: 'Syrup',
+            syrup: 'Syrup',
+            susp: 'Suspension',
+            suspension: 'Suspension',
+            ointment: 'Ointment',
+            cream: 'Cream',
+            gel: 'Gel',
+            drops: 'Drops',
+            drop: 'Drops',
+            powder: 'Powder',
+            sachet: 'Sachet',
+            sachets: 'Sachet',
+            lotion: 'Lotion',
+            spray: 'Spray',
+            inhaler: 'Inhaler'
+        };
+        if (Object.prototype.hasOwnProperty.call(map, key)) {
+            return map[key];
+        }
+
+        var lower = raw.toLowerCase();
+        if (lower.indexOf('tablet') >= 0) {
+            return 'Tablet';
+        }
+        if (lower.indexOf('capsule') >= 0) {
+            return 'Capsule';
+        }
+        if (lower.indexOf('injection') >= 0) {
+            return 'Injection';
+        }
+        if (lower.indexOf('syrup') >= 0) {
+            return 'Syrup';
+        }
+        if (lower.indexOf('suspension') >= 0) {
+            return 'Suspension';
+        }
+        if (lower.indexOf('cream') >= 0) {
+            return 'Cream';
+        }
+        if (lower.indexOf('ointment') >= 0) {
+            return 'Ointment';
+        }
+        if (lower.indexOf('gel') >= 0) {
+            return 'Gel';
+        }
+
+        return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+    }
+
+    function normalizeCompanyText(text) {
+        var raw = normalizeSpace(text);
+        if (!raw) {
+            return '';
+        }
+
+        var key = compactKey(raw);
+        var map = {
+            ipca: 'Ipca Laboratories Limited',
+            ipcalab: 'Ipca Laboratories Limited',
+            ipcalabs: 'Ipca Laboratories Limited',
+            ipcalaboratories: 'Ipca Laboratories Limited',
+            ipcalaboratoriesltd: 'Ipca Laboratories Limited',
+            ipcalaboratorieslimited: 'Ipca Laboratories Limited'
+        };
+        if (Object.prototype.hasOwnProperty.call(map, key)) {
+            return map[key];
+        }
+
+        return raw.toLowerCase().replace(/\b\w/g, function (m) { return m.toUpperCase(); }).replace(/\bLtd\.?\b/g, 'Limited');
+    }
+
+    function normalizeCode(text) {
+        return compactKey(text || '');
+    }
+
+    function normalizeRouteText(text) {
+        var route = normalizeSpace(text || '');
+        if (!route) {
+            return '';
+        }
+
+        var lower = route.toLowerCase();
+        if (lower.indexOf('oral') >= 0) {
+            return 'Oral';
+        }
+        if (lower.indexOf('topical') >= 0) {
+            return 'Topical';
+        }
+        if (lower.indexOf('intravenous') >= 0 || lower === 'iv') {
+            return 'Intravenous';
+        }
+        if (lower.indexOf('intramuscular') >= 0 || lower === 'im') {
+            return 'Intramuscular';
+        }
+        if (lower.indexOf('subcutaneous') >= 0) {
+            return 'Subcutaneous';
+        }
+        if (lower.indexOf('nasal') >= 0) {
+            return 'Nasal';
+        }
+        if (lower.indexOf('ophthalmic') >= 0) {
+            return 'Ophthalmic';
+        }
+        if (lower.indexOf('otic') >= 0) {
+            return 'Otic';
+        }
+        if (lower.indexOf('rectal') >= 0) {
+            return 'Rectal';
+        }
+        if (lower.indexOf('vaginal') >= 0) {
+            return 'Vaginal';
+        }
+
+        return route.charAt(0).toUpperCase() + route.slice(1).toLowerCase();
     }
 
     function isIdentifierLike(text) {
@@ -383,35 +550,119 @@ $flag = static function ($v): string {
         return null;
     }
 
+    function normalizeRoute(routeText) {
+        var route = normalizeRouteText(routeText || '');
+        if (!route) {
+            return '';
+        }
+        route = route.replace(/\broute\b/ig, '');
+        return normalizeRouteText(route);
+    }
+
+    function splitFormulationAndRoute(formulationText, routeText) {
+        var formulation = normalizeSpace(formulationText || '');
+        var route = normalizeRoute(routeText);
+
+        if (!formulation) {
+            return {
+                formulation: '',
+                route: route
+            };
+        }
+
+        var knownRoutes = ['oral', 'topical', 'intravenous', 'iv', 'intramuscular', 'im', 'subcutaneous', 'inhalation', 'nasal', 'ophthalmic', 'otic', 'rectal', 'vaginal', 'transdermal'];
+        var lower = formulation.toLowerCase();
+        for (var i = 0; i < knownRoutes.length; i++) {
+            var key = knownRoutes[i];
+            var re = new RegExp('\\b' + key.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&') + '\\b', 'i');
+            if (re.test(lower)) {
+                if (!route) {
+                    route = normalizeRoute(key);
+                }
+                formulation = normalizeSpace(formulation.replace(re, ''));
+                break;
+            }
+        }
+
+        return {
+            formulation: formulation,
+            route: route
+        };
+    }
+
+    function deriveDrugName(detail, parsed) {
+        var brandName = normalizeSpace(detail.brand_name || '');
+        var manufacturerName = normalizeSpace(detail.manufacturer_name || '');
+        var label = normalizeSpace(detail.label || '');
+        var displayName = normalizeSpace(detail.display_name || '');
+        var productName = normalizeSpace(parsed && parsed.productName ? parsed.productName : '');
+
+        if (brandName) {
+            return brandName;
+        }
+        if (manufacturerName && !isIdentifierLike(manufacturerName)) {
+            return manufacturerName;
+        }
+        if (label && !isIdentifierLike(label)) {
+            return label;
+        }
+        if (displayName && !isIdentifierLike(displayName)) {
+            return parsed && parsed.productName ? productName : displayName;
+        }
+        return productName || displayName || label;
+    }
+
+    function deriveGenericName(detail, parsed, flatMeta) {
+        var generic = normalizeSpace(detail.generic_name || '');
+        var metaGeneric = getMetaText(flatMeta, ['generic_name', 'genericname', 'generic', 'salt', 'molecule', 'composition', 'composition_text']);
+        var parsedGeneric = normalizeSpace(parsed && parsed.genericName ? parsed.genericName : '');
+        return normalizeSpace(generic || metaGeneric || parsedGeneric);
+    }
+
     function setFormulationValue(formulation) {
-        var value = normalizeSpace(formulation).toLowerCase();
+        var value = normalizeFormulationText(formulation).toLowerCase();
         if (!value) {
             return;
         }
         var $f = $('#input_formulation');
         var matchedVal = '';
         $f.find('option').each(function () {
-            var v = normalizeSpace($(this).val()).toLowerCase();
-            var t = normalizeSpace($(this).text()).toLowerCase();
-            if (v === value || t === value || v.indexOf(value) >= 0 || t.indexOf(value) >= 0 || value.indexOf(v) >= 0 || value.indexOf(t) >= 0) {
-                matchedVal = $(this).val();
+            var optVal = $(this).val();
+            if (!optVal) { return true; } // skip placeholder/empty options
+            var v = normalizeFormulationText(optVal).toLowerCase();
+            var t = normalizeFormulationText($(this).text()).toLowerCase();
+            if (v === value || t === value || v.indexOf(value) >= 0 || t.indexOf(value) >= 0 || (v && value.indexOf(v) >= 0) || (t && value.indexOf(t) >= 0)) {
+                matchedVal = optVal;
                 return false;
             }
         });
         if (matchedVal !== '') {
-            $f.val(matchedVal);
+            $f.val(matchedVal).trigger('change');
         }
     }
 
     function setCompanyByName(companyName) {
-        var needle = normalizeSpace(companyName).toLowerCase();
+        var needle = normalizeCompanyText(companyName).toLowerCase();
         if (!needle) {
             return;
         }
         var $c = $('#input_company_name');
         var matchedVal = '';
+
         $c.find('option').each(function () {
-            var text = normalizeSpace($(this).text()).toLowerCase();
+            var text = normalizeCompanyText($(this).text()).toLowerCase();
+            if (text === needle) {
+                matchedVal = $(this).val();
+                return false;
+            }
+        });
+        if (matchedVal !== '') {
+            $c.val(matchedVal).trigger('change');
+            return;
+        }
+
+        $c.find('option').each(function () {
+            var text = normalizeCompanyText($(this).text()).toLowerCase();
             if (!text || text === 'select') {
                 return;
             }
@@ -421,7 +672,45 @@ $flag = static function ($v): string {
             }
         });
         if (matchedVal !== '') {
-            $c.val(matchedVal);
+            $c.val(matchedVal).trigger('change');
+        }
+    }
+
+    function setCompanyByCode(companyCode) {
+        var needle = normalizeCode(companyCode);
+        if (!needle) {
+            return;
+        }
+        var $c = $('#input_company_name');
+        var matchedVal = '';
+        $c.find('option').each(function () {
+            var code = normalizeCode($(this).data('company-code') || '');
+            if (code && code === needle) {
+                matchedVal = $(this).val();
+                return false;
+            }
+        });
+        if (matchedVal !== '') {
+            $c.val(matchedVal).trigger('change');
+        }
+    }
+
+    function setFormulationByCode(formulationCode) {
+        var needle = normalizeCode(formulationCode);
+        if (!needle) {
+            return;
+        }
+        var $f = $('#input_formulation');
+        var matchedVal = '';
+        $f.find('option').each(function () {
+            var code = normalizeCode($(this).data('formulation-code') || '');
+            if (code && code === needle) {
+                matchedVal = $(this).val();
+                return false;
+            }
+        });
+        if (matchedVal !== '') {
+            $f.val(matchedVal).trigger('change');
         }
     }
 
@@ -470,30 +759,47 @@ $flag = static function ($v): string {
             return;
         }
 
-        var label = detail.label || '';
-        var generic = detail.generic_name || '';
+        var label = normalizeSpace(detail.label || '');
+        var brandName = normalizeSpace(detail.brand_name || '');
+        var manufacturerName = normalizeSpace(detail.manufacturer_name || '');
+        var manufacturerCode = normalizeSpace(detail.manufacturer_code || '');
+        var generic = normalizeSpace(detail.generic_name || '');
         var hsnCode = detail.hsn_code || '';
-        var formulation = detail.formulation || '';
-        var packing = detail.packing || '';
+        var formulation = detail.dosage_form || detail.formulation || '';
+        var route = detail.route || '';
+        var packing = detail.pack_size_text || detail.packing || '';
 
         var parsed = parseDrugLabel(label);
         var payloadObj = parseJsonObject(detail.payload_json || '{}');
         var flatMeta = flattenMeta(payloadObj, {});
 
-        var metaGeneric = getMetaText(flatMeta, ['generic_name', 'genericname', 'generic', 'salt', 'molecule', 'composition']);
-        var metaCompany = getMetaText(flatMeta, ['company', 'manufacturer', 'brand_owner', 'marketer']);
+        var metaGeneric = getMetaText(flatMeta, ['generic_name', 'genericname', 'generic', 'salt', 'molecule', 'composition', 'composition_text']);
+        var metaCompany = getMetaText(flatMeta, ['company', 'company_name', 'manufacturer', 'manufacturer_name', 'brand_owner', 'marketer']);
         var metaCategory = getMetaText(flatMeta, ['medicine_category', 'category', 'drug_category', 'schedule_category']);
-        var metaFormulation = getMetaText(flatMeta, ['formulation', 'dosage_form', 'drug_form']);
-        var metaPacking = getMetaText(flatMeta, ['packing', 'pack_size', 'package']);
+        var metaFormulation = getMetaText(flatMeta, ['formulation', 'dosage_form', 'drug_form', 'short_formulation', 'short_form', 'sf_name']);
+        var metaRoute = getMetaText(flatMeta, ['route', 'administration_route']);
+        var metaPacking = getMetaText(flatMeta, ['packing', 'pack_size', 'pack_size_text', 'package']);
         var metaHsn = getMetaText(flatMeta, ['hsn_code', 'hsn', 'hscode']);
+        var metaStrength = getMetaText(flatMeta, ['strength_text', 'strength', 'dose_strength']);
+        var manufacturerNameMeta = getMetaText(flatMeta, ['manufacturer_name', 'manufacturer', 'company_name', 'company']);
+
+        // Nested manufacturer object: payload_json.manufacturer.name / .code
+        var manufacturerFromPayload = '';
+        var manufacturerCodeFromPayload = '';
+        if (payloadObj.manufacturer && typeof payloadObj.manufacturer === 'object') {
+            manufacturerFromPayload = normalizeSpace(String(payloadObj.manufacturer.name || ''));
+            manufacturerCodeFromPayload = normalizeSpace(String(payloadObj.manufacturer.code || ''));
+        }
 
         var cgstVal = getMetaNumber(flatMeta, ['cgst', 'cgst_per', 'cgst_percent']);
         var sgstVal = getMetaNumber(flatMeta, ['sgst', 'sgst_per', 'sgst_percent']);
         var gstTotal = getMetaNumber(flatMeta, ['gst', 'gst_per', 'gst_percent', 'igst', 'tax_percent']);
 
-        var finalProductName = normalizeSpace(parsed.productName || label);
-        var finalGeneric = normalizeSpace(generic || metaGeneric || parsed.genericName);
-        var finalFormulation = normalizeSpace(formulation || metaFormulation || parsed.formulation);
+        var finalProductName = deriveDrugName(detail, parsed);
+        var finalGeneric = deriveGenericName(detail, parsed, flatMeta);
+        var split = splitFormulationAndRoute(formulation || metaFormulation || parsed.formulation, route || metaRoute);
+        var finalFormulation = normalizeSpace(split.formulation || parsed.formulation);
+        var finalRoute = normalizeRouteText(split.route);
         var finalPacking = normalizeSpace(packing || metaPacking);
         var finalHsn = normalizeSpace(hsnCode || metaHsn);
 
@@ -508,16 +814,24 @@ $flag = static function ($v): string {
         }
         if (finalFormulation) {
             setFormulationValue(finalFormulation);
+            setFormulationByCode(finalFormulation);
         }
         if (finalPacking && !$('#input_packing_type').val()) {
             $('#input_packing_type').val(finalPacking);
         }
 
-        if (metaCompany) {
-            setCompanyByName(metaCompany);
+        if (manufacturerName || manufacturerFromPayload || manufacturerNameMeta || metaCompany) {
+            setCompanyByName(manufacturerName || manufacturerFromPayload || manufacturerNameMeta || metaCompany);
+        }
+        if (manufacturerCode || manufacturerCodeFromPayload) {
+            setCompanyByCode(manufacturerCode || manufacturerCodeFromPayload);
         }
         if (metaCategory) {
             setCategoryByName(metaCategory);
+        }
+
+        if (!finalPacking && metaStrength) {
+            $('#input_packing_type').val(metaStrength);
         }
 
         if (cgstVal !== null) {
@@ -563,12 +877,28 @@ $flag = static function ($v): string {
             }
         }
 
-        $('#abdm_drug_display').val(label || finalProductName);
+        $('#abdm_drug_display').val(finalProductName || brandName || label);
 
         $('#abdm_drug_type').val(detail.type || '');
         $('#abdm_drug_identifier').val(detail.identifier || '');
         $('#abdm_drug_generic').val(finalGeneric);
-        $('#abdm_drug_payload_json').val(detail.payload_json || '{}');
+        var payloadObjToSave = parseJsonObject(detail.payload_json || '{}');
+        if (finalRoute && !payloadObjToSave.route) {
+            payloadObjToSave.route = finalRoute;
+        }
+        if (finalFormulation && !payloadObjToSave.dosage_form) {
+            payloadObjToSave.dosage_form = finalFormulation;
+        }
+        if (manufacturerCode && !payloadObjToSave.manufacturer_code) {
+            payloadObjToSave.manufacturer_code = manufacturerCode;
+        }
+        if (finalFormulation && !payloadObjToSave.formulation_code) {
+            payloadObjToSave.formulation_code = normalizeCode(finalFormulation);
+        }
+        if ((manufacturerName || manufacturerFromPayload || manufacturerNameMeta || metaCompany) && !payloadObjToSave.manufacturer_name) {
+            payloadObjToSave.manufacturer_name = manufacturerName || manufacturerFromPayload || manufacturerNameMeta || metaCompany;
+        }
+        $('#abdm_drug_payload_json').val(JSON.stringify(payloadObjToSave));
         $('#abdm_drug_last_synced_at').val(detail.synced_at || '');
         showSelectedDrugSummary();
     }
@@ -579,7 +909,7 @@ $flag = static function ($v): string {
         }
 
         $.getJSON('<?= base_url('product_master/drug_terminology_detail') ?>', {
-            type: type || 'generic',
+            type: type || 'brand',
             identifier: identifier
         }, function (resp) {
             if (!resp || Number(resp.ok || 0) !== 1 || !resp.selected) {
@@ -631,6 +961,7 @@ $flag = static function ($v): string {
 
         var item = suggestionItems[index] || {};
         var label = item.label || '';
+        var brandName = item.brand_name || '';
         var displayName = item.display_name || '';
         var genericName = item.generic_name || '';
         var type = item.type || '';
@@ -641,14 +972,16 @@ $flag = static function ($v): string {
         // Apply parsed fields immediately so user sees direct form fill.
         applyParsedLabelToForm(label);
 
-        if (displayName && !isIdentifierLike(displayName)) {
+        if (type === 'brand' && brandName && !isIdentifierLike(brandName)) {
+            $('#input_item_name').val(brandName);
+        } else if (displayName && !isIdentifierLike(displayName)) {
             $('#input_item_name').val(displayName);
         }
         if (genericName) {
             $('#input_genericname').val(genericName);
         }
 
-        $('#abdm_drug_display').val(label);
+        $('#abdm_drug_display').val((type === 'brand' && brandName) ? brandName : label);
         $('#abdm_drug_type').val(type);
         $('#abdm_drug_identifier').val(identifier);
         $('#abdm_drug_last_synced_at').val(new Date().toISOString().slice(0, 19).replace('T', ' '));
@@ -672,6 +1005,7 @@ $flag = static function ($v): string {
 
         items.forEach(function (item, idx) {
             var label = item.label || '';
+            var brandName = item.brand_name || '';
             var displayName = item.display_name || '';
             var genericName = item.generic_name || '';
             var type = item.type || '';
@@ -682,7 +1016,7 @@ $flag = static function ($v): string {
 
             var $a = $('<a href="#" class="list-group-item list-group-item-action py-1 px-2"></a>');
             $a.attr('data-idx', String(idx));
-            var mainText = displayName || label || identifier;
+            var mainText = (type === 'brand' ? (brandName || label) : '') || displayName || label || identifier;
             var detailParts = [];
             if (genericName && genericName.toLowerCase() !== String(mainText).toLowerCase()) {
                 detailParts.push('Generic: ' + genericName);
@@ -711,7 +1045,7 @@ $flag = static function ($v): string {
 
     function fetchDrugSuggestions() {
         var q = ($('#input_item_name').val() || '').trim();
-        var type = ($('#abdm_drug_search_type').val() || 'generic').trim();
+        var type = ($('#abdm_drug_search_type').val() || 'brand').trim();
 
         if (q.length < 2) {
             clearSuggestionBox();
