@@ -1150,7 +1150,7 @@ $flag = static function ($v): string {
             }
             showMsg(data.show_text || '');
             if ((data.is_update_stock || 0) > 0) {
-                load_form_div('<?= base_url('Product_master/Product_edit') ?>/' + data.is_update_stock, 'searchresult', 'Drug Master : Edit :Pharmacy');
+                load_form_div('<?= base_url('Product_master/Product_edit') ?>/' + data.is_update_stock, 'medical-main', 'Drug Master : Edit :Pharmacy');
             }
         }, 'json').fail(function () {
             showMsg('<div class="alert alert-danger mb-0">Unable to update product.</div>');

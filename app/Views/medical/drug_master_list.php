@@ -11,7 +11,7 @@
             <button type="button" id="btnResetSearch" class="btn btn-secondary">Reset</button>
         </div>
         <div class="col-auto">
-            <button onclick="load_form_div('<?= base_url('Product_master/Product_edit/0') ?>','searchresult','Drug Master : New Product :Pharmacy');" type="button" class="btn btn-warning">Add New Product</button>
+            <button onclick="load_form_div('<?= base_url('Product_master/Product_edit/0') ?>','medical-main','Drug Master : New Product :Pharmacy');" type="button" class="btn btn-warning">Add New Product</button>
         </div>
     </form>
 

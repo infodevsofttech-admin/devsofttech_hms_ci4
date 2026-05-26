@@ -19,7 +19,7 @@
                 <td><?= esc($row->genericname ?? '') ?></td>
                 <td><?= esc($row->packing ?? '') ?></td>
                 <td>
-                    <button onclick="load_form_div('<?= base_url('Product_master/Product_edit/' . (int) ($row->id ?? 0)) ?>','searchresult','Drug Master : Edit :Pharmacy');" type="button" class="btn btn-warning btn-sm">Edit</button>
+                    <button onclick="load_form_div('<?= base_url('Product_master/Product_edit/' . (int) ($row->id ?? 0)) ?>','medical-main','Drug Master : Edit :Pharmacy');" type="button" class="btn btn-warning btn-sm">Edit</button>
                 </td>
             </tr>
         <?php endforeach; ?>
