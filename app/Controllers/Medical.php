@@ -541,7 +541,11 @@ class Medical extends BaseController
                 'l_Batch' => (string) ($row['batch_no'] ?? ''),
                 'l_Expiry' => (string) ($row['expiry_date_str'] ?? ''),
                 'l_mrp' => (string) ($row['mrp'] ?? ''),
-                'l_unit_rate' => (string) ($row['selling_unit_rate'] ?? ''),
+                'l_unit_rate' => (string) (
+                    ((float) ($row['packing'] ?? 0) > 0)
+                        ? round(((float) ($row['mrp'] ?? 0)) / ((float) ($row['packing'] ?? 1)), 4)
+                        : (float) ($row['selling_unit_rate'] ?? 0)
+                ),
                 'l_c_qty' => (string) ($row['c_qty'] ?? ''),
                 'l_packing' => (string) ($row['packing'] ?? ''),
                 'l_new_stock' => (string) ($row['new_stock'] ?? 0),
@@ -1577,7 +1581,12 @@ class Medical extends BaseController
             return redirect()->to(base_url('Medical/invoice_edit/' . $invoiceId . '?msg=' . urlencode('Stock qty is less than required qty')));
         }
 
-        $price = (float) ($stock->selling_unit_rate ?? 0);
+        $packing = (float) ($stock->packing ?? 0);
+        $mrp = (float) ($stock->mrp ?? 0);
+        $price = $packing > 0 ? round($mrp / $packing, 4) : (float) ($stock->selling_unit_rate ?? 0);
+        if ($price <= 0) {
+            $price = (float) ($stock->selling_unit_rate ?? 0);
+        }
         $amount = $qty * $price;
         $discAmount = ($discPer > 0) ? ($amount * $discPer / 100) : 0;
         $netAmount = $amount - $discAmount;
