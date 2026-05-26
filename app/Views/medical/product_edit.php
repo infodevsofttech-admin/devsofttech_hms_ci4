@@ -108,7 +108,7 @@ $flag = static function ($v): string {
             </div>
             <div class="col-md-2">
                 <label class="form-label">Packing</label>
-                <input class="form-control" name="input_packing_type" id="input_packing_type" type="text" value="<?= esc($packing) ?>">
+                <input class="form-control" name="input_packing_type" id="input_packing_type" type="number" min="1" step="1" value="<?= esc($packing) ?>">
             </div>
             <div class="col-md-2">
                 <label class="form-label">Re-Order Qty</label>
