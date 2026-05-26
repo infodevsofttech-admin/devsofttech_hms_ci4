@@ -241,6 +241,8 @@
                 $.ajax({
                         url: ourl,
                         dataType: "html",
+                    cache: false,
+                    cache: false,
                     async: true,
                             timeout: REQUEST_TIMEOUT_MS
                     })
