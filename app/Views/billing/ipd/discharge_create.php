@@ -3939,6 +3939,59 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                 });
             }
 
+            function pollScanLookupStatus(queueId, onTick, onDone) {
+                if (!queueId || queueId <= 0) {
+                    if (typeof onDone === 'function') {
+                        onDone({ ok: 0, status: 'unknown', error_text: 'Missing queue id' });
+                    }
+                    return;
+                }
+
+                var tries = 0;
+                var maxTries = 10;
+                var timer = setInterval(function() {
+                    tries++;
+                    $.getJSON('<?= base_url('AbdmGateway/scan_share_lookup_status') ?>/' + queueId, function(resp) {
+                        if (typeof onTick === 'function') {
+                            onTick(resp, tries, maxTries);
+                        }
+
+                        if (!resp || parseInt(resp.ok || 0, 10) !== 1) {
+                            if (tries >= maxTries) {
+                                clearInterval(timer);
+                                if (typeof onDone === 'function') {
+                                    onDone(resp || { ok: 0, status: 'failed', error_text: 'Status lookup failed' });
+                                }
+                            }
+                            return;
+                        }
+
+                        var status = (resp.status || '').toString().toLowerCase();
+                        if (parseInt(resp.done || 0, 10) === 1 || status === 'sent' || status === 'failed') {
+                            clearInterval(timer);
+                            if (typeof onDone === 'function') {
+                                onDone(resp);
+                            }
+                            return;
+                        }
+
+                        if (tries >= maxTries) {
+                            clearInterval(timer);
+                            if (typeof onDone === 'function') {
+                                onDone(resp);
+                            }
+                        }
+                    }).fail(function() {
+                        if (tries >= maxTries) {
+                            clearInterval(timer);
+                            if (typeof onDone === 'function') {
+                                onDone({ ok: 0, status: 'failed', error_text: 'Status polling failed' });
+                            }
+                        }
+                    });
+                }, 3000);
+            }
+
             // Scan & Share Lookup
             var btnScan = document.getElementById('btn_ipd_abdm_scan_lookup');
             if (btnScan) {
@@ -3953,7 +4006,36 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                             var addr = document.getElementById('ipd_abha_address');
                             if (addr) { addr.value = resp.abha_address; }
                         }
-                        setStatus(resp && resp.message ? resp.message : 'Lookup done.');
+
+                        if (!resp || parseInt(resp.ok || 0, 10) !== 1) {
+                            setStatus((resp && resp.error_text) ? resp.error_text : 'Scan lookup failed.', true);
+                            return;
+                        }
+
+                        var queueId = parseInt(resp.queue_id || '0', 10);
+                        setStatus((resp && resp.message ? resp.message : 'Lookup queued.') + ' Queue ID: ' + (queueId || '-') + '. Checking status...', false);
+
+                        pollScanLookupStatus(queueId, function(scanResp, currentTry, maxTry) {
+                            if (!scanResp || parseInt(scanResp.ok || 0, 10) !== 1) {
+                                setStatus('Scan lookup status check (' + currentTry + '/' + maxTry + ')...', true);
+                                return;
+                            }
+                            var st = (scanResp.status || 'pending').toString();
+                            setStatus('Scan lookup status: ' + st.toUpperCase() + ' (' + currentTry + '/' + maxTry + ')', st === 'failed');
+                        }, function(finalResp) {
+                            if (!finalResp || parseInt(finalResp.ok || 0, 10) !== 1) {
+                                setStatus((finalResp && finalResp.error_text) ? finalResp.error_text : 'Scan lookup status unresolved. Please check Bridge Log.', true);
+                                return;
+                            }
+                            var fs = (finalResp.status || '').toString().toLowerCase();
+                            if (fs === 'sent') {
+                                setStatus('Scan lookup sent successfully. Queue ID: ' + queueId, false);
+                            } else if (fs === 'failed') {
+                                setStatus('Scan lookup failed: ' + (finalResp.last_error || 'Unknown bridge error'), true);
+                            } else {
+                                setStatus('Scan lookup is still ' + fs.toUpperCase() + '. Please check Bridge Log.', true);
+                            }
+                        });
                     });
                 });
             }

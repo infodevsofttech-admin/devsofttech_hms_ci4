@@ -169,6 +169,12 @@
     const BASE         = '<?= base_url() ?>';
     const CSRF_NAME    = '<?= csrf_token() ?>';
     const REFRESH_SECS = 30;
+    const STATUS_TRANSITIONS = {
+        PENDING: ['CALLED', 'CANCELLED'],
+        CALLED: ['COMPLETED', 'CANCELLED', 'PENDING'],
+        COMPLETED: ['PENDING'],
+        CANCELLED: ['PENDING']
+    };
     let autoTimer      = null;
     let opdModalCurrentUrl = '';
     let originalLoadFormRef = null;
@@ -331,6 +337,10 @@
 
     function renderQueue(data) {
         const tokens  = data.data ?? data.tokens ?? [];
+        const statusFilter = String(document.getElementById('queueStatus')?.value || '').toUpperCase();
+        const viewTokens = statusFilter
+            ? tokens
+            : tokens.filter(t => ['PENDING', 'CALLED'].includes(String(t.status || '').toUpperCase()));
         const body    = document.getElementById('abdmQueueBody');
         const summary = document.getElementById('abdmQSummary');
 
@@ -350,12 +360,14 @@
             `<span class="badge rounded-pill bg-secondary px-3 py-2">${tokens.length} Total</span>`,
         ].join('');
 
-        if (!tokens.length) {
-            body.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-muted small">No tokens found for this filter.</td></tr>';
+        if (!viewTokens.length) {
+            body.innerHTML = statusFilter
+                ? '<tr><td colspan="9" class="text-center py-4 text-muted small">No tokens found for this filter.</td></tr>'
+                : '<tr><td colspan="9" class="text-center py-4 text-muted small">No active queue tokens. Completed/Cancelled are hidden from active queue.</td></tr>';
             return;
         }
 
-        body.innerHTML = tokens.map(t => {
+        body.innerHTML = viewTokens.map(t => {
             const id       = t.id ?? 0;
             const isPend   = t.status === 'PENDING';
             const isCalled = t.status === 'CALLED';
@@ -371,7 +383,9 @@
                 hmsCell = `<a href="javascript:load_form('${esc(t.hms_profile_url ?? '')}','Patient Profile')" class="text-decoration-none">
                                <span class="badge bg-success-subtle text-success border border-success-subtle">✓ ${lbl}</span>
                            </a>`;
-                if (t.hms_opd_url && !t.hms_opd_id) {
+                if (t.hms_opd_id && t.hms_opd_code) {
+                    hmsCell += `<br><span class="badge bg-primary-subtle text-primary border border-primary-subtle">Booked OPD: ${esc(t.hms_opd_code)}</span>`;
+                } else if (t.hms_opd_url) {
                     hmsCell += `<br><a href="javascript:void(0)" onclick="abdmQOpenOpdInModal('${esc(t.hms_opd_url)}')" class="small text-primary">+ Add OPD Visit</a>`;
                 }
             }
@@ -379,10 +393,14 @@
             let actions = '';
             if (isPend) {
                 actions += `<button class="btn btn-xs btn-sm btn-outline-primary me-1" onclick="abdmQCall(${id})">Call</button>`;
-            }
-            if (isPend || isCalled) {
-                actions += `<button class="btn btn-xs btn-sm btn-outline-success me-1" onclick="abdmQComplete(${id})">Complete</button>`;
                 actions += `<button class="btn btn-xs btn-sm btn-outline-danger me-1" onclick="abdmQCancel(${id})">Cancel</button>`;
+            }
+            if (isCalled) {
+                actions += `<button class="btn btn-xs btn-sm btn-outline-success me-1" onclick="abdmQComplete(${id})">Complete</button>`;
+                actions += `<button class="btn btn-xs btn-sm btn-outline-secondary me-1" onclick="abdmQReopen(${id})">Mark Pending</button>`;
+            }
+            if (t.status === 'COMPLETED' || t.status === 'CANCELLED') {
+                actions += `<button class="btn btn-xs btn-sm btn-outline-secondary me-1" onclick="abdmQReopen(${id})">Reopen</button>`;
             }
             if (!isLinked && (isPend || isCalled)) {
                 const pl = encodePayload({
@@ -398,7 +416,7 @@
                 actions += `<button class="btn btn-xs btn-sm btn-primary" onclick="abdmQRegister('${pl}')">Register OPD</button>`;
             }
 
-            return `<tr id="abdmqrow-${id}" class="${isLinked ? 'table-success' : ''}">
+            return `<tr id="abdmqrow-${id}" data-status="${esc(String(t.status || 'PENDING').toUpperCase())}" class="${isLinked ? 'table-success' : ''}">
                 <td><span class="abdm-q-token-num">#${t.token_number ?? id}</span></td>
                 <td>
                     <div class="fw-semibold small">${esc(t.patient_name ?? '—')}</div>
@@ -416,6 +434,16 @@
     }
 
     function setStatus(tokenId, status) {
+        const row = document.getElementById('abdmqrow-' + tokenId);
+        const currentStatus = row ? String(row.getAttribute('data-status') || '').trim().toUpperCase() : '';
+        if (currentStatus && currentStatus !== status) {
+            const next = STATUS_TRANSITIONS[currentStatus] || [];
+            if (next.indexOf(status) === -1) {
+                alert('Invalid transition: ' + currentStatus + ' -> ' + status);
+                return;
+            }
+        }
+
         post(BASE + 'AbdmOpdQueue/token_status/' + tokenId, { status })
             .then(r => {
                 if (r.ok) {
@@ -433,6 +461,7 @@
 
     window.abdmQCall     = id => setStatus(id, 'CALLED');
     window.abdmQComplete = id => setStatus(id, 'COMPLETED');
+    window.abdmQReopen   = id => setStatus(id, 'PENDING');
     window.abdmQCancel   = id => { if (confirm('Cancel token #' + id + '?')) setStatus(id, 'CANCELLED'); };
 
     window.abdmQRegister = function (payloadEncoded) {

@@ -5789,6 +5789,59 @@
         scheduleAutoSave();
     });
 
+    function pollScanLookupStatus(queueId, onTick, onDone) {
+        if (!queueId || queueId <= 0) {
+            if (typeof onDone === 'function') {
+                onDone({ ok: 0, status: 'unknown', error_text: 'Missing queue id' });
+            }
+            return;
+        }
+
+        var tries = 0;
+        var maxTries = 10;
+        var timer = setInterval(function() {
+            tries++;
+            $.getJSON('<?= base_url('AbdmGateway/scan_share_lookup_status') ?>/' + queueId, function(resp) {
+                if (typeof onTick === 'function') {
+                    onTick(resp, tries, maxTries);
+                }
+
+                if (!resp || parseInt(resp.ok || 0, 10) !== 1) {
+                    if (tries >= maxTries) {
+                        clearInterval(timer);
+                        if (typeof onDone === 'function') {
+                            onDone(resp || { ok: 0, status: 'failed', error_text: 'Status lookup failed' });
+                        }
+                    }
+                    return;
+                }
+
+                var status = (resp.status || '').toString().toLowerCase();
+                if (parseInt(resp.done || 0, 10) === 1 || status === 'sent' || status === 'failed') {
+                    clearInterval(timer);
+                    if (typeof onDone === 'function') {
+                        onDone(resp);
+                    }
+                    return;
+                }
+
+                if (tries >= maxTries) {
+                    clearInterval(timer);
+                    if (typeof onDone === 'function') {
+                        onDone(resp);
+                    }
+                }
+            }).fail(function() {
+                if (tries >= maxTries) {
+                    clearInterval(timer);
+                    if (typeof onDone === 'function') {
+                        onDone({ ok: 0, status: 'failed', error_text: 'Status polling failed' });
+                    }
+                }
+            });
+        }, 3000);
+    }
+
     $('#btn_abdm_scan_lookup').on('click', function() {
         var qrPayload = ($('#abdm_qr_payload').val() || '').toString().trim();
         if (!qrPayload) {
@@ -5806,7 +5859,30 @@
             if (data.abha_id_hint) {
                 $('#abha_address').val(data.abha_id_hint).trigger('input');
             }
-            setAbdmStatus('Scan lookup queued. Queue ID: ' + (data.queue_id || '-'), 'success');
+            var queueId = parseInt(data.queue_id || '0', 10);
+            setAbdmStatus('Scan lookup queued. Queue ID: ' + (queueId || '-') + '. Checking status...', 'success');
+
+            pollScanLookupStatus(queueId, function(scanResp, currentTry, maxTry) {
+                if (!scanResp || parseInt(scanResp.ok || 0, 10) !== 1) {
+                    setAbdmStatus('Scan lookup status check (' + currentTry + '/' + maxTry + ')...', 'warning');
+                    return;
+                }
+                var st = (scanResp.status || 'pending').toString();
+                setAbdmStatus('Scan lookup status: ' + st.toUpperCase() + ' (' + currentTry + '/' + maxTry + ')', st === 'failed' ? 'danger' : 'muted');
+            }, function(finalResp) {
+                if (!finalResp || parseInt(finalResp.ok || 0, 10) !== 1) {
+                    setAbdmStatus((finalResp && finalResp.error_text) ? finalResp.error_text : 'Scan lookup status unresolved. Please check Bridge Log.', 'danger');
+                    return;
+                }
+                var fs = (finalResp.status || '').toString().toLowerCase();
+                if (fs === 'sent') {
+                    setAbdmStatus('Scan lookup sent successfully. Queue ID: ' + queueId, 'success');
+                } else if (fs === 'failed') {
+                    setAbdmStatus('Scan lookup failed: ' + (finalResp.last_error || 'Unknown bridge error'), 'danger');
+                } else {
+                    setAbdmStatus('Scan lookup is still ' + fs.toUpperCase() + '. You can recheck from Bridge Log.', 'warning');
+                }
+            });
         });
     });
 

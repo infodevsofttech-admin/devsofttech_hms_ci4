@@ -106,6 +106,7 @@ $mergedGroups = [
                     $patientGenderText  = $patientGenderCode === 1 ? 'Male' : ($patientGenderCode === 2 ? 'Female' : ($patientGenderCode === 3 ? 'Other' : ''));
                     $patientAgeGender   = trim($patientAgeText . ($patientGenderText !== '' ? ' / ' . $patientGenderText : ''));
                     $patientDisplayName = esc($patientRawName . ($patientAgeGender !== '' ? ' (' . $patientAgeGender . ')' : ''));
+                    $isAbdmSource       = (int) ($row->is_abdm_source ?? 0) === 1;
                     $tabType            = $group['tabType'];
                     $status             = $group['status'];
                     ?>
@@ -115,7 +116,12 @@ $mergedGroups = [
                         data-has-prescription="<?= $showFullActions ? 1 : 0 ?>">
                         <td><span class="badge <?= esc($group['badge']) ?>"><?= esc($group['label']) ?></span></td>
                         <td><?= esc($row->opd_code ?? '') ?></td>
-                        <td><?= $patientDisplayName ?></td>
+                        <td>
+                            <?= $patientDisplayName ?>
+                            <?php if ($isAbdmSource) : ?>
+                                <span class="badge bg-primary ms-1">ABDM</span>
+                            <?php endif; ?>
+                        </td>
                         <td data-order="<?= esc($queueDisplay !== '' ? $queueDisplay : 'ZZZZ') ?>"><?= esc($queueDisplay) ?></td>
                         <td><?= esc($row->p_code ?? '') ?></td>
                         <td><?= esc($row->opd_type ?? '') ?> / Amt: <?= esc($row->opd_fee_amount ?? '') ?></td>

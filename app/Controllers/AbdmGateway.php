@@ -247,6 +247,10 @@ class AbdmGateway extends BaseController
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'qr_payload is required']);
         }
 
+        if (strlen($qrPayload) < 8) {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'Invalid QR payload']);
+        }
+
         $abhaId = '';
         if (preg_match('/\b(\d{14})\b/', $qrPayload, $match) === 1) {
             $abhaId = (string) ($match[1] ?? '');
@@ -259,18 +263,277 @@ class AbdmGateway extends BaseController
         ];
 
         $queueId = null;
+        $result = [];
         try {
             $result  = $this->connector->scanShareLookup($qrPayload, $abhaId, $payload);
-            $queueId = $result['queue_id'] ?? null;
+            $queueId = (int) ($result['queue_id'] ?? $result['id'] ?? (($result['data']['queue_id'] ?? 0)));
         } catch (\Throwable $e) {
+            return $this->response->setStatusCode(500)->setJSON([
+                'ok' => 0,
+                'error_text' => $e->getMessage(),
+                'abha_id_hint' => $abhaId,
+                'abha_address' => $abhaId,
+            ]);
         }
+
+        $scanStatus = [
+            'ok' => 1,
+            'status' => 'queued',
+            'queue_id' => $queueId > 0 ? $queueId : null,
+            'abha_id_hint' => $abhaId,
+            'abha_address' => $abhaId,
+            'status_url' => $queueId > 0 ? base_url('AbdmGateway/scan_share_lookup_status/' . $queueId) : null,
+            'message' => 'Scan & Share lookup queued to center server.',
+        ];
+
+        if (is_array($result) && ! empty($result)) {
+            $scanStatus['bridge_result'] = $result;
+        }
+
+        return $this->response->setJSON($scanStatus);
+    }
+
+    public function scanShareLookupStatus(int $queueId)
+    {
+        if ($queueId <= 0) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid queue id']);
+        }
+
+        if (! $this->db->tableExists('bridge_sync_queue')) {
+            return $this->response->setStatusCode(404)->setJSON(['ok' => 0, 'error_text' => 'bridge_sync_queue table not found']);
+        }
+
+        $row = $this->db->table('bridge_sync_queue')
+            ->select('id, event_type, status, attempts, max_attempts, last_error, created_at, updated_at, sent_at, entity_type, entity_id')
+            ->where('id', $queueId)
+            ->get(1)
+            ->getRowArray();
+
+        if (! $row) {
+            return $this->response->setStatusCode(404)->setJSON(['ok' => 0, 'error_text' => 'Queue record not found']);
+        }
+
+        if ((string) ($row['event_type'] ?? '') !== 'abdm.scan_share.lookup') {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Queue record is not a scan-share lookup event']);
+        }
+
+        $status = strtolower((string) ($row['status'] ?? 'pending'));
+        $isDone = in_array($status, ['sent', 'failed'], true) ? 1 : 0;
+
+        $responseLog = null;
+        if ($this->db->tableExists('abdm_api_logs')) {
+            $likeToken = '"queue_id":' . $queueId;
+            $responseLog = $this->db->table('abdm_api_logs')
+                ->select('id, response_code, response_json, status, error_message, created_at')
+                ->where('event_type', 'abdm.scan_share.lookup')
+                ->like('request_json', $likeToken)
+                ->orderBy('id', 'DESC')
+                ->get(1)
+                ->getRowArray();
+        }
+
+        $resultPayload = $this->getScanShareResultPayload($queueId);
+        $resolved = is_array($resultPayload) ? $this->extractScanShareIdentity($resultPayload) : [];
 
         return $this->response->setJSON([
             'ok' => 1,
-            'status' => 'queued',
+            'queue_id' => (int) ($row['id'] ?? 0),
+            'event_type' => (string) ($row['event_type'] ?? ''),
+            'status' => $status,
+            'done' => $isDone,
+            'attempts' => (int) ($row['attempts'] ?? 0),
+            'max_attempts' => (int) ($row['max_attempts'] ?? 0),
+            'last_error' => (string) ($row['last_error'] ?? ''),
+            'entity_type' => (string) ($row['entity_type'] ?? ''),
+            'entity_id' => (string) ($row['entity_id'] ?? ''),
+            'created_at' => (string) ($row['created_at'] ?? ''),
+            'updated_at' => (string) ($row['updated_at'] ?? ''),
+            'sent_at' => (string) ($row['sent_at'] ?? ''),
+            'bridge_log' => $responseLog,
+            'resolved_data' => $resolved,
+        ]);
+    }
+
+    public function scanShareLookupResultCallback()
+    {
+        $signatureFailure = $this->validateWebhookSignature();
+        if ($signatureFailure !== null) {
+            return $signatureFailure;
+        }
+
+        $payload = $this->request->getJSON(true);
+        if (! is_array($payload) || empty($payload)) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid callback payload']);
+        }
+
+        $queueId = (int) ($payload['queue_id'] ?? $payload['queueId'] ?? $payload['meta']['queue_id'] ?? 0);
+        if ($queueId <= 0) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'queue_id is required']);
+        }
+
+        $ok = (int) ($payload['ok'] ?? 1) === 1;
+        $status = strtolower(trim((string) ($payload['status'] ?? ($ok ? 'sent' : 'failed'))));
+        $errorText = trim((string) ($payload['error_text'] ?? $payload['error'] ?? ''));
+
+        if ($this->db->tableExists('bridge_sync_queue')) {
+            $this->db->table('bridge_sync_queue')
+                ->where('id', $queueId)
+                ->where('event_type', 'abdm.scan_share.lookup')
+                ->update([
+                    'status' => $status === 'failed' ? 'failed' : 'sent',
+                    'sent_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
+                    'last_error' => $errorText !== '' ? mb_substr($errorText, 0, 500) : null,
+                    'updated_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
+                ]);
+        }
+
+        if ($this->db->tableExists('abdm_api_logs')) {
+            $this->db->table('abdm_api_logs')->insert([
+                'channel' => 'bridge',
+                'event_type' => 'abdm.scan_share.lookup.result',
+                'endpoint' => '/AbdmGateway/scan_share_lookup_result_callback',
+                'http_method' => 'POST',
+                'entity_type' => 'abha_scan',
+                'entity_id' => (string) $queueId,
+                'request_json' => (string) json_encode(['queue_id' => $queueId], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'response_code' => $ok ? 200 : 500,
+                'response_json' => (string) json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'status' => $ok ? 'success' : 'error',
+                'error_message' => $errorText !== '' ? mb_substr($errorText, 0, 1000) : null,
+                'created_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
+            ]);
+        }
+
+        return $this->response->setJSON(['ok' => 1, 'queue_id' => $queueId, 'status' => $status !== '' ? $status : 'sent']);
+    }
+
+    public function scanShareResolvePatient(int $queueId)
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $resultPayload = $this->getScanShareResultPayload($queueId);
+        if (! is_array($resultPayload)) {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'No scan-share result found for queue']);
+        }
+
+        $identity = $this->extractScanShareIdentity($resultPayload);
+        $matches = $this->findScanSharePatientMatches($identity);
+
+        return $this->response->setJSON([
+            'ok' => 1,
             'queue_id' => $queueId,
-            'abha_id_hint' => $abhaId,
-            'message' => 'Scan & Share lookup queued to center server.',
+            'identity' => $identity,
+            'matches' => $matches,
+            'requires_confirmation' => count($matches) > 0 ? 1 : 0,
+        ]);
+    }
+
+    public function scanShareLinkPatient(int $queueId)
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $action = strtolower(trim((string) ($this->request->getPost('action') ?? 'check')));
+        if (! in_array($action, ['link_existing', 'create_new'], true)) {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'Invalid action']);
+        }
+
+        $identity = [
+            'abha_number' => preg_replace('/\D/', '', (string) ($this->request->getPost('abha_number') ?? '')),
+            'abha_address' => trim((string) ($this->request->getPost('abha_address') ?? '')),
+            'patient_name' => trim((string) ($this->request->getPost('patient_name') ?? '')),
+            'phone' => trim((string) ($this->request->getPost('phone') ?? '')),
+            'gender' => strtoupper(trim((string) ($this->request->getPost('gender') ?? ''))),
+            'dob' => trim((string) ($this->request->getPost('dob') ?? '')),
+        ];
+
+        $db = $this->db;
+        $fields = $db->getFieldNames('patient_master') ?? [];
+        $abhaField = $this->resolveFirstExistingColumn($fields, ['abha_id', 'abha_no', 'abha', 'abha_address']);
+
+        $patientId = 0;
+        $pCode = '';
+        $isNew = false;
+
+        if ($action === 'link_existing') {
+            $existingPatientId = (int) ($this->request->getPost('existing_patient_id') ?? 0);
+            if ($existingPatientId <= 0) {
+                return $this->response->setJSON(['ok' => 0, 'error_text' => 'existing_patient_id is required']);
+            }
+
+            $existing = $db->table('patient_master')
+                ->select('id,p_code,mphone1' . ($abhaField ? ',' . $abhaField . ' AS patient_abha' : ''))
+                ->where('id', $existingPatientId)
+                ->get(1)
+                ->getRowArray();
+            if (! $existing) {
+                return $this->response->setJSON(['ok' => 0, 'error_text' => 'Selected patient not found']);
+            }
+
+            $patientId = (int) ($existing['id'] ?? 0);
+            $pCode = (string) ($existing['p_code'] ?? '');
+
+            $backfill = [];
+            if ($abhaField && trim((string) ($existing['patient_abha'] ?? '')) === '' && ($identity['abha_number'] !== '' || $identity['abha_address'] !== '')) {
+                $backfill[$abhaField] = $identity['abha_number'] !== '' ? $identity['abha_number'] : $identity['abha_address'];
+            }
+            if (trim((string) ($existing['mphone1'] ?? '')) === '' && $identity['phone'] !== '') {
+                $backfill['mphone1'] = $identity['phone'];
+            }
+            if (! empty($backfill)) {
+                $db->table('patient_master')->where('id', $patientId)->update($backfill);
+            }
+        }
+
+        if ($action === 'create_new') {
+            if ($identity['patient_name'] === '') {
+                return $this->response->setJSON(['ok' => 0, 'error_text' => 'patient_name is required to create patient']);
+            }
+
+            $created = $this->createPatientFromScanIdentity($identity, $abhaField);
+            $patientId = (int) ($created['patient_id'] ?? 0);
+            $pCode = (string) ($created['p_code'] ?? '');
+            $isNew = true;
+        }
+
+        if ($patientId <= 0) {
+            return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => 'Unable to resolve patient']);
+        }
+
+        if ($db->tableExists('bridge_sync_queue')) {
+            $db->table('bridge_sync_queue')
+                ->where('id', $queueId)
+                ->where('event_type', 'abdm.scan_share.lookup')
+                ->update([
+                    'entity_type' => 'patient',
+                    'entity_id' => (string) $patientId,
+                    'updated_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
+                ]);
+        }
+
+        $this->getAuditService()->log([
+            'action' => 'scan_share_patient_link',
+            'entity_type' => 'abha_scan',
+            'entity_id' => (string) $queueId,
+            'patient_id' => $patientId,
+            'abha_id' => (string) ($identity['abha_address'] !== '' ? $identity['abha_address'] : $identity['abha_number']),
+            'request' => ['action' => $action, 'identity' => $identity],
+            'response' => ['patient_id' => $patientId, 'p_code' => $pCode],
+            'outcome' => 'success',
+            'error_message' => null,
+        ]);
+
+        return $this->response->setJSON([
+            'ok' => 1,
+            'queue_id' => $queueId,
+            'patient_id' => $patientId,
+            'p_code' => $pCode,
+            'is_new' => $isNew ? 1 : 0,
+            'profile_url' => base_url('Patient/person_record/' . $patientId),
+            'edit_url' => base_url('Patient/person_record/' . $patientId . '/1'),
         ]);
     }
 
@@ -1288,6 +1551,195 @@ class AbdmGateway extends BaseController
 
         $result = $this->connector->opdRunningTokenStatus();
         return $this->response->setJSON($result);
+    }
+
+    private function getScanShareResultPayload(int $queueId): ?array
+    {
+        if (! $this->db->tableExists('abdm_api_logs')) {
+            return null;
+        }
+
+        $likeToken = '"queue_id":' . $queueId;
+
+        $resultLog = $this->db->table('abdm_api_logs')
+            ->select('response_json, request_json')
+            ->whereIn('event_type', ['abdm.scan_share.lookup.result', 'abdm.scan_share.lookup'])
+            ->groupStart()
+                ->like('request_json', $likeToken)
+                ->orLike('response_json', $likeToken)
+            ->groupEnd()
+            ->orderBy('id', 'DESC')
+            ->get(1)
+            ->getRowArray();
+
+        if (! $resultLog) {
+            return null;
+        }
+
+        $responsePayload = json_decode((string) ($resultLog['response_json'] ?? ''), true);
+        if (is_array($responsePayload) && ! empty($responsePayload)) {
+            return $responsePayload;
+        }
+
+        $requestPayload = json_decode((string) ($resultLog['request_json'] ?? ''), true);
+        return is_array($requestPayload) && ! empty($requestPayload) ? $requestPayload : null;
+    }
+
+    private function extractScanShareIdentity(array $payload): array
+    {
+        $identity = [
+            'abha_number' => '',
+            'abha_address' => '',
+            'patient_name' => '',
+            'phone' => '',
+            'gender' => '',
+            'dob' => '',
+        ];
+
+        $abhaNumber = (string) ($this->findFirstByKeys($payload, ['abha_number', 'abhaNumber', 'abha_id', 'abhaId', 'healthIdNumber']) ?? '');
+        $abhaDigits = preg_replace('/\D/', '', $abhaNumber);
+        if (strlen($abhaDigits) === 14) {
+            $identity['abha_number'] = $abhaDigits;
+        }
+
+        $abhaAddress = trim((string) ($this->findFirstByKeys($payload, ['abha_address', 'abhaAddress', 'phrAddress', 'healthId']) ?? ''));
+        if ($abhaAddress !== '') {
+            $identity['abha_address'] = $abhaAddress;
+        }
+
+        $patientName = trim((string) ($this->findFirstByKeys($payload, ['patient_name', 'patientName', 'name', 'fullName']) ?? ''));
+        if ($patientName !== '') {
+            $identity['patient_name'] = strtoupper($patientName);
+        }
+
+        $phone = preg_replace('/\D/', '', (string) ($this->findFirstByKeys($payload, ['phone', 'mobile', 'mobileNumber']) ?? ''));
+        if ($phone !== '') {
+            $identity['phone'] = $phone;
+        }
+
+        $gender = strtoupper(substr(trim((string) ($this->findFirstByKeys($payload, ['gender', 'sex']) ?? '')), 0, 1));
+        if (in_array($gender, ['M', 'F', 'O'], true)) {
+            $identity['gender'] = $gender;
+        }
+
+        $dob = trim((string) ($this->findFirstByKeys($payload, ['dob', 'dateOfBirth', 'birthDate']) ?? ''));
+        if ($dob !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dob)) {
+            $identity['dob'] = $dob;
+        }
+
+        return $identity;
+    }
+
+    private function findFirstByKeys(array $data, array $keys): ?string
+    {
+        $normalized = array_map(static fn ($k) => strtolower((string) $k), $keys);
+        foreach ($data as $key => $value) {
+            if (is_array($value)) {
+                $found = $this->findFirstByKeys($value, $keys);
+                if ($found !== null && trim($found) !== '') {
+                    return $found;
+                }
+                continue;
+            }
+
+            $k = strtolower((string) $key);
+            if (in_array($k, $normalized, true)) {
+                $v = trim((string) $value);
+                if ($v !== '') {
+                    return $v;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function findScanSharePatientMatches(array $identity): array
+    {
+        $fields = $this->db->getFieldNames('patient_master') ?? [];
+        $abhaField = $this->resolveFirstExistingColumn($fields, ['abha_id', 'abha_no', 'abha', 'abha_address']);
+
+        $select = 'id,p_code,p_fname,mphone1';
+        if ($abhaField) {
+            $select .= ',' . $abhaField . ' AS patient_abha';
+        }
+
+        $bucket = [];
+        $append = static function (array $rows, string $reason) use (&$bucket): void {
+            foreach ($rows as $row) {
+                $id = (int) ($row['id'] ?? 0);
+                if ($id <= 0) {
+                    continue;
+                }
+                if (! isset($bucket[$id])) {
+                    $row['match_reasons'] = [];
+                    $bucket[$id] = $row;
+                }
+                if (! in_array($reason, $bucket[$id]['match_reasons'], true)) {
+                    $bucket[$id]['match_reasons'][] = $reason;
+                }
+            }
+        };
+
+        if ($abhaField && ($identity['abha_number'] !== '' || $identity['abha_address'] !== '')) {
+            $abha = $identity['abha_number'] !== '' ? $identity['abha_number'] : $identity['abha_address'];
+            $rows = $this->db->table('patient_master')->select($select)->where($abhaField, $abha)->limit(10)->get()->getResultArray();
+            $append($rows, 'ABHA');
+        }
+
+        if ($identity['phone'] !== '') {
+            $rows = $this->db->table('patient_master')->select($select)->where('mphone1', $identity['phone'])->limit(10)->get()->getResultArray();
+            $append($rows, 'Phone');
+        }
+
+        return array_values($bucket);
+    }
+
+    private function resolveFirstExistingColumn(array $fields, array $candidates): ?string
+    {
+        foreach ($candidates as $candidate) {
+            if (in_array($candidate, $fields, true)) {
+                return $candidate;
+            }
+        }
+        return null;
+    }
+
+    private function createPatientFromScanIdentity(array $identity, ?string $abhaField): array
+    {
+        $fields = $this->db->getFieldNames('patient_master') ?? [];
+        $genderDb = ($identity['gender'] ?? '') === 'F' ? 2 : 1;
+        $dob = (string) ($identity['dob'] ?? '');
+
+        $insertData = [
+            'p_fname' => strtoupper((string) ($identity['patient_name'] ?? 'ABHA PATIENT')),
+            'mphone1' => (string) ($identity['phone'] ?? ''),
+            'gender' => $genderDb,
+            'blood_group' => 'Not Define',
+            'estimate_dob' => $dob !== '' ? 0 : 1,
+        ];
+        if ($dob !== '') {
+            $insertData['dob'] = $dob;
+        } else {
+            $insertData['age'] = 0;
+            $insertData['age_in_month'] = 0;
+        }
+
+        if ($abhaField && (($identity['abha_number'] ?? '') !== '' || ($identity['abha_address'] ?? '') !== '')) {
+            $insertData[$abhaField] = (string) (($identity['abha_number'] ?? '') !== '' ? $identity['abha_number'] : $identity['abha_address']);
+        }
+
+        $today = date('y') . date('m');
+        $countRow = $this->db->query("SELECT COUNT(*) as cnt FROM patient_master WHERE p_code LIKE 'P{$today}%'")->getRow();
+        $seq = str_pad(((int) ($countRow->cnt ?? 0)) + 1, 4, '0', STR_PAD_LEFT);
+        $insertData['p_code'] = 'P' . $today . $seq;
+
+        $this->db->table('patient_master')->insert($insertData);
+
+        return [
+            'patient_id' => (int) $this->db->insertID(),
+            'p_code' => (string) $insertData['p_code'],
+        ];
     }
 
     private function validateWebhookSignature()

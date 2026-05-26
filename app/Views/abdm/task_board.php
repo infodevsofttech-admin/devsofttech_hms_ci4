@@ -188,6 +188,7 @@
             </div>
 
             <div class="small text-muted" id="abdmSandboxStatus">Ready</div>
+            <div class="mt-2 d-none" id="abdmScanResolvePane"></div>
         </div>
     </div>
 
@@ -378,6 +379,7 @@
     var sandboxCard = document.getElementById('abdmSandboxCard');
     var sandboxContext = document.getElementById('abdmSandboxContext');
     var sandboxStatus = document.getElementById('abdmSandboxStatus');
+    var scanResolvePane = document.getElementById('abdmScanResolvePane');
     var sandboxAbhaInput = document.getElementById('tb_abha_id');
     var sandboxQrPayloadInput = document.getElementById('tb_abdm_qr_payload');
     var sandboxPurposeCodeInput = document.getElementById('tb_abdm_purpose_code');
@@ -578,6 +580,110 @@
         sandboxStatus.textContent = msg || 'Ready';
     }
 
+    function clearScanResolvePane() {
+        if (!scanResolvePane) {
+            return;
+        }
+        scanResolvePane.classList.add('d-none');
+        scanResolvePane.innerHTML = '';
+    }
+
+    function renderScanResolvePane(queueId, identity, matches) {
+        if (!scanResolvePane) {
+            return;
+        }
+
+        identity = identity || {};
+        matches = Array.isArray(matches) ? matches : [];
+
+        var cardHtml = '<div class="border rounded p-2 bg-light">';
+        cardHtml += '<div class="small fw-semibold mb-1">Scan User ABHA QR Result</div>';
+        cardHtml += '<div class="small text-muted mb-2">Queue ID: ' + (queueId || '-') + '</div>';
+        cardHtml += '<div class="small mb-1"><strong>Name:</strong> ' + ((identity.patient_name || '-') + '') + '</div>';
+        cardHtml += '<div class="small mb-1"><strong>ABHA:</strong> ' + ((identity.abha_number || identity.abha_address || '-') + '') + '</div>';
+        cardHtml += '<div class="small mb-2"><strong>Phone:</strong> ' + ((identity.phone || '-') + '') + '</div>';
+
+        if (matches.length > 0) {
+            cardHtml += '<div class="small fw-semibold mb-1">Matching HMS Patients</div>';
+            matches.forEach(function (m) {
+                var mLabel = ((m.p_code || 'UHID') + ' - ' + (m.p_fname || 'Unnamed'));
+                cardHtml += '<div class="d-flex justify-content-between align-items-center border rounded p-1 mb-1 bg-white">';
+                cardHtml += '<div class="small">' + mLabel + '</div>';
+                cardHtml += '<button type="button" class="btn btn-sm btn-outline-primary" data-scan-use-existing="1" data-patient-id="' + (m.id || 0) + '">Use</button>';
+                cardHtml += '</div>';
+            });
+        } else {
+            cardHtml += '<div class="small text-muted mb-2">No existing patient matched from ABHA/phone.</div>';
+        }
+
+        cardHtml += '<div class="d-flex gap-2 mt-2">';
+        cardHtml += '<button type="button" class="btn btn-sm btn-success" id="btnScanCreateNewPatient">Create New Patient</button>';
+        cardHtml += '<button type="button" class="btn btn-sm btn-outline-secondary" id="btnScanClearPane">Clear</button>';
+        cardHtml += '</div>';
+        cardHtml += '</div>';
+
+        scanResolvePane.innerHTML = cardHtml;
+        scanResolvePane.classList.remove('d-none');
+
+        scanResolvePane.querySelectorAll('[data-scan-use-existing="1"]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var patientId = parseInt(btn.getAttribute('data-patient-id') || '0', 10);
+                if (!patientId) {
+                    return;
+                }
+                setSandboxStatus('Linking selected HMS patient...', 'muted');
+                post('<?= base_url('AbdmGateway/scan_share_link_patient') ?>/' + queueId, {
+                    action: 'link_existing',
+                    existing_patient_id: patientId,
+                    abha_number: (identity.abha_number || ''),
+                    abha_address: (identity.abha_address || ''),
+                    patient_name: (identity.patient_name || ''),
+                    phone: (identity.phone || ''),
+                    gender: (identity.gender || ''),
+                    dob: (identity.dob || '')
+                }, function (resp) {
+                    if (!resp || parseInt(resp.ok || 0, 10) !== 1) {
+                        setSandboxStatus((resp && resp.error_text) ? resp.error_text : 'Unable to link patient.', 'danger');
+                        return;
+                    }
+                    clearScanResolvePane();
+                    setSandboxStatus('Patient linked: ' + (resp.p_code || resp.patient_id || '-') + '. You can open profile now.', 'success');
+                });
+            });
+        });
+
+        var createBtn = document.getElementById('btnScanCreateNewPatient');
+        if (createBtn) {
+            createBtn.addEventListener('click', function () {
+                setSandboxStatus('Creating new patient from scan result...', 'muted');
+                post('<?= base_url('AbdmGateway/scan_share_link_patient') ?>/' + queueId, {
+                    action: 'create_new',
+                    abha_number: (identity.abha_number || ''),
+                    abha_address: (identity.abha_address || ''),
+                    patient_name: (identity.patient_name || ''),
+                    phone: (identity.phone || ''),
+                    gender: (identity.gender || ''),
+                    dob: (identity.dob || '')
+                }, function (resp) {
+                    if (!resp || parseInt(resp.ok || 0, 10) !== 1) {
+                        setSandboxStatus((resp && resp.error_text) ? resp.error_text : 'Unable to create patient.', 'danger');
+                        return;
+                    }
+                    clearScanResolvePane();
+                    setSandboxStatus('New patient created: ' + (resp.p_code || resp.patient_id || '-') + '.', 'success');
+                });
+            });
+        }
+
+        var clearBtn = document.getElementById('btnScanClearPane');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', function () {
+                clearScanResolvePane();
+                setSandboxStatus('Ready', 'muted');
+            });
+        }
+    }
+
     function currentSandboxContext() {
         if (!sandboxRow) {
             return null;
@@ -620,6 +726,7 @@
         sandboxPurposeCodeInput.value = sandboxPurposeCodeInput.value || 'CAREMGT';
         sandboxConsentHandleInput.value = '';
         sandboxClaimDocumentInput.value = '';
+        clearScanResolvePane();
 
         var opdId = row.getAttribute('data-opd-id') || '0';
         var opdSessionId = row.getAttribute('data-opd-session-id') || '0';
@@ -761,7 +868,60 @@
             sandboxCard.classList.add('d-none');
         }
         sandboxRow = null;
+        clearScanResolvePane();
     });
+
+    function pollScanLookupStatus(queueId, onTick, onDone) {
+        if (!queueId || queueId <= 0) {
+            if (typeof onDone === 'function') {
+                onDone({ ok: 0, status: 'unknown', error_text: 'Missing queue id' });
+            }
+            return;
+        }
+
+        var tries = 0;
+        var maxTries = 10;
+        var timer = setInterval(function () {
+            tries++;
+            $.getJSON('<?= base_url('AbdmGateway/scan_share_lookup_status') ?>/' + queueId, function (resp) {
+                if (typeof onTick === 'function') {
+                    onTick(resp, tries, maxTries);
+                }
+                if (!resp || parseInt(resp.ok || 0, 10) !== 1) {
+                    if (tries >= maxTries) {
+                        clearInterval(timer);
+                        if (typeof onDone === 'function') {
+                            onDone(resp || { ok: 0, status: 'failed', error_text: 'Status lookup failed' });
+                        }
+                    }
+                    return;
+                }
+
+                var status = (resp.status || '').toString().toLowerCase();
+                if (parseInt(resp.done || 0, 10) === 1 || status === 'sent' || status === 'failed') {
+                    clearInterval(timer);
+                    if (typeof onDone === 'function') {
+                        onDone(resp);
+                    }
+                    return;
+                }
+
+                if (tries >= maxTries) {
+                    clearInterval(timer);
+                    if (typeof onDone === 'function') {
+                        onDone(resp);
+                    }
+                }
+            }).fail(function () {
+                if (tries >= maxTries) {
+                    clearInterval(timer);
+                    if (typeof onDone === 'function') {
+                        onDone({ ok: 0, status: 'failed', error_text: 'Status polling failed' });
+                    }
+                }
+            });
+        }, 3000);
+    }
 
     document.getElementById('tb_btn_abdm_scan_lookup').addEventListener('click', function () {
         var qrPayload = (sandboxQrPayloadInput.value || '').trim();
@@ -780,7 +940,48 @@
             if (res.abha_id_hint) {
                 sandboxAbhaInput.value = (res.abha_id_hint || '').toString().trim();
             }
-            setSandboxStatus('Scan lookup queued. Queue ID: ' + (res.queue_id || '-'), 'success');
+            var queueId = parseInt(res.queue_id || '0', 10);
+            setSandboxStatus('Scan lookup queued. Queue ID: ' + (queueId || '-') + '. Checking status...', 'success');
+
+            pollScanLookupStatus(queueId, function (scanResp, currentTry, maxTry) {
+                if (!scanResp || parseInt(scanResp.ok || 0, 10) !== 1) {
+                    setSandboxStatus('Scan lookup status check (' + currentTry + '/' + maxTry + ')...', 'warning');
+                    return;
+                }
+                var st = (scanResp.status || 'pending').toString();
+                setSandboxStatus('Scan lookup status: ' + st.toUpperCase() + ' (' + currentTry + '/' + maxTry + ')', st === 'failed' ? 'danger' : 'muted');
+            }, function (finalResp) {
+                if (!finalResp || parseInt(finalResp.ok || 0, 10) !== 1) {
+                    setSandboxStatus((finalResp && finalResp.error_text) ? finalResp.error_text : 'Scan lookup status unresolved. Please check Bridge Log.', 'danger');
+                    return;
+                }
+                var fs = (finalResp.status || '').toString().toLowerCase();
+                if (fs === 'sent') {
+                    setSandboxStatus('Scan lookup sent to bridge successfully. Queue ID: ' + queueId + '. Resolving patient...', 'success');
+                    $.getJSON('<?= base_url('AbdmGateway/scan_share_resolve_patient') ?>/' + queueId, function (resolveResp) {
+                        if (!resolveResp || parseInt(resolveResp.ok || 0, 10) !== 1) {
+                            setSandboxStatus((resolveResp && resolveResp.error_text) ? resolveResp.error_text : 'Scan result received but patient data not available yet.', 'warning');
+                            clearScanResolvePane();
+                            return;
+                        }
+
+                        if (resolveResp.identity && resolveResp.identity.abha_number) {
+                            sandboxAbhaInput.value = (resolveResp.identity.abha_number || '').toString();
+                        }
+
+                        renderScanResolvePane(queueId, resolveResp.identity || {}, resolveResp.matches || []);
+                        setSandboxStatus('Resolve patient using scan result below.', 'success');
+                    }).fail(function () {
+                        setSandboxStatus('Scan lookup sent, but patient resolution fetch failed.', 'warning');
+                    });
+                } else if (fs === 'failed') {
+                    setSandboxStatus('Scan lookup failed: ' + (finalResp.last_error || 'Unknown bridge error'), 'danger');
+                    clearScanResolvePane();
+                } else {
+                    setSandboxStatus('Scan lookup is still ' + fs.toUpperCase() + '. You can recheck from Bridge Log.', 'warning');
+                    clearScanResolvePane();
+                }
+            });
         });
     });
 

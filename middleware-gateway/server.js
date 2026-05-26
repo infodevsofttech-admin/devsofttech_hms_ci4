@@ -1,6 +1,7 @@
 import express from 'express';
 import axios from 'axios';
 import dotenv from 'dotenv';
+import Database from 'better-sqlite3';
 import helmet from 'helmet';
 import cors from 'cors';
 import morgan from 'morgan';
@@ -445,6 +446,99 @@ app.get('/api/v3/gateway/status', authenticateToken, async (req, res) => {
     res.status(500).json({
       ok: 0,
       error: error.message,
+      request_id: req.id,
+    });
+  }
+});
+
+/**
+ * Drug Masters Endpoint
+ * GET /api/v3/drugs/masters
+ * Serves normalised HMS master lists (company, formulation, short_formulation, generic)
+ * from the local CDCI SQLite database imported into the gateway.
+ * Data is NOT proxied to ABDM M3 — it comes from the gateway's own CDCI dataset.
+ *
+ * Query params:
+ *   master  = company | formulation | short_formulation | generic  (required)
+ *   q       = optional contains-filter on name
+ *   limit   = 1–500  (default 100)
+ *   offset  = pagination offset (default 0)
+ */
+app.get('/api/v3/drugs/masters', authenticateToken, (req, res) => {
+  try {
+    const { master = 'company', q = '', limit = '100', offset = '0' } = req.query;
+
+    const validMasters = ['company', 'formulation', 'short_formulation', 'generic'];
+    if (!validMasters.includes(master)) {
+      return res.status(400).json({
+        ok: 0,
+        error_code: 'INVALID_MASTER_TYPE',
+        message: `Invalid master type. Valid values: ${validMasters.join(', ')}`,
+        request_id: req.id,
+      });
+    }
+
+    const parsedLimit  = Math.min(Math.max(parseInt(limit,  10) || 100, 1), 500);
+    const parsedOffset = Math.max(parseInt(offset, 10) || 0, 0);
+
+    logger.info('Drug masters requested', { requestId: req.id, master, limit: parsedLimit, offset: parsedOffset });
+
+    // Open the CDCI SQLite database (path set via CDCI_DB_PATH in .env)
+    const dbPath = process.env.CDCI_DB_PATH || path.join(__dirname, 'data', 'cdci.db');
+
+    let db;
+    try {
+      db = new Database(dbPath, { readonly: true, fileMustExist: true });
+    } catch (dbErr) {
+      logger.error('CDCI DB open failed', { requestId: req.id, error: dbErr.message, dbPath });
+      return res.status(503).json({
+        ok: 0,
+        error_code: 'CDCI_DB_UNAVAILABLE',
+        message: 'CDCI database not available. Contact gateway admin.',
+        request_id: req.id,
+      });
+    }
+
+    // Table mapping — each master type maps to a CDCI table
+    const tableMap = {
+      company:           'cdci_manufacturers',
+      formulation:       'cdci_formulations',
+      short_formulation: 'cdci_short_formulations',
+      generic:           'cdci_generics',
+    };
+    const table = tableMap[master];
+
+    try {
+      const filterClause = q ? `WHERE name LIKE ?` : '';
+      const filterParam  = q ? [`%${q}%`] : [];
+
+      const totalRow = db.prepare(`SELECT COUNT(*) AS cnt FROM ${table} ${filterClause}`).get(...filterParam);
+      const total    = totalRow?.cnt ?? 0;
+
+      const rows = db.prepare(
+        `SELECT identifier, name, updated_at FROM ${table} ${filterClause} ORDER BY name ASC LIMIT ? OFFSET ?`
+      ).all(...filterParam, parsedLimit, parsedOffset);
+
+      logger.info('Drug masters served', { requestId: req.id, master, count: rows.length, total });
+
+      res.json({
+        ok:         1,
+        master,
+        count:      rows.length,
+        total,
+        items:      rows,
+        request_id: req.id,
+      });
+    } finally {
+      db.close();
+    }
+
+  } catch (error) {
+    logger.error('Drug masters endpoint error', { requestId: req.id, error: error.message });
+    res.status(500).json({
+      ok:         0,
+      error_code: 'SERVER_ERROR',
+      message:    NODE_ENV === 'production' ? 'Internal server error' : error.message,
       request_id: req.id,
     });
   }

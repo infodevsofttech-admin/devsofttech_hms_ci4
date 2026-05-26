@@ -3,7 +3,9 @@
 namespace App\Controllers;
 
 use App\Controllers\BaseController;
+use App\Libraries\Abdm\AbdmConnectorFactory;
 use App\Libraries\HealthplixService;
+use App\Models\ClinicalAuditTrailModel;
 use App\Models\OpdModel;
 use App\Models\PaymentModel;
 use CodeIgniter\I18n\Time;
@@ -883,6 +885,10 @@ class Opd extends BaseController
 
         $docId = (int) $docId;
         $opdDateSql = $this->db->escape($opdDate);
+        $abdmSelect = '0 as is_abdm_source';
+        if ($this->db->tableExists('abdm_opd_tokens')) {
+            $abdmSelect = "(case when exists(select 1 from abdm_opd_tokens t where t.opd_id = o.opd_id) then 1 else 0 end) as is_abdm_source";
+        }
 
         $sql = "select d.id as doc_id, d.p_fname,
                 group_concat(DISTINCT m.SpecName) as Spec
@@ -926,6 +932,7 @@ class Opd extends BaseController
                     1,0
                 ) as has_vitals,
                 coalesce(pr.queue_no,0) as queue_no
+                ," . $abdmSelect . "
             from opd_master o
             join patient_master p on o.p_id=p.id
             left join opd_prescription pr on o.opd_id=pr.opd_id
@@ -1316,12 +1323,127 @@ class Opd extends BaseController
                 'opd_status_remark' => $statusRemark,
             ]);
 
+        $this->syncAbdmTokenAfterOpdStatus((int) $opdId, (int) $opdStatus, (int) $userId, (string) $userLabel);
+
         return $this->response->setJSON([
             'update' => 1,
             'opd_id' => (int) $opdId,
             'opd_status' => (int) $opdStatus,
             'message' => 'Status updated',
         ]);
+    }
+
+    private function syncAbdmTokenAfterOpdStatus(int $opdId, int $opdStatus, int $actorId, string $actorLabel): void
+    {
+        if ($opdStatus !== 2 || ! $this->db->tableExists('abdm_opd_tokens')) {
+            return;
+        }
+
+        $rows = $this->db->query(
+            "SELECT id, gateway_token_id, status, queue_date
+             FROM abdm_opd_tokens
+             WHERE opd_id = " . (int) $opdId . "
+               AND status <> 'COMPLETED'"
+        )->getResultArray();
+
+        if (empty($rows)) {
+            return;
+        }
+
+        $connector = null;
+        try {
+            $connector = AbdmConnectorFactory::make();
+        } catch (\Throwable $e) {
+            $connector = null;
+        }
+
+        foreach ($rows as $row) {
+            $localId = (int) ($row['id'] ?? 0);
+            $gatewayTokenId = (int) ($row['gateway_token_id'] ?? 0);
+            $oldStatus = strtoupper(trim((string) ($row['status'] ?? '')));
+            if ($localId <= 0 || $oldStatus === 'COMPLETED') {
+                continue;
+            }
+
+            $gatewaySync = 'skipped';
+            $gatewayError = '';
+            if ($connector && $gatewayTokenId > 0) {
+                try {
+                    $connector->opdTokenUpdateStatus($gatewayTokenId, 'COMPLETED');
+                    $gatewaySync = 'ok';
+                } catch (\Throwable $e) {
+                    $gatewaySync = 'failed';
+                    $gatewayError = $e->getMessage();
+                }
+            }
+
+            $this->db->table('abdm_opd_tokens')
+                ->where('id', $localId)
+                ->update([
+                    'status' => 'COMPLETED',
+                    'updated_at' => date('Y-m-d H:i:s'),
+                ]);
+
+            $meta = [
+                'source' => 'opd_status_visit_done',
+                'opd_id' => $opdId,
+                'queue_date' => (string) ($row['queue_date'] ?? ''),
+                'gateway_token_id' => $gatewayTokenId,
+                'gateway_sync' => $gatewaySync,
+                'gateway_error' => $gatewayError,
+                'actor' => $actorLabel,
+            ];
+
+            $this->writeClinicalAuditTrail(
+                'abdm_opd_queue',
+                $gatewayTokenId > 0 ? (string) $gatewayTokenId : (string) $localId,
+                'status',
+                $oldStatus,
+                'COMPLETED | ' . json_encode($meta, JSON_UNESCAPED_SLASHES),
+                (string) $actorId
+            );
+        }
+    }
+
+    private function writeClinicalAuditTrail(
+        string $module,
+        string $recordId,
+        string $fieldName,
+        ?string $oldValue,
+        ?string $newValue,
+        string $userId
+    ): void {
+        try {
+            if (! $this->db->tableExists('clinical_audit_trail')) {
+                return;
+            }
+
+            $actionAt = date('Y-m-d H:i:s');
+            $hash = hash('sha256', implode('|', [
+                $module,
+                $recordId,
+                $fieldName,
+                (string) $oldValue,
+                (string) $newValue,
+                $userId,
+                $actionAt,
+                microtime(true),
+                random_int(1000, 999999),
+            ]));
+
+            (new ClinicalAuditTrailModel())->insert([
+                'module' => $module,
+                'record_id' => $recordId,
+                'field_name' => $fieldName,
+                'old_value' => $oldValue,
+                'new_value' => $newValue,
+                'user_id' => $userId,
+                'action_at' => $actionAt,
+                'hash' => $hash,
+            ]);
+        } catch (\Throwable $e) {
+            // fail-open: audit write errors must not block OPD flow
+        }
     }
 
     public function addopd(int $pno, int $orgCaseId = 0)

@@ -25,6 +25,16 @@
                             </a>
                         </li>
                         <li class="mb-2">
+                            <a href="javascript:load_form_div('<?= base_url('product_master/formulation_master_list') ?>','medical-main','Formulation Master :Pharmacy');">
+                                <i class="bi bi-hand-index-thumb"></i> Formulation
+                            </a>
+                        </li>
+                        <li class="mb-2">
+                            <a href="javascript:load_form_div('<?= base_url('product_master/short_formulation_master_list') ?>','medical-main','Short Formulation Master :Pharmacy');">
+                                <i class="bi bi-hand-index-thumb"></i> Short Formulation
+                            </a>
+                        </li>
+                        <li class="mb-2">
                             <a href="javascript:load_form_div('<?= base_url('product_master/medicine_category') ?>','medical-main','Medicine Category :Pharmacy');">
                                 <i class="bi bi-hand-index-thumb"></i> Medicine Category
                             </a>
