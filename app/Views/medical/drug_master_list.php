@@ -15,22 +15,23 @@
         </div>
     </form>
 
-    <div id="sub-main-pharmacy" class="mb-3" style="display:none;"></div>
-
-    <div id="searchresult" class="table-responsive">
-        <table id="product_report_list" class="table table-bordered table-striped table-sm align-middle" style="width:100%;">
-            <thead>
-            <tr>
-                <th>Prod. ID</th>
-                <th>Name</th>
-                <th>Formulation</th>
-                <th>Generic Name</th>
-                <th>Packing Type</th>
-                <th style="width:110px;">Action</th>
-            </tr>
-            </thead>
-            <tbody></tbody>
-        </table>
+    <div id="sub-main-pharmacy" class="mb-3">
+        <div id="drug-master-list-panel" class="table-responsive">
+            <table id="product_report_list" class="table table-bordered table-striped table-sm align-middle" style="width:100%;">
+                <thead>
+                <tr>
+                    <th>Prod. ID</th>
+                    <th>Name</th>
+                    <th>Formulation</th>
+                    <th>Generic Name</th>
+                    <th>Packing Type</th>
+                    <th style="width:110px;">Action</th>
+                </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <div id="drug-master-sub-panel" style="display:none;"></div>
     </div>
 </section>
 
@@ -72,17 +73,26 @@
 
     $form.off('submit').on('submit', function (event) {
         event.preventDefault();
+        if (window.showDrugMasterListPanel) {
+            window.showDrugMasterListPanel();
+        }
         dt.ajax.reload();
     });
 
     $('#btnResetSearch').off('click').on('click', function () {
         $('#txtsearch').val('');
+        if (window.showDrugMasterListPanel) {
+            window.showDrugMasterListPanel();
+        }
         dt.search('').ajax.reload();
     });
 
     $('#txtsearch').off('keypress').on('keypress', function (event) {
         if (event.which === 13) {
             event.preventDefault();
+            if (window.showDrugMasterListPanel) {
+                window.showDrugMasterListPanel();
+            }
             dt.ajax.reload();
         }
     });
@@ -98,20 +108,38 @@
 })();
 
 // Keep add/edit forms inside the Drug Master shell so the search form stays visible.
+window.showDrugMasterListPanel = function () {
+    var $listPanel = $('#drug-master-list-panel');
+    var $subPanel = $('#drug-master-sub-panel');
+
+    if ($listPanel.length && $subPanel.length) {
+        $subPanel.hide();
+        $listPanel.show();
+    }
+};
+
 window.openDrugMasterSubView = function (url, title) {
-    var $sub = $('#sub-main-pharmacy');
-    if ($sub.length) {
-        $sub.show();
-        load_form_div(url, 'sub-main-pharmacy', title || 'Drug Master :Pharmacy');
+    var $root = $('#sub-main-pharmacy');
+    var $listPanel = $('#drug-master-list-panel');
+    var $subPanel = $('#drug-master-sub-panel');
+
+    if ($root.length && $subPanel.length) {
+        $listPanel.hide();
+        $subPanel.show();
+        load_form_div(url, 'drug-master-sub-panel', title || 'Drug Master :Pharmacy');
         return;
     }
     load_form_div(url, 'medical-main', title || 'Drug Master :Pharmacy');
 };
 
 window.closeDrugMasterSubView = function () {
-    var $sub = $('#sub-main-pharmacy');
-    if ($sub.length) {
-        $sub.hide().empty();
+    var $root = $('#sub-main-pharmacy');
+    var $listPanel = $('#drug-master-list-panel');
+    var $subPanel = $('#drug-master-sub-panel');
+
+    if ($root.length && $subPanel.length) {
+        $subPanel.hide().empty();
+        $listPanel.show();
         if (window.reloadDrugMasterList) {
             window.reloadDrugMasterList();
         }

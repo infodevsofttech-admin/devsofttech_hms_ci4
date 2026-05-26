@@ -6850,6 +6850,11 @@ class Medical extends BaseController
             $categories = $this->db->table('med_product_cat_master')->orderBy('med_cat_desc', 'ASC')->get()->getResult();
         }
 
+        $gstRates = [];
+        if ($this->db->tableExists('med_gst_per')) {
+            $gstRates = $this->db->table('med_gst_per')->orderBy('gst_per', 'ASC')->get()->getResult();
+        }
+
         $selectedCatIds = [];
         if ($productId > 0 && $this->db->tableExists('med_product_cat_assign')) {
             $catRows = $this->db->table('med_product_cat_assign')
@@ -6865,6 +6870,7 @@ class Medical extends BaseController
             'med_formulation' => $formulations,
             'med_company' => $companies,
             'med_product_cat_master' => $categories,
+            'med_gst_per' => $gstRates,
             'selected_cat_ids' => $selectedCatIds,
         ]);
     }

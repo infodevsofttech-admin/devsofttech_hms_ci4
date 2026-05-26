@@ -22,6 +22,7 @@ $abdmDrugDisplay = (string) ($product->abdm_drug_display ?? '');
 $abdmDrugGeneric = (string) ($product->abdm_drug_generic ?? '');
 $abdmDrugPayloadJson = (string) ($product->abdm_drug_payload_json ?? '');
 $abdmDrugLastSyncedAt = (string) ($product->abdm_drug_last_synced_at ?? '');
+$gstRates = $med_gst_per ?? [];
 
 $flag = static function ($v): string {
     return ((int) $v === 1) ? 'checked' : '';
@@ -119,11 +120,35 @@ $flag = static function ($v): string {
             </div>
             <div class="col-md-1">
                 <label class="form-label">CGST</label>
-                <input class="form-control" name="input_CGST" id="input_CGST" type="text" value="<?= esc($cgst) ?>">
+                <select class="form-select" name="input_CGST" id="input_CGST">
+                    <?php if (! empty($gstRates)): ?>
+                        <?php foreach ($gstRates as $rate): ?>
+                            <?php $gstValue = trim((string) ($rate->gst_per ?? '0')); ?>
+                            <?php if ($gstValue === '') { $gstValue = '0'; } ?>
+                            <option value="<?= esc($gstValue) ?>" <?= ((float) $gstValue === (float) $cgst) ? 'selected' : '' ?>><?= esc($gstValue) ?></option>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <?php foreach (['0', '2.5', '5', '6', '9', '12'] as $gstValue): ?>
+                            <option value="<?= esc($gstValue) ?>" <?= ((float) $gstValue === (float) $cgst) ? 'selected' : '' ?>><?= esc($gstValue) ?></option>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </select>
             </div>
             <div class="col-md-1">
                 <label class="form-label">SGST</label>
-                <input class="form-control" name="input_SGST" id="input_SGST" type="text" value="<?= esc($sgst) ?>">
+                <select class="form-select" name="input_SGST" id="input_SGST">
+                    <?php if (! empty($gstRates)): ?>
+                        <?php foreach ($gstRates as $rate): ?>
+                            <?php $gstValue = trim((string) ($rate->gst_per ?? '0')); ?>
+                            <?php if ($gstValue === '') { $gstValue = '0'; } ?>
+                            <option value="<?= esc($gstValue) ?>" <?= ((float) $gstValue === (float) $sgst) ? 'selected' : '' ?>><?= esc($gstValue) ?></option>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <?php foreach (['0', '2.5', '5', '6', '9', '12'] as $gstValue): ?>
+                            <option value="<?= esc($gstValue) ?>" <?= ((float) $gstValue === (float) $sgst) ? 'selected' : '' ?>><?= esc($gstValue) ?></option>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </select>
             </div>
 
             <div class="col-md-2">
@@ -173,15 +198,40 @@ $flag = static function ($v): string {
 
 <script>
 window.openDrugMasterSubView = window.openDrugMasterSubView || function (url, title) {
-    var target = document.getElementById('sub-main-pharmacy') ? 'sub-main-pharmacy' : 'medical-main';
+    var listPanel = document.getElementById('drug-master-list-panel');
+    var subPanel = document.getElementById('drug-master-sub-panel');
+    var target = 'medical-main';
+
+    if (subPanel) {
+        if (listPanel) {
+            listPanel.style.display = 'none';
+        }
+        subPanel.style.display = '';
+        target = 'drug-master-sub-panel';
+    } else if (document.getElementById('sub-main-pharmacy')) {
+        target = 'sub-main-pharmacy';
+    }
+
     load_form_div(url, target, title || 'Drug Master :Pharmacy');
 };
 
 window.closeDrugMasterSubView = window.closeDrugMasterSubView || function () {
+    var listPanel = document.getElementById('drug-master-list-panel');
+    var subPanel = document.getElementById('drug-master-sub-panel');
     var sub = document.getElementById('sub-main-pharmacy');
+
+    if (subPanel && listPanel) {
+        subPanel.innerHTML = '';
+        subPanel.style.display = 'none';
+        listPanel.style.display = '';
+        if (typeof window.reloadDrugMasterList === 'function') {
+            window.reloadDrugMasterList();
+        }
+        return;
+    }
+
     if (sub) {
         sub.innerHTML = '';
-        sub.style.display = 'none';
         if (typeof window.reloadDrugMasterList === 'function') {
             window.reloadDrugMasterList();
         }
@@ -218,6 +268,32 @@ window.closeDrugMasterSubView = window.closeDrugMasterSubView || function () {
 
     function showMsg(html) {
         $('#product-msg').html(html || '');
+    }
+
+    function setTaxSelectValue(selector, value) {
+        var $el = $(selector);
+        if (!$el.length) {
+            return;
+        }
+
+        var normalized = (value === null || value === undefined) ? '' : String(value).trim();
+        if (normalized === '') {
+            return;
+        }
+
+        var exists = false;
+        $el.find('option').each(function () {
+            if (String($(this).val()) === normalized) {
+                exists = true;
+                return false;
+            }
+            return true;
+        });
+
+        if (!exists) {
+            $el.append($('<option>', { value: normalized, text: normalized }));
+        }
+        $el.val(normalized).trigger('change');
     }
 
     function showSelectedDrugSummary() {
@@ -853,18 +929,18 @@ window.closeDrugMasterSubView = window.closeDrugMasterSubView || function () {
         }
 
         if (cgstVal !== null) {
-            $('#input_CGST').val(cgstVal.toFixed(2).replace(/\.00$/, ''));
+            setTaxSelectValue('#input_CGST', cgstVal.toFixed(2).replace(/\.00$/, ''));
         }
         if (sgstVal !== null) {
-            $('#input_SGST').val(sgstVal.toFixed(2).replace(/\.00$/, ''));
+            setTaxSelectValue('#input_SGST', sgstVal.toFixed(2).replace(/\.00$/, ''));
         }
         if (gstTotal !== null && (cgstVal === null || sgstVal === null)) {
             var half = (gstTotal / 2);
             if (cgstVal === null) {
-                $('#input_CGST').val(half.toFixed(2).replace(/\.00$/, ''));
+                setTaxSelectValue('#input_CGST', half.toFixed(2).replace(/\.00$/, ''));
             }
             if (sgstVal === null) {
-                $('#input_SGST').val(half.toFixed(2).replace(/\.00$/, ''));
+                setTaxSelectValue('#input_SGST', half.toFixed(2).replace(/\.00$/, ''));
             }
         }
 
@@ -1161,13 +1237,25 @@ window.closeDrugMasterSubView = window.closeDrugMasterSubView || function () {
     showSelectedDrugSummary();
 
     $('#btn_update_stock').off('click').on('click', function () {
-        $.post('<?= base_url('product_master/product_master_update') ?>/' + ($('#product_id').val() || '0'), $('#product-form').serialize(), function (data) {
+        var currentProductId = parseInt($('#product_id').val() || '0', 10) || 0;
+        var isAddFlow = currentProductId <= 0;
+
+        $.post('<?= base_url('product_master/product_master_update') ?>/' + (currentProductId || '0'), $('#product-form').serialize(), function (data) {
             if (!data || typeof data !== 'object') {
                 showMsg('<div class="alert alert-danger mb-0">Unexpected response.</div>');
                 return;
             }
             showMsg(data.show_text || '');
             if ((data.is_update_stock || 0) > 0) {
+                if (isAddFlow) {
+                    if (window.jQuery && $('#txtsearch').length) {
+                        $('#txtsearch').val($('#input_item_name').val() || '');
+                    }
+                    if (typeof window.closeDrugMasterSubView === 'function') {
+                        window.closeDrugMasterSubView();
+                    }
+                    return;
+                }
                 openDrugMasterSubView('<?= base_url('Product_master/Product_edit') ?>/' + data.is_update_stock, 'Drug Master : Edit :Pharmacy');
             }
         }, 'json').fail(function () {
