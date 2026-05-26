@@ -165,13 +165,31 @@ $flag = static function ($v): string {
 
             <div class="col-12">
                 <button type="button" class="btn btn-primary" id="btn_update_stock">Update Product in Master</button>
-                <button type="button" class="btn btn-secondary" onclick="load_form_div('<?= base_url('product_master/drug_master_list') ?>','medical-main','Drug Master :Pharmacy');">Back</button>
+                <button type="button" class="btn btn-secondary" onclick="closeDrugMasterSubView();">Back</button>
             </div>
         </form>
     </div>
 </div>
 
 <script>
+window.openDrugMasterSubView = window.openDrugMasterSubView || function (url, title) {
+    var target = document.getElementById('sub-main-pharmacy') ? 'sub-main-pharmacy' : 'medical-main';
+    load_form_div(url, target, title || 'Drug Master :Pharmacy');
+};
+
+window.closeDrugMasterSubView = window.closeDrugMasterSubView || function () {
+    var sub = document.getElementById('sub-main-pharmacy');
+    if (sub) {
+        sub.innerHTML = '';
+        sub.style.display = 'none';
+        if (typeof window.reloadDrugMasterList === 'function') {
+            window.reloadDrugMasterList();
+        }
+        return;
+    }
+    load_form_div('<?= base_url('product_master/drug_master_list') ?>', 'medical-main', 'Drug Master :Pharmacy');
+};
+
 (function () {
     var suggestTimer = null;
     var lastQuery = '';
@@ -1150,7 +1168,7 @@ $flag = static function ($v): string {
             }
             showMsg(data.show_text || '');
             if ((data.is_update_stock || 0) > 0) {
-                load_form_div('<?= base_url('Product_master/Product_edit') ?>/' + data.is_update_stock, 'medical-main', 'Drug Master : Edit :Pharmacy');
+                openDrugMasterSubView('<?= base_url('Product_master/Product_edit') ?>/' + data.is_update_stock, 'Drug Master : Edit :Pharmacy');
             }
         }, 'json').fail(function () {
             showMsg('<div class="alert alert-danger mb-0">Unable to update product.</div>');

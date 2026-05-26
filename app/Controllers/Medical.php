@@ -5809,7 +5809,7 @@ class Medical extends BaseController
                     esc((string) ($row['formulation'] ?? '')),
                     esc((string) ($row['genericname'] ?? '')),
                     esc((string) ($row['packing'] ?? '')),
-                    '<button onclick="load_form_div(\'' . $editUrl . '\',\'medical-main\',\'Drug Master : Edit :Pharmacy\');" type="button" class="btn btn-warning btn-sm">Edit</button>',
+                    '<button onclick="openDrugMasterSubView(\'' . $editUrl . '\',\'Drug Master : Edit :Pharmacy\');" type="button" class="btn btn-warning btn-sm">Edit</button>',
                 ];
             }
 

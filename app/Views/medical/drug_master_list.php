@@ -11,9 +11,11 @@
             <button type="button" id="btnResetSearch" class="btn btn-secondary">Reset</button>
         </div>
         <div class="col-auto">
-            <button onclick="load_form_div('<?= base_url('Product_master/Product_edit/0') ?>','medical-main','Drug Master : New Product :Pharmacy');" type="button" class="btn btn-warning">Add New Product</button>
+            <button onclick="openDrugMasterSubView('<?= base_url('Product_master/Product_edit/0') ?>','Drug Master : New Product :Pharmacy');" type="button" class="btn btn-warning">Add New Product</button>
         </div>
     </form>
+
+    <div id="sub-main-pharmacy" class="mb-3" style="display:none;"></div>
 
     <div id="searchresult" class="table-responsive">
         <table id="product_report_list" class="table table-bordered table-striped table-sm align-middle" style="width:100%;">
@@ -94,6 +96,29 @@
 
     $('#product_report_list_filter input[type="search"]').attr('placeholder', 'Quick filter table...');
 })();
+
+// Keep add/edit forms inside the Drug Master shell so the search form stays visible.
+window.openDrugMasterSubView = function (url, title) {
+    var $sub = $('#sub-main-pharmacy');
+    if ($sub.length) {
+        $sub.show();
+        load_form_div(url, 'sub-main-pharmacy', title || 'Drug Master :Pharmacy');
+        return;
+    }
+    load_form_div(url, 'medical-main', title || 'Drug Master :Pharmacy');
+};
+
+window.closeDrugMasterSubView = function () {
+    var $sub = $('#sub-main-pharmacy');
+    if ($sub.length) {
+        $sub.hide().empty();
+        if (window.reloadDrugMasterList) {
+            window.reloadDrugMasterList();
+        }
+        return;
+    }
+    load_form_div('<?= base_url('product_master/drug_master_list') ?>', 'medical-main', 'Drug Master :Pharmacy');
+};
 
 // Refresh list after returning from add/edit forms.
 window.reloadDrugMasterList = function () {
