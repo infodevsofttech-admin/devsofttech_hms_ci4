@@ -1,0 +1,350 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="616" uniqueCount="436"><si><t>Project Name:</t></si><si><t>ABDM - Sandbox Integration</t></si><si><t xml:space="preserve">Test Designed by:  </t></si><si><t>NHA</t></si><si><t>Module Name:</t></si><si><t>ABHA Creation and Verification</t></si><si><t xml:space="preserve">Test Designed date: </t></si><si><t>Release Version:</t></si><si><t xml:space="preserve">Test Executed by: </t></si><si><t xml:space="preserve">Test Execution date: </t></si><si><t>Application/ System Name:</t></si><si><t>Value</t></si><si><t>{{baseUri}}</t></si><si><t>Prerequisites</t></si><si><t>Client ID and Client Secret</t></si><si><t>Postman and Postman Collection</t></si><si><t>S.No</t></si><si><t>Function</t></si><si><t>Applicable To</t></si><si><t>Mandatory/ Optional</t></si><si><t>Test Case ID</t></si><si><t>Functionality</t></si><si><t>Test Case
+(to be checked during functional testing)</t></si><si><t>Steps To Be Executed 
+(By User or Functional Tester)</t></si><si><t>Expected Result</t></si><si><t>Suggestions for the Functional Tester</t></si><si><t>Status</t></si><si><t>Remark</t></si><si><t>ABHA Creation Process</t></si><si><t>ABHA Creation Through
+Aadhaar OTP</t></si><si><t>All</t></si><si><t>https://dev.abdm.gov.in/gateway/v0.5/sessions</t></si><si><t>https://dev.abdm.gov.in/api/hiecm/gateway/v3/sessions</t></si><si><t>Mandatory</t></si><si><t>CRT_ABHA_101</t></si><si><t>Create ABHA Option</t></si><si><t>The system must provide an option to create ABHA through Aadhaar OTP</t></si><si><t>User will have an option to create ABHA</t></si><si><t>CRT_ABHA_102</t></si><si><t>Consent collection</t></si><si><t>The system must display the  consent language/ disclaimer language and collect user's consent as per the ABDM published  consent.
+Refer Cell No-: M14</t></si><si><t>1. Read consent language
+2. Agree to the consent language (through 'I agree' checkbox or any other form of signature)</t></si><si><t xml:space="preserve">User provides consent for sharing of Aadhaar details and creation of ABHA.
+
+System records user consent for compliance with Health Data Management Policy.
+
+</t></si><si><t>Please refer  the approved consent language.</t></si><si><t xml:space="preserve">Optional </t></si><si><t>CRT_ABHA_103</t></si><si><t xml:space="preserve">Suggestions:- 
+Consent collection should be multilingual </t></si><si><t>The system should be able to provide the consent in languages other than English also</t></si><si><t>CRT_ABHA_104</t></si><si><t>Aadhaar collection and Error Message</t></si><si><t>System must allow the user to enter Aadhaar Number and the system will display an error message for invalid Aadhaar Number</t></si><si><t>1. Enter Aadhaar number</t></si><si><t>User is prompted to enter correct Aadhaar Number
+
+In case user enters an invalid Aadhaar number (A valid Aadhaar is a 12-digit number), the system shows an error message "Aadhaar Number is not valid".</t></si><si><t>CRT_ABHA_105</t></si><si><t>Aadhaar OTP Collection</t></si><si><t>User receives Aadhaar OTP and System must allow the user to enter Aadhaar OTP.</t></si><si><t>1. Receive OTP on mobile number registered with Aadhaar
+2. Enter Aadhaar OTP</t></si><si><r><t xml:space="preserve">User will be able to enter a valid Aadhaar OTP (A valid Aadhaar OTP is a 6-digit number).
+Example -
+Modified text for the "Please enter 6 -digit OTP sent to Aadhaar linked mobile number " step during the ABHA Creation workflow with “We just sent an OTP on the  </t></r><r><rPr><sz val="10"/><color rgb="FFFF0000"/><rFont val="Verdana"/><family val="2"/></rPr><t>Mobile Number *******XXXX</t></r><r><rPr><sz val="10"/><color theme="1"/><rFont val="Verdana"/><family val="2"/></rPr><t xml:space="preserve">  linked with Aadhaar. Enter the OTP below to proceed with ABHA creation".</t></r></si><si><t>CRT_ABHA_106</t></si><si><t>Resend OTP</t></si><si><t>System may activate the Resend OTP button maximum 2 times after  60 seconds</t></si><si><t>1. Click on Resend OTP Button
+2. Receive OTP on mobile</t></si><si><t>User will able to send OTP again and verify it</t></si><si><t>CRT_ABHA_107</t></si><si><t>OTP based Aadhaar Authentication</t></si><si><t>System must verify the OTP</t></si><si><t>Click on verify button  (For Resend and Send)
+
+It is recommended that verify button be auto enabled</t></si><si><t>System authenticates the user's Aadhaar through OTP
+
+In case of incorrect OTP, the system displays an error
+In case of correct OTP, the system allows the user to proceed</t></si><si><t>Note: Many integrating entities have not implemented API for OTP not to be sent in case communication mobile is same as Aadhaar linked mobile. In that case the test scenario detailed under sl. No 1.8 will only be considered. However, it is recommended that API = checkAndGenerateMobileOTP be implemented. This will reduce one step of OTP verification in case communication mobile is same as the Aadhaar linked mobile</t></si><si><t>Optional</t></si><si><t>CRT_ABHA_108</t></si><si><t>Communication Mobile Number verification-I</t></si><si><t>1. If communication mobile number is same as Aadhaar linked mobile number then it should directly go to ABHA  creation screen .
+
+2. Alternatively , Integrators may also prompt for OTP  again from the user and then post verification of OTP user can go to ABHA  creation screen.</t></si><si><t xml:space="preserve"> This is applicable for testcase cell no -G20 , point no-1 
+
+1. System will check entered mobile is same as Aadhaar linked mobile number. If returns true then user will directed to ABHA  creation screen.
+
+
+2. For point number 2 step are already mentioned in test case cell no- G20 , point no-2 
+
+
+</t></si><si><t>Redirect to the ABHA  creation screen.</t></si><si><t>CRT_ABHA_109</t></si><si><t>Communication Mobile Number verification-II</t></si><si><t>If communication mobile number is not same as Aadhaar linked mobile number then system must ask for the OTP to verify comuncation mobile number.</t></si><si><t>1. System must verify the mobile number.
+1. System must send OTP on mobile number 
+2. User enters the OTP and clicks on verify
+3. In case of incorrect OTP, the system displays an error
+4. In case of correct OTP, the system allows the user to proceed</t></si><si><t>System verifies the communication mobile number</t></si><si><t>Mandatory for Private /Government (Optional for integrated program using demo auth as they have default ABHA address generated)</t></si><si><t>CRT_ABHA_112</t></si><si><t>Suggested ABHA Address</t></si><si><t xml:space="preserve">1. The system should allow the user to select  the ABHA  address giving atleast 3 available suggestions 
+
+2. Otherwise the system should have a provision to create a ABHA address with ABHA address Policy and validation rule should be print beside the field where ABHA Address is entered.
+
+Validation rules on ABHA Address to be set at the API level:
+1. Minimum length - 8 characters
+2. Maximum length - 18 characters
+3. Special characters allowed - 1 dot (.) and/or 1 underscore (_)
+4. Special character dot and underscore should be in between. Special characters cannot be in the beginning or at the end
+5. Alphanumeric - only numbers, only letters or any combination of numbers and letters is allowed.
+
+</t></si><si><r><t>1. Governemnt integrator may use the option for creating default ABHA  address. However, it is recommended that user-defined or system suggested ABHA address be used
+2. System should have a provision for private integrators to proceed with the suggested ABHA address.</t></r><r><rPr><b/><sz val="10"/><color rgb="FFFF0000"/><rFont val="Verdana"/><family val="2"/></rPr><t xml:space="preserve">
+</t></r><r><rPr><sz val="10"/><color rgb="FFFF0000"/><rFont val="Verdana"/><family val="2"/></rPr><t>3. If beneficary use the existing ABHA address then system displays the "ABHA Address is already exist".</t></r></si><si><t xml:space="preserve">System should prompt / display the available or suggested ABHA addresses. System should allow the user to proceed with the enterered ABHA  Address. In case, entered ABHA address is already in use then system should allow the user to input and proceed with any one of the suggested ABHA address.
+
+</t></si><si><t>CRT_ABHA_113</t></si><si><t>Display of ABHA Number</t></si><si><t>System must display the created ABHA Number</t></si><si><t xml:space="preserve">1. System shows the 14-digit ABHA number and ABHA  address  generated
+</t></si><si><t>User should be able to view the generated ABHA Number and linked ABHA address</t></si><si><t xml:space="preserve">Mandatory  for Private </t></si><si><t>CRT_ABHA_114</t></si><si><t xml:space="preserve">View and Download ABHA details. 
+(If integrators is generating ABHA card) </t></si><si><t xml:space="preserve">System must have a provision to View / Download ABHA card </t></si><si><t>1. System should show the user their ABHA Card
+2. ABHA Card should be generated by API and should contain -
+a. ABHA Number (Mandatory)
+b. User Photo-Optional
+c. ABHA QR code
+d. date of birth and gender
+e. ABHA Address</t></si><si><t>User should be able to view their ABHA Card with all the demographc details as mentioned in cell H26</t></si><si><t xml:space="preserve">Either of the test cases CRT_ABHA_114 or CRT_ABHA_115 is mandatory for Governement 
+
+
+Optional for Private </t></si><si><t>CRT_ABHA_115</t></si><si><t xml:space="preserve">View and Download ABHA details. 
+(If integrators  is not  generating ABHA card) </t></si><si><t>System must have a provision to View details like ABHA number and ABHA address in the card (either ABHA card or any card being generated for their program/scheme/entity)</t></si><si><t>1. If Integrator is not generating ABHA card then They print the mentioned information on their program/scheme or any other card
+a. ABHA Number (Mandatory)
+b. ABHA Address</t></si><si><r><t xml:space="preserve">User should be able to view card with ABHA  number and ABHA  address and </t></r><r><rPr><sz val="10"/><color rgb="FFFF0000"/><rFont val="Verdana"/><family val="2"/></rPr><t>the details should be saved in HIMS system and linked with the HIMS unique beneficary 's ID.g or as per their business requirement.</t></r></si><si><t>ABHA Creation Through Aadhaar Biometric</t></si><si><t>CRT_ABHA_201</t></si><si><t>Create ABHA 
+Option</t></si><si><t>The system must provide an option to create ABHA through Aadhaar Biometric</t></si><si><t>User will have a choice to create ABHA using Aadhaar Biometrics</t></si><si><t>CRT_ABHA_202</t></si><si><t xml:space="preserve">
+
+
+The system must display the  consent language/ disclaimer language and collect user's consent as per the ABDM published  consent.
+
+Refer Cell No-: M14</t></si><si><t>CRT_ABHA_203</t></si><si><t>CRT_ABHA_204</t></si><si><t>User is prompted to enter correct Aadhaar Number
+
+In case user enters an invalid Aadhaar number (A valid Aadhaar is a 12-digit number), the system shows an error message  "Aadhaar Number is not valid".</t></si><si><t>CRT_ABHA_205</t></si><si><t>Biometric based Aadhaar Authentication</t></si><si><t>System must verify the biometrics (fingerprint or face) of the user</t></si><si><t>1. Scan biometrics (Fingerprint) 
+2. Click on verify button</t></si><si><t>System authenticates the user's Aadhaar though user's biometrics
+In case of incorrect biometrics, the system displays an error
+In case of correct biometrics, the system allows the user to proceed</t></si><si><t>Note: Many integrating entities have not implemented API for OTP not to be sent in case communication mobile is same as Aadhaar linked mobile. In that case the test scenario detailed under sl. No 2.6 will only be considered. However, it is recommended that API = checkAndGenerateMobileOTP be implemented. This will reduce one step of OTP verification in case communication mobile is same as the Aadhaar linked mobile</t></si><si><t>CRT_ABHA_206</t></si><si><t>CRT_ABHA_207</t></si><si><t>CRT_ABHA_208</t></si><si><t>User should be able to view the generated ABHA Number</t></si><si><t>CRT_ABHA_209</t></si><si><t>User should be able to view their ABHA Card</t></si><si><t xml:space="preserve">Either of the test cases CRT_ABHA_209 or CRT_ABHA_210 is mandatory for Governement 
+
+
+Optional for Private </t></si><si><t>CRT_ABHA_210</t></si><si><r><t xml:space="preserve">User should be able to view card with ABHA  number and ABHA  address and </t></r><r><rPr><sz val="10"/><color rgb="FFFF0000"/><rFont val="Verdana"/><family val="2"/></rPr><t xml:space="preserve"> the details should be saved in HIMS system and linked with the HIMS unique beneficary 's ID.g or as per their business requirement.</t></r></si><si><t xml:space="preserve">ABHA Creation Through Demo Auth/ Offline Mode
+(Available Only for trusted entities. All    government Entities    are eligible. </t></si><si><t>Government</t></si><si><t>CRT_ABHA_301</t></si><si><t>The system must provide an option to create ABHA through Aadhaar Demographic/ Offline Mode</t></si><si><t>CRT_ABHA_302</t></si><si><t>CRT_ABHA_303</t></si><si><t>CRT_ABHA_304</t></si><si><t>CRT_ABHA_305</t></si><si><t>Demographic Information based authentication</t></si><si><t>System must verify the demographic information of the user against their Aadhaar</t></si><si><r><t>1. Enter beneficiary's name, date of birth, gender, Aadhaar Number, Mobile Number, Address, State name, and district name in accordance with the details on their Aadhaar card.
+2</t></r><r><rPr><sz val="10"/><color rgb="FFFF0000"/><rFont val="Verdana"/><family val="2"/></rPr><t xml:space="preserve">. Case 1:If the beneficiary has an existing ABHA address, it should be displayed on both the ABHA card and the ABHA profile.
+                                       OR
+    Case 2: If beneficary want to create a customize ABHA address then same ABHA address should be displayed on both the ABHA card and the ABHA profile.
+3 : Case 3 : If the beneficiary have no ABHA address then system will create a Default ABHA Address ( ABHA Number @sbx) and same ABHA address should be displayed on both the ABHA card and the ABHA profile. (Mandatory )                         
+4. If a beneficiary's deatils are matched with Aadhaaar information then system will not allow  to create ABHA.
+5. If If a beneficiary's deatils are matched with Aadhaaar information then system will allow to create ABHA .
+</t></r></si><si><r><t xml:space="preserve">1. System authenticates the user's Aadhaar though user's demographic data.
+</t></r><r><rPr><sz val="10"/><color rgb="FFFF0000"/><rFont val="Verdana"/><family val="2"/></rPr><t>2.The fields for name, date of birth, and gender are set as non-editable, while the remaining fields can be open for editing i.e (Address, Email , Mobile Number, State, district , City e.t.c)</t></r></si><si><t>CRT_ABHA_306</t></si><si><t>Profile Completion</t></si><si><t xml:space="preserve">System should accepts user's profile information -  </t></si><si><t xml:space="preserve">1. System auto-populates  beneficiary's name, date of birth, gender, Aadhaar number, mobile number, address, state name, district name
+ and ABHA Number.
+2.The fields for name, date of birth, and gender are set as non-editable, while the remaining fields can be open for editing.
+</t></si><si><t>CRT_ABHA_307</t></si><si><t xml:space="preserve">1. The system displays the 14-digit ABHA number and generates the corresponding ABHA Address, adhering to the implementation chosen by integrators, either as a default setting or a customized one.
+</t></si><si><t>CRT_ABHA_308</t></si><si><t>1. System should show the user their ABHA Card
+2. ABHA Card should be generated by API and should contain -
+a. ABHA Number (Mandatory)
+b. ABHA QR code
+c. Name, date of birth and gender
+d. ABHA Address</t></si><si><t xml:space="preserve">Either of the test cases CRT_ABHA_308 or CRT_ABHA_309 is mandatory for Governement 
+
+
+Optional for Private </t></si><si><t>CRT_ABHA_309</t></si><si><r><t xml:space="preserve">1. If Integrator is not generating ABHA card then They print the mentioned information on their program/scheme or any other card with the </t></r><r><rPr><b/><sz val="10"/><color theme="1"/><rFont val="Verdana"/><family val="2"/></rPr><t xml:space="preserve"> beneficiary's demographic details.</t></r><r><rPr><sz val="10"/><color theme="1"/><rFont val="Verdana"/><family val="2"/></rPr><t xml:space="preserve">
+a. ABHA Number (Mandatory)
+b. ABHA Address</t></r></si><si><r><t xml:space="preserve">User should be able to view card with ABHA  number and ABHA  address.and  </t></r><r><rPr><sz val="10"/><color rgb="FFFF0000"/><rFont val="Verdana"/><family val="2"/></rPr><t>the details should be saved in HIMS system and linked with the HIMS unique beneficary 's ID.g or as per their business requirement.</t></r></si><si><t>ABHA Creation Through Driving License / PAN</t></si><si><t>Optional for Private 
+
+Mandatory for Government</t></si><si><t>CRT_ABHA_401</t></si><si><t xml:space="preserve">The system must provide an option to create ABHA through Driving License / PAN </t></si><si><t>CRT_ABHA_402</t></si><si><t>Consent Collection</t></si><si><t>The System must display the consent/ disclaimer language and collect user's consent</t></si><si><t>1. Read the consent language
+2. Agree to the consent language (through 'I agree' checkbox or any other form of signature)</t></si><si><t>User provides consent for sharing of Aadhaar details and creation of ABHA.
+
+System records user consent for compliance with Health Data Management Policy.</t></si><si><t>CRT_ABHA_403</t></si><si><t>Communication Mobile Number</t></si><si><t>System must collect the communication mobile number</t></si><si><t>1. Enters a valid mobile number for communication purpose</t></si><si><t>User will be able to enter their Mobile Number</t></si><si><t>CRT_ABHA_404</t></si><si><t>Mobile Number Verification</t></si><si><t>System must verify the provided mobile number</t></si><si><t>1. Receive OTP on mobile number 
+2. Enter the OTP and clicks on verify</t></si><si><t>In case of incorrect OTP, the system displays an error 
+In case of correct OTP, the system allows the user to proceed</t></si><si><t>CRT_ABHA_405</t></si><si><t>Document Verification</t></si><si><t xml:space="preserve">System must verify the provided document - Driving License / PAN
+
+
+</t></si><si><t>1. Enter the Driving License / PAN number
+2. Enter name, date of birth and gender as per the document.
+3. successfully verification will generate enrollment number 
+4. With this enrollment number patient/ user will approach with any ABDM facilty for creation of ABHA  number .</t></si><si><t>System validates user's Driving License / PAN</t></si><si><t>CRT_ABHA_406</t></si><si><t>Document Upload</t></si><si><t>System must allow upload of front and back page of the Driving licence/ PAN</t></si><si><t>1. Upload the front and back page of the document i.e Driving License / PAN.</t></si><si><t>Document photos are uploaded in the system</t></si><si><t>CRT_ABHA_407</t></si><si><t>Manual Verification and ABHA Creation</t></si><si><t xml:space="preserve">System Operator / healthcare worker must manually check the documents - Driving License / PAN </t></si><si><t>1. A healthcare worker/ system operator manually verifies the Driving License / PAN</t></si><si><t>Documents are manually verified. 
+
+In case the document is valid, the operator approves ABHA creation.
+
+In case the document is invalid, the operator rejects the ABHA creation.</t></si><si><t>CRT_ABHA_408</t></si><si><t>System should display the created ABHA Number</t></si><si><t>1. Show the 14-digit ABHA number generated
+2. Show ABHA Number instead of Health ID</t></si><si><t>CRT_ABHA_410</t></si><si><r><t xml:space="preserve">User should be able to view their ABHA Card </t></r><r><rPr><sz val="10"/><color rgb="FFFF0000"/><rFont val="Verdana"/><family val="2"/></rPr><t>and  the details should be saved in HIMS system and linked with the HIMS unique beneficary 's ID.g or as per their business requirement.</t></r></si><si><t>CRT_ABHA_411</t></si><si><t xml:space="preserve"> If Integrator is not generating ABHA card.</t></si><si><t>1. If Integrator is not generating ABHA card then They print the mentioned information on their own card.
+a. ABHA Number (Mandatory)
+b. ABHA Address</t></si><si><t>User should be able to view card with ABHA  number and ABHA  address.</t></si><si><t>ABHA Verification Process</t></si><si><t>ABHA Verification</t></si><si><t>VRFY_ABHA_101</t></si><si><t xml:space="preserve"> ABHA Number Verification using Aadhaar OTP</t></si><si><t>System must allow ABHA Number  verification using Aadhaar OTP</t></si><si><r><t xml:space="preserve">1. Share ABHA Number or ABHA Address
+2. Receive OTP on the Aadhaar linked mobile number 
+3. Enter the OTP.
+4. System may activate the Resend OTP button maximum </t></r><r><rPr><sz val="10"/><color rgb="FFFF0000"/><rFont val="Verdana"/><family val="2"/></rPr><t xml:space="preserve"> 2 times after  60  seconds in the OTP not received.
+5. If beneficiary updates their mobile number in the HIMS system and It is advisable to provide users with the option to update their mobile number in the ABHA profile with (Yes/No) using the profile API you should be able to update the details. </t></r></si><si><r><t xml:space="preserve">1. In case of correct OTP, the verification is complete and the System can fetch user's ABHA profile - name, date of birth, gender, mobile number, photo and address, ABHA Number , ABHA Address and other details from the  APIs.
+2. In case of incorrect OTP, the verification fails.
+</t></r><r><rPr><sz val="10"/><color rgb="FFFF0000"/><rFont val="Verdana"/><family val="2"/></rPr><t xml:space="preserve">
+3. The fields for name, date of birth, and gender are set as non-editable, while the remaining fields can be open for editing i.e (Address, Email , Mobile Number, State, district , City e.t.c)
+
+4. After verification , the details should be saved in HIMS system and linked with the HIMS unique beneficary 's ID.g or as per their business requirement.</t></r></si><si><t>VRFY_ABHA_102</t></si><si><t>ABHA Address   Verification using Aadhaar OTP</t></si><si><t>System must allow ABHA Address verification using Aadhaar OTP</t></si><si><r><t>1. Share ABHA Number or ABHA Address.
+2. Receive OTP on the Aadhaar linked mobile number.
+3. Enter the OTP.
+4. System may activate the Resend OTP button maximum</t></r><r><rPr><sz val="10"/><color rgb="FFFF0000"/><rFont val="Verdana"/><family val="2"/></rPr><t xml:space="preserve"> 2 times after 60 seconds in the OTP not received.</t></r><r><rPr><sz val="10"/><color theme="1"/><rFont val="Verdana"/><family val="2"/></rPr><t xml:space="preserve">
+</t></r><r><rPr><sz val="10"/><color rgb="FFFF0000"/><rFont val="Verdana"/><family val="2"/></rPr><t xml:space="preserve">5. If beneficiary updates their mobile number in the HIMS system and It is advisable to provide users with the option to update their mobile number in the ABHA profile with (Yes/No) using the profile API you should be able to update the details. </t></r></si><si><r><t xml:space="preserve">1. In case of correct OTP, the verification is complete and the System can fetch user's ABHA profile - name, date of birth, gender, mobile number, photo and address, , state,district, ABHA Number , ABHA Address and other details from the  APIs.
+
+2. In case of incorrect OTP, the verification fails.
+</t></r><r><rPr><strike/><sz val="10"/><color theme="1"/><rFont val="Verdana"/><family val="2"/></rPr><t xml:space="preserve">
+3</t></r><r><rPr><sz val="10"/><color rgb="FFFF0000"/><rFont val="Verdana"/><family val="2"/></rPr><t>. The fields for name, date of birth, and gender are set as non-editable, while the remaining fields can be open for editing i.e (Address, Email , Mobile Number, State, district , City e.t.c)
+
+4. After verification , the details should be saved in HIMS system and linked with the HIMS unique beneficary 's ID.g or as per their business requirement.</t></r></si><si><t>ABHA  Verification</t></si><si><t>VRFY_ABHA_201</t></si><si><t>ABHA Number  verification using   mobile OTP(ABHA Linked Mobile Number )</t></si><si><t xml:space="preserve">System must allow ABHA Number  verification using 
+mobile OTP(ABHA Linked Mobile Number )  </t></si><si><r><t xml:space="preserve">1. Share ABHA Number or ABHA Address
+2. Receive OTP on the Communication mobile number 
+3. Enter the OTP.
+4. System may activate the Resend OTP button maximum </t></r><r><rPr><sz val="10"/><color rgb="FFFF0000"/><rFont val="Verdana"/><family val="2"/></rPr><t xml:space="preserve"> 2 times after 60 seconds in the OTP not received.</t></r><r><rPr><sz val="10"/><color theme="1"/><rFont val="Verdana"/><family val="2"/></rPr><t xml:space="preserve">
+</t></r><r><rPr><sz val="10"/><color rgb="FFFF0000"/><rFont val="Verdana"/><family val="2"/></rPr><t xml:space="preserve">5. If beneficiary updates their mobile number in the HIMS system and It is advisable to provide users with the option to update their mobile number in the ABHA profile with (Yes/No) using the profile API you should be able to update the details. </t></r></si><si><r><t xml:space="preserve">1. In case of correct OTP, the verification is complete and the System can fetch user's ABHA profile - name, date of birth, gender, mobile number, photo and address, , state,district,ABHA Number , ABHA Address and other details from the  APIs.
+2.In case of incorrect OTP, the verification fails.
+
+</t></r><r><rPr><sz val="10"/><color rgb="FFFF0000"/><rFont val="Verdana"/><family val="2"/></rPr><t>2. The fields for name, date of birth, and gender are set as non-editable, while the remaining fields can be open for editing i.e (Address, Email , Mobile Number, State, district , City e.t.c)</t></r><r><rPr><sz val="10"/><color theme="1"/><rFont val="Verdana"/><family val="2"/></rPr><t xml:space="preserve">
+</t></r><r><rPr><sz val="10"/><color rgb="FFFF0000"/><rFont val="Verdana"/><family val="2"/></rPr><t xml:space="preserve">
+4. After verification , the details should be saved in HIMS system and linked with the HIMS unique beneficary 's ID.</t></r><r><rPr><sz val="10"/><color theme="1"/><rFont val="Verdana"/><family val="2"/></rPr><t xml:space="preserve">
+</t></r><r><rPr><sz val="10"/><color rgb="FFFF0000"/><rFont val="Verdana"/><family val="2"/></rPr><t xml:space="preserve">
+</t></r></si><si><t>VRFY_ABHA_202</t></si><si><t>ABHA Address verification using   mobile OTP(ABHA Linked Mobile Number )</t></si><si><t xml:space="preserve">System must allow ABHA Address  verification using 
+mobile OTP(ABHA Linked Mobile Number )  </t></si><si><r><t xml:space="preserve">1. Share ABHA Number or ABHA Address
+2. Receive OTP on the Communication mobile number 
+3. Enter the OTP.
+4. System may activate the Resend OTP button maximum  </t></r><r><rPr><sz val="10"/><color rgb="FFFF0000"/><rFont val="Verdana"/><family val="2"/></rPr><t xml:space="preserve">2 times after 60  seconds in the OTP not received.
+5. If beneficiary updates their mobile number in the HIMS system and It is advisable to provide users with the option to update their mobile number in the ABHA profile with (Yes/No) using the profile API you should be able to update the details. </t></r></si><si><r><t>1. In case of correct OTP, the verification is complete and the System can fetch user's ABHA profile - name, date of birth, gender, mobile number, photo and address,, state,district, ABHA Number , ABHA Address and other details from the  APIs.
+
+2. In case of incorrect OTP, the verification fails.
+
+3</t></r><r><rPr><sz val="10"/><color rgb="FFFF0000"/><rFont val="Verdana"/><family val="2"/></rPr><t xml:space="preserve">. The fields for name, date of birth, and gender are set as non-editable, while the remaining fields can be open for editing i.e (Address, Email , Mobile Number, State, district , City e.t.c)
+
+4. After verification , the details should be saved in HIMS system and linked with the HIMS unique beneficary 's ID.g or as per their business requirement.
+</t></r></si><si><r><rPr><strike/><sz val="10"/><color theme="1"/><rFont val="Verdana"/><family val="2"/></rPr><t xml:space="preserve">
+
+</t></r><r><rPr><sz val="10"/><color rgb="FFFF0000"/><rFont val="Verdana"/><family val="2"/></rPr><t>Mandatory</t></r></si><si><t>VRFY_ABHA _301</t></si><si><t>Fetch ABHA details using Mobile  (communication)authentication .
+Multi authentication feature also need to be implemented like Captcha preferred</t></si><si><t>System must allow ABHA retrieval  using communication mobile OTP</t></si><si><t xml:space="preserve">1. If the user enters a in-valid mobile number(communication)  then  system will display an error message " Please enter a valid mobile number".
+
+  </t></si><si><t>Display relevant error messgae.</t></si><si><t>VRFY_ABHA _302</t></si><si><t>ABHA Details not  exists to  communicated Mobile Number</t></si><si><t xml:space="preserve">1. Incase ABHA Details not  exists to  communicated Mobile Number in ABHA system.
+    </t></si><si><r><t xml:space="preserve">System will display an error message i.e. 
+  " ABHA Number not found
+    We did not find any ABHA number linked to this mobile number.
+     Please use ABHA linked mobile number"       
+</t></r><r><rPr><b/><sz val="10"/><color rgb="FFFF0000"/><rFont val="Verdana"/><family val="2"/></rPr><t xml:space="preserve"> Kindly Note: System  should allow to create ABHA option should be open.</t></r></si><si><t>VRFY_ABHA _303</t></si><si><t xml:space="preserve">ABHA Details  exists to communicated Mobile Number. </t></si><si><t>1. Incase ABHA Details  exists to communicated Mobile Number. 
+      1.1.  If ABHA Details exists to comunication mobile number exists in ABHA system , In case ' Yes'  then system will display a message "ABHA Exists to communication Mobile" and user will receive the OTP i.e "OTP sent to ABHA linked mobile number ending with ******XXXX" and then Upon verification completion, the system will display a list of ABHA numbers linked to the mobile number, including the following details: Name, ABHA Number, ABHA Address, and the beneficiary's photograph. When the user attempts to link selected ABHA details, the system will verify if the selected record is present in the HIMS system. If so, it will display a message indicating that the record is already linked in the HIMS with the HIMS beneficiary's ID.
+     1.2  If the selected ABHA Profile  is not present in HIMS, the system will allow it to be Register and linked in their HIMS beneficary's ID or proceed as per bussiness requirement OR benefciary can download the ABHA card (Optional)</t></si><si><t>1. Fetching ABHA Details.
+2. Register and Linked in their HIMS OR OR benefciary can download the ABHA card.</t></si><si><t>VRFY_ABHA _304</t></si><si><t>Incorrect OTP</t></si><si><t>1. In case of incorrect OTP, the verification fails and display the relevant message.</t></si><si><t>VRFY_ABHA _305</t></si><si><t>Resend OTP Functionality</t></si><si><t>1. System may activate the Resend OTP button maximum  2 times after 60 seconds in the OTP not received.</t></si><si><t xml:space="preserve">Fetching ABHA details  using Aadhaar Number
+</t></si><si><t>VRFY_ABHA_401</t></si><si><t xml:space="preserve">Fetch ABHA details using Aadhaar Number 
+</t></si><si><t xml:space="preserve">System must allow ABHA retrieval  using Aadhaar Number </t></si><si><t xml:space="preserve">1.If the user enters wrong Aadhaar Number   then  system will display an error message "Invalid LoginId" or some relevant message i.e "Aadhaar Number is not valid".
+  </t></si><si><t>VRFY_ABHA_402</t></si><si><t>VRFY_ABHA_403</t></si><si><t>ABHA Details not  exists to  Aadhaar Number</t></si><si><t xml:space="preserve">1. Beneficary enter Aadhaar Number .
+2. Beneficary will receive the OTP i.e "OTP sent to Aadhaar linked mobile number ending with ******XXXX" 
+3. After OTP verfication then system will display "NO ABHA user registered with this Aadhaar Number".
+4. The system should have a provision to create ABHA.
+    
+    </t></si><si><t>VRFY_ABHA_404</t></si><si><t>ABHA Details  exists to Aadhaar Number</t></si><si><t>1. Enter Aadhaar Number.
+2. Beneficary will receive the OTP i.e "OTP sent to Aadhaar linked mobile number ending with ******XXXX" .
+3. After the OTP verfication. If ABHA Number exists then system will display Beneficary ABHA profile details and user can download the ABHA card.
+4. If  ABHA Profile  is not present in HIMS, the system will allow it to be Register and linked in their HIMS beneficary's ID or proceed as per bussiness requirement .</t></si><si><t>1. Display ABHA Profile details.
+2. Download ABHA Card. 
+3. Register and linked in their HIMS beneficary's ID or proceed as per bussiness requirement .</t></si><si><t>VRFY_ABHA_405</t></si><si><t>1.  System may activate the Resend OTP button maximum  2 times after 60 seconds in the OTP not received.</t></si><si><t>ABHA Verification
+(Applicable for Government Entites)</t></si><si><t>VRFY_ABHA_501</t></si><si><t>ABHA Number  verification using  Aadhaar Biometric - Fingerprint</t></si><si><t>System must allow ABHA Number verification using Biometric scan</t></si><si><t>1. Share ABHA Number or ABHA Address
+2. Scan fingerprint or face</t></si><si><t>In case the biometrics match, the verification is complete and the System can fetch user's ABHA profile - name, date of birth, gender, mobile number, photo and address, ABHA Number , ABHA Address and other details from the  APIs.
+
+In case the biometrics do not match, the verification fails.</t></si><si><t>VRFY_ABHA_502</t></si><si><t>ABHA Address verification using  Aadhaar Biometric - Fingerprint</t></si><si><t>System must allow ABHA Address verification using Biometric scan</t></si><si><t>Reading ABHA Info using ABHA QR Code</t></si><si><t>Reading ABHA Profile Info using ABHA QR Code</t></si><si><t>System must allow scanning of ABHA QR code to read the ABHA information</t></si><si><t>1. EMR/HMIS scans the user's ABHA QR code</t></si><si><t>System reads the user information from the ABHA QR code - name, date of birth, gender, mobile and other details into the system for registration.</t></si><si><t>Profile Update</t></si><si><t>PROF_ABHA_601</t></si><si><t>Mobile Update</t></si><si><t>System must allow the user to update their Mobile number</t></si><si><t>1. Enter new mobile number
+2. Enter OTP
+3. Enter Password/ OTP on old mobile number</t></si><si><t>Mobile number on ABHA profile is updated</t></si><si><t>PROF_ABHA_602</t></si><si><t>Photo Update</t></si><si><t>System must allow the user to update their Photo</t></si><si><t>1. Click on Edit Photo
+2. Upload new photo</t></si><si><t>Photo on ABHA profile is updated</t></si><si><t>PROF_ABHA_603</t></si><si><t>Email Update</t></si><si><t>System must allow the user to update their Email</t></si><si><t>1. Enter new Email ID
+2. Enter OTP</t></si><si><t>Email ID on ABHA profile is updated</t></si><si><t>PROF_ABHA_604</t></si><si><t>Re-KYC</t></si><si><t>System must allow the user to perform re-KYC</t></si><si><t>1. Click on re-KYC option
+2. Enter OTP received on Aadhaar linked mobile numer</t></si><si><t>KYC details on ABHA profile are updated</t></si><si><t>PROF_ABHA_605</t></si><si><t>Delete ABHA</t></si><si><t>System must allow the user to Delete/ Deactivate ABHA</t></si><si><t>1. Click on Delete/ Deactivate ABHA
+2. Enter OTP received on mobile number to confirm deletion/ deactivation
+3. Try to login again using the same ABHA</t></si><si><t>ABHA Number should be deleted. 
+
+The system should not allow login through the same ABHA</t></si><si><t xml:space="preserve">Verify one ABHA Number is linked to the unique patient ID in  HIMS </t></si><si><t xml:space="preserve">TAGGING_UNIQUEPATIENTID_UNIQUEABHANUMBER </t></si><si><t>Intergrator's HIMS System should allow tagging of one ABHA Number with unique patient Id.</t></si><si><r><t xml:space="preserve">ABHA Number should be validated in the database if already exists before creating a new patient id to avoid tagging of multiple patient id with same ABHA Number.
+</t></r><r><rPr><sz val="10"/><color rgb="FFFF0000"/><rFont val="Verdana"/><family val="2"/></rPr><t xml:space="preserve">Kindly Note:  This test scenario is applicable for both new and existing beneficiaries and linking will be happens with ABHA  creation and verification flow.
+</t></r></si><si><t>HIMS is able to tag Patient ID with ABHA number.</t></si><si><t xml:space="preserve">Share Profile </t></si><si><t>PHR app</t></si><si><t>SHARE _PATIENT_PROFILE_701</t></si><si><t>Share Patient Profile</t></si><si><t>User will scan the QR code which is placed the facility premises</t></si><si><t>1. Log into PHR app.
+2. User will scan the QR code which is placed at the facility premises/registration desk.
+3. Post scanning, patient profile details are displayed including ABHA number, ABHA address, Name, Gender, DoB, Mobile No and Address. Below this consent language is displayed - "Your consent to the above information to be shared with &lt;HIP Name&gt;. They can use this information for your registration and linking your health records" and both "Cancel" / "Share" buttons are provided. 
+4.Check that after clicking on "Share" button, user profile is successfully shared with the HIP and if user click on "Cancel" button then user profile is not shared with the HIP. 
+5. User clicks on share and gets a token number.
+6. User clicks on ok and gets token number with validity of 30 minutes.</t></si><si><t>/v1/patients/profile/share
+/v0.5/patients/profile/on-share</t></si><si><t>https://dev.abdm.gov.in/api/hiecm/v3/patient-share/share
+https://dev.abdm.gov.in/api/hiecm/v3/patient-share/on-share</t></si><si><t>Note:</t></si><si><t>For teams utilizing APIs from version 1 (v1) or version 2 (v2), this document provides comprehensive mapping to the version 3 (v3) APIs. Although we have consistently referenced version 2 (v2) throughout this document, the guidance and mappings provided are equally applicable to version 1 (v1) APIs.
+This ensures that regardless of the API version currently in use, teams can seamlessly transition to the updated v3 APIs by referring to the detailed mappings and representations included herein.
+Please utilize this document as a primary resource for understanding the changes and enhancements in v3, and for ensuring compatibility with your existing API implementations.</t></si><si><t>V1 API's</t></si><si><t>V2 API's</t></si><si><t>V3 API's</t></si><si><t>1. v3/enrollment/enrol/byAadhaar</t></si><si><t>1. v1/hid/benefit/createHealthId/demo/auth</t></si><si><t xml:space="preserve">1. v2/hid/benefit/createHealthId/demo/auth
+</t></si><si><t>1. v2/document/generate/mobile/otp
+2. v2/document/verify/mobile/otp
+3. v2/document/validate</t></si><si><t>1. v2/auth/init
+2. v2/auth/confirmWithAadhaarOtp</t></si><si><t>1. v1/auth/init
+2. v1/auth/confirmWithAadhaarOtp</t></si><si><t>1. v1/phr/search/authMethods?phrAddress=singh128@sbx
+2. v1/auth/init
+3. v1/auth/confirmWithAadhaarOTP</t></si><si><t>1. v1/phr/search/authMethods?phrAddress=singh128
+2. v1/auth/init
+3. v1/auth/confirmWithMobileOTP</t></si><si><t>1. v1/auth/init
+2. v1/auth/confirmWithMobileOTP</t></si><si><t>1. v2/auth/init
+2. v2/auth/confirmWithMobileOTP</t></si><si><t>1. v2/registration/mobile/login/generateOtp
+2. v2/registration/mobile/login/verifyOtp
+3. v2/registration/mobile/login/userAuthorizedToken</t></si><si><t>1. v2/account/qrCode</t></si><si><t>1. v1/account/qrCode</t></si><si><r><rPr><b/><sz val="11"/><color theme="1"/><rFont val="Calibri"/><family val="2"/><scheme val="minor"/></rPr><t>Delete using Aadhaar OTP OR ABDM OTP</t></r><r><rPr><sz val="11"/><color theme="1"/><rFont val="Calibri"/><family val="2"/><scheme val="minor"/></rPr><t xml:space="preserve">
+1. v2/account/aadhaar/generateOTP
+2. v2/account/profile/delete
+
+</t></r><r><rPr><b/><sz val="11"/><color theme="1"/><rFont val="Calibri"/><family val="2"/><scheme val="minor"/></rPr><t>Deactivate using Aadhaar OTP OR ABDM OTP</t></r><r><rPr><sz val="11"/><color theme="1"/><rFont val="Calibri"/><family val="2"/><scheme val="minor"/></rPr><t xml:space="preserve">
+
+1. v2/account/aadhaar/generateOTP
+2. v2/account/profile/delete
+
+</t></r><r><rPr><b/><sz val="11"/><color theme="1"/><rFont val="Calibri"/><family val="2"/><scheme val="minor"/></rPr><t>Re-activate using Aadhaar OTP OR ABDM OTP</t></r><r><rPr><sz val="11"/><color theme="1"/><rFont val="Calibri"/><family val="2"/><scheme val="minor"/></rPr><t xml:space="preserve">
+
+1. v2/auth/reactivate/init
+2. v2/auth/reactivate</t></r></si><si><t>No APIs</t></si><si><t>Login via Password</t></si><si><t>Login via password</t></si><si><t>1. v2/auth/authPassword</t></si><si><t>1. v1/auth/authPassword</t></si><si><t>1. v3/profile/login/verify</t></si><si><t>Forgot ABHA</t></si><si><t>Via Aadhaar OTP</t></si><si><t>1. v2/auth/reactivate/init
+2. v2/auth/reactivate</t></si><si><t>1. v3/profile/login/request/otp
+2. v3/profile/login/verify</t></si><si><t>Via Mobile OTP</t></si><si><t>1. v2/account/change/mobile/new/generateOTP
+2. v2/account/change/mobile/new/verifyOTP</t></si><si><t>1. v2/account/email/verification/send/otp
+2. v2/account/email/verification/verify/otp</t></si><si><t>1. v2/account/aadhaar/generateOTP
+2. v2/account/aadhaar/verifyOTP</t></si><si><t>Set / Update Password</t></si><si><t>Set Password</t></si><si><t>Update Password Via Aadhaar Otp</t></si><si><t>1. v1/account/change/passwd/generateAadhaarOTP
+2. v1/account/change/passwd/byAadhaar</t></si><si><t>1. v2/account/change/passwd/generateAadhaarOTP
+2. v2/account/change/passwd/byAadhaar</t></si><si><t>1. v3/profile/account/request/otp
+2. v3/profile/account/verify</t></si><si><t>Update Password Via Password</t></si><si><t>Update Password Via Mobile Otp</t></si><si><t>1. v1/account/change/passwd/generateMobileOTP
+2. v1/account/change/passwd/byMobile</t></si><si><t>1. v2/account/change/passwd/generateMobileOTP
+2. v2/account/change/passwd/byMobile</t></si><si><t>1. v3/profile/account/verify</t></si><si><t>1. v2/account/change/passwd/byAadhaar</t></si><si><t>Benefit API's</t></si><si><t xml:space="preserve">Create ABHA using Aadhaar </t></si><si><t>1. v1/hid/benefit/aadhaar/generateOtp
+2. v1/hid/benefit/aadhaar/verifyAadharOtp</t></si><si><t>1. v2/hid/benefit/aadhaar/generateOtp
+2. v2/hid/benefit/aadhaar/verifyAadharOtp</t></si><si><t xml:space="preserve">1. v3/enrollment/request/otp 
+2. v3/enrollment/enrol/byAadhaar </t></si><si><t>Link ABHA With Benefit Name</t></si><si><t>1. v1/hid/benefit/link</t></si><si><t>1. v2/hid/benefit/link</t></si><si><t xml:space="preserve">1. v3/profile/benefit/linkAndDelink </t></si><si><t>De-link ABHA With Benefit Name</t></si><si><t>1. v1/hid/benefit/deLinkHid</t></si><si><t>1. v2/hid/benefit/deLinkHid</t></si><si><t>Benefit Link Delink ABHA</t></si><si><t xml:space="preserve">Benefit Update ABHA Profile Details </t></si><si><t>Update Mobile Number</t></si><si><t>1. v1/hid/benefit/update/mobile</t></si><si><t>1. v2/hid/benefit/update/mobile</t></si><si><t>1. v3/profile/account</t></si><si><t>Update Profile</t></si><si><t>1. v1/hid/benefit/update/profile
+2. v1/hid/benefit/update/status</t></si><si><t>1. v2/hid/benefit/update/profile
+2. v2/hid/benefit/update/status</t></si><si><r><t>Search Benefit Details</t></r><r><rPr><b/><sz val="13"/><color rgb="FF2F5496"/><rFont val="Calibri"/><family val="2"/><scheme val="minor"/></rPr><t xml:space="preserve"> </t></r></si><si><t>Search by xmlUid</t></si><si><t>1. v1/hid/benefit/search/aadhaar</t></si><si><t>1. v2/hid/benefit/search/aadhaar</t></si><si><t xml:space="preserve">1. v3/profile/benefit/search </t></si><si><t>Search by Health Id Number</t></si><si><t>1. v1/hid/benefit/search/healthIdNumber</t></si><si><t>1. v2/hid/benefit/search/healthIdNumber</t></si><si><t>1. v3/profile/benefit/abha/healthIdNumber</t></si><si><t>Search</t></si><si><t>1. v3/profile/benefit/abha/{{healthIdNumber}}</t></si><si><t>1. No API</t></si><si><t>Find ABHA via Mobile</t></si><si><t xml:space="preserve">1. v3/profile/account/abha/search
+2. v3/profile/login/request/otp
+3. v3/profile/login/verify </t></si><si><t>Find ABHA using Mobile number</t></si><si><t>Child ABHA</t></si><si><t>1. v2/hid/benefit/integrator/child/createHealthId
+2. v2/hid/benefit/integrator/child/parent/mappedAbhaId
+3. v2/account/profile</t></si><si><t xml:space="preserve">1. v3/enrollment/enrol/byAadhaar
+2. v3/enrollment/profile/children
+3. v3/profile/account
+</t></si><si><t>ABHA Address Creation</t></si><si><t>ABHA address creation via mobile</t></si><si><t>Create child ABHA</t></si><si><t>1. v1/registration/mobile/generateOtp
+2. v1/registration/mobile/verifyOtp
+3. No API
+4. v1/phr/registration/phr/suggestion
+5. v1/search/existsByHealthId
+6. v1/phr/registration/create/phr</t></si><si><t>1. v3/phr/web/enrollment/abha/request/otp
+2. v3/phr/web/enrollment/abha/verify
+3. v3/phr/web/login/abha/verify/user
+4. v3/phr/web/enrollment/suggestion
+5. v3/phr/web/enrollment/isExists?abhaAddress=dharam123@sbx
+6. v3/phr/web/enrollment/abha/enrol</t></si><si><t>Get ABHA address</t></si><si><t>1. v1/account/profile
+2. v1/account/getPngCard</t></si><si><t>1. v2/account/profile
+2. v2/account/getPngCard</t></si><si><t>1. v3/phr/web/login/profile/abha-profile
+2. v3/phr/web/login/profile/abha/phr-card</t></si><si><t>1. v2/account/logout</t></si><si><t>1. v1/account/logout</t></si><si><t>1. v3/profile/account/request/logout</t></si><si><t>Logout</t></si><si><t>Profile logout</t></si><si><t>1. v3/profile/account
+2. No API</t></si><si><t>1. v1/account/change/passwd/byAadhaar</t></si><si><t>Login via Aadhaar(input Aadhaar) - Forgot ABHA via Aadhaar</t></si><si><t>https://abhasbx.abdm.gov.in/abha/api/</t></si><si><t>1. v3/enrollment/request/otp
+2. v3/enrollment/auth/byAbdm
+3. v3/enrollment/enrol/byDocument</t></si><si><t>1. v3/profile/login/request/otp
+2. v3/profile/login/verify 
+3. v3/profile/account
+4. v3/profile/account/abha-card</t></si><si><t>1. v3/phr/web/login/abha/search
+2. v3/phr/web/login/abha/request/otp
+3. v3/phr/web/login/abha/verify
+4. v3/phr/web/login/profile/abha-profile
+5. v3/phr/web/login/profile/abha/phr-card</t></si><si><t>1. v3/profile/login/request/otp
+2. v3/profile/login/verify
+3. v3/profile/account
+4. v3/profile/account/abha-card</t></si><si><t xml:space="preserve">1. v3/profile/login/request/otp
+2. v3/profile/login/verify
+3. v3/profile/login/verify/user
+4. v3/profile/account
+5. v3/profile/account/abha-card
+</t></si><si><r><rPr><b/><sz val="11"/><color theme="1"/><rFont val="Calibri"/><family val="2"/><scheme val="minor"/></rPr><t>Delete using Aadhaar OTP OR ABDM OTP</t></r><r><rPr><sz val="11"/><color theme="1"/><rFont val="Calibri"/><family val="2"/><scheme val="minor"/></rPr><t xml:space="preserve">
+1. v3/profile/account/request/otp
+2. v3/profile/account/verify
+
+</t></r><r><rPr><b/><sz val="11"/><color theme="1"/><rFont val="Calibri"/><family val="2"/><scheme val="minor"/></rPr><t>Deactivate using Aadhaar OTP OR ABDM OTP</t></r><r><rPr><sz val="11"/><color theme="1"/><rFont val="Calibri"/><family val="2"/><scheme val="minor"/></rPr><t xml:space="preserve">
+
+1. v3/profile/account/request/otp
+2. v3/profile/account/verify
+
+</t></r><r><rPr><b/><sz val="11"/><color theme="1"/><rFont val="Calibri"/><family val="2"/><scheme val="minor"/></rPr><t>Re-activate using Aadhaar OTP OR ABDM OTP</t></r><r><rPr><sz val="11"/><color theme="1"/><rFont val="Calibri"/><family val="2"/><scheme val="minor"/></rPr><t xml:space="preserve">
+
+1. v3/profile/login/request/otp
+2. v3/profile/login/verify/user</t></r></si><si><t>1. v2/account/change/password</t></si><si><t xml:space="preserve">1. v3/profile/login/request/otp
+2. v3/profile/login/verify
+</t></si><si><t>Create ABHA using Aadhaar Bio</t></si><si><t xml:space="preserve">1. v3/enrollment/enrol/byAadhaar </t></si><si><t>1. v1/account/profile</t></si><si><t>1. v2/account/profile</t></si><si><t>1. v3/profile/account/qrCode</t></si><si><t>1. v2/registration/aadhaar/verifyBio</t></si><si><t>1. v1/registration/aadhaar/verifyBio</t></si><si><t>1. v1/account/change/password</t></si><si><t xml:space="preserve">1. v2/auth/init
+2. v2/auth/confirmWithAadhaarBio
+
+</t></si><si><t xml:space="preserve">1. v1/auth/init
+2. v1/auth/confirmWithAadhaarBio
+
+</t></si><si><t>https://healthidsbx.abdm.gov.in/api/</t></si><si><t>1. v2/registration/aadhaar/generateOtp
+2. v2/registration/aadhaar/resendAadhaarOtp
+3. v2/registration/aadhaar/verifyOTP
+4. v2/registration/aadhaar/checkAndGenerateMobileOTP
+5. v2/registration/aadhaar/generateMobileOTP
+6. v2/registration/aadhaar/verifyMobileOTP
+7. No APIs
+8. v2/registration/aadhaar/createHealthIdByAdhaar
+9. No APIs
+10. No APIs
+11. No APIs
+12. v2/search/existsByHealthId
+13. No APIs</t></si><si><t>1. v3/enrollment/request/otp
+2. v3/enrollment/request/otp
+3. v3/enrollment/enrol/byAadhaar
+4. No APIs
+5. v3/enrollment/request/otp
+6. v3/enrollment/auth/byAbdm
+7. v3/profile/account/request/emailVerificationLink
+8. No APIs
+9. No APIs
+10. No APIs
+11. v3/enrollment/enrol/suggestion
+12. No APIs
+13. v3/enrollment/enrol/abha-address</t></si><si><r><t xml:space="preserve">1. v1/registration/aadhaar/generateOtp
+2. v1/registration/aadhaar/resendAadhaarOtp
+3. v1/registration/aadhaar/verifyOTP
+4. No APIs
+5. v1/registration/aadhaar/generateMobileOTP
+6. v1/registration/aadhaar/verifyMobileOTP
+7. No APIs
+</t></r><r><rPr><b/><sz val="11"/><color theme="1"/><rFont val="Calibri"/><family val="2"/><scheme val="minor"/></rPr><t xml:space="preserve">8. </t></r><r><rPr><sz val="11"/><color theme="1"/><rFont val="Calibri"/><family val="2"/><scheme val="minor"/></rPr><t xml:space="preserve">v1/registration/aadhaar/createHealthIdWithAadhaarOtp
+9. v1/registration/aadhaar/createHealthIdWithPreVerified
+10. {{baseUri}}/v1/phr/profile/link/profileDetails
+11. {{baseUri}}/v1/phr/registration/phr/suggestion
+12. {{baseUri}}/v1/search/existsByHealthId
+</t></r><r><rPr><b/><sz val="11"/><color theme="1"/><rFont val="Calibri"/><family val="2"/><scheme val="minor"/></rPr><t>13. {{baseUri}}/</t></r><r><rPr><sz val="11"/><color theme="1"/><rFont val="Calibri"/><family val="2"/><scheme val="minor"/></rPr><t>v1/phr/registration/hid/create-phr-address</t></r></si><si><t>https://phrsbx.abdm.gov.in/api/</t></si><si><t>V1 and V2 APIs</t></si><si><t>Base URL</t></si><si><t>V3 APIs (SBX)</t></si><si><t>V3 APIs (Prod)</t></si><si><t>https://abha.abdm.gov.in/api/abha/</t></si></sst>
