@@ -1052,7 +1052,7 @@ class Diagnosis extends BaseController
             ->getRow();
 
         $templateBuilder = $this->db->table('radiology_ultrasound_template')
-            ->select('id, template_name')
+            ->select('id, template_name, title, keywords, impression_cat')
             ->where('Modality', (int) ($reportRow->lab_type ?? 0));
 
         if (! empty($invoiceItem->item_id)) {
@@ -1132,7 +1132,7 @@ class Diagnosis extends BaseController
             ->getRow();
 
         $templateBuilder = $this->db->table('radiology_ultrasound_template')
-            ->select('id, template_name')
+            ->select('id, template_name, title, keywords, impression_cat')
             ->where('Modality', (int) ($reportRow->lab_type ?? 0));
 
         if (! empty($invoiceItem->item_id)) {
@@ -1165,12 +1165,16 @@ class Diagnosis extends BaseController
         }
 
         $row = $this->db->table('radiology_ultrasound_template')
-            ->select('Findings, Impression')
+            ->select('template_name, title, keywords, impression_cat, Findings, Impression')
             ->where('id', $templateId)
             ->get()
             ->getRow();
 
         return $this->response->setJSON([
+            'template_name' => (string) ($row->template_name ?? ''),
+            'title' => (string) ($row->title ?? ''),
+            'keywords' => (string) ($row->keywords ?? ''),
+            'impression_cat' => (string) ($row->impression_cat ?? ''),
             'Findings' => (string) ($row->Findings ?? ''),
             'Impression' => (string) ($row->Impression ?? ''),
         ]);

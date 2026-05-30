@@ -144,6 +144,28 @@ HTML;
         return $this->requirePermission($permission);
     }
 
+    private function buildRadiologyTemplatePayload(int $modality): array
+    {
+        $payload = [
+            'template_name' => trim((string) $this->request->getPost('input_Reportname')),
+            'title' => trim((string) $this->request->getPost('group_id')),
+            'charge_id' => (int) $this->request->getPost('charge_id'),
+            'Findings' => (string) $this->request->getPost('HTMLData'),
+            'Impression' => (string) $this->request->getPost('Impression'),
+            'modality' => $modality,
+        ];
+
+        if ($this->db->fieldExists('keywords', 'radiology_ultrasound_template')) {
+            $payload['keywords'] = trim((string) $this->request->getPost('keywords'));
+        }
+
+        if ($this->db->fieldExists('impression_cat', 'radiology_ultrasound_template')) {
+            $payload['impression_cat'] = trim((string) $this->request->getPost('impression_cat'));
+        }
+
+        return $payload;
+    }
+
     private function resolveBridgeGatewayConfig(): array
     {
         $gwUrl   = '';
@@ -737,10 +759,6 @@ HTML;
         }
 
         $inputReportName = trim((string) $this->request->getPost('input_Reportname'));
-        $chargeId = (int) $this->request->getPost('charge_id');
-        $groupId = (string) $this->request->getPost('group_id');
-        $htmlData = (string) $this->request->getPost('HTMLData');
-        $impression = (string) $this->request->getPost('Impression');
 
         if ($inputReportName === '') {
             return $this->response->setJSON([
@@ -750,14 +768,7 @@ HTML;
         }
 
         $pathLab = new PathLabModel();
-        $insertId = $pathLab->insertUltrasoundReport([
-            'template_name' => $inputReportName,
-            'title' => $groupId,
-            'charge_id' => $chargeId,
-            'Findings' => $htmlData,
-            'Impression' => $impression,
-            'modality' => $modality,
-        ]);
+        $insertId = $pathLab->insertUltrasoundReport($this->buildRadiologyTemplatePayload($modality));
 
         return $this->response->setJSON([
             'insertid' => $insertId,
@@ -780,11 +791,6 @@ HTML;
 
         $repoId = (int) $this->request->getPost('repo_id');
         $inputReportName = trim((string) $this->request->getPost('input_Reportname'));
-        $chargeId = (int) $this->request->getPost('charge_id');
-        $groupId = (string) $this->request->getPost('group_id');
-        $htmlData = (string) $this->request->getPost('HTMLData');
-        $impression = (string) $this->request->getPost('Impression');
-
         if ($repoId <= 0 || $inputReportName === '') {
             return $this->response->setJSON([
                 'update_record' => 0,
@@ -793,18 +799,57 @@ HTML;
         }
 
         $pathLab = new PathLabModel();
-        $pathLab->updateUltrasoundReport([
-            'template_name' => $inputReportName,
-            'title' => $groupId,
-            'charge_id' => $chargeId,
-            'Findings' => $htmlData,
-            'Impression' => $impression,
-            'modality' => $modality,
-        ], $repoId);
+        $pathLab->updateUltrasoundReport($this->buildRadiologyTemplatePayload($modality), $repoId);
 
         return $this->response->setJSON([
             'update_record' => 1,
             'showcontent' => 'Data Saved successfully',
+        ]);
+    }
+
+    public function report_ultrasound_delete(int $modality = 2, int $repoId = 0)
+    {
+        if ($resp = $this->requireModalityPermission($modality)) {
+            return $resp;
+        }
+
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
+                'error' => 'Invalid request',
+            ]);
+        }
+
+        if ($repoId <= 0) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
+                'error' => 'Invalid template ID',
+            ]);
+        }
+
+        $builder = $this->db->table('radiology_ultrasound_template')
+            ->where('id', $repoId)
+            ->where('Modality', $modality);
+
+        $exists = $builder->countAllResults(false);
+        if ($exists <= 0) {
+            return $this->response->setStatusCode(404)->setJSON([
+                'ok' => 0,
+                'error' => 'Template not found for selected modality',
+            ]);
+        }
+
+        $deleted = $builder->delete();
+        if (! $deleted) {
+            return $this->response->setStatusCode(500)->setJSON([
+                'ok' => 0,
+                'error' => 'Failed to delete template',
+            ]);
+        }
+
+        return $this->response->setJSON([
+            'ok' => 1,
+            'message' => 'Template deleted successfully',
         ]);
     }
 

@@ -828,6 +828,7 @@ $routes->post('Lab_Admin/report_insert', 'Setting\Template::report_insert');
 $routes->post('Lab_Admin/report_delete/(:num)', 'Setting\Template::report_delete/$1');
 $routes->post('Lab_Admin/report_ultrasound_insert/(:num)', 'Setting\Template::report_ultrasound_insert/$1');
 $routes->post('Lab_Admin/report_ultrasound_update/(:num)', 'Setting\Template::report_ultrasound_update/$1');
+$routes->post('Lab_Admin/report_ultrasound_delete/(:num)/(:num)', 'Setting\Template::report_ultrasound_delete/$1/$2');
 $routes->post('Lab_Admin/add_test_repo/(:num)/(:num)', 'Setting\Template::add_test_repo/$1/$2');
 $routes->post('Lab_Admin/remove_test_item/(:num)/(:num)', 'Setting\Template::remove_test_item/$1/$2');
 $routes->post('Lab_Admin/test_item_search', 'Setting\Template::test_item_search');

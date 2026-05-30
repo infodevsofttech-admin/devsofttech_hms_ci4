@@ -121,11 +121,56 @@ $editReason = trim((string) ($edit_reason ?? ''));
 
                 <div class="col-md-4" style="border-left:1px solid #e4ebf5; padding-left:12px;">
                     <label class="form-label"><strong>Templates</strong></label>
+                    <div class="card border-light mb-2">
+                        <div class="card-body p-2">
+                            <div class="small fw-semibold mb-1">Apply Mode</div>
+                            <div class="d-flex gap-2 flex-wrap mb-2">
+                                <label class="form-check-label me-2">
+                                    <input class="form-check-input" type="radio" name="tpl_apply_mode" value="replace" checked>
+                                    Replace
+                                </label>
+                                <label class="form-check-label">
+                                    <input class="form-check-input" type="radio" name="tpl_apply_mode" value="append">
+                                    Append
+                                </label>
+                            </div>
+                            <div class="d-flex gap-2 flex-wrap small">
+                                <label class="form-check-label me-2">
+                                    <input class="form-check-input" type="checkbox" id="tpl_apply_findings" checked>
+                                    Findings
+                                </label>
+                                <label class="form-check-label">
+                                    <input class="form-check-input" type="checkbox" id="tpl_apply_impression" checked>
+                                    Impression
+                                </label>
+                            </div>
+                        </div>
+                    </div>
                     <input type="text" id="template_search" class="form-control form-control-sm" placeholder="Search templates..." autocomplete="off" />
                     <div id="templateList" style="max-height:60vh; overflow-y:auto; margin-top:8px;">
                         <?php foreach ($templates as $tpl): ?>
-                            <div class="template-item mb-1">
-                                <a href="javascript:set_template(<?= (int) ($tpl->id ?? 0) ?>)"><?= esc($tpl->template_name ?? '') ?></a>
+                            <?php
+                                $tplName = (string) ($tpl->template_name ?? '');
+                                $tplTitle = trim((string) ($tpl->title ?? ''));
+                                $tplKeywords = trim((string) ($tpl->keywords ?? ''));
+                                $tplCategory = trim((string) ($tpl->impression_cat ?? ''));
+                                $searchBlob = strtolower(trim($tplName . ' ' . $tplTitle . ' ' . $tplKeywords . ' ' . $tplCategory));
+                            ?>
+                            <div class="template-item mb-2" data-search="<?= esc($searchBlob) ?>">
+                                <a href="javascript:set_template(<?= (int) ($tpl->id ?? 0) ?>)" class="d-block p-2 border rounded text-decoration-none">
+                                    <div class="fw-semibold"><?= esc($tplName) ?></div>
+                                    <?php if ($tplTitle !== ''): ?>
+                                        <div class="small text-muted"><?= esc($tplTitle) ?></div>
+                                    <?php endif; ?>
+                                    <div class="mt-1 small">
+                                        <?php if ($tplCategory !== ''): ?>
+                                            <span class="badge text-bg-light border">Category: <?= esc($tplCategory) ?></span>
+                                        <?php endif; ?>
+                                        <?php if ($tplKeywords !== ''): ?>
+                                            <span class="badge text-bg-light border">Tags: <?= esc($tplKeywords) ?></span>
+                                        <?php endif; ?>
+                                    </div>
+                                </a>
                             </div>
                         <?php endforeach; ?>
                         <div id="no_templates_msg" style="display:none; color:#888; padding:6px;">No templates found</div>
@@ -213,7 +258,8 @@ $editReason = trim((string) ($edit_reason ?? ''));
                     let count = 0;
 
                     items.forEach(function (item) {
-                        const show = item.textContent.toLowerCase().indexOf(q) !== -1;
+                        const source = (item.getAttribute('data-search') || item.textContent || '').toLowerCase();
+                        const show = source.indexOf(q) !== -1;
                         item.style.display = show ? '' : 'none';
                         if (show) {
                             count++;
@@ -226,6 +272,42 @@ $editReason = trim((string) ($edit_reason ?? ''));
                     }
                 });
             })();
+
+            function getEditorValue(editorId) {
+                if (typeof CKEDITOR !== 'undefined' && CKEDITOR.instances[editorId]) {
+                    return CKEDITOR.instances[editorId].getData();
+                }
+                const el = document.getElementById(editorId);
+                return el ? el.value : '';
+            }
+
+            function setEditorValue(editorId, value) {
+                if (typeof CKEDITOR !== 'undefined' && CKEDITOR.instances[editorId]) {
+                    CKEDITOR.instances[editorId].setData(value);
+                    return;
+                }
+                const el = document.getElementById(editorId);
+                if (el) {
+                    el.value = value;
+                }
+            }
+
+            function mergeTemplateContent(currentValue, incomingValue, mode) {
+                if (mode !== 'append') {
+                    return incomingValue;
+                }
+
+                const current = (currentValue || '').trim();
+                const incoming = (incomingValue || '').trim();
+                if (!current) {
+                    return incoming;
+                }
+                if (!incoming) {
+                    return current;
+                }
+
+                return current + '<hr>' + incoming;
+            }
 
             // Modal helper function
             window._imagingSupportModalInstance = window._imagingSupportModalInstance || null;
@@ -315,16 +397,24 @@ $editReason = trim((string) ($edit_reason ?? ''));
                     const findings = data.Findings || '';
                     const impression = data.Impression || '';
 
-                    if (typeof CKEDITOR !== 'undefined' && CKEDITOR.instances.HTMLShow) {
-                        CKEDITOR.instances.HTMLShow.setData(findings);
-                    } else {
-                        document.getElementById('HTMLShow').value = findings;
+                    const selectedModeEl = document.querySelector('input[name="tpl_apply_mode"]:checked');
+                    const mode = selectedModeEl ? selectedModeEl.value : 'replace';
+                    const applyFindings = !!document.getElementById('tpl_apply_findings')?.checked;
+                    const applyImpression = !!document.getElementById('tpl_apply_impression')?.checked;
+
+                    if (!applyFindings && !applyImpression) {
+                        alert('Select Findings and/or Impression to apply template.');
+                        return;
                     }
 
-                    if (typeof CKEDITOR !== 'undefined' && CKEDITOR.instances.report_data_Impression) {
-                        CKEDITOR.instances.report_data_Impression.setData(impression);
-                    } else {
-                        document.getElementById('report_data_Impression').value = impression;
+                    if (applyFindings) {
+                        const mergedFindings = mergeTemplateContent(getEditorValue('HTMLShow'), findings, mode);
+                        setEditorValue('HTMLShow', mergedFindings);
+                    }
+
+                    if (applyImpression) {
+                        const mergedImpression = mergeTemplateContent(getEditorValue('report_data_Impression'), impression, mode);
+                        setEditorValue('report_data_Impression', mergedImpression);
                     }
                 })
                 .catch(e => console.error(e));
