@@ -636,6 +636,7 @@ class FhirR4Builder
      * @param array<string, mixed>|null         $practitioner    {name, registration_number}
      * @param array<string, mixed>|null         $organization    {name, hfr_id}
      * @param array<string, mixed>|null         $encounter       {id, status, class_code (AMB|IMP|EMER), period_start, period_end}
+     * @param array<string, mixed>|null         $attachment      Optional PDF attachment {content_type, data_base64, title}
      *
      * @return array<string, mixed>
      */
@@ -645,7 +646,8 @@ class FhirR4Builder
         array  $observations  = [],
         ?array $practitioner  = null,
         ?array $organization  = null,
-        ?array $encounter     = null
+        ?array $encounter     = null,
+        ?array $attachment    = null
     ): array {
         $issuedAt        = $this->isoTimestamp();
         $bundleUuid      = $this->generateUuid();
@@ -658,6 +660,8 @@ class FhirR4Builder
         $reportedAt  = trim((string) ($diagnosticReport['reported_at'] ?? '')) ?: $issuedAt;
         $reportTitle = trim((string) ($diagnosticReport['title'] ?? 'Diagnostic Report'));
         $reportStatus = trim((string) ($diagnosticReport['status'] ?? 'final'));
+        $isImaging   = (bool) ($diagnosticReport['is_imaging'] ?? false)
+            || strtolower(trim((string) ($diagnosticReport['report_domain'] ?? ''))) === 'imaging';
 
         $hasPractitioner  = $practitioner !== null && trim((string) ($practitioner['name'] ?? '')) !== '';
         $hasOrganization  = $organization !== null && trim((string) ($organization['name'] ?? '')) !== '';
@@ -827,6 +831,8 @@ class FhirR4Builder
         // ── Binary + DocumentReference for HTML report ─────────────────────────
         $docRefEntry = null;
         $docRefRef   = null;
+        $pdfDocRefRef = null;
+        $mediaRef = null;
         $reportHtml  = trim((string) ($diagnosticReport['report_html'] ?? ''));
         if ($reportHtml !== '') {
             $binaryUuid  = $this->generateUuid();
@@ -837,6 +843,7 @@ class FhirR4Builder
             $resourceEntries[] = ['fullUrl' => 'urn:uuid:' . $binaryUuid, 'resource' => [
                 'resourceType' => 'Binary',
                 'id'           => $binaryUuid,
+                'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Binary']],
                 'contentType'  => $contentType,
                 'data'         => base64_encode($reportHtml),
             ]];
@@ -848,16 +855,79 @@ class FhirR4Builder
                 'status'        => 'current',
                 'type'          => ['coding' => [['system' => 'http://snomed.info/sct', 'code' => '721981007', 'display' => 'Diagnostic studies report']]],
                 'subject'       => ['reference' => $patientRef],
-                'content'       => [['attachment' => ['contentType' => $contentType, 'url' => 'urn:uuid:' . $binaryUuid, 'title' => $reportTitle]]],
+                'content'       => [['attachment' => ['contentType' => $contentType, 'url' => 'urn:uuid:' . $binaryUuid, 'data' => base64_encode($reportHtml), 'title' => $reportTitle]]],
             ];
             $resourceEntries[] = ['fullUrl' => $docRefRef, 'resource' => $docRefEntry];
         }
+
+        // ── Optional PDF attachment as Binary + DocumentReference ───────────
+        if ($attachment !== null && ! empty($attachment['data_base64'])) {
+            $pdfData = trim((string) ($attachment['data_base64'] ?? ''));
+            if ($pdfData !== '') {
+                $pdfBinaryUuid = $this->generateUuid();
+                $pdfDocRefUuid = $this->generateUuid();
+                $pdfDocRefRef = 'urn:uuid:' . $pdfDocRefUuid;
+                $pdfContentType = trim((string) ($attachment['content_type'] ?? 'application/pdf')) ?: 'application/pdf';
+                $pdfTitle = trim((string) ($attachment['title'] ?? 'Lab Report PDF')) ?: 'Lab Report PDF';
+
+                $resourceEntries[] = ['fullUrl' => 'urn:uuid:' . $pdfBinaryUuid, 'resource' => [
+                    'resourceType' => 'Binary',
+                    'id'           => $pdfBinaryUuid,
+                    'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Binary']],
+                    'contentType'  => $pdfContentType,
+                    'data'         => $pdfData,
+                ]];
+
+                $resourceEntries[] = ['fullUrl' => $pdfDocRefRef, 'resource' => [
+                    'resourceType' => 'DocumentReference',
+                    'id'           => $pdfDocRefUuid,
+                    'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentReference']],
+                    'status'       => 'current',
+                    'type'         => ['coding' => [['system' => 'http://snomed.info/sct', 'code' => '721981007', 'display' => 'Diagnostic studies report']]],
+                    'subject'      => ['reference' => $patientRef],
+                    'content'      => [[
+                        'attachment' => [
+                            'contentType' => $pdfContentType,
+                            'url' => 'urn:uuid:' . $pdfBinaryUuid,
+                            'data' => $pdfData,
+                            'title' => $pdfTitle,
+                        ],
+                    ]],
+                ]];
+
+                if ($isImaging) {
+                    $mediaUuid = $this->generateUuid();
+                    $mediaRef = 'urn:uuid:' . $mediaUuid;
+                    $resourceEntries[] = ['fullUrl' => $mediaRef, 'resource' => [
+                        'resourceType' => 'Media',
+                        'id'           => $mediaUuid,
+                        'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Media']],
+                        'status'       => 'completed',
+                        'type'         => 'photo',
+                        'subject'      => ['reference' => $patientRef],
+                        'createdDateTime' => $reportedAt,
+                        'content'      => [
+                            'contentType' => $pdfContentType,
+                            'url' => 'urn:uuid:' . $pdfBinaryUuid,
+                            'data' => $pdfData,
+                            'title' => $pdfTitle,
+                        ],
+                    ]];
+                }
+            }
+        }
+
+        // Pick a single DocumentReference for Composition.section slicing (0..1).
+        $effectiveDocRefRef = $pdfDocRefRef !== null ? $pdfDocRefRef : $docRefRef;
 
         // ── DiagnosticReport ──────────────────────────────────────────────────
         $reportRes = [
             'resourceType' => 'DiagnosticReport',
             'id'           => $reportUuid,
-            'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DiagnosticReportLab']],
+            'meta'         => ['profile' => [$isImaging
+                ? 'https://nrces.in/ndhm/fhir/r4/StructureDefinition/DiagnosticReportImaging'
+                : 'https://nrces.in/ndhm/fhir/r4/StructureDefinition/DiagnosticReportLab'
+            ]],
             'status'       => $reportStatus,
             'code'         => array_filter([
                 'coding' => trim((string) ($diagnosticReport['loinc_code'] ?? '')) !== ''
@@ -876,6 +946,11 @@ class FhirR4Builder
         } elseif ($practitionerRef !== '') {
             $reportRes['performer'] = [['reference' => $practitionerRef]];
         }
+        if ($practitionerRef !== '') {
+            $reportRes['resultsInterpreter'] = [['reference' => $practitionerRef]];
+        } elseif ($organizationRef !== '') {
+            $reportRes['resultsInterpreter'] = [['reference' => $organizationRef]];
+        }
         if ($encounterRef !== '') {
             $reportRes['encounter'] = ['reference' => $encounterRef];
         }
@@ -884,19 +959,42 @@ class FhirR4Builder
             $reportRes['category'] = [['coding' => [['system' => 'http://snomed.info/sct', 'code' => $catSnomedCode, 'display' => trim((string) ($diagnosticReport['category_snomed_display'] ?? $catSnomedCode))]]]];
         }
         $conclusion = trim((string) ($diagnosticReport['conclusion'] ?? ''));
-        if ($conclusion !== '') {
-            $reportRes['conclusion'] = $conclusion;
+        $reportRes['conclusion'] = $conclusion !== '' ? $conclusion : 'Laboratory report generated';
+        if ($isImaging && $mediaRef !== null) {
+            $reportRes['media'] = [[
+                'link' => ['reference' => $mediaRef],
+            ]];
+        }
+        if ($attachment !== null && ! empty($attachment['data_base64'])) {
+            $pdfPresentedFormUrl = $pdfDocRefRef !== null ? $pdfDocRefRef : null;
+            $reportRes['presentedForm'] = [[
+                'contentType' => trim((string) ($attachment['content_type'] ?? 'application/pdf')) ?: 'application/pdf',
+                'title' => trim((string) ($attachment['title'] ?? 'Lab Report PDF')) ?: 'Lab Report PDF',
+                'url' => $pdfPresentedFormUrl,
+            ]];
         }
         $resourceEntries[] = ['fullUrl' => $reportRef, 'resource' => $reportRes];
 
         // ── Composition section entries ────────────────────────────────────────
-        $sectionEntries = [['reference' => $reportRef]];
-        if ($docRefRef !== null) {
-            $sectionEntries[] = ['reference' => $docRefRef];
+        $sectionEntries = [[
+            'reference' => $reportRef,
+            'type'      => 'DiagnosticReport',
+        ]];
+        if ($effectiveDocRefRef !== null) {
+            $sectionEntries[] = [
+                'reference' => $effectiveDocRefRef,
+                'type'      => 'DocumentReference',
+            ];
         }
 
+        $sectionTitle = trim((string) ($diagnosticReport['section_title'] ?? ($isImaging ? 'Computed tomography imaging report' : 'Hematology report')));
+        $sectionCode = trim((string) ($diagnosticReport['section_snomed_code'] ?? ($isImaging ? '371531008' : '4321000179101')));
+        $sectionDisplay = trim((string) ($diagnosticReport['section_snomed_display'] ?? $sectionTitle));
+
         // ── Composition ───────────────────────────────────────────────────────
-        $authorEntry = $practitionerRef !== '' ? ['reference' => $practitionerRef] : ['display' => 'Unknown'];
+        $authorEntry = $practitionerRef !== ''
+            ? ['reference' => $practitionerRef]
+            : ($organizationRef !== '' ? ['reference' => $organizationRef] : ['reference' => $patientRef]);
         $composition = [
             'resourceType' => 'Composition',
             'id'           => $compositionUuid,
@@ -905,16 +1003,20 @@ class FhirR4Builder
             'identifier'   => ['system' => 'https://ndhm.in/phr', 'value' => $compositionUuid],
             'status'       => 'final',
             'type'         => [
-                'coding' => [['system' => 'http://snomed.info/sct', 'code' => '721981007', 'display' => 'Diagnostic studies report']],
-                'text'   => 'Diagnostic Report',
+                'coding' => [[
+                    'system' => 'http://snomed.info/sct',
+                    'code' => $isImaging ? '721979004' : '721981007',
+                    'display' => $isImaging ? 'Diagnostic Report- Imaging' : 'Diagnostic Report- Lab',
+                ]],
+                'text'   => $isImaging ? 'Diagnostic Report- Imaging' : 'Diagnostic Report- Lab',
             ],
             'subject'   => ['reference' => $patientRef, 'display' => 'Patient'],
             'date'      => $issuedAt,
-            'author'    => [[$authorEntry]],
+            'author'    => [$authorEntry],
             'title'     => $reportTitle,
             'section'   => [[
-                'title' => 'Diagnostic Report',
-                'code'  => ['coding' => [['system' => 'http://snomed.info/sct', 'code' => '721981007', 'display' => 'Diagnostic studies report']]],
+                'title' => $sectionTitle,
+                'code'  => ['coding' => [['system' => 'http://snomed.info/sct', 'code' => $sectionCode, 'display' => $sectionDisplay]]],
                 'entry' => $sectionEntries,
             ]],
         ];

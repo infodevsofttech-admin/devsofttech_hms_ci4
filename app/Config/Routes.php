@@ -589,6 +589,9 @@ $routes->post('AbdmCodingPanel/mark_fhir_ready', 'AbdmCodingPanel::markFhirReady
 $routes->get('AbdmCodingPanel/tip_check', 'AbdmCodingPanel::tipCheck');
 $routes->post('AbdmGateway/share_ipd_discharge_bundle', 'AbdmGateway::shareIpdDischargeBundle', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmGateway/share_diagnosis_report_bundle', 'AbdmGateway::shareDiagnosisReportBundle', ['filter' => $abdmPermFilter]);
+$routes->post('AbdmGateway/shareDiagnosisReportBundle', 'AbdmGateway::shareDiagnosisReportBundle', ['filter' => $abdmPermFilter]);
+$routes->get('AbdmGateway/diagnosis_report_fhir_preview', 'AbdmGateway::diagnosisReportFhirPreview', ['filter' => $abdmPermFilter]);
+$routes->get('AbdmGateway/ipd_discharge_fhir_preview', 'AbdmGateway::ipdDischargeFhirPreview', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmGateway/push_health_record', 'AbdmGateway::pushHealthRecord', ['filter' => $abdmPermFilter]);
 $routes->get('AbdmGateway/health_records_list', 'AbdmGateway::healthRecordsList', ['filter' => $abdmPermFilter]);
 $routes->get('AbdmGateway/bridge_record_status/(:num)', 'AbdmGateway::bridgeRecordStatus/$1', ['filter' => $abdmPermFilter]);

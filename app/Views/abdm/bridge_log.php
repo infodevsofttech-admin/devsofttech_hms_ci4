@@ -426,6 +426,32 @@ const today = new Date().toISOString().slice(0, 10);
 document.getElementById('filterDateFrom').value = today;
 document.getElementById('filterDateTo').value   = today;
 
+// Allow deep-link filters, e.g. AbdmBridgeLog?search=REC-xxxx&date_from=2026-05-31
+(function applyUrlFilters() {
+    const qs = new URLSearchParams(window.location.search || '');
+    const map = [
+        ['channel', 'filterChannel'],
+        ['status', 'filterStatus'],
+        ['search', 'filterSearch'],
+        ['date_from', 'filterDateFrom'],
+        ['date_to', 'filterDateTo'],
+    ];
+    map.forEach(([key, id]) => {
+        const value = (qs.get(key) || '').trim();
+        if (value === '') return;
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.value = value;
+    });
+
+    // If a queue search is provided without date range, clear date defaults
+    // so older queue ids are still discoverable.
+    if ((qs.get('search') || '').trim() !== '' && (qs.get('date_from') || '').trim() === '' && (qs.get('date_to') || '').trim() === '') {
+        document.getElementById('filterDateFrom').value = '';
+        document.getElementById('filterDateTo').value = '';
+    }
+})();
+
 loadList(1);
 </script>
 </body>

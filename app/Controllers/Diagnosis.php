@@ -2145,15 +2145,149 @@ class Diagnosis extends BaseController
                     'report_compile' => $compiledBy,
                 ]);
 
+            $pdfStore = $this->autoStoreCompiledPdfAttachment($invoiceId, $labType, $rawData, $header);
+
+            $message = 'Data Compile';
+            if (($pdfStore['ok'] ?? false) && ! empty($pdfStore['file_id'])) {
+                $message .= ' + PDF stored';
+            } elseif (! empty($pdfStore['error'])) {
+                $message .= ' (PDF store skipped: ' . (string) $pdfStore['error'] . ')';
+            }
+
             return $this->response->setJSON([
                 'status' => 'success',
-                'message' => 'Data Compile',
+                'message' => $message,
+                'pdf_file_id' => (int) ($pdfStore['file_id'] ?? 0),
             ]);
         } catch (\Throwable $e) {
             return $this->response->setJSON([
                 'status' => 'error',
                 'message' => $e->getMessage(),
             ]);
+        }
+    }
+
+    /**
+     * Generate compiled report PDF and persist metadata in file_upload_data.
+     * Fail-open: returns error details without throwing so compile flow stays successful.
+     *
+     * @return array{ok: bool, file_id?: int, error?: string}
+     */
+    private function autoStoreCompiledPdfAttachment(int $invoiceId, int $labType, string $reportHtml, string $reportHeader = ''): array
+    {
+        if ($invoiceId <= 0 || $labType <= 0) {
+            return ['ok' => false, 'error' => 'invalid_context'];
+        }
+
+        if (! $this->db->tableExists('file_upload_data')) {
+            return ['ok' => false, 'error' => 'file_upload_data table not found'];
+        }
+
+        try {
+            $compiledHtml = trim($reportHeader) . "\n" . trim($reportHtml);
+            if ($compiledHtml === '') {
+                return ['ok' => false, 'error' => 'empty_compiled_report'];
+            }
+
+            $wrappedHtml = '<!doctype html><html><head><meta charset="utf-8">'
+                . '<style>body{font-family:DejaVu Sans,sans-serif;font-size:11px;color:#111} h1,h2,h3{margin:8px 0} table{border-collapse:collapse;width:100%} td,th{vertical-align:top}</style>'
+                . '</head><body>' . $compiledHtml . '</body></html>';
+
+            $mpdfTempDir = WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'mpdf';
+            if (! is_dir($mpdfTempDir)) {
+                @mkdir($mpdfTempDir, 0755, true);
+            }
+
+            $mpdf = new Mpdf([
+                'format' => 'A4',
+                'margin_top' => 10,
+                'margin_bottom' => 10,
+                'margin_left' => 10,
+                'margin_right' => 10,
+                'tempDir' => $mpdfTempDir,
+            ]);
+            $mpdf->WriteHTML($wrappedHtml);
+
+            $invoiceCode = '';
+            if ($this->db->tableExists('invoice_master')) {
+                $inv = $this->db->table('invoice_master')->select('invoice_code')->where('id', $invoiceId)->get(1)->getRowArray();
+                $invoiceCode = trim((string) ($inv['invoice_code'] ?? ''));
+            }
+            $invoiceCodeSafe = preg_replace('/[^A-Za-z0-9\-_]/', '_', $invoiceCode !== '' ? $invoiceCode : ('INV_' . $invoiceId));
+            $storedName = 'compiled_' . $invoiceCodeSafe . '_L' . $labType . '_' . date('Ymd_His') . '.pdf';
+
+            $targetDir = ROOTPATH . 'public' . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'diagnosis' . DIRECTORY_SEPARATOR . date('Y') . DIRECTORY_SEPARATOR . date('m');
+            if (! is_dir($targetDir) && ! @mkdir($targetDir, 0775, true) && ! is_dir($targetDir)) {
+                return ['ok' => false, 'error' => 'Unable to create upload directory'];
+            }
+
+            $absolutePath = $targetDir . DIRECTORY_SEPARATOR . $storedName;
+            file_put_contents($absolutePath, $mpdf->Output($storedName, 'S'));
+
+            if (! is_file($absolutePath)) {
+                return ['ok' => false, 'error' => 'compiled_pdf_write_failed'];
+            }
+
+            $fields = $this->db->getFieldNames('file_upload_data');
+
+            // Keep only one latest auto-compiled PDF per invoice/lab context.
+            if (in_array('scan_type', $fields, true) && in_array('isdelete', $fields, true)) {
+                $this->db->table('file_upload_data')
+                    ->where('charge_id', $invoiceId)
+                    ->where('charge_type', $labType)
+                    ->where('scan_type', 'compiled_pdf_auto')
+                    ->where('isdelete', 0)
+                    ->update(['isdelete' => 1]);
+            }
+
+            $user = function_exists('auth') ? auth()->user() : null;
+            $uploadBy = trim((string) ($user->username ?? $user->email ?? 'system'));
+            $uploadById = (int) ($user->id ?? 0);
+
+            $insert = [];
+            $fieldMap = [
+                'name' => $storedName,
+                'file_name' => $storedName,
+                'orig_name' => 'Compiled_Report_' . ($invoiceCode !== '' ? $invoiceCode : $invoiceId) . '_' . $labType . '.pdf',
+                'client_name' => 'Compiled_Report_' . ($invoiceCode !== '' ? $invoiceCode : $invoiceId) . '_' . $labType . '.pdf',
+                'file_ext' => '.pdf',
+                'file_type' => 'application/pdf',
+                'full_path' => str_replace('\\', '/', $absolutePath),
+                'file_path' => str_replace('\\', '/', $targetDir) . '/',
+                'raw_name' => pathinfo($storedName, PATHINFO_FILENAME),
+                'store_file_name' => $storedName,
+                'file_size' => round(((float) filesize($absolutePath)) / 1024, 2),
+                'is_image' => 0,
+                'image_type' => 'pdf',
+                'insert_date' => Time::now('Asia/Kolkata')->toDateTimeString(),
+                'insert_time' => Time::now('Asia/Kolkata')->toDateTimeString(),
+                'file_desc' => 'Auto compiled report PDF',
+                'repo_id' => 0,
+                'charge_id' => $invoiceId,
+                'charge_type' => $labType,
+                'upload_by' => $uploadBy,
+                'upload_by_id' => $uploadById,
+                'scan_type' => 'compiled_pdf_auto',
+                'show_type' => 0,
+                'isdelete' => 0,
+                'document_type' => 'diagnosis-compiled-report',
+                'content_description' => 'Auto-generated from diagnosis/report-compile',
+            ];
+
+            foreach ($fieldMap as $key => $value) {
+                if (in_array($key, $fields, true)) {
+                    $insert[$key] = $value;
+                }
+            }
+
+            $ok = $this->db->table('file_upload_data')->insert($insert);
+            if (! $ok) {
+                return ['ok' => false, 'error' => 'Unable to save compiled PDF metadata'];
+            }
+
+            return ['ok' => true, 'file_id' => (int) $this->db->insertID()];
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'error' => $e->getMessage()];
         }
     }
 

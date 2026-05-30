@@ -8,6 +8,8 @@ use App\Libraries\FhirR4Builder;
 use App\Libraries\FhirEncryptionService;
 use App\Libraries\AbdmAuditService;
 use CodeIgniter\I18n\Time;
+use Mpdf\HTMLParserMode;
+use Mpdf\Mpdf;
 
 class AbdmGateway extends BaseController
 {
@@ -936,6 +938,14 @@ class AbdmGateway extends BaseController
             'reported_at'  => $reportedAt,
             'report_html'  => trim((string) ($labReq->Report_Data ?? '')),
         ];
+        $isImaging = (int) ($labReq->lab_type ?? 0) === 6;
+        if ($isImaging) {
+            $diagnosticReport['is_imaging'] = true;
+            $diagnosticReport['report_domain'] = 'imaging';
+            $diagnosticReport['section_title'] = 'Computed tomography imaging report';
+            $diagnosticReport['section_snomed_code'] = '371531008';
+            $diagnosticReport['section_snomed_display'] = 'Computed tomography imaging report';
+        }
 
         // ── Load LOINC code for the panel from lab_repo ───────────────────────
         $labRepoRow = $this->db->table('lab_request lr')
@@ -964,7 +974,21 @@ class AbdmGateway extends BaseController
             'period_start' => $reportedAt,
         ];
 
-        $bundle     = $fhir->buildLabReportBundle($patient, $diagnosticReport, $observations, null, $organization, $encounter);
+        $pdfAttachment = $this->loadLatestLabPdfAttachment(
+            (int) ($labReq->charge_id ?? 0),
+            (int) ($labReq->lab_type ?? 0),
+            $labReqId,
+            $testTitle !== '' ? ($testTitle . ' PDF Report') : 'Lab Report PDF'
+        );
+
+        if ($pdfAttachment === null) {
+            return $this->response->setStatusCode(422)->setJSON([
+                'ok' => 0,
+                'error' => 'PDF attachment missing for this lab request. Compile and store the report first, then retry ABDM submit.',
+            ]);
+        }
+
+        $bundle     = $fhir->buildLabReportBundle($patient, $diagnosticReport, $observations, null, $organization, $encounter, $pdfAttachment);
         $bundleJson = (string) json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
         // ── Store health_record ───────────────────────────────────────────────
@@ -1023,6 +1047,255 @@ class AbdmGateway extends BaseController
             'consent_handle' => $effectiveConsent,
             'status'         => $connectorError === null ? 'queued' : 'failed',
             'error'          => $connectorError,
+        ]);
+    }
+
+    public function diagnosisReportFhirPreview()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(403)->setJSON(['status' => 'error', 'message' => 'AJAX only']);
+        }
+
+        $labReqId = (int) ($this->request->getGet('lab_req_id') ?? $this->request->getPost('lab_req_id') ?? 0);
+        $patientId = (int) ($this->request->getGet('patient_id') ?? $this->request->getPost('patient_id') ?? 0);
+        $abhaId = trim((string) ($this->request->getGet('abha_id') ?? $this->request->getPost('abha_id') ?? ''));
+
+        if ($labReqId <= 0 || $patientId <= 0 || $abhaId === '') {
+            return $this->response->setStatusCode(400)->setJSON([
+                'status' => 'error',
+                'message' => 'lab_req_id, patient_id and abha_id are required.',
+            ]);
+        }
+
+        $labReq = $this->db->table('lab_request')
+            ->select('id, patient_name, lab_type, charge_id, Report_Data, report_data_Impression, status, reported_time')
+            ->where('id', $labReqId)
+            ->get(1)
+            ->getRow();
+
+        if (! $labReq) {
+            return $this->response->setStatusCode(404)->setJSON([
+                'status' => 'error',
+                'message' => 'Lab request not found.',
+            ]);
+        }
+
+        $patientRow = [];
+        if ($this->db->tableExists('patient_master')) {
+            $patientRow = $this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray() ?? [];
+        }
+        $patName = trim(
+            trim((string) ($patientRow['p_fname'] ?? '')) . ' ' .
+            trim((string) ($patientRow['p_lname'] ?? ''))
+        ) ?: trim((string) ($labReq->patient_name ?? ''));
+
+        $testTitle = '';
+        $chargeId  = (int) ($labReq->charge_id ?? 0);
+        if ($chargeId > 0 && $this->db->tableExists('charge_master')) {
+            $chargeRow = $this->db->table('charge_master')->select('charge_name')->where('id', $chargeId)->get(1)->getRowArray() ?? [];
+            $testTitle = trim((string) ($chargeRow['charge_name'] ?? ''));
+        }
+        if ($testTitle === '') {
+            $testTitle = $this->mapLabTypeToTitle((int) ($labReq->lab_type ?? 0));
+        }
+
+        $hospitalProfile = $this->getHospitalProfileForFhir();
+
+        $reportedRaw = trim((string) ($labReq->reported_time ?? ''));
+        $reportedAt = $reportedRaw !== '' ? (new \DateTime($reportedRaw, new \DateTimeZone('Asia/Kolkata')))->format('Y-m-d\TH:i:sP') : '';
+
+        $diagnosticReport = [
+            'id'           => (string) $labReqId,
+            'title'        => $testTitle ?: 'Laboratory Report',
+            'status'       => ((string) ($labReq->status ?? '0')) === '1' ? 'final' : 'preliminary',
+            'conclusion'   => trim((string) ($labReq->report_data_Impression ?? '')),
+            'reported_at'  => $reportedAt,
+            'report_html'  => trim((string) ($labReq->Report_Data ?? '')),
+        ];
+        $isImaging = (int) ($labReq->lab_type ?? 0) === 6;
+        if ($isImaging) {
+            $diagnosticReport['is_imaging'] = true;
+            $diagnosticReport['report_domain'] = 'imaging';
+            $diagnosticReport['section_title'] = 'Computed tomography imaging report';
+            $diagnosticReport['section_snomed_code'] = '371531008';
+            $diagnosticReport['section_snomed_display'] = 'Computed tomography imaging report';
+        }
+
+        $labRepoRow = $this->db->table('lab_request lr')
+            ->select('lr.lab_repo_id, repo.loinc_code AS repo_loinc_code')
+            ->join('lab_repo repo', 'repo.mstRepoKey = lr.lab_repo_id', 'left')
+            ->where('lr.id', $labReqId)
+            ->get(1)
+            ->getRowArray() ?? [];
+
+        $repoLoincCode = trim((string) ($labRepoRow['repo_loinc_code'] ?? ''));
+        if ($repoLoincCode !== '') {
+            $diagnosticReport['loinc_code'] = $repoLoincCode;
+        }
+
+        $observations = $this->buildLabObservations($labReqId, (string) ($labReq->status ?? '0'));
+
+        $organization = $hospitalProfile['name'] !== ''
+            ? ['name' => $hospitalProfile['name'], 'hfr_id' => $hospitalProfile['hfr_id']]
+            : null;
+
+        $encounter = [
+            'id'           => 'LAB-' . $labReqId,
+            'status'       => 'finished',
+            'class_code'   => 'AMB',
+            'period_start' => $reportedAt,
+        ];
+
+        $patient = [
+            'id'          => (string) $patientId,
+            'name'        => $patName,
+            'gender'      => trim((string) ($patientRow['gender'] ?? '')),
+            'birthDate'   => ! empty($patientRow['dob']) ? date('Y-m-d', strtotime((string) $patientRow['dob'])) : '',
+            'abhaAddress' => $abhaId,
+        ];
+
+        $fhir = new FhirR4Builder();
+        $pdfAttachment = $this->loadLatestLabPdfAttachment(
+            (int) ($labReq->charge_id ?? 0),
+            (int) ($labReq->lab_type ?? 0),
+            $labReqId,
+            $testTitle !== '' ? ($testTitle . ' PDF Report') : 'Lab Report PDF'
+        );
+
+        if ($pdfAttachment === null) {
+            return $this->response->setStatusCode(422)->setJSON([
+                'status' => 'error',
+                'message' => 'PDF attachment missing for this lab request. Compile and store the report first, then retry preview.',
+            ]);
+        }
+
+        $bundle = $fhir->buildLabReportBundle($patient, $diagnosticReport, $observations, null, $organization, $encounter, $pdfAttachment);
+
+        return $this->response->setJSON([
+            'status' => 'ok',
+            'lab_req_id' => $labReqId,
+            'patient_id' => $patientId,
+            'abha_id' => $abhaId,
+            'bundle' => $bundle,
+        ]);
+    }
+
+    public function ipdDischargeFhirPreview()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(403)->setJSON(['status' => 'error', 'message' => 'AJAX only']);
+        }
+
+        $ipdId = (int) ($this->request->getGet('ipd_id') ?? $this->request->getPost('ipd_id') ?? 0);
+        $patientId = (int) ($this->request->getGet('patient_id') ?? $this->request->getPost('patient_id') ?? 0);
+        $abhaId = trim((string) ($this->request->getGet('abha_id') ?? $this->request->getPost('abha_id') ?? ''));
+
+        if ($ipdId <= 0 || $patientId <= 0 || $abhaId === '') {
+            return $this->response->setStatusCode(400)->setJSON([
+                'status' => 'error',
+                'message' => 'ipd_id, patient_id and abha_id are required.',
+            ]);
+        }
+
+        $ipdRow = $this->db->tableExists('ipd_master')
+            ? ($this->db->table('ipd_master')->where('id', $ipdId)->get(1)->getRowArray() ?? [])
+            : [];
+
+        if (empty($ipdRow)) {
+            return $this->response->setStatusCode(404)->setJSON([
+                'status' => 'error',
+                'message' => 'IPD record not found.',
+            ]);
+        }
+
+        $summaryHtml = '';
+        if ($this->db->tableExists('ipd_discharge') && $this->db->fieldExists('content', 'ipd_discharge')) {
+            $summaryRow = $this->db->table('ipd_discharge')
+                ->select('content')
+                ->where('ipd_id', $ipdId)
+                ->orderBy('id', 'DESC')
+                ->get(1)
+                ->getRowArray();
+            $summaryHtml = trim((string) ($summaryRow['content'] ?? ''));
+        }
+
+        $patientRow = [];
+        if ($this->db->tableExists('patient_master')) {
+            $patientRow = $this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray() ?? [];
+        }
+        $patName = trim(
+            trim((string) ($patientRow['p_fname'] ?? '')) . ' ' .
+            trim((string) ($patientRow['p_lname'] ?? ''))
+        ) ?: trim((string) ($ipdRow['P_name'] ?? ''));
+
+        $hospitalProfile = $this->getHospitalProfileForFhir();
+
+        $doctorId   = (int) ($ipdRow['r_doc_id'] ?? 0);
+        $doctorName = trim((string) ($ipdRow['r_doc_name'] ?? ''));
+        $doctorRegNo = '';
+        if ($doctorId > 0 && $this->db->tableExists('doctor_master')) {
+            $dFields = $this->db->getFieldNames('doctor_master') ?? [];
+            $dSelect = ['id'];
+            foreach (['p_fname', 'p_lname', 'doctor_reg_no', 'registration_no', 'reg_no'] as $f) {
+                if (in_array($f, $dFields, true)) {
+                    $dSelect[] = $f;
+                }
+            }
+            $dRow = $this->db->table('doctor_master')->select(implode(',', $dSelect))->where('id', $doctorId)->get(1)->getRowArray() ?? [];
+            if ($dRow !== [] && $doctorName === '') {
+                $doctorName = trim(trim((string) ($dRow['p_fname'] ?? '')) . ' ' . trim((string) ($dRow['p_lname'] ?? '')));
+            }
+            foreach (['doctor_reg_no', 'registration_no', 'reg_no'] as $f) {
+                if (! empty($dRow[$f])) {
+                    $doctorRegNo = trim((string) $dRow[$f]);
+                    break;
+                }
+            }
+        }
+
+        $admissionRaw  = trim((string) ($ipdRow['register_date'] ?? ''));
+        $dischargeRaw  = trim((string) ($ipdRow['discharge_date'] ?? ''));
+        $admissionDate = $admissionRaw !== '' ? (new \DateTime($admissionRaw, new \DateTimeZone('Asia/Kolkata')))->format('Y-m-d\TH:i:sP') : '';
+        $dischargeDate = $dischargeRaw !== '' ? (new \DateTime($dischargeRaw, new \DateTimeZone('Asia/Kolkata')))->format('Y-m-d\TH:i:sP') : '';
+
+        $fhir = new FhirR4Builder();
+
+        $patient = [
+            'id'          => (string) $patientId,
+            'name'        => $patName,
+            'gender'      => trim((string) ($patientRow['gender'] ?? '')),
+            'birthDate'   => ! empty($patientRow['dob']) ? date('Y-m-d', strtotime((string) $patientRow['dob'])) : '',
+            'abhaAddress' => $abhaId,
+        ];
+
+        $encounter = [
+            'id'             => (string) $ipdId,
+            'admission_date' => $admissionDate,
+            'discharge_date' => $dischargeDate,
+            'ipd_code'       => trim((string) ($ipdRow['ipd_code'] ?? '')),
+        ];
+
+        $summary = [
+            'title'                 => 'Discharge Summary',
+            'chief_complaints'      => trim((string) ($ipdRow['problem'] ?? '')),
+            'clinical_summary_html' => $summaryHtml,
+        ];
+
+        $practitioner = $doctorName !== ''
+            ? ['name' => $doctorName, 'registration_number' => $doctorRegNo]
+            : null;
+        $organization = $hospitalProfile['name'] !== ''
+            ? ['name' => $hospitalProfile['name'], 'hfr_id' => $hospitalProfile['hfr_id']]
+            : null;
+
+        $bundle = $fhir->buildDischargeSummaryBundle($patient, $encounter, $summary, $practitioner, $organization);
+
+        return $this->response->setJSON([
+            'status' => 'ok',
+            'ipd_id' => $ipdId,
+            'patient_id' => $patientId,
+            'abha_id' => $abhaId,
+            'bundle' => $bundle,
         ]);
     }
 
@@ -1608,6 +1881,176 @@ class AbdmGateway extends BaseController
 
         $result = $this->connector->opdRunningTokenStatus();
         return $this->response->setJSON($result);
+    }
+
+    /**
+     * Resolve latest PDF for a lab/radiology context and return base64 attachment payload.
+     *
+     * @return array{content_type: string, data_base64: string, title: string}|null
+     */
+    private function loadLatestLabPdfAttachment(int $invoiceId, int $labType, int $labReqId = 0, string $defaultTitle = 'Lab Report PDF'): ?array
+    {
+        if ($invoiceId <= 0 || $labType <= 0 || ! $this->db->tableExists('file_upload_data')) {
+            return null;
+        }
+
+        $fields = $this->db->getFieldNames('file_upload_data') ?? [];
+        if (empty($fields)) {
+            return null;
+        }
+
+        $selectParts = [];
+        foreach (['id', 'file_name', 'orig_name', 'full_path', 'file_type', 'repo_id'] as $col) {
+            if (in_array($col, $fields, true)) {
+                $selectParts[] = $col;
+            }
+        }
+        if (empty($selectParts)) {
+            return null;
+        }
+
+        $builder = $this->db->table('file_upload_data')
+            ->select(implode(',', $selectParts))
+            ->where('charge_id', $invoiceId)
+            ->where('charge_type', $labType);
+
+        if (in_array('isdelete', $fields, true)) {
+            $builder->where('isdelete', 0);
+        }
+
+        // Prefer exact report-level file; fall back to invoice-level compiled (repo_id=0).
+        if (in_array('repo_id', $fields, true)) {
+            $builder->whereIn('repo_id', [$labReqId, 0]);
+            $builder->orderBy('CASE WHEN repo_id = ' . (int) $labReqId . ' THEN 0 WHEN repo_id = 0 THEN 1 ELSE 2 END', '', false);
+        }
+
+        $rows = $builder->orderBy('id', 'DESC')->limit(20)->get()->getResultArray();
+        if (empty($rows)) {
+            return null;
+        }
+
+        foreach ($rows as $row) {
+            $fullPath = trim((string) ($row['full_path'] ?? ''));
+            $fileName = trim((string) ($row['file_name'] ?? ''));
+            $mimeType = trim((string) ($row['file_type'] ?? ''));
+            $ext = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+            $isPdf = $ext === 'pdf' || $mimeType === 'application/pdf';
+            if (! $isPdf) {
+                continue;
+            }
+
+            $absolutePath = $this->resolveStoredFileAbsolutePath($fullPath);
+            if ($absolutePath === '' || ! is_file($absolutePath)) {
+                continue;
+            }
+
+            $bytes = @file_get_contents($absolutePath);
+            if ($bytes === false || $bytes === '') {
+                continue;
+            }
+
+            $title = trim((string) ($row['orig_name'] ?? ''));
+            if ($title === '') {
+                $title = $fileName !== '' ? $fileName : $defaultTitle;
+            }
+
+            return [
+                'content_type' => 'application/pdf',
+                'data_base64' => base64_encode($bytes),
+                'title' => $title,
+            ];
+        }
+
+        if ($labReqId > 0) {
+            $fallbackRow = $this->db->table('lab_request')
+                ->select('Report_Data, patient_name')
+                ->where('id', $labReqId)
+                ->get(1)
+                ->getRowArray() ?? [];
+
+            $reportHtml = trim((string) ($fallbackRow['Report_Data'] ?? ''));
+            if ($reportHtml !== '') {
+                $fallbackTitle = trim((string) ($defaultTitle !== '' ? $defaultTitle : 'Lab Report PDF'));
+                $generatedPdf = $this->renderReportHtmlToPdfAttachment($reportHtml, $fallbackTitle);
+                if ($generatedPdf !== null) {
+                    return $generatedPdf;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Render report HTML to a PDF attachment payload without persisting it.
+     *
+     * @return array{content_type: string, data_base64: string, title: string}|null
+     */
+    private function renderReportHtmlToPdfAttachment(string $reportHtml, string $title = 'Lab Report PDF'): ?array
+    {
+        $reportHtml = trim($reportHtml);
+        if ($reportHtml === '') {
+            return null;
+        }
+
+        try {
+            $wrappedHtml = '<!doctype html><html><head><meta charset="utf-8">'
+                . '<style>body{font-family:DejaVu Sans,sans-serif;font-size:11px;color:#111} table{border-collapse:collapse;width:100%} td,th{vertical-align:top}</style>'
+                . '</head><body>' . $reportHtml . '</body></html>';
+
+            $mpdfTempDir = WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'mpdf';
+            if (! is_dir($mpdfTempDir)) {
+                @mkdir($mpdfTempDir, 0755, true);
+            }
+
+            $mpdf = new Mpdf([
+                'format' => 'A4',
+                'margin_top' => 10,
+                'margin_bottom' => 10,
+                'margin_left' => 10,
+                'margin_right' => 10,
+                'tempDir' => $mpdfTempDir,
+            ]);
+            $mpdf->WriteHTML($wrappedHtml, HTMLParserMode::HTML_BODY);
+
+            return [
+                'content_type' => 'application/pdf',
+                'data_base64'  => base64_encode($mpdf->Output($title . '.pdf', 'S')),
+                'title'        => $title,
+            ];
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    private function resolveStoredFileAbsolutePath(string $fullPath): string
+    {
+        $normalized = str_replace('\\', '/', trim($fullPath));
+        if ($normalized === '') {
+            return '';
+        }
+
+        if (is_file($normalized)) {
+            return $normalized;
+        }
+
+        if (preg_match('/^[A-Za-z]:\//', $normalized) === 1 || str_starts_with($normalized, '/')) {
+            return is_file($normalized) ? $normalized : '';
+        }
+
+        $candidates = [
+            ROOTPATH . ltrim(str_replace('/', DIRECTORY_SEPARATOR, $normalized), DIRECTORY_SEPARATOR),
+            ROOTPATH . 'public' . DIRECTORY_SEPARATOR . ltrim(str_replace('/', DIRECTORY_SEPARATOR, $normalized), DIRECTORY_SEPARATOR),
+            WRITEPATH . ltrim(str_replace('/', DIRECTORY_SEPARATOR, $normalized), DIRECTORY_SEPARATOR),
+        ];
+
+        foreach ($candidates as $path) {
+            if (is_file($path)) {
+                return $path;
+            }
+        }
+
+        return '';
     }
 
     private function getScanShareResultPayload(int $queueId): ?array

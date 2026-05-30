@@ -81,7 +81,8 @@
                             $opdId = (int) ($meta['opd_id'] ?? 0);
                             $opdSessionId = (int) ($meta['opd_session_id'] ?? 0);
                             $showSandbox = ($type === 'opd_prescription_publish' && $opdId > 0);
-                            $showPreview = ($type === 'opd_prescription_publish' && $opdId > 0);
+                            $showPreview = ($type === 'opd_prescription_publish' && $opdId > 0)
+                                || in_array($type, ['lab_report_publish', 'radiology_report_publish', 'ipd_discharge_publish'], true);
                         ?>
                         <tr
                             data-task-id="<?= (int) ($t['id'] ?? 0) ?>"
@@ -743,9 +744,9 @@
         sandboxCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
-    function runAction(row, action) {
+    function runAction(row, action, overrideAbha) {
         var taskId = row.getAttribute('data-task-id');
-        var abha = modalAbhaInput.value.trim();
+        var abha = (overrideAbha || modalAbhaInput.value || '').trim();
 
         setStatus('Submitting action...');
         post('<?= base_url('AbdmTaskBoard/perform_action') ?>', {
@@ -765,8 +766,85 @@
                 badge.className = 'badge bg-info status-pill';
             }
             setStatus('Action queued: ' + (res.event_type || '-'));
-            actionModal.hide();
+            if (modalEl && modalEl.classList.contains('show')) {
+                actionModal.hide();
+            }
         });
+    }
+
+    function openTaskFhirPreviewForSubmit(row) {
+        if (!row) {
+            return false;
+        }
+
+        var taskType = (row.getAttribute('data-task-type') || '').toLowerCase();
+        var abhaInput = row.querySelector('.abha-input');
+        var abhaId = (abhaInput ? abhaInput.value : (row.getAttribute('data-abha-id') || '')).trim();
+
+        if (!/^\d{14}$/.test(abhaId)) {
+            setStatus('ABHA must be a 14-digit number before FHIR preview.', true);
+            return true;
+        }
+
+        var previewUrl = '';
+        var title = 'FHIR Preview';
+
+        if (taskType === 'lab_report_publish' || taskType === 'radiology_report_publish') {
+            var labReqId = parseInt(row.getAttribute('data-entity-id') || '0', 10) || 0;
+            var patientId = parseInt(row.getAttribute('data-patient-id') || '0', 10) || 0;
+
+            if (labReqId <= 0 || patientId <= 0) {
+                setStatus('Task data missing for FHIR preview.', true);
+                return true;
+            }
+
+            previewUrl = '<?= base_url('AbdmGateway/diagnosis_report_fhir_preview') ?>'
+                + '?lab_req_id=' + encodeURIComponent(labReqId)
+                + '&patient_id=' + encodeURIComponent(patientId)
+                + '&abha_id=' + encodeURIComponent(abhaId);
+            title = (taskType === 'radiology_report_publish' ? 'Radiology' : 'Lab') + ' FHIR Preview — Request #' + labReqId;
+        } else if (taskType === 'opd_prescription_publish') {
+            var opdId = parseInt(row.getAttribute('data-opd-id') || row.getAttribute('data-entity-id') || '0', 10) || 0;
+            var opdSessionId = parseInt(row.getAttribute('data-opd-session-id') || '0', 10) || 0;
+
+            if (opdId <= 0) {
+                setStatus('Task data missing for OPD FHIR preview.', true);
+                return true;
+            }
+
+            previewUrl = opdSessionId > 0
+                ? '<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId + '/' + opdSessionId
+                : '<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId;
+            title = 'OPD FHIR Preview — OPD #' + opdId;
+        } else if (taskType === 'ipd_discharge_publish') {
+            var ipdId = parseInt(row.getAttribute('data-entity-id') || '0', 10) || 0;
+            var ipdPatientId = parseInt(row.getAttribute('data-patient-id') || '0', 10) || 0;
+
+            if (ipdId <= 0 || ipdPatientId <= 0) {
+                setStatus('Task data missing for IPD discharge FHIR preview.', true);
+                return true;
+            }
+
+            previewUrl = '<?= base_url('AbdmGateway/ipd_discharge_fhir_preview') ?>'
+                + '?ipd_id=' + encodeURIComponent(ipdId)
+                + '&patient_id=' + encodeURIComponent(ipdPatientId)
+                + '&abha_id=' + encodeURIComponent(abhaId);
+            title = 'IPD Discharge FHIR Preview — IPD #' + ipdId;
+        } else {
+            return false;
+        }
+
+        _fhirSubmitMode = 'task';
+        _fhirSubmitTaskRow = row;
+        _fhirSubmitAbha = abhaId;
+
+        openFhirModal(previewUrl, title, {
+            submitMode: 'task',
+            taskRow: row,
+            abhaId: abhaId
+        });
+
+        return true;
     }
 
     document.querySelectorAll('.action-btn').forEach(function (btn) {
@@ -777,10 +855,17 @@
             }
             selectedAction = btn.getAttribute('data-action') || 'submit';
 
+            if (selectedAction === 'submit') {
+                var previewHandled = openTaskFhirPreviewForSubmit(selectedRow);
+                if (previewHandled) {
+                    return;
+                }
+            }
+
             var abhaInput = selectedRow.querySelector('.abha-input');
-            var taskType = selectedRow.getAttribute('data-task-type') || '';
+            var taskTypeLabel = selectedRow.getAttribute('data-task-type') || '';
             modalAbhaInput.value = abhaInput ? abhaInput.value.trim() : '';
-            modalTaskSummary.textContent = 'Task: ' + taskType + ' | Action: ' + selectedAction.toUpperCase();
+            modalTaskSummary.textContent = 'Task: ' + taskTypeLabel + ' | Action: ' + selectedAction.toUpperCase();
             actionModal.show();
         });
     });
@@ -801,6 +886,11 @@
         btn.addEventListener('click', function () {
             var row = btn.closest('tr');
             if (!row) {
+                return;
+            }
+
+            var handled = openTaskFhirPreviewForSubmit(row);
+            if (handled) {
                 return;
             }
 
@@ -1190,6 +1280,12 @@
     var fhirTabJson        = document.getElementById('fhirTabJson');
     var fhirModalDataBadge = document.getElementById('fhirModalDataBadge');
     var fhirModalHttpBadge = document.getElementById('fhirModalHttpBadge');
+    var btnRegenerateFhirModal = document.getElementById('btnRegenerateFhirModal');
+    var btnSubmitFhirToAbdm = document.getElementById('btnSubmitFhirToAbdm');
+
+    var defaultSubmitBtnHtml = btnSubmitFhirToAbdm ? btnSubmitFhirToAbdm.innerHTML : '';
+    var defaultSubmitBtnClass = btnSubmitFhirToAbdm ? btnSubmitFhirToAbdm.className : 'btn btn-sm btn-outline-success';
+    var defaultSubmitBtnTitle = btnSubmitFhirToAbdm ? btnSubmitFhirToAbdm.title : 'Push FHIR bundle to ABDM bridge';
 
     // ── Tab switching ──────────────────────────────────────────────────
     fhirTabForm.addEventListener('click', function () {
@@ -1208,6 +1304,9 @@
     // ── Track current bundle context for edits ──────────────────────
     var _fhirOpdId = 0, _fhirSessionId = 0;
     var _fhirLiveComplaints = [], _fhirLiveDiagnoses = [];
+    var _fhirSubmitMode = 'opd';
+    var _fhirSubmitTaskRow = null;
+    var _fhirSubmitAbha = '';
 
     // ── Inline complaint SNOMED edit (event delegation on fhirFormView) ─
     var _editTimer = null;
@@ -1656,24 +1755,66 @@
             html += '</ul></div></div>';
         }
 
-        // ── Vitals
+        // ── Observation Groups (Vitals vs Lab Results)
         if (observations.length) {
             var loincLabel = { '8867-4':'HR','59408-5':'SpO₂','8480-6':'BP Sys','8462-4':'BP Dia','8310-5':'Temp','9279-1':'RR','8302-2':'Height','29463-7':'Weight' };
-            html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">Vitals</small></div><div class="card-body py-2"><div class="d-flex flex-wrap gap-2">';
-            observations.forEach(function(o) {
-                var loinc = (((o.code || {}).coding) || [])[0] || {};
-                var label = loincLabel[loinc.code] || (o.code || {}).text || loinc.display || '';
-                var val   = (o.valueQuantity || {}).value;
-                var unit  = (o.valueQuantity || {}).unit || '';
-                if (val === undefined || val === null) return;
-                html += '<div class="border rounded px-2 py-1 text-center" style="min-width:80px;">';
-                html += '<div class="small text-muted" style="font-size:.7rem;">' + hesc(label) + '</div>';
-                html += '<div class="fw-bold">' + hesc(val) + '</div>';
-                html += '<div class="text-muted" style="font-size:.7rem;">' + hesc(unit);
-                if (loinc.code) html += ' <span class="text-secondary" style="font-size:.65rem;">'+hesc(loinc.code)+'</span>';
-                html += '</div></div>';
-            });
-            html += '</div></div></div>';
+            var vitalLoincCodes = { '8867-4':1, '59408-5':1, '8480-6':1, '8462-4':1, '8310-5':1, '9279-1':1, '8302-2':1, '29463-7':1 };
+
+            function isVitalObservation(o) {
+                var categories = o.category || [];
+                for (var ci = 0; ci < categories.length; ci++) {
+                    var cat = categories[ci] || {};
+                    var catText = (cat.text || '').toLowerCase();
+                    if (catText.indexOf('vital') !== -1) {
+                        return true;
+                    }
+                    var codings = cat.coding || [];
+                    for (var cj = 0; cj < codings.length; cj++) {
+                        var c = codings[cj] || {};
+                        var system = (c.system || '').toLowerCase();
+                        var code = (c.code || '').toLowerCase();
+                        if ((system.indexOf('observation-category') !== -1 && code === 'vital-signs') || code === 'vital-signs') {
+                            return true;
+                        }
+                    }
+                }
+
+                var coding = (((o.code || {}).coding) || [])[0] || {};
+                var code = coding.code || '';
+                return !!vitalLoincCodes[code];
+            }
+
+            function renderObservationCard(sectionTitle, items) {
+                if (!items.length) {
+                    return;
+                }
+                html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">' + hesc(sectionTitle) + '</small></div><div class="card-body py-2"><div class="d-flex flex-wrap gap-2">';
+                items.forEach(function(o) {
+                    var loinc = (((o.code || {}).coding) || [])[0] || {};
+                    var label = loincLabel[loinc.code] || (o.code || {}).text || loinc.display || '';
+                    var val = (o.valueQuantity || {}).value;
+                    var unit = (o.valueQuantity || {}).unit || '';
+                    if (val === undefined || val === null) {
+                        val = o.valueString || o.valueCodeableConcept && o.valueCodeableConcept.text || '';
+                    }
+                    if (val === undefined || val === null || val === '') {
+                        return;
+                    }
+                    html += '<div class="border rounded px-2 py-1 text-center" style="min-width:80px;">';
+                    html += '<div class="small text-muted" style="font-size:.7rem;">' + hesc(label) + '</div>';
+                    html += '<div class="fw-bold">' + hesc(val) + '</div>';
+                    html += '<div class="text-muted" style="font-size:.7rem;">' + hesc(unit);
+                    if (loinc.code) html += ' <span class="text-secondary" style="font-size:.65rem;">' + hesc(loinc.code) + '</span>';
+                    html += '</div></div>';
+                });
+                html += '</div></div></div>';
+            }
+
+            var vitalObservations = observations.filter(isVitalObservation);
+            var labObservations = observations.filter(function(o) { return !isVitalObservation(o); });
+
+            renderObservationCard('Vitals', vitalObservations);
+            renderObservationCard('Lab Results', labObservations);
         }
 
         // ── Medications
@@ -1768,7 +1909,23 @@
             items.push('<span class="badge ' + (n === diagnoses.length ? 'bg-success' : 'bg-warning text-dark') + ' me-1">Diagnoses ' + n + '/' + diagnoses.length + ' SNOMED</span>');
         }
         if (obs.length) {
-            items.push('<span class="badge bg-success me-1">Vitals ' + obs.length + ' LOINC</span>');
+            var vitalLoincCodes = { '8867-4':1, '59408-5':1, '8480-6':1, '8462-4':1, '8310-5':1, '9279-1':1, '8302-2':1, '29463-7':1 };
+            var vitalObs = 0;
+            var labObs = 0;
+            obs.forEach(function(o) {
+                var code = ((((o.code || {}).coding) || [])[0] || {}).code || '';
+                if (vitalLoincCodes[code]) {
+                    vitalObs++;
+                } else {
+                    labObs++;
+                }
+            });
+            if (vitalObs > 0) {
+                items.push('<span class="badge bg-success me-1">Vitals ' + vitalObs + ' LOINC</span>');
+            }
+            if (labObs > 0) {
+                items.push('<span class="badge bg-primary me-1">Lab Results ' + labObs + ' LOINC</span>');
+            }
         }
         if (services.length) {
             var n = services.filter(hasLoincCoding).length;
@@ -1780,7 +1937,12 @@
         return items.length ? '<small class="text-muted me-1">Code quality:</small>' + items.join('') : '';
     }
 
-    function openFhirModal(url, title) {
+    function openFhirModal(url, title, options) {
+        options = options || {};
+        _fhirSubmitMode = options.submitMode || 'opd';
+        _fhirSubmitTaskRow = options.taskRow || null;
+        _fhirSubmitAbha = (options.abhaId || '').trim();
+
         _fhirOpdId = 0; _fhirSessionId = 0;
         if (fhirModalTitle)   fhirModalTitle.textContent = title || 'FHIR Preview';
         if (fhirModalMeta)    { fhirModalMeta.textContent = 'Loading...'; fhirModalMeta.className = 'flex-grow-1 small text-muted'; }
@@ -1792,6 +1954,23 @@
         fhirFormView.style.display = '';        fhirModalJson.style.display = 'none';
         if (fhirModalDataBadge) { fhirModalDataBadge.className = 'badge bg-warning text-dark'; fhirModalDataBadge.textContent = 'CHECKING'; }
         if (fhirModalHttpBadge) { fhirModalHttpBadge.className = 'badge bg-warning text-dark'; fhirModalHttpBadge.textContent = 'HTTP ...'; }
+
+        if (btnSubmitFhirToAbdm) {
+            if (_fhirSubmitMode === 'task') {
+                btnSubmitFhirToAbdm.className = 'btn btn-sm btn-outline-warning';
+                btnSubmitFhirToAbdm.innerHTML = '<i class="bi bi-check2-square"></i> Verify & Submit to Gateway';
+                btnSubmitFhirToAbdm.title = 'Submit directly to ABDM gateway after FHIR verification';
+            } else {
+                btnSubmitFhirToAbdm.className = defaultSubmitBtnClass;
+                btnSubmitFhirToAbdm.innerHTML = defaultSubmitBtnHtml;
+                btnSubmitFhirToAbdm.title = defaultSubmitBtnTitle;
+            }
+        }
+
+        if (btnRegenerateFhirModal) {
+            btnRegenerateFhirModal.style.display = _fhirSubmitMode === 'task' ? 'none' : '';
+        }
+
         fhirPreviewModal.show();
 
         fetch(url, { method: 'GET', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } })
@@ -1824,7 +2003,7 @@
     }
 
     // Regenerate FHIR bundle in modal
-    document.getElementById('btnRegenerateFhirModal').addEventListener('click', function () {
+    btnRegenerateFhirModal.addEventListener('click', function () {
         var btn = this;
         if (_fhirOpdId <= 0) { alert('No FHIR bundle loaded.'); return; }
         if (!confirm('Rebuild FHIR bundle for OPD #' + _fhirOpdId + '?\nThis overwrites the stored bundle with fresh data.')) return;
@@ -1880,8 +2059,78 @@
         });
     })();
 
-    document.getElementById('btnSubmitFhirToAbdm').addEventListener('click', function () {
+    btnSubmitFhirToAbdm.addEventListener('click', function () {
         var btn = this;
+
+        if (_fhirSubmitMode === 'task') {
+            if (!_fhirSubmitTaskRow) {
+                alert('No ABDM task selected for submission.');
+                return;
+            }
+            if (!/^\d{14}$/.test(_fhirSubmitAbha)) {
+                alert('ABHA must be a 14-digit number before queueing.');
+                return;
+            }
+            if (!confirm('FHIR verified. Submit this record to ABDM gateway now?')) {
+                return;
+            }
+
+            var rowInput = _fhirSubmitTaskRow.querySelector('.abha-input');
+            if (rowInput) {
+                rowInput.value = _fhirSubmitAbha;
+            }
+
+            var taskType = (_fhirSubmitTaskRow.getAttribute('data-task-type') || '').toLowerCase();
+            if (taskType === 'lab_report_publish' || taskType === 'radiology_report_publish') {
+                var labReqId = parseInt(_fhirSubmitTaskRow.getAttribute('data-entity-id') || '0', 10) || 0;
+                var patientId = parseInt(_fhirSubmitTaskRow.getAttribute('data-patient-id') || '0', 10) || 0;
+                if (labReqId <= 0 || patientId <= 0) {
+                    alert('Task data missing (lab_req_id/patient_id).');
+                    return;
+                }
+
+                var origHtmlTask = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Submitting…';
+
+                post('<?= base_url('AbdmGateway/share_diagnosis_report_bundle') ?>', {
+                    lab_req_id: labReqId,
+                    patient_id: patientId,
+                    abha_id: _fhirSubmitAbha,
+                    consent_handle: ''
+                }, function (res) {
+                    btn.disabled = false;
+                    btn.innerHTML = origHtmlTask;
+
+                    if (!res || parseInt(res.ok || '0', 10) !== 1) {
+                        var err = (res && (res.error || res.error_text || res.message)) ? (res.error || res.error_text || res.message) : 'Gateway submit failed';
+                        setStatus(err, true);
+                        alert('Submission failed:\n' + err);
+                        return;
+                    }
+
+                    var queueText = res.queue_id ? (' Queue ID: ' + res.queue_id) : '';
+                    setStatus('Submitted to ABDM gateway.' + queueText);
+                    var badge = _fhirSubmitTaskRow.querySelector('.status-pill');
+                    if (badge) {
+                        badge.textContent = 'IN_PROGRESS';
+                        badge.className = 'badge bg-info status-pill';
+                    }
+                    alert('Submitted to ABDM gateway.' + queueText);
+                    if (res.queue_id) {
+                        var logUrl = '<?= base_url('AbdmBridgeLog') ?>' + '?search=' + encodeURIComponent(res.queue_id);
+                        window.open(logUrl, '_blank');
+                    }
+                    fhirPreviewModal.hide();
+                });
+                return;
+            }
+
+            runAction(_fhirSubmitTaskRow, 'submit', _fhirSubmitAbha);
+            fhirPreviewModal.hide();
+            return;
+        }
+
         if (_fhirOpdId <= 0) { alert('No FHIR bundle loaded.'); return; }
         if (!confirm('Submit FHIR bundle for OPD #' + _fhirOpdId + ' to ABDM bridge?')) return;
         var origHtml = btn.innerHTML;
