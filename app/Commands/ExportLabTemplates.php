@@ -65,11 +65,28 @@ class ExportLabTemplates extends BaseCommand
             orderBy:     'id ASC',
         );
 
+        // Include loinc_code only if the column exists (migration may not have run on all environments)
+        $repoFields  = $this->db->getFieldNames('lab_repo')  ?? [];
+        $testFields  = $this->db->getFieldNames('lab_tests') ?? [];
+
+        $labRepoCols = ['mstRepoKey', 'Title', 'RTFData', 'HTMLData', 'GrpKey',
+                        'IncludeHeader', 'IncludeFooter', 'charge_id'];
+        if (in_array('loinc_code', $repoFields, true)) {
+            $labRepoCols[] = 'loinc_code';
+        }
+
+        $labTestsCols = ['mstTestKey', 'Test', 'TestID', 'Result', 'Options', 'Formula',
+                         'VRule', 'VMsg', 'Unit', 'FixedNormals', 'isGenderSpecific', 'FixedNormalsWomen'];
+        foreach (['loinc_code', 'loinc_property', 'loinc_system', 'loinc_scale'] as $col) {
+            if (in_array($col, $testFields, true)) {
+                $labTestsCols[] = $col;
+            }
+        }
+
         $this->exportTable(
             filename:    '03_lab_repo.sql',
             table:       'lab_repo',
-            columns:     ['mstRepoKey', 'Title', 'RTFData', 'HTMLData', 'GrpKey',
-                          'IncludeHeader', 'IncludeFooter', 'charge_id'],
+            columns:     $labRepoCols,
             schema:      $this->schemaLabRepo(),
             orderBy:     'mstRepoKey ASC',
         );
@@ -77,8 +94,7 @@ class ExportLabTemplates extends BaseCommand
         $this->exportTable(
             filename:    '04_lab_tests.sql',
             table:       'lab_tests',
-            columns:     ['mstTestKey', 'Test', 'TestID', 'Result', 'Options', 'Formula',
-                          'VRule', 'VMsg', 'Unit', 'FixedNormals', 'isGenderSpecific', 'FixedNormalsWomen'],
+            columns:     $labTestsCols,
             schema:      $this->schemaLabTests(),
             orderBy:     'mstTestKey ASC',
         );
@@ -244,6 +260,8 @@ CREATE TABLE IF NOT EXISTS `lab_repo` (
   `IncludeHeader` tinyint(1) DEFAULT '1',
   `IncludeFooter` tinyint(1) DEFAULT '1',
   `charge_id` int DEFAULT '0',
+  `loinc_code` varchar(20) DEFAULT NULL,
+  `loinc_synced_at` datetime DEFAULT NULL,
   PRIMARY KEY (`mstRepoKey`),
   UNIQUE KEY `Title` (`Title`),
   KEY `GrpKey` (`GrpKey`),
@@ -268,9 +286,15 @@ CREATE TABLE IF NOT EXISTS `lab_tests` (
   `FixedNormals` varchar(30) NOT NULL DEFAULT '0',
   `isGenderSpecific` int NOT NULL DEFAULT '0',
   `FixedNormalsWomen` varchar(30) NOT NULL,
+  `loinc_code` varchar(20) DEFAULT NULL,
+  `loinc_property` varchar(50) DEFAULT NULL,
+  `loinc_system` varchar(50) DEFAULT NULL,
+  `loinc_scale` varchar(20) DEFAULT NULL,
+  `loinc_synced_at` datetime DEFAULT NULL,
   PRIMARY KEY (`mstTestKey`),
   UNIQUE KEY `TestID` (`TestID`),
-  KEY `Test` (`Test`)
+  KEY `Test` (`Test`),
+  KEY `idx_lab_tests_loinc` (`loinc_code`)
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8mb3;
 SQL;
     }

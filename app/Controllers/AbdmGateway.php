@@ -144,15 +144,39 @@ class AbdmGateway extends BaseController
         ]);
 
         $queueId = null;
+        $gatewayConsentId = '';
         try {
             $result  = $this->connector->requestConsent($patientId, $abhaId, $purposeCode, $expiresAt, $consentHandle, $rawPayload);
             $queueId = $result['queue_id'] ?? null;
+            $gatewayConsentId = trim((string) ($result['gateway_consent_id'] ?? $result['consent_id'] ?? ''));
+
+            if ($gatewayConsentId !== '') {
+                $tableFields = $this->db->getFieldNames('abdm_consent_records') ?? [];
+                $updateData = [
+                    'updated_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
+                ];
+
+                // Persist gateway consent id when a compatible column exists.
+                if (in_array('consent_id', $tableFields, true)) {
+                    $updateData['consent_id'] = $gatewayConsentId;
+                } elseif (in_array('gateway_consent_id', $tableFields, true)) {
+                    $updateData['gateway_consent_id'] = $gatewayConsentId;
+                }
+
+                $rawPayload['gateway_consent_id'] = $gatewayConsentId;
+                $updateData['raw_payload_json'] = (string) json_encode($rawPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+                $this->db->table('abdm_consent_records')
+                    ->where('consent_handle', $consentHandle)
+                    ->update($updateData);
+            }
         } catch (\Throwable $e) {
         }
 
         return $this->response->setJSON([
             'ok' => 1,
             'consent_handle' => $consentHandle,
+            'gateway_consent_id' => $gatewayConsentId !== '' ? $gatewayConsentId : null,
             'queue_id' => $queueId,
             'status' => 'requested',
         ]);
@@ -177,6 +201,7 @@ class AbdmGateway extends BaseController
         $handle = trim((string) $payload['consent_handle']);
         $status = trim((string) ($payload['consent_status'] ?? 'approved'));
         $expiresAt = trim((string) ($payload['expires_at'] ?? ''));
+        $incomingConsentId = trim((string) ($payload['consent_id'] ?? $payload['gateway_consent_id'] ?? ''));
         $now = Time::now('Asia/Kolkata')->toDateTimeString();
 
         $existing = $this->db->table('abdm_consent_records')
@@ -229,11 +254,25 @@ class AbdmGateway extends BaseController
             'updated_at' => $now,
         ];
 
+        if ($incomingConsentId !== '') {
+            $tableFields = $this->db->getFieldNames('abdm_consent_records') ?? [];
+            if (in_array('consent_id', $tableFields, true)) {
+                $update['consent_id'] = $incomingConsentId;
+            } elseif (in_array('gateway_consent_id', $tableFields, true)) {
+                $update['gateway_consent_id'] = $incomingConsentId;
+            }
+        }
+
         $this->db->table('abdm_consent_records')
             ->where('consent_handle', $handle)
             ->update($update);
 
-        return $this->response->setJSON(['ok' => 1, 'consent_handle' => $handle, 'status' => $incomingStatus]);
+        return $this->response->setJSON([
+            'ok' => 1,
+            'consent_handle' => $handle,
+            'status' => $incomingStatus,
+            'gateway_consent_id' => $incomingConsentId !== '' ? $incomingConsentId : null,
+        ]);
     }
 
     public function scanShareLookup()
@@ -589,6 +628,7 @@ class AbdmGateway extends BaseController
             'patient_id' => $patientId,
             'abha_id' => $abhaId,
             'consent_handle' => (string) ($consent['consent_handle'] ?? ''),
+            'consent_id' => $this->resolveConsentExternalId($consent),
             'bundle_type' => (string) ($bundleRow['bundle_type'] ?? 'MedicationRequestBundle'),
             'bundle' => $bundle,
         ];
@@ -634,6 +674,7 @@ class AbdmGateway extends BaseController
             'ok' => 1,
             'queue_id' => $queueId,
             'consent_handle' => (string) ($consent['consent_handle'] ?? ''),
+            'gateway_consent_id' => $this->resolveConsentExternalId($consent) !== '' ? $this->resolveConsentExternalId($consent) : null,
             'status' => 'queued',
         ]);
     }
@@ -896,6 +937,22 @@ class AbdmGateway extends BaseController
             'report_html'  => trim((string) ($labReq->Report_Data ?? '')),
         ];
 
+        // ── Load LOINC code for the panel from lab_repo ───────────────────────
+        $labRepoRow = $this->db->table('lab_request lr')
+            ->select('lr.lab_repo_id, repo.loinc_code AS repo_loinc_code, repo.Title')
+            ->join('lab_repo repo', 'repo.mstRepoKey = lr.lab_repo_id', 'left')
+            ->where('lr.id', $labReqId)
+            ->get(1)
+            ->getRowArray() ?? [];
+
+        $repoLoincCode = trim((string) ($labRepoRow['repo_loinc_code'] ?? ''));
+        if ($repoLoincCode !== '') {
+            $diagnosticReport['loinc_code'] = $repoLoincCode;
+        }
+
+        // ── Build structured observations from lab_request_item + lab_tests ───
+        $observations = $this->buildLabObservations($labReqId, (string) ($labReq->status ?? '0'));
+
         $organization = $hospitalProfile['name'] !== ''
             ? ['name' => $hospitalProfile['name'], 'hfr_id' => $hospitalProfile['hfr_id']]
             : null;
@@ -907,7 +964,7 @@ class AbdmGateway extends BaseController
             'period_start' => $reportedAt,
         ];
 
-        $bundle     = $fhir->buildLabReportBundle($patient, $diagnosticReport, [], null, $organization, $encounter);
+        $bundle     = $fhir->buildLabReportBundle($patient, $diagnosticReport, $observations, null, $organization, $encounter);
         $bundleJson = (string) json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
         // ── Store health_record ───────────────────────────────────────────────
@@ -1991,6 +2048,142 @@ class AbdmGateway extends BaseController
     }
 
     /**
+     * Load lab_request_item rows for a lab request and build the structured
+     * observations array expected by FhirR4Builder::buildLabReportBundle().
+     *
+     * Each element contains:
+     *   test_name, loinc_code, value_type (quantity|string), value,
+     *   unit, ucum_code, ref_low, ref_high, interpretation, status
+     *
+     * @param int    $labReqId  lab_request.id
+     * @param string $status    raw status from lab_request.status
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildLabObservations(int $labReqId, string $status): array
+    {
+        if (! $this->db->tableExists('lab_request_item') || ! $this->db->tableExists('lab_tests')) {
+            return [];
+        }
+
+        $rows = $this->db->table('lab_request_item lri')
+            ->select(
+                'lri.lab_test_id, lri.lab_test_value, lri.lab_test_remark,' .
+                ' lt.Test, lt.Unit, lt.FixedNormals, lt.FixedNormalsWomen,' .
+                ' lt.loinc_code, lt.loinc_scale, lt.loinc_system, lt.loinc_property,' .
+                ' lt.isGenderSpecific'
+            )
+            ->join('lab_tests lt', 'lt.mstTestKey = lri.lab_test_id', 'left')
+            ->where('lri.lab_request_id', $labReqId)
+            ->orderBy('lri.id', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        if (empty($rows)) {
+            return [];
+        }
+
+        $obsStatus = ($status == '1') ? 'final' : 'preliminary';
+        $observations = [];
+
+        foreach ($rows as $row) {
+            $rawValue  = trim((string) ($row['lab_test_value'] ?? ''));
+            if ($rawValue === '' || strtolower($rawValue) === 'n/a') {
+                continue;
+            }
+
+            $testName  = trim((string) ($row['Test'] ?? ''));
+            $loincCode = trim((string) ($row['loinc_code'] ?? ''));
+            $unit      = trim((string) ($row['Unit'] ?? ''));
+            $scale     = strtolower(trim((string) ($row['loinc_scale'] ?? '')));
+
+            // Determine value type: Quantitative = numeric value
+            $isNumeric = is_numeric($rawValue) && $scale !== 'nom' && $scale !== 'ord';
+            $valueType = $isNumeric ? 'quantity' : 'string';
+
+            // Parse reference range from "low-high" format (e.g. "12.00-16.00")
+            $refLow = $refHigh = '';
+            $normals = trim((string) ($row['FixedNormals'] ?? ''));
+            if ($normals !== '' && str_contains($normals, '-')) {
+                $parts = explode('-', $normals, 2);
+                if (count($parts) === 2 && is_numeric(trim($parts[0])) && is_numeric(trim($parts[1]))) {
+                    $refLow  = trim($parts[0]);
+                    $refHigh = trim($parts[1]);
+                }
+            }
+
+            // Interpretation: H/L/N based on value vs reference range
+            $interpretation = 'N';
+            if ($isNumeric && $refLow !== '' && $refHigh !== '') {
+                $fVal = (float) $rawValue;
+                if ($fVal < (float) $refLow) {
+                    $interpretation = 'L';
+                } elseif ($fVal > (float) $refHigh) {
+                    $interpretation = 'H';
+                }
+            }
+
+            $obs = [
+                'test_name'      => $testName !== '' ? $testName : ('Test-' . $row['lab_test_id']),
+                'loinc_code'     => $loincCode,
+                'value_type'     => $valueType,
+                'value'          => $rawValue,
+                'unit'           => $unit,
+                'ucum_code'      => $this->unitToUcum($unit),
+                'ref_low'        => $refLow,
+                'ref_high'       => $refHigh,
+                'interpretation' => $interpretation,
+                'status'         => $obsStatus,
+            ];
+
+            if ($row['lab_test_remark'] !== '' && $row['lab_test_remark'] !== null) {
+                $obs['remark'] = trim((string) $row['lab_test_remark']);
+            }
+
+            $observations[] = $obs;
+        }
+
+        return $observations;
+    }
+
+    /**
+     * Best-effort map of common lab units to UCUM codes.
+     * Returns the original unit string when no UCUM equivalent is known.
+     */
+    private function unitToUcum(string $unit): string
+    {
+        $unit = trim($unit);
+        if ($unit === '') {
+            return '';
+        }
+
+        $map = [
+            'g/dl'      => 'g/dL',
+            'g/dL'      => 'g/dL',
+            'mg/dl'     => 'mg/dL',
+            'mg/dL'     => 'mg/dL',
+            'mg/l'      => 'mg/L',
+            'mmol/l'    => 'mmol/L',
+            'umol/l'    => 'umol/L',
+            'u/l'       => 'U/L',
+            'iu/l'      => 'IU/L',
+            'iu/ml'     => 'IU/mL',
+            'cells/cumm'=> '10*3/uL',
+            'cells/mm3' => '10*3/uL',
+            '10^9/l'    => '10*9/L',
+            '10^3/ul'   => '10*3/uL',
+            'fl'        => 'fL',
+            'pg'        => 'pg',
+            '%'         => '%',
+            'sec'       => 's',
+            'min'       => 'min',
+            'mmhg'      => 'mm[Hg]',
+            'meq/l'     => 'meq/L',
+        ];
+
+        return $map[strtolower($unit)] ?? $unit;
+    }
+
+    /**
      * Returns a lazily-constructed AbdmAuditService instance.
      */
     private function getAuditService(): AbdmAuditService
@@ -2024,19 +2217,50 @@ class AbdmGateway extends BaseController
         }
 
         $now = Time::now('Asia/Kolkata')->toDateTimeString();
+        $consentFields = $this->db->getFieldNames('abdm_consent_records') ?? [];
 
         $builder = $this->db->table('abdm_consent_records')
             ->where('patient_id', $patientId)
             ->where('abha_id', $abhaId)
-            ->where('status', 'GRANTED')
-            ->where('expiry_date >=', $now);
+            ->whereIn('consent_status', ['approved', 'granted'])
+            ->groupStart()
+                ->where('expires_at IS NULL', null, false)
+                ->orWhere('expires_at >=', $now)
+            ->groupEnd();
 
         if ($consentHandle !== '') {
-            $builder->where('consent_handle', $consentHandle);
+            $builder->groupStart()->where('consent_handle', $consentHandle);
+            if (in_array('consent_id', $consentFields, true)) {
+                $builder->orWhere('consent_id', $consentHandle);
+            }
+            if (in_array('gateway_consent_id', $consentFields, true)) {
+                $builder->orWhere('gateway_consent_id', $consentHandle);
+            }
+            $builder->groupEnd();
         }
 
         $row = $builder->orderBy('id', 'DESC')->get(1)->getRowArray();
         return ! empty($row) ? $row : null;
+    }
+
+    /**
+     * Pick the consent id expected by gateway: consent_id/gateway_consent_id fallback to consent_handle.
+     *
+     * @param array<string, mixed> $consent
+     */
+    private function resolveConsentExternalId(array $consent): string
+    {
+        $consentId = trim((string) ($consent['consent_id'] ?? ''));
+        if ($consentId !== '') {
+            return $consentId;
+        }
+
+        $gatewayConsentId = trim((string) ($consent['gateway_consent_id'] ?? ''));
+        if ($gatewayConsentId !== '') {
+            return $gatewayConsentId;
+        }
+
+        return trim((string) ($consent['consent_handle'] ?? ''));
     }
 
     // =========================================================================

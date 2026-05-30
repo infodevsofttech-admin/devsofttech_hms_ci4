@@ -178,6 +178,11 @@
                 <input type="text" class="form-control form-control-sm" id="tb_abdm_consent_handle" placeholder="Auto-filled after consent request">
             </div>
 
+            <div class="mb-2">
+                <label class="form-label mb-1 small">Gateway Consent ID</label>
+                <input type="text" class="form-control form-control-sm" id="tb_abdm_gateway_consent_id" placeholder="Auto-filled if returned by gateway" readonly>
+            </div>
+
             <div class="row g-2 mb-2">
                 <div class="col-md-7">
                     <input type="number" min="1" class="form-control form-control-sm" id="tb_abdm_claim_document_id" placeholder="Claim Document ID">
@@ -385,6 +390,7 @@
     var sandboxPurposeCodeInput = document.getElementById('tb_abdm_purpose_code');
     var sandboxConsentExpiresInput = document.getElementById('tb_abdm_consent_expires_at');
     var sandboxConsentHandleInput = document.getElementById('tb_abdm_consent_handle');
+    var sandboxGatewayConsentIdInput = document.getElementById('tb_abdm_gateway_consent_id');
     var sandboxClaimDocumentInput = document.getElementById('tb_abdm_claim_document_id');
     var quickOpdInput = null;
     var quickSessionInput = null;
@@ -725,6 +731,7 @@
         sandboxQrPayloadInput.value = '';
         sandboxPurposeCodeInput.value = sandboxPurposeCodeInput.value || 'CAREMGT';
         sandboxConsentHandleInput.value = '';
+        sandboxGatewayConsentIdInput.value = '';
         sandboxClaimDocumentInput.value = '';
         clearScanResolvePane();
 
@@ -1028,7 +1035,14 @@
             if (res.consent_handle) {
                 sandboxConsentHandleInput.value = (res.consent_handle || '').toString();
             }
-            setSandboxStatus('Consent requested. Handle: ' + (res.consent_handle || '-'), 'success');
+            if (res.gateway_consent_id) {
+                sandboxGatewayConsentIdInput.value = (res.gateway_consent_id || '').toString();
+            }
+            var statusText = 'Consent requested. Handle: ' + (res.consent_handle || '-');
+            if (res.gateway_consent_id) {
+                statusText += ' | Consent ID: ' + res.gateway_consent_id;
+            }
+            setSandboxStatus(statusText, 'success');
         });
     });
 

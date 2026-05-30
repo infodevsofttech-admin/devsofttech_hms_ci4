@@ -168,6 +168,59 @@
                 return true;
             }
 
+            function executeInjectedScripts(containerId) {
+                var container = document.getElementById(containerId);
+                if (!container) {
+                    return;
+                }
+
+                // Some pages (dashboard charts) can be reloaded into the same canvas IDs.
+                // Destroy existing chart instances before executing injected scripts.
+                if (window.Chart) {
+                    var canvases = container.querySelectorAll('canvas');
+                    canvases.forEach(function(canvasEl) {
+                        try {
+                            if (typeof window.Chart.getChart === 'function') {
+                                var existingChart = window.Chart.getChart(canvasEl);
+                                if (existingChart) {
+                                    existingChart.destroy();
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('Chart cleanup failed', e);
+                        }
+                    });
+                }
+
+                var scripts = container.querySelectorAll('script');
+                if (!scripts || scripts.length === 0) {
+                    return;
+                }
+
+                scripts.forEach(function(oldScript) {
+                    var newScript = document.createElement('script');
+
+                    for (var i = 0; i < oldScript.attributes.length; i++) {
+                        var attr = oldScript.attributes[i];
+                        newScript.setAttribute(attr.name, attr.value);
+                    }
+
+                    if (oldScript.src) {
+                        var existing = document.querySelector('script[src="' + oldScript.src + '"]');
+                        if (existing) {
+                            return;
+                        }
+                    } else {
+                        newScript.text = oldScript.textContent || oldScript.innerText || '';
+                    }
+
+                    document.head.appendChild(newScript);
+                    if (!oldScript.src) {
+                        document.head.removeChild(newScript);
+                    }
+                });
+            }
+
             function handleAuthError(jqXHR) {
                 if (jqXHR.status === 401 || jqXHR.status === 403) {
                     alert('You have been logged out. Please login again.');
@@ -187,21 +240,27 @@
                     }
                 }
                 $.ajax({
-                        url: ourl,
-                        dataType: "html",
-                        async: true,
-                            timeout: REQUEST_TIMEOUT_MS,
-                        beforeSend: function() {
-                            $('#main').html('loading...');
-                            $("#wait").css("display", "block");
-                        }
-                    })
+                    url: ourl,
+                    dataType: "html",
+                    async: true,
+                    timeout: REQUEST_TIMEOUT_MS,
+                    beforeSend: function() {
+                        $('#main').html('loading...');
+                        $("#wait").css("display", "block");
+                    }
+                })
                     .done(function(html) {
                         if (typeof delete_varible === 'function') {
                             delete_varible();
                         }
                         $("#wait").css("display", "none");
-                        $("#main").html(html);
+                        var mainEl = document.getElementById('main');
+                        if (mainEl) {
+                            mainEl.innerHTML = html;
+                        } else {
+                            $("#main").html(html);
+                        }
+                        executeInjectedScripts('main');
                         if (typeof initfunc === 'function') {
                             initfunc();
                         }
@@ -239,15 +298,20 @@
             window.load_form_div = function(ourl, xdiv, top_title = '') {
                 if (!requireJquery()) return;
                 $.ajax({
-                        url: ourl,
-                        dataType: "html",
-                    cache: false,
+                    url: ourl,
+                    dataType: "html",
                     cache: false,
                     async: true,
-                            timeout: REQUEST_TIMEOUT_MS
-                    })
+                    timeout: REQUEST_TIMEOUT_MS
+                })
                     .done(function(html) {
-                        $("#" + xdiv).html(html);
+                        var targetEl = document.getElementById(xdiv);
+                        if (targetEl) {
+                            targetEl.innerHTML = html;
+                        } else {
+                            $("#" + xdiv).html(html);
+                        }
+                        executeInjectedScripts(xdiv);
                         if (typeof initfunc === 'function') {
                             initfunc();
                         }
@@ -339,6 +403,158 @@
                 }
             };
         }
+    </script>
+    <script>
+        (function() {
+            if (!window.jQuery) {
+                return;
+            }
+
+            var SEARCH_URL = '<?= base_url('Lab_Admin/pathology_masters_search') ?>';
+            var debounceTimer = null;
+
+            function escHtml(str) {
+                return String(str || '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;');
+            }
+
+            function getModalEls() {
+                return {
+                    input: document.getElementById('add_panel_name'),
+                    list: document.getElementById('add-panel-suggestions'),
+                    spinner: document.getElementById('add-panel-search-spinner'),
+                    meta: document.getElementById('add-panel-master-meta')
+                };
+            }
+
+            function hideList() {
+                var els = getModalEls();
+                if (!els.list) {
+                    return;
+                }
+                els.list.style.display = 'none';
+                els.list.innerHTML = '';
+            }
+
+            function renderList(items) {
+                var els = getModalEls();
+                if (!els.list) {
+                    return;
+                }
+
+                els.list.innerHTML = '';
+                if (!items || items.length === 0) {
+                    hideList();
+                    return;
+                }
+
+                items.forEach(function(item) {
+                    var btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+                    btn.innerHTML = '<span>' + escHtml(item.name || item.test_name || '') + '</span>'
+                        + (item.loinc_code ? '<span class="badge bg-success ms-2">' + escHtml(item.loinc_code) + '</span>' : '<span class="badge bg-light text-muted border ms-2">No LOINC</span>');
+
+                    btn.addEventListener('click', function() {
+                        if (els.input) {
+                            els.input.value = String(item.test_name || item.name || '').trim();
+                        }
+                        if (els.meta) {
+                            els.meta.innerHTML = 'Selected from ABDM API: ' + escHtml(item.test_name || item.name || '');
+                        }
+                        hideList();
+                    });
+
+                    els.list.appendChild(btn);
+                });
+
+                els.list.style.display = 'block';
+            }
+
+            $(document)
+                .off('input.abdmPanelSearch', '#add_panel_name')
+                .on('input.abdmPanelSearch', '#add_panel_name', function() {
+                    clearTimeout(debounceTimer);
+
+                    var q = String(this.value || '').trim();
+                    var els = getModalEls();
+
+                    if (q.length < 2) {
+                        hideList();
+                        if (els.meta) {
+                            els.meta.innerHTML = 'Type at least 2 letters to live-search panel templates from ABDM Gateway API.';
+                        }
+                        return;
+                    }
+
+                    if (els.spinner) {
+                        els.spinner.classList.remove('d-none');
+                    }
+                    if (els.meta) {
+                        els.meta.innerHTML = 'Searching panel templates from ABDM Gateway API...';
+                    }
+
+                    debounceTimer = setTimeout(function() {
+                        $.ajax({
+                            url: SEARCH_URL,
+                            method: 'GET',
+                            dataType: 'json',
+                            data: { q: q, source: 'api', panel_only: 1 },
+                            cache: false,
+                            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                        })
+                        .done(function(payload) {
+                            if (els.spinner) {
+                                els.spinner.classList.add('d-none');
+                            }
+
+                            if (payload && !Array.isArray(payload) && Number(payload.ok || 0) === 0) {
+                                hideList();
+                                if (els.meta) {
+                                    els.meta.innerHTML = 'Search failed: ' + escHtml(payload.error || 'Gateway API search failed');
+                                }
+                                return;
+                            }
+
+                            var items = Array.isArray(payload)
+                                ? payload
+                                : (payload && Array.isArray(payload.items) ? payload.items : []);
+
+                            renderList(items);
+                            if (els.meta) {
+                                els.meta.innerHTML = items.length > 0
+                                    ? ('Found ' + items.length + ' API matches')
+                                    : ('No API matches for "' + escHtml(q) + '"');
+                            }
+                        })
+                        .fail(function(jqXHR, textStatus) {
+                            if (els.spinner) {
+                                els.spinner.classList.add('d-none');
+                            }
+                            hideList();
+                            if (els.meta) {
+                                els.meta.innerHTML = 'API search request failed (' + escHtml(textStatus || 'error') + ').';
+                            }
+                        });
+                    }, 280);
+                });
+
+            $(document)
+                .off('click.abdmPanelSearchDoc')
+                .on('click.abdmPanelSearchDoc', function(e) {
+                    var input = document.getElementById('add_panel_name');
+                    var list = document.getElementById('add-panel-suggestions');
+                    if (!input || !list) {
+                        return;
+                    }
+                    if (!input.contains(e.target) && !list.contains(e.target)) {
+                        hideList();
+                    }
+                });
+        })();
     </script>
 </body>
 

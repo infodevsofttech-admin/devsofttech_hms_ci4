@@ -825,11 +825,23 @@ $routes->get('Lab_Admin/print_pdf_create/(:num)/(:num)/(:num)', 'Diagnosis::prin
 $routes->get('Lab_Admin/print_pdf_create/(:num)/(:num)/(:num)/(:num)', 'Diagnosis::printPdfCreate/$1/$2/$3/$4');
 $routes->post('Lab_Admin/report_update', 'Setting\Template::report_update');
 $routes->post('Lab_Admin/report_insert', 'Setting\Template::report_insert');
+$routes->post('Lab_Admin/report_delete/(:num)', 'Setting\Template::report_delete/$1');
 $routes->post('Lab_Admin/report_ultrasound_insert/(:num)', 'Setting\Template::report_ultrasound_insert/$1');
 $routes->post('Lab_Admin/report_ultrasound_update/(:num)', 'Setting\Template::report_ultrasound_update/$1');
 $routes->post('Lab_Admin/add_test_repo/(:num)/(:num)', 'Setting\Template::add_test_repo/$1/$2');
 $routes->post('Lab_Admin/remove_test_item/(:num)/(:num)', 'Setting\Template::remove_test_item/$1/$2');
 $routes->post('Lab_Admin/test_item_search', 'Setting\Template::test_item_search');
+
+// LOINC Mapping Admin
+$routes->get('Lab_Admin/loinc_panel', 'Setting\Template::loincPanel');
+$routes->post('Lab_Admin/loinc_sync', 'Setting\Template::loincSync');
+$routes->post('Lab_Admin/loinc_update', 'Setting\Template::loincUpdate');
+$routes->get('Lab_Admin/pathology_masters_search', 'Setting\Template::pathologyMastersSearch');
+$routes->get('Lab_Admin/pathology_component_masters_search', 'Setting\Template::pathologyComponentMastersSearch');
+$routes->get('Lab_Admin/pathology_master_template', 'Setting\Template::pathologyMasterTemplate');
+$routes->post('Lab_Admin/pathology_master_apply_panel', 'Setting\Template::pathologyMasterApplyPanel');
+$routes->post('Lab_Admin/pathology_master_add_component', 'Setting\Template::pathologyMasterAddComponent');
+$routes->get('Lab_Admin/pathology_bridge_debug', 'Setting\Template::pathologyBridgeDebug');
 
 $routes->match(['get', 'post'], 'setting/template/discharge_templates', 'Setting\Template::discharge_templates');
 $routes->get('setting/template/discharge_templates/delete/(:num)', 'Setting\Template::discharge_template_delete/$1');

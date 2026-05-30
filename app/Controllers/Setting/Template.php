@@ -144,6 +144,211 @@ HTML;
         return $this->requirePermission($permission);
     }
 
+    private function resolveBridgeGatewayConfig(): array
+    {
+        $gwUrl   = '';
+        $gwToken = '';
+        $hfrId   = '';
+
+        if ($this->db->tableExists('hospital_setting')) {
+            $hsRows = $this->db->table('hospital_setting')
+                ->select('s_name, s_value')
+                ->whereIn('s_name', ['EATRIA_BRIDGE_URL', 'EATRIA_BRIDGE_TOKEN', 'ABDM_HFR_ID'])
+                ->get()
+                ->getResultArray();
+
+            foreach ($hsRows as $hsRow) {
+                $sName  = (string) ($hsRow['s_name'] ?? '');
+                $sValue = trim((string) ($hsRow['s_value'] ?? ''));
+
+                if ($sName === 'EATRIA_BRIDGE_URL') {
+                    $gwUrl = $sValue;
+                }
+                if ($sName === 'EATRIA_BRIDGE_TOKEN') {
+                    $gwToken = $sValue;
+                }
+                if ($sName === 'ABDM_HFR_ID') {
+                    $hfrId = $sValue;
+                }
+            }
+        }
+
+        return [
+            'url' => rtrim($gwUrl !== '' ? $gwUrl : 'https://abdm-bridge.e-atria.in/api', '/'),
+            'token' => $gwToken,
+            'hfr_id' => $hfrId,
+        ];
+    }
+
+    private function bridgeGet(string $baseUrl, string $token, string $path, array $query = []): array
+    {
+        $base = rtrim($baseUrl, '/');
+        $normalizedPath = '/' . ltrim($path, '/');
+
+        $baseHasApiSuffix = (bool) preg_match('#/api$#i', $base);
+        $pathHasApiPrefix = str_starts_with($normalizedPath, '/api/');
+
+        // Support both config styles:
+        // 1) baseUrl = https://host/api + path=/v3/...
+        // 2) baseUrl = https://host     + path=/api/v3/...
+        if ($baseHasApiSuffix && $pathHasApiPrefix) {
+            $normalizedPath = substr($normalizedPath, 4); // drop leading /api
+            if ($normalizedPath === '') {
+                $normalizedPath = '/';
+            }
+        } elseif (! $baseHasApiSuffix && ! $pathHasApiPrefix) {
+            $normalizedPath = '/api' . $normalizedPath;
+        }
+
+        $url = $base . $normalizedPath;
+        if (! empty($query)) {
+            $url .= '?' . http_build_query($query);
+        }
+
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 20,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_HTTPHEADER => [
+                'Accept: application/json',
+                'Authorization: Bearer ' . $token,
+            ],
+        ]);
+
+        $raw = (string) curl_exec($ch);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr = (string) curl_error($ch);
+        curl_close($ch);
+
+        $decoded = json_decode($raw, true);
+
+        return [
+            'url' => $url,
+            'http_code' => $httpCode,
+            'curl_error' => $curlErr,
+            'raw' => $raw,
+            'json' => is_array($decoded) ? $decoded : [],
+        ];
+    }
+
+    private function escHtmlValue(string $value): string
+    {
+        return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+    }
+
+    private function buildPathologyMasterTemplateHtml(string $panelName, array $components): string
+    {
+        $safePanel = $this->escHtmlValue(trim($panelName) !== '' ? $panelName : 'Pathology Panel');
+
+        if (empty($components)) {
+            return '<p><strong>' . $safePanel . '</strong></p>'
+                . '<p><em>No component rows returned from gateway master mapping.</em></p>';
+        }
+
+        $rows = '';
+        foreach ($components as $component) {
+            $componentName = $this->escHtmlValue((string) ($component['component_test_name'] ?? ''));
+            $componentCode = $this->escHtmlValue((string) ($component['component_code'] ?? ''));
+            $unit          = $this->escHtmlValue((string) ($component['unit'] ?? ''));
+            $property      = $this->escHtmlValue((string) ($component['component_property'] ?? ''));
+            $system        = $this->escHtmlValue((string) ($component['component_system'] ?? ''));
+            $scale         = $this->escHtmlValue((string) ($component['component_scale'] ?? ''));
+
+            $metaBits = [];
+            if ($componentCode !== '') {
+                $metaBits[] = 'LOINC ' . $componentCode;
+            }
+            if ($property !== '') {
+                $metaBits[] = $property;
+            }
+            if ($system !== '') {
+                $metaBits[] = $system;
+            }
+            if ($scale !== '') {
+                $metaBits[] = $scale;
+            }
+
+            $metaText = $this->escHtmlValue(implode(' | ', $metaBits));
+
+            $rows .= '<tr>'
+                . '<td>' . ($componentName !== '' ? $componentName : '&nbsp;') . '</td>'
+                . '<td style="text-align:center;">&nbsp;</td>'
+                . '<td style="text-align:center;">' . ($unit !== '' ? $unit : '&nbsp;') . '</td>'
+                . '<td style="text-align:center;">&nbsp;</td>'
+                . '<td style="font-size:11px;">' . ($metaText !== '' ? $metaText : '&nbsp;') . '</td>'
+                . '</tr>';
+        }
+
+        return '<p><strong>' . $safePanel . '</strong></p>'
+            . '<table style="width:100%;border-collapse:collapse;font-size:12px;" border="1" cellpadding="6" cellspacing="0">'
+            . '<thead>'
+            . '<tr style="background:#f4f6f8;">'
+            . '<th style="text-align:left;">Investigation</th>'
+            . '<th style="text-align:center;">Result</th>'
+            . '<th style="text-align:center;">Unit</th>'
+            . '<th style="text-align:center;">Reference Range</th>'
+            . '<th style="text-align:left;">Code / Property</th>'
+            . '</tr>'
+            . '</thead>'
+            . '<tbody>' . $rows . '</tbody>'
+            . '</table>';
+    }
+
+    private function normalizePanelTokenCode(string $raw, int $fallbackIndex = 0): string
+    {
+        $code = strtoupper(trim($raw));
+        $code = preg_replace('/[^A-Z0-9]/', '', $code) ?? '';
+
+        if ($code === '') {
+            $code = 'T' . max(1, $fallbackIndex);
+        }
+
+        if (strlen($code) > 24) {
+            $code = substr($code, 0, 24);
+        }
+
+        return $code;
+    }
+
+    private function buildPathologyPanelTokenTemplateHtml(string $panelName, array $tests): string
+    {
+        $safePanel = $this->escHtmlValue(trim($panelName) !== '' ? $panelName : 'Pathology Panel');
+
+        $rows = '';
+        foreach ($tests as $row) {
+            $name = $this->escHtmlValue((string) ($row['test_name'] ?? ''));
+            $tokenCode = $this->normalizePanelTokenCode((string) ($row['test_code'] ?? ''));
+            $token = '{' . $tokenCode . '}';
+            $unit = $this->escHtmlValue((string) ($row['unit'] ?? ''));
+
+            $rows .= '<tr>'
+                . '<td>' . ($name !== '' ? $name : '&nbsp;') . '</td>'
+                . '<td>' . $this->escHtmlValue($token) . '</td>'
+                . '<td>' . ($unit !== '' ? $unit : '&nbsp;') . '</td>'
+                . '<td>&nbsp;</td>'
+                . '</tr>';
+        }
+
+        if ($rows === '') {
+            $rows = '<tr><td colspan="4"><em>No panel components available.</em></td></tr>';
+        }
+
+        return '<p><strong>' . $safePanel . '</strong></p>'
+            . '<table style="width:100%;border-collapse:collapse;font-size:12px;" border="1" cellpadding="6" cellspacing="0">'
+            . '<thead>'
+            . '<tr style="background:#f4f6f8;">'
+            . '<th style="text-align:left;">Test Name</th>'
+            . '<th style="text-align:left;">Result</th>'
+            . '<th style="text-align:left;">Unit</th>'
+            . '<th style="text-align:left;">Bio. Ref. Interval</th>'
+            . '</tr>'
+            . '</thead>'
+            . '<tbody>' . $rows . '</tbody>'
+            . '</table>';
+    }
+
     public function index()
     {
         if ($resp = $this->requireAnyPermission(self::PERMISSIONS)) {
@@ -159,15 +364,59 @@ HTML;
             return $resp;
         }
 
-                $sql = "select COALESCE(g.RepoGrp, 'Unassigned') as RepoGrp, r.Title, r.mstRepoKey
-                        from lab_repo r
-                        left join hc_items i on r.charge_id = i.id
-                        left join lab_rgroups g on r.GrpKey = g.mstRGrpKey
-                        where r.mstRepoKey > 0
-                            and (i.id is null or i.itype in (5,6))
-                        order by r.mstRepoKey asc";
+        $repoColumnsRows = $this->db->query('SHOW COLUMNS FROM lab_repo')->getResultArray();
+        $itemColumnsRows = $this->db->query('SHOW COLUMNS FROM hc_items')->getResultArray();
+        $repoColumns = array_column($repoColumnsRows, 'Field');
+        $itemColumns = array_column($itemColumnsRows, 'Field');
+
+        $updatedExpr = 'NULL';
+        foreach (['updated_at', 'modified_at', 'loinc_synced_at', 'created_at'] as $column) {
+            if (in_array($column, $repoColumns, true)) {
+                $updatedExpr = 'r.' . $column;
+                break;
+            }
+        }
+
+        $activeExpr = '1';
+        if (in_array('active', $repoColumns, true)) {
+            $activeExpr = 'CASE WHEN COALESCE(r.active,1)=1 THEN 1 ELSE 0 END';
+        } elseif (in_array('status', $repoColumns, true)) {
+            $activeExpr = 'CASE WHEN COALESCE(r.status,1)=1 THEN 1 ELSE 0 END';
+        } elseif (in_array('active', $itemColumns, true)) {
+            $activeExpr = 'CASE WHEN COALESCE(i.active,1)=1 THEN 1 ELSE 0 END';
+        }
+
+        $sql = "select r.mstRepoKey as panel_id,
+                       COALESCE(r.Title, '') as panel_name,
+                       'PANEL' as panel_type,
+                       COALESCE(g.RepoGrp, 'General') as test_type,
+                       COALESCE(r.Title, '') as description,
+                       COALESCE(x.items_count, 0) as items_count,
+                       {$activeExpr} as is_active,
+                       {$updatedExpr} as updated_on
+                from lab_repo r
+                left join hc_items i on r.charge_id = i.id
+                left join lab_rgroups g on r.GrpKey = g.mstRGrpKey
+                left join (
+                    select mstRepoKey, count(*) as items_count
+                    from lab_repotests
+                    group by mstRepoKey
+                ) x on x.mstRepoKey = r.mstRepoKey
+                where r.mstRepoKey > 0
+                  and (i.id is null or i.itype in (5,6))
+                order by r.mstRepoKey asc";
         $query = $this->db->query($sql);
         $data['labReport_master'] = $query->getResult();
+
+        $groupQuery = $this->db->query('select mstRGrpKey, RepoGrp from lab_rgroups order by RepoGrp asc');
+        $data['lab_rgroups'] = $groupQuery->getResult();
+
+                $chargeQuery = $this->db->query("select id, idesc, amount
+                        from hc_items
+                        where itype in (5,6)
+                            and id not in (select charge_id from lab_repo where charge_id > 0)
+                        order by idesc asc");
+                $data['charge_items'] = $chargeQuery->getResult();
 
         return view('PathLab_Report/lab_report_list', $data);
     }
@@ -192,13 +441,33 @@ HTML;
             return $resp;
         }
 
-        $sql = "select j.id, r.mstRepoKey, t.mstTestKey, t.Test, t.TestID, t.Result, j.EOrder
+        $testColumnsRows = $this->db->query('SHOW COLUMNS FROM lab_tests')->getResultArray();
+        $testColumns = array_column($testColumnsRows, 'Field');
+        $codeExpr = in_array('loinc_code', $testColumns, true) ? 'COALESCE(t.loinc_code, "")' : '""';
+
+        $sql = "select j.id,
+                       r.mstRepoKey,
+                       COALESCE(r.Title, '') as panel_name,
+                       t.mstTestKey,
+                       t.Test,
+                       COALESCE(t.TestID, '') as short_name,
+                       {$codeExpr} as component_code,
+                       t.Result,
+                       j.EOrder
             from lab_repo r join lab_repotests j join lab_tests t
             on r.mstRepoKey=j.mstRepoKey and j.mstTestKey=t.mstTestKey
             where r.mstRepoKey=" . (int) $repoId . " order by j.EOrder";
         $query = $this->db->query($sql);
         $data['lab_Rep_Item_List'] = $query->getResult();
         $data['mstRepoKey'] = $repoId;
+        $data['panel_name'] = count($data['lab_Rep_Item_List']) > 0
+            ? (string) ($data['lab_Rep_Item_List'][0]->panel_name ?? '')
+            : '';
+
+        if ($data['panel_name'] === '') {
+            $nameRow = $this->db->table('lab_repo')->select('Title')->where('mstRepoKey', $repoId)->get()->getRow();
+            $data['panel_name'] = (string) ($nameRow->Title ?? '');
+        }
 
         return view('PathLab_Report/lab_report_test_list', $data);
     }
@@ -290,6 +559,12 @@ HTML;
 
         $data['repo_id'] = $repoId;
 
+        // Pass LOINC code for pre-filling the field
+        $data['repo_loinc_code'] = '';
+        if (! empty($data['labReport_master'])) {
+            $data['repo_loinc_code'] = (string) ($data['labReport_master'][0]->loinc_code ?? '');
+        }
+
         return view('PathLab_Report/lab_report_edit', $data);
     }
 
@@ -348,11 +623,12 @@ HTML;
 
         $pathLab = new PathLabModel();
         $pathLab->updateReport([
-            'Title' => $inputReportName,
-            'GrpKey' => $groupId,
-            'charge_id' => $chargeId,
-            'HTMLData' => $htmlData,
-            'RTFData' => $htmlData,
+            'Title'      => $inputReportName,
+            'GrpKey'     => $groupId,
+            'charge_id'  => $chargeId,
+            'HTMLData'   => $htmlData,
+            'RTFData'    => $htmlData,
+            'loinc_code' => trim((string) $this->request->getPost('loinc_code')),
         ], $repoId);
 
         return $this->response->setJSON([
@@ -395,16 +671,55 @@ HTML;
 
         $pathLab = new PathLabModel();
         $insertId = $pathLab->insertReport([
-            'Title' => $inputReportName,
-            'GrpKey' => $groupId,
-            'charge_id' => $chargeId,
-            'HTMLData' => $htmlData,
-            'RTFData' => $htmlData,
+            'Title'      => $inputReportName,
+            'GrpKey'     => $groupId,
+            'charge_id'  => $chargeId,
+            'HTMLData'   => $htmlData,
+            'RTFData'    => $htmlData,
+            'loinc_code' => trim((string) $this->request->getPost('loinc_code')),
         ]);
 
         return $this->response->setJSON([
             'insertid' => $insertId,
             'showcontent' => $insertId > 0 ? 'Data Saved successfully' : 'Unable to save data',
+        ]);
+    }
+
+    public function report_delete(int $repoId = 0)
+    {
+        if ($resp = $this->requirePermission('template.pathology')) {
+            return $resp;
+        }
+
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
+                'error' => 'Invalid request',
+            ]);
+        }
+
+        if ($repoId <= 0) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
+                'error' => 'Invalid report ID',
+            ]);
+        }
+
+        $this->db->transStart();
+        $this->db->table('lab_repotests')->where('mstRepoKey', $repoId)->delete();
+        $this->db->table('lab_repo')->where('mstRepoKey', $repoId)->delete();
+        $this->db->transComplete();
+
+        if (! $this->db->transStatus()) {
+            return $this->response->setStatusCode(500)->setJSON([
+                'ok' => 0,
+                'error' => 'Failed to delete panel',
+            ]);
+        }
+
+        return $this->response->setJSON([
+            'ok' => 1,
+            'message' => 'Panel deleted successfully',
         ]);
     }
 
@@ -522,6 +837,19 @@ HTML;
             'FixedNormalsWomen' => (string) $this->request->getPost('input_FixedNormalsWomen'),
         ];
 
+        if ($this->db->fieldExists('loinc_code', 'lab_tests')) {
+            $data['loinc_code'] = trim((string) $this->request->getPost('input_loinc_code'));
+        }
+        if ($this->db->fieldExists('loinc_property', 'lab_tests')) {
+            $data['loinc_property'] = trim((string) $this->request->getPost('input_loinc_property'));
+        }
+        if ($this->db->fieldExists('loinc_system', 'lab_tests')) {
+            $data['loinc_system'] = trim((string) $this->request->getPost('input_loinc_system'));
+        }
+        if ($this->db->fieldExists('loinc_scale', 'lab_tests')) {
+            $data['loinc_scale'] = trim((string) $this->request->getPost('input_loinc_scale'));
+        }
+
         $pathLab->updateItemParameter($data, $mstTestKey);
 
         return $this->response->setJSON([
@@ -554,6 +882,19 @@ HTML;
             'Unit' => (string) $this->request->getPost('input_Unit'),
             'FixedNormals' => (string) $this->request->getPost('input_Fixed'),
         ];
+
+        if ($this->db->fieldExists('loinc_code', 'lab_tests')) {
+            $data['loinc_code'] = trim((string) $this->request->getPost('input_loinc_code'));
+        }
+        if ($this->db->fieldExists('loinc_property', 'lab_tests')) {
+            $data['loinc_property'] = trim((string) $this->request->getPost('input_loinc_property'));
+        }
+        if ($this->db->fieldExists('loinc_system', 'lab_tests')) {
+            $data['loinc_system'] = trim((string) $this->request->getPost('input_loinc_system'));
+        }
+        if ($this->db->fieldExists('loinc_scale', 'lab_tests')) {
+            $data['loinc_scale'] = trim((string) $this->request->getPost('input_loinc_scale'));
+        }
 
         $insertId = $pathLab->insertItemParameter($data);
 
@@ -721,6 +1062,1092 @@ HTML;
 
         return $this->response->setBody($html);
     }
+
+    // -------------------------------------------------------------------------
+    // LOINC Mapping Admin
+    // -------------------------------------------------------------------------
+
+    /**
+     * GET Lab_Admin/loinc_panel
+     * Show all lab panels (lab_repo) and their tests (lab_tests) with LOINC codes.
+     */
+    public function loincPanel()
+    {
+        if ($resp = $this->requirePermission('template.pathology')) {
+            return $resp;
+        }
+
+        $panels = $this->db->table('lab_repo')
+            ->select('mstRepoKey, Title, loinc_code, loinc_synced_at')
+            ->orderBy('Title', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        $tests = $this->db->table('lab_tests lt')
+            ->select('lt.mstTestKey, lt.Test, lt.Unit, lt.loinc_code, lt.loinc_property, lt.loinc_system, lt.loinc_scale, lt.loinc_synced_at, lrt.mstRepoKey')
+            ->join('lab_repotests lrt', 'lrt.mstTestKey = lt.mstTestKey', 'left')
+            ->orderBy('lrt.mstRepoKey, lrt.EOrder', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        // Group tests by repo id
+        $testsByRepo = [];
+        foreach ($tests as $t) {
+            $rid = (int) ($t['mstRepoKey'] ?? 0);
+            $testsByRepo[$rid][] = $t;
+        }
+
+        $data = [
+            'title'       => 'LOINC Mapping — Pathology',
+            'panels'      => $panels,
+            'testsByRepo' => $testsByRepo,
+        ];
+
+        return view('PathLab_Report/loinc_panel', $data);
+    }
+
+    /**
+     * POST Lab_Admin/loinc_sync  (AJAX)
+     * Trigger incremental LOINC sync from Bridge API via the Spark command.
+     * Runs synchronously for up to 60 s — suitable for admin-initiated syncs.
+     */
+    public function loincSync()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(403)->setJSON(['ok' => 0, 'error' => 'AJAX only']);
+        }
+        if ($resp = $this->requirePermission('template.pathology')) {
+            return $resp;
+        }
+
+        $since = trim((string) ($this->request->getPost('since') ?? ''));
+
+        // Build command
+        $sparkPath = ROOTPATH . 'spark';
+        $cmd = PHP_BINARY . ' ' . escapeshellarg($sparkPath) . ' abdm:sync-pathology-loinc';
+        if ($since !== '') {
+            $cmd .= ' --since=' . escapeshellarg($since);
+        }
+
+        $output = [];
+        $exitCode = 0;
+        exec($cmd . ' 2>&1', $output, $exitCode);
+
+        return $this->response->setJSON([
+            'ok'       => $exitCode === 0 ? 1 : 0,
+            'output'   => implode("\n", $output),
+            'exitCode' => $exitCode,
+        ]);
+    }
+
+    /**
+     * POST Lab_Admin/loinc_update  (AJAX)
+     * Manually update LOINC code for a single lab_test or lab_repo record.
+     *
+     * POST params:
+     *   type      = 'test' | 'panel'
+     *   id        = mstTestKey | mstRepoKey
+     *   loinc_code, loinc_property, loinc_system, loinc_scale  (test only)
+     */
+    public function loincUpdate()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(403)->setJSON(['ok' => 0, 'error' => 'AJAX only']);
+        }
+        if ($resp = $this->requirePermission('template.pathology')) {
+            return $resp;
+        }
+
+        $type      = trim((string) ($this->request->getPost('type') ?? ''));
+        $id        = (int) ($this->request->getPost('id') ?? 0);
+        $loincCode = trim((string) ($this->request->getPost('loinc_code') ?? ''));
+
+        if ($id <= 0 || ! in_array($type, ['test', 'panel'], true)) {
+            return $this->response->setJSON(['ok' => 0, 'error' => 'Invalid parameters']);
+        }
+
+        $now = date('Y-m-d H:i:s');
+
+        if ($type === 'panel') {
+            $this->db->table('lab_repo')->where('mstRepoKey', $id)->update([
+                'loinc_code'      => $loincCode,
+                'loinc_synced_at' => $now,
+            ]);
+        } else {
+            $this->db->table('lab_tests')->where('mstTestKey', $id)->update([
+                'loinc_code'      => $loincCode,
+                'loinc_property'  => trim((string) ($this->request->getPost('loinc_property') ?? '')),
+                'loinc_system'    => trim((string) ($this->request->getPost('loinc_system') ?? '')),
+                'loinc_scale'     => trim((string) ($this->request->getPost('loinc_scale') ?? '')),
+                'loinc_synced_at' => $now,
+            ]);
+        }
+
+        return $this->response->setJSON(['ok' => 1]);
+    }
+
+    /**
+     * GET Lab_Admin/pathology_masters_search?q=CBC
+     * Returns JSON list of matching panel names (+ LOINC codes).
+     * Uses the same direct-curl pattern as Medical::fetchAllGatewayDrugMasters().
+     * Falls back to local lab_repo search if Bridge API is unavailable/unconfigured.
+     */
+    public function pathologyMastersSearch()
+    {
+        if ($resp = $this->requirePermission('template.pathology')) {
+            return $resp;
+        }
+
+        $q = trim((string) ($this->request->getGet('q') ?? ''));
+        $subCategory = trim((string) ($this->request->getGet('sub_category') ?? ''));
+        $source = strtolower(trim((string) ($this->request->getGet('source') ?? '')));
+        $bridgeOnly = in_array($source, ['api', 'bridge', 'gateway', 'bridge_only'], true);
+        $panelOnly = in_array(strtolower(trim((string) ($this->request->getGet('panel_only') ?? ''))), ['1', 'true', 'yes'], true);
+        if (strlen($q) < 1) {
+            return $this->response->setJSON([]);
+        }
+
+        $results = [];
+        $bridgeAttempted = false;
+        $bridgeError = '';
+        $bridgeHttpCode = 0;
+        $bridgeUrl = '';
+        $bridgeRaw = '';
+        $mastersSucceeded = false;
+
+        $gw = $this->resolveBridgeGatewayConfig();
+        $gwUrl = (string) ($gw['url'] ?? '');
+        $gwToken = (string) ($gw['token'] ?? '');
+        $hfrId = (string) ($gw['hfr_id'] ?? '');
+
+        // ── Try Bridge API ────────────────────────────────────────────────────
+        if ($gwToken !== '') {
+            try {
+                $bridgeAttempted = true;
+                $query = [
+                    'q'     => $q,
+                    'limit' => 20,
+                    'offset' => 0,
+                    'include_inactive' => 0,
+                ];
+                if ($subCategory !== '') {
+                    $query['sub_category'] = $subCategory;
+                }
+                if ($hfrId !== '') {
+                    $query['hfr_id'] = $hfrId;
+                }
+
+                if ($panelOnly) {
+                    $query['panel_type'] = 'PANEL';
+                }
+
+                $resp = $this->bridgeGet($gwUrl, $gwToken, '/api/v3/pathology/panels', $query);
+                $code = (int) ($resp['http_code'] ?? 0);
+                $cerr = (string) ($resp['curl_error'] ?? '');
+                $raw  = (string) ($resp['raw'] ?? '');
+                $body = (array) ($resp['json'] ?? []);
+                $bridgeHttpCode = $code;
+                $bridgeUrl = (string) ($resp['url'] ?? '');
+                $bridgeRaw = $raw;
+
+                if ($cerr === '' && $code >= 200 && $code < 300) {
+                    if (is_array($body) && (int) ($body['ok'] ?? 0) === 1) {
+                        $mastersSucceeded = true;
+                        $panelNameSet = [];
+
+                        $isLikelyPanelName = static function (string $name): bool {
+                            $trim = trim($name);
+                            if ($trim === '') {
+                                return false;
+                            }
+
+                            // Exclude low-level analyte-style names commonly seen in component datasets.
+                            if ((bool) preg_match('/-(mcnc|scnc|rto|srto|mrto|ccnc|arb|acnc)\b/i', $trim)) {
+                                return false;
+                            }
+
+                            // Keep strong panel/meta-panel cues and common panel abbreviations.
+                            if ((bool) preg_match('/\b(meta\s*panel|metapanel|panel|profile|screen|function|count|cbc|lft|kft|tft)\b/i', $trim)) {
+                                return true;
+                            }
+
+                            // Names with explicit acronym in brackets are often panel labels.
+                            if ((bool) preg_match('/\([A-Za-z0-9\-]{2,12}\)/', $trim)) {
+                                return true;
+                            }
+
+                            return false;
+                        };
+
+                        foreach ((array) ($body['items'] ?? []) as $item) {
+                            $name = trim((string) ($item['panel_name'] ?? $item['test_name'] ?? $item['display_name'] ?? $item['name'] ?? ''));
+                            if ($name !== '') {
+                                if ($panelOnly) {
+                                    $itemType = strtolower(trim((string) ($item['panel_type'] ?? $item['type'] ?? $item['test_type'] ?? $item['entity_type'] ?? $item['master_type'] ?? '')));
+                                    $isPanelType = in_array($itemType, ['panel', 'meta_panel', 'metapanel', 'meta-panel'], true);
+                                    $isPanelName = $isLikelyPanelName($name);
+                                    if (! $isPanelType && ! $isPanelName) {
+                                        continue;
+                                    }
+                                    $panelNameSet[$name] = [
+                                        'name' => $name,
+                                        'test_name' => (string) ($item['panel_name'] ?? $item['test_name'] ?? $name),
+                                        'display_name' => (string) ($item['description'] ?? $item['display_name'] ?? ''),
+                                        'loinc_code' => (string) ($item['code'] ?? $item['loinc_code'] ?? ''),
+                                        'code_system' => (string) ($item['code_system'] ?? ''),
+                                        'sub_category' => (string) ($item['sub_category'] ?? ''),
+                                        'standard_rate' => (string) ($item['standard_rate'] ?? ''),
+                                        'master_id' => (int) ($item['id'] ?? 0),
+                                        'updated_at' => (string) ($item['updated_at'] ?? ''),
+                                        'source' => 'bridge',
+                                    ];
+                                    continue;
+                                }
+
+                                $results[] = [
+                                    'name'         => $name,
+                                    'test_name'    => (string) ($item['panel_name'] ?? $item['test_name'] ?? $name),
+                                    'display_name' => (string) ($item['description'] ?? $item['display_name'] ?? ''),
+                                    'loinc_code'   => (string) ($item['code'] ?? $item['loinc_code'] ?? ''),
+                                    'code_system'  => (string) ($item['code_system'] ?? ''),
+                                    'sub_category' => (string) ($item['sub_category'] ?? ''),
+                                    'standard_rate' => (string) ($item['standard_rate'] ?? ''),
+                                    'master_id'    => (int) ($item['id'] ?? 0),
+                                    'updated_at'   => (string) ($item['updated_at'] ?? ''),
+                                    'source'       => 'bridge',
+                                ];
+                            }
+                        }
+
+                        if ($panelOnly && !empty($panelNameSet)) {
+                            $results = array_values($panelNameSet);
+                        }
+                    } else {
+                        $bridgeError = trim((string) ($body['message'] ?? $body['error_code'] ?? 'Bridge returned ok=0'));
+                        log_message('debug', '[pathologyMastersSearch] Bridge API ok=' . ($body['ok'] ?? '?') .
+                            ' code=' . $code . ' body=' . substr($raw, 0, 300));
+                    }
+                } else {
+                    $bridgeError = $cerr !== '' ? $cerr : 'HTTP ' . $code;
+                    log_message('warning', '[pathologyMastersSearch] Bridge API curl_err=' . $cerr . ' http=' . $code .
+                        ' body=' . substr($raw, 0, 300));
+                }
+            } catch (\Throwable $e) {
+                $bridgeError = $e->getMessage();
+                log_message('warning', '[pathologyMastersSearch] Bridge API exception: ' . $e->getMessage());
+            }
+
+            // If panel lookup returned nothing, try dedicated component master search for non-panel contexts.
+            if (empty($results) && ! $panelOnly) {
+                try {
+                    $compQuery = [
+                        'q' => $q,
+                        'limit' => 50,
+                        'offset' => 0,
+                        'include_inactive' => 0,
+                    ];
+                    if ($hfrId !== '') {
+                        $compQuery['hfr_id'] = $hfrId;
+                    }
+
+                    $compResp = $this->bridgeGet($gwUrl, $gwToken, '/api/v3/pathology/component-masters', $compQuery);
+                    $compCode = (int) ($compResp['http_code'] ?? 0);
+                    $compErr = (string) ($compResp['curl_error'] ?? '');
+                    $compRaw = (string) ($compResp['raw'] ?? '');
+                    $compBody = (array) ($compResp['json'] ?? []);
+
+                    if ($compErr === '' && $compCode >= 200 && $compCode < 300 && (int) ($compBody['ok'] ?? 0) === 1) {
+                        $componentsByName = [];
+                        foreach ((array) ($compBody['items'] ?? []) as $item) {
+                            $componentName = trim((string) ($item['component_name'] ?? $item['test_name'] ?? $item['name'] ?? ''));
+                            if ($componentName !== '') {
+                                $componentsByName[$componentName] = [
+                                    'name' => $componentName,
+                                    'test_name' => $componentName,
+                                    'display_name' => '',
+                                    'loinc_code' => (string) ($item['code'] ?? ''),
+                                    'code_system' => (string) ($item['code_system'] ?? ''),
+                                    'sub_category' => (string) ($item['sub_category'] ?? 'PATHOLOGY'),
+                                    'standard_rate' => '',
+                                    'master_id' => (int) ($item['id'] ?? 0),
+                                    'updated_at' => (string) ($item['updated_at'] ?? ''),
+                                    'source' => 'bridge',
+                                ];
+                            }
+                        }
+
+                        $existingNames = [];
+                        foreach ($results as $r) {
+                            $existingNames[strtolower(trim((string) ($r['name'] ?? '')))] = true;
+                        }
+
+                        foreach ($componentsByName as $componentName => $row) {
+                            $lk = strtolower($componentName);
+                            if (isset($existingNames[$lk])) {
+                                continue;
+                            }
+                            $results[] = $row;
+                        }
+                    } elseif ($bridgeError === '') {
+                        $bridgeError = $compErr !== '' ? $compErr : ('HTTP ' . $compCode);
+                        $bridgeHttpCode = $compCode;
+                        $bridgeUrl = (string) ($compResp['url'] ?? $bridgeUrl);
+                        $bridgeRaw = $compRaw;
+                    }
+                } catch (\Throwable $e) {
+                    if ($bridgeError === '') {
+                        $bridgeError = $e->getMessage();
+                    }
+                    log_message('warning', '[pathologyMastersSearch] components fallback exception: ' . $e->getMessage());
+                }
+            }
+        } else {
+            $bridgeError = 'EATRIA_BRIDGE_TOKEN not configured';
+        }
+
+        // ── Fallback: local lab_repo search ───────────────────────────────────
+        if (empty($results) && ! $bridgeOnly) {
+            try {
+                $localRows = $this->db->table('lab_repo r')
+                    ->select("r.mstRepoKey, r.Title, COALESCE(g.RepoGrp, '') AS sub_category, IFNULL(r.loinc_code, '') AS loinc_code")
+                    ->join('lab_rgroups g', 'g.mstRGrpKey = r.GrpKey', 'left')
+                    ->like('r.Title', $q)
+                    ->orderBy('Title', 'ASC')
+                    ->limit(20)
+                    ->get()
+                    ->getResultArray();
+            } catch (\Throwable $e) {
+                $localRows = $this->db->table('lab_repo r')
+                    ->select("r.mstRepoKey, r.Title, COALESCE(g.RepoGrp, '') AS sub_category")
+                    ->join('lab_rgroups g', 'g.mstRGrpKey = r.GrpKey', 'left')
+                    ->like('r.Title', $q)
+                    ->orderBy('Title', 'ASC')
+                    ->limit(20)
+                    ->get()
+                    ->getResultArray();
+            }
+
+            foreach ($localRows as $row) {
+                $results[] = [
+                    'name'         => (string) ($row['Title'] ?? ''),
+                    'test_name'    => (string) ($row['Title'] ?? ''),
+                    'display_name' => '',
+                    'loinc_code'   => (string) ($row['loinc_code'] ?? ''),
+                    'code_system'  => '',
+                    'sub_category' => (string) ($row['sub_category'] ?? ''),
+                    'standard_rate' => '',
+                    'master_id'    => 0,
+                    'updated_at'   => '',
+                    'source'       => 'local',
+                ];
+            }
+        }
+
+        if (empty($results) && $bridgeOnly) {
+            if ($panelOnly && $mastersSucceeded) {
+                return $this->response->setJSON([
+                    'ok' => 1,
+                    'items' => [],
+                    'source' => 'bridge',
+                ]);
+            }
+
+            if ($bridgeError !== '' || ! $bridgeAttempted) {
+                return $this->response->setStatusCode(502)->setJSON([
+                    'ok' => 0,
+                    'items' => [],
+                    'source' => 'bridge',
+                    'error' => $bridgeError !== '' ? $bridgeError : 'Bridge request not attempted',
+                    'http_code' => $bridgeHttpCode,
+                    'url' => $bridgeUrl,
+                    'details' => substr($bridgeRaw, 0, 300),
+                ]);
+            }
+
+            return $this->response->setJSON([
+                'ok' => 1,
+                'items' => [],
+                'source' => 'bridge',
+            ]);
+        }
+
+        return $this->response->setJSON($results);
+    }
+
+    /**
+     * GET Lab_Admin/pathology_master_template?parent_test=CBC
+     * Fetches panel components from Bridge master data and returns generated HTML template.
+     */
+    public function pathologyMasterTemplate()
+    {
+        if ($resp = $this->requirePermission('template.pathology')) {
+            return $resp;
+        }
+
+        $parentTest = trim((string) ($this->request->getGet('parent_test') ?? ''));
+        if ($parentTest === '') {
+            return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
+                'error' => 'parent_test is required',
+            ]);
+        }
+
+        $gw = $this->resolveBridgeGatewayConfig();
+        $gwUrl = (string) ($gw['url'] ?? '');
+        $gwToken = (string) ($gw['token'] ?? '');
+        $hfrId = (string) ($gw['hfr_id'] ?? '');
+
+        if ($gwToken === '') {
+            return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
+                'error' => 'EATRIA_BRIDGE_TOKEN not configured',
+            ]);
+        }
+
+        $masterMeta = [
+            'name' => $parentTest,
+            'loinc_code' => '',
+            'sub_category' => '',
+            'code_system' => '',
+            'standard_rate' => '',
+            'master_id' => 0,
+        ];
+
+        try {
+            $masterQuery = [
+                'q' => $parentTest,
+                'limit' => 25,
+                'offset' => 0,
+                'include_inactive' => 0,
+            ];
+            if ($hfrId !== '') {
+                $masterQuery['hfr_id'] = $hfrId;
+            }
+
+            $masterQuery['panel_type'] = 'PANEL';
+            $masterResp = $this->bridgeGet($gwUrl, $gwToken, '/api/v3/pathology/panels', $masterQuery);
+            $masterBody = (array) ($masterResp['json'] ?? []);
+            if ((int) ($masterBody['ok'] ?? 0) === 1) {
+                foreach ((array) ($masterBody['items'] ?? []) as $item) {
+                    $candidate = trim((string) ($item['panel_name'] ?? $item['test_name'] ?? $item['display_name'] ?? ''));
+                    if ($candidate === '') {
+                        continue;
+                    }
+
+                    $masterMeta = [
+                        'name' => $candidate,
+                        'loinc_code' => (string) ($item['code'] ?? $item['loinc_code'] ?? ''),
+                        'sub_category' => (string) ($item['sub_category'] ?? ''),
+                        'code_system' => (string) ($item['code_system'] ?? ''),
+                        'standard_rate' => (string) ($item['standard_rate'] ?? ''),
+                        'master_id' => (int) ($item['id'] ?? 0),
+                    ];
+
+                    if (strcasecmp($candidate, $parentTest) === 0) {
+                        break;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            log_message('warning', '[pathologyMasterTemplate] master lookup failed: ' . $e->getMessage());
+        }
+
+        $expandQuery = [
+            'entity_type' => 'panel',
+            'name' => $masterMeta['name'],
+            'include_inactive' => 0,
+            'max_depth' => 8,
+        ];
+        if ($hfrId !== '') {
+            $expandQuery['hfr_id'] = $hfrId;
+        }
+
+        $expandResp = $this->bridgeGet($gwUrl, $gwToken, '/api/v3/pathology/expand', $expandQuery);
+        $expandCode = (int) ($expandResp['http_code'] ?? 0);
+        $expandErr = (string) ($expandResp['curl_error'] ?? '');
+        $expandBody = (array) ($expandResp['json'] ?? []);
+
+        if ($expandErr !== '' || $expandCode < 200 || $expandCode >= 300 || (int) ($expandBody['ok'] ?? 0) !== 1) {
+            return $this->response->setStatusCode(502)->setJSON([
+                'ok' => 0,
+                'error' => 'Failed to expand pathology panel from gateway',
+                'http_code' => $expandCode,
+                'details' => substr((string) ($expandResp['raw'] ?? ''), 0, 300),
+            ]);
+        }
+
+        $components = [];
+        foreach ((array) ($expandBody['atomic_tests'] ?? []) as $atomic) {
+            $components[] = [
+                'component_test_name' => (string) ($atomic['test_name'] ?? ''),
+                'component_code' => (string) ($atomic['code'] ?? ''),
+                'unit' => (string) ($atomic['unit'] ?? ''),
+                'component_property' => (string) ($atomic['property'] ?? ''),
+                'component_system' => (string) ($atomic['specimen_system'] ?? ''),
+                'component_scale' => (string) ($atomic['scale_type'] ?? ''),
+                'sort_order' => (int) ($atomic['sort_order'] ?? 0),
+            ];
+        }
+        usort($components, static function ($a, $b): int {
+            return (int) ($a['sort_order'] ?? 99999) <=> (int) ($b['sort_order'] ?? 99999);
+        });
+
+        $templateHtml = $this->buildPathologyMasterTemplateHtml((string) $masterMeta['name'], $components);
+
+        return $this->response->setJSON([
+            'ok' => 1,
+            'panel_name' => (string) $masterMeta['name'],
+            'loinc_code' => (string) $masterMeta['loinc_code'],
+            'sub_category' => (string) $masterMeta['sub_category'],
+            'code_system' => (string) $masterMeta['code_system'],
+            'standard_rate' => (string) $masterMeta['standard_rate'],
+            'master_id' => (int) $masterMeta['master_id'],
+            'components_count' => count($components),
+            'components' => $components,
+            'template_html' => $templateHtml,
+            'request_id' => (string) ($expandBody['request_id'] ?? ''),
+        ]);
+    }
+
+    /**
+     * GET Lab_Admin/pathology_component_masters_search?q=hem
+     * Gateway-only component search for Add Component modal.
+     */
+    public function pathologyComponentMastersSearch()
+    {
+        if ($resp = $this->requirePermission('template.pathology')) {
+            return $resp;
+        }
+
+        $q = trim((string) ($this->request->getGet('q') ?? ''));
+        if (strlen($q) < 2) {
+            return $this->response->setJSON(['ok' => 1, 'items' => []]);
+        }
+
+        $gw = $this->resolveBridgeGatewayConfig();
+        $gwUrl = (string) ($gw['url'] ?? '');
+        $gwToken = (string) ($gw['token'] ?? '');
+        $hfrId = (string) ($gw['hfr_id'] ?? '');
+
+        if ($gwToken === '') {
+            return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
+                'error' => 'EATRIA_BRIDGE_TOKEN not configured',
+                'items' => [],
+            ]);
+        }
+
+        $query = [
+            'q' => $q,
+            'limit' => 25,
+            'offset' => 0,
+            'include_inactive' => 0,
+        ];
+        if ($hfrId !== '') {
+            $query['hfr_id'] = $hfrId;
+        }
+
+        $resp = $this->bridgeGet($gwUrl, $gwToken, '/api/v3/pathology/component-masters', $query);
+        $code = (int) ($resp['http_code'] ?? 0);
+        $cerr = (string) ($resp['curl_error'] ?? '');
+        $body = (array) ($resp['json'] ?? []);
+
+        if ($cerr !== '' || $code < 200 || $code >= 300 || (int) ($body['ok'] ?? 0) !== 1) {
+            return $this->response->setStatusCode(502)->setJSON([
+                'ok' => 0,
+                'items' => [],
+                'error' => $cerr !== '' ? $cerr : 'Gateway component search failed',
+                'http_code' => $code,
+                'details' => substr((string) ($resp['raw'] ?? ''), 0, 300),
+            ]);
+        }
+
+        $items = [];
+        foreach ((array) ($body['items'] ?? []) as $item) {
+            $name = trim((string) ($item['component_name'] ?? $item['test_name'] ?? $item['name'] ?? ''));
+            if ($name === '') {
+                continue;
+            }
+
+            $items[] = [
+                'name' => $name,
+                'short_name' => (string) ($item['short_name'] ?? $item['test_id'] ?? ''),
+                'code' => (string) ($item['code'] ?? $item['loinc_code'] ?? ''),
+                'unit' => (string) ($item['unit'] ?? ''),
+                'property' => (string) ($item['property'] ?? $item['component_property'] ?? ''),
+                'specimen_system' => (string) ($item['specimen_system'] ?? $item['component_system'] ?? ''),
+                'scale_type' => (string) ($item['scale_type'] ?? $item['component_scale'] ?? ''),
+                'sub_category' => (string) ($item['sub_category'] ?? ''),
+                'master_id' => (int) ($item['id'] ?? 0),
+            ];
+        }
+
+        return $this->response->setJSON([
+            'ok' => 1,
+            'items' => $items,
+            'source' => 'bridge',
+            'request_id' => (string) ($body['request_id'] ?? ''),
+        ]);
+    }
+
+    /**
+     * POST Lab_Admin/pathology_master_add_component
+     * Adds one gateway component into local lab_tests and maps it to the selected panel.
+     */
+    public function pathologyMasterAddComponent()
+    {
+        if ($resp = $this->requirePermission('template.pathology')) {
+            return $resp;
+        }
+
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
+                'error' => 'Invalid request',
+            ]);
+        }
+
+        $repoId = (int) ($this->request->getPost('repo_id') ?? 0);
+        $name = trim((string) ($this->request->getPost('component_name') ?? ''));
+        $shortName = trim((string) ($this->request->getPost('short_name') ?? ''));
+        $code = trim((string) ($this->request->getPost('code') ?? ''));
+        $unit = trim((string) ($this->request->getPost('unit') ?? ''));
+        $property = trim((string) ($this->request->getPost('property') ?? ''));
+        $system = trim((string) ($this->request->getPost('specimen_system') ?? ''));
+        $scale = trim((string) ($this->request->getPost('scale_type') ?? ''));
+
+        if ($repoId <= 0 || $name === '') {
+            return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
+                'error' => 'repo_id and component_name are required',
+            ]);
+        }
+
+        $testColumnsRows = $this->db->query('SHOW COLUMNS FROM lab_tests')->getResultArray();
+        $testColumns = array_column($testColumnsRows, 'Field');
+
+        $find = $this->db->table('lab_tests')->select('mstTestKey');
+        $find->groupStart();
+        if ($code !== '' && in_array('loinc_code', $testColumns, true)) {
+            $find->orGroupStart()
+                ->where('loinc_code', $code)
+                ->where('loinc_code !=', '')
+                ->groupEnd();
+        }
+        if ($shortName !== '') {
+            $find->orWhere('TestID', $shortName);
+        }
+        $find->orWhere('Test', $name);
+        $find->groupEnd();
+
+        $existing = $find->orderBy('mstTestKey', 'ASC')->get()->getRowArray();
+        $mstTestKey = (int) ($existing['mstTestKey'] ?? 0);
+
+        $testData = [
+            'Test' => $name,
+            'TestID' => $shortName !== '' ? $shortName : ($code !== '' ? $code : ''),
+            'Unit' => $unit,
+        ];
+
+        if (in_array('loinc_code', $testColumns, true)) {
+            $testData['loinc_code'] = $code;
+        }
+        if (in_array('loinc_property', $testColumns, true)) {
+            $testData['loinc_property'] = $property;
+        }
+        if (in_array('loinc_system', $testColumns, true)) {
+            $testData['loinc_system'] = $system;
+        }
+        if (in_array('loinc_scale', $testColumns, true)) {
+            $testData['loinc_scale'] = $scale;
+        }
+
+        $pathLab = new PathLabModel();
+
+        if ($mstTestKey > 0) {
+            $pathLab->updateItemParameter($testData, $mstTestKey);
+        } else {
+            $mstTestKey = $pathLab->insertItemParameter($testData);
+        }
+
+        if ($mstTestKey <= 0) {
+            return $this->response->setStatusCode(500)->setJSON([
+                'ok' => 0,
+                'error' => 'Unable to create component locally',
+            ]);
+        }
+
+        $exists = $this->db->table('lab_repotests')
+            ->where('mstRepoKey', $repoId)
+            ->where('mstTestKey', $mstTestKey)
+            ->countAllResults();
+
+        if ($exists <= 0) {
+            $row = $this->db->table('lab_repotests')
+                ->selectMax('EOrder', 'max_order')
+                ->where('mstRepoKey', $repoId)
+                ->get()
+                ->getRowArray();
+            $nextOrder = (int) ($row['max_order'] ?? 0) + 1;
+
+            $pathLab->insertItemSortorder([
+                'mstRepoKey' => $repoId,
+                'mstTestKey' => $mstTestKey,
+                'EOrder' => $nextOrder,
+            ]);
+        }
+
+        return $this->response->setJSON([
+            'ok' => 1,
+            'mstTestKey' => $mstTestKey,
+            'added' => $exists <= 0 ? 1 : 0,
+            'message' => $exists <= 0 ? 'Component added' : 'Component already attached',
+        ]);
+    }
+
+    /**
+     * POST Lab_Admin/pathology_master_apply_panel
+     * Gateway-style panel mapping import:
+     * - expands panel to atomic tests (short/code aware)
+     * - upserts local lab_tests
+     * - maps tests to lab_repotests for the report template
+     * - regenerates HTMLData with token placeholders ({HB}, {TLC}, ...)
+     */
+    public function pathologyMasterApplyPanel()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(403)->setJSON(['ok' => 0, 'error' => 'AJAX only']);
+        }
+        if ($resp = $this->requirePermission('template.pathology')) {
+            return $resp;
+        }
+
+        $repoId = (int) ($this->request->getPost('repo_id') ?? 0);
+        $panelName = trim((string) ($this->request->getPost('panel_name') ?? ''));
+        $replaceExisting = in_array(strtolower(trim((string) ($this->request->getPost('replace_existing') ?? '1'))), ['1', 'true', 'yes'], true);
+
+        if ($repoId <= 0) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
+                'error' => 'Save report first, then import panel components.',
+            ]);
+        }
+
+        if ($panelName === '') {
+            return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
+                'error' => 'panel_name is required',
+            ]);
+        }
+
+        $gw = $this->resolveBridgeGatewayConfig();
+        $gwUrl = (string) ($gw['url'] ?? '');
+        $gwToken = (string) ($gw['token'] ?? '');
+        $hfrId = (string) ($gw['hfr_id'] ?? '');
+
+        if ($gwToken === '') {
+            return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
+                'error' => 'EATRIA_BRIDGE_TOKEN not configured',
+            ]);
+        }
+
+        // Resolve to canonical panel name from gateway so expand/components can match reliably.
+        try {
+            $panelQuery = [
+                'q' => $panelName,
+                'panel_type' => 'PANEL',
+                'limit' => 50,
+                'offset' => 0,
+                'include_inactive' => 0,
+            ];
+            if ($hfrId !== '') {
+                $panelQuery['hfr_id'] = $hfrId;
+            }
+
+            $panelResp = $this->bridgeGet($gwUrl, $gwToken, '/api/v3/pathology/panels', $panelQuery);
+            $panelBody = (array) ($panelResp['json'] ?? []);
+            if ((int) ($panelBody['ok'] ?? 0) === 1) {
+                $panelItems = array_values((array) ($panelBody['items'] ?? []));
+                foreach ($panelItems as $item) {
+                    $candidate = trim((string) ($item['panel_name'] ?? $item['test_name'] ?? $item['display_name'] ?? ''));
+                    if ($candidate === '') {
+                        continue;
+                    }
+
+                    if (strcasecmp($candidate, $panelName) === 0) {
+                        $panelName = $candidate;
+                        break;
+                    }
+
+                    if (stripos($candidate, $panelName) !== false || stripos($panelName, $candidate) !== false) {
+                        $panelName = $candidate;
+                        break;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            log_message('warning', '[pathologyMasterApplyPanel] canonical panel resolve failed: ' . $e->getMessage());
+        }
+
+        $expandQuery = [
+            'entity_type' => 'panel',
+            'name' => $panelName,
+            'include_inactive' => 0,
+            'max_depth' => 8,
+        ];
+        if ($hfrId !== '') {
+            $expandQuery['hfr_id'] = $hfrId;
+        }
+
+        $expandResp = $this->bridgeGet($gwUrl, $gwToken, '/api/v3/pathology/expand', $expandQuery);
+        $expandCode = (int) ($expandResp['http_code'] ?? 0);
+        $expandErr = (string) ($expandResp['curl_error'] ?? '');
+        $expandBody = (array) ($expandResp['json'] ?? []);
+
+        $atomic = [];
+        if ($expandErr === '' && $expandCode >= 200 && $expandCode < 300 && (int) ($expandBody['ok'] ?? 0) === 1) {
+            $atomic = array_values((array) ($expandBody['atomic_tests'] ?? []));
+        } else {
+            $compQuery = [
+                'parent_test' => $panelName,
+                'limit' => 500,
+                'offset' => 0,
+                'include_inactive' => 0,
+            ];
+            if ($hfrId !== '') {
+                $compQuery['hfr_id'] = $hfrId;
+            }
+
+            $compResp = $this->bridgeGet($gwUrl, $gwToken, '/api/v3/pathology/components', $compQuery);
+            $compCode = (int) ($compResp['http_code'] ?? 0);
+            $compErr = (string) ($compResp['curl_error'] ?? '');
+            $compBody = (array) ($compResp['json'] ?? []);
+
+            if ($compErr !== '' || $compCode < 200 || $compCode >= 300 || (int) ($compBody['ok'] ?? 0) !== 1) {
+                return $this->response->setStatusCode(502)->setJSON([
+                    'ok' => 0,
+                    'error' => 'Failed to expand panel from gateway',
+                    'http_code' => $expandCode,
+                    'details' => substr((string) ($expandResp['raw'] ?? ''), 0, 300),
+                ]);
+            }
+
+            $components = array_values((array) ($compBody['items'] ?? []));
+            foreach ($components as $row) {
+                $atomic[] = [
+                    'test_name' => (string) ($row['component_test_name'] ?? ''),
+                    'short_name' => '',
+                    'code' => (string) ($row['component_code'] ?? ''),
+                    'property' => (string) ($row['component_property'] ?? ''),
+                    'specimen_system' => (string) ($row['component_system'] ?? ''),
+                    'scale_type' => (string) ($row['component_scale'] ?? ''),
+                    'unit' => (string) ($row['unit'] ?? ''),
+                    'sort_order' => (int) ($row['sort_order'] ?? 0),
+                ];
+            }
+        }
+
+        if ($atomic === []) {
+            return $this->response->setStatusCode(404)->setJSON([
+                'ok' => 0,
+                'error' => 'No atomic tests found for selected panel',
+            ]);
+        }
+
+        usort($atomic, static function ($a, $b): int {
+            return (int) ($a['sort_order'] ?? 99999) <=> (int) ($b['sort_order'] ?? 99999);
+        });
+
+        $testRowsForTemplate = [];
+        $linkedCount = 0;
+        $createdCount = 0;
+        $updatedCount = 0;
+
+        $this->db->transStart();
+
+        if ($replaceExisting) {
+            $this->db->table('lab_repotests')->where('mstRepoKey', $repoId)->delete();
+        }
+
+        $order = 10;
+        $seenCodes = [];
+
+        foreach ($atomic as $index => $item) {
+            $testName = trim((string) ($item['test_name'] ?? ''));
+            if ($testName === '') {
+                continue;
+            }
+
+            $short = trim((string) ($item['short_name'] ?? ''));
+            $code = trim((string) ($item['code'] ?? ''));
+            $testCode = $this->normalizePanelTokenCode($short !== '' ? $short : $code, $index + 1);
+
+            if (isset($seenCodes[$testCode])) {
+                $testCode = $this->normalizePanelTokenCode($testCode . ($index + 1), $index + 1);
+            }
+            $seenCodes[$testCode] = true;
+
+            $unit = trim((string) ($item['unit'] ?? ''));
+            $property = trim((string) ($item['property'] ?? ''));
+            $system = trim((string) ($item['specimen_system'] ?? ''));
+            $scale = trim((string) ($item['scale_type'] ?? ''));
+
+            $existing = $this->db->table('lab_tests')
+                ->select('mstTestKey')
+                ->groupStart()
+                    ->where('TestID', $testCode)
+                    ->orGroupStart()
+                        ->where('loinc_code', $code)
+                        ->where('loinc_code !=', '')
+                    ->groupEnd()
+                    ->orWhere('Test', $testName)
+                ->groupEnd()
+                ->orderBy('mstTestKey', 'ASC')
+                ->get(1)
+                ->getRowArray();
+
+            if (is_array($existing) && (int) ($existing['mstTestKey'] ?? 0) > 0) {
+                $mstTestKey = (int) $existing['mstTestKey'];
+                $this->db->table('lab_tests')->where('mstTestKey', $mstTestKey)->update([
+                    'Test' => $testName,
+                    'TestID' => $testCode,
+                    'Unit' => $unit,
+                    'loinc_code' => $code,
+                    'loinc_property' => $property,
+                    'loinc_system' => $system,
+                    'loinc_scale' => $scale,
+                    'loinc_synced_at' => date('Y-m-d H:i:s'),
+                ]);
+                $updatedCount++;
+            } else {
+                $this->db->table('lab_tests')->insert([
+                    'Test' => $testName,
+                    'TestID' => $testCode,
+                    'Result' => '',
+                    'Options' => null,
+                    'Formula' => '',
+                    'VRule' => '',
+                    'VMsg' => '',
+                    'Unit' => $unit,
+                    'FixedNormals' => '',
+                    'isGenderSpecific' => 0,
+                    'FixedNormalsWomen' => '',
+                    'loinc_code' => $code,
+                    'loinc_property' => $property,
+                    'loinc_system' => $system,
+                    'loinc_scale' => $scale,
+                    'loinc_synced_at' => date('Y-m-d H:i:s'),
+                ]);
+                $mstTestKey = (int) $this->db->insertID();
+                $createdCount++;
+            }
+
+            if ($mstTestKey <= 0) {
+                continue;
+            }
+
+            $mapExists = $this->db->table('lab_repotests')
+                ->where('mstRepoKey', $repoId)
+                ->where('mstTestKey', $mstTestKey)
+                ->countAllResults();
+
+            if ($mapExists <= 0) {
+                $this->db->table('lab_repotests')->insert([
+                    'mstRepoKey' => $repoId,
+                    'mstTestKey' => $mstTestKey,
+                    'EOrder' => $order,
+                ]);
+                $linkedCount++;
+            }
+
+            $order += 10;
+
+            $testRowsForTemplate[] = [
+                'test_name' => $testName,
+                'test_code' => $testCode,
+                'unit' => $unit,
+            ];
+        }
+
+        $templateHtml = $this->buildPathologyPanelTokenTemplateHtml($panelName, $testRowsForTemplate);
+        $panelLoinc = trim((string) ($expandBody['resolved']['code'] ?? ''));
+
+        $updateData = [
+            'Title' => $panelName,
+            'HTMLData' => $templateHtml,
+            'RTFData' => $templateHtml,
+        ];
+        if ($panelLoinc !== '') {
+            $updateData['loinc_code'] = $panelLoinc;
+            $updateData['loinc_synced_at'] = date('Y-m-d H:i:s');
+        }
+
+        $this->db->table('lab_repo')->where('mstRepoKey', $repoId)->update($updateData);
+
+        $this->db->transComplete();
+
+        if (! $this->db->transStatus()) {
+            return $this->response->setStatusCode(500)->setJSON([
+                'ok' => 0,
+                'error' => 'Failed to apply panel mapping in local database',
+            ]);
+        }
+
+        return $this->response->setJSON([
+            'ok' => 1,
+            'repo_id' => $repoId,
+            'panel_name' => $panelName,
+            'panel_loinc_code' => $panelLoinc,
+            'components_count' => count($testRowsForTemplate),
+            'created_tests' => $createdCount,
+            'updated_tests' => $updatedCount,
+            'linked_tests' => $linkedCount,
+            'template_html' => $templateHtml,
+        ]);
+    }
+
+    /**
+    * GET Lab_Admin/pathology_bridge_debug
+    * DEV-ONLY: Shows raw Bridge API response for /api/v3/pathology/panels
+     * Remove this route from production!
+     */
+    public function pathologyBridgeDebug()
+    {
+        if ($resp = $this->requirePermission('template.pathology')) {
+            return $resp;
+        }
+
+        $gw = $this->resolveBridgeGatewayConfig();
+        $gwUrl = (string) ($gw['url'] ?? '');
+        $gwToken = (string) ($gw['token'] ?? '');
+        $hfrId = (string) ($gw['hfr_id'] ?? '');
+
+        if ($gwToken === '') {
+            return $this->response->setJSON(['error' => 'EATRIA_BRIDGE_TOKEN not configured', 'url' => $gwUrl]);
+        }
+
+        $query = ['limit' => 5, 'offset' => 0];
+        if ($hfrId !== '') {
+            $query['hfr_id'] = $hfrId;
+        }
+
+        $query['panel_type'] = 'PANEL';
+        $resp = $this->bridgeGet($gwUrl, $gwToken, '/api/v3/pathology/panels', $query);
+        $raw = (string) ($resp['raw'] ?? '');
+        $parsed = (array) ($resp['json'] ?? []);
+
+        return $this->response->setJSON([
+            'url'         => (string) ($resp['url'] ?? ''),
+            'token_set'   => $gwToken !== '' ? substr($gwToken, 0, 6) . '***' . substr($gwToken, -4) : '(empty)',
+            'hfr_id_set'  => $hfrId !== '',
+            'http_code'   => (int) ($resp['http_code'] ?? 0),
+            'curl_error'  => (string) ($resp['curl_error'] ?? ''),
+            'raw_first_500' => substr($raw, 0, 500),
+            'parsed'      => $parsed,
+        ]);
+    }
+
 
     public function diagnosis_print_settings(int $modality = 3)
     {

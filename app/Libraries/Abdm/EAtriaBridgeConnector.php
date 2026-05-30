@@ -308,7 +308,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
     public function sharePrescriptionBundle(array $payload, string $entityId = ''): array
     {
         return $this->post('/v3/bundle/push', [
-            'consent_id'  => (string) ($payload['consent_handle'] ?? $payload['consent_id'] ?? ''),
+            'consent_id'  => (string) ($payload['consent_id'] ?? $payload['consent_handle'] ?? ''),
             'hi_type'     => (string) ($payload['hi_type'] ?? 'OPConsultation'),
             'fhir_bundle' => $payload['bundle'] ?? $payload['fhir_bundle'] ?? [],
         ]);
@@ -317,7 +317,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
     public function shareIpdDischargeBundle(array $payload, string $entityId = ''): array
     {
         return $this->post('/v3/bundle/push', [
-            'consent_id'  => (string) ($payload['consent_handle'] ?? $payload['consent_id'] ?? ''),
+            'consent_id'  => (string) ($payload['consent_id'] ?? $payload['consent_handle'] ?? ''),
             'hi_type'     => 'DischargeSummary',
             'fhir_bundle' => $payload['bundle'] ?? $payload['fhir_bundle'] ?? [],
         ]);
@@ -326,7 +326,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
     public function shareDiagnosisReportBundle(array $payload, string $entityId = ''): array
     {
         return $this->post('/v3/bundle/push', [
-            'consent_id'  => (string) ($payload['consent_handle'] ?? $payload['consent_id'] ?? ''),
+            'consent_id'  => (string) ($payload['consent_id'] ?? $payload['consent_handle'] ?? ''),
             'hi_type'     => 'DiagnosticReport',
             'fhir_bundle' => $payload['bundle'] ?? $payload['fhir_bundle'] ?? [],
         ]);
@@ -581,5 +581,67 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         }
 
         return $this->get('/v3/drugs/version', $query);
+    }
+
+    // -------------------------------------------------------------------------
+    // Pathology Terminology (LOINC)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Fetch pathology panel masters from the Bridge API.
+     *
+     * @param string $subCategory  'PATHOLOGY' | 'BIOPSY' | '' for all
+     * @param int    $limit        items per page (max 500)
+     * @param int    $offset       pagination offset
+     * @param string $updatedSince ISO-8601 datetime for incremental sync
+     * @return array<string, mixed>
+     */
+    public function pathologyMasters(
+        string $subCategory  = '',
+        int    $limit        = 200,
+        int    $offset       = 0,
+        string $updatedSince = ''
+    ): array {
+        $query = ['limit' => max(1, min(500, $limit)), 'offset' => $offset];
+        if ($subCategory !== '') {
+            $query['sub_category'] = strtoupper($subCategory);
+        }
+        if ($updatedSince !== '') {
+            $query['updated_since'] = $updatedSince;
+        }
+        if ($this->hfrId !== '') {
+            $query['hfr_id'] = $this->hfrId;
+        }
+
+        return $this->get('/v3/pathology/masters', $query);
+    }
+
+    /**
+     * Fetch LOINC component details for a specific pathology panel.
+     *
+     * @param string $parentTest   Exact panel name (e.g. 'Complete Blood Count Panel')
+     * @param int    $limit        items per page
+     * @param int    $offset       pagination offset
+     * @param string $updatedSince ISO-8601 datetime for incremental sync
+     * @return array<string, mixed>
+     */
+    public function pathologyComponents(
+        string $parentTest   = '',
+        int    $limit        = 200,
+        int    $offset       = 0,
+        string $updatedSince = ''
+    ): array {
+        $query = ['limit' => max(1, min(500, $limit)), 'offset' => $offset];
+        if ($parentTest !== '') {
+            $query['parent_test'] = $parentTest;
+        }
+        if ($updatedSince !== '') {
+            $query['updated_since'] = $updatedSince;
+        }
+        if ($this->hfrId !== '') {
+            $query['hfr_id'] = $this->hfrId;
+        }
+
+        return $this->get('/v3/pathology/components', $query);
     }
 }

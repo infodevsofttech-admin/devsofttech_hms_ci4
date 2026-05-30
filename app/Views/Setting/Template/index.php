@@ -153,7 +153,7 @@ $hasTemplateAccess = $canPathology || $canUltrasound || $canXray || $canCt || $c
     <div class="row g-3 admin-tiles">
         <?php if ($canPathology) { ?>
             <div class="col-6 col-md-2 col-lg-2">
-                <a class="admin-tile" href="javascript:load_form_div('<?= base_url('Lab_Admin/report_list') ?>','maindiv','Pathology Template');">
+                <a class="admin-tile" href="javascript:load_form('<?= base_url('Lab_Admin/report_list') ?>','Pathology Template');">
                     <span class="tile-icon"><i class="bi bi-heart-pulse"></i></span>
                     <span>Pathology Template</span>
                 </a>
