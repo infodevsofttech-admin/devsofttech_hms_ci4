@@ -853,8 +853,17 @@ class Patient extends BaseController
 			return $this->response->setStatusCode(404)->setBody('Patient not found');
 		}
 
+		$opdFields = $this->db->getFieldNames('opd_master') ?? [];
+		$opdSelect = [
+			'opd_id',
+			'opd_code',
+			'doc_name',
+			'apointment_date',
+		];
+		$opdSelect[] = in_array('queue_no', $opdFields, true) ? 'queue_no' : "'' AS queue_no";
+
 		$opdList = $this->db->table('opd_master')
-			->select('opd_id, opd_code, doc_name, apointment_date, queue_no')
+			->select(implode(', ', $opdSelect), false)
 			->where('p_id', $pno)
 			->orderBy('opd_id', 'DESC')
 			->get()
