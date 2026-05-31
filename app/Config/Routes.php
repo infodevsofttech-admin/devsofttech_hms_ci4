@@ -1079,6 +1079,9 @@ $routes->group('setting', static function($routes) {
     $routes->post('admin/ai-settings/save', 'Setting\\AiSettings::save');
     $routes->post('admin/ai-settings/test', 'Setting\\AiSettings::test');
     $routes->post('admin/ai-settings/usage', 'Setting\\AiSettings::usage');
+    $routes->get('admin/healthplix-settings', 'Setting\\HealthplixSettings::index', ['filter' => $settingsAdminFilter]);
+    $routes->post('admin/healthplix-settings/save', 'Setting\\HealthplixSettings::save', ['filter' => $settingsAdminFilter]);
+    $routes->post('admin/healthplix-settings/test', 'Setting\\HealthplixSettings::test', ['filter' => $settingsAdminFilter]);
     $routes->get('admin/abdm-gateway', 'Setting\\AbdmGatewaySettings::index', ['filter' => $settingsAdminFilter]);
     $routes->post('admin/abdm-gateway/save', 'Setting\\AbdmGatewaySettings::save', ['filter' => $settingsAdminFilter]);
     $routes->post('admin/abdm-gateway/test', 'Setting\\AbdmGatewaySettings::testConnection', ['filter' => $settingsAdminFilter]);
