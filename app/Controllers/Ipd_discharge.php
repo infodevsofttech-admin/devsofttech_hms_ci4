@@ -2529,7 +2529,7 @@ class Ipd_discharge extends BaseController
 
         $builder = $this->db->table('invoice_master m')
             ->select('DATE(m.inv_date) AS inv_date', false)
-            ->select("DATE_FORMAT(m.inv_date,'%d-%m-%Y') AS inv_date_label", false)
+            ->select("DATE_FORMAT(MIN(m.inv_date),'%d-%m-%Y') AS inv_date_label", false)
             ->select('GROUP_CONCAT(DISTINCT t.Test ORDER BY t.Test SEPARATOR ",") AS test_list', false)
             ->join('lab_request l', 'm.id = l.charge_id', 'inner')
             ->join('lab_request_item i', 'l.id = i.lab_request_id', 'inner')
