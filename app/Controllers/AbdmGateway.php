@@ -823,11 +823,13 @@ class AbdmGateway extends BaseController
                 'patient_name'           => $patName,
                 'abha_id'                => $abhaId,
                 'hi_type'                => 'DischargeSummaryRecord',
-                'record_type'            => 'discharge_summary',
+                'record_type'            => 'DischargeSummaryRecord',
                 'visit_date'             => $visitDate,
                 'doctor_name'            => $doctorName,
                 'care_context_reference' => $ccRef,
+                'care_context_display'    => 'Discharge Summary - ' . ($ipdCode !== '' ? 'IPD#' . $ipdCode : 'IPD#' . $ipdId),
                 'notes'                  => 'Discharge Summary - ' . ($ipdCode !== '' ? 'IPD#' . $ipdCode : 'IPD#' . $ipdId),
+                'queue_id'               => 'IPD-' . $ipdId . '-' . $visitDate,
                 'record_data'            => $bundle,
             ]);
             $queueId        = (string) ($result['queue_id'] ?? '');
@@ -1014,10 +1016,12 @@ class AbdmGateway extends BaseController
                 'patient_name'           => $patName,
                 'abha_id'                => $abhaId,
                 'hi_type'                => 'DiagnosticReportRecord',
-                'record_type'            => 'lab_report',
+                'record_type'            => 'DiagnosticReportRecord',
                 'visit_date'             => $visitDate,
                 'care_context_reference' => $ccRef,
+                'care_context_display'    => $testTitle !== '' ? $testTitle : 'Lab Report',
                 'notes'                  => $testTitle !== '' ? $testTitle : 'Lab Report',
+                'queue_id'               => 'LAB-' . $labReqId . '-' . $visitDate,
                 'record_data'            => $bundle,
             ]);
             $queueId        = (string) ($result['queue_id'] ?? '');
@@ -1769,7 +1773,9 @@ class AbdmGateway extends BaseController
                 'doctor_name'            => $doctorName,
                 'department'             => $department,
                 'care_context_reference' => trim((string) ($hr['care_context_reference'] ?? '')),
+                'care_context_display'    => trim((string) ($storedPayload['care_context_display'] ?? '')),
                 'notes'                  => trim((string) ($storedPayload['care_context_display'] ?? '')),
+                'queue_id'               => trim((string) ($hr['care_context_reference'] ?? '')),
                 'record_data'            => $fhirBundle,
             ]);
             $queueId        = $result['queue_id'] ?? null;
@@ -2958,17 +2964,19 @@ class AbdmGateway extends BaseController
     }
 
     /**
-     * Maps HMS internal ABDM hi_type strings to bridge API record_type enum values.
-     * Bridge accepts: prescription | lab_report | discharge_summary | wellness_record | health_document
+     * Maps HMS inputs to official ABDM HI record types.
      */
     private function mapHiTypeToRecordType(string $hiType): string
     {
         return match (strtolower($hiType)) {
-            'opconsultrecord', 'prescriptionrecord' => 'prescription',
-            'diagnosticreportrecord'                => 'lab_report',
-            'dischargesummaryrecord'                => 'discharge_summary',
-            'wellnessrecord'                        => 'wellness_record',
-            default                                 => 'health_document',
+            'opconsultrecord', 'prescriptionrecord', 'prescription' => 'PrescriptionRecord',
+            'diagnosticreportrecord', 'lab_report', 'diagnosticreport' => 'DiagnosticReportRecord',
+            'dischargesummaryrecord', 'discharge_summary', 'dischargesummary' => 'DischargeSummaryRecord',
+            'wellnessrecord' => 'WellnessRecord',
+            'immunizationrecord' => 'ImmunizationRecord',
+            'invoicerecord' => 'InvoiceRecord',
+            'healthdocumentrecord', 'health_document' => 'HealthDocumentRecord',
+            default => 'HealthDocumentRecord',
         };
     }
 

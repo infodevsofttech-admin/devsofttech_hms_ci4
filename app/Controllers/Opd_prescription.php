@@ -5281,28 +5281,39 @@ class Opd_prescription extends BaseController
             }
         }
 
+        if ($abhaId === '') {
+            return $this->response->setJSON([
+                'ok' => 0,
+                'error_text' => 'ABHA address is required before pushing to ABDM. Update the patient record first.',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
         try {
             $connector = new \App\Libraries\Abdm\EAtriaBridgeConnector();
 
             $visitLabel = $visitDate !== '' ? date('d M Y', strtotime($visitDate)) : date('d M Y');
-            $displayLabel = 'OPD Consultation - ' . $visitLabel . ($doctorName !== '' ? ' - Dr. ' . $doctorName : '');
+            $displayLabel = 'OPD Visit ' . $visitLabel . ($doctorName !== '' ? ' - Dr. ' . $doctorName : '');
 
             // care_context_reference must be unique per visit in ABDM spec.
-            // Use OPD-{id}-{date} so different visit dates generate distinct care contexts.
-            $ccRef = 'OPD-' . $opdId . '-' . ($visitDate !== '' ? $visitDate : date('Y-m-d'));
+            // Use OPD-{id}-{session} so the reference stays stable for a specific saved record.
+            $ccRef = 'OPD-' . $opdId . '-' . $recordId;
 
             $pushData = [
                 'patient_id'             => (string) $patientId,
                 'patient_name'           => $patientName,
-                'record_type'            => 'prescription',
+                'record_type'            => 'PrescriptionRecord',
+                'hi_type'                => 'PrescriptionRecord',
                 'visit_date'             => $visitDate,
+                'hospital_id'            => (string) $opdId,
                 'care_context_reference' => $ccRef,
+                'care_context_display'    => $displayLabel,
                 'notes'                  => $displayLabel,
+                'queue_id'               => 'OPD-' . $opdId . '-' . $recordId,
+                'abha_address'           => $abhaId,
                 'record_data'            => $bundle,
             ];
-            if ($abhaId !== '') {
-                $pushData['abha_address'] = $abhaId;
-            }
             if ($doctorName !== '') {
                 $pushData['doctor_name'] = $doctorName;
             }

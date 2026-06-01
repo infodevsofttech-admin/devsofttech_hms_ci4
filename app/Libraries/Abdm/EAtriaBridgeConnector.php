@@ -21,6 +21,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
     private string $baseUrl;
     private string $token;
     private string $hfrId;
+    private string $hospitalId;
     private int    $timeoutSec;
 
     public function __construct()
@@ -30,6 +31,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         $this->baseUrl    = rtrim((string) ($config->eatriaBridgeUrl ?? 'https://abdm-bridge.e-atria.in/api'), '/');
         $this->token      = (string) ($config->eatriaBridgeToken ?? '');
         $this->hfrId      = '';
+        $this->hospitalId = '';
         $this->timeoutSec = (int) ($config->eatriaBridgeTimeoutSec ?? 30);
 
         // DB (Admin Panel → ABDM Gateway Config) is the authoritative source for
@@ -41,7 +43,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             if ($db->tableExists('hospital_setting')) {
                 $rows = $db->table('hospital_setting')
                     ->select('s_name, s_value')
-                    ->whereIn('s_name', ['EATRIA_BRIDGE_TOKEN', 'EATRIA_BRIDGE_URL', 'ABDM_HFR_ID'])
+                    ->whereIn('s_name', ['EATRIA_BRIDGE_TOKEN', 'EATRIA_BRIDGE_URL', 'ABDM_HFR_ID', 'ABDM_BRIDGE_HOSPITAL_ID', 'HOSPITAL_ID'])
                     ->get()
                     ->getResultArray();
 
@@ -55,6 +57,11 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
                 }
                 if (! empty($dbSettings['ABDM_HFR_ID'])) {
                     $this->hfrId = trim($dbSettings['ABDM_HFR_ID']);
+                }
+                if (! empty($dbSettings['ABDM_BRIDGE_HOSPITAL_ID'])) {
+                    $this->hospitalId = trim($dbSettings['ABDM_BRIDGE_HOSPITAL_ID']);
+                } elseif (! empty($dbSettings['HOSPITAL_ID'])) {
+                    $this->hospitalId = trim($dbSettings['HOSPITAL_ID']);
                 }
             }
         } catch (\Throwable $e) {
@@ -351,59 +358,75 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
 
     public function pushRecord(array $data): array
     {
-        // Normalize to gateway-enforced HI types for /v3/records/push.
-        // Runtime valid_types include *Record variants.
+        $recordTypeRaw = (string) ($data['record_type'] ?? '');
         $hiTypeRaw = (string) ($data['hi_type'] ?? '');
-        $hiType    = match ($hiTypeRaw) {
-            'OPConsultRecord', 'OPConsultation'  => 'OPConsultRecord',
-            'PrescriptionRecord', 'Prescription' => 'PrescriptionRecord',
-            'DiagnosticReportRecord', 'DiagnosticReport' => 'DiagnosticReportRecord',
-            'DischargeSummaryRecord', 'DischargeSummary' => 'DischargeSummaryRecord',
-            'WellnessRecord'                     => 'WellnessRecord',
-            'ImmunizationRecord'                 => 'ImmunizationRecord',
-            'InvoiceRecord'                      => 'InvoiceRecord',
-            'HealthDocumentRecord'               => 'HealthDocumentRecord',
-            ''                                   => '',
-            default                              => $hiTypeRaw,
+
+        $normalizeHiType = static function (string $value): string {
+            return match ($value) {
+                'OPConsultation', 'OPConsultRecord', 'Prescription', 'PrescriptionRecord' => 'PrescriptionRecord',
+                'DiagnosticReport', 'DiagnosticReportRecord', 'Lab_Report', 'lab_report' => 'DiagnosticReportRecord',
+                'DischargeSummary', 'DischargeSummaryRecord' => 'DischargeSummaryRecord',
+                'ImmunizationRecord' => 'ImmunizationRecord',
+                'WellnessRecord' => 'WellnessRecord',
+                'HealthDocumentRecord' => 'HealthDocumentRecord',
+                'InvoiceRecord' => 'InvoiceRecord',
+                default => '',
+            };
         };
 
-        // Bridge internal record_type enum (sent alongside hi_type for categorisation)
-        $recordTypeIn = (string) ($data['record_type'] ?? '');
-        $validRecordTypes = ['prescription', 'lab_report', 'discharge_summary', 'wellness_record', 'health_document'];
-        if (in_array($recordTypeIn, $validRecordTypes, true)) {
-            $recordType = $recordTypeIn;
-        } else {
-            // Derive record_type from hi_type
-            $recordType = match ($hiType) {
-                'OPConsultation', 'Prescription' => 'prescription',
-                'DiagnosticReport'               => 'lab_report',
-                'DischargeSummary'               => 'discharge_summary',
-                'WellnessRecord', 'ImmunizationRecord'  => 'wellness_record',
-                default                                 => 'health_document',
-            };
+        $normalizeRecordType = static function (string $value) use ($normalizeHiType): string {
+            return $normalizeHiType($value);
+        };
+
+        $recordType = $normalizeRecordType($recordTypeRaw);
+        if ($recordType === '') {
+            $recordType = $normalizeRecordType($hiTypeRaw);
+        }
+        if ($recordType === '') {
+            $recordType = 'HealthDocumentRecord';
         }
 
-        // Derive hi_type from record_type if still empty.
-        // Gateway requires hi_type with the exact ABDM HI type name.
+        $hiType = $normalizeHiType($hiTypeRaw);
         if ($hiType === '') {
-            $hiType = match ($recordType) {
-                'prescription'      => 'OPConsultRecord',
-                'lab_report'        => 'DiagnosticReportRecord',
-                'discharge_summary' => 'DischargeSummaryRecord',
-                'wellness_record'   => 'WellnessRecord',
-                default             => 'HealthDocumentRecord',
-            };
+            $hiType = $recordType;
+        }
+
+        $patientName = trim((string) ($data['patient_name'] ?? ''));
+        $abhaAddress = trim((string) ($data['abha_address'] ?? ''));
+        $abhaId = trim((string) ($data['abha_id'] ?? ''));
+        $careContextReference = trim((string) ($data['care_context_reference'] ?? ''));
+        $careContextDisplay = trim((string) ($data['care_context_display'] ?? $data['notes'] ?? ''));
+        $queueId = trim((string) ($data['queue_id'] ?? ''));
+
+        if ($patientName === '') {
+            return ['ok' => 0, 'http_code' => 0, 'error_text' => 'patient_name is required'];
+        }
+        if ($abhaAddress === '') {
+            return ['ok' => 0, 'http_code' => 0, 'error_text' => 'abha_address is required before pushing health record'];
+        }
+        if ($careContextReference === '') {
+            return ['ok' => 0, 'http_code' => 0, 'error_text' => 'care_context_reference is required'];
+        }
+        if ($careContextDisplay === '') {
+            $careContextDisplay = $recordType;
+        }
+        if ($queueId === '') {
+            $queueId = $careContextReference;
         }
 
         // Gateway requires BOTH record_type (lowercase alias) and hi_type (official ABDM name).
         $body = [
             'patient_id'   => (string) ($data['patient_id'] ?? ''),
-            'patient_name' => (string) ($data['patient_name'] ?? ''),
+            'patient_name' => $patientName,
             'record_type'  => $recordType,
             'hi_type'      => $hiType,
             'visit_date'   => (string) ($data['visit_date'] ?? date('Y-m-d')),
             'record_data'  => $data['record_data'] ?? $data['bundle'] ?? (object) [],
             'fhir_bundle'  => $data['record_data'] ?? $data['bundle'] ?? (object) [],
+            'care_context_reference' => $careContextReference,
+            'care_context_display' => $careContextDisplay,
+            'abha_address' => $abhaAddress,
+            'queue_id' => $queueId,
         ];
 
         // hfr_id is required in every push request alongside the Bearer token.
@@ -411,7 +434,11 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             $body['hfr_id'] = $this->hfrId;
         }
 
-        foreach (['abha_id', 'abha_address', 'doctor_name', 'department', 'care_context_reference', 'care_context_display', 'notes', 'queue_id', 'gender', 'year_of_birth'] as $optional) {
+        if ($this->hospitalId !== '') {
+            $body['hospital_id'] = $this->hospitalId;
+        }
+
+        foreach (['abha_id', 'doctor_name', 'department', 'notes', 'gender', 'year_of_birth'] as $optional) {
             if (! empty($data[$optional])) {
                 $body[$optional] = (string) $data[$optional];
             }
