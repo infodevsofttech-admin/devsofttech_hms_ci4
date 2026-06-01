@@ -656,6 +656,7 @@ $routes->get('Opd_prescription/fhir_bundle_history/(:num)/(:num)', 'Opd_prescrip
 $routes->get('Opd_prescription/fhir_bundle_preview/(:num)', 'Opd_prescription::fhir_bundle_preview/$1');
 $routes->get('Opd_prescription/fhir_bundle_preview/(:num)/(:num)', 'Opd_prescription::fhir_bundle_preview/$1/$2');
 $routes->post('Opd_prescription/fhir_bundle_submit', 'Opd_prescription::fhir_bundle_submit');
+$routes->get('Opd_prescription/fhir_bundle_regenerate', 'Opd_prescription::fhir_bundle_regenerate_manual');
 $routes->post('Opd_prescription/fhir_bundle_regenerate', 'Opd_prescription::fhir_bundle_regenerate');
 $routes->post('Opd_prescription/fhir_complaint_recode', 'Opd_prescription::fhir_complaint_recode');
 $routes->post('Opd_prescription/fhir_diagnosis_recode', 'Opd_prescription::fhir_diagnosis_recode');

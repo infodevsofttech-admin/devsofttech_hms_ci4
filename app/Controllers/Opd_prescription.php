@@ -4641,21 +4641,55 @@ class Opd_prescription extends BaseController
         $opdId     = (int) $this->request->getPost('opd_id');
         $sessionId = (int) $this->request->getPost('opd_session_id');
 
+        return $this->response->setJSON($this->regenerateFhirBundleInternal($opdId, $sessionId));
+    }
+
+    /**
+     * GET Opd_prescription/fhir_bundle_regenerate
+     *
+     * Manual browser test wrapper. To execute regeneration, pass:
+     *   ?opd_id={id}&opd_session_id={id-or-0}&run=1
+     */
+    public function fhir_bundle_regenerate_manual()
+    {
+        $opdId     = (int) $this->request->getGet('opd_id');
+        $sessionId = (int) $this->request->getGet('opd_session_id');
+        $run       = trim((string) $this->request->getGet('run'));
+
+        if ($opdId <= 0 || $run !== '1') {
+            return $this->response->setJSON([
+                'ok' => 0,
+                'message' => 'Manual test mode: call with ?opd_id={id}&opd_session_id=0&run=1 to execute regeneration.',
+                'example' => base_url('Opd_prescription/fhir_bundle_regenerate?opd_id=8&opd_session_id=0&run=1'),
+            ]);
+        }
+
+        return $this->response->setJSON($this->regenerateFhirBundleInternal($opdId, $sessionId));
+    }
+
+    /**
+     * Shared core logic used by both POST-AJAX and manual GET regenerate endpoints.
+     *
+     * @return array<string, mixed>
+     */
+    private function regenerateFhirBundleInternal(int $opdId, int $sessionId): array
+    {
+
         if ($opdId <= 0) {
-            return $this->response->setJSON(['ok' => 0, 'message' => 'opd_id is required']);
+            return ['ok' => 0, 'message' => 'opd_id is required'];
         }
 
         if (! $this->db->tableExists('opd_fhir_documents')) {
-            return $this->response->setJSON(['ok' => 0, 'message' => 'FHIR bundle storage not available']);
+            return ['ok' => 0, 'message' => 'FHIR bundle storage not available'];
         }
 
         // Load the OPD row
         if (! $this->db->tableExists('opd_master')) {
-            return $this->response->setJSON(['ok' => 0, 'message' => 'opd_master table not found']);
+            return ['ok' => 0, 'message' => 'opd_master table not found'];
         }
         $opdRow = $this->db->table('opd_master')->where('opd_id', $opdId)->get(1)->getRowArray();
         if (empty($opdRow)) {
-            return $this->response->setJSON(['ok' => 0, 'message' => 'OPD record not found']);
+            return ['ok' => 0, 'message' => 'OPD record not found'];
         }
 
         // If no session given, find the latest prescription session
@@ -4674,7 +4708,7 @@ class Opd_prescription extends BaseController
             $patientRow = $this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray() ?? [];
         }
         if (empty($patientRow)) {
-            return $this->response->setJSON(['ok' => 0, 'message' => 'Patient record not found']);
+            return ['ok' => 0, 'message' => 'Patient record not found'];
         }
 
         try {
@@ -4750,16 +4784,16 @@ class Opd_prescription extends BaseController
                 $documentId = (int) $this->db->insertID();
             }
 
-            return $this->response->setJSON([
+            return [
                 'ok'           => 1,
                 'message'      => 'FHIR bundle regenerated successfully',
                 'document_id'  => $documentId,
                 'generated_at' => $generatedAt,
                 'entry_count'  => isset($bundle['entry']) ? count($bundle['entry']) : 0,
-            ]);
+            ];
         } catch (\Throwable $e) {
             log_message('error', '[fhir_bundle_regenerate] ' . $e->getMessage());
-            return $this->response->setJSON(['ok' => 0, 'message' => 'Regeneration failed: ' . $e->getMessage()]);
+            return ['ok' => 0, 'message' => 'Regeneration failed: ' . $e->getMessage()];
         }
     }
 
