@@ -132,7 +132,7 @@ class FhirR4Builder
                 'display' => 'Ambulatory',
             ],
             'subject' => ['reference' => $patientRef, 'display' => 'Patient'],
-            'period'  => ['start' => trim((string) ($encounter['period_start'] ?? '')) !== '' ? (string) $encounter['period_start'] : $issuedAt],
+            'period'  => ['start' => $this->normalizeIsoDateTime((string) ($encounter['period_start'] ?? ''), $issuedAt)],
         ];
         if ($practitionerRef !== '') {
             $encounterResource['participant'] = [['individual' => ['reference' => $practitionerRef]]];
@@ -657,7 +657,7 @@ class FhirR4Builder
 
         $patientRef  = 'urn:uuid:' . $patientUuid;
         $reportRef   = 'urn:uuid:' . $reportUuid;
-        $reportedAt  = trim((string) ($diagnosticReport['reported_at'] ?? '')) ?: $issuedAt;
+        $reportedAt  = $this->normalizeIsoDateTime((string) ($diagnosticReport['reported_at'] ?? ''), $issuedAt);
         $reportTitle = trim((string) ($diagnosticReport['title'] ?? 'Diagnostic Report'));
         $reportStatus = trim((string) ($diagnosticReport['status'] ?? 'final'));
         $isImaging   = (bool) ($diagnosticReport['is_imaging'] ?? false)
@@ -734,12 +734,15 @@ class FhirR4Builder
                 ],
                 'subject' => ['reference' => $patientRef, 'display' => 'Patient'],
             ];
-            $pStart = trim((string) ($encounter['period_start'] ?? ''));
-            if ($pStart !== '') {
-                $encounterRes['period'] = ['start' => $pStart];
-                $pEnd = trim((string) ($encounter['period_end'] ?? ''));
-                if ($pEnd !== '') {
-                    $encounterRes['period']['end'] = $pEnd;
+            $pStartRaw = trim((string) ($encounter['period_start'] ?? ''));
+            if ($pStartRaw !== '') {
+                $encounterRes['period'] = ['start' => $this->normalizeIsoDateTime($pStartRaw, $issuedAt)];
+                $pEndRaw = trim((string) ($encounter['period_end'] ?? ''));
+                if ($pEndRaw !== '') {
+                    $pEndIso = $this->normalizeIsoDateTime($pEndRaw);
+                    if ($pEndIso !== '') {
+                        $encounterRes['period']['end'] = $pEndIso;
+                    }
                 }
             }
             if ($practitionerRef !== '') {
@@ -809,7 +812,9 @@ class FhirR4Builder
                 if ($refHigh !== null && is_numeric($refHigh)) {
                     $rr['high'] = ['value' => (float) $refHigh, 'unit' => $unit ?: $ucum, 'system' => 'http://unitsofmeasure.org', 'code' => $ucum];
                 }
-                $obsResource['referenceRange'] = [$rr];
+                if (! empty($rr)) {
+                    $obsResource['referenceRange'] = [$rr];
+                }
             }
             // Interpretation (H/L/N)
             $interp = trim((string) ($obs['interpretation'] ?? ''));
@@ -1401,6 +1406,28 @@ class FhirR4Builder
     }
 
     /**
+     * Normalize any datetime-like string into ISO 8601 with IST offset.
+     */
+    private function normalizeIsoDateTime(string $value, string $fallback = ''): string
+    {
+        $raw = trim($value);
+        if ($raw === '') {
+            return trim($fallback);
+        }
+
+        try {
+            $hasTimezone = preg_match('/([+-]\d{2}:\d{2}|Z)$/', $raw) === 1;
+            $dt = $hasTimezone && strpos($raw, 'T') !== false
+                ? new \DateTime($raw)
+                : new \DateTime($raw, new \DateTimeZone('Asia/Kolkata'));
+
+            return $dt->setTimezone(new \DateTimeZone('Asia/Kolkata'))->format('Y-m-d\TH:i:sP');
+        } catch (\Throwable $e) {
+            return trim($fallback);
+        }
+    }
+
+    /**
      * @param array<string, mixed> $patient
      *
      * @return array<string, mixed>
@@ -1435,8 +1462,9 @@ class FhirR4Builder
             'name'         => [$nameEntry],
         ];
 
-        if (! empty($patient['gender'])) {
-            $resource['gender'] = (string) $patient['gender'];
+        $gender = $this->normalizeAdministrativeGender($patient['gender'] ?? null);
+        if ($gender !== '') {
+            $resource['gender'] = $gender;
         }
 
         if (! empty($patient['birthDate'])) {
@@ -1469,6 +1497,25 @@ class FhirR4Builder
         }
 
         return $resource;
+    }
+
+    /**
+     * Convert legacy/local gender values to FHIR AdministrativeGender.
+     */
+    private function normalizeAdministrativeGender($value): string
+    {
+        $raw = strtolower(trim((string) $value));
+        if ($raw === '') {
+            return '';
+        }
+
+        return match ($raw) {
+            'm', 'male', '1' => 'male',
+            'f', 'female', '2' => 'female',
+            'o', 'other', '3', 'transgender', 'trans' => 'other',
+            'u', 'unknown', '0', 'na', 'n/a', 'not known' => 'unknown',
+            default => in_array($raw, ['male', 'female', 'other', 'unknown'], true) ? $raw : 'unknown',
+        };
     }
 
     /**

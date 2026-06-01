@@ -966,6 +966,7 @@ class AbdmGateway extends BaseController
         $organization = $hospitalProfile['name'] !== ''
             ? ['name' => $hospitalProfile['name'], 'hfr_id' => $hospitalProfile['hfr_id']]
             : null;
+        $practitioner = $this->resolveLabPractitionerForFhir($labReqId, $labReq);
 
         $encounter = [
             'id'           => 'LAB-' . $labReqId,
@@ -988,7 +989,7 @@ class AbdmGateway extends BaseController
             ]);
         }
 
-        $bundle     = $fhir->buildLabReportBundle($patient, $diagnosticReport, $observations, null, $organization, $encounter, $pdfAttachment);
+        $bundle     = $fhir->buildLabReportBundle($patient, $diagnosticReport, $observations, $practitioner, $organization, $encounter, $pdfAttachment);
         $bundleJson = (string) json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
         // ── Store health_record ───────────────────────────────────────────────
@@ -1138,6 +1139,7 @@ class AbdmGateway extends BaseController
         $organization = $hospitalProfile['name'] !== ''
             ? ['name' => $hospitalProfile['name'], 'hfr_id' => $hospitalProfile['hfr_id']]
             : null;
+        $practitioner = $this->resolveLabPractitionerForFhir($labReqId, $labReq);
 
         $encounter = [
             'id'           => 'LAB-' . $labReqId,
@@ -1169,7 +1171,7 @@ class AbdmGateway extends BaseController
             ]);
         }
 
-        $bundle = $fhir->buildLabReportBundle($patient, $diagnosticReport, $observations, null, $organization, $encounter, $pdfAttachment);
+        $bundle = $fhir->buildLabReportBundle($patient, $diagnosticReport, $observations, $practitioner, $organization, $encounter, $pdfAttachment);
 
         return $this->response->setJSON([
             'status' => 'ok',
@@ -2470,6 +2472,167 @@ class AbdmGateway extends BaseController
             $hfrId = '';
         }
         return ['name' => $name, 'hfr_id' => $hfrId];
+    }
+
+    /**
+     * Resolve practitioner details for lab/radiology DiagnosticReportRecord.
+     *
+     * Best-effort strategy:
+     * 1) read doctor id/name/registration from lab_request (when present)
+     * 2) enrich from doctor_master using doctor id
+     *
+     * @param int                     $labReqId
+     * @param object|array<string,mixed>|null $labReqRow
+     * @return array<string,string>|null
+     */
+    private function resolveLabPractitionerForFhir(int $labReqId, $labReqRow = null): ?array
+    {
+        if ($labReqId <= 0 || ! $this->db->tableExists('lab_request')) {
+            return null;
+        }
+
+        $doctorId = 0;
+        $doctorName = '';
+        $doctorRegNo = '';
+
+        $candidateIdCols = ['doctor_id', 'dr_id', 'doc_id', 'r_doc_id', 'consultant_id', 'reported_by_doctor_id'];
+        $candidateNameCols = ['doctor_name', 'dr_name', 'doc_name', 'r_doc_name', 'consultant_name', 'reported_by_name', 'reported_by'];
+        $candidateRegCols = ['doctor_reg_no', 'registration_no', 'reg_no', 'doctor_registration_no'];
+
+        // Try immediate row first (if caller passed a richer row object/array).
+        if (is_object($labReqRow)) {
+            foreach ($candidateIdCols as $c) {
+                if (isset($labReqRow->{$c}) && (int) $labReqRow->{$c} > 0) {
+                    $doctorId = (int) $labReqRow->{$c};
+                    break;
+                }
+            }
+            foreach ($candidateNameCols as $c) {
+                $v = isset($labReqRow->{$c}) ? trim((string) $labReqRow->{$c}) : '';
+                if ($v !== '') {
+                    $doctorName = $v;
+                    break;
+                }
+            }
+            foreach ($candidateRegCols as $c) {
+                $v = isset($labReqRow->{$c}) ? trim((string) $labReqRow->{$c}) : '';
+                if ($v !== '') {
+                    $doctorRegNo = $v;
+                    break;
+                }
+            }
+        } elseif (is_array($labReqRow)) {
+            foreach ($candidateIdCols as $c) {
+                if (isset($labReqRow[$c]) && (int) $labReqRow[$c] > 0) {
+                    $doctorId = (int) $labReqRow[$c];
+                    break;
+                }
+            }
+            foreach ($candidateNameCols as $c) {
+                $v = isset($labReqRow[$c]) ? trim((string) $labReqRow[$c]) : '';
+                if ($v !== '') {
+                    $doctorName = $v;
+                    break;
+                }
+            }
+            foreach ($candidateRegCols as $c) {
+                $v = isset($labReqRow[$c]) ? trim((string) $labReqRow[$c]) : '';
+                if ($v !== '') {
+                    $doctorRegNo = $v;
+                    break;
+                }
+            }
+        }
+
+        try {
+            $labFields = $this->db->getFieldNames('lab_request') ?? [];
+            $selectCols = ['id'];
+            foreach (array_merge($candidateIdCols, $candidateNameCols, $candidateRegCols) as $c) {
+                if (in_array($c, $labFields, true)) {
+                    $selectCols[] = $c;
+                }
+            }
+
+            if (count($selectCols) > 1) {
+                $labDbRow = $this->db->table('lab_request')
+                    ->select(implode(',', array_unique($selectCols)))
+                    ->where('id', $labReqId)
+                    ->get(1)
+                    ->getRowArray() ?? [];
+
+                if (! empty($labDbRow)) {
+                    if ($doctorId <= 0) {
+                        foreach ($candidateIdCols as $c) {
+                            if (isset($labDbRow[$c]) && (int) $labDbRow[$c] > 0) {
+                                $doctorId = (int) $labDbRow[$c];
+                                break;
+                            }
+                        }
+                    }
+                    if ($doctorName === '') {
+                        foreach ($candidateNameCols as $c) {
+                            $v = isset($labDbRow[$c]) ? trim((string) $labDbRow[$c]) : '';
+                            if ($v !== '') {
+                                $doctorName = $v;
+                                break;
+                            }
+                        }
+                    }
+                    if ($doctorRegNo === '') {
+                        foreach ($candidateRegCols as $c) {
+                            $v = isset($labDbRow[$c]) ? trim((string) $labDbRow[$c]) : '';
+                            if ($v !== '') {
+                                $doctorRegNo = $v;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // fail-open; continue with what we already have
+        }
+
+        if ($doctorId > 0 && $this->db->tableExists('doctor_master')) {
+            try {
+                $dFields = $this->db->getFieldNames('doctor_master') ?? [];
+                $dSelect = ['id'];
+                foreach (['p_fname', 'p_lname', 'doctor_reg_no', 'registration_no', 'reg_no'] as $f) {
+                    if (in_array($f, $dFields, true)) {
+                        $dSelect[] = $f;
+                    }
+                }
+
+                $dRow = $this->db->table('doctor_master')
+                    ->select(implode(',', array_unique($dSelect)))
+                    ->where('id', $doctorId)
+                    ->get(1)
+                    ->getRowArray() ?? [];
+
+                if ($doctorName === '' && ! empty($dRow)) {
+                    $doctorName = trim(trim((string) ($dRow['p_fname'] ?? '')) . ' ' . trim((string) ($dRow['p_lname'] ?? '')));
+                }
+                if ($doctorRegNo === '' && ! empty($dRow)) {
+                    foreach (['doctor_reg_no', 'registration_no', 'reg_no'] as $f) {
+                        if (! empty($dRow[$f])) {
+                            $doctorRegNo = trim((string) $dRow[$f]);
+                            break;
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                // fail-open
+            }
+        }
+
+        if ($doctorName === '') {
+            return null;
+        }
+
+        return [
+            'name' => $doctorName,
+            'registration_number' => $doctorRegNo,
+        ];
     }
 
     /**
