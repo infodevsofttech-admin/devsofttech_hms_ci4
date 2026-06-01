@@ -383,7 +383,7 @@ class AbdmTaskBoard extends BaseController
             $docRows = $this->db->table('opd_fhir_documents')
                 ->select('id, opd_id, opd_session_id, generated_at')
                 ->whereIn('opd_id', $opdIds)
-                ->where('bundle_type', 'MedicationRequestBundle')
+                ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle'])
                 ->orderBy('id', 'DESC')
                 ->get()
                 ->getResultArray();

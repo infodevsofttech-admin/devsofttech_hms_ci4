@@ -608,7 +608,7 @@ class AbdmGateway extends BaseController
 
         $builder = $this->db->table('opd_fhir_documents')
             ->where('opd_id', $opdId)
-            ->where('bundle_type', 'MedicationRequestBundle');
+            ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle']);
         if ($sessionId > 0) {
             $builder->where('opd_session_id', $sessionId);
         }
