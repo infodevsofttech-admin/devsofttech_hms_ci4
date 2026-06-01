@@ -4837,6 +4837,17 @@ class Opd_prescription extends BaseController
 
         $prettyJson = (string) json_encode($bundle, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
+        $bundleType = (string) ($row['bundle_type'] ?? '');
+        if ($bundleType === '' || $bundleType === 'MedicationRequestBundle') {
+            $compositionProfiles = (array) ($bundle['entry'][0]['resource']['meta']['profile'] ?? []);
+            foreach ($compositionProfiles as $profile) {
+                if (stripos((string) $profile, 'OPConsultRecord') !== false) {
+                    $bundleType = 'OPConsultRecord';
+                    break;
+                }
+            }
+        }
+
         // AJAX callers (modal preview) get JSON directly
         if ($this->request->isAJAX()) {
             // Fetch live complaint and diagnosis terms from current prescription row
@@ -4880,7 +4891,7 @@ class Opd_prescription extends BaseController
                 'bundle'          => $bundle,
                 'document_id'     => (int) ($row['id'] ?? 0),
                 'generated_at'    => (string) ($row['generated_at'] ?? ''),
-                'bundle_type'     => (string) ($row['bundle_type'] ?? ''),
+                'bundle_type'     => $bundleType,
                 'opd_id'          => (int) $opdId,
                 'opd_session_id'  => (int) $sessionId,
                 'live_complaints' => $liveComplaints,
@@ -4937,7 +4948,7 @@ class Opd_prescription extends BaseController
 
         $docId        = (int) ($row['id'] ?? 0);
         $generatedAt  = htmlspecialchars((string) ($row['generated_at'] ?? ''), ENT_QUOTES, 'UTF-8');
-        $bundleType   = htmlspecialchars((string) ($row['bundle_type'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $bundleType   = htmlspecialchars($bundleType, ENT_QUOTES, 'UTF-8');
         $entryCount   = isset($bundle['entry']) && is_array($bundle['entry']) ? count($bundle['entry']) : 0;
         $csrfTokName  = csrf_token();
         $csrfTokHash  = csrf_hash();
