@@ -422,6 +422,12 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             'queue_id' => $queueId,
         ];
 
+        // Also send ABDM-style careContexts wrapper so consent linkage remains explicit.
+        $body['careContexts'] = [[
+            'careContextReference' => $careContextReference,
+            'description'          => $careContextDisplay,
+        ]];
+
         // hfr_id is required in every push request alongside the Bearer token.
         if ($this->hfrId !== '') {
             $body['hfr_id'] = $this->hfrId;

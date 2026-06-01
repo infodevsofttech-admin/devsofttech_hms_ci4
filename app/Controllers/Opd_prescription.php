@@ -5234,13 +5234,6 @@ class Opd_prescription extends BaseController
             ]);
         }
 
-        $recordRefId = $sessionId > 0
-            ? $sessionId
-            : (int) ($bundleRow['opd_session_id'] ?? ($bundleRow['id'] ?? 0));
-        if ($recordRefId <= 0) {
-            $recordRefId = (int) ($bundleRow['id'] ?? $opdId);
-        }
-
         // Gather patient / OPD context for the push payload
         $patientId   = 0;
         $patientName = '';
@@ -5303,20 +5296,19 @@ class Opd_prescription extends BaseController
             $visitLabel = $visitDate !== '' ? date('d M Y', strtotime($visitDate)) : date('d M Y');
             $displayLabel = 'OPD Visit ' . $visitLabel . ($doctorName !== '' ? ' - Dr. ' . $doctorName : '');
 
-            // care_context_reference must be unique per visit in ABDM spec.
-            // Use OPD-{id}-{session} so the reference stays stable for a specific saved record.
-            $ccRef = 'OPD-' . $opdId . '-' . $recordRefId;
+            // Keep a stable OPD visit reference keyed by visit date for ABDM care-context linkage.
+            $ccRef = 'OPD-' . $opdId . '-' . $visitDate;
 
             $pushData = [
                 'patient_id'             => (string) $patientId,
                 'patient_name'           => $patientName,
-                'record_type'            => 'PrescriptionRecord',
-                'hi_type'                => 'PrescriptionRecord',
+                'record_type'            => 'OPConsultRecord',
+                'hi_type'                => 'OPConsultRecord',
                 'visit_date'             => $visitDate,
                 'care_context_reference' => $ccRef,
                 'care_context_display'    => $displayLabel,
                 'notes'                  => $displayLabel,
-                'queue_id'               => 'OPD-' . $opdId . '-' . $recordRefId,
+                'queue_id'               => $ccRef,
                 'abha_address'           => $abhaId,
                 'record_data'            => $bundle,
             ];
