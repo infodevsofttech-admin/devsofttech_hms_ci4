@@ -4570,7 +4570,7 @@ class Opd_prescription extends BaseController
 
         $builder = $this->db->table('opd_fhir_documents')
             ->where('opd_id', (int) $opdId)
-            ->where('bundle_type', 'MedicationRequestBundle');
+            ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle']);
 
         if ($sessionId > 0) {
             $builder->where('opd_session_id', (int) $sessionId);
@@ -4599,7 +4599,7 @@ class Opd_prescription extends BaseController
 
         $builder = $this->db->table('opd_fhir_documents')
             ->where('opd_id', (int) $opdId)
-            ->where('bundle_type', 'MedicationRequestBundle');
+            ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle']);
 
         if ($sessionId > 0) {
             $builder->where('opd_session_id', (int) $sessionId);
@@ -4723,7 +4723,7 @@ class Opd_prescription extends BaseController
             // Overwrite the latest stored bundle for this opd_id / session
             $existingBuilder = $this->db->table('opd_fhir_documents')
                 ->where('opd_id', $opdId)
-                ->where('bundle_type', 'MedicationRequestBundle');
+                ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle']);
             if ($sessionId > 0) {
                 $existingBuilder->where('opd_session_id', $sessionId);
             }
@@ -4742,7 +4742,7 @@ class Opd_prescription extends BaseController
                 $this->db->table('opd_fhir_documents')->insert([
                     'opd_id'         => $opdId,
                     'opd_session_id' => $sessionId,
-                    'bundle_type'    => 'MedicationRequestBundle',
+                    'bundle_type'    => 'OPConsultRecord',
                     'bundle_json'    => $bundleJson,
                     'generated_by'   => $generatedBy,
                     'generated_at'   => $generatedAt,
@@ -4774,7 +4774,7 @@ class Opd_prescription extends BaseController
 
         $builder = $this->db->table('opd_fhir_documents')
             ->where('opd_id', (int) $opdId)
-            ->where('bundle_type', 'MedicationRequestBundle');
+            ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle']);
 
         if ($sessionId > 0) {
             $builder->where('opd_session_id', (int) $sessionId);
@@ -5208,7 +5208,7 @@ class Opd_prescription extends BaseController
 
         $builder = $this->db->table('opd_fhir_documents')
             ->where('opd_id', $opdId)
-            ->where('bundle_type', 'MedicationRequestBundle');
+            ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle']);
         if ($sessionId > 0) {
             $builder->where('opd_session_id', $sessionId);
         }
@@ -10279,7 +10279,7 @@ class Opd_prescription extends BaseController
         $inserted = (bool) $this->db->table('opd_fhir_documents')->insert([
             'opd_id' => $opdId,
             'opd_session_id' => $sessionId,
-            'bundle_type' => 'MedicationRequestBundle',
+            'bundle_type' => 'OPConsultRecord',
             'bundle_json' => $bundleJson,
             'generated_by' => $generatedBy,
             'generated_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
@@ -10298,7 +10298,7 @@ class Opd_prescription extends BaseController
                     'opd_fhir_document_id' => $documentId,
                     'opd_id' => $opdId,
                     'opd_session_id' => $sessionId,
-                    'bundle_type' => 'MedicationRequestBundle',
+                    'bundle_type' => 'OPConsultRecord',
                     'generated_by' => $generatedBy,
                     'generated_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
                     'bundle_json' => $bundle,
