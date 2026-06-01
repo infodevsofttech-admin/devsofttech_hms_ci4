@@ -307,9 +307,22 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
 
     public function sharePrescriptionBundle(array $payload, string $entityId = ''): array
     {
+        $hiTypeRaw = (string) ($payload['hi_type'] ?? 'OPConsultRecord');
+        $hiType = match ($hiTypeRaw) {
+            'OPConsultation', 'OPConsultRecord' => 'OPConsultRecord',
+            'Prescription', 'PrescriptionRecord' => 'PrescriptionRecord',
+            'DiagnosticReport', 'DiagnosticReportRecord' => 'DiagnosticReportRecord',
+            'DischargeSummary', 'DischargeSummaryRecord' => 'DischargeSummaryRecord',
+            'ImmunizationRecord' => 'ImmunizationRecord',
+            'WellnessRecord' => 'WellnessRecord',
+            'HealthDocumentRecord' => 'HealthDocumentRecord',
+            'InvoiceRecord' => 'InvoiceRecord',
+            default => $hiTypeRaw,
+        };
+
         return $this->post('/v3/bundle/push', [
             'consent_id'  => (string) ($payload['consent_id'] ?? $payload['consent_handle'] ?? ''),
-            'hi_type'     => (string) ($payload['hi_type'] ?? 'OPConsultation'),
+            'hi_type'     => $hiType,
             'fhir_bundle' => $payload['bundle'] ?? $payload['fhir_bundle'] ?? [],
         ]);
     }
@@ -318,7 +331,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
     {
         return $this->post('/v3/bundle/push', [
             'consent_id'  => (string) ($payload['consent_id'] ?? $payload['consent_handle'] ?? ''),
-            'hi_type'     => 'DischargeSummary',
+            'hi_type'     => 'DischargeSummaryRecord',
             'fhir_bundle' => $payload['bundle'] ?? $payload['fhir_bundle'] ?? [],
         ]);
     }
@@ -327,7 +340,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
     {
         return $this->post('/v3/bundle/push', [
             'consent_id'  => (string) ($payload['consent_id'] ?? $payload['consent_handle'] ?? ''),
-            'hi_type'     => 'DiagnosticReport',
+            'hi_type'     => 'DiagnosticReportRecord',
             'fhir_bundle' => $payload['bundle'] ?? $payload['fhir_bundle'] ?? [],
         ]);
     }
@@ -338,16 +351,14 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
 
     public function pushRecord(array $data): array
     {
-        // Normalise to gateway accepted HI types from integration docs.
-        // Valid values: OPConsultation, Prescription, DiagnosticReport,
-        //               DischargeSummary, ImmunizationRecord, WellnessRecord,
-        //               HealthDocumentRecord, InvoiceRecord
+        // Normalize to gateway-enforced HI types for /v3/records/push.
+        // Runtime valid_types include *Record variants.
         $hiTypeRaw = (string) ($data['hi_type'] ?? '');
         $hiType    = match ($hiTypeRaw) {
-            'OPConsultRecord', 'OPConsultation'  => 'OPConsultation',
-            'PrescriptionRecord', 'Prescription' => 'Prescription',
-            'DiagnosticReportRecord', 'DiagnosticReport' => 'DiagnosticReport',
-            'DischargeSummaryRecord', 'DischargeSummary' => 'DischargeSummary',
+            'OPConsultRecord', 'OPConsultation'  => 'OPConsultRecord',
+            'PrescriptionRecord', 'Prescription' => 'PrescriptionRecord',
+            'DiagnosticReportRecord', 'DiagnosticReport' => 'DiagnosticReportRecord',
+            'DischargeSummaryRecord', 'DischargeSummary' => 'DischargeSummaryRecord',
             'WellnessRecord'                     => 'WellnessRecord',
             'ImmunizationRecord'                 => 'ImmunizationRecord',
             'InvoiceRecord'                      => 'InvoiceRecord',
@@ -376,9 +387,9 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         // Gateway requires hi_type with the exact ABDM HI type name.
         if ($hiType === '') {
             $hiType = match ($recordType) {
-                'prescription'      => 'OPConsultation',
-                'lab_report'        => 'DiagnosticReport',
-                'discharge_summary' => 'DischargeSummary',
+                'prescription'      => 'OPConsultRecord',
+                'lab_report'        => 'DiagnosticReportRecord',
+                'discharge_summary' => 'DischargeSummaryRecord',
                 'wellness_record'   => 'WellnessRecord',
                 default             => 'HealthDocumentRecord',
             };
