@@ -544,11 +544,17 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
 
     public function hipLinkToken(array $payload): array
     {
+        if ($this->hfrId !== '' && empty($payload['hfr_id'])) {
+            $payload['hfr_id'] = $this->hfrId;
+        }
         return $this->post('/v3/hip/link-token', $payload);
     }
 
     public function hipLinkCareContext(array $payload): array
     {
+        if ($this->hfrId !== '' && empty($payload['hfr_id'])) {
+            $payload['hfr_id'] = $this->hfrId;
+        }
         return $this->post('/v3/hip/link/carecontext', $payload);
     }
 
