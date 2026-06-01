@@ -51,11 +51,12 @@
                     <div class="mt-4">
                         <label class="form-label">Permissions</label>
                         <div class="alert alert-info py-2 mb-2">
-                            Pharmacy module access is controlled by <strong>pharmacy.access</strong>.
+                            Pharmacy module access is controlled by <strong>pharmacy.access</strong>. Editing past Walk-in/Registered pharmacy invoices requires <strong>pharmacy.invoice.edit-old</strong> (or <strong>pharmacy.invoice.admin</strong>). Discount caps can be granted with <strong>pharmacy.invoice.discount.10</strong>, <strong>pharmacy.invoice.discount.20</strong>, <strong>pharmacy.invoice.discount.30</strong>, or full override using <strong>pharmacy.invoice.admin</strong>. Base user discount can be set in hospital setting key <strong>PHARMACY_NORMAL_MAX_DISCOUNT_PERCENT</strong>.
                         </div>
                         <div class="border rounded p-3 bg-light">
                             <?php
                             $selectedPermissions = [];
+                            $permissions = $permissions ?? [];
                             if (! empty($selectedUser)) {
                                 $selectedPermissions = $selectedUser->getPermissions() ?? [];
                             }

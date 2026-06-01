@@ -14,6 +14,7 @@ $customerCode = trim((string) ($invoice->patient_code ?? ''));
 $customerPhone = trim((string) ($invoice->inv_phone_number ?? ($patient->mphone1 ?? '')));
 $doctorName = trim((string) ($invoice->doc_name ?? ''));
 $doctorLabel = $doctorName !== '' ? (preg_match('/^dr\.?\s*/i', $doctorName) ? $doctorName : 'Dr. ' . $doctorName) : '-';
+$items = $items ?? [];
 $addressLine = $pharmacyAddress;
 if ($pharmacyState !== '') {
     $addressLine .= ($addressLine !== '' ? ', ' : '') . $pharmacyState;
@@ -26,6 +27,18 @@ $discountTotal = 0.0;
 $cgstTotal = 0.0;
 $sgstTotal = 0.0;
 $netTotal = 0.0;
+$invoiceLevelDiscountTotal = (float) (($invoice->discount_amount ?? 0) + ($invoice->disc_amount ?? 0) + ($invoice->item_discount_amount ?? 0));
+$itemCount = count($items);
+$baseGrossTotal = 0.0;
+$baseDiscountTotal = 0.0;
+if (! empty($items)) {
+    foreach ($items as $printItem) {
+        $baseGrossTotal += (float) ($printItem->amount ?? 0);
+        $baseDiscountTotal += (float) ($printItem->disc_amount ?? 0);
+    }
+}
+$extraInvoiceDiscountTotal = max(0.0, $invoiceLevelDiscountTotal - $baseDiscountTotal);
+$allocatedExtraDiscountTotal = 0.0;
 
 $compact = in_array((int) ($printFormat ?? 0), [1, 2, 3], true);
 $baseFont = $compact ? '10px' : '11px';
@@ -129,8 +142,25 @@ $tdPad = $compact ? '4px 4px' : '5px 5px';
                     <?php foreach ($items as $index => $item): ?>
                         <?php
                         $gross = (float) ($item->amount ?? 0);
-                        $disc = (float) ($item->disc_amount ?? ($item->twdisc_amount ?? 0));
-                        $net = (float) ($item->twdisc_amount ?? $item->tamount ?? ($item->net_amount ?? 0));
+                        $baseDisc = (float) ($item->disc_amount ?? 0);
+                        $baseNet = (float) ($item->twdisc_amount ?? $item->tamount ?? ($item->net_amount ?? 0));
+
+                        $remainingExtraDiscount = max(0.0, $extraInvoiceDiscountTotal - $allocatedExtraDiscountTotal);
+                        $allocExtraDisc = 0.0;
+                        if ($remainingExtraDiscount > 0 && $baseGrossTotal > 0) {
+                            if ((int) $index === $itemCount - 1) {
+                                $allocExtraDisc = $remainingExtraDiscount;
+                            } else {
+                                $allocExtraDisc = round($extraInvoiceDiscountTotal * ($gross / $baseGrossTotal), 2);
+                                if ($allocExtraDisc > $remainingExtraDiscount) {
+                                    $allocExtraDisc = $remainingExtraDiscount;
+                                }
+                            }
+                        }
+                        $allocatedExtraDiscountTotal += $allocExtraDisc;
+
+                        $disc = $baseDisc + $allocExtraDisc;
+                        $net = max(0.0, $baseNet - $allocExtraDisc);
 
                         $cgstPer = (float) ($item->CGST_per ?? 0);
                         $sgstPer = (float) ($item->SGST_per ?? 0);
@@ -179,8 +209,10 @@ $tdPad = $compact ? '4px 4px' : '5px 5px';
 
         <?php
         $grossFinal = (float) ($invoice->gross_amount ?? $grossTotal);
-        $discFinal = (float) ($invoice->disc_amount ?? $discountTotal);
-        $netFinal = (float) ($invoice->net_amount ?? $netTotal);
+        $invoiceDiscount = (float) (($invoice->discount_amount ?? 0) + ($invoice->disc_amount ?? 0) + ($invoice->item_discount_amount ?? 0));
+        $discFinal = $invoiceDiscount > 0 ? $invoiceDiscount : $discountTotal;
+        $netFromSummary = $grossFinal - $discFinal;
+        $netFinal = $netFromSummary >= 0 ? $netFromSummary : 0.0;
         ?>
 
         <table class="summary">

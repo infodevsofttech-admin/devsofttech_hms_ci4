@@ -53,6 +53,10 @@ class AuthGroups extends ShieldAuthGroups
             'title'       => 'Developer',
             'description' => 'Site programmers.',
         ],
+        'pharmacy_admin' => [
+            'title'       => 'Pharmacy Admin',
+            'description' => 'Full pharmacy controls including old bill edits and discount overrides.',
+        ],
         'stock_manager' => [
             'title'       => 'Stock Manager',
             'description' => 'Manages stock masters, approvals, and procurement.',
@@ -148,6 +152,11 @@ class AuthGroups extends ShieldAuthGroups
         'doctor_work.advice.manage' => 'Can manage OPD advice master',
         'doctor_work.template_workspace.access' => 'Can access clinical templates workspace',
         'pharmacy.access'     => 'Can access pharmacy module',
+        'pharmacy.invoice.admin' => 'Can fully manage pharmacy invoice controls (old bills and discount overrides)',
+        'pharmacy.invoice.discount.10' => 'Can apply pharmacy invoice discount up to 10%',
+        'pharmacy.invoice.discount.20' => 'Can apply pharmacy invoice discount up to 20%',
+        'pharmacy.invoice.discount.30' => 'Can apply pharmacy invoice discount up to 30%',
+        'pharmacy.invoice.edit-old' => 'Can edit past Walk-in/Registered pharmacy invoices',
         'pharmacy.purchase.status-update' => 'Can update pharmacy purchase invoice status',
         'template.pathology'  => 'Can access pathology templates',
         'template.ultrasound' => 'Can access ultrasound templates',
@@ -246,6 +255,9 @@ class AuthGroups extends ShieldAuthGroups
             'template.*',
             'hospital_stock.*',
             'abdm.*',
+        ],
+        'pharmacy_admin' => [
+            'pharmacy.*',
         ],
         'stock_manager' => [
             'hospital_stock.access',

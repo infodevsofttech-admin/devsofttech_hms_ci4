@@ -46,11 +46,103 @@ class Medical extends BaseController
             return true;
         }
 
+        if (
+            $permission !== 'pharmacy.invoice.admin'
+            && $user
+            && method_exists($user, 'can')
+            && $user->can('pharmacy.invoice.admin')
+        ) {
+            return true;
+        }
+
         if ($user && method_exists($user, 'inGroup') && $user->inGroup('superadmin', 'admin', 'developer')) {
             return true;
         }
 
         return false;
+    }
+
+    private function getHospitalSettingValue(string $name, string $default = ''): string
+    {
+        $name = trim($name);
+        if ($name === '' || ! $this->db->tableExists('hospital_setting')) {
+            return $default;
+        }
+
+        $row = $this->db->table('hospital_setting')
+            ->select('s_value')
+            ->where('s_name', $name)
+            ->get()
+            ->getRowArray();
+
+        if (! is_array($row) || ! array_key_exists('s_value', $row)) {
+            return $default;
+        }
+
+        $value = trim((string) ($row['s_value'] ?? ''));
+        return $value !== '' ? $value : $default;
+    }
+
+    private function getPharmacyBaseDiscountPercent(): float
+    {
+        $raw = $this->getHospitalSettingValue('PHARMACY_NORMAL_MAX_DISCOUNT_PERCENT', '10');
+        $percent = is_numeric($raw) ? (float) $raw : 10.0;
+        if ($percent < 0) {
+            $percent = 0.0;
+        }
+        if ($percent > 100) {
+            $percent = 100.0;
+        }
+
+        return round($percent, 2);
+    }
+
+    private function getPharmacyMaxDiscountPercent(): float
+    {
+        if ($this->canPharmacyPermission('pharmacy.invoice.admin')) {
+            return 100.0;
+        }
+
+        $percent = $this->getPharmacyBaseDiscountPercent();
+
+        if ($this->canPharmacyPermission('pharmacy.invoice.discount.10')) {
+            $percent = max($percent, 10.0);
+        }
+        if ($this->canPharmacyPermission('pharmacy.invoice.discount.20')) {
+            $percent = max($percent, 20.0);
+        }
+        if ($this->canPharmacyPermission('pharmacy.invoice.discount.30')) {
+            $percent = max($percent, 30.0);
+        }
+
+        if ($percent < 0) {
+            $percent = 0.0;
+        }
+        if ($percent > 100) {
+            $percent = 100.0;
+        }
+
+        return round($percent, 2);
+    }
+
+    private function validatePharmacyDiscountAmount(float $grossAmount, float $discountAmount, ?string &$errorText = null): bool
+    {
+        $errorText = null;
+
+        if ($discountAmount < 0) {
+            $errorText = 'Discount amount cannot be negative.';
+            return false;
+        }
+
+        $maxPercent = $this->getPharmacyMaxDiscountPercent();
+        $maxAmount = round(max(0.0, $grossAmount) * $maxPercent / 100, 2);
+
+        if ($discountAmount > $maxAmount + 0.00001) {
+            $errorText = 'Discount Amount is greater than allowed limit. Max : ' . number_format($maxAmount, 2, '.', '') . ' (' . rtrim(rtrim(number_format($maxPercent, 2, '.', ''), '0'), '.') . '%)';
+            return false;
+        }
+
+        return true;
     }
 
     private function ensureMedicalAdminActionLogTable(): void
@@ -2064,6 +2156,8 @@ class Medical extends BaseController
         $message = trim((string) $this->request->getGet('msg'));
         $editBlockReason = null;
         $canEditInvoice = $this->canEditInvoiceRecord((array) $invoice, $editBlockReason);
+        $discountPercentLimit = $this->getPharmacyMaxDiscountPercent();
+        $discountAmountLimit = round((float) ($invoice->gross_amount ?? 0) * $discountPercentLimit / 100, 2);
 
         return view('medical/medical_final_invoice', [
             'invoice' => $invoice,
@@ -2077,6 +2171,8 @@ class Medical extends BaseController
             'message' => $message,
             'canEditInvoice' => $canEditInvoice,
             'editBlockReason' => (string) ($editBlockReason ?? ''),
+            'discountPercentLimit' => $discountPercentLimit,
+            'discountAmountLimit' => $discountAmountLimit,
         ]);
     }
 
@@ -2669,6 +2765,12 @@ class Medical extends BaseController
             return service('response')->setJSON(['update' => 0, 'msg_text' => 'No invoice found']);
         }
 
+        $grossAmount = (float) ($invoice->gross_amount ?? 0);
+        $discountError = null;
+        if (! $this->validatePharmacyDiscountAmount($grossAmount, $discount, $discountError)) {
+            return service('response')->setJSON(['update' => 0, 'msg_text' => (string) $discountError]);
+        }
+
         $invoiceId = (int) ($invoice->id ?? 0);
         $update = [];
         if (in_array('discount_amount', $fields, true)) {
@@ -3110,6 +3212,15 @@ class Medical extends BaseController
         $discountAmount = (float) $this->request->getPost('input_dis_amt');
         $discountRemark = trim((string) $this->request->getPost('input_dis_desc'));
 
+        $grossAmount = (float) ($invoice->gross_amount ?? 0);
+        $discountError = null;
+        if (! $this->validatePharmacyDiscountAmount($grossAmount, $discountAmount, $discountError)) {
+            return service('response')->setJSON([
+                'update' => 0,
+                'error_text' => (string) $discountError,
+            ]);
+        }
+
         $user = service('auth')->user();
         $userId = (int) ($user->id ?? 0);
         $userName = $user ? trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) : 'System';
@@ -3441,7 +3552,12 @@ class Medical extends BaseController
         $caseId = (int) ($invoiceRow['case_id'] ?? 0);
         $isWalkInOrRegistered = $ipdId === 0 && $caseId === 0 && in_array($customerType, [0, 1], true);
 
-        if ($isPastDate && $isWalkInOrRegistered && ! $this->canPharmacyPermission('pharmacy.invoice.edit-old')) {
+        if (
+            $isPastDate
+            && $isWalkInOrRegistered
+            && ! $this->canPharmacyPermission('pharmacy.invoice.edit-old')
+            && ! $this->canPharmacyPermission('pharmacy.invoice.admin')
+        ) {
             $reason = 'No permission to edit past Walk-in/Registered pharmacy invoice.';
             return false;
         }
@@ -6209,7 +6325,6 @@ class Medical extends BaseController
 
         $key = $this->normalizeCompactKey($value);
         $map = [
-            'tab' => 'Tablet',
             'tabs' => 'Tablet',
             'tablet' => 'Tablet',
             'tablets' => 'Tablet',

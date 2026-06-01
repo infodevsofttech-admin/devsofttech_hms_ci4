@@ -6,6 +6,8 @@
     $deduction = (float) ($paymentSummary['extra_discount'] ?? ($invoice->discount_amount ?? 0));
     $deductionRemark = (string) ($paymentSummary['discount_remark'] ?? ($invoice->discount_remark ?? ''));
     $allowPaymentMode = ((int) ($invoice->ipd_credit ?? 0) === 0) && ((int) ($invoice->case_credit ?? 0) === 0) && ((int) ($invoice->group_invoice_id ?? 0) === 0);
+    $discountPercentLimit = (float) ($discountPercentLimit ?? 10.0);
+    $discountAmountLimit = (float) ($discountAmountLimit ?? (((float) ($invoice->gross_amount ?? 0)) * $discountPercentLimit / 100));
 ?>
 
 <div class="card border-0" id="medical-final-invoice">
@@ -145,6 +147,9 @@
         </div>
 
         <div class="table-responsive mb-3">
+            <div class="small text-muted mb-2">
+                Max allowed deduction for your login: <?= esc(number_format($discountPercentLimit, 2)) ?>% (<?= esc(number_format($discountAmountLimit, 2)) ?>)
+            </div>
             <table class="table table-sm table-striped table-bordered align-middle mb-0">
                 <tr>
                     <th style="width: 18px">#</th>
@@ -335,9 +340,10 @@
             btnDed.addEventListener('click', function () {
                 var grossAmount = parseFloat('<?= (float)($invoice->gross_amount ?? 0) ?>');
                 var discountAmount = parseFloat(document.getElementById('input_dis_amt').value || '0');
-                var maxDiscount = grossAmount * 0.12;
+                var discountPercentLimit = parseFloat('<?= (float) ($discountPercentLimit ?? 10.0) ?>');
+                var maxDiscount = grossAmount * discountPercentLimit / 100;
                 if (discountAmount > maxDiscount) {
-                    showError('Discount Amount is greater than allowed limit. Max : ' + maxDiscount.toFixed(2));
+                    showError('Discount Amount is greater than allowed limit. Max : ' + maxDiscount.toFixed(2) + ' (' + discountPercentLimit.toFixed(2).replace(/\.00$/, '') + '%)');
                     return;
                 }
 

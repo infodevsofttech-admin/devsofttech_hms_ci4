@@ -33,6 +33,19 @@
 
         $doctorName = trim((string) ($invoice->doc_name ?? ''));
         $doctorLabel = $doctorName !== '' ? (preg_match('/^dr\.?\s*/i', $doctorName) ? $doctorName : 'Dr. ' . $doctorName) : '-';
+        $items = $items ?? [];
+        $rowCount = count($items);
+        $baseGrossTotal = 0.0;
+        $baseDiscountTotal = 0.0;
+        if (! empty($items)) {
+            foreach ($items as $printItem) {
+                $baseGrossTotal += (float) ($printItem->amount ?? 0);
+                $baseDiscountTotal += (float) ($printItem->disc_amount ?? 0);
+            }
+        }
+        $invoiceDiscountTotal = (float) (($invoice->discount_amount ?? 0) + ($invoice->disc_amount ?? 0) + ($invoice->item_discount_amount ?? 0));
+        $extraInvoiceDiscountTotal = max(0.0, $invoiceDiscountTotal - $baseDiscountTotal);
+        $allocatedExtraDiscountTotal = 0.0;
     ?>
     <div class="print-actions">
         <button onclick="window.print()">Print</button>
@@ -79,8 +92,23 @@
                 <?php foreach ($items as $idx => $item): ?>
                     <?php
                         $rowGross = (float) ($item->amount ?? 0);
-                        $rowDisc = (float) ($item->disc_amount ?? 0);
-                        $rowNet = (float) ($item->tamount ?? 0);
+                        $baseRowDisc = (float) ($item->disc_amount ?? 0);
+                        $baseRowNet = (float) ($item->twdisc_amount ?? $item->tamount ?? ($item->net_amount ?? 0));
+                        $remainingExtraDiscount = max(0.0, $extraInvoiceDiscountTotal - $allocatedExtraDiscountTotal);
+                        $allocExtraDisc = 0.0;
+                        if ($remainingExtraDiscount > 0 && $baseGrossTotal > 0) {
+                            if ((int) $idx === $rowCount - 1) {
+                                $allocExtraDisc = $remainingExtraDiscount;
+                            } else {
+                                $allocExtraDisc = round($extraInvoiceDiscountTotal * ($rowGross / $baseGrossTotal), 2);
+                                if ($allocExtraDisc > $remainingExtraDiscount) {
+                                    $allocExtraDisc = $remainingExtraDiscount;
+                                }
+                            }
+                        }
+                        $allocatedExtraDiscountTotal += $allocExtraDisc;
+                        $rowDisc = $baseRowDisc + $allocExtraDisc;
+                        $rowNet = max(0.0, $baseRowNet - $allocExtraDisc);
                         $gross += $rowGross;
                         $discount += $rowDisc;
                         $net += $rowNet;
@@ -103,17 +131,26 @@
             <?php endif; ?>
         </tbody>
         <tfoot>
+            <?php
+                $printGrossTotal = (float) ($invoice->gross_amount ?? $gross);
+                $printDiscountTotal = (float) (($invoice->discount_amount ?? 0) + ($invoice->disc_amount ?? 0) + ($invoice->item_discount_amount ?? 0));
+                $printDiscountTotal = $printDiscountTotal > 0 ? $printDiscountTotal : $discount;
+                $printNetTotal = $printGrossTotal - $printDiscountTotal;
+                if ($printNetTotal < 0) {
+                    $printNetTotal = 0.0;
+                }
+            ?>
             <tr class="totals">
                 <td colspan="6" class="text-end">Gross</td>
-                <td colspan="2" class="text-end"><?= esc(number_format((float)($invoice->gross_amount ?? $gross), 2)) ?></td>
+                <td colspan="2" class="text-end"><?= esc(number_format($printGrossTotal, 2)) ?></td>
             </tr>
             <tr class="totals">
                 <td colspan="6" class="text-end">Discount</td>
-                <td colspan="2" class="text-end"><?= esc(number_format((float)($invoice->disc_amount ?? $discount), 2)) ?></td>
+                <td colspan="2" class="text-end"><?= esc(number_format($printDiscountTotal, 2)) ?></td>
             </tr>
             <tr class="totals">
                 <td colspan="6" class="text-end">Net Amount</td>
-                <td colspan="2" class="text-end"><?= esc(number_format((float)($invoice->net_amount ?? $net), 2)) ?></td>
+                <td colspan="2" class="text-end"><?= esc(number_format($printNetTotal, 2)) ?></td>
             </tr>
         </tfoot>
     </table>
