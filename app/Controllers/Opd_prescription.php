@@ -4767,6 +4767,7 @@ class Opd_prescription extends BaseController
                 $this->db->table('opd_fhir_documents')
                     ->where('id', (int) $existing['id'])
                     ->update([
+                        'bundle_type' => 'OPConsultRecord',
                         'bundle_json'  => $bundleJson,
                         'generated_by' => $generatedBy,
                         'generated_at' => $generatedAt,
