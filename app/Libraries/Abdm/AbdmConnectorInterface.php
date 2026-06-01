@@ -198,6 +198,16 @@ interface AbdmConnectorInterface
     public function triggerShare(int $bridgeId): array;
 
     /**
+     * POST /api/v3/records/{id}/link-and-share — orchestrated care-context link + share.
+     */
+    public function linkAndShare(int $bridgeId): array;
+
+    /**
+     * GET /api/v3/records/{id}/workflow-status — end-to-end workflow status.
+     */
+    public function workflowStatus(int $bridgeId): array;
+
+    /**
      * GET /api/v3/records — list stored bridge records with optional filters.
      *
      * Filters: abha_id, abha_address, status (pending|shared|linked|failed|revoked),

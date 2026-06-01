@@ -81,6 +81,12 @@
             </a>
         </div>
         <div class="col-6 col-md-2 col-lg-2">
+            <a class="admin-tile" href="javascript:load_form_div('<?= base_url('setting/admin/abdm-report-doctors') ?>','maindiv','ABDM Report Doctors');">
+                <i class="bi bi-person-vcard" style="color:#0d6efd"></i>
+                <span>ABDM Report Doctors</span>
+            </a>
+        </div>
+        <div class="col-6 col-md-2 col-lg-2">
             <a class="admin-tile" href="javascript:load_form_div('<?= base_url('setting/admin/hospital-profile') ?>','maindiv','Hospital Profile');">
                 <i class="bi bi-building"></i>
                 <span>Hospital Profile</span>

@@ -338,16 +338,16 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
 
     public function pushRecord(array $data): array
     {
-        // Normalise to the 8 official ABDM HI types that the gateway validates.
-        // Valid values: OPConsultRecord, PrescriptionRecord, DiagnosticReportRecord,
-        //               DischargeSummaryRecord, ImmunizationRecord, WellnessRecord,
+        // Normalise to gateway accepted HI types from integration docs.
+        // Valid values: OPConsultation, Prescription, DiagnosticReport,
+        //               DischargeSummary, ImmunizationRecord, WellnessRecord,
         //               HealthDocumentRecord, InvoiceRecord
         $hiTypeRaw = (string) ($data['hi_type'] ?? '');
         $hiType    = match ($hiTypeRaw) {
-            'OPConsultRecord', 'OPConsultation'  => 'OPConsultRecord',
-            'PrescriptionRecord'                 => 'PrescriptionRecord',
-            'DiagnosticReportRecord', 'DiagnosticReport' => 'DiagnosticReportRecord',
-            'DischargeSummaryRecord', 'DischargeSummary' => 'DischargeSummaryRecord',
+            'OPConsultRecord', 'OPConsultation'  => 'OPConsultation',
+            'PrescriptionRecord', 'Prescription' => 'Prescription',
+            'DiagnosticReportRecord', 'DiagnosticReport' => 'DiagnosticReport',
+            'DischargeSummaryRecord', 'DischargeSummary' => 'DischargeSummary',
             'WellnessRecord'                     => 'WellnessRecord',
             'ImmunizationRecord'                 => 'ImmunizationRecord',
             'InvoiceRecord'                      => 'InvoiceRecord',
@@ -364,9 +364,9 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         } else {
             // Derive record_type from hi_type
             $recordType = match ($hiType) {
-                'OPConsultRecord', 'PrescriptionRecord' => 'prescription',
-                'DiagnosticReportRecord'                => 'lab_report',
-                'DischargeSummaryRecord'                => 'discharge_summary',
+                'OPConsultation', 'Prescription' => 'prescription',
+                'DiagnosticReport'               => 'lab_report',
+                'DischargeSummary'               => 'discharge_summary',
                 'WellnessRecord', 'ImmunizationRecord'  => 'wellness_record',
                 default                                 => 'health_document',
             };
@@ -376,9 +376,9 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         // Gateway requires hi_type with the exact ABDM HI type name.
         if ($hiType === '') {
             $hiType = match ($recordType) {
-                'prescription'      => 'OPConsultRecord',
-                'lab_report'        => 'DiagnosticReportRecord',
-                'discharge_summary' => 'DischargeSummaryRecord',
+                'prescription'      => 'OPConsultation',
+                'lab_report'        => 'DiagnosticReport',
+                'discharge_summary' => 'DischargeSummary',
                 'wellness_record'   => 'WellnessRecord',
                 default             => 'HealthDocumentRecord',
             };
@@ -392,6 +392,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             'hi_type'      => $hiType,
             'visit_date'   => (string) ($data['visit_date'] ?? date('Y-m-d')),
             'record_data'  => $data['record_data'] ?? $data['bundle'] ?? (object) [],
+            'fhir_bundle'  => $data['record_data'] ?? $data['bundle'] ?? (object) [],
         ];
 
         // hfr_id is required in every push request alongside the Bearer token.
@@ -399,7 +400,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             $body['hfr_id'] = $this->hfrId;
         }
 
-        foreach (['abha_id', 'abha_address', 'doctor_name', 'department', 'care_context_reference', 'notes', 'queue_id'] as $optional) {
+        foreach (['abha_id', 'abha_address', 'doctor_name', 'department', 'care_context_reference', 'care_context_display', 'notes', 'queue_id', 'gender', 'year_of_birth'] as $optional) {
             if (! empty($data[$optional])) {
                 $body[$optional] = (string) $data[$optional];
             }
@@ -458,12 +459,38 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
 
     public function getRecord(int $bridgeId): array
     {
-        return $this->get('/v3/records/' . $bridgeId);
+        $query = [];
+        if ($this->hfrId !== '') {
+            $query['hfr_id'] = $this->hfrId;
+        }
+        return $this->get('/v3/records/' . $bridgeId, $query);
     }
 
     public function triggerShare(int $bridgeId): array
     {
-        return $this->post('/v3/records/' . $bridgeId . '/share', []);
+        $body = [];
+        if ($this->hfrId !== '') {
+            $body['hfr_id'] = $this->hfrId;
+        }
+        return $this->post('/v3/records/' . $bridgeId . '/share', $body);
+    }
+
+    public function linkAndShare(int $bridgeId): array
+    {
+        $body = [];
+        if ($this->hfrId !== '') {
+            $body['hfr_id'] = $this->hfrId;
+        }
+        return $this->post('/v3/records/' . $bridgeId . '/link-and-share', $body);
+    }
+
+    public function workflowStatus(int $bridgeId): array
+    {
+        $query = [];
+        if ($this->hfrId !== '') {
+            $query['hfr_id'] = $this->hfrId;
+        }
+        return $this->get('/v3/records/' . $bridgeId . '/workflow-status', $query);
     }
 
     public function opdQueueFetch(string $date = '', string $status = '', int $page = 1, int $limit = 100): array

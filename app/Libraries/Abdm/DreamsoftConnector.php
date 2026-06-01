@@ -189,6 +189,50 @@ class DreamsoftConnector implements AbdmConnectorInterface
         return $this->sharePrescriptionBundle($data, (string) ($data['entity_id'] ?? ''));
     }
 
+    public function getRecord(int $bridgeId): array
+    {
+        // No direct pull API in Dreamsoft async adapter; return queued placeholder.
+        return [
+            'ok' => 1,
+            'id' => $bridgeId,
+            'status' => 'queued',
+            'message' => 'Dreamsoft connector does not provide synchronous record fetch.',
+        ];
+    }
+
+    public function triggerShare(int $bridgeId): array
+    {
+        // Keep compatibility with older UI actions.
+        return [
+            'ok' => 1,
+            'id' => $bridgeId,
+            'status' => 'queued',
+            'message' => 'Dreamsoft connector does not provide synchronous share trigger.',
+        ];
+    }
+
+    public function linkAndShare(int $bridgeId): array
+    {
+        // New e-Atria orchestration API is not available in Dreamsoft adapter.
+        return [
+            'ok' => 1,
+            'id' => $bridgeId,
+            'status' => 'queued',
+            'message' => 'Dreamsoft connector does not provide synchronous link-and-share orchestration.',
+        ];
+    }
+
+    public function workflowStatus(int $bridgeId): array
+    {
+        // No synchronous status API in Dreamsoft adapter.
+        return [
+            'ok' => 1,
+            'id' => $bridgeId,
+            'status' => 'queued',
+            'next_action' => 'Track status via bridge queue/callback events.',
+        ];
+    }
+
     public function nhcxClaimStatusRequest(
         int    $documentId,
         string $externalRef,
@@ -208,5 +252,97 @@ class DreamsoftConnector implements AbdmConnectorInterface
             (string) $documentId
         );
         return ['ok' => 1, 'queue_id' => $queueId, 'status' => 'queued'];
+    }
+
+    public function getRecords(array $filters = []): array
+    {
+        return [
+            'ok' => 1,
+            'records' => [],
+            'status' => 'queued',
+            'message' => 'Dreamsoft connector does not provide synchronous records listing.',
+        ];
+    }
+
+    public function gatewayStatus(): array
+    {
+        return [
+            'ok' => 1,
+            'status' => 'queued',
+            'connector' => $this->getConnectorName(),
+            'message' => 'Dreamsoft connector does not expose synchronous gateway status.',
+        ];
+    }
+
+    public function hipLinkToken(array $payload): array
+    {
+        return [
+            'ok' => 0,
+            'error_text' => 'HIP link-token flow is not supported by DreamsoftConnector. Use eatria_bridge connector.',
+        ];
+    }
+
+    public function hipLinkCareContext(array $payload): array
+    {
+        return [
+            'ok' => 0,
+            'error_text' => 'HIP link care-context flow is not supported by DreamsoftConnector. Use eatria_bridge connector.',
+        ];
+    }
+
+    public function hipGetPatientLinks(array $filters = []): array
+    {
+        return [
+            'ok' => 0,
+            'error_text' => 'HIP patient links flow is not supported by DreamsoftConnector. Use eatria_bridge connector.',
+        ];
+    }
+
+    public function hipLinkNotify(array $payload): array
+    {
+        return [
+            'ok' => 0,
+            'error_text' => 'HIP link notify flow is not supported by DreamsoftConnector. Use eatria_bridge connector.',
+        ];
+    }
+
+    public function hipSmsNotify(array $payload): array
+    {
+        return [
+            'ok' => 0,
+            'error_text' => 'HIP SMS notify flow is not supported by DreamsoftConnector. Use eatria_bridge connector.',
+        ];
+    }
+
+    public function opdQueueFetch(string $date = '', string $status = '', int $page = 1, int $limit = 100): array
+    {
+        return [
+            'ok' => 0,
+            'error_text' => 'OPD queue API is not supported by DreamsoftConnector. Use eatria_bridge connector.',
+        ];
+    }
+
+    public function opdTokenCreate(array $payload): array
+    {
+        return [
+            'ok' => 0,
+            'error_text' => 'OPD token API is not supported by DreamsoftConnector. Use eatria_bridge connector.',
+        ];
+    }
+
+    public function opdTokenUpdateStatus(int $tokenId, string $status): array
+    {
+        return [
+            'ok' => 0,
+            'error_text' => 'OPD token status API is not supported by DreamsoftConnector. Use eatria_bridge connector.',
+        ];
+    }
+
+    public function opdRunningTokenStatus(): array
+    {
+        return [
+            'ok' => 0,
+            'error_text' => 'OPD running token status API is not supported by DreamsoftConnector. Use eatria_bridge connector.',
+        ];
     }
 }

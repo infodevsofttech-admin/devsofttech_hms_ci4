@@ -597,6 +597,8 @@ $routes->post('AbdmGateway/push_health_record', 'AbdmGateway::pushHealthRecord',
 $routes->get('AbdmGateway/health_records_list', 'AbdmGateway::healthRecordsList', ['filter' => $abdmPermFilter]);
 $routes->get('AbdmGateway/bridge_record_status/(:num)', 'AbdmGateway::bridgeRecordStatus/$1', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmGateway/bridge_record_share/(:num)', 'AbdmGateway::bridgeRecordShare/$1', ['filter' => $abdmPermFilter]);
+$routes->post('AbdmGateway/bridge_record_link_share/(:num)', 'AbdmGateway::bridgeRecordLinkShare/$1', ['filter' => $abdmPermFilter]);
+$routes->get('AbdmGateway/bridge_record_workflow_status/(:num)', 'AbdmGateway::bridgeRecordWorkflowStatus/$1', ['filter' => $abdmPermFilter]);
 $routes->get('AbdmGateway/opd_running_token_status', 'AbdmGateway::opdRunningTokenStatus', ['filter' => $abdmPermFilter]);
 $routes->get('AbdmGateway/gateway_status', 'AbdmGateway::gatewayStatus', ['filter' => $abdmPermFilter]);
 $routes->get('AbdmGateway/bridge_records_list', 'AbdmGateway::bridgeRecordsList', ['filter' => $abdmPermFilter]);
@@ -1086,6 +1088,8 @@ $routes->group('setting', static function($routes) {
     $routes->get('admin/abdm-gateway', 'Setting\\AbdmGatewaySettings::index', ['filter' => $settingsAdminFilter]);
     $routes->post('admin/abdm-gateway/save', 'Setting\\AbdmGatewaySettings::save', ['filter' => $settingsAdminFilter]);
     $routes->post('admin/abdm-gateway/test', 'Setting\\AbdmGatewaySettings::testConnection', ['filter' => $settingsAdminFilter]);
+    $routes->get('admin/abdm-report-doctors', 'Setting\\AbdmReportDoctorSettings::index', ['filter' => $settingsAdminFilter]);
+    $routes->post('admin/abdm-report-doctors/save', 'Setting\\AbdmReportDoctorSettings::save', ['filter' => $settingsAdminFilter]);
     $routes->get('admin/hospital-profile', 'Setting\\HospitalProfile::index');
     $routes->post('admin/hospital-profile/save', 'Setting\\HospitalProfile::save');
     $routes->post('admin/hospital-profile/delete-logo', 'Setting\\HospitalProfile::deleteLogo');

@@ -1851,7 +1851,12 @@ class AbdmGateway extends BaseController
             return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
         }
 
-        $result = $this->connector->getRecord($bridgeId);
+        try {
+            $result = $this->connector->workflowStatus($bridgeId);
+        } catch (\Throwable $e) {
+            // Backward compatibility with older connectors.
+            $result = $this->connector->getRecord($bridgeId);
+        }
         return $this->response->setJSON($result);
     }
 
@@ -1866,8 +1871,27 @@ class AbdmGateway extends BaseController
             return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
         }
 
-        $result = $this->connector->triggerShare($bridgeId);
+        try {
+            $result = $this->connector->linkAndShare($bridgeId);
+        } catch (\Throwable $e) {
+            // Backward compatibility with older connectors.
+            $result = $this->connector->triggerShare($bridgeId);
+        }
         return $this->response->setJSON($result);
+    }
+
+    // =========================================================================
+    // Explicit e-Atria orchestration aliases for HMS integration docs.
+    // =========================================================================
+
+    public function bridgeRecordLinkShare(int $bridgeId)
+    {
+        return $this->bridgeRecordShare($bridgeId);
+    }
+
+    public function bridgeRecordWorkflowStatus(int $bridgeId)
+    {
+        return $this->bridgeRecordStatus($bridgeId);
     }
 
     // =========================================================================
@@ -2494,6 +2518,8 @@ class AbdmGateway extends BaseController
         $doctorId = 0;
         $doctorName = '';
         $doctorRegNo = '';
+        $labType = 0;
+        $chargeId = 0;
 
         $candidateIdCols = ['doctor_id', 'dr_id', 'doc_id', 'r_doc_id', 'consultant_id', 'reported_by_doctor_id'];
         $candidateNameCols = ['doctor_name', 'dr_name', 'doc_name', 'r_doc_name', 'consultant_name', 'reported_by_name', 'reported_by'];
@@ -2501,6 +2527,8 @@ class AbdmGateway extends BaseController
 
         // Try immediate row first (if caller passed a richer row object/array).
         if (is_object($labReqRow)) {
+            $labType = (int) ($labReqRow->lab_type ?? 0);
+            $chargeId = (int) ($labReqRow->charge_id ?? 0);
             foreach ($candidateIdCols as $c) {
                 if (isset($labReqRow->{$c}) && (int) $labReqRow->{$c} > 0) {
                     $doctorId = (int) $labReqRow->{$c};
@@ -2522,6 +2550,8 @@ class AbdmGateway extends BaseController
                 }
             }
         } elseif (is_array($labReqRow)) {
+            $labType = (int) ($labReqRow['lab_type'] ?? 0);
+            $chargeId = (int) ($labReqRow['charge_id'] ?? 0);
             foreach ($candidateIdCols as $c) {
                 if (isset($labReqRow[$c]) && (int) $labReqRow[$c] > 0) {
                     $doctorId = (int) $labReqRow[$c];
@@ -2541,6 +2571,31 @@ class AbdmGateway extends BaseController
                     $doctorRegNo = $v;
                     break;
                 }
+            }
+        }
+
+        // Priority 1: explicit admin mapping by modality (Pathology/X-Ray/CT/USG/etc.).
+        $testTitle = '';
+        if ($chargeId > 0 && $this->db->tableExists('charge_master')) {
+            try {
+                $chargeRow = $this->db->table('charge_master')
+                    ->select('charge_name')
+                    ->where('id', $chargeId)
+                    ->get(1)
+                    ->getRowArray() ?? [];
+                $testTitle = trim((string) ($chargeRow['charge_name'] ?? ''));
+            } catch (\Throwable $e) {
+                $testTitle = '';
+            }
+        }
+
+        $mappedDoctorId = $this->resolveMappedDoctorIdForLabContext($labType, $testTitle);
+        if ($mappedDoctorId > 0) {
+            $mappedDoctor = $this->loadDoctorIdentityById($mappedDoctorId);
+            if ($mappedDoctor !== null) {
+                $doctorId = $mappedDoctorId;
+                $doctorName = trim((string) ($mappedDoctor['name'] ?? ''));
+                $doctorRegNo = trim((string) ($mappedDoctor['registration_number'] ?? ''));
             }
         }
 
@@ -2633,6 +2688,107 @@ class AbdmGateway extends BaseController
             'name' => $doctorName,
             'registration_number' => $doctorRegNo,
         ];
+    }
+
+    private function resolveMappedDoctorIdForLabContext(int $labType, string $testTitle): int
+    {
+        if (! $this->db->tableExists('hospital_setting')) {
+            return 0;
+        }
+
+        $title = strtolower(trim($testTitle));
+        if ($labType === 6) {
+            if ($title !== '') {
+                if (preg_match('/\bx\s*-?\s*ray\b|\bxray\b|\bradiograph\b/', $title) === 1) {
+                    return $this->readMappedDoctorId('ABDM_DOC_XRAY');
+                }
+                if (preg_match('/\bct\b|\bct\s*scan\b|\bhrct\b|\bcect\b/', $title) === 1) {
+                    return $this->readMappedDoctorId('ABDM_DOC_CTSCAN');
+                }
+                if (preg_match('/\busg\b|\bultra\s*sound\b|\bultrasound\b|\bsonograph\b/', $title) === 1) {
+                    return $this->readMappedDoctorId('ABDM_DOC_ULTRASOUND');
+                }
+                if (preg_match('/\bmri\b|\bmr\b/', $title) === 1) {
+                    return $this->readMappedDoctorId('ABDM_DOC_MRI');
+                }
+            }
+
+            $radDefault = $this->readMappedDoctorId('ABDM_DOC_RADIOLOGY');
+            if ($radDefault > 0) {
+                return $radDefault;
+            }
+        }
+
+        return $this->readMappedDoctorId('ABDM_DOC_PATHOLOGY');
+    }
+
+    private function readMappedDoctorId(string $settingKey): int
+    {
+        if ($settingKey === '' || ! $this->db->tableExists('hospital_setting')) {
+            return 0;
+        }
+
+        $row = $this->db->table('hospital_setting')
+            ->select('s_value')
+            ->where('s_name', $settingKey)
+            ->get(1)
+            ->getRowArray();
+
+        return (int) ($row['s_value'] ?? 0);
+    }
+
+    /**
+     * @return array{name:string,registration_number:string}|null
+     */
+    private function loadDoctorIdentityById(int $doctorId): ?array
+    {
+        if ($doctorId <= 0 || ! $this->db->tableExists('doctor_master')) {
+            return null;
+        }
+
+        try {
+            $dFields = $this->db->getFieldNames('doctor_master') ?? [];
+            $dSelect = ['id'];
+            foreach (['p_title', 'p_fname', 'p_lname', 'doctor_reg_no', 'registration_no', 'reg_no', 'doc_reg_no', 'nmc_reg_no', 'mci_reg_no'] as $f) {
+                if (in_array($f, $dFields, true)) {
+                    $dSelect[] = $f;
+                }
+            }
+
+            $dRow = $this->db->table('doctor_master')
+                ->select(implode(',', array_unique($dSelect)))
+                ->where('id', $doctorId)
+                ->get(1)
+                ->getRowArray() ?? [];
+
+            if (empty($dRow)) {
+                return null;
+            }
+
+            $name = trim(
+                trim((string) ($dRow['p_title'] ?? '')) . ' ' .
+                trim((string) ($dRow['p_fname'] ?? '')) . ' ' .
+                trim((string) ($dRow['p_lname'] ?? ''))
+            );
+            if ($name === '') {
+                return null;
+            }
+
+            $reg = '';
+            foreach (['doctor_reg_no', 'registration_no', 'reg_no', 'doc_reg_no', 'nmc_reg_no', 'mci_reg_no'] as $f) {
+                if (! empty($dRow[$f])) {
+                    $reg = trim((string) $dRow[$f]);
+                    break;
+                }
+            }
+
+            return [
+                'name' => $name,
+                'registration_number' => $reg,
+            ];
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     /**
