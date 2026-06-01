@@ -5306,7 +5306,6 @@ class Opd_prescription extends BaseController
                 'record_type'            => 'PrescriptionRecord',
                 'hi_type'                => 'PrescriptionRecord',
                 'visit_date'             => $visitDate,
-                'hospital_id'            => (string) $opdId,
                 'care_context_reference' => $ccRef,
                 'care_context_display'    => $displayLabel,
                 'notes'                  => $displayLabel,

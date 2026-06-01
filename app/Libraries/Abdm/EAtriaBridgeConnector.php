@@ -21,7 +21,6 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
     private string $baseUrl;
     private string $token;
     private string $hfrId;
-    private string $hospitalId;
     private int    $timeoutSec;
 
     public function __construct()
@@ -31,7 +30,6 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         $this->baseUrl    = rtrim((string) ($config->eatriaBridgeUrl ?? 'https://abdm-bridge.e-atria.in/api'), '/');
         $this->token      = (string) ($config->eatriaBridgeToken ?? '');
         $this->hfrId      = '';
-        $this->hospitalId = '';
         $this->timeoutSec = (int) ($config->eatriaBridgeTimeoutSec ?? 30);
 
         // DB (Admin Panel → ABDM Gateway Config) is the authoritative source for
@@ -43,7 +41,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             if ($db->tableExists('hospital_setting')) {
                 $rows = $db->table('hospital_setting')
                     ->select('s_name, s_value')
-                    ->whereIn('s_name', ['EATRIA_BRIDGE_TOKEN', 'EATRIA_BRIDGE_URL', 'ABDM_HFR_ID', 'ABDM_BRIDGE_HOSPITAL_ID', 'HOSPITAL_ID'])
+                    ->whereIn('s_name', ['EATRIA_BRIDGE_TOKEN', 'EATRIA_BRIDGE_URL', 'ABDM_HFR_ID'])
                     ->get()
                     ->getResultArray();
 
@@ -57,11 +55,6 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
                 }
                 if (! empty($dbSettings['ABDM_HFR_ID'])) {
                     $this->hfrId = trim($dbSettings['ABDM_HFR_ID']);
-                }
-                if (! empty($dbSettings['ABDM_BRIDGE_HOSPITAL_ID'])) {
-                    $this->hospitalId = trim($dbSettings['ABDM_BRIDGE_HOSPITAL_ID']);
-                } elseif (! empty($dbSettings['HOSPITAL_ID'])) {
-                    $this->hospitalId = trim($dbSettings['HOSPITAL_ID']);
                 }
             }
         } catch (\Throwable $e) {
@@ -432,10 +425,6 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         // hfr_id is required in every push request alongside the Bearer token.
         if ($this->hfrId !== '') {
             $body['hfr_id'] = $this->hfrId;
-        }
-
-        if ($this->hospitalId !== '') {
-            $body['hospital_id'] = $this->hospitalId;
         }
 
         foreach (['abha_id', 'doctor_name', 'department', 'notes', 'gender', 'year_of_birth'] as $optional) {
