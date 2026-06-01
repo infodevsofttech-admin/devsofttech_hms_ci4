@@ -8933,6 +8933,212 @@ class Medical extends BaseController
         ]);
     }
 
+    public function report_1()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        return view('medical/report_sale_day', [
+            'today' => date('Y-m-d'),
+        ]);
+    }
+
+    public function report_1_data($dateRange, $output = 0)
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        [$dateFrom, $dateTo] = $this->parseLegacyDateRange((string) $dateRange);
+        $output = (int) $output;
+        $rows = $this->getSaleDaySummaryRows($dateFrom, $dateTo);
+
+        if ($output === 1) {
+            $content = view('medical/report_sale_day_data', [
+                'rows' => $rows,
+                'dateFrom' => $dateFrom,
+                'dateTo' => $dateTo,
+                'showHeader' => true,
+            ]);
+            ExportExcel($content, 'Report_Sale_Day_' . date('YmdHis'));
+            return;
+        }
+
+        if ($output === 2) {
+            $html = view('medical/report_sale_day_data', [
+                'rows' => $rows,
+                'dateFrom' => $dateFrom,
+                'dateTo' => $dateTo,
+                'showHeader' => true,
+            ]);
+
+            $mpdf = new Mpdf([
+                'mode' => 'utf-8',
+                'format' => 'A4',
+                'orientation' => 'L',
+                'margin_left' => 8,
+                'margin_right' => 8,
+                'margin_top' => 8,
+                'margin_bottom' => 8,
+                'tempDir' => WRITEPATH . 'cache',
+            ]);
+
+            $mpdf->SetTitle('Sale Day Report');
+            $mpdf->WriteHTML($html);
+
+            return $this->response
+                ->setHeader('Content-Type', 'application/pdf')
+                ->setBody($mpdf->Output('Report_Sale_Day_' . date('YmdHis') . '.pdf', 'S'));
+        }
+
+        return view('medical/report_sale_day_data', [
+            'rows' => $rows,
+            'dateFrom' => $dateFrom,
+            'dateTo' => $dateTo,
+            'showHeader' => false,
+        ]);
+    }
+
+    public function report_2()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        return view('medical/report_day_cash', [
+            'today' => date('Y-m-d'),
+        ]);
+    }
+
+    public function report_2_data($saleDate, $billType = 0, $output = 0)
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        $saleDate = $this->normalizeLegacyDateInput((string) $saleDate);
+        $billType = (int) $billType;
+        $output = (int) $output;
+
+        $rows = $this->getDayCashReportRows($saleDate, $billType);
+
+        if ($output === 1) {
+            $content = view('medical/report_day_cash_data', [
+                'rows' => $rows,
+                'saleDate' => $saleDate,
+                'billType' => $billType,
+                'showHeader' => true,
+            ]);
+            ExportExcel($content, 'Report_Day_' . $saleDate . '_' . date('YmdHis'));
+            return;
+        }
+
+        if ($output === 2) {
+            $html = view('medical/report_day_cash_data', [
+                'rows' => $rows,
+                'saleDate' => $saleDate,
+                'billType' => $billType,
+                'showHeader' => true,
+            ]);
+
+            $mpdf = new Mpdf([
+                'mode' => 'utf-8',
+                'format' => 'A4',
+                'orientation' => 'L',
+                'margin_left' => 8,
+                'margin_right' => 8,
+                'margin_top' => 8,
+                'margin_bottom' => 8,
+                'tempDir' => WRITEPATH . 'cache',
+            ]);
+
+            $mpdf->SetTitle('Day Report');
+            $mpdf->WriteHTML($html);
+
+            return $this->response
+                ->setHeader('Content-Type', 'application/pdf')
+                ->setBody($mpdf->Output('Report_Day_' . $saleDate . '_' . date('YmdHis') . '.pdf', 'S'));
+        }
+
+        return view('medical/report_day_cash_data', [
+            'rows' => $rows,
+            'saleDate' => $saleDate,
+            'billType' => $billType,
+            'showHeader' => false,
+        ]);
+    }
+
+    public function report_payment_recieved()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        return view('medical/report_payment_received', [
+            'today' => date('Y-m-d'),
+            'actors' => $this->getPaymentReportActors(),
+        ]);
+    }
+
+    public function report_payment_recieved_data($dateRange, $empNameId = '0', $output = 0)
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        [$dateFrom, $dateTo] = $this->parseLegacyDateRange((string) $dateRange);
+        $empNameId = trim((string) $empNameId);
+        $output = (int) $output;
+
+        $rows = $this->getPaymentReceivedRows($dateFrom, $dateTo, $empNameId);
+
+        if ($output === 1) {
+            $content = view('medical/report_payment_received_data', [
+                'rows' => $rows,
+                'dateFrom' => $dateFrom,
+                'dateTo' => $dateTo,
+                'showHeader' => true,
+            ]);
+            ExportExcel($content, 'Report_Payment_Received_' . date('YmdHis'));
+            return;
+        }
+
+        if ($output === 2) {
+            $html = view('medical/report_payment_received_data', [
+                'rows' => $rows,
+                'dateFrom' => $dateFrom,
+                'dateTo' => $dateTo,
+                'showHeader' => true,
+            ]);
+
+            $mpdf = new Mpdf([
+                'mode' => 'utf-8',
+                'format' => 'A4',
+                'orientation' => 'L',
+                'margin_left' => 8,
+                'margin_right' => 8,
+                'margin_top' => 8,
+                'margin_bottom' => 8,
+                'tempDir' => WRITEPATH . 'cache',
+            ]);
+
+            $mpdf->SetTitle('Payment Report');
+            $mpdf->WriteHTML($html);
+
+            return $this->response
+                ->setHeader('Content-Type', 'application/pdf')
+                ->setBody($mpdf->Output('Report_Payment_Received_' . date('YmdHis') . '.pdf', 'S'));
+        }
+
+        return view('medical/report_payment_received_data', [
+            'rows' => $rows,
+            'dateFrom' => $dateFrom,
+            'dateTo' => $dateTo,
+            'showHeader' => false,
+        ]);
+    }
+
     public function report_4()
     {
         if ($deny = $this->ensurePharmacyAccess()) {
@@ -9683,6 +9889,327 @@ class Medical extends BaseController
             'dateTo' => $dateTo,
             'showHeader' => false,
         ]);
+    }
+
+    private function normalizeLegacyDateInput(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return date('Y-m-d');
+        }
+
+        $value = str_replace(['_', '.'], '-', $value);
+        $ts = strtotime($value);
+        if ($ts === false) {
+            return date('Y-m-d');
+        }
+
+        return date('Y-m-d', $ts);
+    }
+
+    private function getInvoiceMasterAmountExpressions(): array
+    {
+        if (! $this->db->tableExists('invoice_med_master')) {
+            return [
+                'netExpr' => '0',
+                'discountExpr' => '0',
+            ];
+        }
+
+        $masterFields = $this->db->getFieldNames('invoice_med_master') ?? [];
+        $resolveField = static function (array $fields, array $candidates): ?string {
+            foreach ($candidates as $candidate) {
+                foreach ($fields as $field) {
+                    if (strcasecmp((string) $field, (string) $candidate) === 0) {
+                        return (string) $field;
+                    }
+                }
+            }
+            return null;
+        };
+
+        $grossField = $resolveField($masterFields, ['gross_amount', 'gross', 'total_amount', 'bill_amount', 'amount']);
+        $netField = $resolveField($masterFields, ['net_amount', 'tamount', 'twdisc_amount']);
+
+        $discountParts = [];
+        foreach (['discount_amount', 'disc_amount', 'item_discount_amount'] as $discountCol) {
+            $discountField = $resolveField($masterFields, [$discountCol]);
+            if ($discountField !== null) {
+                $discountParts[] = 'IFNULL(m.' . $discountField . ',0)';
+            }
+        }
+        $discountExpr = ! empty($discountParts) ? implode(' + ', $discountParts) : '0';
+
+        if ($grossField !== null) {
+            $netExpr = 'GREATEST(0, IFNULL(m.' . $grossField . ',0) - (' . $discountExpr . '))';
+        } elseif ($netField !== null && ! empty($discountParts)) {
+            $netExpr = 'GREATEST(0, IFNULL(m.' . $netField . ',0) - (' . $discountExpr . '))';
+        } elseif ($netField !== null) {
+            $netExpr = 'IFNULL(m.' . $netField . ',0)';
+        } else {
+            $netExpr = '0';
+        }
+
+        return [
+            'netExpr' => $netExpr,
+            'discountExpr' => $discountExpr,
+        ];
+    }
+
+    private function getSaleDaySummaryRows(string $dateFrom, string $dateTo): array
+    {
+        if (! $this->db->tableExists('invoice_med_master')) {
+            return [];
+        }
+
+        $amountExpr = $this->getInvoiceMasterAmountExpressions();
+        $netExpr = $amountExpr['netExpr'];
+
+        $sql = "SELECT
+                DATE(m.inv_date) AS sale_date,
+                COUNT(DISTINCT m.id) AS no_invoice,
+                COUNT(DISTINCT IFNULL(m.patient_id,0)) AS no_patients,
+                SUM(" . $netExpr . ") AS net_amount,
+                SUM(CASE
+                    WHEN IFNULL(m.ipd_id,0)=0 AND IFNULL(m.case_id,0)=0 AND IFNULL(m.case_credit,0)=0 THEN " . $netExpr . "
+                    ELSE 0
+                END) AS opd_cash_amount,
+                SUM(CASE
+                    WHEN IFNULL(m.ipd_id,0)=0 AND IFNULL(m.case_id,0)>0 THEN " . $netExpr . "
+                    ELSE 0
+                END) AS opd_org_amount,
+                SUM(CASE
+                    WHEN IFNULL(m.ipd_id,0)>0 AND IFNULL(m.ipd_credit,0)=0 THEN " . $netExpr . "
+                    ELSE 0
+                END) AS ipd_cash_amount,
+                SUM(CASE
+                    WHEN IFNULL(m.ipd_id,0)>0 AND IFNULL(m.ipd_credit,0)=1 AND IFNULL(m.group_invoice_id,0)=0 THEN " . $netExpr . "
+                    ELSE 0
+                END) AS ipd_credit_amount,
+                SUM(CASE
+                    WHEN IFNULL(m.ipd_id,0)>0 AND IFNULL(m.ipd_credit,0)=1 AND IFNULL(m.group_invoice_id,0)>0 THEN " . $netExpr . "
+                    ELSE 0
+                END) AS ipd_package_amount
+            FROM invoice_med_master m
+            WHERE DATE(m.inv_date) BETWEEN ? AND ?
+              AND IFNULL(m.sale_return,0)=0
+            GROUP BY DATE(m.inv_date)
+            ORDER BY DATE(m.inv_date)";
+
+        return $this->db->query($sql, [$dateFrom, $dateTo])->getResultArray();
+    }
+
+    private function getDayCashReportRows(string $saleDate, int $billType = 0): array
+    {
+        if (! $this->db->tableExists('invoice_med_master')) {
+            return [];
+        }
+
+        $amountExpr = $this->getInvoiceMasterAmountExpressions();
+        $netExpr = $amountExpr['netExpr'];
+
+        $hasOrgCase = $this->db->tableExists('organization_case_master');
+        $hasInsurance = $this->db->tableExists('hc_insurance');
+        $orgFields = $hasOrgCase ? ($this->db->getFieldNames('organization_case_master') ?? []) : [];
+        $insuranceFields = $hasInsurance ? ($this->db->getFieldNames('hc_insurance') ?? []) : [];
+
+        $billCondition = '';
+        switch ($billType) {
+            case 1:
+                $billCondition = ' AND IFNULL(m.ipd_id,0)=0 AND IFNULL(m.case_id,0)=0 AND IFNULL(m.case_credit,0)=0';
+                break;
+            case 2:
+                $billCondition = ' AND IFNULL(m.ipd_id,0)=0 AND IFNULL(m.case_id,0)>0';
+                break;
+            case 3:
+                $billCondition = ' AND IFNULL(m.ipd_id,0)>0 AND IFNULL(m.ipd_credit,0)=0';
+                break;
+            case 4:
+                $billCondition = ' AND IFNULL(m.ipd_id,0)>0 AND IFNULL(m.ipd_credit,0)=1 AND IFNULL(m.group_invoice_id,0)=0';
+                break;
+            case 5:
+                $billCondition = ' AND IFNULL(m.ipd_id,0)>0 AND IFNULL(m.ipd_credit,0)=1 AND IFNULL(m.group_invoice_id,0)>0';
+                break;
+            case 6:
+                $billCondition = ' AND IFNULL(m.sale_return,0)=1';
+                break;
+            default:
+                break;
+        }
+
+        $joinSql = '';
+        $orgNameExpr = "''";
+        if ($hasOrgCase && $hasInsurance && in_array('id', $orgFields, true) && in_array('id', $insuranceFields, true)) {
+            $insuranceKey = null;
+            foreach (['hc_insurance_id', 'insurance_id', 'insurence_id'] as $candidate) {
+                if (in_array($candidate, $orgFields, true)) {
+                    $insuranceKey = $candidate;
+                    break;
+                }
+            }
+            if ($insuranceKey !== null) {
+                $shortNameCol = in_array('short_name', $insuranceFields, true)
+                    ? 'short_name'
+                    : (in_array('name', $insuranceFields, true) ? 'name' : null);
+                if ($shortNameCol !== null) {
+                    $joinSql = ' LEFT JOIN organization_case_master o ON o.id=m.case_id LEFT JOIN hc_insurance i ON i.id=o.' . $insuranceKey;
+                    $orgNameExpr = 'IFNULL(i.' . $shortNameCol . ',\'\')';
+                }
+            }
+        }
+
+        $sql = "SELECT
+                m.id,
+                m.inv_date,
+                IFNULL(m.inv_med_code,'-') AS bill_no,
+                IFNULL(m.patient_code,'-') AS uhid,
+                IFNULL(m.inv_name,'-') AS patient_name,
+            " . $netExpr . " AS net_amount,
+                IFNULL(m.payment_received,0) AS payment_received,
+                IFNULL(m.payment_balance,0) AS payment_balance,
+                CASE
+                    WHEN IFNULL(m.sale_return,0)=1 THEN 'SALE RETURN'
+                    WHEN IFNULL(m.ipd_id,0)=0 AND IFNULL(m.case_id,0)=0 AND IFNULL(m.case_credit,0)=0 THEN 'OPD CASH'
+                    WHEN IFNULL(m.ipd_id,0)=0 AND IFNULL(m.case_id,0)>0 THEN 'OPD ORG'
+                    WHEN IFNULL(m.ipd_id,0)>0 AND IFNULL(m.ipd_credit,0)=0 THEN 'IPD CASH'
+                    WHEN IFNULL(m.ipd_id,0)>0 AND IFNULL(m.ipd_credit,0)=1 AND IFNULL(m.group_invoice_id,0)=0 THEN 'IPD CREDIT'
+                    WHEN IFNULL(m.ipd_id,0)>0 AND IFNULL(m.ipd_credit,0)=1 AND IFNULL(m.group_invoice_id,0)>0 THEN 'IPD PACKAGE'
+                    ELSE 'OTHER'
+                END AS bill_type,
+                " . $orgNameExpr . " AS org_name
+            FROM invoice_med_master m
+            " . $joinSql . "
+            WHERE DATE(m.inv_date)=?
+              " . $billCondition . "
+            ORDER BY m.id";
+
+        return $this->db->query($sql, [$saleDate])->getResultArray();
+    }
+
+    private function getPaymentReportActors(): array
+    {
+        if (! $this->db->tableExists('payment_history_medical')) {
+            return [];
+        }
+
+        $joinUsers = '';
+        $userNameExpr = "''";
+        if ($this->db->tableExists('users')) {
+            $userFields = $this->db->getFieldNames('users') ?? [];
+            if (in_array('id', $userFields, true)) {
+                $joinUsers = ' LEFT JOIN users u ON u.id=IFNULL(p.update_by_id,0) ';
+
+                $nameParts = [];
+                if (in_array('first_name', $userFields, true)) {
+                    $nameParts[] = "NULLIF(TRIM(u.first_name),'')";
+                }
+                if (in_array('last_name', $userFields, true)) {
+                    $nameParts[] = "NULLIF(TRIM(u.last_name),'')";
+                }
+
+                if (! empty($nameParts)) {
+                    $userNameExpr = 'TRIM(CONCAT_WS(\' \' , ' . implode(', ', $nameParts) . '))';
+                }
+
+                if (in_array('username', $userFields, true)) {
+                    $userNameExpr = "COALESCE(NULLIF($userNameExpr,''), NULLIF(TRIM(u.username),''))";
+                }
+                if (in_array('email', $userFields, true)) {
+                    $userNameExpr = "COALESCE(NULLIF($userNameExpr,''), NULLIF(TRIM(u.email),''))";
+                }
+            }
+        }
+
+        $displayExpr = "CASE
+                WHEN TRIM(IFNULL(p.update_by,''))<>'' THEN p.update_by
+                WHEN TRIM(IFNULL($userNameExpr,''))<>'' THEN $userNameExpr
+                ELSE CONCAT('User-', IFNULL(p.update_by_id,0))
+            END";
+
+        $sql = "SELECT
+                IFNULL(p.update_by_id,0) AS update_by_id,
+                $displayExpr AS update_by
+            FROM payment_history_medical p
+            $joinUsers
+            GROUP BY IFNULL(p.update_by_id,0), $displayExpr
+            ORDER BY update_by ASC";
+
+        return $this->db->query($sql)->getResultArray();
+    }
+
+    private function getPaymentReceivedRows(string $dateFrom, string $dateTo, string $empNameId = '0'): array
+    {
+        if (! $this->db->tableExists('payment_history_medical')) {
+            return [];
+        }
+
+        $params = [$dateFrom, $dateTo];
+        $userFilter = '';
+        if ($empNameId !== '' && $empNameId !== '0') {
+            $userFilter = ' AND IFNULL(p.update_by_id,0)=?';
+            $params[] = (int) $empNameId;
+        }
+
+        $joinInvoice = $this->db->tableExists('invoice_med_master')
+            ? ' LEFT JOIN invoice_med_master m ON m.id=p.Medical_invoice_id '
+            : '';
+
+        $joinUsers = '';
+        $userNameExpr = "''";
+        if ($this->db->tableExists('users')) {
+            $userFields = $this->db->getFieldNames('users') ?? [];
+            if (in_array('id', $userFields, true)) {
+                $joinUsers = ' LEFT JOIN users u ON u.id=IFNULL(p.update_by_id,0) ';
+
+                $nameParts = [];
+                if (in_array('first_name', $userFields, true)) {
+                    $nameParts[] = "NULLIF(TRIM(u.first_name),'')";
+                }
+                if (in_array('last_name', $userFields, true)) {
+                    $nameParts[] = "NULLIF(TRIM(u.last_name),'')";
+                }
+
+                if (! empty($nameParts)) {
+                    $userNameExpr = 'TRIM(CONCAT_WS(\' \' , ' . implode(', ', $nameParts) . '))';
+                }
+
+                if (in_array('username', $userFields, true)) {
+                    $userNameExpr = "COALESCE(NULLIF($userNameExpr,''), NULLIF(TRIM(u.username),''))";
+                }
+                if (in_array('email', $userFields, true)) {
+                    $userNameExpr = "COALESCE(NULLIF($userNameExpr,''), NULLIF(TRIM(u.email),''))";
+                }
+            }
+        }
+
+        $displayExpr = "CASE
+                WHEN TRIM(IFNULL(p.update_by,''))<>'' THEN p.update_by
+                WHEN TRIM(IFNULL($userNameExpr,''))<>'' THEN $userNameExpr
+                ELSE CONCAT('User-', IFNULL(p.update_by_id,0))
+            END";
+
+        $sql = "SELECT
+                p.id,
+                p.payment_date,
+                IFNULL(p.Medical_invoice_id,0) AS medical_invoice_id,
+                IFNULL(m.inv_med_code,'-') AS bill_no,
+                IFNULL(m.patient_code,'-') AS uhid,
+                IFNULL(m.inv_name,'-') AS patient_name,
+                IFNULL(p.amount,0) AS amount,
+                IFNULL(p.credit_debit,0) AS credit_debit,
+                CASE
+                    WHEN IFNULL(p.credit_debit,0)=0 THEN 'RECEIVED'
+                    ELSE 'REFUND/DEBIT'
+                END AS payment_type,
+                $displayExpr AS update_by
+            FROM payment_history_medical p
+            {$joinInvoice}
+            {$joinUsers}
+            WHERE DATE(p.payment_date) BETWEEN ? AND ?
+              {$userFilter}
+            ORDER BY p.id DESC";
+
+        return $this->db->query($sql, $params)->getResultArray();
     }
 
     private function getDailyMedicineSaleRows(string $dateFrom, string $dateTo): array

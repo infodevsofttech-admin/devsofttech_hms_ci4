@@ -32,6 +32,15 @@
                 <a class="btn btn-outline-primary btn-sm" href="javascript:load_form_div('<?= base_url('Medical/master') ?>','medical-main','Master :Pharmacy');">
                     <i class="bi bi-sliders"></i> Master
                 </a>
+                <a class="btn btn-outline-primary btn-sm" href="javascript:load_form_div('<?= base_url('Medical_Report/Report_2') ?>','medical-main','Day Report :Pharmacy');">
+                    <i class="bi bi-calendar-day"></i> Day Report
+                </a>
+                <a class="btn btn-outline-primary btn-sm" href="javascript:load_form_div('<?= base_url('Medical_Report/Report_1') ?>','medical-main','Sale Day Report :Pharmacy');">
+                    <i class="bi bi-graph-up-arrow"></i> Sale Day Report
+                </a>
+                <a class="btn btn-outline-primary btn-sm" href="javascript:load_form_div('<?= base_url('Medical_Report/Report_Payment_Recieved') ?>','medical-main','Payment Report :Pharmacy');">
+                    <i class="bi bi-cash-stack"></i> Payment Report
+                </a>
                 <a class="btn btn-outline-warning btn-sm" href="javascript:load_form_div('<?= base_url('Medical/credit_payout_request') ?>','medical-main','Credit Payout Request :Pharmacy');">
                     <i class="bi bi-cash-stack"></i> Credit Payout Request
                 </a>

@@ -210,6 +210,17 @@ $routes->get('Medical_Report/purchase_invoice_report', 'Medical::purchase_invoic
 $routes->get('Medical_Report/ipd_discharge', 'Medical::ipd_discharge');
 $routes->get('Medical_Report/Report_6_data/(:segment)', 'Medical::report_6_data/$1');
 $routes->get('Medical_Report/Report_6_data/(:segment)/(:num)', 'Medical::report_6_data/$1/$2');
+$routes->get('Medical_Report/Report_1', 'Medical::report_1');
+$routes->get('Medical_Report/Report_1_data/(:segment)', 'Medical::report_1_data/$1');
+$routes->get('Medical_Report/Report_1_data/(:segment)/(:num)', 'Medical::report_1_data/$1/$2');
+$routes->get('Medical_Report/Report_2', 'Medical::report_2');
+$routes->get('Medical_Report/Report_2_data/(:segment)/(:num)', 'Medical::report_2_data/$1/$2');
+$routes->get('Medical_Report/Report_2_data/(:segment)/(:num)/(:num)', 'Medical::report_2_data/$1/$2/$3');
+$routes->get('Medical_Report/Report_2_short_data/(:segment)/(:num)', 'Medical::report_2_data/$1/$2');
+$routes->get('Medical_Report/Report_2_short_data/(:segment)/(:num)/(:num)', 'Medical::report_2_data/$1/$2/$3');
+$routes->get('Medical_Report/Report_Payment_Recieved', 'Medical::report_payment_recieved');
+$routes->get('Medical_Report/Report_Payment_Recieved_data/(:segment)/(:segment)', 'Medical::report_payment_recieved_data/$1/$2');
+$routes->get('Medical_Report/Report_Payment_Recieved_data/(:segment)/(:segment)/(:num)', 'Medical::report_payment_recieved_data/$1/$2/$3');
 $routes->get('Medical_Report/Report_daily_med_sale', 'Medical::report_daily_med_sale');
 $routes->get('Medical_Report/Report_daily_med_sale_data/(:segment)', 'Medical::report_daily_med_sale_data/$1');
 $routes->get('Medical_Report/Report_daily_med_sale_data/(:segment)/(:num)', 'Medical::report_daily_med_sale_data/$1/$2');
