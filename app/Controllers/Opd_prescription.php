@@ -5189,7 +5189,7 @@ class Opd_prescription extends BaseController
             // Submit button
             . 'document.getElementById("btnSubmit").addEventListener("click",function(){'
             . '  const btn=this,origHtml=btn.innerHTML;'
-            . '  if(!confirm("Submit FHIR bundle for OPD #' . $opdId . ' to ABDM bridge?"))return;'
+            . '  if(!confirm("Submit FHIR bundle for OPD #' . $opdId . ' to ABDM gateway?"))return;'
             . '  btn.disabled=true;btn.innerHTML=\'<span class="spinner-border spinner-border-sm me-1"></span>Submitting\u2026\';'
             . '  const body=new URLSearchParams({opd_id:CTX.opdId,opd_session_id:CTX.sessionId});'
             . '  body.append(CSRF_NAME,CSRF_HASH);'
@@ -5337,54 +5337,41 @@ class Opd_prescription extends BaseController
         }
 
         try {
-            $connector = new \App\Libraries\Abdm\EAtriaBridgeConnector();
+            $gatewayUrl = base_url('AbdmGateway/share_prescription_bundle');
+            $cookieHeader = (string) $this->request->getHeaderLine('Cookie');
 
-            $visitLabel = $visitDate !== '' ? date('d M Y', strtotime($visitDate)) : date('d M Y');
-            $displayLabel = 'OPD Visit ' . $visitLabel . ($doctorName !== '' ? ' - Dr. ' . $doctorName : '');
+            $client = service('curlrequest', [
+                'timeout' => 60,
+                'http_errors' => false,
+            ]);
 
-            // Keep a stable OPD visit reference keyed by visit date for ABDM care-context linkage.
-            $ccRef = 'OPD-' . $opdId . '-' . $visitDate;
+            $response = $client->post($gatewayUrl, [
+                'headers' => array_filter([
+                    'X-Requested-With' => 'XMLHttpRequest',
+                    'Cookie' => $cookieHeader !== '' ? $cookieHeader : null,
+                ]),
+                'form_params' => [
+                    'opd_id' => $opdId,
+                    'opd_session_id' => $sessionId,
+                    'patient_id' => $patientId,
+                    'abha_id' => $abhaId,
+                    'consent_handle' => (string) ($this->request->getPost('consent_handle') ?? ''),
+                    csrf_token() => csrf_hash(),
+                ],
+            ]);
 
-            $pushData = [
-                'patient_id'             => (string) $patientId,
-                'patient_name'           => $patientName,
-                'record_type'            => 'OPConsultRecord',
-                'hi_type'                => 'OPConsultRecord',
-                'visit_date'             => $visitDate,
-                'care_context_reference' => $ccRef,
-                'care_context_display'    => $displayLabel,
-                'notes'                  => $displayLabel,
-                'queue_id'               => $ccRef,
-                'abha_address'           => $abhaId,
-                'record_data'            => $bundle,
-            ];
-            if ($doctorName !== '') {
-                $pushData['doctor_name'] = $doctorName;
+            $httpCode = (int) $response->getStatusCode();
+            $result = json_decode((string) $response->getBody(), true);
+            if (! is_array($result)) {
+                $result = [];
             }
 
-            $result   = $connector->pushRecord($pushData);
-            $httpCode = (int) ($result['http_code'] ?? 0);
-
-            // 409 = duplicate queue_id — record already stored in bridge
-            if ($httpCode === 409) {
-                return $this->response->setJSON([
-                    'ok'       => 1,
-                    'duplicate' => 1,
-                    'bridge_id' => (int) ($result['id'] ?? 0),
-                    'queue_id'  => (string) ($result['queue_id'] ?? ''),
-                    'message'  => 'Record already stored in bridge (duplicate queue_id). Use existing record.',
-                    'http_code' => $httpCode,
-                    'csrfName'  => csrf_token(),
-                    'csrfHash'  => csrf_hash(),
-                ]);
-            }
-
-            $ok       = (int) ($result['ok'] ?? 0);
-            $queueId  = (string) ($result['queue_id'] ?? '');
-            $bridgeId = (int) ($result['id'] ?? 0);
-            $msg      = (string) ($result['message'] ?? ($ok === 1
-                ? 'FHIR bundle submitted to ABDM bridge successfully.'
-                : ($result['error_text'] ?? 'Submission failed. Check bridge configuration.')));
+            $ok = (int) ($result['ok'] ?? 0);
+            $queueId = (string) ($result['queue_id'] ?? '');
+            $bridgeId = (int) ($result['bridge_id'] ?? $result['id'] ?? 0);
+            $msg = (string) ($result['message'] ?? $result['error_text'] ?? ($ok === 1
+                ? 'FHIR bundle submitted to ABDM gateway successfully.'
+                : 'Submission failed. Check gateway configuration.'));
 
             return $this->response->setJSON([
                 'ok'        => $ok,
@@ -5399,7 +5386,7 @@ class Opd_prescription extends BaseController
             log_message('error', '[fhir_bundle_submit] OPD#' . $opdId . ': ' . $e->getMessage());
             return $this->response->setJSON([
                 'ok'       => 0,
-                'message'  => 'Bridge connection failed: ' . $e->getMessage(),
+                'message'  => 'Gateway handoff failed: ' . $e->getMessage(),
                 'csrfName' => csrf_token(),
                 'csrfHash' => csrf_hash(),
             ]);

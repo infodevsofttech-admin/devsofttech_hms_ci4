@@ -1735,16 +1735,21 @@ class AbdmGateway extends BaseController
             $abhaId = trim((string) $this->request->getPost('abha_id'));
         }
 
-        // Decrypt the stored payload (JSON encoded full push payload, may contain 'bundle' key)
+        // Prefer the plain stored bundle; fall back to the encrypted copy for older rows.
         $storedPayload = [];
-        $encPayload = trim((string) ($hr['fhir_bundle_enc'] ?? ''));
-        if ($encPayload !== '') {
-            try {
-                $enc           = new \App\Libraries\FhirEncryptionService();
-                $decrypted     = $enc->decrypt($encPayload);
-                $storedPayload = json_decode($decrypted, true) ?? [];
-            } catch (\Throwable $e) {
-                return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => 'Could not decrypt FHIR bundle: ' . $e->getMessage()]);
+        $plainPayload = trim((string) ($hr['record_data'] ?? ''));
+        if ($plainPayload !== '') {
+            $storedPayload = json_decode($plainPayload, true) ?? [];
+        } else {
+            $encPayload = trim((string) ($hr['fhir_bundle_enc'] ?? ''));
+            if ($encPayload !== '') {
+                try {
+                    $enc           = new \App\Libraries\FhirEncryptionService();
+                    $decrypted     = $enc->decrypt($encPayload);
+                    $storedPayload = json_decode($decrypted, true) ?? [];
+                } catch (\Throwable $e) {
+                    return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => 'Could not decrypt FHIR bundle: ' . $e->getMessage()]);
+                }
             }
         }
 
@@ -2378,7 +2383,8 @@ class AbdmGateway extends BaseController
     // =========================================================================
 
     /**
-     * Persist an encrypted FHIR bundle to health_records and return the new row id.
+     * Persist a FHIR bundle to health_records and return the new row id.
+     * Stores both a plain-text copy in record_data and an encrypted copy in fhir_bundle_enc.
      * Returns 0 when the table is absent or on any DB error (fail-open).
      *
      * @param array{patient_id: int, abha_id: string, hi_type: string, entity_type: string,
@@ -2407,6 +2413,7 @@ class AbdmGateway extends BaseController
                 'hi_type'             => (string) ($data['hi_type'] ?? 'unknown'),
                 'entity_type'         => (string) ($data['entity_type'] ?? ''),
                 'entity_id'           => (string) ($data['entity_id'] ?? ''),
+                'record_data'         => $rawBundle !== '' ? $rawBundle : null,
                 'fhir_bundle_enc'     => $encPayload !== '' ? $encPayload : null,
                 'push_status'         => 'queued',
                 'push_at'             => $now,
