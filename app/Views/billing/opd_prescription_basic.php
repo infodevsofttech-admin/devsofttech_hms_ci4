@@ -974,6 +974,8 @@
                                     <button type="button" class="btn btn-outline-secondary btn-sm btn-field-clear" data-target="provisional_diagnosis">Clear</button>
                                 </div>
                                 <textarea class="form-control rx-field" id="provisional_diagnosis" rows="4" maxlength="4000"><?= esc($opd_prescription[0]->Provisional_diagnosis ?? '') ?></textarea>
+                                <div class="rx-recent-chip-label">Selected provisional diagnosis</div>
+                                <div class="rx-recent-chip-box" id="provisional_diagnosis_selected_chips"><span class="text-muted small">No provisional diagnosis selected</span></div>
                                 <div class="rx-recent-chip-label">Recent provisional diagnosis</div>
                                 <div class="rx-recent-chip-box" id="recent_chips_provisional_diagnosis"><span class="text-muted small">Loading...</span></div>
                                 <input type="hidden" id="provisional_diagnosis_snomed_id" value="<?= esc($opd_prescription[0]->provisional_diagnosis_snomed_id ?? '') ?>">
@@ -4558,7 +4560,7 @@
 
         var seen = {};
         rows.forEach(function(entry) {
-            var values = section === 'complaints'
+            var values = ['complaints', 'diagnosis', 'provisional_diagnosis'].indexOf(section) !== -1
                 ? (entry || '').toString().split(/[,;\n\r]+/)
                 : [entry];
 
@@ -4613,6 +4615,102 @@
         return true;
     }
 
+    function getClinicalTextParts(value) {
+        return (value || '').toString().split(/[,;\n\r]+/).map(function(part) {
+            return (part || '').toString().trim().replace(/^[,;\s]+|[,;\s]+$/g, '');
+        }).filter(function(part) {
+            return part !== '';
+        });
+    }
+
+    function syncProvisionalDiagnosisChips() {
+        var $box = $('#provisional_diagnosis_selected_chips');
+        if (!$box.length) {
+            return;
+        }
+
+        var seen = {};
+        var parts = getClinicalTextParts($('#provisional_diagnosis').val()).filter(function(part) {
+            var key = complaintTextKey(part);
+            if (seen[key]) {
+                return false;
+            }
+            seen[key] = true;
+            return true;
+        });
+
+        $('#provisional_diagnosis').val(parts.join('\n'));
+        $box.empty();
+        if (!parts.length) {
+            $box.html('<span class="text-muted small">No provisional diagnosis selected</span>');
+            return;
+        }
+
+        parts.forEach(function(part) {
+            var escaped = $('<div>').text(part).html();
+            $box.append('<button type="button" class="btn btn-outline-secondary btn-sm btn-selected-provisional-diagnosis" data-value="' + escaped + '">' + escaped + ' <span class="text-danger ms-1">&times;</span></button>');
+        });
+    }
+
+    function addProvisionalDiagnosisItem(value) {
+        var incoming = (value || '').toString().trim();
+        if (!incoming) {
+            return false;
+        }
+
+        var parts = getClinicalTextParts($('#provisional_diagnosis').val());
+        var incomingParts = getClinicalTextParts(incoming);
+        var seen = {};
+        var changed = false;
+        parts.forEach(function(part) {
+            seen[complaintTextKey(part)] = true;
+        });
+        incomingParts.forEach(function(part) {
+            var key = complaintTextKey(part);
+            if (!seen[key]) {
+                parts.push(part);
+                seen[key] = true;
+                changed = true;
+            }
+        });
+
+        if (!changed) {
+            return false;
+        }
+
+        $('#provisional_diagnosis').val(parts.join('\n'));
+        syncProvisionalDiagnosisChips();
+        refreshCounters();
+        markDirty('Provisional diagnosis added');
+        return true;
+    }
+
+    $(document).on('click', '.btn-selected-provisional-diagnosis', function() {
+        var removeKey = complaintTextKey($(this).data('value') || '');
+        if (!removeKey) {
+            return;
+        }
+
+        var parts = getClinicalTextParts($('#provisional_diagnosis').val()).filter(function(part) {
+            return complaintTextKey(part) !== removeKey;
+        });
+        $('#provisional_diagnosis').val(parts.join('\n'));
+
+        if (complaintTextKey($('#provisional_diagnosis_snomed_term').val()) === removeKey || !parts.length) {
+            $('#provisional_diagnosis_snomed_id').val('');
+            $('#provisional_diagnosis_snomed_term').val('');
+            $('#provisional_diagnosis_snomed_source').val('');
+        }
+
+        syncProvisionalDiagnosisChips();
+        refreshCounters();
+        markDirty('Provisional diagnosis removed');
+    });
+
+    $('#provisional_diagnosis').on('blur', function() {
+        syncProvisionalDiagnosisChips();
+    });
+
     function loadRecentEntryChips() {
         var opdId = parseInt($('#opd_id').val() || '0', 10);
         if (opdId <= 0) {
@@ -4653,16 +4751,15 @@
             return;
         }
 
-        var targetMap = {
-            diagnosis: 'diagnosis',
-            provisional_diagnosis: 'provisional_diagnosis'
-        };
-        var targetId = targetMap[section] || '';
-        if (!targetId) {
+        if (section === 'diagnosis') {
+            addDiagnosisItem({ name: value, concept_id: '', source: 'local' });
             return;
         }
 
-        appendRecentEntryToField(targetId, value);
+        if (section === 'provisional_diagnosis') {
+            addProvisionalDiagnosisItem(value);
+            return;
+        }
     });
 
     $('#btn_toggle_fhir_history').on('click', function() {
@@ -5296,7 +5393,7 @@
         }));
         $('#diagnosis_json').val(json);
         // Reconstruct plain-text diagnosis for backward compat (print templates etc.)
-        $('#diagnosis').val(selectedDiagnosisItems.map(function(i) { return i.term; }).join(', '));
+        $('#diagnosis').val(selectedDiagnosisItems.map(function(i) { return (i.term || '').toString().trim(); }).filter(function(term) { return term !== ''; }).join(', '));
     }
 
     function renderDiagnosisTable() {
@@ -5355,8 +5452,9 @@
         var conceptId = ((row && (row.snomed_concept_id || row.concept_id)) || '').toString().trim();
         var source    = ((row && row.source) || (conceptId ? 'snomed' : 'local')).toString();
 
+        var newKey = complaintTextKey(term);
         var exists = selectedDiagnosisItems.some(function(item) {
-            return item.term.toUpperCase() === term.toUpperCase();
+            return complaintTextKey(item.term) === newKey;
         });
         if (exists) return false;
 
@@ -5559,13 +5657,30 @@
     // Init from saved JSON on page load
     (function initDiagnosisItemsFromSaved() {
         var raw = ($('#diagnosis_json').val() || '').toString().trim();
+        var seen = {};
+        function pushDiagnosisItem(item) {
+            var term = (item && item.term ? item.term : '').toString().trim();
+            var key = complaintTextKey(term);
+            if (!term || seen[key]) {
+                return;
+            }
+            seen[key] = true;
+            selectedDiagnosisItems.push({
+                term:       term,
+                concept_id: (item.concept_id || '').toString(),
+                source:     (item.source     || '').toString(),
+                duration:   (item.duration   || '').toString(),
+                date:       (item.date       || '').toString()
+            });
+        }
+
         if (!raw || raw === '[]') {
             // Try to parse legacy plain text diagnosis field
             var legacy = ($('#diagnosis').val() || '').toString().trim();
             if (legacy) {
-                legacy.split(',').forEach(function(t) {
+                legacy.split(/[,;\n\r]+/).forEach(function(t) {
                     var term = t.trim();
-                    if (term) selectedDiagnosisItems.push({ term: term, concept_id: '', source: 'local', duration: '', date: '' });
+                    if (term) pushDiagnosisItem({ term: term, source: 'local' });
                 });
             }
             renderDiagnosisTable();
@@ -5576,13 +5691,7 @@
             if (Array.isArray(saved)) {
                 saved.forEach(function(item) {
                     if (item && item.term) {
-                        selectedDiagnosisItems.push({
-                            term:       (item.term       || '').toString(),
-                            concept_id: (item.concept_id || '').toString(),
-                            source:     (item.source     || '').toString(),
-                            duration:   (item.duration   || '').toString(),
-                            date:       (item.date       || '').toString()
-                        });
+                        pushDiagnosisItem(item);
                     }
                 });
             }
@@ -6048,6 +6157,7 @@
     refreshCounters();
     setStatus('normal', 'No local changes');
     renderComplaintChips();
+    syncProvisionalDiagnosisChips();
     initComplaintsSpeech();
     initMedicalSpeechButtons();
     applySpeechModePreference();
