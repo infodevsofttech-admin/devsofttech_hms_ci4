@@ -3593,8 +3593,8 @@ class Opd extends BaseController
             if ($lineBreakAfterLabel) {
                 // List-style sections (Complaint, Diagnosis …):
                 //   heading on its own line, content block below with a small left indent.
-                //   margin-bottom:12px gives clear visual separation between consecutive sections.
-                return '<div style="margin-top:0;margin-bottom:12px;line-height:1.6;">'
+                //   margin-bottom:18px gives clear visual separation between consecutive sections.
+                return '<div style="margin-top:0;margin-bottom:18px;line-height:1.6;">'
                     . $headingHtml
                     . '<div style="margin-top:3px;padding-left:6px;font-weight:400;color:#111;line-height:1.6;">'
                     . $value
@@ -3602,8 +3602,8 @@ class Opd extends BaseController
             }
 
             // Inline sections (Vitals, Investigation, Next Visit):
-            //   heading + value on the same line; same 12px gap after block.
-            return '<div style="margin-top:0;margin-bottom:12px;line-height:1.6;">'
+            //   heading + value on the same line; same 18px gap after block.
+            return '<div style="margin-top:0;margin-bottom:18px;line-height:1.6;">'
                 . $headingHtml
                 . ' <span style="font-weight:400;color:#111;">'
                 . $value
@@ -3840,9 +3840,13 @@ class Opd extends BaseController
 
         $medicalHtml = trim((string) ($tokens['medical'] ?? ''));
         $tokens['Rx'] = $medicalHtml !== ''
-            ? '<div style="margin:8px 0 6px 0;"><div style="font-weight:700;font-size:24px;line-height:1.2;margin-bottom:8px;">Rx :</div>' . $medicalHtml . '</div>'
+            ? '<div style="margin-top:18px;margin-bottom:18px;"><div style="font-weight:700;font-size:24px;line-height:1.2;margin-bottom:8px;">Rx :</div>' . $medicalHtml . '</div>'
             : '';
         $tokens['rx'] = $tokens['Rx'];
+        // {{medical}} used directly in templates: wrap with the same top/bottom margin.
+        $tokens['medical'] = $medicalHtml !== ''
+            ? '<div style="margin-top:18px;margin-bottom:18px;">' . $medicalHtml . '</div>'
+            : '';
 
         $tokens['VitalsBlock'] = (string) ($tokens['vital_content'] ?? '');
         $tokens['ComplaintBlock'] = (string) ($tokens['Complaint'] ?? '');
