@@ -3802,8 +3802,53 @@ class Opd extends BaseController
         $tokens['general_examination'] = $tokens['vital_content_full'];
 
         // ── Pain scale (formatted) ────────────────────────────────────────────
+        $painValueRaw = trim((string) ($tokens['pain_value'] ?? ''));
+        $painValue = is_numeric($painValueRaw) ? (int) $painValueRaw : null;
         $painLabel = trim((string) ($tokens['pain_label'] ?? ''));
-        $tokens['pain_scale'] = $painLabel !== '' ? $formatBlock('Pain Scale', $painLabel) : '';
+        $isNoPain = $painLabel !== '' && strcasecmp($painLabel, 'No Pain') === 0;
+        if ($painValue !== null && $painValue === 0) {
+            $isNoPain = true;
+        }
+
+        // Do not print Pain Scale text block when value is explicitly No Pain.
+        $tokens['pain_scale'] = ($painLabel !== '' && ! $isNoPain) ? $formatBlock('Pain Scale', $painLabel) : '';
+        $tokens['painscale'] = ! $isNoPain ? $painLabel : '';
+
+        // Legacy token {{painscale_img}}: use legacy PNG if available, else render
+        // a simple inline visual scale so placeholder always displays meaningful UI.
+        $painIndex = ($painValue !== null && $painValue >= 0 && $painValue <= 4) ? $painValue : null;
+        $painImageHtml = '';
+        if ($painIndex !== null) {
+            $imageCandidates = [
+                FCPATH . 'assets/images/pains_scale_' . $painIndex . '.png',
+                FCPATH . 'assets/images/pains_scale.png',
+            ];
+
+            foreach ($imageCandidates as $imagePath) {
+                if (is_file($imagePath)) {
+                    $painImageHtml = '<img src="' . esc(str_replace('\\\\', '/', $imagePath)) . '" style="width:300px;height:40px;" />';
+                    break;
+                }
+            }
+        }
+
+        if ($painImageHtml === '' && $painIndex !== null) {
+            $labels = ['No Pain', 'Mild', 'Moderate', 'Intense', 'Worst'];
+            $painImageHtml = '<table width="100%" border="0" cellpadding="2" cellspacing="0" style="border-collapse:collapse;margin:2px 0 0 0;">'
+                . '<tr>';
+            for ($i = 0; $i <= 4; $i++) {
+                $active = $painIndex === $i;
+                $bg = $active ? '#f59e0b' : '#e5e7eb';
+                $color = $active ? '#111' : '#4b5563';
+                $painImageHtml .= '<td width="20%" style="text-align:center;border:1px solid #d1d5db;background:' . $bg . ';color:' . $color . ';font-size:10px;font-weight:' . ($active ? '700' : '400') . ';">' . $i . '</td>';
+            }
+            $painImageHtml .= '</tr><tr>';
+            for ($i = 0; $i <= 4; $i++) {
+                $painImageHtml .= '<td width="20%" style="text-align:center;color:#6b7280;font-size:8px;line-height:1.2;">' . esc($labels[$i]) . '</td>';
+            }
+            $painImageHtml .= '</tr></table>';
+        }
+        $tokens['painscale_img'] = $painImageHtml;
 
         // ── Complication & Addiction (formatted) ──────────────────────────────
         $tokens['Complication'] = $formatBlock('Complication', (string) ($tokens['complication'] ?? ''));
@@ -3817,13 +3862,30 @@ class Opd extends BaseController
         $adrHistory     = trim((string) ($tokens['adr_history']          ?? ''));
         $currentMeds    = trim((string) ($tokens['current_medications']  ?? ''));
 
+        // Fallback extraction when ADR was stored only in free-text remarks.
+        if ($adrHistory === '') {
+            $remarksRaw = (string) ($tokens['Prescriber_Remarks_raw'] ?? '');
+            if (preg_match('/^\s*ADR\s*History\s*:\s*(.+)$/im', $remarksRaw, $m) === 1) {
+                $adrHistory = trim((string) ($m[1] ?? ''));
+            }
+        }
+
         $allergyBlock = $allergyStatus !== '' ? esc($allergyStatus) : '';
         if ($allergyDetails !== '') {
             $allergyBlock .= ($allergyBlock !== '' ? ' — ' : '') . esc($allergyDetails);
         }
+        $allergicHistoryRaw = trim((string) ($tokens['allergic_history'] ?? ''));
+        if ($allergicHistoryRaw === '' && $allergyDetails !== '') {
+            $allergicHistoryRaw = $allergyDetails;
+        }
         $tokens['drug_allergy_block'] = $allergyBlock !== '' ? $formatBlock('Drug Allergy', $allergyBlock) : '';
         $tokens['adr_history_block'] = $adrHistory !== '' ? $formatBlock('ADR History', esc($adrHistory)) : '';
         $tokens['current_medications_block'] = $currentMeds !== '' ? $formatBlock('Current Medications', esc($currentMeds)) : '';
+        // Keep both raw and formatted allergy placeholders for template compatibility.
+        $tokens['allergic_history_raw'] = $allergicHistoryRaw;
+        $tokens['allergic_history'] = $allergicHistoryRaw !== '' ? $formatBlock('Allergic History', esc($allergicHistoryRaw)) : '';
+        $tokens['allergic_history_block'] = $tokens['allergic_history'];
+        $tokens['adr_history'] = $adrHistory;
 
         // ── Women related (formatted) ─────────────────────────────────────────
         $womenParts = [];
@@ -3842,7 +3904,7 @@ class Opd extends BaseController
         $menstrual = trim((string) ($tokens['menstrual_history'] ?? ''));
         $medicalSurgical = trim((string) ($tokens['medical_surgical_history'] ?? ''));
         $family = trim((string) ($tokens['family_history'] ?? ''));
-        $allergic = trim((string) ($tokens['allergic_history'] ?? ''));
+        $allergic = trim((string) ($tokens['allergic_history_raw'] ?? $tokens['allergic_history'] ?? ''));
         $vaccination = trim((string) ($tokens['vaccination_history'] ?? ''));
 
         if ($obstetric !== '') { $patientHistoryParts[] = '<strong>Obstetric:</strong> ' . esc($obstetric); }
