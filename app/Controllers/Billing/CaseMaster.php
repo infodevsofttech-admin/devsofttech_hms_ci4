@@ -159,6 +159,7 @@ class CaseMaster extends BaseController
         $existing = $this->db->table('organization_case_master')
             ->where('case_type', $caseType)
             ->where('p_id', $pId)
+            ->where('status', 0)
             ->get()
             ->getResult();
 
