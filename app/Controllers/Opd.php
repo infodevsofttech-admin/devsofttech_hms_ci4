@@ -3586,22 +3586,24 @@ class Opd extends BaseController
                 return '';
             }
 
-            // Heading uses same font-size as surrounding content (inherit) so heading
-            // and value are visually consistent; bold weight + uppercase provides
-            // clear separation without a size mismatch.
-            $headingHtml = '<span style="font-weight:700;font-size:inherit;letter-spacing:0.03em;text-transform:uppercase;color:#1a1a1a;">' . $label . ' :</span>';
+            // Heading: bold + uppercase, same font-size as surrounding content so
+            // heading and value stay visually matched (no mismatch from hardcoded px).
+            $headingHtml = '<span style="font-weight:700;font-size:inherit;letter-spacing:0.04em;text-transform:uppercase;color:#1a1a1a;">' . $label . ' :</span>';
 
             if ($lineBreakAfterLabel) {
-                // List-style sections: heading on its own line, content indented below.
-                return '<div style="margin-bottom:6px;line-height:1.5;">'
+                // List-style sections (Complaint, Diagnosis …):
+                //   heading on its own line, content block below with a small left indent.
+                //   margin-bottom:12px gives clear visual separation between consecutive sections.
+                return '<div style="margin-top:0;margin-bottom:12px;line-height:1.6;">'
                     . $headingHtml
-                    . '<div style="margin-top:2px;padding-left:4px;font-weight:400;color:#111;line-height:1.6;">'
+                    . '<div style="margin-top:3px;padding-left:6px;font-weight:400;color:#111;line-height:1.6;">'
                     . $value
                     . '</div></div>';
             }
 
-            // Inline sections (Vitals, Investigation, Next Visit): heading + value on same line.
-            return '<div style="margin-bottom:5px;line-height:1.5;">'
+            // Inline sections (Vitals, Investigation, Next Visit):
+            //   heading + value on the same line; same 12px gap after block.
+            return '<div style="margin-top:0;margin-bottom:12px;line-height:1.6;">'
                 . $headingHtml
                 . ' <span style="font-weight:400;color:#111;">'
                 . $value
