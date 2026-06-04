@@ -2105,6 +2105,7 @@ class Opd extends BaseController
     public function opd_lettre_pdf(int $opdId)
     {
         $sessionId = (int) $this->request->getGet('session_id');
+        $debugHtml = ((int) $this->request->getGet('debug_html')) === 1;
         $layoutMode = strtolower(trim((string) $this->request->getGet('layout')));
         if ($layoutMode === '') {
             $layoutMode = 'full';
@@ -2163,6 +2164,12 @@ class Opd extends BaseController
             $tokenVars = $this->buildOpdPdfTokenVars($data);
             $html = $this->applyOpdPdfTemplateTokens($customHtml, $tokenVars);
             $html = $this->sanitizeOpdNamedHeaderFooterReferences($html);
+
+            if ($debugHtml) {
+                return $this->response
+                    ->setHeader('Content-Type', 'text/plain; charset=UTF-8')
+                    ->setBody($html);
+            }
 
             $mpdf = new Mpdf([
                 'mode'             => 'utf-8',
@@ -2378,6 +2385,13 @@ class Opd extends BaseController
 
         if ($prefixHtml !== '') {
             $mpdf->WriteHTML($prefixHtml, HTMLParserMode::HTML_HEADER_BUFFER);
+        }
+
+        if ($debugHtml) {
+            $debugOutput = $prefixHtml !== '' ? ($prefixHtml . "\n" . $html) : $html;
+            return $this->response
+                ->setHeader('Content-Type', 'text/plain; charset=UTF-8')
+                ->setBody($debugOutput);
         }
 
         $opdCode = (string) ($data['opd_master'][0]->opd_code ?? ('OPD-' . $opdId));
@@ -3594,7 +3608,7 @@ class Opd extends BaseController
                 // List-style sections (Complaint, Diagnosis …):
                 //   heading on its own line, content block below with a small left indent.
                 //   margin-bottom:18px gives clear visual separation between consecutive sections.
-                return '<div style="margin-top:0;margin-bottom:18px;line-height:1.6;">'
+                return '<div style="display:block;margin-top:0 !important;margin-bottom:18px !important;padding-bottom:10px !important;line-height:1.6;">'
                     . $headingHtml
                     . '<div style="margin-top:3px;padding-left:6px;font-weight:400;color:#111;line-height:1.6;">'
                     . $value
@@ -3603,7 +3617,7 @@ class Opd extends BaseController
 
             // Inline sections (Vitals, Investigation, Next Visit):
             //   heading + value on the same line; same 18px gap after block.
-            return '<div style="margin-top:0;margin-bottom:18px;line-height:1.6;">'
+            return '<div style="display:block;margin-top:0 !important;margin-bottom:18px !important;padding-bottom:10px !important;line-height:1.6;">'
                 . $headingHtml
                 . ' <span style="font-weight:400;color:#111;">'
                 . $value
@@ -3840,12 +3854,12 @@ class Opd extends BaseController
 
         $medicalHtml = trim((string) ($tokens['medical'] ?? ''));
         $tokens['Rx'] = $medicalHtml !== ''
-            ? '<div style="margin-top:18px;margin-bottom:18px;"><div style="font-weight:700;font-size:24px;line-height:1.2;margin-bottom:8px;">Rx :</div>' . $medicalHtml . '</div>'
+            ? '<div style="display:block;margin-top:18px !important;margin-bottom:18px !important;padding-top:10px !important;padding-bottom:10px !important;"><div style="font-weight:700;font-size:24px;line-height:1.2;margin-bottom:8px;">Rx :</div>' . $medicalHtml . '</div>'
             : '';
         $tokens['rx'] = $tokens['Rx'];
         // {{medical}} used directly in templates: wrap with the same top/bottom margin.
         $tokens['medical'] = $medicalHtml !== ''
-            ? '<div style="margin-top:18px;margin-bottom:18px;">' . $medicalHtml . '</div>'
+            ? '<div style="display:block;margin-top:18px !important;margin-bottom:18px !important;padding-top:10px !important;padding-bottom:10px !important;">' . $medicalHtml . '</div>'
             : '';
 
         $tokens['VitalsBlock'] = (string) ($tokens['vital_content'] ?? '');
