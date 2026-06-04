@@ -64,6 +64,12 @@ $opdConsultSet = [
     'morbidities', 'morbidities_block',
     'painscale_img',
     'complaint', 'diagnosis', 'provisional_diagnosis', 'finding_examinations',
+    'complaint_onset', 'complaint_duration_days', 'complaint_severity',
+    'complaint_snomed_json',
+    'diagnosis_json',
+    'diagnosis_snomed_id', 'diagnosis_snomed_term', 'diagnosis_snomed_source',
+    'provisional_diagnosis_snomed_id', 'provisional_diagnosis_snomed_term', 'provisional_diagnosis_snomed_source',
+    'complaint_list', 'diagnosis_list', 'provisional_diagnosis_list',
     'medical', 'investigation', 'prescriber_remarks', 'advice', 'next_visit', 'refer_to',
     'rx', 'rxtable', 'rxfullblock',
     'vitalsblock', 'complaintblock', 'diagnosisblock', 'investigationblock',
@@ -87,7 +93,17 @@ foreach (($placeholders ?? []) as $ph) {
 }
 
 foreach ($placeholderGroups as $groupName => $groupValues) {
-    $groupValues = array_values(array_unique($groupValues));
+    $seen = [];
+    $filtered = [];
+    foreach ($groupValues as $groupValue) {
+        $dedupeKey = strtolower((string) $groupValue);
+        if (isset($seen[$dedupeKey])) {
+            continue;
+        }
+        $seen[$dedupeKey] = true;
+        $filtered[] = $groupValue;
+    }
+    $groupValues = $filtered;
     natcasesort($groupValues);
     $placeholderGroups[$groupName] = array_values($groupValues);
 }

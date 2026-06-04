@@ -135,8 +135,8 @@ class Opd extends BaseController
             'pain_label',           // e.g. "Mild Pain"
             'pain_scale',           // Formatted block: Pain Scale : Mild Pain
             // Complication & Addiction
-            'Complication', 'complication',   // Formatted block of checked flags
-            'Addiction', 'addiction',           // Formatted block of checked flags
+            'complication',   // Formatted block of checked flags
+            'addiction',      // Formatted block of checked flags
             // Drug allergy / NABH
             'drug_allergy_status', 'drug_allergy_details',
             'adr_history', 'current_medications',
@@ -156,6 +156,12 @@ class Opd extends BaseController
             // Clinical content
             'painscale_img',
             'Complaint', 'diagnosis', 'Provisional_diagnosis', 'Finding_Examinations',
+            'complaint_onset', 'complaint_duration_days', 'complaint_severity',
+            'complaint_snomed_json',
+            'diagnosis_json',
+            'diagnosis_snomed_id', 'diagnosis_snomed_term', 'diagnosis_snomed_source',
+            'provisional_diagnosis_snomed_id', 'provisional_diagnosis_snomed_term', 'provisional_diagnosis_snomed_source',
+            'complaint_list', 'diagnosis_list', 'provisional_diagnosis_list',
             'medical', 'investigation', 'Prescriber_Remarks', 'advice', 'next_visit', 'refer_to',
             // Composed blocks
             'Rx', 'RxTable', 'RxFullBlock',
@@ -2803,12 +2809,23 @@ class Opd extends BaseController
         }
 
         $complaintText = $rxRead($rx, ['complaints', 'Complaint', 'complaint', 'chief_complaint', 'chief_complaints']);
+        $complaintOnset = $rxRead($rx, ['complaint_onset']);
+        $complaintDurationDays = $rxRead($rx, ['complaint_duration_days']);
+        $complaintSeverity = $rxRead($rx, ['complaint_severity']);
+        $complaintSnomedJson = $rxRead($rx, ['complaint_snomed_json']);
         if ($complaintText === '') {
             $complaintText = trim((string) ($opd->complaints ?? ($opd->complaint ?? '')));
         }
 
         $provisionalDiagnosisText = $rxRead($rx, ['Provisional_diagnosis', 'provisional_diagnosis', 'provisional_diagnosis_text']);
         $diagnosisText = $rxRead($rx, ['diagnosis', 'Diagnosis', 'final_diagnosis', 'dx']);
+        $diagnosisJson = $rxRead($rx, ['diagnosis_json']);
+        $diagnosisSnomedId = $rxRead($rx, ['diagnosis_snomed_id']);
+        $diagnosisSnomedTerm = $rxRead($rx, ['diagnosis_snomed_term']);
+        $diagnosisSnomedSource = $rxRead($rx, ['diagnosis_snomed_source']);
+        $provisionalDiagnosisSnomedId = $rxRead($rx, ['provisional_diagnosis_snomed_id']);
+        $provisionalDiagnosisSnomedTerm = $rxRead($rx, ['provisional_diagnosis_snomed_term']);
+        $provisionalDiagnosisSnomedSource = $rxRead($rx, ['provisional_diagnosis_snomed_source']);
 
         if ($diagnosisText === '') {
             $diagnosisText = implode(', ', is_array($data['selected_morbidities'] ?? null) ? ($data['selected_morbidities'] ?? []) : []);
@@ -2988,12 +3005,23 @@ class Opd extends BaseController
             'Complaint' => $complaintText,
             'complaint' => $complaintText,
             'complaints' => $complaintText,
+            'complaint_onset' => $complaintOnset,
+            'complaint_duration_days' => $complaintDurationDays,
+            'complaint_severity' => $complaintSeverity,
+            'complaint_snomed_json' => $complaintSnomedJson,
             'Complaint_local' => $complaintLocal,
             'diagnosis' => $diagnosisText,
             'Diagnosis' => $diagnosisText,
+            'diagnosis_json' => $diagnosisJson,
+            'diagnosis_snomed_id' => $diagnosisSnomedId,
+            'diagnosis_snomed_term' => $diagnosisSnomedTerm,
+            'diagnosis_snomed_source' => $diagnosisSnomedSource,
             'diagnosis_local' => $diagnosisLocal,
             'Provisional_diagnosis' => $provisionalDiagnosisText,
             'provisional_diagnosis' => $provisionalDiagnosisText,
+            'provisional_diagnosis_snomed_id' => $provisionalDiagnosisSnomedId,
+            'provisional_diagnosis_snomed_term' => $provisionalDiagnosisSnomedTerm,
+            'provisional_diagnosis_snomed_source' => $provisionalDiagnosisSnomedSource,
             'investigation' => $rxInvestigation,
             'investigation_local' => $investigationLocal,
             'medical' => $medicalHtml,
@@ -3567,6 +3595,103 @@ class Opd extends BaseController
             return '<div style="margin-bottom:4px;">' . $headingHtml . ' ' . $value . '</div>';
         };
 
+        $escape = static fn (string $value): string => htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+
+        $splitClinicalText = static function (string $value): array {
+            $parts = preg_split('/[\r\n,;]+/', (string) $value) ?: [];
+            $seen = [];
+            $rows = [];
+            foreach ($parts as $part) {
+                $term = trim((string) $part);
+                if ($term === '') {
+                    continue;
+                }
+
+                $key = strtoupper(preg_replace('/\s+/', ' ', $term) ?? $term);
+                if (isset($seen[$key])) {
+                    continue;
+                }
+
+                $seen[$key] = true;
+                $rows[] = ['term' => $term];
+            }
+
+            return $rows;
+        };
+
+        $parseClinicalJsonItems = static function (string $jsonRaw): array {
+            $jsonRaw = trim($jsonRaw);
+            if ($jsonRaw === '') {
+                return [];
+            }
+
+            $decoded = json_decode($jsonRaw, true);
+            if (! is_array($decoded)) {
+                return [];
+            }
+
+            $items = [];
+            $seen = [];
+            foreach ($decoded as $row) {
+                if (! is_array($row)) {
+                    continue;
+                }
+
+                $term = trim((string) ($row['term'] ?? $row['name'] ?? ''));
+                if ($term === '') {
+                    continue;
+                }
+
+                $key = strtoupper(preg_replace('/\s+/', ' ', $term) ?? $term);
+                if (isset($seen[$key])) {
+                    continue;
+                }
+
+                $seen[$key] = true;
+                $items[] = [
+                    'term' => $term,
+                    'frequency' => trim((string) ($row['frequency'] ?? '')),
+                    'severity' => trim((string) ($row['severity'] ?? '')),
+                    'duration' => trim((string) ($row['duration'] ?? '')),
+                    'date' => trim((string) ($row['date'] ?? '')),
+                    'concept_id' => trim((string) ($row['concept_id'] ?? '')),
+                ];
+            }
+
+            return $items;
+        };
+
+        $renderClinicalList = static function (array $items, array $detailMap = []) use ($escape): string {
+            if (empty($items)) {
+                return '';
+            }
+
+            $listHtml = '<ul style="margin:4px 0 0 18px;padding:0;">';
+            foreach ($items as $item) {
+                $term = trim((string) ($item['term'] ?? ''));
+                if ($term === '') {
+                    continue;
+                }
+
+                $details = [];
+                foreach ($detailMap as $detailKey => $detailLabel) {
+                    $value = trim((string) ($item[$detailKey] ?? ''));
+                    if ($value !== '') {
+                        $details[] = $detailLabel . ': ' . $value;
+                    }
+                }
+
+                $listHtml .= '<li style="margin-bottom:2px;">' . $escape($term);
+                if (! empty($details)) {
+                    $listHtml .= '<span style="color:#666;font-size:11px;"> (' . $escape(implode(' | ', $details)) . ')</span>';
+                }
+                $listHtml .= '</li>';
+            }
+            $listHtml .= '</ul>';
+
+            return $listHtml === '<ul style="margin:4px 0 0 18px;padding:0;"></ul>' ? '' : $listHtml;
+        };
+
         $tokens['vital_content_raw'] = (string) ($tokens['vital_content'] ?? '');
         $tokens['Complaint_raw'] = (string) ($tokens['Complaint'] ?? '');
         $tokens['diagnosis_raw'] = (string) ($tokens['diagnosis'] ?? '');
@@ -3577,12 +3702,48 @@ class Opd extends BaseController
         $tokens['advice_raw'] = (string) ($tokens['advice'] ?? '');
         $tokens['next_visit_raw'] = (string) ($tokens['next_visit'] ?? '');
 
+        $complaintItems = $parseClinicalJsonItems((string) ($tokens['complaint_snomed_json'] ?? ''));
+        if (empty($complaintItems)) {
+            $complaintItems = $splitClinicalText((string) ($tokens['Complaint_raw'] ?? ''));
+        }
+
+        $diagnosisItems = $parseClinicalJsonItems((string) ($tokens['diagnosis_json'] ?? ''));
+        if (empty($diagnosisItems)) {
+            $diagnosisItems = $splitClinicalText((string) ($tokens['diagnosis_raw'] ?? ''));
+        }
+
+        $provisionalDiagnosisItems = $splitClinicalText((string) ($tokens['Provisional_diagnosis_raw'] ?? ''));
+
+        $tokens['complaint_list'] = $renderClinicalList($complaintItems, [
+            'frequency' => 'Freq',
+            'severity' => 'Severity',
+            'duration' => 'Duration',
+            'date' => 'Date',
+        ]);
+        $tokens['diagnosis_list'] = $renderClinicalList($diagnosisItems, [
+            'duration' => 'Duration',
+            'date' => 'Date',
+        ]);
+        $tokens['provisional_diagnosis_list'] = $renderClinicalList($provisionalDiagnosisItems);
+
         $tokens['vital_content'] = $formatBlock('Vitals', (string) ($tokens['vital_content'] ?? ''), false);
-        $tokens['Complaint'] = $formatBlock('Complaint', (string) ($tokens['Complaint_raw'] ?? ''));
+        $complaintBlockValue = (string) ($tokens['complaint_list'] ?? '');
+        if ($complaintBlockValue === '') {
+            $complaintBlockValue = nl2br($escape((string) ($tokens['Complaint_raw'] ?? '')));
+        }
+        $tokens['Complaint'] = $formatBlock('Complaint', $complaintBlockValue, true);
         $tokens['complaint'] = $tokens['Complaint'];
-        $tokens['diagnosis'] = $formatBlock('Diagnosis', (string) ($tokens['diagnosis_raw'] ?? ''));
+        $diagnosisBlockValue = (string) ($tokens['diagnosis_list'] ?? '');
+        if ($diagnosisBlockValue === '') {
+            $diagnosisBlockValue = nl2br($escape((string) ($tokens['diagnosis_raw'] ?? '')));
+        }
+        $tokens['diagnosis'] = $formatBlock('Diagnosis', $diagnosisBlockValue, true);
         $tokens['Diagnosis'] = $tokens['diagnosis'];
-        $tokens['Provisional_diagnosis'] = $formatBlock('Provisional Diagnosis', (string) ($tokens['Provisional_diagnosis_raw'] ?? ''));
+        $provisionalBlockValue = (string) ($tokens['provisional_diagnosis_list'] ?? '');
+        if ($provisionalBlockValue === '') {
+            $provisionalBlockValue = nl2br($escape((string) ($tokens['Provisional_diagnosis_raw'] ?? '')));
+        }
+        $tokens['Provisional_diagnosis'] = $formatBlock('Provisional Diagnosis', $provisionalBlockValue, true);
         $tokens['provisional_diagnosis'] = $tokens['Provisional_diagnosis'];
         $tokens['Finding_Examinations'] = $formatBlock('Finding / Examination', (string) ($tokens['Finding_Examinations_raw'] ?? ''));
         $tokens['finding_examinations'] = $tokens['Finding_Examinations'];
