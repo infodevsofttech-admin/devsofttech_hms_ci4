@@ -3762,7 +3762,9 @@ class Opd extends BaseController
         ]);
         $tokens['provisional_diagnosis_list'] = $renderClinicalList($provisionalDiagnosisItems);
 
-        $tokens['vital_content'] = $formatBlock('Vitals', (string) ($tokens['vital_content'] ?? ''), false);
+        $vitalCoreRaw = (string) ($tokens['vital_content_raw'] ?? '');
+        $tokens['vital_content'] = $vitalCoreRaw;
+        $tokens['vital_content_block'] = $formatBlock('Vitals', $vitalCoreRaw, false);
         $complaintBlockValue = (string) ($tokens['complaint_list'] ?? '');
         if ($complaintBlockValue === '') {
             $complaintBlockValue = nl2br($escape((string) ($tokens['Complaint_raw'] ?? '')));
@@ -3883,8 +3885,9 @@ class Opd extends BaseController
         $tokens['current_medications_block'] = $currentMeds !== '' ? $formatBlock('Current Medications', esc($currentMeds)) : '';
         // Keep both raw and formatted allergy placeholders for template compatibility.
         $tokens['allergic_history_raw'] = $allergicHistoryRaw;
-        $tokens['allergic_history'] = $allergicHistoryRaw !== '' ? $formatBlock('Allergic History', esc($allergicHistoryRaw)) : '';
-        $tokens['allergic_history_block'] = $tokens['allergic_history'];
+        $tokens['allergic_history'] = $allergicHistoryRaw;
+        $tokens['allergic_history_block'] = $allergicHistoryRaw !== '' ? $formatBlock('Allergic History', esc($allergicHistoryRaw)) : '';
+        $tokens['allergic_history_formatted'] = $tokens['allergic_history_block'];
         $tokens['adr_history'] = $adrHistory;
 
         // ── Women related (formatted) ─────────────────────────────────────────
@@ -3930,7 +3933,7 @@ class Opd extends BaseController
             ? $blockGapHtml . '<div style="display:block;">' . $medicalHtml . '</div>' . $blockGapHtml
             : '';
 
-        $tokens['VitalsBlock'] = (string) ($tokens['vital_content'] ?? '');
+        $tokens['VitalsBlock'] = (string) ($tokens['vital_content_full'] ?? $tokens['vital_content_block'] ?? '');
         $tokens['ComplaintBlock'] = (string) ($tokens['Complaint'] ?? '');
         $tokens['DiagnosisBlock'] = (string) ($tokens['diagnosis'] ?? '');
         $tokens['ProvisionalDiagnosisBlock'] = (string) ($tokens['Provisional_diagnosis'] ?? '');
@@ -4063,6 +4066,28 @@ class Opd extends BaseController
         // content_section : all clinical blocks combined (same as {{RxFullBlock}})
         $tokens['content_section'] = (string) ($tokens['RxFullBlock'] ?? '');
         // ─────────────────────────────────────────────────────────────────────
+
+        // Add case-insensitive aliases after all token mutations so newly built
+        // placeholders also resolve in legacy templates.
+        foreach ($tokens as $key => $value) {
+            $key = (string) $key;
+            $value = (string) $value;
+
+            $lower = strtolower($key);
+            if (! array_key_exists($lower, $tokens)) {
+                $tokens[$lower] = $value;
+            }
+
+            $ucfirst = ucfirst($lower);
+            if (! array_key_exists($ucfirst, $tokens)) {
+                $tokens[$ucfirst] = $value;
+            }
+
+            $upper = strtoupper($key);
+            if (! array_key_exists($upper, $tokens)) {
+                $tokens[$upper] = $value;
+            }
+        }
 
         return $tokens;
     }
