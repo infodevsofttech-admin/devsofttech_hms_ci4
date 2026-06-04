@@ -3594,7 +3594,11 @@ class Opd extends BaseController
             }
         }
 
-        $formatBlock = static function (string $label, string $value, bool $lineBreakAfterLabel = false): string {
+        // mPDF-safe vertical spacer. Using a fixed-height block in mm is more reliable
+        // than margins inside absolute-positioned containers.
+        $blockGapHtml = '<div style="display:block;height:2.8mm;line-height:0;font-size:0;">&nbsp;</div>';
+
+        $formatBlock = static function (string $label, string $value, bool $lineBreakAfterLabel = false) use ($blockGapHtml): string {
             $value = trim($value);
             if ($value === '') {
                 return '';
@@ -3607,21 +3611,23 @@ class Opd extends BaseController
             if ($lineBreakAfterLabel) {
                 // List-style sections (Complaint, Diagnosis …):
                 //   heading on its own line, content block below with a small left indent.
-                //   margin-bottom:18px gives clear visual separation between consecutive sections.
-                return '<div style="display:block;margin-top:0 !important;margin-bottom:18px !important;padding-bottom:10px !important;line-height:1.6;">'
+                //   explicit spacer block is appended for consistent separation in mPDF.
+                return '<div style="display:block;line-height:1.6;">'
                     . $headingHtml
                     . '<div style="margin-top:3px;padding-left:6px;font-weight:400;color:#111;line-height:1.6;">'
                     . $value
-                    . '</div></div>';
+                    . '</div></div>'
+                    . $blockGapHtml;
             }
 
             // Inline sections (Vitals, Investigation, Next Visit):
-            //   heading + value on the same line; same 18px gap after block.
-            return '<div style="display:block;margin-top:0 !important;margin-bottom:18px !important;padding-bottom:10px !important;line-height:1.6;">'
+            //   heading + value on the same line; explicit spacer appended after block.
+            return '<div style="display:block;line-height:1.6;">'
                 . $headingHtml
                 . ' <span style="font-weight:400;color:#111;">'
                 . $value
-                . '</span></div>';
+                . '</span></div>'
+                . $blockGapHtml;
         };
 
         $escape = static fn (string $value): string => htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
@@ -3854,12 +3860,12 @@ class Opd extends BaseController
 
         $medicalHtml = trim((string) ($tokens['medical'] ?? ''));
         $tokens['Rx'] = $medicalHtml !== ''
-            ? '<div style="display:block;margin-top:18px !important;margin-bottom:18px !important;padding-top:10px !important;padding-bottom:10px !important;"><div style="font-weight:700;font-size:24px;line-height:1.2;margin-bottom:8px;">Rx :</div>' . $medicalHtml . '</div>'
+            ? $blockGapHtml . '<div style="display:block;"><div style="font-weight:700;font-size:24px;line-height:1.2;margin-bottom:8px;">Rx :</div>' . $medicalHtml . '</div>' . $blockGapHtml
             : '';
         $tokens['rx'] = $tokens['Rx'];
         // {{medical}} used directly in templates: wrap with the same top/bottom margin.
         $tokens['medical'] = $medicalHtml !== ''
-            ? '<div style="display:block;margin-top:18px !important;margin-bottom:18px !important;padding-top:10px !important;padding-bottom:10px !important;">' . $medicalHtml . '</div>'
+            ? $blockGapHtml . '<div style="display:block;">' . $medicalHtml . '</div>' . $blockGapHtml
             : '';
 
         $tokens['VitalsBlock'] = (string) ($tokens['vital_content'] ?? '');
