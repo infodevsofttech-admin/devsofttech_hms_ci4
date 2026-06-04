@@ -3586,13 +3586,26 @@ class Opd extends BaseController
                 return '';
             }
 
-            $headingHtml = '<span style="font-weight:700;font-size:13px;line-height:1.35;">' . $label . ' :</span>';
+            // Heading uses same font-size as surrounding content (inherit) so heading
+            // and value are visually consistent; bold weight + uppercase provides
+            // clear separation without a size mismatch.
+            $headingHtml = '<span style="font-weight:700;font-size:inherit;letter-spacing:0.03em;text-transform:uppercase;color:#1a1a1a;">' . $label . ' :</span>';
 
             if ($lineBreakAfterLabel) {
-                return '<div style="margin-bottom:4px;">' . $headingHtml . '<br/>' . $value . '</div>';
+                // List-style sections: heading on its own line, content indented below.
+                return '<div style="margin-bottom:6px;line-height:1.5;">'
+                    . $headingHtml
+                    . '<div style="margin-top:2px;padding-left:4px;font-weight:400;color:#111;line-height:1.6;">'
+                    . $value
+                    . '</div></div>';
             }
 
-            return '<div style="margin-bottom:4px;">' . $headingHtml . ' ' . $value . '</div>';
+            // Inline sections (Vitals, Investigation, Next Visit): heading + value on same line.
+            return '<div style="margin-bottom:5px;line-height:1.5;">'
+                . $headingHtml
+                . ' <span style="font-weight:400;color:#111;">'
+                . $value
+                . '</span></div>';
         };
 
         $escape = static fn (string $value): string => htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
@@ -3666,7 +3679,7 @@ class Opd extends BaseController
                 return '';
             }
 
-            $listHtml = '<ul style="margin:4px 0 0 18px;padding:0;">';
+            $listHtml = '<ul style="margin:3px 0 0 16px;padding:0;list-style-type:disc;">';
             foreach ($items as $item) {
                 $term = trim((string) ($item['term'] ?? ''));
                 if ($term === '') {
@@ -3681,15 +3694,16 @@ class Opd extends BaseController
                     }
                 }
 
-                $listHtml .= '<li style="margin-bottom:2px;">' . $escape($term);
+                // Term in normal weight; detail metadata in muted italic at 90% size.
+                $listHtml .= '<li style="margin-bottom:3px;font-weight:400;line-height:1.5;color:#111;">' . $escape($term);
                 if (! empty($details)) {
-                    $listHtml .= '<span style="color:#666;font-size:11px;"> (' . $escape(implode(' | ', $details)) . ')</span>';
+                    $listHtml .= ' <span style="color:#555;font-size:0.9em;font-style:italic;">(' . $escape(implode(' | ', $details)) . ')</span>';
                 }
                 $listHtml .= '</li>';
             }
             $listHtml .= '</ul>';
 
-            return $listHtml === '<ul style="margin:4px 0 0 18px;padding:0;"></ul>' ? '' : $listHtml;
+            return $listHtml === '<ul style="margin:3px 0 0 16px;padding:0;list-style-type:disc;"></ul>' ? '' : $listHtml;
         };
 
         $tokens['vital_content_raw'] = (string) ($tokens['vital_content'] ?? '');
