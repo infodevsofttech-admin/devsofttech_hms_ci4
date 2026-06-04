@@ -4556,13 +4556,22 @@
             return;
         }
 
+        var seen = {};
         rows.forEach(function(entry) {
-            var val = (entry || '').toString().trim();
-            if (!val) {
-                return;
-            }
+            var values = section === 'complaints'
+                ? (entry || '').toString().split(/[,;\n\r]+/)
+                : [entry];
 
-            $box.append('<button type="button" class="btn btn-outline-secondary btn-sm btn-recent-entry-chip" data-section="' + $('<div>').text(section).html() + '" data-value="' + $('<div>').text(val).html() + '">' + $('<div>').text(val).html() + '</button>');
+            values.forEach(function(part) {
+                var val = (part || '').toString().trim().replace(/^[,;\s]+|[,;\s]+$/g, '');
+                var key = val.toLowerCase();
+                if (!val || seen[key]) {
+                    return;
+                }
+                seen[key] = true;
+
+                $box.append('<button type="button" class="btn btn-outline-secondary btn-sm btn-recent-entry-chip" data-section="' + $('<div>').text(section).html() + '" data-value="' + $('<div>').text(val).html() + '">' + $('<div>').text(val).html() + '</button>');
+            });
         });
     }
 
@@ -4639,8 +4648,12 @@
             return;
         }
 
+        if (section === 'complaints') {
+            addComplaintItem({ name: value, concept_id: '', source: 'local', hierarchy: '' });
+            return;
+        }
+
         var targetMap = {
-            complaints: 'complaints',
             diagnosis: 'diagnosis',
             provisional_diagnosis: 'provisional_diagnosis'
         };
@@ -4675,6 +4688,10 @@
     var _complaintSearchTimer = null;
     var _complaintSearchCache = {};
 
+    function complaintTextKey(value) {
+        return (value || '').toString().trim().replace(/\s+/g, ' ').toUpperCase();
+    }
+
     function syncComplaintSnomedJson() {
         var json = JSON.stringify(selectedComplaintItems.map(function(item) {
             return {
@@ -4689,6 +4706,11 @@
             };
         }));
         $('#complaint_snomed_json').val(json);
+        $('#complaints').val(selectedComplaintItems.map(function(item) {
+            return (item.term || '').toString().trim();
+        }).filter(function(term) {
+            return term !== '';
+        }).join(', '));
         // Keep first-complaint data in legacy hidden fields for payload compatibility
         var first = selectedComplaintItems[0];
         $('#complaint_duration_days').val(first ? (first.duration || '') : '');
@@ -4772,9 +4794,10 @@
         var source    = ((row && row.source) || (conceptId ? 'snomed' : 'local')).toString();
         var hierarchy = ((row && row.hierarchy) || '').toString();
 
-        // Deduplicate by term (case-insensitive)
+        // Deduplicate by normalized term (case-insensitive)
+        var newKey = complaintTextKey(term);
         var exists = selectedComplaintItems.some(function(item) {
-            return item.term.toUpperCase() === term.toUpperCase();
+            return complaintTextKey(item.term) === newKey;
         });
         if (exists) {
             return false;
@@ -5213,7 +5236,36 @@
     // Init from saved JSON on page load
     (function initComplaintItemsFromSaved() {
         var raw = ($('#complaint_snomed_json').val() || '').toString().trim();
+        var seen = {};
+        function pushComplaintItem(item) {
+            var term = (item && item.term ? item.term : '').toString().trim();
+            var key = complaintTextKey(term);
+            if (!term || seen[key]) {
+                return;
+            }
+            seen[key] = true;
+            selectedComplaintItems.push({
+                term:       term,
+                concept_id: (item.concept_id || '').toString(),
+                source:     (item.source     || '').toString(),
+                hierarchy:  (item.hierarchy  || '').toString(),
+                frequency:  (item.frequency  || '').toString(),
+                severity:   (item.severity   || '').toString(),
+                duration:   (item.duration   || '').toString(),
+                date:       (item.date       || '').toString()
+            });
+        }
+
         if (!raw || raw === '[]' || raw === '') {
+            var legacyComplaints = ($('#complaints').val() || '').toString().trim();
+            if (legacyComplaints !== '') {
+                (legacyComplaints.split(/[,;\n\r]+/) || []).forEach(function(part) {
+                    var term = (part || '').toString().trim();
+                    if (term && !/^Complaint\s*(Onset|Duration|Severity)\s*:/i.test(term)) {
+                        pushComplaintItem({ term: term, source: 'local' });
+                    }
+                });
+            }
             renderComplaintChips();
             return;
         }
@@ -5222,16 +5274,7 @@
             if (Array.isArray(saved)) {
                 saved.forEach(function(item) {
                     if (item && item.term) {
-                        selectedComplaintItems.push({
-                            term:       (item.term       || '').toString(),
-                            concept_id: (item.concept_id || '').toString(),
-                            source:     (item.source     || '').toString(),
-                            hierarchy:  (item.hierarchy  || '').toString(),
-                            frequency:  (item.frequency  || '').toString(),
-                            severity:   (item.severity   || '').toString(),
-                            duration:   (item.duration   || '').toString(),
-                            date:       (item.date       || '').toString()
-                        });
+                        pushComplaintItem(item);
                     }
                 });
             }
