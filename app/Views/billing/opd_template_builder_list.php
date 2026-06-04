@@ -4,16 +4,11 @@
             <h1>OPD Print Template Builder</h1>
         </div>
         <div style="float:right; margin-top:8px;">
-            <?php $firstTemplate = !empty($template_names ?? []) ? (string) $template_names[0] : 'default'; ?>
-            <div class="btn-group btn-group-sm" role="group" aria-label="Template Navigation">
-                <button type="button" class="btn btn-primary" disabled>Template List</button>
-                <a class="btn btn-default" href="javascript:load_form_div('<?= base_url('Opd/print_template_builder') ?>?mode=edit&name=<?= esc($firstTemplate) ?>','maindiv','OPD Template Edit');">Edit Template</a>
-            </div>
+             <button type="button" class="btn btn-success btn-sm" id="btn_new_template">+ Add New Template</button>
         </div>
     </div>
     <ol class="breadcrumb">
-        <li><a href="javascript:load_form_div('<?= base_url('opd/appointment') ?>','maindiv','OPD Appointment');">OPD</a></li>
-        <li class="active">Template List</li>
+        <li>OPD Template List</li>
     </ol>
 </section>
 
@@ -22,7 +17,7 @@
         <div class="box-header with-border">
             <h3 class="box-title">Templates</h3>
             <div class="box-tools">
-                <button type="button" class="btn btn-success btn-sm" id="btn_new_template">+ Add New Template</button>
+               
             </div>
         </div>
         <div class="box-body">
@@ -48,7 +43,7 @@
                                     <td><?= (int) $idx + 1 ?></td>
                                     <td><?= esc($nm) ?></td>
                                     <td>
-                                        <a class="btn btn-primary btn-xs" href="javascript:load_form_div('<?= base_url('Opd/print_template_builder') ?>?mode=edit&name=<?= esc($nm) ?>','maindiv','OPD Template Edit');">Edit</a>
+                                        <a class="btn btn-primary btn-xs" href="javascript:load_form('<?= base_url('Opd/print_template_builder') ?>?mode=edit&name=<?= esc($nm) ?>','maindiv','OPD Template Edit');">Edit</a>
                                         <button type="button" class="btn btn-default btn-xs btn_rename_template" data-name="<?= esc($nm) ?>">Rename</button>
                                         <button type="button" class="btn btn-danger btn-xs btn_delete_template" data-name="<?= esc($nm) ?>">Delete</button>
                                     </td>
@@ -102,7 +97,7 @@
             return;
         }
 
-        load_form_div('<?= base_url('Opd/print_template_builder') ?>?mode=edit&name=' + encodeURIComponent(name), 'maindiv', 'OPD Template Edit');
+        load_form('<?= base_url('Opd/print_template_builder') ?>?mode=edit&name=' + encodeURIComponent(name), 'maindiv', 'OPD Template Edit');
     });
 
     var renameButtons = document.querySelectorAll('.btn_rename_template');
@@ -148,7 +143,7 @@
                 }
 
                 setListMsg('Template renamed: ' + oldName + ' -> ' + (res.new_name || newName), true);
-                load_form_div('<?= base_url('Opd/print_template_builder') ?>?mode=list', 'maindiv', 'OPD Template List');
+                load_form('<?= base_url('Opd/print_template_builder') ?>?mode=list', 'maindiv', 'OPD Template List');
             }, 'json').fail(function () {
                 setListMsg('Unable to rename template', false);
             });
@@ -187,7 +182,7 @@
                 }
 
                 setListMsg('Template deleted: ' + templateName, true);
-                load_form_div('<?= base_url('Opd/print_template_builder') ?>?mode=list', 'maindiv', 'OPD Template List');
+                load_form('<?= base_url('Opd/print_template_builder') ?>?mode=list', 'maindiv', 'OPD Template List');
             }, 'json').fail(function () {
                 setListMsg('Unable to delete template', false);
             });
