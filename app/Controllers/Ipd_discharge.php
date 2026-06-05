@@ -295,6 +295,9 @@ class Ipd_discharge extends BaseController
             ?? $person->reg_no
             ?? ''
         ));
+        $ipdCode = trim((string) ($ipd->ipd_code ?? ''));
+
+        $content = $this->stripLegacyTopSummaryFromContent($content, $templateHtml, $patientName, $patientCode, $ipdCode);
 
         $age = get_age_1($person->dob ?? null, $person->age ?? '', $person->age_in_month ?? '', $person->estimate_dob ?? '');
         $ageGender = trim($age . ' / ' . ((string) ($person->xgender ?? '')));
@@ -318,7 +321,7 @@ class Ipd_discharge extends BaseController
             '{{CONTENT}}' => $content,
             '{{PATIENT_NAME}}' => esc($patientName),
             '{{UHID}}' => esc($patientCode),
-            '{{IPD_CODE}}' => esc((string) ($ipd->ipd_code ?? '')),
+            '{{IPD_CODE}}' => esc($ipdCode),
             '{{AGE_GENDER}}' => esc($ageGender),
             '{{ADMIT_DATE}}' => esc((string) ($ipd->str_register_date ?? '')),
             '{{DISCHARGE_DATE}}' => esc((string) ($ipd->str_discharge_date ?? '')),
@@ -339,6 +342,54 @@ class Ipd_discharge extends BaseController
             'selected_template_name' => (string) ($selectedTemplate['template_name'] ?? ''),
             'selected_template_settings' => $templateSettings,
         ];
+    }
+
+    private function stripLegacyTopSummaryFromContent(
+        string $content,
+        string $templateHtml,
+        string $patientName,
+        string $patientCode,
+        string $ipdCode
+    ): string {
+        $content = trim($content);
+        if ($content === '') {
+            return $content;
+        }
+
+        // Only clean legacy duplicate headers when template itself already prints patient/meta area.
+        $templateHasMeta = strpos($templateHtml, '{{PATIENT_NAME}}') !== false
+            || strpos($templateHtml, '{{UHID}}') !== false
+            || strpos($templateHtml, '{{IPD_CODE}}') !== false
+            || strpos($templateHtml, '{{ADMIT_DATE}}') !== false
+            || strpos($templateHtml, '{{DISCHARGE_DATE}}') !== false;
+
+        if (! $templateHasMeta) {
+            return $content;
+        }
+
+        $scanHead = substr($content, 0, 3000);
+        if ($scanHead === false) {
+            $scanHead = $content;
+        }
+
+        $hasPatientMarker = $patientName !== '' && stripos($scanHead, $patientName) !== false;
+        $hasUhidMarker = $patientCode !== '' && stripos($scanHead, $patientCode) !== false;
+        $hasIpdMarker = $ipdCode !== '' && stripos($scanHead, $ipdCode) !== false;
+        $hasDischargeHeading = stripos($scanHead, 'Discharge Summary') !== false;
+
+        if (! $hasDischargeHeading || (! $hasPatientMarker && ! $hasUhidMarker && ! $hasIpdMarker)) {
+            return $content;
+        }
+
+        // Remove one legacy heading + first demographic summary table block if present at top.
+        $pattern = '/^\s*(?:<h[1-6][^>]*>\s*discharge\s*summary\s*<\/h[1-6]>\s*)?'
+            . '(?:<table\b[^>]*>.*?<\/table>\s*){1,2}/is';
+        $cleaned = preg_replace($pattern, '', $content, 1);
+        if (is_string($cleaned) && trim($cleaned) !== '') {
+            return trim($cleaned);
+        }
+
+        return $content;
     }
 
     private function currentUserLabel(): string
