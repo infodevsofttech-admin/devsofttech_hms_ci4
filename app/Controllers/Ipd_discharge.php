@@ -4854,6 +4854,7 @@ class Ipd_discharge extends BaseController
             . '.content table{width:100%;border-collapse:collapse;margin:6px 0 10px 0;font-size:10pt;}'
             . '.content th,.content td{border:1px solid #d1d5db;padding:5px;vertical-align:top;}'
             . '.content table.no-border th,.content table.no-border td{border:none !important;}'
+            . '.content table[border="0"] th,.content table[border="0"] td{border:none !important;border-color:transparent !important;}'
             . '.content ul,.content ol{margin:4px 0 10px 18px;padding:0;}'
             . '</style></head><body>'
             . '<div class="content">' . $renderedContent . '</div>'
