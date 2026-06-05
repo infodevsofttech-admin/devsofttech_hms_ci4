@@ -562,7 +562,6 @@ class CaseMaster extends BaseController
                     and (
                         o.insurance_case_id = cast(c.id as char)
                         or o.insurance_case_id = c.case_id_code
-                        or o.p_id = c.p_id
                     )
 
                 union all
@@ -586,7 +585,6 @@ class CaseMaster extends BaseController
                     and (
                         i.insurance_case_id = c.id
                         or i.insurance_case_id = c.case_id_code
-                        or i.attach_id = c.p_id
                     )
             ) v
             order by v.Charge_type, v.Adate
@@ -628,7 +626,6 @@ class CaseMaster extends BaseController
             ->groupStart()
                 ->where('insurance_case_id', (string) $caseId)
                 ->orWhere('insurance_case_id', (string) ($caseRow->case_id_code ?? ''))
-                ->orWhere('p_id', (int) ($caseRow->p_id ?? 0))
             ->groupEnd()
             ->get()
             ->getRow();
@@ -647,7 +644,6 @@ class CaseMaster extends BaseController
             ->groupStart()
                 ->where('insurance_case_id', $caseId)
                 ->orWhere('insurance_case_id', (string) ($caseRow->case_id_code ?? ''))
-                ->orWhere('attach_id', (int) ($caseRow->p_id ?? 0))
             ->groupEnd()
             ->get()
             ->getRow();
