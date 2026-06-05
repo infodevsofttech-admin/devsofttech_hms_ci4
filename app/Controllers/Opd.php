@@ -140,6 +140,10 @@ class Opd extends BaseController
             // Drug allergy / NABH
             'drug_allergy_status', 'drug_allergy_details',
             'adr_history', 'current_medications',
+            'drug_allergy_status_block',
+            'drug_allergy_details_block',
+            'adr_history_raw',
+            'current_medications_raw',
             'drug_allergy_block',         // Formatted: Drug Allergy : status — details
             'adr_history_block',          // Formatted: ADR History : ...
             'current_medications_block',  // Formatted: Current Medications : ...
@@ -3880,6 +3884,12 @@ class Opd extends BaseController
         if ($allergicHistoryRaw === '' && $allergyDetails !== '') {
             $allergicHistoryRaw = $allergyDetails;
         }
+        $tokens['drug_allergy_status_raw'] = $allergyStatus;
+        $tokens['drug_allergy_details_raw'] = $allergyDetails;
+        $tokens['adr_history_raw'] = $adrHistory;
+        $tokens['current_medications_raw'] = $currentMeds;
+        $tokens['drug_allergy_status_block'] = $allergyStatus !== '' ? $formatBlock('Drug Allergy Status', esc($allergyStatus)) : '';
+        $tokens['drug_allergy_details_block'] = $allergyDetails !== '' ? $formatBlock('Drug Allergy Details', esc($allergyDetails)) : '';
         $tokens['drug_allergy_block'] = $allergyBlock !== '' ? $formatBlock('Drug Allergy', $allergyBlock) : '';
         $tokens['adr_history_block'] = $adrHistory !== '' ? $formatBlock('ADR History', esc($adrHistory)) : '';
         $tokens['current_medications_block'] = $currentMeds !== '' ? $formatBlock('Current Medications', esc($currentMeds)) : '';
