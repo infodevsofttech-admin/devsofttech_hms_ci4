@@ -297,6 +297,10 @@ class Ipd_discharge extends BaseController
         ));
         $ipdCode = trim((string) ($ipd->ipd_code ?? ''));
 
+        if ($this->shouldUseContentOnlyTemplate($content, $templateHtml)) {
+            $templateHtml = '{{CONTENT}}';
+        }
+
         $content = $this->stripLegacyTopSummaryFromContent($content, $templateHtml, $patientName, $patientCode, $ipdCode);
 
         $age = get_age_1($person->dob ?? null, $person->age ?? '', $person->age_in_month ?? '', $person->estimate_dob ?? '');
@@ -342,6 +346,35 @@ class Ipd_discharge extends BaseController
             'selected_template_name' => (string) ($selectedTemplate['template_name'] ?? ''),
             'selected_template_settings' => $templateSettings,
         ];
+    }
+
+    private function shouldUseContentOnlyTemplate(string $content, string $templateHtml): bool
+    {
+        $content = trim($content);
+        if ($content === '') {
+            return false;
+        }
+
+        $templateHasMeta = strpos($templateHtml, '{{PATIENT_NAME}}') !== false
+            || strpos($templateHtml, '{{UHID}}') !== false
+            || strpos($templateHtml, '{{IPD_CODE}}') !== false
+            || strpos($templateHtml, '{{ADMIT_DATE}}') !== false
+            || strpos($templateHtml, '{{DISCHARGE_DATE}}') !== false;
+
+        if (! $templateHasMeta) {
+            return false;
+        }
+
+        $scan = substr($content, 0, 5000);
+        if ($scan === false) {
+            $scan = $content;
+        }
+
+        $hasHeading = stripos($scan, 'Discharge Summary') !== false;
+        $hasPatientGrid = stripos($scan, 'IPD No.') !== false || stripos($scan, 'Admission') !== false;
+        $hasClinicalBody = stripos($scan, 'Final Diagnosis') !== false || stripos($scan, 'Course in the Hospital') !== false;
+
+        return $hasHeading && $hasPatientGrid && $hasClinicalBody;
     }
 
     private function stripLegacyTopSummaryFromContent(
@@ -4684,21 +4717,6 @@ class Ipd_discharge extends BaseController
         $ipd = $panelData['ipd_info'] ?? null;
         $person = $panelData['person_info'] ?? null;
 
-        $patientName = trim((string) ($person->p_fname ?? ''));
-        $patientCode = trim((string) (
-            $person->uhid
-            ?? $person->UHID
-            ?? $person->patient_code
-            ?? $person->p_code
-            ?? $person->reg_no
-            ?? ''
-        ));
-        $ipdCode = trim((string) ($ipd->ipd_code ?? ''));
-        $gender = trim((string) ($person->xgender ?? ''));
-        $age = get_age_1($person->dob ?? null, $person->age ?? '', $person->age_in_month ?? '', $person->estimate_dob ?? '');
-        $admitDate = trim((string) ($ipd->str_register_date ?? ''));
-        $dischargeDate = trim((string) ($ipd->str_discharge_date ?? ''));
-
         $headerBlock = '';
         if ($withHeader) {
             $headerBlock = '<div class="pdf-header">'
@@ -4714,26 +4732,13 @@ class Ipd_discharge extends BaseController
             . '.pdf-header{margin-bottom:10px;border-bottom:1px solid #d1d5db;padding-bottom:6px;}'
             . '.pdf-header-title{font-size:18pt;font-weight:700;}'
             . '.pdf-header-sub{font-size:9pt;color:#4b5563;}'
-            . '.meta{border:1px solid #cbd5e1;padding:8px;margin-bottom:10px;}'
-            . '.meta-table{width:100%;border-collapse:collapse;font-size:10pt;}'
-            . '.meta-table td{padding:2px 6px;border-right:1px solid #e5e7eb;vertical-align:top;}'
-            . '.meta-table td:last-child{border-right:none;}'
-            . '.content{border:1px solid #d1d5db;padding:10px;}'
+                . '.content{padding:0;}'
             . '.content h2,.content h3,.content h4{margin:12px 0 6px 0;color:#0f172a;}'
             . '.content table{width:100%;border-collapse:collapse;margin:6px 0 10px 0;font-size:10pt;}'
             . '.content th,.content td{border:1px solid #d1d5db;padding:5px;vertical-align:top;}'
             . '.content ul,.content ol{margin:4px 0 10px 18px;padding:0;}'
             . '</style></head><body>'
             . $headerBlock
-            . '<div class="meta"><table class="meta-table"><tr>'
-            . '<td><strong>Patient:</strong> ' . esc($patientName) . '</td>'
-            . '<td><strong>UHID:</strong> ' . esc($patientCode) . '</td>'
-            . '<td><strong>IPD:</strong> ' . esc($ipdCode) . '</td>'
-            . '</tr><tr>'
-            . '<td><strong>Age/Gender:</strong> ' . esc(trim($age . ' / ' . $gender)) . '</td>'
-            . '<td><strong>Admit Date:</strong> ' . esc($admitDate) . '</td>'
-            . '<td><strong>Discharge Date:</strong> ' . esc($dischargeDate) . '</td>'
-            . '</tr></table></div>'
             . '<div class="content">' . $renderedContent . '</div>'
             . '</body></html>';
     }
