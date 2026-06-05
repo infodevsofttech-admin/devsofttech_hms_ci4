@@ -136,11 +136,32 @@ class Ipd_discharge extends BaseController
             . '</tr>'
             . '<tr>'
             . '<td><b>Age/Gender</b>: {{AGE_GENDER}}</td>'
+            . '<td><b>Guardian</b>: {{GUARDIAN_RELATION}}{{GUARDIAN_NAME}}</td>'
+            . '<td><b>Address</b>: {{PATIENT_ADDRESS}}</td>'
+            . '</tr>'
+            . '<tr>'
             . '<td><b>Admit Date</b>: {{ADMIT_DATE}}</td>'
             . '<td><b>Discharge Date</b>: {{DISCHARGE_DATE}}</td>'
+            . '<td><b>Prepared On</b>: {{CURRENT_DATE}}</td>'
             . '</tr>'
             . '</table>'
-            . '<div>{{CONTENT}}</div>';
+            . '<div>{{DISCHARGE_SUMMARY}}</div>'
+            . '<div>{{PRESENTING_COMPLAINTS}}</div>'
+            . '<div>{{PAIN_MEASUREMENT_SCALE}}</div>'
+            . '<div>{{GENERAL_EXAM_ADMISSION}}</div>'
+            . '<div>{{CLINICAL_INVESTIGATION_REPORTS}}</div>'
+            . '<div>{{FINAL_DIAGNOSIS}}</div>'
+            . '<div>{{COURSE_IN_HOSPITAL}}</div>'
+            . '<div>{{EXAMINATION_ON_DISCHARGE}}</div>'
+            . '<div>{{SURGERY}}</div>'
+            . '<div>{{PROCEDURE}}</div>'
+            . '<div>{{PERSONAL_HISTORY}}</div>'
+            . '<div>{{DRUG_ALLERGY_ADR}}</div>'
+            . '<div>{{CO_MORBIDITIES}}</div>'
+            . '<div>{{DISCHARGE_MEDICATIONS}}</div>'
+            . '<div>{{DIETARY_ADVICE}}</div>'
+            . '<div>{{DISCHARGE_INSTRUCTIONS}}</div>'
+            . '<div>{{SIGNATURE_BLOCK}}</div>';
     }
 
     private function defaultDischargeTemplateSettings(): array
@@ -172,17 +193,34 @@ class Ipd_discharge extends BaseController
             . '</tr>'
             . '<tr>'
             . '<td><b>Age/Gender</b>: {{AGE_GENDER}}</td>'
-            . '<td><b>Date of Admission</b>: {{ADMIT_DATE}}</td>'
-            . '<td><b>Date of Discharge</b>: {{DISCHARGE_DATE}}</td>'
+            . '<td><b>Guardian</b>: {{GUARDIAN_RELATION}}{{GUARDIAN_NAME}}</td>'
+            . '<td><b>Address</b>: {{PATIENT_ADDRESS}}</td>'
             . '</tr>'
             . '<tr>'
-            . '<td colspan="3"><b>Prepared On</b>: {{CURRENT_DATE}}</td>'
+            . '<td><b>Date of Admission</b>: {{ADMIT_DATE}}</td>'
+            . '<td><b>Date of Discharge</b>: {{DISCHARGE_DATE}}</td>'
+            . '<td><b>Prepared On</b>: {{CURRENT_DATE}}</td>'
             . '</tr>'
             . '</table>'
             . '<div style="font-size:11px;color:#334155;margin-bottom:10px;">'
             . 'NABH guidance note: Ensure diagnosis, procedures, clinical course, condition at discharge, medication with dose/duration, follow-up advice, red-flag signs, and emergency contact are documented.'
             . '</div>'
-            . '<div style="margin-bottom:10px;">{{CONTENT}}</div>'
+            . '<div style="margin-bottom:10px;">{{DISCHARGE_SUMMARY}}</div>'
+            . '<div style="margin-bottom:10px;">{{PRESENTING_COMPLAINTS}}</div>'
+            . '<div style="margin-bottom:10px;">{{PAIN_MEASUREMENT_SCALE}}</div>'
+            . '<div style="margin-bottom:10px;">{{GENERAL_EXAM_ADMISSION}}</div>'
+            . '<div style="margin-bottom:10px;">{{CLINICAL_INVESTIGATION_REPORTS}}</div>'
+            . '<div style="margin-bottom:10px;">{{FINAL_DIAGNOSIS}}</div>'
+            . '<div style="margin-bottom:10px;">{{COURSE_IN_HOSPITAL}}</div>'
+            . '<div style="margin-bottom:10px;">{{EXAMINATION_ON_DISCHARGE}}</div>'
+            . '<div style="margin-bottom:10px;">{{SURGERY}}</div>'
+            . '<div style="margin-bottom:10px;">{{PROCEDURE}}</div>'
+            . '<div style="margin-bottom:10px;">{{PERSONAL_HISTORY}}</div>'
+            . '<div style="margin-bottom:10px;">{{DRUG_ALLERGY_ADR}}</div>'
+            . '<div style="margin-bottom:10px;">{{CO_MORBIDITIES}}</div>'
+            . '<div style="margin-bottom:10px;">{{DISCHARGE_MEDICATIONS}}</div>'
+            . '<div style="margin-bottom:10px;">{{DIETARY_ADVICE}}</div>'
+            . '<div style="margin-bottom:10px;">{{DISCHARGE_INSTRUCTIONS}}</div>'
             . '<h4 style="margin:12px 0 6px 0;">Counselling & Handover Confirmation</h4>'
             . '<table style="width:100%;border-collapse:collapse;margin-bottom:10px;" border="1" cellpadding="6">'
             . '<tr><td style="width:32%;">Medication explained to patient/attendant</td><td style="width:8%;"></td><td style="width:60%;">Remarks:</td></tr>'
@@ -316,8 +354,8 @@ class Ipd_discharge extends BaseController
             'UHID' => esc($patientCode),
             'IPD_CODE' => esc($ipdCode),
             'AGE_GENDER' => esc($ageGender),
-            'ADMIT_DATE' => esc((string) ($ipd->str_register_date ?? '')),
-            'DISCHARGE_DATE' => esc((string) ($ipd->str_discharge_date ?? '')),
+            'ADMIT_DATE' => esc($this->safeDate((string) ($ipd->str_register_date ?? $ipd->register_date ?? ''))),
+            'DISCHARGE_DATE' => esc($this->safeDate((string) ($ipd->str_discharge_date ?? $ipd->discharge_date ?? ''))),
             'CURRENT_DATE' => esc(date('d-m-Y')),
             'PRINT_TIME' => esc(date('d-m-Y H:i:s')),
             'H_Name' => esc($hName),
@@ -332,6 +370,11 @@ class Ipd_discharge extends BaseController
             'hospital_phone' => esc($hPhone),
             'hospital_email' => esc($hEmail),
         ];
+
+        $summaryTokens = $this->buildDischargeSummaryTokenVars($panelData);
+        foreach ($summaryTokens as $key => $value) {
+            $tokens[$key] = $value;
+        }
 
         $sectionVars = $this->buildDischargeSectionTokenVars($content);
         foreach ($sectionVars as $key => $value) {
@@ -361,6 +404,52 @@ class Ipd_discharge extends BaseController
         return $tokens;
     }
 
+    private function buildDischargeSummaryTokenVars(array $panelData): array
+    {
+        $ipd = $panelData['ipd_info'] ?? null;
+        $person = $panelData['person_info'] ?? null;
+
+        $guardianRelation = '';
+        $guardianName = '';
+        $address = '';
+
+        if ($person) {
+            $guardianRelation = trim((string) ($person->p_relative ?? $person->relation ?? $person->guardian_relation ?? ''));
+            $guardianName = trim((string) ($person->p_rname ?? $person->relative_name ?? $person->guardian_name ?? ''));
+
+            $addressParts = [];
+            foreach (['address_1', 'address', 'p_address', 'add1', 'add2', 'city', 'district', 'state', 'zip'] as $field) {
+                $part = trim((string) ($person->{$field} ?? ''));
+                if ($part === '') {
+                    continue;
+                }
+
+                if (! in_array($part, $addressParts, true)) {
+                    $addressParts[] = $part;
+                }
+            }
+            $address = trim(implode(', ', $addressParts));
+        }
+
+        if ($address === '' && $ipd) {
+            $address = trim((string) ($ipd->address ?? $ipd->patient_address ?? $ipd->contact_address ?? ''));
+        }
+
+        $guardianCombined = trim($guardianRelation . ($guardianName !== '' ? ' of ' . $guardianName : ''));
+        if ($guardianCombined === '') {
+            $guardianCombined = $guardianName !== '' ? $guardianName : $guardianRelation;
+        }
+
+        return [
+            'GUARDIAN_RELATION' => esc($guardianRelation !== '' ? $guardianRelation . ' of ' : ''),
+            'GUARDIAN_NAME' => esc($guardianName),
+            'GUARDIAN' => esc($guardianCombined),
+            'PATIENT_ADDRESS' => esc($address),
+            'ADMIT_DATE_ONLY' => esc($this->safeDate((string) ($ipd->str_register_date ?? $ipd->register_date ?? ''))),
+            'DISCHARGE_DATE_ONLY' => esc($this->safeDate((string) ($ipd->str_discharge_date ?? $ipd->discharge_date ?? ''))),
+        ];
+    }
+
     private function buildDischargeSectionTokenVars(string $content): array
     {
         $full = trim($content);
@@ -371,6 +460,7 @@ class Ipd_discharge extends BaseController
         $allMarkers = [
             'Discharge Summary',
             'Presenting Complaints and Reason for Admission',
+            'Pain Measurement Scale',
             'General Examination on Admission',
             'Clinical Investigation Reports',
             'Final Diagnosis',
@@ -379,12 +469,12 @@ class Ipd_discharge extends BaseController
             'Surgery',
             'Procedure',
             'Personal History',
+            'Drug Allergy / ADR',
+            'Co-Morbidities',
             'Discharge Medications',
             'Discharge Advice/Instructions/Summary',
             'Dietary Advice',
             'Signature of Consultant',
-            'Drug Allergy / ADR',
-            'Co-Morbidities',
             'Summary of key investigations during Hospitalization',
             'Nursing Trend',
         ];
@@ -399,6 +489,7 @@ class Ipd_discharge extends BaseController
         $procedure = $section(['Procedure']);
         $personalHistory = $section(['Personal History']);
         $presentingComplaints = $section(['Presenting Complaints and Reason for Admission']);
+        $painMeasurement = $section(['Pain Measurement Scale']);
         $generalExam = $section(['General Examination on Admission']);
         $clinicalInvestigations = $section(['Clinical Investigation Reports']);
         $courseInHospital = $section(['Course in the hospital']);
@@ -406,6 +497,8 @@ class Ipd_discharge extends BaseController
         $dischargeMedications = $section(['Discharge Medications']);
         $dietaryAdvice = $section(['Dietary Advice']);
         $dischargeInstructions = $section(['Discharge Advice/Instructions/Summary']);
+        $drugAllergyAdr = $section(['Drug Allergy / ADR']);
+        $coMorbidities = $section(['Co-Morbidities']);
         $signatureBlock = $section(['Signature of Consultant'], ['Signature of Medical Officer', 'Signature of Receiver / Date']);
 
         $vars = [
@@ -422,6 +515,9 @@ class Ipd_discharge extends BaseController
             'DISCHARGE_MEDICATIONS' => $dischargeMedications,
             'DIETARY_ADVICE' => $dietaryAdvice,
             'DISCHARGE_INSTRUCTIONS' => $dischargeInstructions,
+            'PAIN_MEASUREMENT_SCALE' => $painMeasurement,
+            'DRUG_ALLERGY_ADR' => $drugAllergyAdr,
+            'CO_MORBIDITIES' => $coMorbidities,
             'SIGNATURE_BLOCK' => $signatureBlock,
             // Legacy style aliases to ease migration from CI3-style template variables.
             'FinalDiagnosis' => $finalDiagnosis,
@@ -436,6 +532,9 @@ class Ipd_discharge extends BaseController
             'Discharge_Medications' => $dischargeMedications,
             'diet_advice' => $dietaryAdvice,
             'Discharge_Instructions' => $dischargeInstructions,
+            'Pain_Measurement_Scale' => $painMeasurement,
+            'Drug_Allergy_ADR' => $drugAllergyAdr,
+            'Co_Morbidities' => $coMorbidities,
         ];
 
         return $vars;
@@ -1098,6 +1197,7 @@ class Ipd_discharge extends BaseController
 
     private function buildAutoDischargeSummaryTable(array $panelData): string
     {
+        $summary = $this->buildDischargeSummaryTokenVars($panelData);
         $ipd = $panelData['ipd_info'] ?? null;
         $person = $panelData['person_info'] ?? null;
         if (! $ipd || ! $person) {
@@ -1107,26 +1207,43 @@ class Ipd_discharge extends BaseController
         $age = get_age_1($person->dob ?? null, $person->age ?? '', $person->age_in_month ?? '', $person->estimate_dob ?? '');
         $patientName = trim((string) ($person->p_fname ?? ''));
         $patientCode = trim((string) ($person->uhid ?? $person->UHID ?? $person->patient_code ?? $person->p_code ?? $person->reg_no ?? ''));
-        $guardian = trim((string) ($ipd->contact_person_Name ?? $person->p_rname ?? ''));
+        $guardian = trim((string) ($summary['GUARDIAN'] ?? ''));
         $phone = trim((string) ($person->mphone1 ?? $ipd->P_mobile1 ?? $ipd->P_mobile2 ?? ''));
-        $address = trim((string) ($person->address_1 ?? $person->address ?? $person->p_address ?? ''));
+        $address = trim((string) ($summary['PATIENT_ADDRESS'] ?? ''));
         $orgName = trim((string) ($ipd->ins_short_name ?? $ipd->ins_company_name ?? ''));
         if ($orgName === '') {
             $orgName = 'Direct';
         }
         $department = $this->getDischargeDepartmentName($ipd);
+        $admitDate = $this->safeDate((string) ($ipd->str_register_date ?? $ipd->register_date ?? ''));
+        $dischargeDate = $this->safeDate((string) ($ipd->str_discharge_date ?? $ipd->discharge_date ?? ''));
 
         return '<h2 style="text-align:center;margin:1px;padding:0px;">Discharge Summary</h2>'
             . '<hr style="margin:1px;padding:0px;" />'
             . '<table width="100%" cellpadding="0" cellspacing="0">'
             . '<tr><td width="150px"><b>Name</b></td><td width="250px">' . esc($patientName) . '</td><td width="150px"><b>UHID</b></td><td width="250px">' . esc($patientCode) . '</td></tr>'
             . '<tr><td width="150px"><b>Age & Gender</b></td><td width="250px">' . esc(trim($age . ' / ' . ((string) ($person->xgender ?? '')))) . '</td><td width="150px"><b>IPD No.</b></td><td width="250px">' . esc((string) ($ipd->ipd_code ?? '')) . '</td></tr>'
-            . '<tr><td width="150px"><b>Guardian</b></td><td width="250px">' . esc($guardian) . '</td><td width="150px"><b>Admission</b></td><td width="250px">' . esc((string) ($ipd->str_register_date ?? '')) . '</td></tr>'
-            . '<tr><td width="150px"><b>Phone No.</b></td><td width="250px">' . esc($phone) . '</td><td width="150px"><b>Discharge</b></td><td width="250px">' . esc((string) ($ipd->str_discharge_date ?? '')) . '</td></tr>'
+            . '<tr><td width="150px"><b>Guardian</b></td><td width="250px">' . esc($guardian) . '</td><td width="150px"><b>Admission</b></td><td width="250px">' . esc($admitDate) . '</td></tr>'
+            . '<tr><td width="150px"><b>Phone No.</b></td><td width="250px">' . esc($phone) . '</td><td width="150px"><b>Discharge</b></td><td width="250px">' . esc($dischargeDate) . '</td></tr>'
             . '<tr><td width="150px"><b>Address</b></td><td width="250px">' . esc($address) . '</td><td width="150px"><b>Org. Name</b></td><td width="250px">' . esc($orgName) . '</td></tr>'
             . '<tr><td width="150px"><b>Department</b></td><td width="250px">' . esc($department) . '</td><td width="150px"></td><td width="250px"></td></tr>'
             . '</table>'
             . '<hr style="margin:1px;padding:0px;" />';
+    }
+
+    private function renderStoredHtmlFragment(string $raw): string
+    {
+        $value = trim($raw);
+        if ($value === '') {
+            return '';
+        }
+
+        $value = html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        if (stripos($value, '<') === false) {
+            return nl2br(esc($value));
+        }
+
+        return $value;
     }
 
     private function buildNarrativeSection(string $title, array $rows, string $remark = ''): string
@@ -1247,12 +1364,13 @@ class Ipd_discharge extends BaseController
         $complaintMeta = $this->parseComplaintMetaPayload((string) ($complaintRemark['comp_report'] ?? ''));
         $painValue = (string) ($complaintMeta['pain_value'] ?? '');
         $painLabel = $this->painScaleLabel($painValue);
+        $painSection = '';
         if ($painLabel !== '') {
-            $sections[] = '<div><b>Pain Measurement Scale:</b> ' . esc($painLabel) . ' (' . esc($painValue) . ')</div>';
+            $painSection = '<div><b>Pain Measurement Scale:</b> ' . esc($painLabel) . ' (' . esc($painValue) . ')</div>';
         } elseif ((string) ($opdHistory['pain_label'] ?? '') !== '') {
             $opdPainLabel = (string) ($opdHistory['pain_label'] ?? '');
             $opdPainValue = (string) ($opdHistory['pain_value'] ?? '');
-            $sections[] = '<div><b>Pain Measurement Scale:</b> ' . esc($opdPainLabel)
+            $painSection = '<div><b>Pain Measurement Scale:</b> ' . esc($opdPainLabel)
                 . ($opdPainValue !== '' ? ' (' . esc($opdPainValue) . ')' : '')
                 . '</div>';
         }
@@ -1316,6 +1434,7 @@ class Ipd_discharge extends BaseController
             $sections[] = '<h4 style="margin:16px 0 8px 0;">Personal History</h4><div>' . esc(implode(', ', $personalHistory)) . '</div>';
         }
 
+        $allergySection = '';
         $allergyLines = [];
         if ((string) ($opdHistory['drug_allergy_status'] ?? '') !== '') {
             $allergyLines[] = '<div><b>Drug Allergy Status:</b> ' . esc((string) ($opdHistory['drug_allergy_status'] ?? '')) . '</div>';
@@ -1330,7 +1449,7 @@ class Ipd_discharge extends BaseController
             $allergyLines[] = '<div><b>Current Medications:</b> ' . esc((string) ($opdHistory['current_medications'] ?? '')) . '</div>';
         }
         if (! empty($allergyLines)) {
-            $sections[] = '<h4 style="margin:16px 0 8px 0;">Drug Allergy / ADR</h4>' . implode('', $allergyLines);
+            $allergySection = '<h4 style="margin:16px 0 8px 0;">Drug Allergy / ADR</h4>' . implode('', $allergyLines);
         }
 
         $coMorbText = trim((string) ($opdHistory['co_morbidities'] ?? ''));
@@ -1471,6 +1590,14 @@ class Ipd_discharge extends BaseController
         $courseBlock = $this->buildNarrativeSection('Course in the hospital', $course, $courseRemarkText);
         if ($courseBlock !== '') {
             $sections[] = $courseBlock;
+        }
+
+        if ($painSection !== '') {
+            $sections[] = $painSection;
+        }
+
+        if ($allergySection !== '') {
+            $sections[] = $allergySection;
         }
 
         $nursingTrendSection = $this->buildNursingTrendSection($ipdId);
@@ -1614,12 +1741,12 @@ class Ipd_discharge extends BaseController
 
             $otherText = trim((string) ($instructionMeta['other_text'] ?? ''));
             if ($otherText !== '') {
-                $html .= '<div style="margin-bottom:8px;"><strong>Other Advice:</strong> ' . nl2br(esc($otherText)) . '</div>';
+                $html .= '<div style="margin-bottom:8px;"><strong>Other Advice:</strong> ' . $this->renderStoredHtmlFragment($otherText) . '</div>';
             }
 
             $remark = trim((string) ($first['comp_remark'] ?? ''));
             if ($remark !== '') {
-                $html .= '<div>' . nl2br(esc($remark)) . '</div>';
+                $html .= '<div>' . $this->renderStoredHtmlFragment($remark) . '</div>';
             }
 
             $reviewAfter = trim((string) ($first['review_after'] ?? ''));
@@ -1637,7 +1764,7 @@ class Ipd_discharge extends BaseController
 
             $footerText = trim((string) ($first['footer_text'] ?? ''));
             if ($footerText !== '') {
-                $html .= '<div style="margin-top:6px;">' . nl2br(esc($footerText)) . '</div>';
+                $html .= '<div style="margin-top:6px;">' . $this->renderStoredHtmlFragment($footerText) . '</div>';
             }
 
             $sections[] = $html;
