@@ -714,58 +714,75 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                 <input type="hidden" name="new_complaint_remark" id="new_complaint_remark" value="">
                                 <button type="submit" class="d-none" id="btn_add_complaint_row" name="action" value="add_complaint" data-reload-section="section-complaints">Add Complaint Row</button>
 
-                                <div class="mb-3">
-                                    <label class="form-label">Smart Complaints Picker (English + Hinglish)</label>
-                                    <div class="input-group">
-                                        <input type="text" class="form-control" id="discharge_complaint_lookup" list="discharge_complaint_suggest" placeholder="Type: bukhar, khansi, pet dard, chakkar...">
-                                        <button type="button" class="btn btn-outline-primary" id="btn_discharge_add_complaint">Add</button>
-                                        <button type="button" class="btn btn-outline-success" id="btn_discharge_ai_draft">AI Draft</button>
-                                    </div>
-                                    <datalist id="discharge_complaint_suggest"></datalist>
-                                    <div id="discharge_complaint_status" class="complaint-status text-muted"></div>
-                                </div>
-
-                                <div class="table-responsive mb-3">
-                                    <table class="table table-sm table-bordered mb-0">
-                                        <thead>
-                                            <tr>
-                                                <th>Complaint Name</th>
-                                                <th>Remark</th>
-                                                <th style="width:90px;">Action</th>
+                                <!-- Healthplix-style inline complaint table -->
+                                <table class="table table-sm table-bordered align-middle mb-1" id="discharge_complaint_table" style="font-size:.82rem">
+                                    <thead class="table-light" style="font-size:.75rem">
+                                        <tr>
+                                            <th style="width:28px">#</th>
+                                            <th>Complaint</th>
+                                            <th>Remark</th>
+                                            <th style="width:24px"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="discharge_complaint_tbody">
+                                        <?php if (empty($complaintRows)): ?>
+                                            <tr><td colspan="4" class="text-muted text-center">No complaint rows yet.</td></tr>
+                                        <?php else: 
+                                            $rowNum = 0;
+                                            foreach ($complaintRows as $row): 
+                                                $rowNum++;
+                                        ?>
+                                            <tr data-complaint-id="<?= (int) ($row['id'] ?? 0) ?>">
+                                                <td class="text-center text-muted"><?= $rowNum ?></td>
+                                                <td>
+                                                    <input 
+                                                        type="text" 
+                                                        class="form-control form-control-sm discharge-complaint-name-input" 
+                                                        data-complaint-id="<?= (int) ($row['id'] ?? 0) ?>"
+                                                        data-original-value="<?= esc((string) ($row['comp_report'] ?? '')) ?>"
+                                                        value="<?= esc((string) ($row['comp_report'] ?? '')) ?>"
+                                                        placeholder="Enter complaint name"
+                                                        style="border:1px solid #dee2e6;font-size:.82rem"
+                                                    >
+                                                </td>
+                                                <td>
+                                                    <input 
+                                                        type="text" 
+                                                        class="form-control form-control-sm discharge-complaint-remark-input" 
+                                                        data-complaint-id="<?= (int) ($row['id'] ?? 0) ?>"
+                                                        data-original-value="<?= esc((string) ($row['comp_remark'] ?? '')) ?>"
+                                                        value="<?= esc((string) ($row['comp_remark'] ?? '')) ?>"
+                                                        placeholder="Enter remark/duration"
+                                                        style="border:1px solid #dee2e6;font-size:.82rem"
+                                                    >
+                                                </td>
+                                                <td class="text-center">
+                                                    <button type="submit" class="btn btn-sm p-0 border-0 text-danger" name="action" value="remove_complaint" data-reload-section="section-complaints" onclick="document.getElementById('complaint_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';" title="Remove" style="width:24px;height:24px">×</button>
+                                                </td>
                                             </tr>
-                                        </thead>
-                                        <tbody>
-                                            <?php if (empty($complaintRows)): ?>
-                                                <tr><td colspan="3" class="text-muted text-center">No complaint rows yet.</td></tr>
-                                            <?php else: foreach ($complaintRows as $row): ?>
-                                                <tr data-complaint-id="<?= (int) ($row['id'] ?? 0) ?>">
-                                                    <td>
-                                                        <input 
-                                                            type="text" 
-                                                            class="form-control form-control-sm discharge-complaint-name-input" 
-                                                            data-complaint-id="<?= (int) ($row['id'] ?? 0) ?>"
-                                                            data-original-value="<?= esc((string) ($row['comp_report'] ?? '')) ?>"
-                                                            value="<?= esc((string) ($row['comp_report'] ?? '')) ?>"
-                                                            placeholder="Enter complaint name"
-                                                        >
-                                                    </td>
-                                                    <td>
-                                                        <input 
-                                                            type="text" 
-                                                            class="form-control form-control-sm discharge-complaint-remark-input" 
-                                                            data-complaint-id="<?= (int) ($row['id'] ?? 0) ?>"
-                                                            data-original-value="<?= esc((string) ($row['comp_remark'] ?? '')) ?>"
-                                                            value="<?= esc((string) ($row['comp_remark'] ?? '')) ?>"
-                                                            placeholder="Enter remark"
-                                                        >
-                                                    </td>
-                                                    <td>
-                                                        <button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_complaint" data-reload-section="section-complaints" onclick="document.getElementById('complaint_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';">Remove</button>
-                                                    </td>
-                                                </tr>
-                                            <?php endforeach; endif; ?>
-                                        </tbody>
-                                    </table>
+                                        <?php endforeach; endif; ?>
+                                    </tbody>
+                                    <tfoot>
+                                        <tr>
+                                            <td></td>
+                                            <td colspan="2" class="p-1 position-relative">
+                                                <input type="text" class="form-control form-control-sm" id="discharge_complaint_lookup"
+                                                       autocomplete="off" placeholder="Type: bukhar, khansi, pet dard, chakkar… (English + Hinglish)" style="font-size:.82rem">
+                                                <div id="discharge_complaint_dropdown" class="border rounded bg-white shadow-sm"
+                                                     style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1060;max-height:260px;overflow-y:auto;"></div>
+                                            </td>
+                                            <td class="text-center">
+                                                <button type="button" class="btn btn-sm btn-outline-primary p-0" id="btn_discharge_add_complaint" title="Add Complaint" style="width:24px;height:24px;line-height:1">+</button>
+                                            </td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+
+                                <div id="discharge_complaint_status" class="small text-muted mb-2"></div>
+
+                                <div class="d-flex flex-wrap gap-1 mb-3">
+                                    <button type="button" class="btn btn-outline-success btn-sm" id="btn_discharge_ai_draft">✨ AI Draft from Complaints</button>
+                                    <button type="button" class="btn btn-outline-primary btn-sm" id="btn_discharge_hinglish_to_english">🔤 Hinglish → English</button>
                                 </div>
 
 
@@ -832,9 +849,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                 </div>
 
                                 <div class="mt-3">
-                                    <label class="form-label">Other Complaints
-                                        <button type="button" class="btn btn-outline-primary btn-sm" id="btn_discharge_hinglish_to_english">Hinglish -> English</button>
-                                    </label>
+                                    <label class="form-label">Other Complaints / Detailed History</label>
                                     <textarea id="complaint_remark_editor" class="form-control" name="complaint_remark" rows="6"><?= esc((string) ($complaint_remark ?? '')) ?></textarea>
                                 </div>
 
@@ -1689,7 +1704,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
             }
 
             var lookup = document.getElementById('discharge_complaint_lookup');
-            var suggest = document.getElementById('discharge_complaint_suggest');
+            var dropdown = document.getElementById('discharge_complaint_dropdown');
             var nameInput = document.getElementById('new_complaint_name');
             var remarkInput = document.getElementById('new_complaint_remark');
             var addRowBtn = document.getElementById('btn_add_complaint_row');
@@ -1703,11 +1718,11 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
             var complaintSuggestions = [];
 
             section.querySelectorAll('table tbody tr').forEach(function(row) {
-                var firstCell = row.querySelector('td');
+                var firstCell = row.querySelector('.discharge-complaint-name-input');
                 if (!firstCell) {
                     return;
                 }
-                var value = (firstCell.textContent || '').trim();
+                var value = (firstCell.value || '').trim();
                 if (value !== '' && value.toLowerCase() !== 'no complaint rows yet.') {
                     selectedComplaints.push(value);
                 }
@@ -1740,28 +1755,65 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                 });
             }
 
-            if (lookup) {
+            if (lookup && dropdown) {
                 lookup.addEventListener('input', function() {
                     var q = (lookup.value || '').trim();
                     if (q.length < 2 || !window.jQuery) {
+                        dropdown.style.display = 'none';
                         return;
                     }
 
                     $.get('<?= base_url('Opd_prescription/complaints_search') ?>?q=' + encodeURIComponent(q), function(data) {
                         complaintSuggestions = (data && data.rows) ? data.rows : [];
-                        if (!suggest) {
+                        if (!complaintSuggestions.length) {
+                            dropdown.style.display = 'none';
                             return;
                         }
+                        
                         var html = '';
                         complaintSuggestions.forEach(function(row) {
                             var label = row.name || '';
-                            if (row.name_hinglish) {
-                                label += ' (' + row.name_hinglish + ')';
-                            }
-                            html += '<option value="' + $('<div>').text(label).html() + '"></option>';
+                            var hinglish = row.name_hinglish ? ' (' + row.name_hinglish + ')' : '';
+                            html += '<div class="dropdown-item px-2 py-1" data-value="' + $('<div>').text(label).html() + '" style="cursor:pointer;font-size:.82rem">' + 
+                                    $('<div>').text(label).html() + 
+                                    '<span class="text-muted small">' + hinglish + '</span></div>';
                         });
-                        suggest.innerHTML = html;
+                        dropdown.innerHTML = html;
+                        dropdown.style.display = 'block';
+                        
+                        dropdown.querySelectorAll('.dropdown-item').forEach(function(item) {
+                            item.addEventListener('mouseenter', function() {
+                                this.style.backgroundColor = '#f8f9fa';
+                            });
+                            item.addEventListener('mouseleave', function() {
+                                this.style.backgroundColor = '';
+                            });
+                            item.addEventListener('click', function() {
+                                var value = this.getAttribute('data-value');
+                                lookup.value = value;
+                                dropdown.style.display = 'none';
+                                if (btnAdd) {
+                                    btnAdd.click();
+                                }
+                            });
+                        });
                     }, 'json');
+                });
+
+                lookup.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' && btnAdd) {
+                        e.preventDefault();
+                        dropdown.style.display = 'none';
+                        btnAdd.click();
+                    } else if (e.key === 'Escape') {
+                        dropdown.style.display = 'none';
+                    }
+                });
+
+                lookup.addEventListener('blur', function() {
+                    setTimeout(function() {
+                        dropdown.style.display = 'none';
+                    }, 200);
                 });
             }
 
