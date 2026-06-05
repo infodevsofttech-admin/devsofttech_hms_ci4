@@ -356,6 +356,7 @@ class Ipd_discharge extends BaseController
             'AGE_GENDER' => esc($ageGender),
             'ADMIT_DATE' => esc($this->safeDate((string) ($ipd->str_register_date ?? $ipd->register_date ?? ''))),
             'DISCHARGE_DATE' => esc($this->safeDate((string) ($ipd->str_discharge_date ?? $ipd->discharge_date ?? ''))),
+            'ISDELIVERY' => esc((string) ($ipd->isdelivery ?? '')),
             'CURRENT_DATE' => esc(date('d-m-Y')),
             'PRINT_TIME' => esc(date('d-m-Y H:i:s')),
             'H_Name' => esc($hName),
@@ -445,8 +446,12 @@ class Ipd_discharge extends BaseController
             'GUARDIAN_NAME' => esc($guardianName),
             'GUARDIAN' => esc($guardianCombined),
             'PATIENT_ADDRESS' => esc($address),
+            'DEPARTMENT' => esc($this->getDischargeDepartmentName($ipd)),
             'ADMIT_DATE_ONLY' => esc($this->safeDate((string) ($ipd->str_register_date ?? $ipd->register_date ?? ''))),
             'DISCHARGE_DATE_ONLY' => esc($this->safeDate((string) ($ipd->str_discharge_date ?? $ipd->discharge_date ?? ''))),
+            'ADMISSION_TIME' => esc($this->safeTime((string) ($ipd->register_date ?? $ipd->register_time ?? $ipd->admission_time ?? $ipd->str_register_date ?? ''))),
+            'DISCHARGE_TIME' => esc($this->safeTime((string) ($ipd->discharge_date ?? $ipd->discharge_time ?? $ipd->str_discharge_date ?? ''))),
+            'ADMIT_TIME' => esc($this->safeTime((string) ($ipd->register_date ?? $ipd->register_time ?? $ipd->admission_time ?? $ipd->str_register_date ?? ''))),
         ];
     }
 
@@ -734,6 +739,11 @@ class Ipd_discharge extends BaseController
             return false;
         }
 
+        // If the template explicitly places section placeholders, preserve that order.
+        if ($this->templateHasDischargeSectionPlaceholders($templateHtml)) {
+            return false;
+        }
+
         $templateHasMeta = strpos($templateHtml, '{{PATIENT_NAME}}') !== false
             || strpos($templateHtml, '{{UHID}}') !== false
             || strpos($templateHtml, '{{IPD_CODE}}') !== false
@@ -754,6 +764,43 @@ class Ipd_discharge extends BaseController
         $hasClinicalBody = stripos($scan, 'Final Diagnosis') !== false || stripos($scan, 'Course in the Hospital') !== false;
 
         return $hasHeading && $hasPatientGrid && $hasClinicalBody;
+    }
+
+    private function templateHasDischargeSectionPlaceholders(string $templateHtml): bool
+    {
+        $templateHtml = trim($templateHtml);
+        if ($templateHtml === '') {
+            return false;
+        }
+
+        $sectionTokens = [
+            'DISCHARGE_SUMMARY',
+            'FINAL_DIAGNOSIS',
+            'SURGERY',
+            'PROCEDURE',
+            'PERSONAL_HISTORY',
+            'PRESENTING_COMPLAINTS',
+            'PAIN_MEASUREMENT_SCALE',
+            'GENERAL_EXAM_ADMISSION',
+            'CLINICAL_INVESTIGATION_REPORTS',
+            'COURSE_IN_HOSPITAL',
+            'EXAMINATION_ON_DISCHARGE',
+            'DRUG_ALLERGY_ADR',
+            'CO_MORBIDITIES',
+            'DISCHARGE_MEDICATIONS',
+            'DIETARY_ADVICE',
+            'DISCHARGE_INSTRUCTIONS',
+            'SIGNATURE_BLOCK',
+        ];
+
+        foreach ($sectionTokens as $token) {
+            if (preg_match('/\{\{\s*' . preg_quote($token, '/') . '\s*\}\}/i', $templateHtml) === 1
+                || preg_match('/\{\s*' . preg_quote($token, '/') . '\s*\}/i', $templateHtml) === 1) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function stripLegacyTopSummaryFromContent(
@@ -1134,6 +1181,21 @@ class Ipd_discharge extends BaseController
         return date('d-m-Y', $ts);
     }
 
+    private function safeTime(?string $dateValue): string
+    {
+        $value = trim((string) $dateValue);
+        if ($value === '' || $value === '00:00:00' || $value === '00:00') {
+            return '';
+        }
+
+        $ts = strtotime($value);
+        if ($ts === false) {
+            return '';
+        }
+
+        return date('h:i A', $ts);
+    }
+
     private function normalizeRichText(string $raw): string
     {
         $value = trim($raw);
@@ -1436,8 +1498,9 @@ class Ipd_discharge extends BaseController
 
         $allergySection = '';
         $allergyLines = [];
-        if ((string) ($opdHistory['drug_allergy_status'] ?? '') !== '') {
-            $allergyLines[] = '<div><b>Drug Allergy Status:</b> ' . esc((string) ($opdHistory['drug_allergy_status'] ?? '')) . '</div>';
+        $drugAllergyStatus = trim((string) ($opdHistory['drug_allergy_status'] ?? ''));
+        if (! $this->isNoAllergyDataStatus($drugAllergyStatus)) {
+            $allergyLines[] = '<div><b>Drug Allergy Status:</b> ' . esc($drugAllergyStatus) . '</div>';
         }
         if ((string) ($opdHistory['drug_allergy_details'] ?? '') !== '') {
             $allergyLines[] = '<div><b>Drug Allergy Details:</b> ' . esc((string) ($opdHistory['drug_allergy_details'] ?? '')) . '</div>';
@@ -3796,6 +3859,29 @@ class Ipd_discharge extends BaseController
         }
 
         return trim(implode(PHP_EOL, $lines));
+    }
+
+    private function isNoAllergyDataStatus(string $status): bool
+    {
+        $normalized = strtolower(trim($status));
+        if ($normalized === '') {
+            return true;
+        }
+
+        $noDataValues = [
+            'allergies not known',
+            'allergy not known',
+            'drug allergy not known',
+            'not known',
+            'unknown',
+            'none',
+            'nil',
+            'no',
+            'n/a',
+            'na',
+        ];
+
+        return in_array($normalized, $noDataValues, true);
     }
 
     private function saveNabhHistoryFromDischarge(int $patientId, array $payload): bool

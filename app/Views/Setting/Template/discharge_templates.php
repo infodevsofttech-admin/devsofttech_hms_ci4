@@ -37,7 +37,8 @@ $status = (int) ($edit['status'] ?? 1);
             <div class="alert alert-info py-2 small">
                 Available placeholders: <code>{{CONTENT}}</code>, <code>{{PATIENT_NAME}}</code>, <code>{{UHID}}</code>, <code>{{IPD_CODE}}</code>,
                 <code>{{AGE_GENDER}}</code>, <code>{{GUARDIAN}}</code>, <code>{{GUARDIAN_RELATION}}</code>, <code>{{GUARDIAN_NAME}}</code>, <code>{{PATIENT_ADDRESS}}</code>,
-                <code>{{ADMIT_DATE}}</code>, <code>{{DISCHARGE_DATE}}</code>, <code>{{ADMIT_DATE_ONLY}}</code>, <code>{{DISCHARGE_DATE_ONLY}}</code>, <code>{{CURRENT_DATE}}</code>,
+                <code>{{DEPARTMENT}}</code>, <code>{{ADMIT_DATE}}</code>, <code>{{DISCHARGE_DATE}}</code>, <code>{{ADMIT_DATE_ONLY}}</code>, <code>{{DISCHARGE_DATE_ONLY}}</code>,
+                <code>{{ADMISSION_TIME}}</code>, <code>{{DISCHARGE_TIME}}</code>, <code>{{ADMIT_TIME}}</code>, <code>{{CURRENT_DATE}}</code>,
                 <code>{{H_Name}}</code>, <code>{{H_address_1}}</code>, <code>{{H_address_2}}</code>, <code>{{H_phone_No}}</code>, <code>{{H_Email}}</code>,
                 <code>{{hospital_name}}</code>, <code>{{hospital_address}}</code>, <code>{{hospital_phone}}</code>, <code>{{hospital_email}}</code>,
                 <code>{{PRINT_TIME}}</code>.<br>
