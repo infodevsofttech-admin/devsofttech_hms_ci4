@@ -1344,7 +1344,7 @@ class Ipd_discharge extends BaseController
             $medRows = $this->byIpdRows('ipd_discharge_prescrption_prescribed', ['med_name', 'med_type', 'qty', 'no_of_days', 'remark'], 'id ASC', $ipdId);
             if (! empty($medRows)) {
                 $html = '<h4 style="margin:16px 0 8px 0;">Discharge Medications</h4>'
-                    . '<table class="no-border" style="width:100%;border-collapse:collapse;margin-bottom:10px;" border="0" cellpadding="6">'
+                    . '<table class="no-border" style="width:100%;border-style: inset;;margin-bottom:10px;" border="0" cellpadding="6">'
                     . '<tr><th style="width:40px;">#</th><th>Medicine</th><th style="width:90px;">Qty</th><th style="width:100px;">Days</th><th>Notes</th></tr>';
                 $sr = 1;
                 foreach ($medRows as $row) {
