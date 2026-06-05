@@ -5437,13 +5437,19 @@
             // # column
             $tr.append($('<td class="text-center text-muted" style="font-size:.75rem">').text(idx + 1));
 
-            // Diagnosis name
-            var $nameTd = $('<td>');
-            var nameStyle = isSnomed ? 'color:#0d6efd;font-weight:600;max-width:260px' : 'max-width:260px';
-            var $nameDiv = $('<div class="text-truncate" style="' + nameStyle + ';">').text(item.term);
-            if (item.concept_id) { $nameDiv.attr('title', 'SNOMED/ICD: ' + item.concept_id); }
-            $nameTd.append($nameDiv);
-            $tr.append($nameTd);
+            // Diagnosis name — editable input (SNOMED = blue, local = default)
+            var titleText = item.concept_id ? 'SNOMED/ICD: ' + item.concept_id : '';
+            var $nameInput = $('<input type="text" class="form-control form-control-sm diagnosis-name-input" autocomplete="off" placeholder="Diagnosis…">')
+                .val(item.term || '')
+                .attr('data-idx', idx)
+                .attr('title', titleText);
+            
+            // Apply SNOMED styling if applicable
+            if (isSnomed) {
+                $nameInput.css({ color: '#0d6efd', fontWeight: '600' });
+            }
+            
+            $tr.append($('<td class="p-1">').append($nameInput));
 
             // Duration input
             $tr.append(
@@ -5498,6 +5504,30 @@
         }, 60);
         return true;
     }
+
+    // ─── Diagnosis Name: event delegation for editing diagnosis text ──────────
+    $(document).on('input', '.diagnosis-name-input', function() {
+        var idx = parseInt($(this).attr('data-idx'), 10);
+        if (idx >= 0 && idx < selectedDiagnosisItems.length) {
+            selectedDiagnosisItems[idx].term = ($(this).val() || '').trim();
+            syncDiagnosisJson();
+        }
+    });
+    $(document).on('blur', '.diagnosis-name-input', function() {
+        var idx = parseInt($(this).attr('data-idx'), 10);
+        if (idx >= 0 && idx < selectedDiagnosisItems.length) {
+            selectedDiagnosisItems[idx].term = ($(this).val() || '').trim();
+            syncDiagnosisJson();
+            markDirty('Diagnosis name updated');
+        }
+    });
+    $(document).on('keydown', '.diagnosis-name-input', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            // Move to duration input in same row
+            $(this).closest('tr').find('.diag-dur-input').trigger('focus');
+        }
+    });
 
     // Duration delegation for diagnosis table
     $(document).on('input focus', '.diag-dur-input', function() {
