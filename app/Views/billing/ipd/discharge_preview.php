@@ -66,47 +66,114 @@ if ($person) {
             margin: 4px 0 10px 18px;
             padding: 0;
         }
+        
+        /* Sticky top panel */
+        .discharge-preview-sticky-header {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background: #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        /* Add padding to body to account for sticky header */
+        body {
+            padding-top: 0;
+        }
     </style>
 
     <div class="card shadow-sm border-0">
-        <div class="card-header bg-light d-flex flex-wrap justify-content-between align-items-center gap-2">
-            <h5 class="mb-0">Discharge Preview</h5>
-            <div class="small text-muted">
-                IPD: <strong><?= esc($ipd->ipd_code ?? $ipdId) ?></strong>
-                <?php if ($patientName !== ''): ?>
-                    | Patient: <strong><?= esc($patientName) ?></strong>
+        <div class="discharge-preview-sticky-header">
+            <div class="card-header bg-light d-flex flex-wrap justify-content-between align-items-center gap-2 py-2">
+                <h5 class="mb-0">Discharge Preview</h5>
+                <div class="small text-muted">
+                    IPD: <strong><?= esc($ipd->ipd_code ?? $ipdId) ?></strong>
+                    <?php if ($patientName !== ''): ?>
+                        | Patient: <strong><?= esc($patientName) ?></strong>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="card-body pb-2 pt-2">
+                <?php if ($noticeText !== ''): ?>
+                    <div class="alert alert-<?= esc($noticeType) ?> py-2 mb-2" role="alert"><?= esc($noticeText) ?></div>
                 <?php endif; ?>
+
+                <div class="row g-2 mb-2 small">
+                    <div class="col-md-3"><strong>UHID:</strong> <?= esc($patientCode) ?></div>
+                    <div class="col-md-3"><strong>Age/Gender:</strong> <?= esc(trim($age . ' / ' . ($person->xgender ?? ''))) ?></div>
+                    <div class="col-md-3"><strong>Admit Date:</strong> <?= esc($ipd->str_register_date ?? '') ?></div>
+                    <div class="col-md-3"><strong>Discharge Date:</strong> <?= esc($ipd->str_discharge_date ?? '') ?></div>
+                </div>
+
+                <div class="row g-2 mb-2">
+                    <div class="col-12">
+                        <div class="d-flex flex-wrap gap-2 align-items-center">
+                            <a class="btn btn-primary btn-sm" id="btn_create" href="<?= site_url('Ipd_discharge/ipd_select/' . $ipdId) ?>">
+                                <i class="fas fa-edit me-1"></i> Back to Edit
+                            </a>
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-danger btn-sm dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="fas fa-file-pdf me-1"></i> Print on Letter Head
+                                </button>
+                                <ul class="dropdown-menu">
+                                    <?php foreach ($templateRows as $tpl): ?>
+                                        <?php $tplId = (int) ($tpl['id'] ?? 0); ?>
+                                        <li>
+                                            <button
+                                                type="button"
+                                                class="dropdown-item discharge-print-link"
+                                                data-print-url="<?= esc(site_url('Ipd_discharge/show_discharge/' . $ipdId . '/1') . '?tpl=' . $tplId) ?>"
+                                            >
+                                                <?= esc((string) ($tpl['template_name'] ?? ('Template #' . $tplId))) ?>
+                                            </button>
+                                        </li>
+                                    <?php endforeach; ?>
+                                </ul>
+                            </div>
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-outline-danger btn-sm dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="fas fa-file me-1"></i> Print On Plain Paper
+                                </button>
+                                <ul class="dropdown-menu">
+                                    <?php foreach ($templateRows as $tpl): ?>
+                                        <?php $tplId = (int) ($tpl['id'] ?? 0); ?>
+                                        <li>
+                                            <button
+                                                type="button"
+                                                class="dropdown-item discharge-print-link"
+                                                data-print-url="<?= esc(site_url('Ipd_discharge/show_discharge/' . $ipdId . '/0') . '?tpl=' . $tplId) ?>"
+                                            >
+                                                <?= esc((string) ($tpl['template_name'] ?? ('Template #' . $tplId))) ?>
+                                            </button>
+                                        </li>
+                                    <?php endforeach; ?>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <form method="get" action="<?= site_url('Ipd_discharge/preview_discharge_report/' . $ipdId) ?>" class="row g-2 mb-2" id="discharge_template_apply_form">
+                    <div class="col-md-6 col-lg-4">
+                        <label class="form-label small mb-1"><strong>Discharge Template</strong></label>
+                        <select class="form-select form-select-sm" name="tpl" id="tpl_selector">
+                            <?php foreach ($templateRows as $tpl): ?>
+                                <?php $tplId = (int) ($tpl['id'] ?? 0); ?>
+                                <option value="<?= $tplId ?>" <?= $tplId === $selectedTemplateId ? 'selected' : '' ?>>
+                                    <?= esc((string) ($tpl['template_name'] ?? ('Template #' . $tplId))) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-6 col-lg-3 d-flex align-items-end">
+                        <button type="submit" class="btn btn-outline-primary btn-sm">Apply Template</button>
+                    </div>
+                </form>
             </div>
         </div>
 
-        <div class="card-body">
-            <?php if ($noticeText !== ''): ?>
-                <div class="alert alert-<?= esc($noticeType) ?> py-2" role="alert"><?= esc($noticeText) ?></div>
-            <?php endif; ?>
-
-            <div class="row g-2 mb-3 small">
-                <div class="col-md-3"><strong>UHID:</strong> <?= esc($patientCode) ?></div>
-                <div class="col-md-3"><strong>Age/Gender:</strong> <?= esc(trim($age . ' / ' . ($person->xgender ?? ''))) ?></div>
-                <div class="col-md-3"><strong>Admit Date:</strong> <?= esc($ipd->str_register_date ?? '') ?></div>
-                <div class="col-md-3"><strong>Discharge Date:</strong> <?= esc($ipd->str_discharge_date ?? '') ?></div>
-            </div>
-
-            <form method="get" action="<?= site_url('Ipd_discharge/preview_discharge_report/' . $ipdId) ?>" class="row g-2 mb-3" id="discharge_template_apply_form">
-                <div class="col-md-6 col-lg-4">
-                    <label class="form-label small mb-1"><strong>Discharge Template</strong></label>
-                    <select class="form-select form-select-sm" name="tpl" id="tpl_selector">
-                        <?php foreach ($templateRows as $tpl): ?>
-                            <?php $tplId = (int) ($tpl['id'] ?? 0); ?>
-                            <option value="<?= $tplId ?>" <?= $tplId === $selectedTemplateId ? 'selected' : '' ?>>
-                                <?= esc((string) ($tpl['template_name'] ?? ('Template #' . $tplId))) ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="col-md-6 col-lg-3 d-flex align-items-end">
-                    <button type="submit" class="btn btn-outline-primary btn-sm">Apply Template</button>
-                </div>
-            </form>
+        <div class="card-body pt-2">
 
             <?php if (! empty($nabhItems)): ?>
                 <div class="card border-warning mb-3">
@@ -156,47 +223,7 @@ if ($person) {
                 <?= $renderedHtml ?>
             </div>
 
-            <div class="d-flex flex-wrap gap-2 mt-3">
-                <a class="btn btn-primary" id="btn_create" href="<?= site_url('Ipd_discharge/ipd_select/' . $ipdId) ?>">Back to Create Discharge Summary</a>
-                <div class="btn-group" role="group">
-                    <button type="button" class="btn btn-danger dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                        Make File and Print on Letter Head
-                    </button>
-                    <ul class="dropdown-menu">
-                        <?php foreach ($templateRows as $tpl): ?>
-                            <?php $tplId = (int) ($tpl['id'] ?? 0); ?>
-                            <li>
-                                <button
-                                    type="button"
-                                    class="dropdown-item discharge-print-link"
-                                    data-print-url="<?= esc(site_url('Ipd_discharge/show_discharge/' . $ipdId . '/1') . '?tpl=' . $tplId) ?>"
-                                >
-                                    <?= esc((string) ($tpl['template_name'] ?? ('Template #' . $tplId))) ?>
-                                </button>
-                            </li>
-                        <?php endforeach; ?>
-                    </ul>
-                </div>
-                <div class="btn-group" role="group">
-                    <button type="button" class="btn btn-outline-danger dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                        Make File and Print On Plain Paper
-                    </button>
-                    <ul class="dropdown-menu">
-                        <?php foreach ($templateRows as $tpl): ?>
-                            <?php $tplId = (int) ($tpl['id'] ?? 0); ?>
-                            <li>
-                                <button
-                                    type="button"
-                                    class="dropdown-item discharge-print-link"
-                                    data-print-url="<?= esc(site_url('Ipd_discharge/show_discharge/' . $ipdId . '/0') . '?tpl=' . $tplId) ?>"
-                                >
-                                    <?= esc((string) ($tpl['template_name'] ?? ('Template #' . $tplId))) ?>
-                                </button>
-                            </li>
-                        <?php endforeach; ?>
-                    </ul>
-                </div>
-            </div>
+            <!-- Buttons moved to sticky top panel -->
         </div>
     </div>
 </section>
