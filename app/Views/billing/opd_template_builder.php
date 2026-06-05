@@ -70,7 +70,7 @@ $opdConsultSet = [
     'diagnosis_snomed_id', 'diagnosis_snomed_term', 'diagnosis_snomed_source',
     'provisional_diagnosis_snomed_id', 'provisional_diagnosis_snomed_term', 'provisional_diagnosis_snomed_source',
     'complaint_list', 'diagnosis_list', 'provisional_diagnosis_list',
-    'medical', 'investigation', 'prescriber_remarks', 'advice', 'next_visit', 'refer_to',
+    'medical', 'investigation', 'Tadvise_test_list', 'prescriber_remarks', 'advice', 'next_visit', 'refer_to',
     'rx', 'rxtable', 'rxfullblock',
     'vitalsblock', 'complaintblock', 'diagnosisblock', 'investigationblock',
     'remarksblock', 'adviceblock', 'nextvisitblock',

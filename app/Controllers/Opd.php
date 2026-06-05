@@ -2796,15 +2796,27 @@ class Opd extends BaseController
         };
 
         $rxInvestigation = $rxRead($rx, ['investigation', 'Investigations', 'investigations', 'Investigation']);
+        $rxInvestigationTestList = '';
         if ($rxInvestigation === '' && !empty($data['rx_investigations']) && is_array($data['rx_investigations'])) {
             $parts = [];
+            $testNames = [];
             foreach ($data['rx_investigations'] as $inv) {
                 $txt = trim((string) ($inv['investigation_name'] ?? $inv['investigation'] ?? ''));
                 if ($txt !== '') {
                     $parts[] = $txt;
+                    $testNames[] = $txt;
                 }
             }
             $rxInvestigation = implode(', ', $parts);
+            
+            // Build formatted test list for {{Tadvise_test_list}} placeholder
+            if (!empty($testNames)) {
+                $rxInvestigationTestList = '<ul style="margin:3px 0 0 16px;padding:0;list-style-type:disc;">';
+                foreach ($testNames as $testName) {
+                    $rxInvestigationTestList .= '<li style="margin-bottom:3px;font-weight:400;line-height:1.5;color:#111;">' . htmlspecialchars($testName, ENT_QUOTES, 'UTF-8') . '</li>';
+                }
+                $rxInvestigationTestList .= '</ul>';
+            }
         }
 
         $rxAdvice = $rxRead($rx, ['advice', 'Advice', 'prescription_advice', 'advice_notes', 'advice_note']);
@@ -3045,6 +3057,7 @@ class Opd extends BaseController
             'provisional_diagnosis_snomed_source' => $provisionalDiagnosisSnomedSource,
             'investigation' => $rxInvestigation,
             'investigation_local' => $investigationLocal,
+            'Tadvise_test_list' => $rxInvestigationTestList,
             'medical' => $medicalHtml,
             'doctor' => '<p style="text-align:right;">Dr. ' . esc((string) ($opd->doc_name ?? '')) . '</p>',
             'top_content' => '',
