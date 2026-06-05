@@ -4826,17 +4826,18 @@
             $tr.append($('<td class="text-center text-muted" style="font-size:.75rem">').text(idx + 1));
 
             // Complaint name — editable input (SNOMED = blue, local = default)
-            var nameStyle = isSnomed ? 'color:#0d6efd;font-weight:600;' : '';
             var titleText = item.concept_id ? 'SNOMED: ' + item.concept_id : '';
-            $tr.append(
-                $('<td class="p-1">').append(
-                    $('<input type="text" class="form-control form-control-sm complaint-name-input" autocomplete="off" placeholder="Complaint…">')
-                        .val(item.term || '')
-                        .attr('data-idx', idx)
-                        .attr('title', titleText)
-                        .css(nameStyle)
-                )
-            );
+            var $nameInput = $('<input type="text" class="form-control form-control-sm complaint-name-input" autocomplete="off" placeholder="Complaint…">')
+                .val(item.term || '')
+                .attr('data-idx', idx)
+                .attr('title', titleText);
+            
+            // Apply SNOMED styling if applicable
+            if (isSnomed) {
+                $nameInput.css({ color: '#0d6efd', fontWeight: '600' });
+            }
+            
+            $tr.append($('<td class="p-1">').append($nameInput));
 
             // Frequency input
             $tr.append(
