@@ -2814,6 +2814,46 @@ class Ipd_discharge extends BaseController
         ]);
     }
 
+    public function update_complaint_field()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['success' => false, 'error' => 'Invalid request']);
+        }
+
+        $complaintId = (int) $this->request->getPost('complaint_id');
+        $fieldType = trim((string) $this->request->getPost('field_type'));
+        $fieldValue = trim((string) $this->request->getPost('field_value'));
+
+        if ($complaintId <= 0 || !in_array($fieldType, ['name', 'remark'], true)) {
+            return $this->response->setJSON(['success' => false, 'error' => 'Invalid parameters']);
+        }
+
+        $table = 'ipd_discharge_comp';
+        if (! $this->db->tableExists($table)) {
+            return $this->response->setJSON(['success' => false, 'error' => 'Complaint table not found']);
+        }
+
+        $columnName = $fieldType === 'name' ? 'comp_report' : 'comp_remark';
+        
+        try {
+            $updated = $this->db->table($table)
+                ->where('id', $complaintId)
+                ->update([
+                    $columnName => $fieldValue,
+                    'updated_at' => date('Y-m-d H:i:s')
+                ]);
+
+            if ($updated) {
+                return $this->response->setJSON(['success' => true]);
+            } else {
+                return $this->response->setJSON(['success' => false, 'error' => 'No rows updated']);
+            }
+        } catch (\Throwable $e) {
+            log_message('error', 'Failed to update discharge complaint field: {msg}', ['msg' => $e->getMessage()]);
+            return $this->response->setJSON(['success' => false, 'error' => 'Database error']);
+        }
+    }
+
     private function upsertByComposite(
         string $table,
         string $ipdField,

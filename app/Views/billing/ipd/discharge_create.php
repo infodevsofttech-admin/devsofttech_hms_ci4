@@ -738,9 +738,27 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                             <?php if (empty($complaintRows)): ?>
                                                 <tr><td colspan="3" class="text-muted text-center">No complaint rows yet.</td></tr>
                                             <?php else: foreach ($complaintRows as $row): ?>
-                                                <tr>
-                                                    <td><?= esc((string) ($row['comp_report'] ?? '')) ?></td>
-                                                    <td><?= esc((string) ($row['comp_remark'] ?? '')) ?></td>
+                                                <tr data-complaint-id="<?= (int) ($row['id'] ?? 0) ?>">
+                                                    <td>
+                                                        <input 
+                                                            type="text" 
+                                                            class="form-control form-control-sm discharge-complaint-name-input" 
+                                                            data-complaint-id="<?= (int) ($row['id'] ?? 0) ?>"
+                                                            data-original-value="<?= esc((string) ($row['comp_report'] ?? '')) ?>"
+                                                            value="<?= esc((string) ($row['comp_report'] ?? '')) ?>"
+                                                            placeholder="Enter complaint name"
+                                                        >
+                                                    </td>
+                                                    <td>
+                                                        <input 
+                                                            type="text" 
+                                                            class="form-control form-control-sm discharge-complaint-remark-input" 
+                                                            data-complaint-id="<?= (int) ($row['id'] ?? 0) ?>"
+                                                            data-original-value="<?= esc((string) ($row['comp_remark'] ?? '')) ?>"
+                                                            value="<?= esc((string) ($row['comp_remark'] ?? '')) ?>"
+                                                            placeholder="Enter remark"
+                                                        >
+                                                    </td>
                                                     <td>
                                                         <button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_complaint" data-reload-section="section-complaints" onclick="document.getElementById('complaint_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';">Remove</button>
                                                     </td>
@@ -3876,6 +3894,86 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
             }
         }, { passive: true, capture: true });
         syncNavOnScroll();
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Editable Complaint Name and Remark Fields
+        // ═══════════════════════════════════════════════════════════════════
+        function saveComplaintField(input, fieldType) {
+            var complaintId = input.getAttribute('data-complaint-id');
+            var newValue = input.value.trim();
+            var originalValue = input.getAttribute('data-original-value');
+
+            if (newValue === originalValue) {
+                return;
+            }
+
+            var form = document.getElementById('discharge_main_form');
+            if (!form) {
+                return;
+            }
+
+            var csrfPair = getCsrfPair(form);
+            var formData = new FormData();
+            formData.append(csrfPair.name, csrfPair.value);
+            formData.append('complaint_id', complaintId);
+            formData.append('field_type', fieldType);
+            formData.append('field_value', newValue);
+
+            fetch('<?= site_url('Ipd_discharge/update_complaint_field') ?>', {
+                method: 'POST',
+                body: formData
+            }).then(function(response) {
+                return response.json();
+            }).then(function(data) {
+                if (data.success) {
+                    input.setAttribute('data-original-value', newValue);
+                    input.style.borderColor = '#28a745';
+                    setTimeout(function() {
+                        input.style.borderColor = '';
+                    }, 1000);
+                } else {
+                    console.error('Failed to save complaint field:', data.error || 'Unknown error');
+                    input.style.borderColor = '#dc3545';
+                    setTimeout(function() {
+                        input.style.borderColor = '';
+                    }, 2000);
+                }
+            }).catch(function(err) {
+                console.error('Error saving complaint field:', err);
+                input.style.borderColor = '#dc3545';
+                setTimeout(function() {
+                    input.style.borderColor = '';
+                }, 2000);
+            });
+        }
+
+        // Complaint Name input handlers
+        document.querySelectorAll('.discharge-complaint-name-input').forEach(function(input) {
+            input.addEventListener('blur', function() {
+                saveComplaintField(this, 'name');
+            });
+
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.blur();
+                }
+            });
+        });
+
+        // Complaint Remark input handlers
+        document.querySelectorAll('.discharge-complaint-remark-input').forEach(function(input) {
+            input.addEventListener('blur', function() {
+                saveComplaintField(this, 'remark');
+            });
+
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.blur();
+                }
+            });
+        });
 
     })();
     </script>
