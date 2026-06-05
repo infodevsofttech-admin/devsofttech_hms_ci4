@@ -3882,17 +3882,17 @@ class Opd extends BaseController
             $labels = ['No Pain', 'Mild', 'Moderate', 'Intense', 'Worst'];
             
             // Add debug info at top showing which pain level is selected
-            $painImageHtml = '<div style="font-size:10px;color:#666;margin-bottom:2px;">Pain Level: ' . $painIndex . ' - ' . esc($labels[$painIndex]) . '</div>';
+            $painImageHtml = '<div style="font-size:8px;color:#666;margin-bottom:1px;">Pain Level: ' . $painIndex . ' - ' . esc($labels[$painIndex]) . '</div>';
             
-            $painImageHtml .= '<table width="100%" border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:4px 0 4px 0;">';
+            $painImageHtml .= '<table width="60%" border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:2px 0 2px 0;">';
             
             // Row 1: Arrow/checkmark indicators (PDF-safe symbols, visible in black & white)
             $painImageHtml .= '<tr>';
             for ($i = 0; $i <= 4; $i++) {
                 $active = ($painIndex === $i);
                 $indicator = $active ? '&#9660;' : ''; // Down-pointing triangle (▼)
-                $fontSize = $active ? '18px' : '12px';
-                $painImageHtml .= '<td width="20%" style="text-align:center;height:22px;font-size:' . $fontSize . ';font-weight:700;line-height:1;">' . $indicator . '</td>';
+                $fontSize = $active ? '12px' : '10px';
+                $painImageHtml .= '<td width="20%" style="text-align:center;height:14px;font-size:' . $fontSize . ';font-weight:700;line-height:1;">' . $indicator . '</td>';
             }
             $painImageHtml .= '</tr>';
             
@@ -3902,9 +3902,9 @@ class Opd extends BaseController
                 $active = ($painIndex === $i);
                 $bg = $active ? '#cccccc' : '#ffffff'; // Medium gray for selected (visible in B&W)
                 $borderColor = '#000000';
-                $borderWidth = $active ? '3px' : '1px';
+                $borderWidth = $active ? '2px' : '1px';
                 $color = '#000000';
-                $painImageHtml .= '<td width="20%" style="text-align:center;border:' . $borderWidth . ' solid ' . $borderColor . ';background:' . $bg . ';color:' . $color . ';font-size:14px;font-weight:' . ($active ? '700' : '500') . ';padding:8px 0;">' . $i . '</td>';
+                $painImageHtml .= '<td width="20%" style="text-align:center;border:' . $borderWidth . ' solid ' . $borderColor . ';background:' . $bg . ';color:' . $color . ';font-size:10px;font-weight:' . ($active ? '700' : '500') . ';padding:3px 0;">' . $i . '</td>';
             }
             $painImageHtml .= '</tr>';
             
@@ -3913,8 +3913,8 @@ class Opd extends BaseController
             for ($i = 0; $i <= 4; $i++) {
                 $active = ($painIndex === $i);
                 $fontWeight = $active ? '700' : '400';
-                $fontSize = $active ? '9px' : '8px';
-                $painImageHtml .= '<td width="20%" style="text-align:center;color:#000000;font-size:' . $fontSize . ';line-height:1.4;padding-top:3px;font-weight:' . $fontWeight . ';">' . esc($labels[$i]) . '</td>';
+                $fontSize = $active ? '7px' : '7px';
+                $painImageHtml .= '<td width="20%" style="text-align:center;color:#000000;font-size:' . $fontSize . ';line-height:1.3;padding-top:2px;font-weight:' . $fontWeight . ';">' . esc($labels[$i]) . '</td>';
             }
             $painImageHtml .= '</tr></table>';
         }
