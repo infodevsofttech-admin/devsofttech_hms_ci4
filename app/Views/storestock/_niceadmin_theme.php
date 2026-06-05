@@ -14,7 +14,7 @@
 
 .storestock-ui .box {
     background: #fff;
-    border: 1px solid #999;
+    border: 1px solid #ebeef4;
     border-radius: 12px;
     box-shadow: 0 0 24px rgba(1, 41, 112, 0.06);
     margin-bottom: 1rem;
@@ -23,7 +23,7 @@
 .storestock-ui .box-header,
 .storestock-ui .box-footer {
     padding: .85rem 1rem;
-    border-color: #999;
+    border-color: #ebeef4;
 }
 
 .storestock-ui .box-body {
@@ -46,7 +46,7 @@
     min-height: 94px;
     margin: .35rem;
     padding: .75rem;
-    border: 1px solid #999;
+    border: 1px solid #ebeef4;
     border-radius: 10px;
     background: #fff;
     color: #012970;
@@ -120,18 +120,18 @@
 .storestock-ui .bg-gray {
     background: #f6f9ff;
     color: #012970;
-    border-bottom: 1px solid #999;
+    border-bottom: 1px solid #ebeef4;
 }
 
 .storestock-ui .modal-content {
     border-radius: 12px;
-    border: 1px solid #666;
+    border: 1px solid #ebeef4;
     box-shadow: 0 0 30px rgba(1, 41, 112, 0.15);
 }
 
 .storestock-ui .modal-header {
     background: #f6f9ff;
-    border-bottom: 1px solid #888;
+    border-bottom: 1px solid #ebeef4;
 }
 
 .storestock-ui .modal-title {
@@ -140,7 +140,7 @@
 }
 
 .storestock-ui .module-hero {
-    border: 1px solid #999;
+    border: 1px solid #e9edf5;
     background: linear-gradient(135deg, #f6f9ff 0%, #ffffff 85%);
     border-radius: 14px;
     padding: 1rem 1.1rem;

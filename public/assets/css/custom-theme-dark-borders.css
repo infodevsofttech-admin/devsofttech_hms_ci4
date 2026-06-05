@@ -49,39 +49,39 @@ textarea:disabled {
 }
 
 /* ========================================
-   Cards - Darker Borders
+   Cards - Keep Original Light Borders
    ======================================== */
 
 .card {
-    border: 1px solid #999 !important;
+    border: 1px solid #ebeef4 !important;
 }
 
 .card-header,
 .card-footer {
-    border-color: #999 !important;
+    border-color: #ebeef4 !important;
 }
 
 /* ========================================
-   Tables - Darker Borders
+   Tables - Keep Moderate Borders
    ======================================== */
 
 .table {
-    border-color: #999 !important;
+    border-color: #ddd !important;
 }
 
 .table > :not(caption) > * > * {
-    border-bottom-color: #aaa !important;
+    border-bottom-color: #ddd !important;
 }
 
 .table > thead > tr > th {
-    border-bottom: 2px solid #777 !important;
+    border-bottom: 2px solid #999 !important;
 }
 
 /* DataTables specific */
 .dataTables_wrapper table.dataTable,
 .dataTables_wrapper table.dataTable thead th,
 .dataTables_wrapper table.dataTable tbody td {
-    border-color: #999 !important;
+    border-color: #ddd !important;
 }
 
 /* ========================================
@@ -102,28 +102,28 @@ textarea:disabled {
 }
 
 /* ========================================
-   Modals - Darker Borders
+   Modals - Keep Original Light Borders
    ======================================== */
 
 .modal-content {
-    border: 1px solid #666 !important;
+    border: 1px solid #ebeef4 !important;
 }
 
 .modal-header,
 .modal-footer {
-    border-color: #888 !important;
+    border-color: #ebeef4 !important;
 }
 
 /* ========================================
-   Dropdowns - Darker Borders
+   Dropdowns - Keep Original Light Borders
    ======================================== */
 
 .dropdown-menu {
-    border: 1px solid #666 !important;
+    border: 1px solid #ebeef4 !important;
 }
 
 .dropdown-divider {
-    border-color: #888 !important;
+    border-color: #ddd !important;
 }
 
 /* ========================================
@@ -243,31 +243,31 @@ textarea:disabled {
 }
 
 /* ========================================
-   Breadcrumb - Darker Borders
+   Breadcrumb - Keep Original Light Borders
    ======================================== */
 
 .breadcrumb {
-    border: 1px solid #999 !important;
+    border: 1px solid #ebeef4 !important;
 }
 
 /* ========================================
-   List Group - Darker Borders
+   List Group - Keep Original Light Borders
    ======================================== */
 
 .list-group-item {
-    border-color: #999 !important;
+    border-color: #ebeef4 !important;
 }
 
 /* ========================================
-   Sidebar & Header - Darker Borders
+   Sidebar & Header - Keep Original Light Borders
    ======================================== */
 
 .sidebar {
-    border-right: 1px solid #777 !important;
+    border-right: 1px solid #ebeef4 !important;
 }
 
 .header {
-    border-bottom: 1px solid #888 !important;
+    border-bottom: 1px solid #ebeef4 !important;
 }
 
 /* ========================================
@@ -283,19 +283,19 @@ textarea:disabled {
 }
 
 /* ========================================
-   Box/Panel Components - Darker Borders
+   Box/Panel Components - Keep Original Light Borders
    ======================================== */
 
 .box,
 .panel {
-    border: 1px solid #999 !important;
+    border: 1px solid #ebeef4 !important;
 }
 
 .box-header,
 .box-footer,
 .panel-heading,
 .panel-footer {
-    border-color: #999 !important;
+    border-color: #ebeef4 !important;
 }
 
 /* ========================================
@@ -308,20 +308,20 @@ hr {
 }
 
 /* ========================================
-   Profile & User Cards - Darker Borders
+   Profile & User Cards - Keep Original Light Borders
    ======================================== */
 
 .profile-card,
 .user-card {
-    border: 1px solid #999 !important;
+    border: 1px solid #ebeef4 !important;
 }
 
 /* ========================================
-   Dashboard Cards - Enhanced Visibility
+   Dashboard Cards - Keep Original Light Borders
    ======================================== */
 
 .dashboard .card,
 .info-card {
-    border: 1px solid #999 !important;
+    border: 1px solid #ebeef4 !important;
     box-shadow: 0 0 24px rgba(1, 41, 112, 0.12) !important;
 }
