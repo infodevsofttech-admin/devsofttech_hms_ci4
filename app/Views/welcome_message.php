@@ -30,6 +30,7 @@
     <link href="<?= base_url('assets/vendor/select2/select2-bootstrap4.min.css') ?>" rel="stylesheet">
 
     <link href="<?= base_url('assets/css/style.css') ?>" rel="stylesheet">
+    <link href="<?= base_url('assets/css/custom-theme-dark-borders.css') ?>" rel="stylesheet">
 </head>
 
 <body>

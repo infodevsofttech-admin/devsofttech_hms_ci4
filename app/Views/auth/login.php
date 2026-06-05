@@ -26,6 +26,7 @@
     <link href="assets/vendor/simple-datatables/style.css" rel="stylesheet">
 
     <link href="assets/css/style.css" rel="stylesheet">
+    <link href="assets/css/custom-theme-dark-borders.css" rel="stylesheet">
 
 </head>
 

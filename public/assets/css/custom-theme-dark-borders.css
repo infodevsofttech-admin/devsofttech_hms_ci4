@@ -1,0 +1,327 @@
+/**
+ * Custom Theme: Dark Borders for Old LED Screens
+ * Increases contrast and border visibility
+ * Updated: <?= date('Y-m-d') ?>
+ */
+
+/* ========================================
+   Form Controls - Darker Borders
+   ======================================== */
+
+/* Default form controls */
+.form-control,
+.form-select,
+textarea.form-control,
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="number"],
+input[type="tel"],
+input[type="url"],
+input[type="search"],
+input[type="date"],
+input[type="datetime-local"],
+input[type="time"],
+select.form-control,
+select.form-select {
+    border: 1px solid #555 !important;
+    border-color: #555 !important;
+}
+
+/* Form controls on focus */
+.form-control:focus,
+.form-select:focus,
+textarea.form-control:focus,
+input:focus,
+select:focus {
+    border-color: #333 !important;
+    box-shadow: 0 0 0 0.15rem rgba(85, 85, 85, 0.25) !important;
+}
+
+/* Disabled form controls */
+.form-control:disabled,
+.form-select:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+    border-color: #666 !important;
+    background-color: #f5f5f5 !important;
+}
+
+/* ========================================
+   Cards - Darker Borders
+   ======================================== */
+
+.card {
+    border: 1px solid #999 !important;
+}
+
+.card-header,
+.card-footer {
+    border-color: #999 !important;
+}
+
+/* ========================================
+   Tables - Darker Borders
+   ======================================== */
+
+.table {
+    border-color: #999 !important;
+}
+
+.table > :not(caption) > * > * {
+    border-bottom-color: #aaa !important;
+}
+
+.table > thead > tr > th {
+    border-bottom: 2px solid #777 !important;
+}
+
+/* DataTables specific */
+.dataTables_wrapper table.dataTable,
+.dataTables_wrapper table.dataTable thead th,
+.dataTables_wrapper table.dataTable tbody td {
+    border-color: #999 !important;
+}
+
+/* ========================================
+   Buttons - Darker Borders
+   ======================================== */
+
+.btn {
+    border-width: 1px !important;
+}
+
+.btn-outline-primary,
+.btn-outline-secondary,
+.btn-outline-success,
+.btn-outline-danger,
+.btn-outline-warning,
+.btn-outline-info {
+    border-width: 2px !important;
+}
+
+/* ========================================
+   Modals - Darker Borders
+   ======================================== */
+
+.modal-content {
+    border: 1px solid #666 !important;
+}
+
+.modal-header,
+.modal-footer {
+    border-color: #888 !important;
+}
+
+/* ========================================
+   Dropdowns - Darker Borders
+   ======================================== */
+
+.dropdown-menu {
+    border: 1px solid #666 !important;
+}
+
+.dropdown-divider {
+    border-color: #888 !important;
+}
+
+/* ========================================
+   Alerts - Darker Borders
+   ======================================== */
+
+.alert {
+    border-width: 1px !important;
+}
+
+.alert-primary {
+    border-color: #4154f1 !important;
+}
+
+.alert-secondary {
+    border-color: #6c757d !important;
+}
+
+.alert-success {
+    border-color: #198754 !important;
+}
+
+.alert-danger {
+    border-color: #dc3545 !important;
+}
+
+.alert-warning {
+    border-color: #ffc107 !important;
+}
+
+.alert-info {
+    border-color: #0dcaf0 !important;
+}
+
+/* ========================================
+   Nav Tabs - Darker Borders
+   ======================================== */
+
+.nav-tabs {
+    border-bottom-color: #777 !important;
+}
+
+.nav-tabs .nav-link {
+    border-color: #999 !important;
+}
+
+.nav-tabs .nav-link.active {
+    border-color: #777 #777 #fff !important;
+}
+
+/* ========================================
+   Pagination - Darker Borders
+   ======================================== */
+
+.pagination .page-link {
+    border-color: #777 !important;
+}
+
+.pagination .page-item.active .page-link {
+    border-color: #4154f1 !important;
+}
+
+/* ========================================
+   Input Groups - Darker Borders
+   ======================================== */
+
+.input-group-text {
+    border: 1px solid #555 !important;
+}
+
+.input-group > .form-control,
+.input-group > .form-select,
+.input-group > .input-group-text {
+    border-color: #555 !important;
+}
+
+/* ========================================
+   Select2 - Darker Borders
+   ======================================== */
+
+.select2-container--bootstrap4 .select2-selection {
+    border: 1px solid #555 !important;
+}
+
+.select2-container--bootstrap4.select2-container--focus .select2-selection {
+    border-color: #333 !important;
+    box-shadow: 0 0 0 0.15rem rgba(85, 85, 85, 0.25) !important;
+}
+
+.select2-dropdown {
+    border: 1px solid #666 !important;
+}
+
+/* ========================================
+   jQuery UI - Darker Borders
+   ======================================== */
+
+.ui-widget,
+.ui-widget-content {
+    border: 1px solid #666 !important;
+}
+
+.ui-widget-header {
+    border: 1px solid #555 !important;
+}
+
+.ui-state-default {
+    border: 1px solid #777 !important;
+}
+
+/* ========================================
+   Badge - Darker Borders
+   ======================================== */
+
+.badge {
+    border: 1px solid rgba(0, 0, 0, 0.2) !important;
+}
+
+/* ========================================
+   Breadcrumb - Darker Borders
+   ======================================== */
+
+.breadcrumb {
+    border: 1px solid #999 !important;
+}
+
+/* ========================================
+   List Group - Darker Borders
+   ======================================== */
+
+.list-group-item {
+    border-color: #999 !important;
+}
+
+/* ========================================
+   Sidebar & Header - Darker Borders
+   ======================================== */
+
+.sidebar {
+    border-right: 1px solid #777 !important;
+}
+
+.header {
+    border-bottom: 1px solid #888 !important;
+}
+
+/* ========================================
+   Search Boxes - Darker Borders
+   ======================================== */
+
+.search-bar input {
+    border: 1px solid #555 !important;
+}
+
+.search-bar input:focus {
+    border-color: #333 !important;
+}
+
+/* ========================================
+   Box/Panel Components - Darker Borders
+   ======================================== */
+
+.box,
+.panel {
+    border: 1px solid #999 !important;
+}
+
+.box-header,
+.box-footer,
+.panel-heading,
+.panel-footer {
+    border-color: #999 !important;
+}
+
+/* ========================================
+   HR Dividers - Darker
+   ======================================== */
+
+hr {
+    border-color: #777 !important;
+    opacity: 1 !important;
+}
+
+/* ========================================
+   Profile & User Cards - Darker Borders
+   ======================================== */
+
+.profile-card,
+.user-card {
+    border: 1px solid #999 !important;
+}
+
+/* ========================================
+   Dashboard Cards - Enhanced Visibility
+   ======================================== */
+
+.dashboard .card,
+.info-card {
+    border: 1px solid #999 !important;
+    box-shadow: 0 0 24px rgba(1, 41, 112, 0.12) !important;
+}
