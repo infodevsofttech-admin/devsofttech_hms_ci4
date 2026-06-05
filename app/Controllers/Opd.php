@@ -2174,35 +2174,42 @@ class Opd extends BaseController
 
             if ($debugHtml) {
                 return $this->response
-                    ->setHeader('Content-Type', 'text/plain; charset=UTF-8')
+                    ->setHeader('Content-Type', 'text/html; charset=UTF-8')
                     ->setBody($html);
             }
 
-            $mpdf = new Mpdf([
-                'mode'             => 'utf-8',
-                'format'           => 'A4',
-                'orientation'      => 'P',
-                'margin_left'      => 5,
-                'margin_right'     => 5,
-                'margin_top'       => 5,
-                'margin_bottom'    => 5,
-                'margin_header'    => 5,
-                'margin_footer'    => 5,
-                'default_font'     => 'dejavusans',
-                'autoScriptToLang' => true,
-                'autoLangToFont'   => true,
-                'tempDir'          => WRITEPATH . 'cache',
-            ]);
+            try {
+                $mpdf = new Mpdf([
+                    'mode'             => 'utf-8',
+                    'format'           => 'A4',
+                    'orientation'      => 'P',
+                    'margin_left'      => 5,
+                    'margin_right'     => 5,
+                    'margin_top'       => 5,
+                    'margin_bottom'    => 5,
+                    'margin_header'    => 5,
+                    'margin_footer'    => 5,
+                    'default_font'     => 'dejavusans',
+                    'autoScriptToLang' => true,
+                    'autoLangToFont'   => true,
+                    'tempDir'          => WRITEPATH . 'cache',
+                ]);
 
-            $opdCode = (string) ($data['opd_master'][0]->opd_code ?? ('OPD-' . $opdId));
-            $mpdf->SetTitle('OPD Prescription ' . $opdCode);
-            $mpdf->WriteHTML($html);
+                $opdCode = (string) ($data['opd_master'][0]->opd_code ?? ('OPD-' . $opdId));
+                $mpdf->SetTitle('OPD Prescription ' . $opdCode);
+                $mpdf->WriteHTML($html);
 
-            $fileName = 'OPD_Prescription_' . str_replace('/', '-', $opdCode) . '.pdf';
-            return $this->response
-                ->setHeader('Content-Type', 'application/pdf')
-                ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
-                ->setBody($mpdf->Output($fileName, 'S'));
+                $fileName = 'OPD_Prescription_' . str_replace('/', '-', $opdCode) . '.pdf';
+                return $this->response
+                    ->setHeader('Content-Type', 'application/pdf')
+                    ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
+                    ->setBody($mpdf->Output($fileName, 'S'));
+            } catch (\Throwable $e) {
+                log_message('error', 'mPDF rendering failed: ' . $e->getMessage());
+                return $this->response
+                    ->setStatusCode(500)
+                    ->setBody('PDF generation failed: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8'));
+            }
         }
 
         $docPrintSetting = $this->getOpdPaperPrintSetting($templateKey);
