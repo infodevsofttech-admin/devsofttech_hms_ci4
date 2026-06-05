@@ -3878,34 +3878,37 @@ class Opd extends BaseController
             $labels = ['No Pain', 'Mild', 'Moderate', 'Intense', 'Worst'];
             $colors = ['#22c55e', '#84cc16', '#eab308', '#f97316', '#ef4444']; // green to red gradient
             
-            $painImageHtml = '<table width="100%" border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:2px 0 0 0;">';
+            $painImageHtml = '<table width="100%" border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:4px 0 4px 0;">';
             
-            // Row 1: Tick/checkmark indicator above selected level
+            // Row 1: Down arrow indicator above selected level (more visible than checkmark)
             $painImageHtml .= '<tr>';
             for ($i = 0; $i <= 4; $i++) {
                 $active = $painIndex === $i;
-                $tick = $active ? '✓' : '';
-                $painImageHtml .= '<td width="20%" style="text-align:center;height:18px;font-size:16px;font-weight:700;color:' . $colors[$i] . ';">' . $tick . '</td>';
+                $arrow = $active ? '▼' : '&nbsp;';
+                $painImageHtml .= '<td width="20%" style="text-align:center;height:20px;font-size:20px;font-weight:700;color:' . $colors[$i] . ';line-height:1;">' . $arrow . '</td>';
             }
             $painImageHtml .= '</tr>';
             
-            // Row 2: Number boxes with color coding
+            // Row 2: Number boxes with strong color coding and border
             $painImageHtml .= '<tr>';
             for ($i = 0; $i <= 4; $i++) {
                 $active = $painIndex === $i;
-                $bg = $active ? $colors[$i] : '#f3f4f6';
-                $borderColor = $active ? $colors[$i] : '#d1d5db';
-                $color = $active ? '#fff' : '#6b7280';
-                $painImageHtml .= '<td width="20%" style="text-align:center;border:2px solid ' . $borderColor . ';background:' . $bg . ';color:' . $color . ';font-size:11px;font-weight:' . ($active ? '700' : '500') . ';padding:4px 0;">' . $i . '</td>';
+                $bg = $active ? $colors[$i] : '#ffffff';
+                $borderColor = $active ? '#000000' : '#d1d5db';
+                $borderWidth = $active ? '3px' : '1px';
+                $color = $active ? '#ffffff' : '#374151';
+                $painImageHtml .= '<td width="20%" style="text-align:center;border:' . $borderWidth . ' solid ' . $borderColor . ';background:' . $bg . ';color:' . $color . ';font-size:13px;font-weight:' . ($active ? '700' : '500') . ';padding:6px 0;">' . $i . '</td>';
             }
             $painImageHtml .= '</tr>';
             
-            // Row 3: Labels
+            // Row 3: Labels with bold for selected
             $painImageHtml .= '<tr>';
             for ($i = 0; $i <= 4; $i++) {
                 $active = $painIndex === $i;
                 $fontWeight = $active ? '700' : '400';
-                $painImageHtml .= '<td width="20%" style="text-align:center;color:#4b5563;font-size:8px;line-height:1.3;padding-top:2px;font-weight:' . $fontWeight . ';">' . esc($labels[$i]) . '</td>';
+                $textColor = $active ? '#000000' : '#6b7280';
+                $fontSize = $active ? '9px' : '8px';
+                $painImageHtml .= '<td width="20%" style="text-align:center;color:' . $textColor . ';font-size:' . $fontSize . ';line-height:1.4;padding-top:3px;font-weight:' . $fontWeight . ';">' . esc($labels[$i]) . '</td>';
             }
             $painImageHtml .= '</tr></table>';
         }
