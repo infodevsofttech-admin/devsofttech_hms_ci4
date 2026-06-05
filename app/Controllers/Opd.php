@@ -2806,28 +2806,42 @@ class Opd extends BaseController
         
         // Build test list independently from textarea content
         $rxInvestigationTestList = '';
+        $testNames = [];
+        
+        // First, try to get tests from rx_investigations table
         if (!empty($data['rx_investigations']) && is_array($data['rx_investigations'])) {
-            $testNames = [];
             foreach ($data['rx_investigations'] as $inv) {
                 $txt = trim((string) ($inv['investigation_name'] ?? $inv['investigation'] ?? ''));
                 if ($txt !== '') {
                     $testNames[] = $txt;
                 }
             }
-            
-            // If textarea is empty, also populate it with comma-separated tests
-            if ($rxInvestigation === '' && !empty($testNames)) {
-                $rxInvestigation = implode(', ', $testNames);
-            }
-            
-            // Always build formatted HTML test list for {{Tadvise_test_list}} placeholder
-            if (!empty($testNames)) {
-                $rxInvestigationTestList = '<ul style="margin:3px 0 0 16px;padding:0;list-style-type:disc;">';
-                foreach ($testNames as $testName) {
-                    $rxInvestigationTestList .= '<li style="margin-bottom:3px;font-weight:400;line-height:1.5;color:#111;">' . htmlspecialchars($testName, ENT_QUOTES, 'UTF-8') . '</li>';
+        }
+        
+        // If no tests from table but textarea has content, parse textarea as fallback
+        if (empty($testNames) && $rxInvestigation !== '') {
+            // Split by newlines or common delimiters
+            $lines = preg_split('/[\r\n]+/', $rxInvestigation);
+            foreach ($lines as $line) {
+                $line = trim($line);
+                if ($line !== '' && $line !== 'null') {
+                    $testNames[] = $line;
                 }
-                $rxInvestigationTestList .= '</ul>';
             }
+        }
+        
+        // If textarea is empty, populate it with comma-separated tests from table
+        if ($rxInvestigation === '' && !empty($testNames)) {
+            $rxInvestigation = implode(', ', $testNames);
+        }
+        
+        // Always build formatted HTML test list for {{Tadvise_test_list}} placeholder
+        if (!empty($testNames)) {
+            $rxInvestigationTestList = '<ul style="margin:3px 0 0 16px;padding:0;list-style-type:disc;">';
+            foreach ($testNames as $testName) {
+                $rxInvestigationTestList .= '<li style="margin-bottom:3px;font-weight:400;line-height:1.5;color:#111;">' . htmlspecialchars($testName, ENT_QUOTES, 'UTF-8') . '</li>';
+            }
+            $rxInvestigationTestList .= '</ul>';
         }
 
         $rxAdvice = $rxRead($rx, ['advice', 'Advice', 'prescription_advice', 'advice_notes', 'advice_note']);
