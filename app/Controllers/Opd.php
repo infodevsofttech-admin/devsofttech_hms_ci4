@@ -3910,7 +3910,9 @@ class Opd extends BaseController
             $nabhPanelParts[] = '<strong>Current Medications:</strong> ' . esc($currentMeds);
         }
         $nabhPanelHtml = implode('<br/>', $nabhPanelParts);
-        $tokens['nabh_panel_block'] = $nabhPanelHtml !== '' ? $formatBlock('Drug Allergy / ADR Panel', $nabhPanelHtml, true) : '';
+        $tokens['nabh_panel_block'] = $nabhPanelHtml !== ''
+            ? '<div style="display:block;line-height:1.6;"><div style="padding-left:6px;font-weight:400;color:#111;line-height:1.6;">' . $nabhPanelHtml . '</div></div>' . $blockGapHtml
+            : '';
         $tokens['allergy_adr_panel_block'] = $tokens['nabh_panel_block'];
         $tokens['drug_allergy_panel_block'] = $tokens['nabh_panel_block'];
         // Keep both raw and formatted allergy placeholders for template compatibility.
