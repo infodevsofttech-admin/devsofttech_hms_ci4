@@ -2645,12 +2645,25 @@ HTML;
     private function ensureDischargeTemplateTable(): void
     {
         if ($this->db->tableExists('ipd_discharge_templates')) {
+            $this->ensureDischargeTemplateColumns();
             return;
         }
 
         $sql = "CREATE TABLE IF NOT EXISTS ipd_discharge_templates (
             id INT NOT NULL AUTO_INCREMENT,
             template_name VARCHAR(120) NOT NULL,
+            page_size VARCHAR(16) NOT NULL DEFAULT 'A4',
+            custom_width_mm INT NOT NULL DEFAULT 210,
+            custom_height_mm INT NOT NULL DEFAULT 297,
+            page_margin_top_cm DECIMAL(5,2) NOT NULL DEFAULT 0.80,
+            page_margin_bottom_cm DECIMAL(5,2) NOT NULL DEFAULT 0.80,
+            page_margin_left_cm DECIMAL(5,2) NOT NULL DEFAULT 0.80,
+            page_margin_right_cm DECIMAL(5,2) NOT NULL DEFAULT 0.80,
+            margin_header_cm DECIMAL(5,2) NOT NULL DEFAULT 0.50,
+            margin_footer_cm DECIMAL(5,2) NOT NULL DEFAULT 0.50,
+            header_html LONGTEXT NULL,
+            footer_html LONGTEXT NULL,
+            template_css LONGTEXT NULL,
             template_html LONGTEXT NOT NULL,
             is_default TINYINT(1) NOT NULL DEFAULT 0,
             status TINYINT(1) NOT NULL DEFAULT 1,
@@ -2660,6 +2673,40 @@ HTML;
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
         $this->db->query($sql);
+        $this->ensureDischargeTemplateColumns();
+    }
+
+    private function ensureDischargeTemplateColumns(): void
+    {
+        if (! $this->db->tableExists('ipd_discharge_templates')) {
+            return;
+        }
+
+        $columns = [
+            'page_size' => "ALTER TABLE ipd_discharge_templates ADD COLUMN page_size VARCHAR(16) NOT NULL DEFAULT 'A4' AFTER template_name",
+            'custom_width_mm' => "ALTER TABLE ipd_discharge_templates ADD COLUMN custom_width_mm INT NOT NULL DEFAULT 210 AFTER page_size",
+            'custom_height_mm' => "ALTER TABLE ipd_discharge_templates ADD COLUMN custom_height_mm INT NOT NULL DEFAULT 297 AFTER custom_width_mm",
+            'page_margin_top_cm' => "ALTER TABLE ipd_discharge_templates ADD COLUMN page_margin_top_cm DECIMAL(5,2) NOT NULL DEFAULT 0.80 AFTER custom_height_mm",
+            'page_margin_bottom_cm' => "ALTER TABLE ipd_discharge_templates ADD COLUMN page_margin_bottom_cm DECIMAL(5,2) NOT NULL DEFAULT 0.80 AFTER page_margin_top_cm",
+            'page_margin_left_cm' => "ALTER TABLE ipd_discharge_templates ADD COLUMN page_margin_left_cm DECIMAL(5,2) NOT NULL DEFAULT 0.80 AFTER page_margin_bottom_cm",
+            'page_margin_right_cm' => "ALTER TABLE ipd_discharge_templates ADD COLUMN page_margin_right_cm DECIMAL(5,2) NOT NULL DEFAULT 0.80 AFTER page_margin_left_cm",
+            'margin_header_cm' => "ALTER TABLE ipd_discharge_templates ADD COLUMN margin_header_cm DECIMAL(5,2) NOT NULL DEFAULT 0.50 AFTER page_margin_right_cm",
+            'margin_footer_cm' => "ALTER TABLE ipd_discharge_templates ADD COLUMN margin_footer_cm DECIMAL(5,2) NOT NULL DEFAULT 0.50 AFTER margin_header_cm",
+            'header_html' => "ALTER TABLE ipd_discharge_templates ADD COLUMN header_html LONGTEXT NULL AFTER margin_footer_cm",
+            'footer_html' => "ALTER TABLE ipd_discharge_templates ADD COLUMN footer_html LONGTEXT NULL AFTER header_html",
+            'template_css' => "ALTER TABLE ipd_discharge_templates ADD COLUMN template_css LONGTEXT NULL AFTER footer_html",
+        ];
+
+        foreach ($columns as $col => $sql) {
+            try {
+                $exists = $this->db->query("SHOW COLUMNS FROM ipd_discharge_templates LIKE '" . $col . "'")->getRowArray();
+                if (empty($exists)) {
+                    $this->db->query($sql);
+                }
+            } catch (\Throwable $e) {
+                // Keep template screen usable even if schema alter fails in restricted env.
+            }
+        }
     }
 
     private function defaultDischargeTemplateHtml(): string
@@ -2876,6 +2923,8 @@ HTML;
             return $resp;
         }
 
+        $this->ensureDischargeTemplateTable();
+
         if (! $this->request->isAJAX()) {
             return $this->response->setStatusCode(400)->setJSON([
                 'update' => 0,
@@ -2922,6 +2971,8 @@ HTML;
         if ($resp = $this->requireAnyPermission(['template.discharge'])) {
             return $resp;
         }
+
+        $this->ensureDischargeTemplateTable();
 
         $id = (int) $id;
         $ok = false;
