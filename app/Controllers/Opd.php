@@ -2804,11 +2804,11 @@ class Opd extends BaseController
 
         $rxInvestigation = $rxRead($rx, ['investigation', 'Investigations', 'investigations', 'Investigation']);
         
-        // Build test list independently from textarea content
+        // Build test list from table (comma-separated, not bullet list)
         $rxInvestigationTestList = '';
         $testNames = [];
         
-        // First, try to get tests from rx_investigations table
+        // Get tests from rx_investigations table
         if (!empty($data['rx_investigations']) && is_array($data['rx_investigations'])) {
             foreach ($data['rx_investigations'] as $inv) {
                 $txt = trim((string) ($inv['investigation_name'] ?? $inv['investigation'] ?? ''));
@@ -2818,30 +2818,10 @@ class Opd extends BaseController
             }
         }
         
-        // If no tests from table but textarea has content, parse textarea as fallback
-        if (empty($testNames) && $rxInvestigation !== '') {
-            // Split by newlines or common delimiters
-            $lines = preg_split('/[\r\n]+/', $rxInvestigation);
-            foreach ($lines as $line) {
-                $line = trim($line);
-                if ($line !== '' && $line !== 'null') {
-                    $testNames[] = $line;
-                }
-            }
-        }
-        
-        // If textarea is empty, populate it with comma-separated tests from table
-        if ($rxInvestigation === '' && !empty($testNames)) {
-            $rxInvestigation = implode(', ', $testNames);
-        }
-        
-        // Always build formatted HTML test list for {{Tadvise_test_list}} placeholder
+        // Build comma-separated test list for {{Tadvise_test_list}} placeholder
+        // This is independent from {{investigation}} textarea content
         if (!empty($testNames)) {
-            $rxInvestigationTestList = '<ul style="margin:3px 0 0 16px;padding:0;list-style-type:disc;">';
-            foreach ($testNames as $testName) {
-                $rxInvestigationTestList .= '<li style="margin-bottom:3px;font-weight:400;line-height:1.5;color:#111;">' . htmlspecialchars($testName, ENT_QUOTES, 'UTF-8') . '</li>';
-            }
-            $rxInvestigationTestList .= '</ul>';
+            $rxInvestigationTestList = implode(', ', $testNames);
         }
 
         $rxAdvice = $rxRead($rx, ['advice', 'Advice', 'prescription_advice', 'advice_notes', 'advice_note']);
