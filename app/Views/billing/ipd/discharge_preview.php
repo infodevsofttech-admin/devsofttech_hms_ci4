@@ -57,6 +57,10 @@ if ($person) {
             padding: 5px;
             vertical-align: top;
         }
+        .discharge-preview-content table.no-border th,
+        .discharge-preview-content table.no-border td {
+            border: none !important;
+        }
         .discharge-preview-content ul,
         .discharge-preview-content ol {
             margin: 4px 0 10px 18px;

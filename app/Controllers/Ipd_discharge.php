@@ -1344,7 +1344,7 @@ class Ipd_discharge extends BaseController
             $medRows = $this->byIpdRows('ipd_discharge_prescrption_prescribed', ['med_name', 'med_type', 'qty', 'no_of_days', 'remark'], 'id ASC', $ipdId);
             if (! empty($medRows)) {
                 $html = '<h4 style="margin:16px 0 8px 0;">Discharge Medications</h4>'
-                    . '<table style="width:100%;border-collapse:collapse;margin-bottom:10px;" border="0" cellpadding="6">'
+                    . '<table class="no-border" style="width:100%;border-collapse:collapse;margin-bottom:10px;" border="0" cellpadding="6">'
                     . '<tr><th style="width:40px;">#</th><th>Medicine</th><th style="width:90px;">Qty</th><th style="width:100px;">Days</th><th>Notes</th></tr>';
                 $sr = 1;
                 foreach ($medRows as $row) {
@@ -4853,6 +4853,7 @@ class Ipd_discharge extends BaseController
             . '.content h2,.content h3,.content h4{margin:12px 0 6px 0;color:#0f172a;}'
             . '.content table{width:100%;border-collapse:collapse;margin:6px 0 10px 0;font-size:10pt;}'
             . '.content th,.content td{border:1px solid #d1d5db;padding:5px;vertical-align:top;}'
+            . '.content table.no-border th,.content table.no-border td{border:none !important;}'
             . '.content ul,.content ol{margin:4px 0 10px 18px;padding:0;}'
             . '</style></head><body>'
             . '<div class="content">' . $renderedContent . '</div>'
