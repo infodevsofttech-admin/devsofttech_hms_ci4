@@ -2787,6 +2787,15 @@ HTML;
             if ($templateName === '' || trim($templateHtml) === '') {
                 $notice = 'Template name and template HTML are required.';
                 $noticeType = 'danger';
+
+                if ($this->request->isAJAX()) {
+                    return $this->response->setJSON([
+                        'update' => 0,
+                        'error_text' => $notice,
+                        'csrfName' => csrf_token(),
+                        'csrfHash' => csrf_hash(),
+                    ]);
+                }
             } else {
                 $table = $this->db->table('ipd_discharge_templates');
                 $data = [
@@ -2808,19 +2817,32 @@ HTML;
                     'status' => $status,
                 ];
 
+                $ok = false;
                 if ($id > 0) {
-                    $table->where('id', $id)->update($data);
-                    $notice = 'Template updated.';
+                    $ok = (bool) $table->where('id', $id)->update($data);
+                    $notice = $ok ? 'Template updated.' : 'Unable to update template.';
                 } else {
-                    $table->insert($data);
+                    $ok = (bool) $table->insert($data);
                     $id = (int) $this->db->insertID();
-                    $notice = 'Template created.';
+                    $notice = $ok ? 'Template created.' : 'Unable to create template.';
                 }
+
+                $noticeType = $ok ? 'success' : 'danger';
 
                 if ($isDefault === 1 && $id > 0) {
                     $this->db->table('ipd_discharge_templates')
                         ->where('id <>', $id)
                         ->update(['is_default' => 0]);
+                }
+
+                if ($this->request->isAJAX()) {
+                    return $this->response->setJSON([
+                        'update' => $ok ? 1 : 0,
+                        'id' => $id,
+                        'error_text' => $notice,
+                        'csrfName' => csrf_token(),
+                        'csrfHash' => csrf_hash(),
+                    ]);
                 }
             }
         }
@@ -2848,6 +2870,53 @@ HTML;
         ]);
     }
 
+    public function discharge_template_get(int $id)
+    {
+        if ($resp = $this->requireAnyPermission(['template.discharge'])) {
+            return $resp;
+        }
+
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'update' => 0,
+                'error_text' => 'Invalid request',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $id = (int) $id;
+        if ($id <= 0 || ! $this->db->tableExists('ipd_discharge_templates')) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Template not found',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $row = $this->db->table('ipd_discharge_templates')
+            ->where('id', $id)
+            ->get(1)
+            ->getRowArray() ?? [];
+
+        if (empty($row)) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Template not found',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'row' => $row,
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
     public function discharge_template_delete(int $id)
     {
         if ($resp = $this->requireAnyPermission(['template.discharge'])) {
@@ -2855,8 +2924,18 @@ HTML;
         }
 
         $id = (int) $id;
+        $ok = false;
         if ($id > 0 && $this->db->tableExists('ipd_discharge_templates')) {
-            $this->db->table('ipd_discharge_templates')->where('id', $id)->delete();
+            $ok = (bool) $this->db->table('ipd_discharge_templates')->where('id', $id)->delete();
+        }
+
+        if ($this->request->isAJAX()) {
+            return $this->response->setJSON([
+                'update' => $ok ? 1 : 0,
+                'error_text' => $ok ? 'Template deleted.' : 'Unable to delete template.',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
         }
 
         return redirect()->to(base_url('setting/template/discharge_templates'));

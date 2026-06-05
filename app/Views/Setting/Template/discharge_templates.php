@@ -66,9 +66,11 @@ $status = (int) ($edit['status'] ?? 1);
                 </div>
             </div>
 
+            <div id="discharge_template_notice" class="mb-2"></div>
+
             <form method="post" action="<?= base_url('setting/template/discharge_templates') ?>" class="mb-4" id="discharge_template_form">
                 <?= csrf_field() ?>
-                <input type="hidden" name="id" value="<?= $editId ?>">
+                <input type="hidden" name="id" id="discharge_template_id" value="<?= $editId ?>">
 
                 <div class="row g-2">
                     <div class="col-md-6">
@@ -155,10 +157,8 @@ $status = (int) ($edit['status'] ?? 1);
                 </div>
 
                 <div class="mt-3 d-flex gap-2">
-                    <button type="submit" class="btn btn-primary btn-sm"><?= $editId > 0 ? 'Update Template' : 'Create Template' ?></button>
-                    <?php if ($editId > 0): ?>
-                        <a class="btn btn-outline-secondary btn-sm" href="javascript:load_form_div('<?= base_url('setting/template/discharge_templates') ?>','maindiv','IPD Discharge Template');">Cancel Edit</a>
-                    <?php endif; ?>
+                    <button type="submit" class="btn btn-primary btn-sm" id="discharge_template_submit_btn"><?= $editId > 0 ? 'Update Template' : 'Create Template' ?></button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="discharge_template_cancel_btn" style="display:<?= $editId > 0 ? 'inline-block' : 'none' ?>;">Cancel Edit</button>
                 </div>
             </form>
 
@@ -184,8 +184,8 @@ $status = (int) ($edit['status'] ?? 1);
                                     <td><?= (int) ($row['is_default'] ?? 0) === 1 ? 'Yes' : 'No' ?></td>
                                     <td><?= (int) ($row['status'] ?? 0) === 1 ? 'Active' : 'Inactive' ?></td>
                                     <td>
-                                        <a class="btn btn-outline-primary btn-sm" href="javascript:load_form_div('<?= base_url('setting/template/discharge_templates?edit=' . (int) ($row['id'] ?? 0)) ?>','maindiv','IPD Discharge Template');">Edit</a>
-                                        <a class="btn btn-outline-danger btn-sm" href="javascript:if(confirm('Delete this template?')) load_form_div('<?= base_url('setting/template/discharge_templates/delete/' . (int) ($row['id'] ?? 0)) ?>','maindiv','IPD Discharge Template');">Delete</a>
+                                        <button type="button" class="btn btn-outline-primary btn-sm discharge-template-edit" data-id="<?= (int) ($row['id'] ?? 0) ?>">Edit</button>
+                                        <button type="button" class="btn btn-outline-danger btn-sm discharge-template-delete" data-id="<?= (int) ($row['id'] ?? 0) ?>">Delete</button>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -200,15 +200,205 @@ $status = (int) ($edit['status'] ?? 1);
 <script>
 (function () {
     var form = document.getElementById('discharge_template_form');
+    var noticeBox = document.getElementById('discharge_template_notice');
+    var templateIdInput = document.getElementById('discharge_template_id');
+    var submitBtn = document.getElementById('discharge_template_submit_btn');
+    var cancelBtn = document.getElementById('discharge_template_cancel_btn');
     var editorFieldId = 'template_html_editor';
     var pageSizeEl = document.getElementById('discharge_page_size');
     var customSizeWraps = document.querySelectorAll('.discharge-custom-size-wrap');
     var previewIpdInput = document.getElementById('discharge_preview_ipd_id');
     var previewBtn = document.getElementById('btn_discharge_preview');
     var pdfBtn = document.getElementById('btn_discharge_pdf');
+    var editButtons = document.querySelectorAll('.discharge-template-edit');
+    var deleteButtons = document.querySelectorAll('.discharge-template-delete');
+
+    var fieldTemplateName = form ? form.querySelector('input[name="template_name"]') : null;
+    var fieldStatus = form ? form.querySelector('select[name="status"]') : null;
+    var fieldIsDefault = form ? form.querySelector('input[name="is_default"]') : null;
+    var fieldCustomWidth = form ? form.querySelector('input[name="custom_width_mm"]') : null;
+    var fieldCustomHeight = form ? form.querySelector('input[name="custom_height_mm"]') : null;
+    var fieldMarginTop = form ? form.querySelector('input[name="page_margin_top_cm"]') : null;
+    var fieldMarginBottom = form ? form.querySelector('input[name="page_margin_bottom_cm"]') : null;
+    var fieldMarginLeft = form ? form.querySelector('input[name="page_margin_left_cm"]') : null;
+    var fieldMarginRight = form ? form.querySelector('input[name="page_margin_right_cm"]') : null;
+    var fieldMarginHeader = form ? form.querySelector('input[name="margin_header_cm"]') : null;
+    var fieldMarginFooter = form ? form.querySelector('input[name="margin_footer_cm"]') : null;
+    var fieldHeaderHtml = form ? form.querySelector('textarea[name="header_html"]') : null;
+    var fieldFooterHtml = form ? form.querySelector('textarea[name="footer_html"]') : null;
+    var fieldTemplateCss = form ? form.querySelector('textarea[name="template_css"]') : null;
+
+    var initialTemplateHtml = <?= json_encode($templateHtml, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 
     function getSelectedTemplateId() {
-        return <?= $editId > 0 ? (int) $editId : 0 ?>;
+        return templateIdInput ? parseInt(templateIdInput.value || '0', 10) : 0;
+    }
+
+    function setNotice(type, message) {
+        if (!noticeBox) {
+            return;
+        }
+
+        if (!message) {
+            noticeBox.innerHTML = '';
+            return;
+        }
+
+        noticeBox.innerHTML = '<div class="alert alert-' + type + ' py-2 mb-0">' + message + '</div>';
+    }
+
+    function updateCsrfToken(data) {
+        if (!data || !data.csrfName || !data.csrfHash || !form) {
+            return;
+        }
+
+        var tokenInput = form.querySelector('input[name="' + data.csrfName + '"]');
+        if (tokenInput) {
+            tokenInput.value = data.csrfHash;
+        }
+    }
+
+    function setSubmitMode(isEdit) {
+        if (submitBtn) {
+            submitBtn.textContent = isEdit ? 'Update Template' : 'Create Template';
+        }
+        if (cancelBtn) {
+            cancelBtn.style.display = isEdit ? 'inline-block' : 'none';
+        }
+    }
+
+    function resetTemplateForm() {
+        if (!form) {
+            return;
+        }
+
+        form.reset();
+        if (templateIdInput) {
+            templateIdInput.value = '0';
+        }
+        if (fieldStatus) {
+            fieldStatus.value = '1';
+        }
+        if (fieldIsDefault) {
+            fieldIsDefault.checked = false;
+        }
+        if (pageSizeEl) {
+            pageSizeEl.value = 'A4';
+        }
+        if (fieldCustomWidth) {
+            fieldCustomWidth.value = '210';
+        }
+        if (fieldCustomHeight) {
+            fieldCustomHeight.value = '297';
+        }
+        if (fieldMarginTop) {
+            fieldMarginTop.value = '0.8';
+        }
+        if (fieldMarginBottom) {
+            fieldMarginBottom.value = '0.8';
+        }
+        if (fieldMarginLeft) {
+            fieldMarginLeft.value = '0.8';
+        }
+        if (fieldMarginRight) {
+            fieldMarginRight.value = '0.8';
+        }
+        if (fieldMarginHeader) {
+            fieldMarginHeader.value = '0.5';
+        }
+        if (fieldMarginFooter) {
+            fieldMarginFooter.value = '0.5';
+        }
+        if (fieldHeaderHtml) {
+            fieldHeaderHtml.value = '';
+        }
+        if (fieldFooterHtml) {
+            fieldFooterHtml.value = '';
+        }
+        if (fieldTemplateCss) {
+            fieldTemplateCss.value = '';
+        }
+
+        if (window.CKEDITOR && CKEDITOR.instances[editorFieldId]) {
+            CKEDITOR.instances[editorFieldId].setData(initialTemplateHtml || '{{CONTENT}}');
+        } else {
+            var templateHtmlEl = document.getElementById(editorFieldId);
+            if (templateHtmlEl) {
+                templateHtmlEl.value = initialTemplateHtml || '{{CONTENT}}';
+            }
+        }
+
+        setSubmitMode(false);
+        toggleCustomSizeFields();
+    }
+
+    function setFormFromTemplateRow(row) {
+        if (!row || !form) {
+            return;
+        }
+
+        if (templateIdInput) {
+            templateIdInput.value = String(parseInt(row.id || 0, 10));
+        }
+        if (fieldTemplateName) {
+            fieldTemplateName.value = String(row.template_name || '');
+        }
+        if (fieldStatus) {
+            fieldStatus.value = String(parseInt(row.status || 0, 10) === 1 ? 1 : 0);
+        }
+        if (fieldIsDefault) {
+            fieldIsDefault.checked = parseInt(row.is_default || 0, 10) === 1;
+        }
+        if (pageSizeEl) {
+            pageSizeEl.value = String((row.page_size || 'A4')).toUpperCase();
+        }
+        if (fieldCustomWidth) {
+            fieldCustomWidth.value = String(row.custom_width_mm || 210);
+        }
+        if (fieldCustomHeight) {
+            fieldCustomHeight.value = String(row.custom_height_mm || 297);
+        }
+        if (fieldMarginTop) {
+            fieldMarginTop.value = String(row.page_margin_top_cm || '0.8');
+        }
+        if (fieldMarginBottom) {
+            fieldMarginBottom.value = String(row.page_margin_bottom_cm || '0.8');
+        }
+        if (fieldMarginLeft) {
+            fieldMarginLeft.value = String(row.page_margin_left_cm || '0.8');
+        }
+        if (fieldMarginRight) {
+            fieldMarginRight.value = String(row.page_margin_right_cm || '0.8');
+        }
+        if (fieldMarginHeader) {
+            fieldMarginHeader.value = String(row.margin_header_cm || '0.5');
+        }
+        if (fieldMarginFooter) {
+            fieldMarginFooter.value = String(row.margin_footer_cm || '0.5');
+        }
+        if (fieldHeaderHtml) {
+            fieldHeaderHtml.value = String(row.header_html || '');
+        }
+        if (fieldFooterHtml) {
+            fieldFooterHtml.value = String(row.footer_html || '');
+        }
+        if (fieldTemplateCss) {
+            fieldTemplateCss.value = String(row.template_css || '');
+        }
+
+        var html = String(row.template_html || '{{CONTENT}}');
+        if (window.CKEDITOR && CKEDITOR.instances[editorFieldId]) {
+            CKEDITOR.instances[editorFieldId].setData(html);
+        } else {
+            var templateHtmlEl = document.getElementById(editorFieldId);
+            if (templateHtmlEl) {
+                templateHtmlEl.value = html;
+            }
+        }
+
+        setSubmitMode(true);
+        toggleCustomSizeFields();
+        setNotice('', '');
     }
 
     function openDischargeUrl(baseUrl, ipdId, printType) {
@@ -289,10 +479,111 @@ $status = (int) ($edit['status'] ?? 1);
     }
 
     if (form) {
-        form.addEventListener('submit', function () {
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
             syncTemplateEditor();
+
+            var formData = new FormData(form);
+            fetch(form.getAttribute('action'), {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+                .then(function (res) { return res.json(); })
+                .then(function (data) {
+                    updateCsrfToken(data);
+                    if (!data || parseInt(data.update || 0, 10) !== 1) {
+                        setNotice('danger', (data && data.error_text) ? data.error_text : 'Unable to save template.');
+                        return;
+                    }
+
+                    setNotice('success', data.error_text || 'Template saved.');
+                    if (typeof load_form_div === 'function') {
+                        load_form_div('<?= base_url('setting/template/discharge_templates') ?>?edit=' + encodeURIComponent(String(data.id || 0)), 'maindiv', 'IPD Discharge Template');
+                    } else {
+                        window.location.assign('<?= base_url('setting/template/discharge_templates') ?>?edit=' + encodeURIComponent(String(data.id || 0)));
+                    }
+                })
+                .catch(function () {
+                    setNotice('danger', 'Network error while saving template.');
+                });
         });
     }
+
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', function () {
+            resetTemplateForm();
+        });
+    }
+
+    editButtons.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var id = parseInt(btn.getAttribute('data-id') || '0', 10);
+            if (id <= 0) {
+                return;
+            }
+
+            fetch('<?= base_url('setting/template/discharge_template_get') ?>/' + id, {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+                .then(function (res) { return res.json(); })
+                .then(function (data) {
+                    updateCsrfToken(data);
+                    if (!data || parseInt(data.update || 0, 10) !== 1 || !data.row) {
+                        setNotice('danger', (data && data.error_text) ? data.error_text : 'Unable to load template.');
+                        return;
+                    }
+
+                    setFormFromTemplateRow(data.row);
+                    if (fieldTemplateName) {
+                        fieldTemplateName.focus();
+                    }
+                })
+                .catch(function () {
+                    setNotice('danger', 'Network error while loading template.');
+                });
+        });
+    });
+
+    deleteButtons.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var id = parseInt(btn.getAttribute('data-id') || '0', 10);
+            if (id <= 0) {
+                return;
+            }
+
+            if (!window.confirm('Delete this template?')) {
+                return;
+            }
+
+            fetch('<?= base_url('setting/template/discharge_templates/delete') ?>/' + id, {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+                .then(function (res) { return res.json(); })
+                .then(function (data) {
+                    updateCsrfToken(data);
+                    if (!data || parseInt(data.update || 0, 10) !== 1) {
+                        setNotice('danger', (data && data.error_text) ? data.error_text : 'Unable to delete template.');
+                        return;
+                    }
+
+                    if (typeof load_form_div === 'function') {
+                        load_form_div('<?= base_url('setting/template/discharge_templates') ?>', 'maindiv', 'IPD Discharge Template');
+                    } else {
+                        window.location.assign('<?= base_url('setting/template/discharge_templates') ?>');
+                    }
+                })
+                .catch(function () {
+                    setNotice('danger', 'Network error while deleting template.');
+                });
+        });
+    });
 
     if (previewBtn) {
         previewBtn.addEventListener('click', function () {
