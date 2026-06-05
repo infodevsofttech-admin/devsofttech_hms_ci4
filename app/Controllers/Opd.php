@@ -4074,6 +4074,11 @@ class Opd extends BaseController
         if ($hLogo === '') {
             $hLogo = defined('H_logo') ? (string) constant('H_logo') : '';
         }
+        
+        // Fallback to default logo if still empty
+        if ($hLogo === '') {
+            $hLogo = 'logo.png';
+        }
 
         $tokens['H_Name'] = $hName;
         $tokens['H_address_1'] = $hAddress1;
