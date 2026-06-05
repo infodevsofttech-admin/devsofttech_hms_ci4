@@ -3862,20 +3862,21 @@ class Opd extends BaseController
         $painIndex = ($painValue !== null && $painValue >= 0 && $painValue <= 4) ? $painValue : null;
         $painImageHtml = '';
         
+        // DISABLED: Static PNG images don't show which level is selected - use dynamic HTML instead
         // Only generate image if pain_value is actually set
-        if ($painIndex !== null) {
-            $imageCandidates = [
-                FCPATH . 'assets/images/pains_scale_' . $painIndex . '.png',
-                FCPATH . 'assets/images/pains_scale.png',
-            ];
-
-            foreach ($imageCandidates as $imagePath) {
-                if (is_file($imagePath)) {
-                    $painImageHtml = '<img src="' . esc(str_replace('\\\\', '/', $imagePath)) . '" style="width:300px;height:40px;" />';
-                    break;
-                }
-            }
-        }
+        // if ($painIndex !== null) {
+        //     $imageCandidates = [
+        //         FCPATH . 'assets/images/pains_scale_' . $painIndex . '.png',
+        //         FCPATH . 'assets/images/pains_scale.png',
+        //     ];
+        //
+        //     foreach ($imageCandidates as $imagePath) {
+        //         if (is_file($imagePath)) {
+        //             $painImageHtml = '<img src="' . esc(str_replace('\\\\', '/', $imagePath)) . '" style="width:300px;height:40px;" />';
+        //             break;
+        //         }
+        //     }
+        // }
 
         if ($painImageHtml === '' && $painIndex !== null) {
             $labels = ['No Pain', 'Mild', 'Moderate', 'Intense', 'Worst'];
