@@ -377,6 +377,7 @@ $routes->post('Ipd_discharge/surgery_master_save', 'Ipd_discharge::surgery_maste
 $routes->post('Ipd_discharge/surgery_master_delete', 'Ipd_discharge::surgery_master_delete');
 $routes->get('Ipd_discharge/diagnosis_icd_lookup', 'Ipd_discharge::diagnosis_icd_lookup');
 $routes->post('Ipd_discharge/diagnosis_icd_seed_starter', 'Ipd_discharge::diagnosis_icd_seed_starter');
+$routes->post('Ipd_discharge/update_complaint_field', 'Ipd_discharge::update_complaint_field');
 $routes->get('Ipd_discharge/dietary_master_list', 'Ipd_discharge::dietary_master_list');
 $routes->post('Ipd_discharge/dietary_master_save', 'Ipd_discharge::dietary_master_save');
 $routes->post('Ipd_discharge/dietary_master_delete', 'Ipd_discharge::dietary_master_delete');
