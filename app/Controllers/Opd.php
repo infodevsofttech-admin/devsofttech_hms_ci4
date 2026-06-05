@@ -3880,32 +3880,31 @@ class Opd extends BaseController
 
         if ($painImageHtml === '' && $painIndex !== null) {
             $labels = ['No Pain', 'Mild', 'Moderate', 'Intense', 'Worst'];
-            $emojis = ['😊', '😐', '😣', '😖', '😭']; // Visual indicators for black & white printing
             
             // Add debug info at top showing which pain level is selected
             $painImageHtml = '<div style="font-size:10px;color:#666;margin-bottom:2px;">Pain Level: ' . $painIndex . ' - ' . esc($labels[$painIndex]) . '</div>';
             
             $painImageHtml .= '<table width="100%" border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:4px 0 4px 0;">';
             
-            // Row 1: Emoji indicators (visible in black & white printing)
+            // Row 1: Arrow/checkmark indicators (PDF-safe symbols, visible in black & white)
             $painImageHtml .= '<tr>';
             for ($i = 0; $i <= 4; $i++) {
                 $active = ($painIndex === $i);
-                $emoji = $active ? $emojis[$i] : '&nbsp;';
-                $fontSize = $active ? '24px' : '16px';
-                $painImageHtml .= '<td width="20%" style="text-align:center;height:28px;font-size:' . $fontSize . ';line-height:1;">' . $emoji . '</td>';
+                $indicator = $active ? '&#9660;' : ''; // Down-pointing triangle (▼)
+                $fontSize = $active ? '18px' : '12px';
+                $painImageHtml .= '<td width="20%" style="text-align:center;height:22px;font-size:' . $fontSize . ';font-weight:700;line-height:1;">' . $indicator . '</td>';
             }
             $painImageHtml .= '</tr>';
             
-            // Row 2: Number boxes with bold border for selected (visible in B&W)
+            // Row 2: Number boxes with bold border and shading for selected (visible in B&W)
             $painImageHtml .= '<tr>';
             for ($i = 0; $i <= 4; $i++) {
                 $active = ($painIndex === $i);
-                $bg = $active ? '#e5e5e5' : '#ffffff'; // Light gray for selected (visible in B&W)
+                $bg = $active ? '#cccccc' : '#ffffff'; // Medium gray for selected (visible in B&W)
                 $borderColor = '#000000';
                 $borderWidth = $active ? '3px' : '1px';
                 $color = '#000000';
-                $painImageHtml .= '<td width="20%" style="text-align:center;border:' . $borderWidth . ' solid ' . $borderColor . ';background:' . $bg . ';color:' . $color . ';font-size:13px;font-weight:' . ($active ? '700' : '500') . ';padding:6px 0;">' . $i . '</td>';
+                $painImageHtml .= '<td width="20%" style="text-align:center;border:' . $borderWidth . ' solid ' . $borderColor . ';background:' . $bg . ';color:' . $color . ';font-size:14px;font-weight:' . ($active ? '700' : '500') . ';padding:8px 0;">' . $i . '</td>';
             }
             $painImageHtml .= '</tr>';
             
