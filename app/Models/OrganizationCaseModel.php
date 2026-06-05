@@ -44,7 +44,7 @@ class OrganizationCaseModel extends Model
             concat('OPD Charge: Dr. ',o.doc_name) AS Description,
             o.opd_code AS Code,o.opd_fee_amount AS Amount,'1' AS orgcode
             from opd_master o
-            join organization_case_master c on o.insurance_case_id = c.id
+            join organization_case_master c on (o.insurance_case_id = cast(c.id as char) or o.insurance_case_id = c.case_id_code)
             where o.opd_status in (1,2) and c.id=" . $caseId .
             " order by Adate";
         $showinvoice1 = $this->db->query($sql1)->getResult();

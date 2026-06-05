@@ -364,7 +364,7 @@ class CaseMaster extends BaseController
             (case c.status when 0 then 'Pending' when 1 then 'Ready for submission' when 2 then 'Submitted' when 3 then 'Payment Done' else 'Other' end) as str_status,
             Date_Format(c.date_registration,'%d-%m-%Y') as date_registration_in
             from (organization_case_master c join patient_master p  on c.p_id=p.id )
-            left join opd_master o   on c.id=o.insurance_case_id
+            left join opd_master o on (o.insurance_case_id = cast(c.id as char) or o.insurance_case_id = c.case_id_code)
             left join invoice_master i on c.id=i.insurance_case_id
             group by c.id ";
 
@@ -428,7 +428,7 @@ class CaseMaster extends BaseController
             concat('OPD Charge: Dr. ',o.doc_name) AS Description,
             o.opd_code AS Code,o.opd_fee_amount AS Amount,'1' AS orgcode
             from opd_master o
-            join organization_case_master c on o.insurance_case_id = c.id
+            join organization_case_master c on (o.insurance_case_id = cast(c.id as char) or o.insurance_case_id = c.case_id_code)
             where o.opd_status in (1,2) and c.id=" . $caseid .
             " order by Charge_type,Adate";
         $data['showinvoice1'] = $this->db->query($sql)->getResult();
@@ -536,7 +536,7 @@ class CaseMaster extends BaseController
             concat('OPD Charge: Dr. ',o.doc_name) AS Description,
             o.opd_code AS Code,o.opd_fee_amount AS Amount,'1' AS orgcode
             from opd_master o
-            join organization_case_master c on o.insurance_case_id = c.id
+            join organization_case_master c on (o.insurance_case_id = cast(c.id as char) or o.insurance_case_id = c.case_id_code)
             where o.opd_status in (1,2) and c.id=" . $caseid .
             " order by Charge_type,Adate";
         $data['showinvoice1'] = $this->db->query($sql)->getResult();
@@ -1010,7 +1010,7 @@ class CaseMaster extends BaseController
 
         $opd = $this->db->query('select c.id,c.case_id_code,c.p_id,sum(o.opd_fee_amount) as tamount,
             count(o.opd_id) as item_qty,Min(o.opd_fee_amount) as rate
-            from opd_master o join organization_case_master c on o.insurance_case_id=c.id
+            from opd_master o join organization_case_master c on (o.insurance_case_id = cast(c.id as char) or o.insurance_case_id = c.case_id_code)
             where opd_status in (1,2) and  id=' . $caseid . ' group by c.id')->getResult();
 
         $data['invoice_list_1'] = $this->db->query("select i.item_type,t.`desc` AS item_name,sum(i.item_amount) as tamount,sum(i.item_qty) as unit,i.item_rate
