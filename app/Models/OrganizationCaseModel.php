@@ -52,6 +52,7 @@ class OrganizationCaseModel extends Model
                     and (
                         o.insurance_case_id = cast(c.id as char)
                         or o.insurance_case_id = c.case_id_code
+                        or o.p_id = c.p_id
                     )
 
                 union all
@@ -75,6 +76,7 @@ class OrganizationCaseModel extends Model
                     and (
                         i.insurance_case_id = c.id
                         or i.insurance_case_id = c.case_id_code
+                        or i.attach_id = c.p_id
                     )
             ) v
             order by v.Charge_type, v.Adate
