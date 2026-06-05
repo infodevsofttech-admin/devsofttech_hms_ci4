@@ -835,17 +835,56 @@ class Ipd_discharge extends BaseController
         $hasUhidMarker = $patientCode !== '' && stripos($scanHead, $patientCode) !== false;
         $hasIpdMarker = $ipdCode !== '' && stripos($scanHead, $ipdCode) !== false;
         $hasDischargeHeading = stripos($scanHead, 'Discharge Summary') !== false;
+        $hasDemographicGrid = stripos($scanHead, 'UHID') !== false
+            && (stripos($scanHead, 'IPD No.') !== false || stripos($scanHead, 'IPD') !== false)
+            && (stripos($scanHead, 'Admission') !== false || stripos($scanHead, 'Discharge') !== false)
+            && stripos($scanHead, '<table') !== false;
 
-        if (! $hasDischargeHeading || (! $hasPatientMarker && ! $hasUhidMarker && ! $hasIpdMarker)) {
+        if ((! $hasDischargeHeading && ! $hasDemographicGrid) || (! $hasPatientMarker && ! $hasUhidMarker && ! $hasIpdMarker)) {
             return $content;
         }
 
         // Remove one legacy heading + first demographic summary table block if present at top.
         $pattern = '/^\s*(?:<h[1-6][^>]*>\s*discharge\s*summary\s*<\/h[1-6]>\s*)?'
-            . '(?:<table\b[^>]*>.*?<\/table>\s*){1,2}/is';
+            . '(?:(?:<hr\b[^>]*>\s*)?<table\b[^>]*>.*?<\/table>\s*){1,2}/is';
         $cleaned = preg_replace($pattern, '', $content, 1);
         if (is_string($cleaned) && trim($cleaned) !== '') {
             return trim($cleaned);
+        }
+
+        // Fallback for legacy plain-text/fragmented blocks: cut everything before first
+        // known clinical section heading when duplicate demographics are detected.
+        $sectionMarkers = [
+            'Final Diagnosis',
+            'Presenting Complaints',
+            'Pain Measurement Scale',
+            'General Examination on Admission',
+            'Clinical Investigation Reports',
+            'Course in the hospital',
+            'Examination on Discharge',
+            'Surgery',
+            'Procedure',
+            'Personal History',
+            'Drug Allergy / ADR',
+            'Co-Morbidities',
+            'Discharge Medications',
+            'Dietary Advice',
+            'Discharge Advice/Instructions/Summary',
+        ];
+
+        $firstSectionPos = null;
+        foreach ($sectionMarkers as $marker) {
+            $pos = stripos($content, $marker);
+            if ($pos !== false && ($firstSectionPos === null || $pos < $firstSectionPos)) {
+                $firstSectionPos = $pos;
+            }
+        }
+
+        if ($firstSectionPos !== null && $firstSectionPos > 120) {
+            $trimmed = trim((string) substr($content, $firstSectionPos));
+            if ($trimmed !== '') {
+                return $trimmed;
+            }
         }
 
         return $content;
@@ -5142,19 +5181,35 @@ class Ipd_discharge extends BaseController
 
         $withHeader = $printType !== 0;
         $renderedHtml = $this->sanitizeDischargePdfHtml((string) ($templatePack['rendered_html'] ?? $content));
+        $renderedHtml = $this->dedupeTopDemographicTables($renderedHtml);
         $templateName = (string) ($templatePack['selected_template_name'] ?? 'Discharge Template');
         $templateTokenVars = $this->buildDischargeTemplateTokenVars($panelData, $content);
         $templateTokenVars['TEMPLATE_NAME'] = esc($templateName);
 
+        $patient = $panelData['person_info'] ?? null;
+        $ipd = $panelData['ipd_info'] ?? null;
+        $patientName = trim((string) ($patient->p_fname ?? 'Patient'));
+        $ipdCode = trim((string) ($ipd->ipd_code ?? $ipdId));
+        $fileName = 'discharge_' . preg_replace('/[^A-Za-z0-9_-]+/', '_', $ipdCode !== '' ? $ipdCode : (string) $ipdId) . '.pdf';
+
         $this->createIpdDischargeWorkTask($ipdId, $panelData);
 
         try {
-            $patient = $panelData['person_info'] ?? null;
-            $ipd = $panelData['ipd_info'] ?? null;
+            $headerHtml = '';
+            if ($withHeader) {
+                $headerHtml = $this->sanitizeDischargePdfHtml(
+                    $this->applyDischargeTemplateTokens(trim((string) ($templateSettings['header_html'] ?? '')), $templateTokenVars),
+                    false
+                );
+            }
 
-            $patientName = trim((string) ($patient->p_fname ?? 'Patient'));
-            $ipdCode = trim((string) ($ipd->ipd_code ?? $ipdId));
-            $fileName = 'discharge_' . preg_replace('/[^A-Za-z0-9_-]+/', '_', $ipdCode !== '' ? $ipdCode : (string) $ipdId) . '.pdf';
+            $footerHtml = $this->sanitizeDischargePdfHtml(
+                $this->applyDischargeTemplateTokens(trim((string) ($templateSettings['footer_html'] ?? '')), $templateTokenVars),
+                false
+            );
+            if ($footerHtml === '') {
+                $footerHtml = '<div style="font-family:freeserif,serif;font-size:9pt;color:#6b7280;text-align:right;">Page {PAGENO}/{nbpg}</div>';
+            }
 
             $pdfHtml = $this->buildDischargePdfHtml($panelData, $renderedHtml, $withHeader, $templateName);
 
@@ -5169,6 +5224,8 @@ class Ipd_discharge extends BaseController
                 'margin_bottom' => max(0, ((float) ($templateSettings['page_margin_bottom_cm'] ?? 0.8)) * 10),
                 'margin_header' => max(0, ((float) ($templateSettings['margin_header_cm'] ?? 0.5)) * 10),
                 'margin_footer' => max(0, ((float) ($templateSettings['margin_footer_cm'] ?? 0.5)) * 10),
+                'autoTopMargin' => 'stretch',
+                'autoBottomMargin' => 'stretch',
                 'default_font' => 'freeserif',
                 'tempDir' => WRITEPATH . 'cache',
             ]);
@@ -5178,25 +5235,17 @@ class Ipd_discharge extends BaseController
             $mpdf->SetTitle('Discharge Summary - ' . ($patientName !== '' ? $patientName : ('IPD ' . $ipdId)));
             $mpdf->SetAuthor('Atria HMS');
 
-            if ($withHeader) {
-                $headerHtml = $this->sanitizeDischargePdfHtml(
-                    $this->applyDischargeTemplateTokens(trim((string) ($templateSettings['header_html'] ?? '')), $templateTokenVars)
-                );
-                if ($headerHtml !== '') {
-                    $mpdf->SetHTMLHeader($headerHtml);
-                }
+            if ($withHeader && $headerHtml !== '') {
+                $mpdf->SetHTMLHeader($headerHtml, 'O', true);
+                $mpdf->SetHTMLHeader($headerHtml, 'E', true);
             }
+            $mpdf->SetHTMLFooter($footerHtml, 'O', true);
+            $mpdf->SetHTMLFooter($footerHtml, 'E', true);
+            $pdfBinary = $this->runMpdfWithTolerantWarnings(static function () use ($mpdf, $pdfHtml, $fileName): string {
+                $mpdf->WriteHTML($pdfHtml);
 
-            $footerHtml = $this->sanitizeDischargePdfHtml(
-                $this->applyDischargeTemplateTokens(trim((string) ($templateSettings['footer_html'] ?? '')), $templateTokenVars)
-            );
-            if ($footerHtml === '') {
-                $footerHtml = '<div style="font-family:freeserif,serif;font-size:9pt;color:#6b7280;text-align:right;">Page {PAGENO}/{nbpg}</div>';
-            }
-            $mpdf->SetHTMLFooter($footerHtml);
-            $mpdf->WriteHTML($pdfHtml);
-
-            $pdfBinary = $mpdf->Output($fileName, Destination::STRING_RETURN);
+                return $mpdf->Output($fileName, Destination::STRING_RETURN);
+            });
             return $this->response
                 ->setHeader('Content-Type', 'application/pdf')
                 ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
@@ -5208,10 +5257,103 @@ class Ipd_discharge extends BaseController
             ]);
 
             if ($printType !== 0) {
-                return $this->response
-                    ->setStatusCode(500)
-                    ->setHeader('Content-Type', 'text/plain; charset=UTF-8')
-                    ->setBody('Unable to generate discharge PDF for this template. Please remove legacy @page html header/footer directives from template CSS/HTML and retry.');
+                try {
+                    $safeBodySource = trim($renderedHtml) !== '' ? $renderedHtml : (string) $content;
+                    $safeBody = $this->sanitizeDischargePdfHtml($safeBodySource);
+                    $safeBody = (string) preg_replace('/<style\b[^>]*>[\s\S]*?<\/style>/i', '', $safeBody);
+                    $safeBody = (string) preg_replace('/<script\b[^>]*>[\s\S]*?<\/script>/i', '', $safeBody);
+                    $safePdfHtml = $this->buildDischargePdfHtml($panelData, $safeBody, false, $templateName);
+
+                    $fallbackPdf = new Mpdf([
+                        'mode' => 'utf-8',
+                        'format' => 'A4',
+                        'margin_left' => 8,
+                        'margin_right' => 8,
+                        'margin_top' => 8,
+                        'margin_bottom' => 8,
+                        'margin_header' => 5,
+                        'margin_footer' => 5,
+                        'default_font' => 'freeserif',
+                        'tempDir' => WRITEPATH . 'cache',
+                    ]);
+                    $fallbackPdf->autoScriptToLang = true;
+                    $fallbackPdf->autoLangToFont = true;
+                    $fallbackPdf->SetTitle('Discharge Summary - ' . ($patientName !== '' ? $patientName : ('IPD ' . $ipdId)));
+                    $fallbackPdf->SetAuthor('Atria HMS');
+                    $fallbackPdf->SetHTMLFooter('<div style="font-family:freeserif,serif;font-size:9pt;color:#6b7280;text-align:right;">Page {PAGENO}/{nbpg}</div>');
+                    $pdfBinary = $this->runMpdfWithTolerantWarnings(static function () use ($fallbackPdf, $safePdfHtml, $fileName): string {
+                        $fallbackPdf->WriteHTML($safePdfHtml);
+
+                        return $fallbackPdf->Output($fileName, Destination::STRING_RETURN);
+                    });
+
+                    log_message('warning', 'Discharge PDF fallback render succeeded for IPD {ipd}', ['ipd' => $ipdId]);
+
+                    return $this->response
+                        ->setHeader('Content-Type', 'application/pdf')
+                        ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
+                        ->setBody($pdfBinary);
+                } catch (\Throwable $fallbackError) {
+                    log_message('error', 'Discharge PDF fallback failed for IPD {ipd}: {msg}', [
+                        'ipd' => $ipdId,
+                        'msg' => $fallbackError->getMessage(),
+                    ]);
+
+                    try {
+                        $plainSourceHtml = trim($renderedHtml) !== '' ? $renderedHtml : (string) $content;
+                        $plainSourceHtml = (string) preg_replace('/<style\b[^>]*>[\s\S]*?<\/style>/i', '', $plainSourceHtml);
+                        $plainSourceHtml = (string) preg_replace('/<script\b[^>]*>[\s\S]*?<\/script>/i', '', $plainSourceHtml);
+                        $plainSource = strip_tags($plainSourceHtml);
+                        $plainSource = $this->forceValidUtf8($plainSource);
+                        $plainSource = preg_replace('/\R{3,}/', "\n\n", (string) $plainSource) ?? '';
+
+                        $plainHtml = '<!doctype html><html><head><meta charset="utf-8"></head><body>'
+                            . '<h3 style="font-family:freeserif,serif;margin:0 0 8px 0;">Discharge Summary</h3>'
+                            . '<pre style="font-family:freeserif,serif;font-size:11pt;white-space:pre-wrap;line-height:1.4;">'
+                            . htmlspecialchars($plainSource, ENT_QUOTES, 'UTF-8')
+                            . '</pre></body></html>';
+
+                        $ultimatePdf = new Mpdf([
+                            'mode' => 'utf-8',
+                            'format' => 'A4',
+                            'margin_left' => 8,
+                            'margin_right' => 8,
+                            'margin_top' => 8,
+                            'margin_bottom' => 8,
+                            'margin_header' => 5,
+                            'margin_footer' => 5,
+                            'default_font' => 'freeserif',
+                            'tempDir' => WRITEPATH . 'cache',
+                        ]);
+                        $ultimatePdf->autoScriptToLang = true;
+                        $ultimatePdf->autoLangToFont = true;
+                        $ultimatePdf->SetTitle('Discharge Summary - ' . ($patientName !== '' ? $patientName : ('IPD ' . $ipdId)));
+                        $ultimatePdf->SetAuthor('Atria HMS');
+                        $ultimatePdf->SetHTMLFooter('<div style="font-family:freeserif,serif;font-size:9pt;color:#6b7280;text-align:right;">Page {PAGENO}/{nbpg}</div>');
+                        $pdfBinary = $this->runMpdfWithTolerantWarnings(static function () use ($ultimatePdf, $plainHtml, $fileName): string {
+                            $ultimatePdf->WriteHTML($plainHtml);
+
+                            return $ultimatePdf->Output($fileName, Destination::STRING_RETURN);
+                        });
+
+                        log_message('warning', 'Discharge PDF ultimate fallback render succeeded for IPD {ipd}', ['ipd' => $ipdId]);
+
+                        return $this->response
+                            ->setHeader('Content-Type', 'application/pdf')
+                            ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
+                            ->setBody($pdfBinary);
+                    } catch (\Throwable $ultimateError) {
+                        log_message('error', 'Discharge PDF ultimate fallback failed for IPD {ipd}: {msg}', [
+                            'ipd' => $ipdId,
+                            'msg' => $ultimateError->getMessage(),
+                        ]);
+
+                        return $this->response
+                            ->setStatusCode(500)
+                            ->setHeader('Content-Type', 'text/plain; charset=UTF-8')
+                            ->setBody('Unable to generate discharge PDF due to invalid template content. Please edit template CSS/HTML and retry.');
+                    }
+                }
             }
         }
 
@@ -5227,7 +5369,7 @@ class Ipd_discharge extends BaseController
         ]);
     }
 
-    private function sanitizeDischargePdfHtml(string $html): string
+    private function sanitizeDischargePdfHtml(string $html, bool $stripNamedHeaderFooterWrappers = true): string
     {
         if ($html === '') {
             return '';
@@ -5236,19 +5378,143 @@ class Ipd_discharge extends BaseController
         $out = str_replace("\0", '', $html);
         $out = (string) preg_replace('/^\xEF\xBB\xBF/u', '', $out);
 
-        // Remove legacy mPDF named header/footer wrappers if they are embedded in body/template HTML.
-        $out = (string) preg_replace('/<htmlpageheader\b[^>]*>[\s\S]*?<\/htmlpageheader>/i', '', $out);
-        $out = (string) preg_replace('/<htmlpagefooter\b[^>]*>[\s\S]*?<\/htmlpagefooter>/i', '', $out);
+        if ($stripNamedHeaderFooterWrappers) {
+            // For body/template HTML, strip legacy named header/footer wrapper blocks.
+            $out = (string) preg_replace('/<htmlpageheader\b[^>]*>[\s\S]*?<\/htmlpageheader>/i', '', $out);
+            $out = (string) preg_replace('/<htmlpagefooter\b[^>]*>[\s\S]*?<\/htmlpagefooter>/i', '', $out);
+        } else {
+            // For SetHTMLHeader/SetHTMLFooter payloads, keep inner content if wrapper tags were supplied.
+            $out = (string) preg_replace('/<htmlpageheader\b[^>]*>([\s\S]*?)<\/htmlpageheader>/i', '$1', $out);
+            $out = (string) preg_replace('/<htmlpagefooter\b[^>]*>([\s\S]*?)<\/htmlpagefooter>/i', '$1', $out);
+        }
 
         // Remove @page header/footer name bindings that require matching named header/footer blocks.
         $out = (string) preg_replace('/\bheader\s*:\s*html[_a-z0-9-]+\s*;?/i', '', $out);
         $out = (string) preg_replace('/\bfooter\s*:\s*html[_a-z0-9-]+\s*;?/i', '', $out);
 
+        return $this->forceValidUtf8($out);
+    }
+
+    private function forceValidUtf8(string $text): string
+    {
+        if ($text === '') {
+            return '';
+        }
+
+        $out = str_replace("\0", '', $text);
+
         if (function_exists('mb_check_encoding') && ! mb_check_encoding($out, 'UTF-8')) {
             $out = mb_convert_encoding($out, 'UTF-8', 'UTF-8, ISO-8859-1, Windows-1252');
         }
 
+        if (function_exists('iconv')) {
+            $converted = @iconv('UTF-8', 'UTF-8//IGNORE', $out);
+            if ($converted !== false) {
+                $out = $converted;
+            }
+        }
+
+        // Drop control characters that are invalid for HTML/PDF text streams.
+        $out = (string) preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $out);
+
         return $out;
+    }
+
+    private function dedupeTopDemographicTables(string $html): string
+    {
+        $html = trim($html);
+        if ($html === '') {
+            return $html;
+        }
+
+        $finalPos = stripos($html, 'Final Diagnosis');
+        if ($finalPos === false || $finalPos < 1) {
+            return $html;
+        }
+
+        $prefix = substr($html, 0, $finalPos);
+        if ($prefix === false) {
+            return $html;
+        }
+
+        if (! preg_match_all('/<table\b[^>]*>[\s\S]*?<\/table>/i', $prefix, $tableMatches, PREG_OFFSET_CAPTURE)) {
+            return $html;
+        }
+
+        $demographicTables = [];
+        foreach ($tableMatches[0] as $match) {
+            $tableHtml = (string) ($match[0] ?? '');
+            $tableOffset = (int) ($match[1] ?? -1);
+            if ($tableOffset < 0) {
+                continue;
+            }
+
+            if ($this->isDemographicTableFragment($tableHtml)) {
+                $demographicTables[] = [
+                    'offset' => $tableOffset,
+                    'length' => strlen($tableHtml),
+                ];
+            }
+        }
+
+        if (count($demographicTables) < 2) {
+            return $html;
+        }
+
+        $removeOffset = (int) ($demographicTables[0]['offset'] ?? -1);
+        $removeLength = (int) ($demographicTables[0]['length'] ?? 0);
+        if ($removeOffset < 0 || $removeLength <= 0) {
+            return $html;
+        }
+
+        $deduped = substr_replace($html, '', $removeOffset, $removeLength);
+
+        return is_string($deduped) && trim($deduped) !== '' ? $deduped : $html;
+    }
+
+    private function isDemographicTableFragment(string $tableHtml): bool
+    {
+        $plain = strtolower(strip_tags($tableHtml));
+        $hasCoreMarkers = str_contains($plain, 'uhid')
+            && (str_contains($plain, 'ipd no') || str_contains($plain, 'ipd'));
+        $hasDemographicMarkers = str_contains($plain, 'age')
+            || str_contains($plain, 'guardian')
+            || str_contains($plain, 'admission')
+            || str_contains($plain, 'discharge');
+
+        return $hasCoreMarkers && $hasDemographicMarkers;
+    }
+
+    /**
+     * mPDF can emit PHP warnings/notices for malformed legacy HTML/CSS while still producing valid output.
+     * In CI4 development mode those warnings become exceptions, so we suppress known non-fatal mPDF warnings.
+     */
+    private function runMpdfWithTolerantWarnings(callable $callback): string
+    {
+        set_error_handler(static function (int $severity, string $message, string $file = '', int $line = 0): bool {
+            $normalizedFile = str_replace('\\', '/', strtolower($file));
+            $normalizedMessage = strtolower($message);
+
+            if (str_contains($normalizedFile, '/vendor/mpdf/') && str_contains($normalizedMessage, 'undefined array key')) {
+                log_message('warning', 'Suppressed non-fatal mPDF warning at {file}:{line} => {msg}', [
+                    'file' => $file,
+                    'line' => $line,
+                    'msg' => $message,
+                ]);
+
+                return true;
+            }
+
+            return false;
+        });
+
+        try {
+            $result = $callback();
+
+            return is_string($result) ? $result : '';
+        } finally {
+            restore_error_handler();
+        }
     }
 
     private function createIpdDischargeWorkTask(int $ipdId, array $panelData): void
