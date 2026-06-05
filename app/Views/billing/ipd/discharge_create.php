@@ -1930,6 +1930,95 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                     });
                 });
             }
+
+            // Attach event handlers to editable complaint fields (name and remark)
+            attachComplaintFieldHandlers(section, form);
+        }
+
+        function attachComplaintFieldHandlers(section, form) {
+            if (!section || !form) {
+                return;
+            }
+
+            function saveComplaintField(input, fieldType) {
+                var complaintId = input.getAttribute('data-complaint-id');
+                var newValue = input.value.trim();
+                var originalValue = input.getAttribute('data-original-value');
+
+                if (newValue === originalValue) {
+                    return;
+                }
+
+                var csrfPair = getCsrfPair(form);
+                var formData = new FormData();
+                formData.append(csrfPair.name, csrfPair.value);
+                formData.append('complaint_id', complaintId);
+                formData.append('field_type', fieldType);
+                formData.append('field_value', newValue);
+
+                fetch('<?= site_url('Ipd_discharge/update_complaint_field') ?>', {
+                    method: 'POST',
+                    body: formData
+                }).then(function(response) {
+                    return response.json();
+                }).then(function(data) {
+                    if (data.success) {
+                        input.setAttribute('data-original-value', newValue);
+                        input.style.borderColor = '#28a745';
+                        setTimeout(function() {
+                            input.style.borderColor = '';
+                        }, 1000);
+                    } else {
+                        console.error('Failed to save complaint field:', data.error || 'Unknown error');
+                        input.style.borderColor = '#dc3545';
+                        setTimeout(function() {
+                            input.style.borderColor = '';
+                        }, 2000);
+                    }
+                }).catch(function(err) {
+                    console.error('Error saving complaint field:', err);
+                    input.style.borderColor = '#dc3545';
+                    setTimeout(function() {
+                        input.style.borderColor = '';
+                    }, 2000);
+                });
+            }
+
+            // Complaint Name input handlers
+            section.querySelectorAll('.discharge-complaint-name-input').forEach(function(input) {
+                // Remove any existing handlers by cloning the element
+                var newInput = input.cloneNode(true);
+                input.parentNode.replaceChild(newInput, input);
+
+                newInput.addEventListener('blur', function() {
+                    saveComplaintField(this, 'name');
+                });
+
+                newInput.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        this.blur();
+                    }
+                });
+            });
+
+            // Complaint Remark input handlers
+            section.querySelectorAll('.discharge-complaint-remark-input').forEach(function(input) {
+                // Remove any existing handlers by cloning the element
+                var newInput = input.cloneNode(true);
+                input.parentNode.replaceChild(newInput, input);
+
+                newInput.addEventListener('blur', function() {
+                    saveComplaintField(this, 'remark');
+                });
+
+                newInput.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        this.blur();
+                    }
+                });
+            });
         }
 
         function setSectionStatus(id, text, level) {
@@ -3894,86 +3983,6 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
             }
         }, { passive: true, capture: true });
         syncNavOnScroll();
-
-        // ═══════════════════════════════════════════════════════════════════
-        // Editable Complaint Name and Remark Fields
-        // ═══════════════════════════════════════════════════════════════════
-        function saveComplaintField(input, fieldType) {
-            var complaintId = input.getAttribute('data-complaint-id');
-            var newValue = input.value.trim();
-            var originalValue = input.getAttribute('data-original-value');
-
-            if (newValue === originalValue) {
-                return;
-            }
-
-            var form = document.getElementById('discharge_main_form');
-            if (!form) {
-                return;
-            }
-
-            var csrfPair = getCsrfPair(form);
-            var formData = new FormData();
-            formData.append(csrfPair.name, csrfPair.value);
-            formData.append('complaint_id', complaintId);
-            formData.append('field_type', fieldType);
-            formData.append('field_value', newValue);
-
-            fetch('<?= site_url('Ipd_discharge/update_complaint_field') ?>', {
-                method: 'POST',
-                body: formData
-            }).then(function(response) {
-                return response.json();
-            }).then(function(data) {
-                if (data.success) {
-                    input.setAttribute('data-original-value', newValue);
-                    input.style.borderColor = '#28a745';
-                    setTimeout(function() {
-                        input.style.borderColor = '';
-                    }, 1000);
-                } else {
-                    console.error('Failed to save complaint field:', data.error || 'Unknown error');
-                    input.style.borderColor = '#dc3545';
-                    setTimeout(function() {
-                        input.style.borderColor = '';
-                    }, 2000);
-                }
-            }).catch(function(err) {
-                console.error('Error saving complaint field:', err);
-                input.style.borderColor = '#dc3545';
-                setTimeout(function() {
-                    input.style.borderColor = '';
-                }, 2000);
-            });
-        }
-
-        // Complaint Name input handlers
-        document.querySelectorAll('.discharge-complaint-name-input').forEach(function(input) {
-            input.addEventListener('blur', function() {
-                saveComplaintField(this, 'name');
-            });
-
-            input.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    this.blur();
-                }
-            });
-        });
-
-        // Complaint Remark input handlers
-        document.querySelectorAll('.discharge-complaint-remark-input').forEach(function(input) {
-            input.addEventListener('blur', function() {
-                saveComplaintField(this, 'remark');
-            });
-
-            input.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    this.blur();
-                }
-            });
-        });
 
     })();
     </script>

@@ -2828,7 +2828,7 @@ class Ipd_discharge extends BaseController
             return $this->response->setJSON(['success' => false, 'error' => 'Invalid parameters']);
         }
 
-        $table = 'ipd_discharge_comp';
+        $table = 'ipd_discharge_complaint';
         if (! $this->db->tableExists($table)) {
             return $this->response->setJSON(['success' => false, 'error' => 'Complaint table not found']);
         }
