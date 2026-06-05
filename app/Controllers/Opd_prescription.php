@@ -575,7 +575,7 @@ class Opd_prescription extends BaseController
             'adr_history' => (string) ($payload['adr_history'] ?? ''),
             'current_medications' => (string) ($payload['current_medications'] ?? ''),
         ];
-        $this->mapNabhFieldsToExistingColumns($payload, $fields, $nabhInput);
+        $unmappedNabh = $this->mapNabhFieldsToExistingColumns($payload, $fields, $nabhInput);
 
         $patientHistoryInput = [
             'obstetric_history' => (string) ($payload['obstetric_history'] ?? ''),
@@ -590,6 +590,13 @@ class Opd_prescription extends BaseController
         // Keep prescription remarks user-controlled; do not auto-inject structured NABH lines.
         $payload['Prescriber_Remarks'] = $this->stripNabhFieldsFromRemarks((string) ($payload['Prescriber_Remarks'] ?? ''));
         $payload['Prescriber_Remarks'] = $this->stripPatientHistoryFieldsFromRemarks((string) ($payload['Prescriber_Remarks'] ?? ''));
+
+        if ($this->hasAnyNabhField($unmappedNabh)) {
+            $payload['Prescriber_Remarks'] = $this->upsertNabhFieldsIntoRemarks(
+                (string) ($payload['Prescriber_Remarks'] ?? ''),
+                $unmappedNabh
+            );
+        }
 
         if ($this->hasAnyPatientHistoryField($unmappedPatientHistory)) {
             $payload['Prescriber_Remarks'] = $this->upsertPatientHistoryFieldsIntoRemarks(
@@ -9154,6 +9161,20 @@ class Opd_prescription extends BaseController
         }
 
         return implode("\n", $lines);
+    }
+
+    /**
+     * @param array<string, string> $input
+     */
+    private function hasAnyNabhField(array $input): bool
+    {
+        foreach ($input as $value) {
+            if (trim((string) $value) !== '') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
