@@ -147,6 +147,9 @@ class Opd extends BaseController
             'drug_allergy_block',         // Formatted: Drug Allergy : status — details
             'adr_history_block',          // Formatted: ADR History : ...
             'current_medications_block',  // Formatted: Current Medications : ...
+            'nabh_panel_block',           // Formatted: single combined panel (status/details/ADR/current meds)
+            'allergy_adr_panel_block',    // Alias of nabh_panel_block
+            'drug_allergy_panel_block',   // Alias of nabh_panel_block
             // Women related
             'women_lmp', 'women_last_baby', 'women_pregnancy_related', 'women_related_problems',
             'women_block',   // Formatted: Women Related : LMP | Last Baby | ...
@@ -3893,6 +3896,23 @@ class Opd extends BaseController
         $tokens['drug_allergy_block'] = $allergyBlock !== '' ? $formatBlock('Drug Allergy', $allergyBlock) : '';
         $tokens['adr_history_block'] = $adrHistory !== '' ? $formatBlock('ADR History', esc($adrHistory)) : '';
         $tokens['current_medications_block'] = $currentMeds !== '' ? $formatBlock('Current Medications', esc($currentMeds)) : '';
+        $nabhPanelParts = [];
+        if ($allergyStatus !== '') {
+            $nabhPanelParts[] = '<strong>Drug Allergy Status:</strong> ' . esc($allergyStatus);
+        }
+        if ($allergyDetails !== '') {
+            $nabhPanelParts[] = '<strong>Drug Allergy Details:</strong> ' . esc($allergyDetails);
+        }
+        if ($adrHistory !== '') {
+            $nabhPanelParts[] = '<strong>ADR History:</strong> ' . esc($adrHistory);
+        }
+        if ($currentMeds !== '') {
+            $nabhPanelParts[] = '<strong>Current Medications:</strong> ' . esc($currentMeds);
+        }
+        $nabhPanelHtml = implode('<br/>', $nabhPanelParts);
+        $tokens['nabh_panel_block'] = $nabhPanelHtml !== '' ? $formatBlock('Drug Allergy / ADR Panel', $nabhPanelHtml, true) : '';
+        $tokens['allergy_adr_panel_block'] = $tokens['nabh_panel_block'];
+        $tokens['drug_allergy_panel_block'] = $tokens['nabh_panel_block'];
         // Keep both raw and formatted allergy placeholders for template compatibility.
         $tokens['allergic_history_raw'] = $allergicHistoryRaw;
         $tokens['allergic_history'] = $allergicHistoryRaw;
