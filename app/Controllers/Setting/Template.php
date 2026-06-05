@@ -2976,14 +2976,51 @@ HTML;
 
         $id = (int) $id;
         $ok = false;
+        $message = 'Unable to delete template.';
         if ($id > 0 && $this->db->tableExists('ipd_discharge_templates')) {
-            $ok = (bool) $this->db->table('ipd_discharge_templates')->where('id', $id)->delete();
+            $row = $this->db->table('ipd_discharge_templates')
+                ->where('id', $id)
+                ->get(1)
+                ->getRowArray() ?? [];
+
+            if (! empty($row)) {
+                $ok = (bool) $this->db->table('ipd_discharge_templates')->where('id', $id)->delete();
+
+                if (! $ok) {
+                    // Some legacy/live schemas may reject delete via engine constraints; archive instead.
+                    $ok = (bool) $this->db->table('ipd_discharge_templates')
+                        ->where('id', $id)
+                        ->update(['status' => 0, 'is_default' => 0]);
+                    if ($ok) {
+                        $message = 'Template archived.';
+                    }
+                }
+
+                if ($ok && (int) ($row['is_default'] ?? 0) === 1) {
+                    $nextDefault = $this->db->table('ipd_discharge_templates')
+                        ->select('id')
+                        ->where('status', 1)
+                        ->orderBy('id', 'ASC')
+                        ->get(1)
+                        ->getRowArray();
+
+                    if (! empty($nextDefault['id'])) {
+                        $this->db->table('ipd_discharge_templates')
+                            ->where('id', (int) $nextDefault['id'])
+                            ->update(['is_default' => 1]);
+                    }
+                }
+
+                if ($ok && $message === 'Unable to delete template.') {
+                    $message = 'Template deleted.';
+                }
+            }
         }
 
         if ($this->request->isAJAX()) {
             return $this->response->setJSON([
                 'update' => $ok ? 1 : 0,
-                'error_text' => $ok ? 'Template deleted.' : 'Unable to delete template.',
+                'error_text' => $message,
                 'csrfName' => csrf_token(),
                 'csrfHash' => csrf_hash(),
             ]);

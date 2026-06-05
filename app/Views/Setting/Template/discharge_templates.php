@@ -564,6 +564,8 @@ $status = (int) ($edit['status'] ?? 1);
             }
 
             fetch('<?= base_url('setting/template/discharge_templates/delete') ?>/' + id, {
+                method: 'POST',
+                body: new FormData(form),
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest'
                 }

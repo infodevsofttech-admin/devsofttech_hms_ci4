@@ -864,7 +864,7 @@ $routes->get('Lab_Admin/pathology_bridge_debug', 'Setting\Template::pathologyBri
 
 $routes->match(['get', 'post'], 'setting/template/discharge_templates', 'Setting\Template::discharge_templates');
 $routes->get('setting/template/discharge_template_get/(:num)', 'Setting\Template::discharge_template_get/$1');
-$routes->get('setting/template/discharge_templates/delete/(:num)', 'Setting\Template::discharge_template_delete/$1');
+$routes->match(['get', 'post'], 'setting/template/discharge_templates/delete/(:num)', 'Setting\Template::discharge_template_delete/$1');
 $routes->match(['get', 'post'], 'setting/template/ipd_document_templates', 'Setting\Template::ipd_document_templates');
 $routes->get('setting/template/ipd_document_templates/delete/(:num)', 'Setting\Template::ipd_document_template_delete/$1');
 $routes->match(['get', 'post'], 'setting/template/diagnosis_print_settings', 'Setting\Template::diagnosis_print_settings');
