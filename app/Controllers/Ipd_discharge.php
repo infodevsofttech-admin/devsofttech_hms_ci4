@@ -925,6 +925,128 @@ class Ipd_discharge extends BaseController
         $sections[] = $html;
     }
 
+    private function getDischargeDepartmentName(?object $ipd): string
+    {
+        $deptId = (int) ($ipd->dept_id ?? 0);
+        if ($deptId > 0 && $this->tableHasColumns('hc_department', ['id', 'vName'])) {
+            $row = $this->db->table('hc_department')
+                ->select('vName')
+                ->where('id', $deptId)
+                ->get(1)
+                ->getRowArray();
+            $name = trim((string) ($row['vName'] ?? ''));
+            if ($name !== '') {
+                return $name;
+            }
+        }
+
+        return '';
+    }
+
+    private function buildAutoDischargeSummaryTable(array $panelData): string
+    {
+        $ipd = $panelData['ipd_info'] ?? null;
+        $person = $panelData['person_info'] ?? null;
+        if (! $ipd || ! $person) {
+            return '';
+        }
+
+        $age = get_age_1($person->dob ?? null, $person->age ?? '', $person->age_in_month ?? '', $person->estimate_dob ?? '');
+        $patientName = trim((string) ($person->p_fname ?? ''));
+        $patientCode = trim((string) ($person->uhid ?? $person->UHID ?? $person->patient_code ?? $person->p_code ?? $person->reg_no ?? ''));
+        $guardian = trim((string) ($ipd->contact_person_Name ?? $person->p_rname ?? ''));
+        $phone = trim((string) ($person->mphone1 ?? $ipd->P_mobile1 ?? $ipd->P_mobile2 ?? ''));
+        $address = trim((string) ($person->address_1 ?? $person->address ?? $person->p_address ?? ''));
+        $orgName = trim((string) ($ipd->ins_short_name ?? $ipd->ins_company_name ?? ''));
+        if ($orgName === '') {
+            $orgName = 'Direct';
+        }
+        $department = $this->getDischargeDepartmentName($ipd);
+
+        return '<h2 style="text-align:center;margin:1px;padding:0px;">Discharge Summary</h2>'
+            . '<hr style="margin:1px;padding:0px;" />'
+            . '<table width="100%" cellpadding="0" cellspacing="0">'
+            . '<tr><td width="150px"><b>Name</b></td><td width="250px">' . esc($patientName) . '</td><td width="150px"><b>UHID</b></td><td width="250px">' . esc($patientCode) . '</td></tr>'
+            . '<tr><td width="150px"><b>Age & Gender</b></td><td width="250px">' . esc(trim($age . ' / ' . ((string) ($person->xgender ?? '')))) . '</td><td width="150px"><b>IPD No.</b></td><td width="250px">' . esc((string) ($ipd->ipd_code ?? '')) . '</td></tr>'
+            . '<tr><td width="150px"><b>Guardian</b></td><td width="250px">' . esc($guardian) . '</td><td width="150px"><b>Admission</b></td><td width="250px">' . esc((string) ($ipd->str_register_date ?? '')) . '</td></tr>'
+            . '<tr><td width="150px"><b>Phone No.</b></td><td width="250px">' . esc($phone) . '</td><td width="150px"><b>Discharge</b></td><td width="250px">' . esc((string) ($ipd->str_discharge_date ?? '')) . '</td></tr>'
+            . '<tr><td width="150px"><b>Address</b></td><td width="250px">' . esc($address) . '</td><td width="150px"><b>Org. Name</b></td><td width="250px">' . esc($orgName) . '</td></tr>'
+            . '<tr><td width="150px"><b>Department</b></td><td width="250px">' . esc($department) . '</td><td width="150px"></td><td width="250px"></td></tr>'
+            . '</table>'
+            . '<hr style="margin:1px;padding:0px;" />';
+    }
+
+    private function buildNarrativeSection(string $title, array $rows, string $remark = ''): string
+    {
+        $lines = [];
+        foreach ($rows as $row) {
+            $report = trim((string) ($row['comp_report'] ?? ''));
+            $rowRemark = trim((string) ($row['comp_remark'] ?? ''));
+            if ($report === '' && $rowRemark === '') {
+                continue;
+            }
+
+            if ($report !== '' && $rowRemark !== '') {
+                $lines[] = esc($report) . ' <i>' . esc($rowRemark) . '</i>';
+            } elseif ($report !== '') {
+                $lines[] = esc($report);
+            } else {
+                $lines[] = esc($rowRemark);
+            }
+        }
+
+        $remark = trim($remark);
+        if ($remark !== '') {
+            $lines[] = nl2br(esc($remark));
+        }
+
+        if ($lines === []) {
+            return '';
+        }
+
+        return '<p><b>' . esc($title) . '</b> :<br /> ' . implode('<br /> ', $lines) . '</p>';
+    }
+
+    private function buildInlineExamSummary(array $rows): string
+    {
+        $parts = [];
+        foreach ($rows as $row) {
+            $label = trim((string) ($row['label'] ?? ''));
+            $value = trim((string) ($row['value'] ?? ''));
+            $unit = trim((string) ($row['unit'] ?? ''));
+            if ($label === '' || $value === '') {
+                continue;
+            }
+
+            $parts[] = esc($label) . ' :<i>' . esc($value . ($unit !== '' ? $unit : '')) . '</i>';
+        }
+
+        return implode('&nbsp;&nbsp;&nbsp;', $parts);
+    }
+
+    private function buildNamedDateSection(string $title, array $rows, string $nameField, string $dateField, string $dateLabel): string
+    {
+        $lines = [];
+        foreach ($rows as $row) {
+            $name = trim((string) ($row[$nameField] ?? ''));
+            if ($name === '') {
+                continue;
+            }
+            $dateText = trim((string) ($row[$dateField] ?? ''));
+            $line = esc($name);
+            if ($dateText !== '') {
+                $line .= '&nbsp;&nbsp;&nbsp; / <b>' . esc($dateLabel) . ' :</b> ' . esc($dateText);
+            }
+            $lines[] = $line;
+        }
+
+        if ($lines === []) {
+            return '';
+        }
+
+        return '<p><b>' . esc($title) . ' : </b><br/>' . implode('<br/>', $lines) . '</p>';
+    }
+
     private function buildAutoDischargeContent(int $ipdId, array $panelData): string
     {
         $ipd = $panelData['ipd_info'] ?? null;
@@ -956,13 +1078,17 @@ class Ipd_discharge extends BaseController
         }
 
         $sections = [];
+        $summaryTable = $this->buildAutoDischargeSummaryTable($panelData);
+        if ($summaryTable !== '') {
+            $sections[] = $summaryTable;
+        }
 
         $complaints = $this->byIpdRows('ipd_discharge_complaint', ['comp_report', 'comp_remark'], 'id ASC', $ipdId);
-        $this->addListSection($sections, 'Presenting Complaints and Reason for Admission', $complaints);
         $complaintRemark = $this->firstRowByIpd('ipd_discharge_complaint_remark', $ipdId);
         $complaintRemarkText = $this->normalizeRichText((string) ($complaintRemark['comp_remark'] ?? ''));
-        if ($complaintRemarkText !== '') {
-            $sections[] = '<div>' . nl2br(esc($complaintRemarkText)) . '</div>';
+        $complaintBlock = $this->buildNarrativeSection('Presenting Complaints and Reason for Admission', $complaints, $complaintRemarkText);
+        if ($complaintBlock !== '') {
+            $sections[] = $complaintBlock;
         }
 
         $complaintMeta = $this->parseComplaintMetaPayload((string) ($complaintRemark['comp_report'] ?? ''));
@@ -990,41 +1116,10 @@ class Ipd_discharge extends BaseController
         }
 
         if (! empty($generalRows)) {
-            $html = '<h4 style="margin:16px 0 8px 0;">General Examination on Admission</h4>'
-                . '<table style="width:100%;border-collapse:collapse;margin-bottom:10px;" border="1" cellpadding="6">';
-
-            $col = 0;
-            $perRow = 4;
-            foreach ($generalRows as $row) {
-                if ($col % $perRow === 0) {
-                    $html .= '<tr>';
-                }
-
-                $label = (string) ($row['label'] ?? '');
-                $value = trim((string) ($row['value'] ?? ''));
-                $unit = trim((string) ($row['unit'] ?? ''));
-                $html .= '<td><b>' . esc($label) . ':</b> ' . esc($value);
-                if ($unit !== '') {
-                    $html .= ' ' . esc($unit);
-                }
-                $html .= '</td>';
-
-                if ($col % $perRow === $perRow - 1) {
-                    $html .= '</tr>';
-                }
-                $col++;
+            $generalSummary = $this->buildInlineExamSummary($generalRows);
+            if ($generalSummary !== '') {
+                $sections[] = '<p><b>General Examination on Admission : </b><br/>' . $generalSummary . '</p>';
             }
-
-            while ($col % $perRow !== 0) {
-                $html .= '<td>&nbsp;</td>';
-                if ($col % $perRow === $perRow - 1) {
-                    $html .= '</tr>';
-                }
-                $col++;
-            }
-
-            $html .= '</table>';
-            $sections[] = $html;
         }
 
         $sysRows = $physicalExamRows['systemic'] ?? [];
@@ -1202,11 +1297,11 @@ class Ipd_discharge extends BaseController
         }
 
         $diagnosis = $this->byIpdRows('ipd_discharge_diagnosis', ['comp_report', 'comp_remark'], 'id ASC', $ipdId);
-        $this->addListSection($sections, 'Final Diagnosis', $diagnosis);
         $diagnosisRemark = $this->firstRowByIpd('ipd_discharge_diagnosis_remark', $ipdId);
         $diagnosisRemarkText = $this->normalizeRichText((string) ($diagnosisRemark['comp_remark'] ?? ''));
-        if ($diagnosisRemarkText !== '') {
-            $sections[] = '<div>' . nl2br(esc($diagnosisRemarkText)) . '</div>';
+        $diagnosisBlock = $this->buildNarrativeSection('Final Diagnosis', $diagnosis, $diagnosisRemarkText);
+        if ($diagnosisBlock !== '') {
+            $sections[] = $diagnosisBlock;
         }
 
         $inhosRow = $this->firstRowByIpd('ipd_discharge_investigtions_inhos', $ipdId);
@@ -1218,11 +1313,11 @@ class Ipd_discharge extends BaseController
         }
 
         $course = $this->byIpdRows('ipd_discharge_course', ['comp_report', 'comp_remark'], 'id ASC', $ipdId);
-        $this->addListSection($sections, 'Course in the Hospital', $course);
         $courseRemark = $this->firstRowByIpd('ipd_discharge_course_remark', $ipdId);
         $courseRemarkText = $this->normalizeRichText((string) ($courseRemark['comp_remark'] ?? ''));
-        if ($courseRemarkText !== '') {
-            $sections[] = '<div>' . nl2br(esc($courseRemarkText)) . '</div>';
+        $courseBlock = $this->buildNarrativeSection('Course in the hospital', $course, $courseRemarkText);
+        if ($courseBlock !== '') {
+            $sections[] = $courseBlock;
         }
 
         $nursingTrendSection = $this->buildNursingTrendSection($ipdId);
@@ -1241,79 +1336,22 @@ class Ipd_discharge extends BaseController
         }
 
         if (! empty($dischargeExamRows)) {
-            $html = '<h4 style="margin:16px 0 8px 0;">Examination on Discharge</h4>'
-                . '<table style="width:100%;border-collapse:collapse;margin-bottom:10px;" border="1" cellpadding="6">';
-
-            $col = 0;
-            $perRow = 4;
-            foreach ($dischargeExamRows as $row) {
-                if ($col % $perRow === 0) {
-                    $html .= '<tr>';
-                }
-
-                $label = (string) ($row['label'] ?? '');
-                $value = trim((string) ($row['value'] ?? ''));
-                $unit = trim((string) ($row['unit'] ?? ''));
-                $html .= '<td><b>' . esc($label) . ':</b> ' . esc($value);
-                if ($unit !== '') {
-                    $html .= ' ' . esc($unit);
-                }
-                $html .= '</td>';
-
-                if ($col % $perRow === $perRow - 1) {
-                    $html .= '</tr>';
-                }
-                $col++;
+            $dischargeSummary = $this->buildInlineExamSummary($dischargeExamRows);
+            if ($dischargeSummary !== '') {
+                $sections[] = '<p><b>Examination on Discharge : </b>' . $dischargeSummary . '</p>';
             }
-
-            while ($col % $perRow !== 0) {
-                $html .= '<td>&nbsp;</td>';
-                if ($col % $perRow === $perRow - 1) {
-                    $html .= '</tr>';
-                }
-                $col++;
-            }
-
-            $html .= '</table>';
-            $sections[] = $html;
         }
 
         $surgeryRows = $this->byIpdRows('ipd_discharge_surgery', ['surgery_name', 'surgery_date'], 'id ASC', $ipdId);
-        if (! empty($surgeryRows)) {
-            $html = '<h4 style="margin:16px 0 8px 0;">Surgery</h4><ul style="margin:0 0 10px 20px;">';
-            foreach ($surgeryRows as $row) {
-                $name = trim((string) ($row['surgery_name'] ?? ''));
-                if ($name === '') {
-                    continue;
-                }
-                $dateText = $this->safeDate((string) ($row['surgery_date'] ?? ''));
-                $html .= '<li>' . esc($name);
-                if ($dateText !== '') {
-                    $html .= ' <span style="color:#475569;">(' . esc($dateText) . ')</span>';
-                }
-                $html .= '</li>';
-            }
-            $html .= '</ul>';
-            $sections[] = $html;
+        $surgeryBlock = $this->buildNamedDateSection('Surgery', $surgeryRows, 'surgery_name', 'surgery_date', 'Date of Surgery');
+        if ($surgeryBlock !== '') {
+            $sections[] = $surgeryBlock;
         }
 
         $procedureRows = $this->byIpdRows('ipd_discharge_procedure', ['procedure_name', 'procedure_date'], 'id ASC', $ipdId);
-        if (! empty($procedureRows)) {
-            $html = '<h4 style="margin:16px 0 8px 0;">Procedure</h4><ul style="margin:0 0 10px 20px;">';
-            foreach ($procedureRows as $row) {
-                $name = trim((string) ($row['procedure_name'] ?? ''));
-                if ($name === '') {
-                    continue;
-                }
-                $dateText = $this->safeDate((string) ($row['procedure_date'] ?? ''));
-                $html .= '<li>' . esc($name);
-                if ($dateText !== '') {
-                    $html .= ' <span style="color:#475569;">(' . esc($dateText) . ')</span>';
-                }
-                $html .= '</li>';
-            }
-            $html .= '</ul>';
-            $sections[] = $html;
+        $procedureBlock = $this->buildNamedDateSection('Procedure', $procedureRows, 'procedure_name', 'procedure_date', 'Date of Procedure');
+        if ($procedureBlock !== '') {
+            $sections[] = $procedureBlock;
         }
 
         $drugRows = $this->byIpdRows('ipd_discharge_drug', ['drug_name', 'drug_dose', 'drug_day'], 'id ASC', $ipdId);
@@ -1433,7 +1471,15 @@ class Ipd_discharge extends BaseController
 
             $reviewAfter = trim((string) ($first['review_after'] ?? ''));
             if ($reviewAfter !== '') {
-                $html .= '<div style="margin-top:6px;">Review after ' . esc($reviewAfter) . ' days / as and when required.</div>';
+                $reviewDate = '';
+                $dischargeDateRaw = trim((string) ($ipd->discharge_date ?? ''));
+                if ($dischargeDateRaw !== '' && is_numeric($reviewAfter)) {
+                    $reviewTs = strtotime($dischargeDateRaw . ' +' . (int) $reviewAfter . ' days');
+                    if ($reviewTs !== false) {
+                        $reviewDate = ' (' . date('d-m-Y', $reviewTs) . ')';
+                    }
+                }
+                $html .= '<div style="margin-top:6px;">Review after ' . esc($reviewAfter) . ' Days' . esc($reviewDate) . ' days / as and when required</div>';
             }
 
             $footerText = trim((string) ($first['footer_text'] ?? ''));
@@ -1444,12 +1490,20 @@ class Ipd_discharge extends BaseController
             $sections[] = $html;
         }
 
-        $sections[] = '<table style="width:100%;border-collapse:collapse;margin-top:24px;" border="1" cellpadding="10">'
+        $sections[] = '<table border="0" cellpadding="1" cellspacing="1" style="width:100%">'
+            . '<tbody>'
+            . '<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>'
             . '<tr>'
-            . '<td style="width:33%;vertical-align:bottom;">____________________<br>Signature of Consultant</td>'
-            . '<td style="width:33%;vertical-align:bottom;">____________________<br>Signature of Medical Officer</td>'
-            . '<td style="width:34%;vertical-align:bottom;">____________________<br>Signature of Receiver / Date</td>'
+            . '<td style="text-align:left; vertical-align:middle">_________________________</td>'
+            . '<td>_________________________</td>'
+            . '<td style="text-align:right; vertical-align:middle">_________________________</td>'
             . '</tr>'
+            . '<tr>'
+            . '<td style="text-align:center; vertical-align:middle">Signature of Consultant</td>'
+            . '<td style="text-align:center; vertical-align:middle">Signature of Medical Officer</td>'
+            . '<td style="text-align:center; vertical-align:middle">Signature of Receiver / Date</td>'
+            . '</tr>'
+            . '</tbody>'
             . '</table>';
 
         return trim(implode("\n", $sections));
@@ -4760,13 +4814,9 @@ class Ipd_discharge extends BaseController
 
             if ($withHeader) {
                 $headerHtml = $this->applyDischargeTemplateTokens(trim((string) ($templateSettings['header_html'] ?? '')), $templateTokenVars);
-                if ($headerHtml === '') {
-                    $headerHtml = '<div style="font-family:freeserif,serif;font-size:11pt;border-bottom:1px solid #d1d5db;padding-bottom:6px;">'
-                        . '<div style="font-size:14pt;font-weight:700;">Discharge Summary</div>'
-                        . '<div style="font-size:9pt;color:#374151;">IPD: ' . esc($ipdCode) . ' | Template: ' . esc($templateName) . '</div>'
-                        . '</div>';
+                if ($headerHtml !== '') {
+                    $mpdf->SetHTMLHeader($headerHtml);
                 }
-                $mpdf->SetHTMLHeader($headerHtml);
             }
 
             $footerHtml = $this->applyDischargeTemplateTokens(trim((string) ($templateSettings['footer_html'] ?? '')), $templateTokenVars);
