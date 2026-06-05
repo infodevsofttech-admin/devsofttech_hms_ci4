@@ -4825,13 +4825,18 @@
             // # column
             $tr.append($('<td class="text-center text-muted" style="font-size:.75rem">').text(idx + 1));
 
-            // Complaint name — SNOMED = blue, local = default
-            var $nameTd = $('<td style="max-width:220px">');
-            var nameStyle = isSnomed ? 'color:#0d6efd;font-weight:600;max-width:210px' : 'max-width:210px';
-            var $nameDiv = $('<div class="text-truncate" style="' + nameStyle + ';">').text(item.term);
-            if (item.concept_id) { $nameDiv.attr('title', 'SNOMED: ' + item.concept_id); }
-            $nameTd.append($nameDiv);
-            $tr.append($nameTd);
+            // Complaint name — editable input (SNOMED = blue, local = default)
+            var nameStyle = isSnomed ? 'color:#0d6efd;font-weight:600;' : '';
+            var titleText = item.concept_id ? 'SNOMED: ' + item.concept_id : '';
+            $tr.append(
+                $('<td class="p-1">').append(
+                    $('<input type="text" class="form-control form-control-sm complaint-name-input" autocomplete="off" placeholder="Complaint…">')
+                        .val(item.term || '')
+                        .attr('data-idx', idx)
+                        .attr('title', titleText)
+                        .css(nameStyle)
+                )
+            );
 
             // Frequency input
             $tr.append(
@@ -4957,6 +4962,30 @@
             .on('mousedown', function(e) { e.preventDefault(); })
             .on('click', function() { onSelect(text); });
     }
+
+    // ─── Complaint Name: event delegation for editing complaint text ──────────
+    $(document).on('input', '.complaint-name-input', function() {
+        var idx = parseInt($(this).attr('data-idx'), 10);
+        if (idx >= 0 && idx < selectedComplaintItems.length) {
+            selectedComplaintItems[idx].term = ($(this).val() || '').trim();
+            syncComplaintSnomedJson();
+        }
+    });
+    $(document).on('blur', '.complaint-name-input', function() {
+        var idx = parseInt($(this).attr('data-idx'), 10);
+        if (idx >= 0 && idx < selectedComplaintItems.length) {
+            selectedComplaintItems[idx].term = ($(this).val() || '').trim();
+            syncComplaintSnomedJson();
+            markDirty('Complaint name updated');
+        }
+    });
+    $(document).on('keydown', '.complaint-name-input', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            // Move to frequency input in same row
+            $(this).closest('tr').find('.complaint-freq-input').trigger('focus');
+        }
+    });
 
     // ─── Frequency: event delegation on table rows ────────────────────
     var _FREQUENCY_OPTIONS = ['daily', 'twice daily', 'weekly', 'intermittent', 'continuous', 'occasional'];
