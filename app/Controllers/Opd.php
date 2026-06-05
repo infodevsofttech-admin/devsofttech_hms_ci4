@@ -2804,7 +2804,7 @@ class Opd extends BaseController
 
         $rxInvestigation = $rxRead($rx, ['investigation', 'Investigations', 'investigations', 'Investigation']);
         
-        // Build test list from table (comma-separated, not bullet list)
+        // Build test list from table (comma-separated)
         $rxInvestigationTestList = '';
         $testNames = [];
         
@@ -2818,10 +2818,25 @@ class Opd extends BaseController
             }
         }
         
-        // Build comma-separated test list for {{Tadvise_test_list}} placeholder
-        // This is independent from {{investigation}} textarea content
+        // Build comma-separated test list
         if (!empty($testNames)) {
             $rxInvestigationTestList = implode(', ', $testNames);
+        }
+        
+        // Combine textarea content and test list into {{investigation}} placeholder
+        $combinedInvestigation = [];
+        if ($rxInvestigation !== '' && $rxInvestigation !== 'null') {
+            $combinedInvestigation[] = $rxInvestigation;
+        }
+        if ($rxInvestigationTestList !== '') {
+            $combinedInvestigation[] = $rxInvestigationTestList;
+        }
+        
+        // Join with line break if both exist, otherwise use whichever is available
+        if (count($combinedInvestigation) > 1) {
+            $rxInvestigation = implode("\n", $combinedInvestigation);
+        } elseif (!empty($combinedInvestigation)) {
+            $rxInvestigation = $combinedInvestigation[0];
         }
 
         $rxAdvice = $rxRead($rx, ['advice', 'Advice', 'prescription_advice', 'advice_notes', 'advice_note']);
