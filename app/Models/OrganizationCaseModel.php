@@ -60,8 +60,8 @@ class OrganizationCaseModel extends Model
                     date_format(i.inv_date,'%d-%m-%Y') AS str_date,
                     concat(t.item_name) AS Description,i.invoice_code AS Code,
                     t.item_amount AS Amount,t.org_code AS orgcode,
-                    case when it.item_rate is not null and it.item_rate <> t.item_rate then 1 else 0 end AS discount_amount,
-                    it.item_rate AS d_rate
+                    case when it.amount1 is not null and it.amount1 <> t.item_rate then 1 else 0 end AS discount_amount,
+                    it.amount1 AS d_rate
                 from invoice_master i
                 join organization_case_master c on i.insurance_case_id = c.id
                 join invoice_item t on t.inv_master_id = i.id
