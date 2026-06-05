@@ -559,6 +559,9 @@ class CaseMaster extends BaseController
                 from opd_master o
                 join organization_case_master c on c.id={$caseid}
                 where o.opd_status in (1,2)
+                    and o.insurance_case_id is not null
+                    and o.insurance_case_id != ''
+                    and o.insurance_case_id != '0'
                     and (
                         o.insurance_case_id = cast(c.id as char)
                         or o.insurance_case_id = c.case_id_code
@@ -579,9 +582,15 @@ class CaseMaster extends BaseController
                 join organization_case_master c on c.id={$caseid}
                 join invoice_item t on t.inv_master_id = i.id
                 join hc_item_type l on t.item_type = l.itype_id
-                left join hc_items_insurance it
-                    on t.item_id = it.hc_items_id and i.insurance_id = it.hc_insurance_id
+                left join (
+                    select hc_items_id, hc_insurance_id, amount1
+                    from hc_items_insurance
+                    group by hc_items_id, hc_insurance_id
+                ) it on t.item_id = it.hc_items_id and i.insurance_id = it.hc_insurance_id
                 where i.ipd_include = 1 and i.invoice_status = 1
+                    and i.insurance_case_id is not null
+                    and i.insurance_case_id != ''
+                    and i.insurance_case_id != '0'
                     and (
                         i.insurance_case_id = c.id
                         or i.insurance_case_id = c.case_id_code
@@ -623,6 +632,7 @@ class CaseMaster extends BaseController
         $opdFeeRow = $this->db->table('opd_master')
             ->selectSum('opd_fee_amount', 'total')
             ->whereIn('opd_status', [1, 2])
+            ->whereNotIn('insurance_case_id', [null, '', '0'])
             ->groupStart()
                 ->where('insurance_case_id', (string) $caseId)
                 ->orWhere('insurance_case_id', (string) ($caseRow->case_id_code ?? ''))
@@ -641,6 +651,7 @@ class CaseMaster extends BaseController
         $chargeRow = $this->db->table('invoice_master')
             ->selectSum('net_amount', 'total')
             ->where('invoice_status', 1)
+            ->whereNotIn('insurance_case_id', [null, '', '0'])
             ->groupStart()
                 ->where('insurance_case_id', $caseId)
                 ->orWhere('insurance_case_id', (string) ($caseRow->case_id_code ?? ''))
