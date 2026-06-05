@@ -39,7 +39,11 @@ $status = (int) ($edit['status'] ?? 1);
                 <code>{{AGE_GENDER}}</code>, <code>{{ADMIT_DATE}}</code>, <code>{{DISCHARGE_DATE}}</code>, <code>{{CURRENT_DATE}}</code>,
                 <code>{{H_Name}}</code>, <code>{{H_address_1}}</code>, <code>{{H_address_2}}</code>, <code>{{H_phone_No}}</code>, <code>{{H_Email}}</code>,
                 <code>{{hospital_name}}</code>, <code>{{hospital_address}}</code>, <code>{{hospital_phone}}</code>, <code>{{hospital_email}}</code>,
-                <code>{{PRINT_TIME}}</code>.
+                <code>{{PRINT_TIME}}</code>.<br>
+                Section placeholders for custom layout/order: <code>{{DISCHARGE_SUMMARY}}</code>, <code>{{FINAL_DIAGNOSIS}}</code>, <code>{{SURGERY}}</code>,
+                <code>{{PROCEDURE}}</code>, <code>{{PERSONAL_HISTORY}}</code>, <code>{{PRESENTING_COMPLAINTS}}</code>, <code>{{GENERAL_EXAM_ADMISSION}}</code>,
+                <code>{{CLINICAL_INVESTIGATION_REPORTS}}</code>, <code>{{COURSE_IN_HOSPITAL}}</code>, <code>{{EXAMINATION_ON_DISCHARGE}}</code>,
+                <code>{{DISCHARGE_MEDICATIONS}}</code>, <code>{{DIETARY_ADVICE}}</code>, <code>{{DISCHARGE_INSTRUCTIONS}}</code>, <code>{{SIGNATURE_BLOCK}}</code>.
             </div>
 
             <div class="alert alert-warning py-2 small">
@@ -155,7 +159,7 @@ $status = (int) ($edit['status'] ?? 1);
                     <div class="col-12">
                         <label class="form-label small">Template HTML</label>
                         <textarea name="template_html" id="template_html_editor" rows="12" class="form-control" required><?= esc($templateHtml) ?></textarea>
-                        <small class="text-muted">Use the editor to format layout. Use the <code>Source</code> button for raw HTML. Keep <code>{{CONTENT}}</code> in the template.</small>
+                        <small class="text-muted">Use the editor to format layout. Use the <code>Source</code> button for raw HTML. You can use one <code>{{CONTENT}}</code> block or arrange section placeholders in any custom order.</small>
                     </div>
                 </div>
 

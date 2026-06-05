@@ -333,6 +333,11 @@ class Ipd_discharge extends BaseController
             'hospital_email' => esc($hEmail),
         ];
 
+        $sectionVars = $this->buildDischargeSectionTokenVars($content);
+        foreach ($sectionVars as $key => $value) {
+            $tokens[$key] = $value;
+        }
+
         foreach ($tokens as $key => $value) {
             $key = (string) $key;
             $value = (string) $value;
@@ -354,6 +359,135 @@ class Ipd_discharge extends BaseController
         }
 
         return $tokens;
+    }
+
+    private function buildDischargeSectionTokenVars(string $content): array
+    {
+        $full = trim($content);
+        if ($full === '') {
+            return [];
+        }
+
+        $allMarkers = [
+            'Discharge Summary',
+            'Presenting Complaints and Reason for Admission',
+            'General Examination on Admission',
+            'Clinical Investigation Reports',
+            'Final Diagnosis',
+            'Course in the hospital',
+            'Examination on Discharge',
+            'Surgery',
+            'Procedure',
+            'Personal History',
+            'Discharge Medications',
+            'Discharge Advice/Instructions/Summary',
+            'Dietary Advice',
+            'Signature of Consultant',
+            'Drug Allergy / ADR',
+            'Co-Morbidities',
+            'Summary of key investigations during Hospitalization',
+            'Nursing Trend',
+        ];
+
+        $section = function (array $starts, array $extraEnds = []) use ($full, $allMarkers): string {
+            return $this->extractDischargeSectionByMarkers($full, $starts, array_merge($allMarkers, $extraEnds));
+        };
+
+        $summary = $section(['Discharge Summary']);
+        $finalDiagnosis = $section(['Final Diagnosis']);
+        $surgery = $section(['Surgery']);
+        $procedure = $section(['Procedure']);
+        $personalHistory = $section(['Personal History']);
+        $presentingComplaints = $section(['Presenting Complaints and Reason for Admission']);
+        $generalExam = $section(['General Examination on Admission']);
+        $clinicalInvestigations = $section(['Clinical Investigation Reports']);
+        $courseInHospital = $section(['Course in the hospital']);
+        $examOnDischarge = $section(['Examination on Discharge']);
+        $dischargeMedications = $section(['Discharge Medications']);
+        $dietaryAdvice = $section(['Dietary Advice']);
+        $dischargeInstructions = $section(['Discharge Advice/Instructions/Summary']);
+        $signatureBlock = $section(['Signature of Consultant'], ['Signature of Medical Officer', 'Signature of Receiver / Date']);
+
+        $vars = [
+            'DISCHARGE_SUMMARY' => $summary,
+            'FINAL_DIAGNOSIS' => $finalDiagnosis,
+            'SURGERY' => $surgery,
+            'PROCEDURE' => $procedure,
+            'PERSONAL_HISTORY' => $personalHistory,
+            'PRESENTING_COMPLAINTS' => $presentingComplaints,
+            'GENERAL_EXAM_ADMISSION' => $generalExam,
+            'CLINICAL_INVESTIGATION_REPORTS' => $clinicalInvestigations,
+            'COURSE_IN_HOSPITAL' => $courseInHospital,
+            'EXAMINATION_ON_DISCHARGE' => $examOnDischarge,
+            'DISCHARGE_MEDICATIONS' => $dischargeMedications,
+            'DIETARY_ADVICE' => $dietaryAdvice,
+            'DISCHARGE_INSTRUCTIONS' => $dischargeInstructions,
+            'SIGNATURE_BLOCK' => $signatureBlock,
+            // Legacy style aliases to ease migration from CI3-style template variables.
+            'FinalDiagnosis' => $finalDiagnosis,
+            'Surgery' => $surgery,
+            'Procedure' => $procedure,
+            'personal_history' => $personalHistory,
+            'discharge_complaint' => $presentingComplaints,
+            'discharge_general_exam' => $generalExam,
+            'lab_test_content' => $clinicalInvestigations,
+            'Course_in_the_hospital' => $courseInHospital,
+            'discharge_exam_on_discharge' => $examOnDischarge,
+            'Discharge_Medications' => $dischargeMedications,
+            'diet_advice' => $dietaryAdvice,
+            'Discharge_Instructions' => $dischargeInstructions,
+        ];
+
+        return $vars;
+    }
+
+    private function extractDischargeSectionByMarkers(string $html, array $startNeedles, array $endNeedles): string
+    {
+        $startPos = null;
+        foreach ($startNeedles as $needle) {
+            $pos = stripos($html, (string) $needle);
+            if ($pos !== false && ($startPos === null || $pos < $startPos)) {
+                $startPos = $pos;
+            }
+        }
+
+        if ($startPos === null) {
+            return '';
+        }
+
+        $tagStart = strrpos(substr($html, 0, $startPos), '<');
+        $sliceStart = $tagStart !== false ? $tagStart : $startPos;
+
+        $sliceEnd = strlen($html);
+        foreach ($endNeedles as $needle) {
+            $needle = (string) $needle;
+            if ($needle === '') {
+                continue;
+            }
+
+            $isStartNeedle = false;
+            foreach ($startNeedles as $startNeedle) {
+                if (strcasecmp($needle, (string) $startNeedle) === 0) {
+                    $isStartNeedle = true;
+                    break;
+                }
+            }
+            if ($isStartNeedle) {
+                continue;
+            }
+
+            $candidate = stripos($html, $needle, $startPos + 1);
+            if ($candidate !== false && $candidate < $sliceEnd) {
+                $tag = strrpos(substr($html, 0, $candidate), '<');
+                $sliceEnd = $tag !== false ? $tag : $candidate;
+            }
+        }
+
+        if ($sliceEnd <= $sliceStart) {
+            return '';
+        }
+
+        return trim(substr($html, $sliceStart, $sliceEnd - $sliceStart));
     }
 
     private function normalizeLegacyDischargeTemplate(string $html): string
@@ -429,11 +563,10 @@ class Ipd_discharge extends BaseController
             $templateHtml = '{{CONTENT}}';
         }
 
-        if (strpos($templateHtml, '{{CONTENT}}') === false) {
+        $tokenVars = $this->buildDischargeTemplateTokenVars($panelData, $content);
+        if (! $this->templateHasKnownDischargeTokens($templateHtml, $tokenVars)) {
             $templateHtml .= "\n{{CONTENT}}";
         }
-
-        $tokenVars = $this->buildDischargeTemplateTokenVars($panelData, $content);
         $patientName = html_entity_decode((string) ($tokenVars['PATIENT_NAME'] ?? ''), ENT_QUOTES, 'UTF-8');
         $patientCode = html_entity_decode((string) ($tokenVars['UHID'] ?? ''), ENT_QUOTES, 'UTF-8');
         $ipdCode = html_entity_decode((string) ($tokenVars['IPD_CODE'] ?? ''), ENT_QUOTES, 'UTF-8');
@@ -473,6 +606,26 @@ class Ipd_discharge extends BaseController
             'selected_template_name' => (string) ($selectedTemplate['template_name'] ?? ''),
             'selected_template_settings' => $templateSettings,
         ];
+    }
+
+    private function templateHasKnownDischargeTokens(string $templateHtml, array $tokenVars): bool
+    {
+        if (trim($templateHtml) === '') {
+            return false;
+        }
+
+        foreach (array_keys($tokenVars) as $tokenName) {
+            $tokenName = (string) $tokenName;
+            if ($tokenName === '') {
+                continue;
+            }
+
+            if (strpos($templateHtml, '{{' . $tokenName . '}}') !== false || strpos($templateHtml, '{' . $tokenName . '}') !== false) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function shouldUseContentOnlyTemplate(string $content, string $templateHtml): bool
