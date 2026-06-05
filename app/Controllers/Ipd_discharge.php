@@ -5141,7 +5141,7 @@ class Ipd_discharge extends BaseController
             : $this->defaultDischargeTemplateSettings();
 
         $withHeader = $printType !== 0;
-        $renderedHtml = (string) ($templatePack['rendered_html'] ?? $content);
+        $renderedHtml = $this->sanitizeDischargePdfHtml((string) ($templatePack['rendered_html'] ?? $content));
         $templateName = (string) ($templatePack['selected_template_name'] ?? 'Discharge Template');
         $templateTokenVars = $this->buildDischargeTemplateTokenVars($panelData, $content);
         $templateTokenVars['TEMPLATE_NAME'] = esc($templateName);
@@ -5179,13 +5179,17 @@ class Ipd_discharge extends BaseController
             $mpdf->SetAuthor('Atria HMS');
 
             if ($withHeader) {
-                $headerHtml = $this->applyDischargeTemplateTokens(trim((string) ($templateSettings['header_html'] ?? '')), $templateTokenVars);
+                $headerHtml = $this->sanitizeDischargePdfHtml(
+                    $this->applyDischargeTemplateTokens(trim((string) ($templateSettings['header_html'] ?? '')), $templateTokenVars)
+                );
                 if ($headerHtml !== '') {
                     $mpdf->SetHTMLHeader($headerHtml);
                 }
             }
 
-            $footerHtml = $this->applyDischargeTemplateTokens(trim((string) ($templateSettings['footer_html'] ?? '')), $templateTokenVars);
+            $footerHtml = $this->sanitizeDischargePdfHtml(
+                $this->applyDischargeTemplateTokens(trim((string) ($templateSettings['footer_html'] ?? '')), $templateTokenVars)
+            );
             if ($footerHtml === '') {
                 $footerHtml = '<div style="font-family:freeserif,serif;font-size:9pt;color:#6b7280;text-align:right;">Page {PAGENO}/{nbpg}</div>';
             }
@@ -5202,6 +5206,13 @@ class Ipd_discharge extends BaseController
                 'ipd' => $ipdId,
                 'msg' => $e->getMessage(),
             ]);
+
+            if ($printType !== 0) {
+                return $this->response
+                    ->setStatusCode(500)
+                    ->setHeader('Content-Type', 'text/plain; charset=UTF-8')
+                    ->setBody('Unable to generate discharge PDF for this template. Please remove legacy @page html header/footer directives from template CSS/HTML and retry.');
+            }
         }
 
         return view('billing/ipd/discharge_print', [
@@ -5214,6 +5225,30 @@ class Ipd_discharge extends BaseController
             'print_type' => $printType,
             'print_mode' => 'standard',
         ]);
+    }
+
+    private function sanitizeDischargePdfHtml(string $html): string
+    {
+        if ($html === '') {
+            return '';
+        }
+
+        $out = str_replace("\0", '', $html);
+        $out = (string) preg_replace('/^\xEF\xBB\xBF/u', '', $out);
+
+        // Remove legacy mPDF named header/footer wrappers if they are embedded in body/template HTML.
+        $out = (string) preg_replace('/<htmlpageheader\b[^>]*>[\s\S]*?<\/htmlpageheader>/i', '', $out);
+        $out = (string) preg_replace('/<htmlpagefooter\b[^>]*>[\s\S]*?<\/htmlpagefooter>/i', '', $out);
+
+        // Remove @page header/footer name bindings that require matching named header/footer blocks.
+        $out = (string) preg_replace('/\bheader\s*:\s*html[_a-z0-9-]+\s*;?/i', '', $out);
+        $out = (string) preg_replace('/\bfooter\s*:\s*html[_a-z0-9-]+\s*;?/i', '', $out);
+
+        if (function_exists('mb_check_encoding') && ! mb_check_encoding($out, 'UTF-8')) {
+            $out = mb_convert_encoding($out, 'UTF-8', 'UTF-8, ISO-8859-1, Windows-1252');
+        }
+
+        return $out;
     }
 
     private function createIpdDischargeWorkTask(int $ipdId, array $panelData): void
