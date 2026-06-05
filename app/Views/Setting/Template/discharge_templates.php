@@ -32,6 +32,24 @@ $status = (int) ($edit['status'] ?? 1);
                 condition at discharge, discharge medication with dose/duration, follow-up plan, and warning signs/emergency contact.
             </div>
 
+            <div class="card border-info-subtle mb-4">
+                <div class="card-body py-3">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-4 col-lg-3">
+                            <label class="form-label small">IPD ID for Preview</label>
+                            <input type="number" min="1" class="form-control form-control-sm" id="discharge_preview_ipd_id" placeholder="Enter IPD ID">
+                        </div>
+                        <div class="col-md-8 col-lg-9 d-flex flex-wrap gap-2">
+                            <button type="button" class="btn btn-outline-primary btn-sm" id="btn_discharge_preview">Preview Discharge</button>
+                            <button type="button" class="btn btn-outline-danger btn-sm" id="btn_discharge_pdf">Open PDF Print</button>
+                        </div>
+                    </div>
+                    <div class="small text-muted mt-2">
+                        Uses the live discharge routes: <code>/Ipd_discharge/preview_discharge_report/{ipdId}</code> and <code>/Ipd_discharge/show_discharge/{ipdId}/0</code>.
+                    </div>
+                </div>
+            </div>
+
             <form method="post" action="<?= base_url('setting/template/discharge_templates') ?>" class="mb-4" id="discharge_template_form">
                 <?= csrf_field() ?>
                 <input type="hidden" name="id" value="<?= $editId ?>">
@@ -108,6 +126,32 @@ $status = (int) ($edit['status'] ?? 1);
 (function () {
     var form = document.getElementById('discharge_template_form');
     var editorFieldId = 'template_html_editor';
+    var previewIpdInput = document.getElementById('discharge_preview_ipd_id');
+    var previewBtn = document.getElementById('btn_discharge_preview');
+    var pdfBtn = document.getElementById('btn_discharge_pdf');
+
+    function getSelectedTemplateId() {
+        return <?= $editId > 0 ? (int) $editId : 0 ?>;
+    }
+
+    function openDischargeUrl(baseUrl, ipdId, printType) {
+        if (!ipdId || ipdId < 1) {
+            alert('Enter a valid IPD ID first.');
+            return;
+        }
+
+        var url = baseUrl + '/' + ipdId;
+        if (typeof printType !== 'undefined') {
+            url += '/' + printType;
+        }
+
+        var tplId = getSelectedTemplateId();
+        if (tplId > 0) {
+            url += '?tpl=' + encodeURIComponent(tplId);
+        }
+
+        window.open(url, '_blank');
+    }
 
     function initTemplateEditor() {
         if (!window.CKEDITOR) {
@@ -154,6 +198,20 @@ $status = (int) ($edit['status'] ?? 1);
     if (form) {
         form.addEventListener('submit', function () {
             syncTemplateEditor();
+        });
+    }
+
+    if (previewBtn) {
+        previewBtn.addEventListener('click', function () {
+            var ipdId = parseInt((previewIpdInput && previewIpdInput.value) ? previewIpdInput.value : '0', 10);
+            openDischargeUrl('<?= site_url('Ipd_discharge/preview_discharge_report') ?>', ipdId);
+        });
+    }
+
+    if (pdfBtn) {
+        pdfBtn.addEventListener('click', function () {
+            var ipdId = parseInt((previewIpdInput && previewIpdInput.value) ? previewIpdInput.value : '0', 10);
+            openDischargeUrl('<?= site_url('Ipd_discharge/show_discharge') ?>', ipdId, 0);
         });
     }
 })();
