@@ -36,7 +36,10 @@ $status = (int) ($edit['status'] ?? 1);
 
             <div class="alert alert-info py-2 small">
                 Available placeholders: <code>{{CONTENT}}</code>, <code>{{PATIENT_NAME}}</code>, <code>{{UHID}}</code>, <code>{{IPD_CODE}}</code>,
-                <code>{{AGE_GENDER}}</code>, <code>{{ADMIT_DATE}}</code>, <code>{{DISCHARGE_DATE}}</code>, <code>{{CURRENT_DATE}}</code>.
+                <code>{{AGE_GENDER}}</code>, <code>{{ADMIT_DATE}}</code>, <code>{{DISCHARGE_DATE}}</code>, <code>{{CURRENT_DATE}}</code>,
+                <code>{{H_Name}}</code>, <code>{{H_address_1}}</code>, <code>{{H_address_2}}</code>, <code>{{H_phone_No}}</code>, <code>{{H_Email}}</code>,
+                <code>{{hospital_name}}</code>, <code>{{hospital_address}}</code>, <code>{{hospital_phone}}</code>, <code>{{hospital_email}}</code>,
+                <code>{{PRINT_TIME}}</code>.
             </div>
 
             <div class="alert alert-warning py-2 small">
@@ -61,7 +64,7 @@ $status = (int) ($edit['status'] ?? 1);
                         </div>
                     </div>
                     <div class="small text-muted mt-2">
-                        Uses the live discharge routes: <code>/Ipd_discharge/preview_discharge_report/{ipdId}</code> and <code>/Ipd_discharge/show_discharge/{ipdId}/0</code>.
+                        Uses the live discharge routes: <code>/Ipd_discharge/preview_discharge_report/{ipdId}</code> and <code>/Ipd_discharge/show_discharge/{ipdId}/1</code>.
                     </div>
                 </div>
             </div>
@@ -595,7 +598,7 @@ $status = (int) ($edit['status'] ?? 1);
     if (pdfBtn) {
         pdfBtn.addEventListener('click', function () {
             var ipdId = parseInt((previewIpdInput && previewIpdInput.value) ? previewIpdInput.value : '0', 10);
-            openDischargeUrl('<?= site_url('Ipd_discharge/show_discharge') ?>', ipdId, 0);
+            openDischargeUrl('<?= site_url('Ipd_discharge/show_discharge') ?>', ipdId, 1);
         });
     }
 })();

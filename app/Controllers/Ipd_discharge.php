@@ -248,6 +248,155 @@ class Ipd_discharge extends BaseController
             ->getResultArray();
     }
 
+    private function getHospitalSettingValue(string $key): string
+    {
+        if (! $this->db->tableExists('hospital_setting')) {
+            return '';
+        }
+
+        $row = $this->db->table('hospital_setting')
+            ->select('s_value')
+            ->where('s_name', $key)
+            ->get(1)
+            ->getRowArray();
+
+        return trim((string) ($row['s_value'] ?? ''));
+    }
+
+    private function buildDischargeTemplateTokenVars(array $panelData, string $content): array
+    {
+        $ipd = $panelData['ipd_info'] ?? null;
+        $person = $panelData['person_info'] ?? null;
+
+        $patientName = trim((string) ($person->p_fname ?? ''));
+        $patientCode = trim((string) (
+            $person->uhid
+            ?? $person->UHID
+            ?? $person->patient_code
+            ?? $person->p_code
+            ?? $person->reg_no
+            ?? ''
+        ));
+        $ipdCode = trim((string) ($ipd->ipd_code ?? ''));
+
+        $age = get_age_1($person->dob ?? null, $person->age ?? '', $person->age_in_month ?? '', $person->estimate_dob ?? '');
+        $ageGender = trim($age . ' / ' . ((string) ($person->xgender ?? '')));
+
+        $hName = $this->getHospitalSettingValue('H_Name');
+        $hAddress1 = $this->getHospitalSettingValue('H_address_1');
+        $hAddress2 = $this->getHospitalSettingValue('H_address_2');
+        $hPhone = $this->getHospitalSettingValue('H_phone_No');
+        $hEmail = $this->getHospitalSettingValue('H_Email');
+        $hLogo = $this->getHospitalSettingValue('H_logo');
+
+        if ($hName === '' && defined('H_Name')) {
+            $hName = (string) constant('H_Name');
+        }
+        if ($hAddress1 === '' && defined('H_address_1')) {
+            $hAddress1 = (string) constant('H_address_1');
+        }
+        if ($hAddress2 === '' && defined('H_address_2')) {
+            $hAddress2 = (string) constant('H_address_2');
+        }
+        if ($hPhone === '' && defined('H_phone_No')) {
+            $hPhone = (string) constant('H_phone_No');
+        }
+        if ($hEmail === '' && defined('H_Email')) {
+            $hEmail = (string) constant('H_Email');
+        }
+        if ($hLogo === '' && defined('H_logo')) {
+            $hLogo = (string) constant('H_logo');
+        }
+
+        $hospitalAddress = trim($hAddress1 . ', ' . $hAddress2, ', ');
+
+        $tokens = [
+            'CONTENT' => $content,
+            'PATIENT_NAME' => esc($patientName),
+            'UHID' => esc($patientCode),
+            'IPD_CODE' => esc($ipdCode),
+            'AGE_GENDER' => esc($ageGender),
+            'ADMIT_DATE' => esc((string) ($ipd->str_register_date ?? '')),
+            'DISCHARGE_DATE' => esc((string) ($ipd->str_discharge_date ?? '')),
+            'CURRENT_DATE' => esc(date('d-m-Y')),
+            'PRINT_TIME' => esc(date('d-m-Y H:i:s')),
+            'H_Name' => esc($hName),
+            'H_address_1' => esc($hAddress1),
+            'H_address_2' => esc($hAddress2),
+            'H_phone_No' => esc($hPhone),
+            'H_Email' => esc($hEmail),
+            'H_logo' => esc($hLogo),
+            'H_logo_abs' => esc($hLogo !== '' ? (FCPATH . 'assets/images/' . $hLogo) : ''),
+            'hospital_name' => esc($hName),
+            'hospital_address' => esc($hospitalAddress),
+            'hospital_phone' => esc($hPhone),
+            'hospital_email' => esc($hEmail),
+        ];
+
+        foreach ($tokens as $key => $value) {
+            $key = (string) $key;
+            $value = (string) $value;
+
+            $lower = strtolower($key);
+            if (! array_key_exists($lower, $tokens)) {
+                $tokens[$lower] = $value;
+            }
+
+            $upper = strtoupper($key);
+            if (! array_key_exists($upper, $tokens)) {
+                $tokens[$upper] = $value;
+            }
+
+            $ucFirst = ucfirst($lower);
+            if (! array_key_exists($ucFirst, $tokens)) {
+                $tokens[$ucFirst] = $value;
+            }
+        }
+
+        return $tokens;
+    }
+
+    private function normalizeLegacyDischargeTemplate(string $html): string
+    {
+        $out = str_replace(["\r\n", "\r"], "\n", $html);
+
+        $mapPatterns = [
+            '/<\?=\s*H_Name\s*\?>/i' => '{{H_Name}}',
+            '/<\?=\s*H_address_1\s*\?>/i' => '{{H_address_1}}',
+            '/<\?=\s*H_address_2\s*\?>/i' => '{{H_address_2}}',
+            '/<\?=\s*H_phone_No\s*\?>/i' => '{{H_phone_No}}',
+            '/<\?=\s*H_Email\s*\?>/i' => '{{H_Email}}',
+            '/<\?=\s*H_logo\s*\?>/i' => '{{H_logo}}',
+            '/<\?=\s*\$content\s*\?>/i' => '{{CONTENT}}',
+            '/<\?=\s*\$content\s*;?\s*\?>/i' => '{{CONTENT}}',
+        ];
+
+        foreach ($mapPatterns as $pattern => $replacement) {
+            $out = (string) preg_replace($pattern, $replacement, $out);
+        }
+
+        $out = (string) preg_replace('/<\?(?:php|=)[\s\S]*?\?>/i', '', $out);
+
+        return trim($out);
+    }
+
+    private function applyDischargeTemplateTokens(string $templateHtml, array $vars): string
+    {
+        if ($templateHtml === '') {
+            return '';
+        }
+
+        $templateHtml = $this->normalizeLegacyDischargeTemplate($templateHtml);
+
+        $replace = [];
+        foreach ($vars as $key => $value) {
+            $replace['{{' . $key . '}}'] = (string) $value;
+            $replace['{' . $key . '}'] = (string) $value;
+        }
+
+        return strtr($templateHtml, $replace);
+    }
+
     private function applyDischargeTemplate(string $content, array $panelData, ?int $requestedTemplateId = null): array
     {
         $templates = $this->getDischargeTemplateRows();
@@ -284,27 +433,16 @@ class Ipd_discharge extends BaseController
             $templateHtml .= "\n{{CONTENT}}";
         }
 
-        $ipd = $panelData['ipd_info'] ?? null;
-        $person = $panelData['person_info'] ?? null;
-        $patientName = trim((string) ($person->p_fname ?? ''));
-        $patientCode = trim((string) (
-            $person->uhid
-            ?? $person->UHID
-            ?? $person->patient_code
-            ?? $person->p_code
-            ?? $person->reg_no
-            ?? ''
-        ));
-        $ipdCode = trim((string) ($ipd->ipd_code ?? ''));
+        $tokenVars = $this->buildDischargeTemplateTokenVars($panelData, $content);
+        $patientName = html_entity_decode((string) ($tokenVars['PATIENT_NAME'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $patientCode = html_entity_decode((string) ($tokenVars['UHID'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $ipdCode = html_entity_decode((string) ($tokenVars['IPD_CODE'] ?? ''), ENT_QUOTES, 'UTF-8');
 
         if ($this->shouldUseContentOnlyTemplate($content, $templateHtml)) {
             $templateHtml = '{{CONTENT}}';
         }
 
         $content = $this->stripLegacyTopSummaryFromContent($content, $templateHtml, $patientName, $patientCode, $ipdCode);
-
-        $age = get_age_1($person->dob ?? null, $person->age ?? '', $person->age_in_month ?? '', $person->estimate_dob ?? '');
-        $ageGender = trim($age . ' / ' . ((string) ($person->xgender ?? '')));
 
         $templateSettings = array_merge($this->defaultDischargeTemplateSettings(), [
             'page_size' => strtoupper(trim((string) ($selectedTemplate['page_size'] ?? 'A4'))),
@@ -321,23 +459,12 @@ class Ipd_discharge extends BaseController
             'template_css' => (string) ($selectedTemplate['template_css'] ?? ''),
         ]);
 
-        $replacements = [
-            '{{CONTENT}}' => $content,
-            '{{PATIENT_NAME}}' => esc($patientName),
-            '{{UHID}}' => esc($patientCode),
-            '{{IPD_CODE}}' => esc($ipdCode),
-            '{{AGE_GENDER}}' => esc($ageGender),
-            '{{ADMIT_DATE}}' => esc((string) ($ipd->str_register_date ?? '')),
-            '{{DISCHARGE_DATE}}' => esc((string) ($ipd->str_discharge_date ?? '')),
-            '{{CURRENT_DATE}}' => esc(date('d-m-Y')),
-        ];
-
         $templateCss = trim((string) $templateSettings['template_css']);
         if ($templateCss !== '') {
             $templateHtml = '<style>' . $templateCss . '</style>' . $templateHtml;
         }
 
-        $rendered = strtr($templateHtml, $replacements);
+        $rendered = $this->applyDischargeTemplateTokens($templateHtml, $tokenVars);
 
         return [
             'rendered_html' => $rendered,
@@ -4596,6 +4723,8 @@ class Ipd_discharge extends BaseController
         $withHeader = $printType !== 0;
         $renderedHtml = (string) ($templatePack['rendered_html'] ?? $content);
         $templateName = (string) ($templatePack['selected_template_name'] ?? 'Discharge Template');
+        $templateTokenVars = $this->buildDischargeTemplateTokenVars($panelData, $content);
+        $templateTokenVars['TEMPLATE_NAME'] = esc($templateName);
 
         $this->createIpdDischargeWorkTask($ipdId, $panelData);
 
@@ -4630,7 +4759,7 @@ class Ipd_discharge extends BaseController
             $mpdf->SetAuthor('Atria HMS');
 
             if ($withHeader) {
-                $headerHtml = trim((string) ($templateSettings['header_html'] ?? ''));
+                $headerHtml = $this->applyDischargeTemplateTokens(trim((string) ($templateSettings['header_html'] ?? '')), $templateTokenVars);
                 if ($headerHtml === '') {
                     $headerHtml = '<div style="font-family:freeserif,serif;font-size:11pt;border-bottom:1px solid #d1d5db;padding-bottom:6px;">'
                         . '<div style="font-size:14pt;font-weight:700;">Discharge Summary</div>'
@@ -4640,7 +4769,7 @@ class Ipd_discharge extends BaseController
                 $mpdf->SetHTMLHeader($headerHtml);
             }
 
-            $footerHtml = trim((string) ($templateSettings['footer_html'] ?? ''));
+            $footerHtml = $this->applyDischargeTemplateTokens(trim((string) ($templateSettings['footer_html'] ?? '')), $templateTokenVars);
             if ($footerHtml === '') {
                 $footerHtml = '<div style="font-family:freeserif,serif;font-size:9pt;color:#6b7280;text-align:right;">Page {PAGENO}/{nbpg}</div>';
             }
