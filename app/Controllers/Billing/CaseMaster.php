@@ -420,34 +420,9 @@ class CaseMaster extends BaseController
             ->get()
             ->getResult();
 
-        $sql = "select c.id AS id,c.case_id_code AS case_id_code,c.p_id AS p_id,
-            o.apointment_date AS s_Date,'OPD' AS Charge_type,0 AS Charge_type_id,
-            o.opd_id AS item_id,0 AS master_item_id,o.apointment_date AS Adate,
-            o.opd_fee_amount AS item_rate,1 AS item_qty,
-            date_format(o.apointment_date,'%d-%m-%Y') AS str_date,
-            concat('OPD Charge: Dr. ',o.doc_name) AS Description,
-            o.opd_code AS Code,o.opd_fee_amount AS Amount,'1' AS orgcode
-            from opd_master o
-            join organization_case_master c on (o.insurance_case_id = cast(c.id as char) or o.insurance_case_id = c.case_id_code)
-            where o.opd_status in (1,2) and c.id=" . $caseid .
-            " order by Charge_type,Adate";
-        $data['showinvoice1'] = $this->db->query($sql)->getResult();
-
-        $sql = "select c.id AS id,c.case_id_code AS case_id_code,c.p_id AS p_id,
-            i.inv_date AS s_Date,l.group_desc AS Charge_type,l.itype_id AS Charge_type_id,
-            t.id AS item_id,t.item_id AS master_item_id,i.inv_date AS Adate,
-            t.item_rate AS item_rate,t.item_qty AS item_qty,
-            date_format(i.inv_date,'%d-%m-%Y') AS str_date,
-            concat(t.item_name) AS Description,i.invoice_code AS Code,
-            t.item_amount AS Amount,t.org_code AS orgcode
-            from invoice_master i
-            join organization_case_master c on i.insurance_case_id = c.id
-            join invoice_item t on t.inv_master_id = i.id
-            join hc_item_type l on t.item_type = l.itype_id
-            left join hc_items_insurance it on t.item_id = it.hc_items_id and i.insurance_id = it.hc_insurance_id
-            where i.ipd_include = 1 and i.invoice_status = 1 and c.id=" . $caseid .
-            " order by Charge_type,Adate";
-        $data['showinvoice2'] = $this->db->query($sql)->getResult();
+        $invoiceRows = $this->getOrganizationCaseInvoiceRows($caseid);
+        $data['showinvoice1'] = $invoiceRows['showinvoice1'];
+        $data['showinvoice2'] = $invoiceRows['showinvoice2'];
 
         $sql = 'select m.*,m.id as med_id
                 from invoice_med_master m join ipd_master p join organization_case_master o
@@ -528,34 +503,9 @@ class CaseMaster extends BaseController
             ->get()
             ->getResult();
 
-        $sql = "select c.id AS id,c.case_id_code AS case_id_code,c.p_id AS p_id,
-            o.apointment_date AS s_Date,'OPD' AS Charge_type,0 AS Charge_type_id,
-            o.opd_id AS item_id,0 AS master_item_id,o.apointment_date AS Adate,
-            o.opd_fee_amount AS item_rate,1 AS item_qty,
-            date_format(o.apointment_date,'%d-%m-%Y') AS str_date,
-            concat('OPD Charge: Dr. ',o.doc_name) AS Description,
-            o.opd_code AS Code,o.opd_fee_amount AS Amount,'1' AS orgcode
-            from opd_master o
-            join organization_case_master c on (o.insurance_case_id = cast(c.id as char) or o.insurance_case_id = c.case_id_code)
-            where o.opd_status in (1,2) and c.id=" . $caseid .
-            " order by Charge_type,Adate";
-        $data['showinvoice1'] = $this->db->query($sql)->getResult();
-
-        $sql = "select c.id AS id,c.case_id_code AS case_id_code,c.p_id AS p_id,
-            i.inv_date AS s_Date,l.group_desc AS Charge_type,l.itype_id AS Charge_type_id,
-            t.id AS item_id,t.item_id AS master_item_id,i.inv_date AS Adate,
-            t.item_rate AS item_rate,t.item_qty AS item_qty,
-            date_format(i.inv_date,'%d-%m-%Y') AS str_date,
-            concat(t.item_name) AS Description,i.invoice_code AS Code,
-            t.item_amount AS Amount,t.org_code AS orgcode
-            from invoice_master i
-            join organization_case_master c on i.insurance_case_id = c.id
-            join invoice_item t on t.inv_master_id = i.id
-            join hc_item_type l on t.item_type = l.itype_id
-            left join hc_items_insurance it on t.item_id = it.hc_items_id and i.insurance_id = it.hc_insurance_id
-            where i.ipd_include = 1 and i.invoice_status = 1 and c.id=" . $caseid .
-            " order by Charge_type,Adate";
-        $data['showinvoice2'] = $this->db->query($sql)->getResult();
+        $invoiceRows = $this->getOrganizationCaseInvoiceRows($caseid);
+        $data['showinvoice1'] = $invoiceRows['showinvoice1'];
+        $data['showinvoice2'] = $invoiceRows['showinvoice2'];
 
         return view('Invoice/caseinvoice_ipd_V', $data);
     }
@@ -588,6 +538,67 @@ class CaseMaster extends BaseController
             'org_id' => $orgId,
             'org_info' => $orgInfo,
         ]);
+    }
+
+    /**
+     * Old CI3-compatible invoice fetch: OPD + invoice item rows via UNION ALL.
+     * Returns rows split for existing views that still expect showinvoice1/showinvoice2.
+     */
+    private function getOrganizationCaseInvoiceRows(int $caseid): array
+    {
+        $sql = "
+            select * from (
+                select c.id AS id,c.case_id_code AS case_id_code,c.p_id AS p_id,
+                    o.apointment_date AS s_Date,'OPD' AS Charge_type,0 AS Charge_type_id,
+                    o.opd_id AS item_id,0 AS master_item_id,o.apointment_date AS Adate,
+                    o.opd_fee_amount AS item_rate,1 AS item_qty,
+                    date_format(o.apointment_date,'%d-%m-%Y') AS str_date,
+                    concat('OPD Charge: Dr. ',o.doc_name) AS Description,
+                    o.opd_code AS Code,o.opd_fee_amount AS Amount,
+                    '1' AS orgcode,0 AS discount_amount,null AS d_rate
+                from opd_master o
+                join organization_case_master c
+                    on (o.insurance_case_id = cast(c.id as char) or o.insurance_case_id = c.case_id_code)
+                where o.opd_status in (1,2) and c.id={$caseid}
+
+                union all
+
+                select c.id AS id,c.case_id_code AS case_id_code,c.p_id AS p_id,
+                    i.inv_date AS s_Date,l.group_desc AS Charge_type,l.itype_id AS Charge_type_id,
+                    t.id AS item_id,t.item_id AS master_item_id,i.inv_date AS Adate,
+                    t.item_rate AS item_rate,t.item_qty AS item_qty,
+                    date_format(i.inv_date,'%d-%m-%Y') AS str_date,
+                    concat(t.item_name) AS Description,i.invoice_code AS Code,
+                    t.item_amount AS Amount,t.org_code AS orgcode,
+                    coalesce(t.discount_amount,0) AS discount_amount,
+                    it.item_rate AS d_rate
+                from invoice_master i
+                join organization_case_master c on i.insurance_case_id = c.id
+                join invoice_item t on t.inv_master_id = i.id
+                join hc_item_type l on t.item_type = l.itype_id
+                left join hc_items_insurance it
+                    on t.item_id = it.hc_items_id and i.insurance_id = it.hc_insurance_id
+                where i.ipd_include = 1 and i.invoice_status = 1 and c.id={$caseid}
+            ) v
+            order by v.Charge_type, v.Adate
+        ";
+
+        $rows = $this->db->query($sql)->getResult();
+
+        $showinvoice1 = [];
+        $showinvoice2 = [];
+        foreach ($rows as $row) {
+            if ((int) ($row->Charge_type_id ?? 0) === 0) {
+                $showinvoice1[] = $row;
+                continue;
+            }
+            $showinvoice2[] = $row;
+        }
+
+        return [
+            'showinvoice1' => $showinvoice1,
+            'showinvoice2' => $showinvoice2,
+        ];
     }
 
     private function updateOrgTotals(int $caseId): void
