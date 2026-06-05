@@ -470,7 +470,7 @@ class Patient extends BaseController
 		$sql = "select *,
 		Date_Format(insert_date,'%Y-%m-%d') as str_regdate,
 		if(gender=1,'Male','Female') as xgender ,
-		if(date_add(insert_date,interval 12 hour)>sysdate(),1,0) as p_edit
+		if(date_add(insert_date,interval 24 hour)>sysdate(),1,0) as p_edit
 		from patient_master where  id=" . $pno;
 		$query = $this->db->query($sql);
 		$data['data'] = $query->getResult();

@@ -11,11 +11,16 @@
 <?php
     $user = auth()->user();
     $patientAbhaId = (string) ($data[0]->abha_id ?? $data[0]->abha_no ?? $data[0]->abha ?? $data[0]->abha_address ?? '');
+    $canEditNameAnytime = is_object($user) && method_exists($user, 'can') ? $user->can('billing.patient.edit-name-anytime') : false;
     $isAdmin = is_object($user) && method_exists($user, 'inGroup') ? $user->inGroup('admin') : false;
-    if ($data[0]->p_edit == 1 || $isAdmin) {
+    
+    // Allow edit if within 24 hours OR user has edit-name-anytime permission OR is admin
+    if ($data[0]->p_edit == 1 || $canEditNameAnytime || $isAdmin) {
         $readonly = '';
+        $readonlyName = '';
     } else {
         $readonly = 'readonly';
+        $readonlyName = 'readonly';
     }
 ?>
 <!-- Main content -->
@@ -55,7 +60,7 @@
                             <div class="form-group">
                                 <label>Full Name</label>
                                 <input class="form-control input-sm" name="input_name" placeholder="Full Name"
-                                    value="<?=$data[0]->p_fname ?>" type="text" autocomplete="off" <?=$readonly?>>
+                                    value="<?=$data[0]->p_fname ?>" type="text" autocomplete="off" <?=$readonlyName?>>
                             </div>
                         </div>
                         <div class="col-md-3">

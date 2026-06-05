@@ -114,6 +114,7 @@ class AuthGroups extends ShieldAuthGroups
         'billing.access'      => 'Can access billing module',
         'opd.doctor-panel.access' => 'Can access OPD doctor work panel (doctor-only)',
         
+        'billing.patient.edit-name-anytime' => 'Can edit patient name even after 24-hour restriction',
         'billing.opd.edit'    => 'Can edit OPD registrations',
         'billing.opd.pay'     => 'Can confirm OPD payments',
         'billing.charges.view' => 'Can view charges invoices',
@@ -219,6 +220,7 @@ class AuthGroups extends ShieldAuthGroups
             'users.delete',
             'beta.access',
             'billing.*',
+            'billing.patient.edit-name-anytime',
             'opd.doctor-panel.access',
             'settings.bed_status.view',
             'settings.charges.access',
