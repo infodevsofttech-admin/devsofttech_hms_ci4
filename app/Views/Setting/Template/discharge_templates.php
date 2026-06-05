@@ -7,6 +7,18 @@ $noticeType = (string) ($notice_type ?? 'success');
 $editId = (int) ($edit['id'] ?? 0);
 $templateName = (string) ($edit['template_name'] ?? '');
 $templateHtml = (string) ($edit['template_html'] ?? '<div>{{CONTENT}}</div>');
+$headerHtml = (string) ($edit['header_html'] ?? '');
+$footerHtml = (string) ($edit['footer_html'] ?? '');
+$templateCss = (string) ($edit['template_css'] ?? '');
+$pageSize = strtoupper((string) ($edit['page_size'] ?? 'A4'));
+$customWidthMm = (int) ($edit['custom_width_mm'] ?? 210);
+$customHeightMm = (int) ($edit['custom_height_mm'] ?? 297);
+$marginTop = (string) ($edit['page_margin_top_cm'] ?? '0.8');
+$marginBottom = (string) ($edit['page_margin_bottom_cm'] ?? '0.8');
+$marginLeft = (string) ($edit['page_margin_left_cm'] ?? '0.8');
+$marginRight = (string) ($edit['page_margin_right_cm'] ?? '0.8');
+$marginHeader = (string) ($edit['margin_header_cm'] ?? '0.5');
+$marginFooter = (string) ($edit['margin_footer_cm'] ?? '0.5');
 $isDefault = (int) ($edit['is_default'] ?? 0);
 $status = (int) ($edit['status'] ?? 1);
 ?>
@@ -30,6 +42,10 @@ $status = (int) ($edit['status'] ?? 1);
             <div class="alert alert-warning py-2 small">
                 NABH drafting checklist: include reason for admission, significant findings, diagnosis, procedures, course in hospital,
                 condition at discharge, discharge medication with dose/duration, follow-up plan, and warning signs/emergency contact.
+            </div>
+
+            <div class="alert alert-secondary py-2 small">
+                Page settings support: <code>A4</code>, <code>A4-L</code>, <code>A5</code>, <code>A6</code>, <code>LETTER</code>, <code>LEGAL</code>, <code>CUSTOM</code>.
             </div>
 
             <div class="card border-info-subtle mb-4">
@@ -71,6 +87,65 @@ $status = (int) ($edit['status'] ?? 1);
                             <input class="form-check-input" type="checkbox" name="is_default" id="is_default" value="1" <?= $isDefault === 1 ? 'checked' : '' ?>>
                             <label class="form-check-label" for="is_default">Set as default</label>
                         </div>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label small">Page Size</label>
+                        <select name="page_size" id="discharge_page_size" class="form-select form-select-sm">
+                            <option value="A4" <?= $pageSize === 'A4' ? 'selected' : '' ?>>A4</option>
+                            <option value="A4-L" <?= $pageSize === 'A4-L' ? 'selected' : '' ?>>A4 Landscape</option>
+                            <option value="A5" <?= $pageSize === 'A5' ? 'selected' : '' ?>>A5</option>
+                            <option value="A6" <?= $pageSize === 'A6' ? 'selected' : '' ?>>A6</option>
+                            <option value="LETTER" <?= $pageSize === 'LETTER' ? 'selected' : '' ?>>Letter</option>
+                            <option value="LEGAL" <?= $pageSize === 'LEGAL' ? 'selected' : '' ?>>Legal</option>
+                            <option value="CUSTOM" <?= $pageSize === 'CUSTOM' ? 'selected' : '' ?>>Custom (mm)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 discharge-custom-size-wrap" style="display:none;">
+                        <label class="form-label small">Custom Width (mm)</label>
+                        <input type="number" name="custom_width_mm" class="form-control form-control-sm" value="<?= esc((string) $customWidthMm) ?>" min="20" max="600" step="1">
+                    </div>
+                    <div class="col-md-3 discharge-custom-size-wrap" style="display:none;">
+                        <label class="form-label small">Custom Height (mm)</label>
+                        <input type="number" name="custom_height_mm" class="form-control form-control-sm" value="<?= esc((string) $customHeightMm) ?>" min="20" max="1000" step="1">
+                    </div>
+
+                    <div class="col-md-2">
+                        <label class="form-label small">Top (cm)</label>
+                        <input type="number" name="page_margin_top_cm" class="form-control form-control-sm" value="<?= esc($marginTop) ?>" step="0.1" min="0" max="25">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">Bottom (cm)</label>
+                        <input type="number" name="page_margin_bottom_cm" class="form-control form-control-sm" value="<?= esc($marginBottom) ?>" step="0.1" min="0" max="25">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">Left (cm)</label>
+                        <input type="number" name="page_margin_left_cm" class="form-control form-control-sm" value="<?= esc($marginLeft) ?>" step="0.1" min="0" max="25">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">Right (cm)</label>
+                        <input type="number" name="page_margin_right_cm" class="form-control form-control-sm" value="<?= esc($marginRight) ?>" step="0.1" min="0" max="25">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">Header (cm)</label>
+                        <input type="number" name="margin_header_cm" class="form-control form-control-sm" value="<?= esc($marginHeader) ?>" step="0.1" min="0" max="25">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">Footer (cm)</label>
+                        <input type="number" name="margin_footer_cm" class="form-control form-control-sm" value="<?= esc($marginFooter) ?>" step="0.1" min="0" max="25">
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label small">Header HTML</label>
+                        <textarea name="header_html" rows="4" class="form-control" style="font-family:Consolas,Monaco,monospace;"><?= esc($headerHtml) ?></textarea>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small">Footer HTML</label>
+                        <textarea name="footer_html" rows="4" class="form-control" style="font-family:Consolas,Monaco,monospace;"><?= esc($footerHtml) ?></textarea>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small">Style (CSS)</label>
+                        <textarea name="template_css" rows="4" class="form-control" style="font-family:Consolas,Monaco,monospace;" placeholder="Example: .title{font-size:16px;font-weight:bold;}"><?= esc($templateCss) ?></textarea>
                     </div>
                     <div class="col-12">
                         <label class="form-label small">Template HTML</label>
@@ -126,6 +201,8 @@ $status = (int) ($edit['status'] ?? 1);
 (function () {
     var form = document.getElementById('discharge_template_form');
     var editorFieldId = 'template_html_editor';
+    var pageSizeEl = document.getElementById('discharge_page_size');
+    var customSizeWraps = document.querySelectorAll('.discharge-custom-size-wrap');
     var previewIpdInput = document.getElementById('discharge_preview_ipd_id');
     var previewBtn = document.getElementById('btn_discharge_preview');
     var pdfBtn = document.getElementById('btn_discharge_pdf');
@@ -183,6 +260,17 @@ $status = (int) ($edit['status'] ?? 1);
         }
     }
 
+    function toggleCustomSizeFields() {
+        if (!pageSizeEl || !customSizeWraps.length) {
+            return;
+        }
+
+        var showCustom = String(pageSizeEl.value || '').toUpperCase() === 'CUSTOM';
+        customSizeWraps.forEach(function (el) {
+            el.style.display = showCustom ? '' : 'none';
+        });
+    }
+
     function syncTemplateEditor() {
         if (!window.CKEDITOR) {
             return;
@@ -194,6 +282,11 @@ $status = (int) ($edit['status'] ?? 1);
     }
 
     initTemplateEditor();
+    toggleCustomSizeFields();
+
+    if (pageSizeEl) {
+        pageSizeEl.addEventListener('change', toggleCustomSizeFields);
+    }
 
     if (form) {
         form.addEventListener('submit', function () {

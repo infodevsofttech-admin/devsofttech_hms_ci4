@@ -31,6 +31,63 @@ class CreateIpdDischargeTemplatesTable extends Migration
                 'constraint' => 120,
                 'null' => false,
             ],
+            'page_size' => [
+                'type' => 'VARCHAR',
+                'constraint' => 16,
+                'default' => 'A4',
+            ],
+            'custom_width_mm' => [
+                'type' => 'INT',
+                'constraint' => 11,
+                'default' => 210,
+            ],
+            'custom_height_mm' => [
+                'type' => 'INT',
+                'constraint' => 11,
+                'default' => 297,
+            ],
+            'page_margin_top_cm' => [
+                'type' => 'DECIMAL',
+                'constraint' => '5,2',
+                'default' => 0.80,
+            ],
+            'page_margin_bottom_cm' => [
+                'type' => 'DECIMAL',
+                'constraint' => '5,2',
+                'default' => 0.80,
+            ],
+            'page_margin_left_cm' => [
+                'type' => 'DECIMAL',
+                'constraint' => '5,2',
+                'default' => 0.80,
+            ],
+            'page_margin_right_cm' => [
+                'type' => 'DECIMAL',
+                'constraint' => '5,2',
+                'default' => 0.80,
+            ],
+            'margin_header_cm' => [
+                'type' => 'DECIMAL',
+                'constraint' => '5,2',
+                'default' => 0.50,
+            ],
+            'margin_footer_cm' => [
+                'type' => 'DECIMAL',
+                'constraint' => '5,2',
+                'default' => 0.50,
+            ],
+            'header_html' => [
+                'type' => 'LONGTEXT',
+                'null' => true,
+            ],
+            'footer_html' => [
+                'type' => 'LONGTEXT',
+                'null' => true,
+            ],
+            'template_css' => [
+                'type' => 'LONGTEXT',
+                'null' => true,
+            ],
             'template_html' => [
                 'type' => 'LONGTEXT',
                 'null' => false,

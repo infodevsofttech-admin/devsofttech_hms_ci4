@@ -62,12 +62,25 @@ class Ipd_discharge extends BaseController
     private function ensureDischargeTemplateTable(): void
     {
         if ($this->db->tableExists('ipd_discharge_templates')) {
+            $this->ensureDischargeTemplateColumns();
             return;
         }
 
         $sql = "CREATE TABLE IF NOT EXISTS ipd_discharge_templates (
             id INT NOT NULL AUTO_INCREMENT,
             template_name VARCHAR(120) NOT NULL,
+            page_size VARCHAR(16) NOT NULL DEFAULT 'A4',
+            custom_width_mm INT NOT NULL DEFAULT 210,
+            custom_height_mm INT NOT NULL DEFAULT 297,
+            page_margin_top_cm DECIMAL(5,2) NOT NULL DEFAULT 0.80,
+            page_margin_bottom_cm DECIMAL(5,2) NOT NULL DEFAULT 0.80,
+            page_margin_left_cm DECIMAL(5,2) NOT NULL DEFAULT 0.80,
+            page_margin_right_cm DECIMAL(5,2) NOT NULL DEFAULT 0.80,
+            margin_header_cm DECIMAL(5,2) NOT NULL DEFAULT 0.50,
+            margin_footer_cm DECIMAL(5,2) NOT NULL DEFAULT 0.50,
+            header_html LONGTEXT NULL,
+            footer_html LONGTEXT NULL,
+            template_css LONGTEXT NULL,
             template_html LONGTEXT NOT NULL,
             is_default TINYINT(1) NOT NULL DEFAULT 0,
             status TINYINT(1) NOT NULL DEFAULT 1,
@@ -77,6 +90,39 @@ class Ipd_discharge extends BaseController
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
         $this->db->query($sql);
+        $this->ensureDischargeTemplateColumns();
+    }
+
+    private function ensureDischargeTemplateColumns(): void
+    {
+        if (! $this->db->tableExists('ipd_discharge_templates')) {
+            return;
+        }
+
+        $columns = [
+            'page_size' => "ALTER TABLE ipd_discharge_templates ADD COLUMN page_size VARCHAR(16) NOT NULL DEFAULT 'A4' AFTER template_name",
+            'custom_width_mm' => 'ALTER TABLE ipd_discharge_templates ADD COLUMN custom_width_mm INT NOT NULL DEFAULT 210 AFTER page_size',
+            'custom_height_mm' => 'ALTER TABLE ipd_discharge_templates ADD COLUMN custom_height_mm INT NOT NULL DEFAULT 297 AFTER custom_width_mm',
+            'page_margin_top_cm' => 'ALTER TABLE ipd_discharge_templates ADD COLUMN page_margin_top_cm DECIMAL(5,2) NOT NULL DEFAULT 0.80 AFTER custom_height_mm',
+            'page_margin_bottom_cm' => 'ALTER TABLE ipd_discharge_templates ADD COLUMN page_margin_bottom_cm DECIMAL(5,2) NOT NULL DEFAULT 0.80 AFTER page_margin_top_cm',
+            'page_margin_left_cm' => 'ALTER TABLE ipd_discharge_templates ADD COLUMN page_margin_left_cm DECIMAL(5,2) NOT NULL DEFAULT 0.80 AFTER page_margin_bottom_cm',
+            'page_margin_right_cm' => 'ALTER TABLE ipd_discharge_templates ADD COLUMN page_margin_right_cm DECIMAL(5,2) NOT NULL DEFAULT 0.80 AFTER page_margin_left_cm',
+            'margin_header_cm' => 'ALTER TABLE ipd_discharge_templates ADD COLUMN margin_header_cm DECIMAL(5,2) NOT NULL DEFAULT 0.50 AFTER page_margin_right_cm',
+            'margin_footer_cm' => 'ALTER TABLE ipd_discharge_templates ADD COLUMN margin_footer_cm DECIMAL(5,2) NOT NULL DEFAULT 0.50 AFTER margin_header_cm',
+            'header_html' => 'ALTER TABLE ipd_discharge_templates ADD COLUMN header_html LONGTEXT NULL AFTER margin_footer_cm',
+            'footer_html' => 'ALTER TABLE ipd_discharge_templates ADD COLUMN footer_html LONGTEXT NULL AFTER header_html',
+            'template_css' => 'ALTER TABLE ipd_discharge_templates ADD COLUMN template_css LONGTEXT NULL AFTER footer_html',
+        ];
+
+        foreach ($columns as $column => $sql) {
+            if (! $this->db->fieldExists($column, 'ipd_discharge_templates')) {
+                try {
+                    $this->db->query($sql);
+                } catch (\Throwable $e) {
+                    // Ignore schema drift during runtime; existing columns are enough for save/render.
+                }
+            }
+        }
     }
 
     private function defaultDischargeTemplateHtml(): string
@@ -95,6 +141,24 @@ class Ipd_discharge extends BaseController
             . '</tr>'
             . '</table>'
             . '<div>{{CONTENT}}</div>';
+    }
+
+    private function defaultDischargeTemplateSettings(): array
+    {
+        return [
+            'page_size' => 'A4',
+            'custom_width_mm' => 210,
+            'custom_height_mm' => 297,
+            'page_margin_top_cm' => 0.80,
+            'page_margin_bottom_cm' => 0.80,
+            'page_margin_left_cm' => 0.80,
+            'page_margin_right_cm' => 0.80,
+            'margin_header_cm' => 0.50,
+            'margin_footer_cm' => 0.50,
+            'header_html' => '',
+            'footer_html' => '',
+            'template_css' => '',
+        ];
     }
 
     private function nabhDischargeTemplateHtml(): string
@@ -176,7 +240,7 @@ class Ipd_discharge extends BaseController
         }
 
         return $this->db->table('ipd_discharge_templates')
-            ->select('id,template_name,template_html,is_default,status')
+            ->select('id,template_name,page_size,custom_width_mm,custom_height_mm,page_margin_top_cm,page_margin_bottom_cm,page_margin_left_cm,page_margin_right_cm,margin_header_cm,margin_footer_cm,header_html,footer_html,template_css,template_html,is_default,status')
             ->where('status', 1)
             ->orderBy('is_default', 'DESC')
             ->orderBy('id', 'ASC')
@@ -235,6 +299,21 @@ class Ipd_discharge extends BaseController
         $age = get_age_1($person->dob ?? null, $person->age ?? '', $person->age_in_month ?? '', $person->estimate_dob ?? '');
         $ageGender = trim($age . ' / ' . ((string) ($person->xgender ?? '')));
 
+        $templateSettings = array_merge($this->defaultDischargeTemplateSettings(), [
+            'page_size' => strtoupper(trim((string) ($selectedTemplate['page_size'] ?? 'A4'))),
+            'custom_width_mm' => (int) ($selectedTemplate['custom_width_mm'] ?? 210),
+            'custom_height_mm' => (int) ($selectedTemplate['custom_height_mm'] ?? 297),
+            'page_margin_top_cm' => (float) ($selectedTemplate['page_margin_top_cm'] ?? 0.8),
+            'page_margin_bottom_cm' => (float) ($selectedTemplate['page_margin_bottom_cm'] ?? 0.8),
+            'page_margin_left_cm' => (float) ($selectedTemplate['page_margin_left_cm'] ?? 0.8),
+            'page_margin_right_cm' => (float) ($selectedTemplate['page_margin_right_cm'] ?? 0.8),
+            'margin_header_cm' => (float) ($selectedTemplate['margin_header_cm'] ?? 0.5),
+            'margin_footer_cm' => (float) ($selectedTemplate['margin_footer_cm'] ?? 0.5),
+            'header_html' => (string) ($selectedTemplate['header_html'] ?? ''),
+            'footer_html' => (string) ($selectedTemplate['footer_html'] ?? ''),
+            'template_css' => (string) ($selectedTemplate['template_css'] ?? ''),
+        ]);
+
         $replacements = [
             '{{CONTENT}}' => $content,
             '{{PATIENT_NAME}}' => esc($patientName),
@@ -246,6 +325,11 @@ class Ipd_discharge extends BaseController
             '{{CURRENT_DATE}}' => esc(date('d-m-Y')),
         ];
 
+        $templateCss = trim((string) $templateSettings['template_css']);
+        if ($templateCss !== '') {
+            $templateHtml = '<style>' . $templateCss . '</style>' . $templateHtml;
+        }
+
         $rendered = strtr($templateHtml, $replacements);
 
         return [
@@ -253,6 +337,7 @@ class Ipd_discharge extends BaseController
             'templates' => $templates,
             'selected_template_id' => (int) ($selectedTemplate['id'] ?? 0),
             'selected_template_name' => (string) ($selectedTemplate['template_name'] ?? ''),
+            'selected_template_settings' => $templateSettings,
         ];
     }
 
@@ -4420,6 +4505,9 @@ class Ipd_discharge extends BaseController
 
         $requestedTemplateId = (int) ($this->request->getGet('tpl') ?? 0);
         $templatePack = $this->applyDischargeTemplate($content, $panelData, $requestedTemplateId > 0 ? $requestedTemplateId : null);
+        $templateSettings = is_array($templatePack['selected_template_settings'] ?? null)
+            ? $templatePack['selected_template_settings']
+            : $this->defaultDischargeTemplateSettings();
 
         $withHeader = $printType !== 0;
         $renderedHtml = (string) ($templatePack['rendered_html'] ?? $content);
@@ -4439,13 +4527,15 @@ class Ipd_discharge extends BaseController
 
             $mpdf = new Mpdf([
                 'mode' => 'utf-8',
-                'format' => 'A4',
-                'margin_left' => 10,
-                'margin_right' => 10,
-                'margin_top' => $withHeader ? 28 : 12,
-                'margin_bottom' => 12,
-                'margin_header' => 8,
-                'margin_footer' => 8,
+                'format' => ($templateSettings['page_size'] ?? 'A4') === 'CUSTOM'
+                    ? [max(20, (int) ($templateSettings['custom_width_mm'] ?? 210)), max(20, (int) ($templateSettings['custom_height_mm'] ?? 297))]
+                    : (string) ($templateSettings['page_size'] ?? 'A4'),
+                'margin_left' => max(0, ((float) ($templateSettings['page_margin_left_cm'] ?? 0.8)) * 10),
+                'margin_right' => max(0, ((float) ($templateSettings['page_margin_right_cm'] ?? 0.8)) * 10),
+                'margin_top' => max(0, ((float) ($templateSettings['page_margin_top_cm'] ?? 0.8)) * 10),
+                'margin_bottom' => max(0, ((float) ($templateSettings['page_margin_bottom_cm'] ?? 0.8)) * 10),
+                'margin_header' => max(0, ((float) ($templateSettings['margin_header_cm'] ?? 0.5)) * 10),
+                'margin_footer' => max(0, ((float) ($templateSettings['margin_footer_cm'] ?? 0.5)) * 10),
                 'default_font' => 'freeserif',
                 'tempDir' => WRITEPATH . 'cache',
             ]);
@@ -4456,14 +4546,21 @@ class Ipd_discharge extends BaseController
             $mpdf->SetAuthor('Atria HMS');
 
             if ($withHeader) {
-                $headerHtml = '<div style="font-family:freeserif,serif;font-size:11pt;border-bottom:1px solid #d1d5db;padding-bottom:6px;">'
-                    . '<div style="font-size:14pt;font-weight:700;">Discharge Summary</div>'
-                    . '<div style="font-size:9pt;color:#374151;">IPD: ' . esc($ipdCode) . ' | Template: ' . esc($templateName) . '</div>'
-                    . '</div>';
+                $headerHtml = trim((string) ($templateSettings['header_html'] ?? ''));
+                if ($headerHtml === '') {
+                    $headerHtml = '<div style="font-family:freeserif,serif;font-size:11pt;border-bottom:1px solid #d1d5db;padding-bottom:6px;">'
+                        . '<div style="font-size:14pt;font-weight:700;">Discharge Summary</div>'
+                        . '<div style="font-size:9pt;color:#374151;">IPD: ' . esc($ipdCode) . ' | Template: ' . esc($templateName) . '</div>'
+                        . '</div>';
+                }
                 $mpdf->SetHTMLHeader($headerHtml);
             }
 
-            $mpdf->SetHTMLFooter('<div style="font-family:freeserif,serif;font-size:9pt;color:#6b7280;text-align:right;">Page {PAGENO}/{nbpg}</div>');
+            $footerHtml = trim((string) ($templateSettings['footer_html'] ?? ''));
+            if ($footerHtml === '') {
+                $footerHtml = '<div style="font-family:freeserif,serif;font-size:9pt;color:#6b7280;text-align:right;">Page {PAGENO}/{nbpg}</div>';
+            }
+            $mpdf->SetHTMLFooter($footerHtml);
             $mpdf->WriteHTML($pdfHtml);
 
             $pdfBinary = $mpdf->Output($fileName, Destination::STRING_RETURN);

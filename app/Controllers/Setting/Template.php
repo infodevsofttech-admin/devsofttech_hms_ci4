@@ -2766,6 +2766,21 @@ HTML;
             $id = (int) ($this->request->getPost('id') ?? 0);
             $templateName = trim((string) ($this->request->getPost('template_name') ?? ''));
             $templateHtml = (string) ($this->request->getPost('template_html') ?? '');
+            $headerHtml = (string) ($this->request->getPost('header_html') ?? '');
+            $footerHtml = (string) ($this->request->getPost('footer_html') ?? '');
+            $templateCss = (string) ($this->request->getPost('template_css') ?? '');
+            $pageSize = strtoupper(trim((string) ($this->request->getPost('page_size') ?? 'A4')));
+            if (! in_array($pageSize, ['A4', 'A4-L', 'A5', 'A6', 'LETTER', 'LEGAL', 'CUSTOM'], true)) {
+                $pageSize = 'A4';
+            }
+            $customWidthMm = max(20, min(600, (int) ($this->request->getPost('custom_width_mm') ?? 210)));
+            $customHeightMm = max(20, min(1000, (int) ($this->request->getPost('custom_height_mm') ?? 297)));
+            $marginTop = max(0, min(25, (float) ($this->request->getPost('page_margin_top_cm') ?? 0.8)));
+            $marginBottom = max(0, min(25, (float) ($this->request->getPost('page_margin_bottom_cm') ?? 0.8)));
+            $marginLeft = max(0, min(25, (float) ($this->request->getPost('page_margin_left_cm') ?? 0.8)));
+            $marginRight = max(0, min(25, (float) ($this->request->getPost('page_margin_right_cm') ?? 0.8)));
+            $marginHeader = max(0, min(25, (float) ($this->request->getPost('margin_header_cm') ?? 0.5)));
+            $marginFooter = max(0, min(25, (float) ($this->request->getPost('margin_footer_cm') ?? 0.5)));
             $isDefault = (int) ($this->request->getPost('is_default') ?? 0) === 1 ? 1 : 0;
             $status = (int) ($this->request->getPost('status') ?? 1) === 1 ? 1 : 0;
 
@@ -2776,6 +2791,18 @@ HTML;
                 $table = $this->db->table('ipd_discharge_templates');
                 $data = [
                     'template_name' => $templateName,
+                    'page_size' => $pageSize,
+                    'custom_width_mm' => $customWidthMm,
+                    'custom_height_mm' => $customHeightMm,
+                    'page_margin_top_cm' => $marginTop,
+                    'page_margin_bottom_cm' => $marginBottom,
+                    'page_margin_left_cm' => $marginLeft,
+                    'page_margin_right_cm' => $marginRight,
+                    'margin_header_cm' => $marginHeader,
+                    'margin_footer_cm' => $marginFooter,
+                    'header_html' => $headerHtml,
+                    'footer_html' => $footerHtml,
+                    'template_css' => $templateCss,
                     'template_html' => $templateHtml,
                     'is_default' => $isDefault,
                     'status' => $status,
