@@ -32,6 +32,38 @@ if ($person) {
 ?>
 
 <section class="content">
+    <style>
+        .discharge-preview-content {
+            font-family: freeserif, serif;
+            font-size: 11pt;
+            color: #111827;
+            line-height: 1.4;
+        }
+        .discharge-preview-content h2,
+        .discharge-preview-content h3,
+        .discharge-preview-content h4 {
+            margin: 12px 0 6px 0;
+            color: #0f172a;
+        }
+        .discharge-preview-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 6px 0 10px 0;
+            font-size: 10pt;
+        }
+        .discharge-preview-content th,
+        .discharge-preview-content td {
+            border: 1px solid #d1d5db !important;
+            padding: 5px;
+            vertical-align: top;
+        }
+        .discharge-preview-content ul,
+        .discharge-preview-content ol {
+            margin: 4px 0 10px 18px;
+            padding: 0;
+        }
+    </style>
+
     <div class="card shadow-sm border-0">
         <div class="card-header bg-light d-flex flex-wrap justify-content-between align-items-center gap-2">
             <h5 class="mb-0">Discharge Preview</h5>
@@ -116,7 +148,7 @@ if ($person) {
                 </div>
             <?php endif; ?>
 
-            <div class="border rounded p-3 bg-white" style="min-height: 420px; overflow:auto;">
+            <div class="border rounded p-3 bg-white discharge-preview-content" style="min-height: 420px; overflow:auto;">
                 <?= $renderedHtml ?>
             </div>
 
