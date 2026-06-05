@@ -3858,8 +3858,11 @@ class Opd extends BaseController
 
         // Legacy token {{painscale_img}}: use legacy PNG if available, else render
         // a simple inline visual scale so placeholder always displays meaningful UI.
+        // IMPORTANT: Only render if painValue is explicitly set (not null/empty)
         $painIndex = ($painValue !== null && $painValue >= 0 && $painValue <= 4) ? $painValue : null;
         $painImageHtml = '';
+        
+        // Only generate image if pain_value is actually set
         if ($painIndex !== null) {
             $imageCandidates = [
                 FCPATH . 'assets/images/pains_scale_' . $painIndex . '.png',
@@ -3878,12 +3881,15 @@ class Opd extends BaseController
             $labels = ['No Pain', 'Mild', 'Moderate', 'Intense', 'Worst'];
             $colors = ['#22c55e', '#84cc16', '#eab308', '#f97316', '#ef4444']; // green to red gradient
             
-            $painImageHtml = '<table width="100%" border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:4px 0 4px 0;">';
+            // Add debug info at top showing which pain level is selected
+            $painImageHtml = '<div style="font-size:10px;color:#666;margin-bottom:2px;">Pain Level: ' . $painIndex . ' - ' . esc($labels[$painIndex]) . '</div>';
+            
+            $painImageHtml .= '<table width="100%" border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:4px 0 4px 0;">';
             
             // Row 1: Down arrow indicator above selected level (more visible than checkmark)
             $painImageHtml .= '<tr>';
             for ($i = 0; $i <= 4; $i++) {
-                $active = $painIndex === $i;
+                $active = ($painIndex === $i);
                 $arrow = $active ? '▼' : '&nbsp;';
                 $painImageHtml .= '<td width="20%" style="text-align:center;height:20px;font-size:20px;font-weight:700;color:' . $colors[$i] . ';line-height:1;">' . $arrow . '</td>';
             }
@@ -3892,7 +3898,7 @@ class Opd extends BaseController
             // Row 2: Number boxes with strong color coding and border
             $painImageHtml .= '<tr>';
             for ($i = 0; $i <= 4; $i++) {
-                $active = $painIndex === $i;
+                $active = ($painIndex === $i);
                 $bg = $active ? $colors[$i] : '#ffffff';
                 $borderColor = $active ? '#000000' : '#d1d5db';
                 $borderWidth = $active ? '3px' : '1px';
@@ -3904,7 +3910,7 @@ class Opd extends BaseController
             // Row 3: Labels with bold for selected
             $painImageHtml .= '<tr>';
             for ($i = 0; $i <= 4; $i++) {
-                $active = $painIndex === $i;
+                $active = ($painIndex === $i);
                 $fontWeight = $active ? '700' : '400';
                 $textColor = $active ? '#000000' : '#6b7280';
                 $fontSize = $active ? '9px' : '8px';
