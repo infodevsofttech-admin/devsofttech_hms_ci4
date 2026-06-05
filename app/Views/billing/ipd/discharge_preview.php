@@ -91,7 +91,7 @@ if ($person) {
                 <div class="col-md-3"><strong>Discharge Date:</strong> <?= esc($ipd->str_discharge_date ?? '') ?></div>
             </div>
 
-            <form method="get" action="<?= site_url('Ipd_discharge/preview_discharge_report/' . $ipdId) ?>" class="row g-2 mb-3">
+            <form method="get" action="<?= site_url('Ipd_discharge/preview_discharge_report/' . $ipdId) ?>" class="row g-2 mb-3" id="discharge_template_apply_form">
                 <div class="col-md-6 col-lg-4">
                     <label class="form-label small mb-1"><strong>Discharge Template</strong></label>
                     <select class="form-select form-select-sm" name="tpl" id="tpl_selector">
@@ -158,9 +158,44 @@ if ($person) {
 
             <div class="d-flex flex-wrap gap-2 mt-3">
                 <a class="btn btn-primary" id="btn_create" href="<?= site_url('Ipd_discharge/ipd_select/' . $ipdId) ?>">Back to Create Discharge Summary</a>
-                <button type="button" class="btn btn-danger" id="btn_show">Make File and Print on Letter Head</button>
-                <button type="button" class="btn btn-danger" id="btn_show2">Make File and Print On Plain Paper</button>
-                <button type="button" class="btn btn-outline-danger" id="btn_show3">New Print</button>
+                <div class="btn-group" role="group">
+                    <button type="button" class="btn btn-danger dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                        Make File and Print on Letter Head
+                    </button>
+                    <ul class="dropdown-menu">
+                        <?php foreach ($templateRows as $tpl): ?>
+                            <?php $tplId = (int) ($tpl['id'] ?? 0); ?>
+                            <li>
+                                <button
+                                    type="button"
+                                    class="dropdown-item discharge-print-link"
+                                    data-print-url="<?= esc(site_url('Ipd_discharge/show_discharge/' . $ipdId . '/1') . '?tpl=' . $tplId) ?>"
+                                >
+                                    <?= esc((string) ($tpl['template_name'] ?? ('Template #' . $tplId))) ?>
+                                </button>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+                <div class="btn-group" role="group">
+                    <button type="button" class="btn btn-outline-danger dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                        Make File and Print On Plain Paper
+                    </button>
+                    <ul class="dropdown-menu">
+                        <?php foreach ($templateRows as $tpl): ?>
+                            <?php $tplId = (int) ($tpl['id'] ?? 0); ?>
+                            <li>
+                                <button
+                                    type="button"
+                                    class="dropdown-item discharge-print-link"
+                                    data-print-url="<?= esc(site_url('Ipd_discharge/show_discharge/' . $ipdId . '/0') . '?tpl=' . $tplId) ?>"
+                                >
+                                    <?= esc((string) ($tpl['template_name'] ?? ('Template #' . $tplId))) ?>
+                                </button>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
             </div>
         </div>
     </div>
@@ -188,9 +223,9 @@ if ($person) {
     var nabhCriticalMissingCount = <?= (int) $nabhCriticalMissingCount ?>;
     var nabhCriticalMissingItems = <?= json_encode(array_values($nabhCriticalMissing), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     var btnCreate = document.getElementById('btn_create');
-    var btnShow = document.getElementById('btn_show');
-    var btnShow2 = document.getElementById('btn_show2');
-    var btnShow3 = document.getElementById('btn_show3');
+    var printLinks = document.querySelectorAll('.discharge-print-link');
+    var applyTemplateForm = document.getElementById('discharge_template_apply_form');
+    var tplSelector = document.getElementById('tpl_selector');
 
     function confirmNabhPrint() {
         if (nabhCriticalMissingCount <= 0) {
@@ -213,49 +248,34 @@ if ($person) {
         });
     }
 
-    if (btnShow) {
-        btnShow.addEventListener('click', function() {
-            if (!confirmNabhPrint()) {
+    if (applyTemplateForm) {
+        applyTemplateForm.addEventListener('submit', function(e) {
+            var action = applyTemplateForm.getAttribute('action') || '';
+            var tplId = tplSelector ? parseInt(tplSelector.value || '0', 10) : 0;
+            if (action === '') {
                 return;
             }
-            var tpl = document.getElementById('tpl_selector');
-            var tplId = tpl ? parseInt(tpl.value || '0', 10) : 0;
-            var url = '<?= site_url('Ipd_discharge/show_discharge') ?>/' + ipdId + '/1';
-            if (tplId > 0) {
-                url += '?tpl=' + tplId;
+
+            if (typeof load_form === 'function' || typeof load_form_div === 'function') {
+                e.preventDefault();
+                if (tplId > 0) {
+                    action += '?tpl=' + encodeURIComponent(String(tplId));
+                }
+                loadOrRedirect(action, 'Discharge Preview');
             }
-            openUrl(url);
         });
     }
 
-    if (btnShow2) {
-        btnShow2.addEventListener('click', function() {
+    printLinks.forEach(function(btn) {
+        btn.addEventListener('click', function() {
             if (!confirmNabhPrint()) {
                 return;
             }
-            var tpl = document.getElementById('tpl_selector');
-            var tplId = tpl ? parseInt(tpl.value || '0', 10) : 0;
-            var url = '<?= site_url('Ipd_discharge/show_discharge') ?>/' + ipdId + '/0';
-            if (tplId > 0) {
-                url += '?tpl=' + tplId;
+            var url = btn.getAttribute('data-print-url') || '';
+            if (url !== '') {
+                openUrl(url);
             }
-            openUrl(url);
         });
-    }
-
-    if (btnShow3) {
-        btnShow3.addEventListener('click', function() {
-            if (!confirmNabhPrint()) {
-                return;
-            }
-            var tpl = document.getElementById('tpl_selector');
-            var tplId = tpl ? parseInt(tpl.value || '0', 10) : 0;
-            var url = '<?= site_url('Ipd_discharge/show_file3') ?>/' + ipdId;
-            if (tplId > 0) {
-                url += '?tpl=' + tplId;
-            }
-            openUrl(url);
-        });
-    }
+    });
 })();
 </script>
