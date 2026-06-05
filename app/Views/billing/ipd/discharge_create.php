@@ -601,6 +601,12 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
         / IPD ID : <strong><?= esc((string) ($ipd->ipd_code ?? '')) ?></strong>
     </div>
 
+    <div class="mb-3 text-end">
+        <button type="button" class="btn btn-primary" id="btn_preview_top" onclick="openDischargePreview('<?= site_url('Ipd_discharge/preview_discharge_report/' . $ipdId . '?regen=1') ?>', 'Discharge Preview');">
+            <i class="fas fa-eye me-1"></i> Preview Discharge Summary
+        </button>
+    </div>
+
     <div class="card discharge-main-card">
         <div class="card-body">
             <?php if ($noticeText !== ''): ?>
