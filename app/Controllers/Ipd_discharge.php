@@ -4843,31 +4843,18 @@ class Ipd_discharge extends BaseController
 
     private function buildDischargePdfHtml(array $panelData, string $renderedContent, bool $withHeader, string $templateName): string
     {
-        $ipd = $panelData['ipd_info'] ?? null;
-        $person = $panelData['person_info'] ?? null;
-
-        $headerBlock = '';
-        if ($withHeader) {
-            $headerBlock = '<div class="pdf-header">'
-                . '<div class="pdf-header-title">Discharge Summary</div>'
-                . '<div class="pdf-header-sub">Template: ' . esc($templateName) . '</div>'
-                . '</div>';
-        }
+        // Keep PDF body clean; header/footer is handled via mPDF SetHTMLHeader/SetHTMLFooter.
 
         return '<!doctype html>'
             . '<html><head><meta charset="utf-8">'
             . '<style>'
             . 'body{font-family:freeserif,serif;font-size:11pt;color:#111827;line-height:1.4;}'
-            . '.pdf-header{margin-bottom:10px;border-bottom:1px solid #d1d5db;padding-bottom:6px;}'
-            . '.pdf-header-title{font-size:18pt;font-weight:700;}'
-            . '.pdf-header-sub{font-size:9pt;color:#4b5563;}'
                 . '.content{padding:0;}'
             . '.content h2,.content h3,.content h4{margin:12px 0 6px 0;color:#0f172a;}'
             . '.content table{width:100%;border-collapse:collapse;margin:6px 0 10px 0;font-size:10pt;}'
             . '.content th,.content td{border:1px solid #d1d5db;padding:5px;vertical-align:top;}'
             . '.content ul,.content ol{margin:4px 0 10px 18px;padding:0;}'
             . '</style></head><body>'
-            . $headerBlock
             . '<div class="content">' . $renderedContent . '</div>'
             . '</body></html>';
     }
