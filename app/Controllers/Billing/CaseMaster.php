@@ -557,9 +557,13 @@ class CaseMaster extends BaseController
                     o.opd_code AS Code,o.opd_fee_amount AS Amount,
                     '1' AS orgcode,0 AS discount_amount,null AS d_rate
                 from opd_master o
-                join organization_case_master c
-                    on (o.insurance_case_id = cast(c.id as char) or o.insurance_case_id = c.case_id_code)
-                where o.opd_status in (1,2) and c.id={$caseid}
+                join organization_case_master c on c.id={$caseid}
+                where o.opd_status in (1,2)
+                    and (
+                        o.insurance_case_id = cast(c.id as char)
+                        or o.insurance_case_id = c.case_id_code
+                        or o.p_id = c.p_id
+                    )
 
                 union all
 
@@ -573,12 +577,16 @@ class CaseMaster extends BaseController
                     case when it.amount1 is not null and it.amount1 <> t.item_rate then 1 else 0 end AS discount_amount,
                     it.amount1 AS d_rate
                 from invoice_master i
-                join organization_case_master c on i.insurance_case_id = c.id
+                join organization_case_master c on c.id={$caseid}
                 join invoice_item t on t.inv_master_id = i.id
                 join hc_item_type l on t.item_type = l.itype_id
                 left join hc_items_insurance it
                     on t.item_id = it.hc_items_id and i.insurance_id = it.hc_insurance_id
-                where i.ipd_include = 1 and i.invoice_status = 1 and c.id={$caseid}
+                where i.ipd_include = 1 and i.invoice_status = 1
+                    and (
+                        i.insurance_case_id = c.id
+                        or i.attach_id = c.p_id
+                    )
             ) v
             order by v.Charge_type, v.Adate
         ";
@@ -604,7 +612,7 @@ class CaseMaster extends BaseController
     private function updateOrgTotals(int $caseId): void
     {
         $caseRow = $this->db->table('organization_case_master')
-            ->select('case_type')
+            ->select('case_type,p_id,case_id_code')
             ->where('id', $caseId)
             ->get()
             ->getRow();
@@ -616,7 +624,11 @@ class CaseMaster extends BaseController
         $opdFeeRow = $this->db->table('opd_master')
             ->selectSum('opd_fee_amount', 'total')
             ->whereIn('opd_status', [1, 2])
-            ->where('insurance_case_id', $caseId)
+            ->groupStart()
+                ->where('insurance_case_id', (string) $caseId)
+                ->orWhere('insurance_case_id', (string) ($caseRow->case_id_code ?? ''))
+                ->orWhere('p_id', (int) ($caseRow->p_id ?? 0))
+            ->groupEnd()
             ->get()
             ->getRow();
         $opdFee = (float) ($opdFeeRow->total ?? 0);
@@ -631,7 +643,10 @@ class CaseMaster extends BaseController
         $chargeRow = $this->db->table('invoice_master')
             ->selectSum('net_amount', 'total')
             ->where('invoice_status', 1)
-            ->where('insurance_case_id', $caseId)
+            ->groupStart()
+                ->where('insurance_case_id', $caseId)
+                ->orWhere('attach_id', (int) ($caseRow->p_id ?? 0))
+            ->groupEnd()
             ->get()
             ->getRow();
         $chargeTotal = (float) ($chargeRow->total ?? 0);
