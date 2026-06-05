@@ -364,7 +364,7 @@ class CaseMaster extends BaseController
             (case c.status when 0 then 'Pending' when 1 then 'Ready for submission' when 2 then 'Submitted' when 3 then 'Payment Done' else 'Other' end) as str_status,
             Date_Format(c.date_registration,'%d-%m-%Y') as date_registration_in
             from (organization_case_master c join patient_master p  on c.p_id=p.id )
-            left join opd_master o on (o.insurance_case_id = cast(c.id as char) or o.insurance_case_id = c.case_id_code)
+            left join opd_master o on c.id=o.insurance_case_id
             left join invoice_master i on c.id=i.insurance_case_id
             group by c.id ";
 
@@ -559,13 +559,7 @@ class CaseMaster extends BaseController
                 from opd_master o
                 join organization_case_master c on c.id={$caseid}
                 where o.opd_status in (1,2)
-                    and o.insurance_case_id is not null
-                    and o.insurance_case_id != ''
-                    and o.insurance_case_id != '0'
-                    and (
-                        o.insurance_case_id = cast(c.id as char)
-                        or o.insurance_case_id = c.case_id_code
-                    )
+                    and o.insurance_case_id = c.id
 
                 union all
 
@@ -588,13 +582,7 @@ class CaseMaster extends BaseController
                     group by hc_items_id, hc_insurance_id
                 ) it on t.item_id = it.hc_items_id and i.insurance_id = it.hc_insurance_id
                 where i.ipd_include = 1 and i.invoice_status = 1
-                    and i.insurance_case_id is not null
-                    and i.insurance_case_id != ''
-                    and i.insurance_case_id != '0'
-                    and (
-                        i.insurance_case_id = c.id
-                        or i.insurance_case_id = c.case_id_code
-                    )
+                    and i.insurance_case_id = c.id
             ) v
             order by v.Charge_type, v.Adate
         ";
@@ -632,11 +620,7 @@ class CaseMaster extends BaseController
         $opdFeeRow = $this->db->table('opd_master')
             ->selectSum('opd_fee_amount', 'total')
             ->whereIn('opd_status', [1, 2])
-            ->whereNotIn('insurance_case_id', [null, '', '0'])
-            ->groupStart()
-                ->where('insurance_case_id', (string) $caseId)
-                ->orWhere('insurance_case_id', (string) ($caseRow->case_id_code ?? ''))
-            ->groupEnd()
+            ->where('insurance_case_id', $caseId)
             ->get()
             ->getRow();
         $opdFee = (float) ($opdFeeRow->total ?? 0);
@@ -651,11 +635,7 @@ class CaseMaster extends BaseController
         $chargeRow = $this->db->table('invoice_master')
             ->selectSum('net_amount', 'total')
             ->where('invoice_status', 1)
-            ->whereNotIn('insurance_case_id', [null, '', '0'])
-            ->groupStart()
-                ->where('insurance_case_id', $caseId)
-                ->orWhere('insurance_case_id', (string) ($caseRow->case_id_code ?? ''))
-            ->groupEnd()
+            ->where('insurance_case_id', $caseId)
             ->get()
             ->getRow();
         $chargeTotal = (float) ($chargeRow->total ?? 0);

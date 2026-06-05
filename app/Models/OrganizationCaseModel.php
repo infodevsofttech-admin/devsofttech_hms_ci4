@@ -49,13 +49,7 @@ class OrganizationCaseModel extends Model
                 from opd_master o
                 join organization_case_master c on c.id={$caseId}
                 where o.opd_status in (1,2)
-                    and o.insurance_case_id is not null
-                    and o.insurance_case_id != ''
-                    and o.insurance_case_id != '0'
-                    and (
-                        o.insurance_case_id = cast(c.id as char)
-                        or o.insurance_case_id = c.case_id_code
-                    )
+                    and o.insurance_case_id = c.id
 
                 union all
 
@@ -78,13 +72,7 @@ class OrganizationCaseModel extends Model
                     group by hc_items_id, hc_insurance_id
                 ) it on t.item_id = it.hc_items_id and i.insurance_id = it.hc_insurance_id
                 where i.ipd_include = 1 and i.invoice_status = 1
-                    and i.insurance_case_id is not null
-                    and i.insurance_case_id != ''
-                    and i.insurance_case_id != '0'
-                    and (
-                        i.insurance_case_id = c.id
-                        or i.insurance_case_id = c.case_id_code
-                    )
+                    and i.insurance_case_id = c.id
             ) v
             order by v.Charge_type, v.Adate
         ";
