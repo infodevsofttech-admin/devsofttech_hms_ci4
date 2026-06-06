@@ -5126,6 +5126,58 @@ class Ipd_discharge extends BaseController
                     $savedAny = $this->upsertByIpd('ipd_discharge_drug_food_interaction', $ipdId, $legacyData) || $savedAny;
                 }
 
+                // Process discharge medicine JSON (newly added medicines from the form).
+                $medicineJson = trim((string) ($this->request->getPost('discharge_medicine_json') ?? ''));
+                if ($medicineJson !== '') {
+                    $medicines = json_decode($medicineJson, true);
+                    if (is_array($medicines) && ! empty($medicines)) {
+                        $legacyTable = $this->findFirstExistingTable([
+                            'ipd_discharge_prescrption_prescribed',
+                            'ipd_discharge_prescription_prescribed',
+                        ]);
+
+                        if ($legacyTable !== null) {
+                            // Clear previously added client-side medicines (optional - keeps only DB-saved ones).
+                            // Comment out if you want to preserve all medicines.
+                            // $this->db->table($legacyTable)->where('ipd_id', $ipdId)->where('med_id', 0)->delete();
+
+                            foreach ($medicines as $med) {
+                                $medName = trim((string) ($med['med_name'] ?? ''));
+                                if ($medName === '') {
+                                    continue;
+                                }
+
+                                $insert = [
+                                    'ipd_id' => $ipdId,
+                                    'med_id' => 0,
+                                    'med_name' => $medName,
+                                    'update_by' => $userLabel,
+                                ];
+
+                                // Add optional fields if columns exist.
+                                $optionalFields = [
+                                    'med_type' => 'med_type',
+                                    'dosage' => 'dosage',
+                                    'dosage_when' => 'dosage_when',
+                                    'dosage_freq' => 'dosage_freq',
+                                    'no_of_days' => 'no_of_days',
+                                    'qty' => 'qty',
+                                    'remark' => 'remark',
+                                ];
+
+                                foreach ($optionalFields as $jsonKey => $colName) {
+                                    if ($this->db->fieldExists($colName, $legacyTable)) {
+                                        $insert[$colName] = trim((string) ($med[$jsonKey] ?? ''));
+                                    }
+                                }
+
+                                $this->db->table($legacyTable)->insert($insert);
+                                $savedAny = true;
+                            }
+                        }
+                    }
+                }
+
                 // Examination on Admission (General Examination values).
                 if ($this->tableHasColumns('ipd_discharge_general_exam_col', ['id', 'col_name'])
                     && $this->tableHasColumns('ipd_discharge_1_b', ['ipd_d_id', 'col_id', 'short_head', 'rdata'])) {
@@ -5586,6 +5638,7 @@ class Ipd_discharge extends BaseController
             'instruction_other' => (string) ($instructionMeta['other_text'] ?? ''),
             'inhos_remark' => (string) ($inhosRow['comp_remark'] ?? ''),
             'other_exam_text' => (string) ($otherExamParsed['text'] ?? ''),
+            'next_visit_options' => $this->getNextVisitOptions(date('Y-m-d')),
         ]);
     }
 
@@ -6144,5 +6197,95 @@ class Ipd_discharge extends BaseController
         } catch (\Throwable $e) {
             // Do not block discharge workflows if queue service is unavailable.
         }
+    }
+
+    private function getNextVisitOptions(string $baseDate): array
+    {
+        $fallbackDays = [3, 4, 5, 7, 10, 15, 20, 30, 60];
+        $fallbackDesc = [
+            3 => '3 Days',
+            4 => '4 Days',
+            5 => '5 Days',
+            7 => '1 Week',
+            10 => '10 Days',
+            15 => '15 Days',
+            20 => '20 days',
+            30 => '1 Month',
+            60 => '2 Months',
+        ];
+
+        $baseTs = strtotime($baseDate);
+        if ($baseTs === false) {
+            $baseTs = strtotime(date('Y-m-d'));
+        }
+
+        $rows = [];
+        if ($this->db->tableExists('opd_nextvisit')) {
+            $fields = $this->db->getFieldNames('opd_nextvisit') ?? [];
+            $descField = $this->resolveFirstField($fields, ['next_visit_desc', 'visit_desc', 'description', 'nextvisit_desc', 'name']);
+            $daysField = $this->resolveFirstField($fields, ['no_of_days', 'days', 'day_count']);
+
+            if ($descField !== null && $daysField !== null) {
+                $builder = $this->db->table('opd_nextvisit')
+                    ->select($descField . ' as visit_desc,' . $daysField . ' as no_of_days');
+
+                if (in_array('status', $fields, true)) {
+                    $builder->where('status', 1);
+                }
+
+                $rows = $builder
+                    ->orderBy($daysField, 'ASC')
+                    ->get()
+                    ->getResultArray();
+            }
+        }
+
+        $options = [];
+        if (! empty($rows)) {
+            foreach ($rows as $row) {
+                $days = (int) ($row['no_of_days'] ?? 0);
+                $desc = trim((string) ($row['visit_desc'] ?? ''));
+                if ($days <= 0 || $desc === '') {
+                    continue;
+                }
+
+                $visitDate = date('d-m-Y', strtotime('+' . $days . ' day', $baseTs));
+                $value = $desc . ' (' . $visitDate . ')';
+
+                $options[] = [
+                    'desc' => $desc,
+                    'days' => $days,
+                    'date' => $visitDate,
+                    'value' => $value,
+                ];
+            }
+        }
+
+        if (empty($options)) {
+            foreach ($fallbackDays as $days) {
+                $desc = (string) ($fallbackDesc[$days] ?? ($days . ' Days'));
+                $visitDate = date('d-m-Y', strtotime('+' . $days . ' day', $baseTs));
+                $value = $desc . ' (' . $visitDate . ')';
+                $options[] = [
+                    'desc' => $desc,
+                    'days' => $days,
+                    'date' => $visitDate,
+                    'value' => $value,
+                ];
+            }
+        }
+
+        return $options;
+    }
+
+    private function resolveFirstField(array $fields, array $candidates): ?string
+    {
+        foreach ($candidates as $candidate) {
+            if (in_array($candidate, $fields, true)) {
+                return $candidate;
+            }
+        }
+
+        return null;
     }
 }

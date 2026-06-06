@@ -1269,6 +1269,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                             </table>
                                         </div>
                                         <input type="hidden" name="drug_remove_id" id="drug_remove_id" value="0">
+                                        <input type="hidden" name="discharge_medicine_json" id="discharge_medicine_json" value="">
                                     </div>
 
                                     <!-- Add Medicine Form -->
@@ -1426,9 +1427,19 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                     <label class="form-label">Discharge Summary</label>
                                     <textarea class="form-control" name="instruction_remark" id="instruction_remark" rows="3"><?= esc((string) ($instruction_remark ?? '')) ?></textarea>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-6">
                                     <label class="form-label">Review After (days/text)</label>
-                                    <input type="text" class="form-control" name="review_after" value="<?= esc((string) ($review_after ?? '')) ?>">
+                                    <input type="text" class="form-control" name="review_after" id="discharge_review_after" value="<?= esc((string) ($review_after ?? '')) ?>" placeholder="e.g. 5 Days">
+                                </div>
+                                <div class="col-md-12">
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <?php $nextVisitOptions = is_array($next_visit_options ?? null) ? $next_visit_options : []; ?>
+                                        <?php foreach ($nextVisitOptions as $nextVisitOpt) : ?>
+                                            <?php $nextVisitValue = trim((string) ($nextVisitOpt['value'] ?? '')); ?>
+                                            <?php if ($nextVisitValue === '') { continue; } ?>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm discharge-review-chip" data-value="<?= esc($nextVisitValue) ?>"><?= esc($nextVisitValue) ?></button>
+                                        <?php endforeach; ?>
+                                    </div>
                                 </div>
                                 <div class="col-md-12 d-flex justify-content-end">
                                     <button type="submit" class="btn btn-outline-success btn-sm" name="action" value="save_main" data-reload-section="section-instructions">Save Discharge Advice</button>
@@ -1713,6 +1724,14 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                 CKEDITOR.instances.systemic_exam_editor.destroy(true);
             }
 
+            if (CKEDITOR.instances.instruction_other) {
+                CKEDITOR.instances.instruction_other.destroy(true);
+            }
+
+            if (CKEDITOR.instances.instruction_remark) {
+                CKEDITOR.instances.instruction_remark.destroy(true);
+            }
+
             if (document.getElementById('complaint_remark_editor')) {
                 CKEDITOR.replace('complaint_remark_editor', {
                     height: 180
@@ -1722,6 +1741,28 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
             if (document.getElementById('systemic_exam_editor')) {
                 CKEDITOR.replace('systemic_exam_editor', {
                     height: 200
+                });
+            }
+
+            if (document.getElementById('instruction_other')) {
+                CKEDITOR.replace('instruction_other', {
+                    height: 120,
+                    toolbar: [
+                        { name: 'basicstyles', items: ['Bold', 'Italic', 'Underline'] },
+                        { name: 'paragraph', items: ['NumberedList', 'BulletedList'] },
+                        { name: 'editing', items: ['Undo', 'Redo'] }
+                    ]
+                });
+            }
+
+            if (document.getElementById('instruction_remark')) {
+                CKEDITOR.replace('instruction_remark', {
+                    height: 150,
+                    toolbar: [
+                        { name: 'basicstyles', items: ['Bold', 'Italic', 'Underline'] },
+                        { name: 'paragraph', items: ['NumberedList', 'BulletedList'] },
+                        { name: 'editing', items: ['Undo', 'Redo'] }
+                    ]
                 });
             }
         }
@@ -3697,6 +3738,19 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
 
             refreshInstructionPreview();
             initDietaryMasterCrud(getDischargeForm());
+
+            // Review After quick select buttons
+            var reviewChips = section.querySelectorAll('.discharge-review-chip');
+            var reviewInput = section.querySelector('#discharge_review_after');
+            reviewChips.forEach(function(chip) {
+                chip.addEventListener('click', function() {
+                    var value = chip.getAttribute('data-value') || chip.textContent.trim();
+                    if (reviewInput) {
+                        reviewInput.value = value;
+                        reviewInput.focus();
+                    }
+                });
+            });
         }
 
         function initDietaryMasterCrud(form) {
@@ -4210,6 +4264,41 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
             }
         }
 
+        function serializeDischargeMedicineTable() {
+            var tbody = document.querySelector('#discharge_medicine_tbody');
+            var hiddenField = document.querySelector('#discharge_medicine_json');
+            if (!tbody || !hiddenField) {
+                return;
+            }
+
+            var rows = tbody.querySelectorAll('tr');
+            var medicines = [];
+
+            rows.forEach(function(row) {
+                var cells = row.querySelectorAll('td');
+                // Skip empty state row or rows with insufficient cells
+                if (cells.length >= 8) {
+                    var cellData = {
+                        med_type: cells[0].textContent.trim(),
+                        med_name: cells[1].textContent.trim(),
+                        dosage: cells[2].textContent.trim(),
+                        dosage_when: cells[3].textContent.trim(),
+                        dosage_freq: cells[4].textContent.trim(),
+                        no_of_days: cells[5].textContent.trim(),
+                        qty: cells[6].textContent.trim(),
+                        remark: cells[7].textContent.trim()
+                    };
+
+                    // Only add non-empty medicine names
+                    if (cellData.med_name !== '' && cellData.med_name !== 'No medicine added') {
+                        medicines.push(cellData);
+                    }
+                }
+            });
+
+            hiddenField.value = JSON.stringify(medicines);
+        }
+
         function syncEditorValues() {
             if (!window.CKEDITOR) {
                 return;
@@ -4551,6 +4640,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
             form.addEventListener('submit', function(e) {
                 e.preventDefault();
                 syncEditorValues();
+                serializeDischargeMedicineTable();
                 syncClinicalLabSelection(form);
                 syncCoMorbidityHidden(form);
 
