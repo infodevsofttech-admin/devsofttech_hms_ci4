@@ -1670,7 +1670,12 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
             // Load existing complaints from PHP (if any)
             <?php if (!empty($complaint_rows)): ?>
                 selectedDischargeComplaints = [
-                    <?php foreach ($complaint_rows as $row): ?>
+                    <?php 
+                    $itemCount = count($complaint_rows);
+                    $currentIndex = 0;
+                    foreach ($complaint_rows as $row): 
+                        $currentIndex++;
+                    ?>
                     {
                         id: <?= (int) ($row['id'] ?? 0) ?>,
                         term: <?= json_encode((string) ($row['comp_report'] ?? '')) ?>,
@@ -1678,7 +1683,8 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                         severity: '',
                         duration: <?= json_encode((string) ($row['comp_remark'] ?? '')) ?>,
                         date: ''
-                    },
+                    }<?= $currentIndex < $itemCount ? ',' : '' ?>
+
                     <?php endforeach; ?>
                 ];
             <?php endif; ?>
