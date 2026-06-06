@@ -1580,7 +1580,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
 
     <!-- Quick Add Surgery/Procedure Modal -->
     <div class="modal fade" id="quickAddTermModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Save New <span id="quick_term_type_label">Surgery</span> in Master</h5>
