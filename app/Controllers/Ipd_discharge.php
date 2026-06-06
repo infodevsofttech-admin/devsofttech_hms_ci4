@@ -909,6 +909,34 @@ class Ipd_discharge extends BaseController
         return 'user-' . (string) ($user->id ?? 0);
     }
 
+    private function templateHasDemographicTokens(string $templateHtml): bool
+    {
+        $templateHtml = trim($templateHtml);
+        if ($templateHtml === '' || $templateHtml === '{{CONTENT}}') {
+            return false;
+        }
+
+        $demographicTokens = [
+            '{{PATIENT_NAME}}',
+            '{{UHID}}',
+            '{{IPD_CODE}}',
+            '{{AGE_GENDER}}',
+            '{{ADMIT_DATE}}',
+            '{{DISCHARGE_DATE}}',
+            '{{GUARDIAN}}',
+            '{{PATIENT_ADDRESS}}',
+            '{{DEPARTMENT}}',
+        ];
+
+        foreach ($demographicTokens as $token) {
+            if (stripos($templateHtml, $token) !== false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private function saveDischargeContent(int $ipdId, string $content): bool
     {
         try {
@@ -1418,7 +1446,7 @@ class Ipd_discharge extends BaseController
         return '<p><b>' . esc($title) . ' : </b><br/>' . implode('<br/>', $lines) . '</p>';
     }
 
-    private function buildAutoDischargeContent(int $ipdId, array $panelData): string
+    private function buildAutoDischargeContent(int $ipdId, array $panelData, bool $includeSummaryTable = true): string
     {
         $ipd = $panelData['ipd_info'] ?? null;
         $person = $panelData['person_info'] ?? null;
@@ -1449,9 +1477,13 @@ class Ipd_discharge extends BaseController
         }
 
         $sections = [];
-        $summaryTable = $this->buildAutoDischargeSummaryTable($panelData);
-        if ($summaryTable !== '') {
-            $sections[] = $summaryTable;
+        
+        // Only include summary table if explicitly requested
+        if ($includeSummaryTable) {
+            $summaryTable = $this->buildAutoDischargeSummaryTable($panelData);
+            if ($summaryTable !== '') {
+                $sections[] = $summaryTable;
+            }
         }
 
         $complaints = $this->byIpdRows('ipd_discharge_complaint', ['comp_report', 'comp_remark'], 'id ASC', $ipdId);
@@ -5369,8 +5401,38 @@ class Ipd_discharge extends BaseController
         $shouldRegenerate = (int) ($this->request->getGet('regen') ?? 0) === 1;
         $requestedTemplateId = (int) ($this->request->getGet('tpl') ?? 0);
 
+        // Get requested template to check if it has demographic tokens
+        $templates = $this->getDischargeTemplateRows();
+        $selectedTemplate = null;
+        
+        if ($requestedTemplateId > 0) {
+            foreach ($templates as $row) {
+                if ((int) ($row['id'] ?? 0) === $requestedTemplateId) {
+                    $selectedTemplate = $row;
+                    break;
+                }
+            }
+        }
+        
+        if ($selectedTemplate === null) {
+            foreach ($templates as $row) {
+                if ((int) ($row['is_default'] ?? 0) === 1) {
+                    $selectedTemplate = $row;
+                    break;
+                }
+            }
+        }
+        
+        if ($selectedTemplate === null && ! empty($templates)) {
+            $selectedTemplate = $templates[0];
+        }
+        
+        $templateHtml = (string) ($selectedTemplate['template_html'] ?? '{{CONTENT}}');
+        $templateHasDemographics = $this->templateHasDemographicTokens($templateHtml);
+
         if ($shouldRegenerate || trim(strip_tags($content)) === '') {
-            $generated = $this->buildAutoDischargeContent($ipdId, $panelData);
+            // Skip auto-summary table if template has demographic tokens
+            $generated = $this->buildAutoDischargeContent($ipdId, $panelData, !$templateHasDemographics);
             if (trim(strip_tags($generated)) !== '') {
                 $content = $generated;
                 if ($this->saveDischargeContent($ipdId, $content)) {
@@ -5421,15 +5483,45 @@ class Ipd_discharge extends BaseController
             return $this->response->setStatusCode(404)->setBody('IPD not found');
         }
 
+        // Get requested template first to check if it has demographic tokens
+        $requestedTemplateId = (int) ($this->request->getGet('tpl') ?? 0);
+        $templates = $this->getDischargeTemplateRows();
+        $selectedTemplate = null;
+        
+        if ($requestedTemplateId > 0) {
+            foreach ($templates as $row) {
+                if ((int) ($row['id'] ?? 0) === $requestedTemplateId) {
+                    $selectedTemplate = $row;
+                    break;
+                }
+            }
+        }
+        
+        if ($selectedTemplate === null) {
+            foreach ($templates as $row) {
+                if ((int) ($row['is_default'] ?? 0) === 1) {
+                    $selectedTemplate = $row;
+                    break;
+                }
+            }
+        }
+        
+        if ($selectedTemplate === null && ! empty($templates)) {
+            $selectedTemplate = $templates[0];
+        }
+        
+        $templateHtml = (string) ($selectedTemplate['template_html'] ?? '{{CONTENT}}');
+        $templateHasDemographics = $this->templateHasDemographicTokens($templateHtml);
+
         $content = $this->getDischargeContent($ipdId);
         if (trim(strip_tags($content)) === '') {
-            $content = $this->buildAutoDischargeContent($ipdId, $panelData);
+            // Skip auto-summary table if template has demographic tokens
+            $content = $this->buildAutoDischargeContent($ipdId, $panelData, !$templateHasDemographics);
             if (trim(strip_tags($content)) !== '') {
                 $this->saveDischargeContent($ipdId, $content);
             }
         }
 
-        $requestedTemplateId = (int) ($this->request->getGet('tpl') ?? 0);
         $templatePack = $this->applyDischargeTemplate($content, $panelData, $requestedTemplateId > 0 ? $requestedTemplateId : null);
         $templateSettings = is_array($templatePack['selected_template_settings'] ?? null)
             ? $templatePack['selected_template_settings']
