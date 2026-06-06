@@ -366,6 +366,8 @@ $routes->get('ipdNew/show_ipd_form/(:num)', 'Billing\\Ipd::showIpdForm/$1/1');
 $routes->get('ipdNew/show_ipd_form/(:num)/(:num)', 'Billing\\Ipd::showIpdForm/$1/$2');
 
 // Legacy compatibility: old discharge summary links should open current discharge tab.
+$routes->get('Ipd_discharge/search_patient', 'Ipd_discharge::search_patient');
+$routes->get('Ipd_discharge/search_patient_ajax', 'Ipd_discharge::search_patient_ajax');
 $routes->match(['get', 'post'], 'Ipd_discharge/ipd_select/(:num)', 'Ipd_discharge::ipd_select/$1');
 $routes->match(['get', 'post'], 'Ipd_discharge/ipd_select/(:num)/(:num)', 'Ipd_discharge::ipd_select/$1/$2');
 $routes->get('Ipd_discharge/section_past_data', 'Ipd_discharge::section_past_data');

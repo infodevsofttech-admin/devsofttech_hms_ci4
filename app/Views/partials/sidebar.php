@@ -315,6 +315,12 @@ if (! $canChargesSettings && $user && method_exists($user, 'inGroup')) {
                 <span>IPD Patient List</span>
             </a>
         </li>
+        <li class="nav-item">
+            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Ipd_discharge/search_patient') ?>','Discharge Management')">
+                <i class="bi bi-file-medical"></i>
+                <span>Discharge</span>
+            </a>
+        </li>
     <?php } ?>
     
     <?php if ($canDoctorWork) { ?>

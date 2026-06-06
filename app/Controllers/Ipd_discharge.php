@@ -4371,6 +4371,113 @@ class Ipd_discharge extends BaseController
             ->update($update);
     }
 
+    public function search_patient()
+    {
+        $permission = $this->requireAnyPermission([
+            'billing.access',
+            'billing.ipd.invoice',
+            'billing.ipd.current-admission',
+        ]);
+        if ($permission) {
+            return $permission;
+        }
+
+        return view('ipd_discharge/search_patient');
+    }
+
+    public function search_patient_ajax()
+    {
+        $permission = $this->requireAnyPermission([
+            'billing.access',
+            'billing.ipd.invoice',
+            'billing.ipd.current-admission',
+        ]);
+        if ($permission) {
+            return $this->response->setJSON(['success' => false, 'message' => 'Access denied']);
+        }
+
+        $searchQuery = trim((string) ($this->request->getGet('q') ?? ''));
+        
+        if ($searchQuery === '') {
+            return $this->response->setJSON([
+                'success' => false,
+                'message' => 'Please enter a search term'
+            ]);
+        }
+
+        try {
+            // Escape search query for LIKE
+            $escapedSearch = $this->db->escapeLikeString($searchQuery);
+            $likePattern = '%' . $escapedSearch . '%';
+            
+            // First, get basic IPD and patient data
+            $sql = "SELECT 
+                im.id, im.ipd_code, im.register_date, im.discharge_date, 
+                im.discarge_patient_status as discharge_status,
+                p.id as p_id, p.p_code as uhid, p.p_fname, p.p_rname, 
+                IF(p.gender = 1, 'Male', 'Female') as xgender,
+                p.age as p_age, 
+                p.age_in_month,
+                DATEDIFF(COALESCE(im.discharge_date, CURDATE()), im.register_date) as no_days
+            FROM ipd_master im
+            LEFT JOIN patient_master p ON p.id = im.p_id
+            WHERE (
+                im.ipd_code LIKE ? OR
+                p.p_code LIKE ? OR
+                p.p_fname LIKE ? OR
+                p.p_rname LIKE ? OR
+                p.mphone1 LIKE ?
+            )
+            ORDER BY im.id DESC
+            LIMIT 50";
+            
+            $records = $this->db->query($sql, [
+                $likePattern, $likePattern, $likePattern, $likePattern, $likePattern
+            ])->getResult();
+
+            // Enrich each record with bed and doctor info
+            foreach ($records as $record) {
+                $ipdId = (int) $record->id;
+                
+                // Get bed info
+                $bedSql = "SELECT 
+                    CONCAT('Bed No :', COALESCE(b.bed_number, ''), ' [', COALESCE(w.ward_name, ''), ']') as Bed_Desc
+                FROM bed_assignment_history bah
+                LEFT JOIN bed_master b ON b.id = bah.bed_id
+                LEFT JOIN ward_master w ON w.id = bah.ward_id
+                WHERE bah.ipd_id = ?
+                ORDER BY bah.id DESC
+                LIMIT 1";
+                
+                $bedResult = $this->db->query($bedSql, [$ipdId])->getRow();
+                $record->Bed_Desc = $bedResult->Bed_Desc ?? '';
+                
+                // Get doctor info
+                $docSql = "SELECT 
+                    GROUP_CONCAT(DISTINCT CONCAT_WS(' ', 'Dr.', d.p_fname, d.p_mname, d.p_lname) SEPARATOR ', ') as doc_name
+                FROM ipd_master_doc_list i
+                JOIN doctor_master d ON i.doc_id = d.id
+                WHERE i.ipd_id = ?
+                GROUP BY i.ipd_id";
+                
+                $docResult = $this->db->query($docSql, [$ipdId])->getRow();
+                $record->doc_name = $docResult->doc_name ?? '';
+            }
+
+            return $this->response->setJSON([
+                'success' => true,
+                'records' => $records,
+                'count' => count($records)
+            ]);
+        } catch (\Throwable $e) {
+            log_message('error', 'IPD Discharge Search Error: ' . $e->getMessage() . ' | File: ' . $e->getFile() . ' | Line: ' . $e->getLine());
+            return $this->response->setJSON([
+                'success' => false,
+                'message' => 'Database error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
     public function ipd_select(int $ipdId, int $reCreate = 0)
     {
         $permission = $this->requireAnyPermission([
