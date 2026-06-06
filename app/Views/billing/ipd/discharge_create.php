@@ -4107,6 +4107,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
             var dischargeMedInput = section.querySelector('#discharge_med_name');
             var dischargeMedSuggest = section.querySelector('#discharge_med_suggest');
             var dischargeMedType = section.querySelector('#discharge_med_type');
+            var dischargeMedSuggestRows = [];
 
             if (dischargeMedInput) {
                 dischargeMedInput.addEventListener('input', function() {
@@ -4115,15 +4116,16 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                         return;
                     }
 
-                    $.get('<?= base_url('Opd_prescription/rx_group_medicine_suggest') ?>?q=' + encodeURIComponent(q), function(data) {
+                    $.get('<?= base_url('Opd_prescription/medicine_search') ?>?q=' + encodeURIComponent(q) + '&scope=active&limit=10', function(data) {
                         var rows = (data && data.rows) ? data.rows : [];
+                        dischargeMedSuggestRows = rows;
                         var html = '';
                         rows.forEach(function(row) {
                             var name = String(row.med_name || '').trim();
                             if (name === '') {
                                 return;
                             }
-                            html += '<option value="' + $('<div>').text(name).html() + '" data-type="' + $('<div>').text(row.med_type || '').html() + '" data-id="' + (row.med_id || 0) + '"></option>';
+                            html += '<option value="' + $('<div>').text(name).html() + '" data-type="' + $('<div>').text(row.med_type || '').html() + '" data-id="' + (row.id || 0) + '"></option>';
                         });
                         if (dischargeMedSuggest) {
                             dischargeMedSuggest.innerHTML = html;
@@ -4132,22 +4134,80 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                 });
 
                 dischargeMedInput.addEventListener('change', function() {
-                    var value = String(dischargeMedInput.value || '').trim();
-                    if (value === '' || !dischargeMedSuggest) {
+                    var value = String(dischargeMedInput.value || '').trim().toUpperCase();
+                    if (value === '') {
                         return;
                     }
 
-                    // Find matching option and fill type if empty
-                    var options = dischargeMedSuggest.querySelectorAll('option');
-                    options.forEach(function(opt) {
-                        if (opt.value === value && dischargeMedType && dischargeMedType.value.trim() === '') {
-                            var type = opt.getAttribute('data-type') || '';
-                            if (type) {
-                                dischargeMedType.value = type;
-                            }
+                    // Find matching medicine and auto-fill all fields
+                    var matched = null;
+                    dischargeMedSuggestRows.forEach(function(row) {
+                        if (String(row.med_name || '').trim().toUpperCase() === value) {
+                            matched = row;
                         }
                     });
+
+                    if (matched) {
+                        // Auto-fill Type
+                        if (dischargeMedType && dischargeMedType.value.trim() === '') {
+                            dischargeMedType.value = String(matched.med_type || '').trim();
+                        }
+                        
+                        // Auto-fill dose fields if they have values
+                        var dosageSelect = section.querySelector('#discharge_dosage');
+                        var whenSelect = section.querySelector('#discharge_dosage_when');
+                        var freqSelect = section.querySelector('#discharge_dosage_freq');
+                        var whereSelect = section.querySelector('#discharge_dose_where');
+                        var daysInput = section.querySelector('#discharge_no_of_days');
+                        var qtyInput = section.querySelector('#discharge_qty');
+                        var remarkInput = section.querySelector('#discharge_remark');
+                        
+                        if (matched.dosage && dosageSelect && dosageSelect.value === '') {
+                            ensureDoseOption(dosageSelect, matched.dosage);
+                            dosageSelect.value = matched.dosage;
+                        }
+                        if (matched.dosage_when && whenSelect && whenSelect.value === '') {
+                            ensureDoseOption(whenSelect, matched.dosage_when);
+                            whenSelect.value = matched.dosage_when;
+                        }
+                        if (matched.dosage_freq && freqSelect && freqSelect.value === '') {
+                            ensureDoseOption(freqSelect, matched.dosage_freq);
+                            freqSelect.value = matched.dosage_freq;
+                        }
+                        if (matched.dosage_where && whereSelect && whereSelect.value === '') {
+                            ensureDoseOption(whereSelect, matched.dosage_where);
+                            whereSelect.value = matched.dosage_where;
+                        }
+                        if (matched.no_of_days && daysInput && daysInput.value === '') {
+                            daysInput.value = String(matched.no_of_days || '').trim();
+                        }
+                        if (matched.qty && qtyInput && qtyInput.value === '') {
+                            qtyInput.value = String(matched.qty || '').trim();
+                        }
+                        if (matched.remark && remarkInput && remarkInput.value === '') {
+                            remarkInput.value = String(matched.remark || '').trim();
+                        }
+                    }
                 });
+            }
+
+            function ensureDoseOption(select, value) {
+                value = (value || '').toString().trim();
+                if (!value) {
+                    return;
+                }
+                
+                var exists = false;
+                $(select).find('option').each(function() {
+                    if ($(this).val() === value) {
+                        exists = true;
+                        return false;
+                    }
+                });
+                
+                if (!exists) {
+                    $(select).append('<option value="' + $('<div>').text(value).html() + '">' + $('<div>').text(value + ' (Current)').html() + '</option>');
+                }
             }
 
             // Handle quick buttons
