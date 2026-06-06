@@ -415,7 +415,13 @@ class Patient extends BaseController
 	public function search_ajax()
 	{
 		$request = $this->request->getGet();
-		$sdata = trim((string) ($request['search_query'] ?? ''));
+		
+		// Get search value from DataTables search box or from initial search_query
+		$dtSearch = trim((string) ($request['search']['value'] ?? ''));
+		$initialSearch = trim((string) ($request['search_query'] ?? ''));
+		
+		// Use DataTables search if provided, otherwise use initial search_query
+		$sdata = $dtSearch !== '' ? $dtSearch : $initialSearch;
 		$sdata = preg_replace('/[^A-Za-z0-9 _.@\-]/', '', $sdata);
 
 		// Detect ABHA column name in patient_master
