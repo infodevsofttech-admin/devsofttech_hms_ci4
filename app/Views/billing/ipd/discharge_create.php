@@ -1223,78 +1223,144 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                 <input type="hidden" name="drug_remove_source" id="drug_remove_source" value="legacy">
                                 <button type="submit" class="d-none" id="btn_apply_rx_group" name="action" value="apply_rx_group" data-reload-section="section-medicine">Apply Rx Group</button>
 
-                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
                                     <div class="d-flex align-items-center gap-2">
-                                        <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_open_rx_group_modal">Rx Group</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_open_rx_group_modal">+ Rx-Group</button>
                                         <span id="rx_group_selected_name" class="text-muted">No Rx-Group selected</span>
                                     </div>
                                     <div class="small text-muted">Select group and preview medicines before add.</div>
                                 </div>
 
-                                <table class="table table-sm table-bordered">
-                                    <thead><tr><th>Medicine</th><th>Type</th><th>Dose</th><th>When</th><th>Freq</th><th>Days</th><th>Qty</th><th>Remark</th><th style="width:90px;">Action</th></tr></thead>
-                                    <tbody>
-                                        <?php if (empty($medicineRows)): ?>
-                                            <tr><td colspan="9" class="text-muted text-center">No medicine added</td></tr>
-                                        <?php else: foreach ($medicineRows as $row): ?>
-                                            <tr>
-                                                <td><?= esc((string) ($row['med_name'] ?? '')) ?></td>
-                                                <td><?= esc((string) ($row['med_type'] ?? '')) ?></td>
-                                                <td><?= esc((string) ($row['dosage'] ?? '')) ?></td>
-                                                <td><?= esc((string) ($row['dosage_when'] ?? '')) ?></td>
-                                                <td><?= esc((string) ($row['dosage_freq'] ?? '')) ?></td>
-                                                <td><?= esc((string) ($row['no_of_days'] ?? '')) ?></td>
-                                                <td><?= esc((string) ($row['qty'] ?? '')) ?></td>
-                                                <td><?= esc((string) ($row['remark'] ?? '')) ?></td>
-                                                <td><button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_drug" data-reload-section="section-medicine" onclick="document.getElementById('drug_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';document.getElementById('drug_remove_source').value='<?= esc((string) ($row['source'] ?? 'legacy')) ?>';">Remove</button></td>
-                                            </tr>
-                                        <?php endforeach; endif; ?>
-                                    </tbody>
-                                </table>
-                                <input type="hidden" name="drug_remove_id" id="drug_remove_id" value="0">
+                                <div class="row g-3">
+                                    <!-- Medicine List Table -->
+                                    <div class="col-md-7">
+                                        <div class="table-responsive">
+                                            <table class="table table-sm table-bordered">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Medicine</th>
+                                                        <th>Type</th>
+                                                        <th>Dose</th>
+                                                        <th>When</th>
+                                                        <th>Freq</th>
+                                                        <th>Days</th>
+                                                        <th>Qty</th>
+                                                        <th>Remark</th>
+                                                        <th style="width:90px;">Action</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="discharge_medicine_tbody">
+                                                    <?php if (empty($medicineRows)): ?>
+                                                        <tr><td colspan="9" class="text-muted text-center">No medicine added</td></tr>
+                                                    <?php else: foreach ($medicineRows as $row): ?>
+                                                        <tr>
+                                                            <td><?= esc((string) ($row['med_name'] ?? '')) ?></td>
+                                                            <td><?= esc((string) ($row['med_type'] ?? '')) ?></td>
+                                                            <td><?= esc((string) ($row['dosage'] ?? '')) ?></td>
+                                                            <td><?= esc((string) ($row['dosage_when'] ?? '')) ?></td>
+                                                            <td><?= esc((string) ($row['dosage_freq'] ?? '')) ?></td>
+                                                            <td><?= esc((string) ($row['no_of_days'] ?? '')) ?></td>
+                                                            <td><?= esc((string) ($row['qty'] ?? '')) ?></td>
+                                                            <td><?= esc((string) ($row['remark'] ?? '')) ?></td>
+                                                            <td><button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_drug" data-reload-section="section-medicine" onclick="document.getElementById('drug_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';document.getElementById('drug_remove_source').value='<?= esc((string) ($row['source'] ?? 'legacy')) ?>';">Remove</button></td>
+                                                        </tr>
+                                                    <?php endforeach; endif; ?>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <input type="hidden" name="drug_remove_id" id="drug_remove_id" value="0">
+                                    </div>
 
-                                <div class="row g-2 mb-2">
-                                    <div class="col-md-4"><input type="text" class="form-control" name="new_drug_name" id="new_drug_name" list="discharge_med_suggest" autocomplete="off" placeholder="Medicine name"></div>
-                                    <div class="col-md-2"><input type="text" class="form-control" name="new_drug_type" id="new_drug_type" placeholder="Type"></div>
-                                    <div class="col-md-2"><input type="text" class="form-control" name="new_drug_dose" id="new_drug_dose" placeholder="Dose"></div>
-                                    <div class="col-md-2"><input type="text" class="form-control" name="new_drug_when" id="new_drug_when" list="discharge_med_when_suggest" autocomplete="off" placeholder="When (BF/AF/WF)"></div>
-                                    <div class="col-md-2"><input type="text" class="form-control" name="new_drug_freq" id="new_drug_freq" list="discharge_med_freq_suggest" autocomplete="off" placeholder="Freq (OD/BD/TDS/HS)"></div>
-                                </div>
-                                <div class="row g-2 mb-2">
-                                    <div class="col-md-2"><input type="text" class="form-control" name="new_drug_day" id="new_drug_day" placeholder="Days"></div>
-                                    <div class="col-md-2"><input type="text" class="form-control" name="new_drug_qty" id="new_drug_qty" placeholder="Qty"></div>
-                                    <div class="col-md-6"><input type="text" class="form-control" name="new_drug_remark" id="new_drug_remark" placeholder="Remark"></div>
-                                    <div class="col-md-2"><button type="submit" class="btn btn-primary" name="action" value="add_drug" data-reload-section="section-medicine" style="width:100%;">Add</button></div>
-                                </div>
+                                    <!-- Add Medicine Form -->
+                                    <div class="col-md-5">
+                                        <div class="card border">
+                                            <div class="card-header py-2 bg-light"><strong>Prescribed:</strong></div>
+                                            <div class="card-body">
+                                                <input type="hidden" id="discharge_med_item_id" value="0">
+                                                <input type="hidden" id="discharge_med_id" value="0">
 
-                                <div class="mb-2">
-                                    <button type="button" class="rx-quick-btn" data-fill-target="new_drug_when" data-fill-value="BF">Before Food</button>
-                                    <button type="button" class="rx-quick-btn" data-fill-target="new_drug_when" data-fill-value="AF">After Food</button>
-                                    <button type="button" class="rx-quick-btn" data-fill-target="new_drug_when" data-fill-value="WF">With Food</button>
-                                    <button type="button" class="rx-quick-btn" data-fill-target="new_drug_freq" data-fill-value="OD">OD</button>
-                                    <button type="button" class="rx-quick-btn" data-fill-target="new_drug_freq" data-fill-value="BD">BD</button>
-                                    <button type="button" class="rx-quick-btn" data-fill-target="new_drug_freq" data-fill-value="TDS">TDS</button>
-                                    <button type="button" class="rx-quick-btn" data-fill-target="new_drug_freq" data-fill-value="HS">HS</button>
-                                    <button type="button" class="rx-quick-btn" data-fill-target="new_drug_day" data-fill-value="3 Days">3 Days</button>
-                                    <button type="button" class="rx-quick-btn" data-fill-target="new_drug_day" data-fill-value="5 Days">5 Days</button>
-                                    <button type="button" class="rx-quick-btn" data-fill-target="new_drug_day" data-fill-value="7 Days">7 Days</button>
-                                </div>
+                                                <div class="mb-2">
+                                                    <label class="form-label small">Medicine Name (Brand)</label>
+                                                    <input type="text" id="discharge_med_name" list="discharge_med_suggest" class="form-control form-control-sm" placeholder="Type medicine name" autocomplete="off">
+                                                    <datalist id="discharge_med_suggest"></datalist>
+                                                </div>
 
-                                <datalist id="discharge_med_suggest"></datalist>
-                                <datalist id="discharge_med_when_suggest">
-                                    <option value="BF" label="Before Food"></option>
-                                    <option value="AF" label="After Food"></option>
-                                    <option value="WF" label="With Food"></option>
-                                </datalist>
-                                <datalist id="discharge_med_freq_suggest">
-                                    <option value="OD" label="Once Daily"></option>
-                                    <option value="BD" label="Twice Daily"></option>
-                                    <option value="TDS" label="Thrice Daily"></option>
-                                    <option value="HS" label="At Bedtime"></option>
-                                    <option value="QID" label="Four Times Daily"></option>
-                                    <option value="SOS" label="As Needed"></option>
-                                </datalist>
-                                <div id="discharge_medicine_status" class="complaint-status text-muted"></div>
+                                                <div class="mb-2">
+                                                    <label class="form-label small">Type</label>
+                                                    <input type="text" id="discharge_med_type" class="form-control form-control-sm" placeholder="TAB,CAP,SYR,INJ">
+                                                </div>
+
+                                                <div class="row g-2 mb-2">
+                                                    <div class="col-4">
+                                                        <label class="form-label small">Dose:</label>
+                                                        <select id="discharge_dosage" class="form-select form-select-sm">
+                                                            <option value="">Dose</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-4">
+                                                        <label class="form-label small">When:</label>
+                                                        <select id="discharge_dosage_when" class="form-select form-select-sm">
+                                                            <option value="">When</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-4">
+                                                        <label class="form-label small">Frequency:</label>
+                                                        <select id="discharge_dosage_freq" class="form-select form-select-sm">
+                                                            <option value="">Frequency</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+
+                                                <div class="row g-2 mb-2">
+                                                    <div class="col-4">
+                                                        <label class="form-label small">Duration:</label>
+                                                        <input type="text" id="discharge_no_of_days" class="form-control form-control-sm" placeholder="e.g. 5 days / 1 month / 3 doses">
+                                                    </div>
+                                                    <div class="col-4">
+                                                        <label class="form-label small">Qty:</label>
+                                                        <input type="text" id="discharge_qty" class="form-control form-control-sm" placeholder="Qty">
+                                                    </div>
+                                                    <div class="col-4">
+                                                        <label class="form-label small">Route:</label>
+                                                        <select id="discharge_dose_where" class="form-select form-select-sm">
+                                                            <option value="">Route</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+
+                                                <div class="mb-3">
+                                                    <label class="form-label small">Medicine Advice:</label>
+                                                    <input type="text" id="discharge_remark" class="form-control form-control-sm" placeholder="Instruction / medicine advice">
+                                                </div>
+
+                                                <div class="d-flex gap-2 mb-3">
+                                                    <button type="button" class="btn btn-primary btn-sm flex-fill" id="btn_discharge_med_add">+ADD / Update</button>
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_discharge_med_reset">Remove All</button>
+                                                </div>
+
+                                                <!-- Quick Buttons -->
+                                                <div class="mb-2">
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_dosage_when" data-fill-value="BF">Before Food</button>
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_dosage_when" data-fill-value="AF">After Food</button>
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_dosage_when" data-fill-value="WF">With Food</button>
+                                                </div>
+                                                <div class="mb-2">
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_dosage_freq" data-fill-value="OD">OD</button>
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_dosage_freq" data-fill-value="BD">BD</button>
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_dosage_freq" data-fill-value="TDS">TDS</button>
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_dosage_freq" data-fill-value="HS">HS</button>
+                                                </div>
+                                                <div class="mb-2">
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_no_of_days" data-fill-value="3 Days">3 Days</button>
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_no_of_days" data-fill-value="5 Days">5 Days</button>
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_no_of_days" data-fill-value="7 Days">7 Days</button>
+                                                </div>
+
+                                                <div class="small text-muted" id="discharge_medicine_status">Ready.</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -3996,6 +4062,207 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
 
                     if (activeApplyBtn) {
                         activeApplyBtn.click();
+                    }
+                });
+            }
+
+            // Load dose masters (Dose, When, Frequency, Route)
+            var doseMasterCache = { dose: [], when: [], freq: [], where: [] };
+            
+            function renderSelectOptions($select, rows, placeholder) {
+                var html = '<option value="">' + $('<div>').text(placeholder || 'Select').html() + '</option>';
+                (rows || []).forEach(function(row) {
+                    var id = (row && row.id !== undefined) ? String(row.id) : '';
+                    var label = (row && row.label !== undefined) ? String(row.label) : '';
+                    if (!id || !label) {
+                        return;
+                    }
+                    html += '<option value="' + $('<div>').text(id).html() + '">' + $('<div>').text(label).html() + '</option>';
+                });
+                $select.html(html);
+            }
+            
+            function loadDischargeDoseMasters() {
+                $.get('<?= base_url('Opd_prescription/rx_group_dose_masters') ?>', function(data) {
+                    doseMasterCache = {
+                        dose: (data && data.dose) ? data.dose : [],
+                        when: (data && data.when) ? data.when : [],
+                        freq: (data && data.freq) ? data.freq : [],
+                        where: (data && data.where) ? data.where : []
+                    };
+
+                    renderSelectOptions($('#discharge_dosage'), doseMasterCache.dose, 'Dose');
+                    renderSelectOptions($('#discharge_dosage_when'), doseMasterCache.when, 'When');
+                    renderSelectOptions($('#discharge_dosage_freq'), doseMasterCache.freq, 'Frequency');
+                    renderSelectOptions($('#discharge_dose_where'), doseMasterCache.where, 'Route');
+                }, 'json').fail(function() {
+                    setMedicineStatus('Unable to load dose masters.', 'error');
+                });
+            }
+
+            // Load dose masters on init
+            loadDischargeDoseMasters();
+
+            // Handle medicine autocomplete with full suggestions
+            var dischargeMedInput = section.querySelector('#discharge_med_name');
+            var dischargeMedSuggest = section.querySelector('#discharge_med_suggest');
+            var dischargeMedType = section.querySelector('#discharge_med_type');
+
+            if (dischargeMedInput) {
+                dischargeMedInput.addEventListener('input', function() {
+                    var q = String(dischargeMedInput.value || '').trim();
+                    if (q.length < 2) {
+                        return;
+                    }
+
+                    $.get('<?= base_url('Opd_prescription/rx_group_medicine_suggest') ?>?q=' + encodeURIComponent(q), function(data) {
+                        var rows = (data && data.rows) ? data.rows : [];
+                        var html = '';
+                        rows.forEach(function(row) {
+                            var name = String(row.med_name || '').trim();
+                            if (name === '') {
+                                return;
+                            }
+                            html += '<option value="' + $('<div>').text(name).html() + '" data-type="' + $('<div>').text(row.med_type || '').html() + '" data-id="' + (row.med_id || 0) + '"></option>';
+                        });
+                        if (dischargeMedSuggest) {
+                            dischargeMedSuggest.innerHTML = html;
+                        }
+                    }, 'json');
+                });
+
+                dischargeMedInput.addEventListener('change', function() {
+                    var value = String(dischargeMedInput.value || '').trim();
+                    if (value === '' || !dischargeMedSuggest) {
+                        return;
+                    }
+
+                    // Find matching option and fill type if empty
+                    var options = dischargeMedSuggest.querySelectorAll('option');
+                    options.forEach(function(opt) {
+                        if (opt.value === value && dischargeMedType && dischargeMedType.value.trim() === '') {
+                            var type = opt.getAttribute('data-type') || '';
+                            if (type) {
+                                dischargeMedType.value = type;
+                            }
+                        }
+                    });
+                });
+            }
+
+            // Handle quick buttons
+            section.querySelectorAll('.discharge-quick-btn').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var targetId = String(btn.getAttribute('data-fill-target') || '').trim();
+                    var value = String(btn.getAttribute('data-fill-value') || '').trim();
+                    var target = targetId ? section.querySelector('#' + targetId) : null;
+                    if (target) {
+                        if (target.tagName.toLowerCase() === 'select') {
+                            // For select elements, set the value or add it if needed
+                            target.value = value;
+                        } else {
+                            target.value = value;
+                        }
+                        target.focus();
+                    }
+                });
+            });
+
+            // Handle Add/Update button
+            var btnAddMed = section.querySelector('#btn_discharge_med_add');
+            if (btnAddMed && btnAddMed.dataset.bound !== '1') {
+                btnAddMed.dataset.bound = '1';
+                btnAddMed.addEventListener('click', function() {
+                    var medName = $('#discharge_med_name').val().trim();
+                    var medType = $('#discharge_med_type').val().trim();
+                    var dosage = $('#discharge_dosage').val();
+                    var dosageWhen = $('#discharge_dosage_when').val();
+                    var dosageFreq = $('#discharge_dosage_freq').val();
+                    var noOfDays = $('#discharge_no_of_days').val().trim();
+                    var qty = $('#discharge_qty').val().trim();
+                    var doseWhere = $('#discharge_dose_where').val();
+                    var remark = $('#discharge_remark').val().trim();
+
+                    if (medName === '') {
+                        setMedicineStatus('Please enter medicine name.', 'error');
+                        $('#discharge_med_name').focus();
+                        return;
+                    }
+
+                    // Build dose plan label from IDs
+                    var dosePlan = '';
+                    if (dosage) {
+                        var doseRow = doseMasterCache.dose.find(function(r) { return String(r.id) === dosage; });
+                        dosePlan += (doseRow ? doseRow.label : dosage) + ' ';
+                    }
+                    if (dosageWhen) {
+                        var whenRow = doseMasterCache.when.find(function(r) { return String(r.id) === dosageWhen; });
+                        dosePlan += (whenRow ? whenRow.label : dosageWhen) + ' ';
+                    }
+                    if (dosageFreq) {
+                        var freqRow = doseMasterCache.freq.find(function(r) { return String(r.id) === dosageFreq; });
+                        dosePlan += (freqRow ? freqRow.label : dosageFreq) + ' ';
+                    }
+                    if (doseWhere) {
+                        var whereRow = doseMasterCache.where.find(function(r) { return String(r.id) === doseWhere; });
+                        dosePlan += (whereRow ? whereRow.label : doseWhere) + ' ';
+                    }
+                    dosePlan += noOfDays;
+                    dosePlan = dosePlan.trim();
+
+                    // Add row to table
+                    var tbody = section.querySelector('#discharge_medicine_tbody');
+                    if (!tbody) {
+                        return;
+                    }
+
+                    // Remove "No medicine added" row if present
+                    var emptyRow = tbody.querySelector('tr td[colspan="9"]');
+                    if (emptyRow) {
+                        emptyRow.closest('tr').remove();
+                    }
+
+                    var tr = document.createElement('tr');
+                    tr.innerHTML = '<td>' + $('<div>').text(medName).html() + '</td>'
+                        + '<td>' + $('<div>').text(medType).html() + '</td>'
+                        + '<td>' + $('<div>').text(dosage).html() + '</td>'
+                        + '<td>' + $('<div>').text(dosageWhen).html() + '</td>'
+                        + '<td>' + $('<div>').text(dosageFreq).html() + '</td>'
+                        + '<td>' + $('<div>').text(noOfDays).html() + '</td>'
+                        + '<td>' + $('<div>').text(qty).html() + '</td>'
+                        + '<td>' + $('<div>').text(remark).html() + '</td>'
+                        + '<td><button type="button" class="btn btn-outline-danger btn-sm btn-remove-discharge-med">Remove</button></td>';
+                    tbody.appendChild(tr);
+
+                    // Clear form
+                    $('#discharge_med_name, #discharge_med_type, #discharge_no_of_days, #discharge_qty, #discharge_remark').val('');
+                    $('#discharge_dosage, #discharge_dosage_when, #discharge_dosage_freq, #discharge_dose_where').val('');
+                    $('#discharge_med_name').focus();
+
+                    setMedicineStatus('Medicine added to list. Remember to save discharge form.', 'success');
+
+                    // Bind remove button
+                    tr.querySelector('.btn-remove-discharge-med').addEventListener('click', function() {
+                        tr.remove();
+                        if (tbody.children.length === 0) {
+                            tbody.innerHTML = '<tr><td colspan="9" class="text-muted text-center">No medicine added</td></tr>';
+                        }
+                        setMedicineStatus('Medicine removed from list.', 'info');
+                    });
+                });
+            }
+
+            // Handle Reset button
+            var btnResetMed = section.querySelector('#btn_discharge_med_reset');
+            if (btnResetMed && btnResetMed.dataset.bound !== '1') {
+                btnResetMed.dataset.bound = '1';
+                btnResetMed.addEventListener('click', function() {
+                    if (confirm('Remove all medicines from the list?')) {
+                        var tbody = section.querySelector('#discharge_medicine_tbody');
+                        if (tbody) {
+                            tbody.innerHTML = '<tr><td colspan="9" class="text-muted text-center">No medicine added</td></tr>';
+                        }
+                        setMedicineStatus('All medicines removed.', 'info');
                     }
                 });
             }
