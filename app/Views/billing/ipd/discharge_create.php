@@ -1905,6 +1905,14 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                 lookup.value = value;
                                 dropdown.style.display = 'none';
                                 if (btnAdd) {
+                                    btnAdd.click();
+                                }
+                            });
+                        });
+                    }, 'json');
+                });
+
+                lookup.addEventListener('keydown', function(e) {
                     var items = dropdown.querySelectorAll('.dropdown-item');
                     var isVisible = dropdown.style.display === 'block' && items.length > 0;
                     
