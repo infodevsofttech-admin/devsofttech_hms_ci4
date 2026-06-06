@@ -1039,12 +1039,14 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                 <input type="hidden" name="surgery_remove_id" id="surgery_remove_id" value="0">
                                 <input type="hidden" name="new_surgery_master_id" id="new_surgery_master_id" value="0">
                                 <div class="row g-2 mb-3">
-                                    <div class="col-md-5"><input type="text" class="form-control" name="new_surgery_name" id="new_surgery_name" list="discharge_surgery_suggest" autocomplete="off" placeholder="Surgery name"></div>
+                                    <div class="col-md-5 position-relative">
+                                        <input type="text" class="form-control" name="new_surgery_name" id="new_surgery_name" autocomplete="off" placeholder="Surgery name (type to search master)">
+                                        <div id="discharge_surgery_dropdown" class="dropdown-menu" style="display:none;position:absolute;z-index:1050;max-height:250px;overflow-y:auto;width:100%;"></div>
+                                    </div>
                                     <div class="col-md-3"><input type="date" class="form-control" name="new_surgery_date"></div>
                                     <div class="col-md-3"><input type="text" class="form-control" name="new_surgery_remark" placeholder="Remark"></div>
                                     <div class="col-md-1"><button type="submit" class="btn btn-primary btn-sm" name="action" value="add_surgery">+ADD</button></div>
                                 </div>
-                                <datalist id="discharge_surgery_suggest"></datalist>
 
                                 <h6>Procedure</h6>
                                 <table class="table table-sm table-bordered">
@@ -1065,7 +1067,10 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                 <input type="hidden" name="procedure_remove_id" id="procedure_remove_id" value="0">
                                 <input type="hidden" name="new_procedure_master_id" id="new_procedure_master_id" value="0">
                                 <div class="row g-2">
-                                    <div class="col-md-5"><input type="text" class="form-control" name="new_procedure_name" id="new_procedure_name" list="discharge_procedure_suggest" autocomplete="off" placeholder="Procedure name"></div>
+                                    <div class="col-md-5 position-relative">
+                                        <input type="text" class="form-control" name="new_procedure_name" id="new_procedure_name" autocomplete="off" placeholder="Procedure name (type to search master)">
+                                        <div id="discharge_procedure_dropdown" class="dropdown-menu" style="display:none;position:absolute;z-index:1050;max-height:250px;overflow-y:auto;width:100%;"></div>
+                                    </div>
                                     <div class="col-md-3"><input type="date" class="form-control" name="new_procedure_date"></div>
                                     <div class="col-md-3"><input type="text" class="form-control" name="new_procedure_remark" placeholder="Remark"></div>
                                     <div class="col-md-1"><button type="submit" class="btn btn-primary btn-sm" name="action" value="add_procedure">+ADD</button></div>
@@ -2097,6 +2102,134 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
             
             // Initialize table with existing data
             initDischargeComplaintsTable();
+        }
+
+        // Surgery/Procedure autocomplete with SNOMED/ICD code display
+        function initSurgeryProcedureAutocomplete() {
+            initTermAutocomplete('surgery', 'new_surgery_name', 'discharge_surgery_dropdown', 'new_surgery_master_id');
+            initTermAutocomplete('procedure', 'new_procedure_name', 'discharge_procedure_dropdown', 'new_procedure_master_id');
+        }
+
+        function initTermAutocomplete(type, inputId, dropdownId, hiddenId) {
+            var input = document.getElementById(inputId);
+            var dropdown = document.getElementById(dropdownId);
+            var hidden = document.getElementById(hiddenId);
+            if (!input || !dropdown || !hidden) return;
+
+            var searchTimer = null;
+            var highlightedIndex = -1;
+            var currentResults = [];
+
+            input.addEventListener('input', function() {
+                var q = input.value.trim();
+                highlightedIndex = -1;
+                
+                if (q.length < 2) {
+                    dropdown.style.display = 'none';
+                    return;
+                }
+
+                clearTimeout(searchTimer);
+                searchTimer = setTimeout(function() {
+                    if (!window.jQuery) return;
+                    
+                    $.get('<?= base_url('Ipd_discharge/surgery_master_lookup') ?>?type=' + type + '&q=' + encodeURIComponent(q), function(data) {
+                        currentResults = (data && data.rows) ? data.rows : [];
+                        if (!currentResults.length) {
+                            dropdown.style.display = 'none';
+                            return;
+                        }
+
+                        var html = '';
+                        currentResults.forEach(function(row) {
+                            var name = row.term_name || '';
+                            var code = row.term_code || '';
+                            var icd = row.icd_code || '';
+                            var codeDisplay = '';
+                            
+                            if (code && icd) {
+                                codeDisplay = '<span class="badge bg-info text-dark me-1">' + code + '</span><span class="badge bg-secondary">' + icd + '</span>';
+                            } else if (code) {
+                                codeDisplay = '<span class="badge bg-info text-dark">' + code + '</span>';
+                            } else if (icd) {
+                                codeDisplay = '<span class="badge bg-secondary">' + icd + '</span>';
+                            }
+
+                            html += '<div class="dropdown-item px-2 py-2" data-id="' + (row.id || 0) + '" data-name="' + name.replace(/"/g, '&quot;') + '" style="cursor:pointer;font-size:.9rem;border-bottom:1px solid #f0f0f0;">';
+                            html += '<div class="fw-semibold">' + name + '</div>';
+                            if (codeDisplay) {
+                                html += '<div class="small mt-1">' + codeDisplay + '</div>';
+                            }
+                            html += '</div>';
+                        });
+
+                        dropdown.innerHTML = html;
+                        dropdown.style.display = 'block';
+
+                        dropdown.querySelectorAll('.dropdown-item').forEach(function(item, idx) {
+                            item.addEventListener('mouseenter', function() {
+                                dropdown.querySelectorAll('.dropdown-item').forEach(function(el) {
+                                    el.style.backgroundColor = '';
+                                });
+                                this.style.backgroundColor = '#f8f9fa';
+                                highlightedIndex = idx;
+                            });
+                            item.addEventListener('mouseleave', function() {
+                                this.style.backgroundColor = '';
+                            });
+                            item.addEventListener('click', function() {
+                                var id = this.getAttribute('data-id');
+                                var name = this.getAttribute('data-name');
+                                input.value = name;
+                                hidden.value = id;
+                                dropdown.style.display = 'none';
+                            });
+                        });
+                    }, 'json');
+                }, 300);
+            });
+
+            input.addEventListener('keydown', function(e) {
+                var items = dropdown.querySelectorAll('.dropdown-item');
+                var isVisible = dropdown.style.display === 'block' && items.length > 0;
+
+                if (e.key === 'ArrowDown' && isVisible) {
+                    e.preventDefault();
+                    highlightedIndex = Math.min(highlightedIndex + 1, items.length - 1);
+                    updateHighlight(items);
+                } else if (e.key === 'ArrowUp' && isVisible) {
+                    e.preventDefault();
+                    highlightedIndex = Math.max(highlightedIndex - 1, 0);
+                    updateHighlight(items);
+                } else if (e.key === 'Enter' && isVisible) {
+                    e.preventDefault();
+                    if (highlightedIndex >= 0 && items[highlightedIndex]) {
+                        items[highlightedIndex].click();
+                    }
+                } else if (e.key === 'Escape') {
+                    dropdown.style.display = 'none';
+                    highlightedIndex = -1;
+                }
+            });
+
+            input.addEventListener('blur', function() {
+                setTimeout(function() {
+                    dropdown.style.display = 'none';
+                }, 200);
+            });
+
+            function updateHighlight(items) {
+                items.forEach(function(item, idx) {
+                    if (idx === highlightedIndex) {
+                        item.style.backgroundColor = '#007bff';
+                        item.style.color = '#fff';
+                        item.scrollIntoView({ block: 'nearest' });
+                    } else {
+                        item.style.backgroundColor = '';
+                        item.style.color = '';
+                    }
+                });
+            }
         }
 
         function setSectionStatus(id, text, level) {
@@ -3503,6 +3636,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
 
         initComplaintEditor();
         initComplaintTools();
+        initSurgeryProcedureAutocomplete();
         initSurgeryTools(getDischargeForm());
         initDiagnosisTools();
         initCourseTools();
