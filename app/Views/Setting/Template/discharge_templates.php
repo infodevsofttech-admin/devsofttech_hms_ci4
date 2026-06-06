@@ -325,12 +325,21 @@ $status = (int) ($edit['status'] ?? 1);
             fieldTemplateCss.value = '';
         }
 
-        if (window.CKEDITOR && CKEDITOR.instances[editorFieldId]) {
-            CKEDITOR.instances[editorFieldId].setData(initialTemplateHtml || '{{CONTENT}}');
+        var defaultHtml = initialTemplateHtml || '{{CONTENT}}';
+        if (typeof CKEDITOR !== 'undefined' && CKEDITOR.instances && CKEDITOR.instances[editorFieldId]) {
+            try {
+                CKEDITOR.instances[editorFieldId].setData(defaultHtml);
+            } catch (e) {
+                console.warn('CKEditor setData failed in reset:', e);
+                var templateHtmlEl = document.getElementById(editorFieldId);
+                if (templateHtmlEl) {
+                    templateHtmlEl.value = defaultHtml;
+                }
+            }
         } else {
             var templateHtmlEl = document.getElementById(editorFieldId);
             if (templateHtmlEl) {
-                templateHtmlEl.value = initialTemplateHtml || '{{CONTENT}}';
+                templateHtmlEl.value = defaultHtml;
             }
         }
 
@@ -393,8 +402,16 @@ $status = (int) ($edit['status'] ?? 1);
         }
 
         var html = String(row.template_html || '{{CONTENT}}');
-        if (window.CKEDITOR && CKEDITOR.instances[editorFieldId]) {
-            CKEDITOR.instances[editorFieldId].setData(html);
+        if (typeof CKEDITOR !== 'undefined' && CKEDITOR.instances && CKEDITOR.instances[editorFieldId]) {
+            try {
+                CKEDITOR.instances[editorFieldId].setData(html);
+            } catch (e) {
+                console.warn('CKEditor setData failed in setForm:', e);
+                var templateHtmlEl = document.getElementById(editorFieldId);
+                if (templateHtmlEl) {
+                    templateHtmlEl.value = html;
+                }
+            }
         } else {
             var templateHtmlEl = document.getElementById(editorFieldId);
             if (templateHtmlEl) {
@@ -427,33 +444,50 @@ $status = (int) ($edit['status'] ?? 1);
     }
 
     function initTemplateEditor() {
-        if (!window.CKEDITOR) {
+        if (typeof CKEDITOR === 'undefined') {
+            console.warn('CKEditor not loaded');
+            return;
+        }
+
+        var editorEl = document.getElementById(editorFieldId);
+        if (!editorEl) {
+            console.warn('Editor textarea not found:', editorFieldId);
             return;
         }
 
         CKEDITOR.config.versionCheck = false;
         CKEDITOR.config.removePlugins = '';
 
-        if (CKEDITOR.instances[editorFieldId]) {
-            CKEDITOR.instances[editorFieldId].destroy(true);
+        // Safe destroy - wrap in try-catch to handle any state issues
+        if (CKEDITOR.instances && CKEDITOR.instances[editorFieldId]) {
+            try {
+                CKEDITOR.instances[editorFieldId].destroy(true);
+            } catch (e) {
+                console.warn('CKEditor destroy failed for', editorFieldId, '- This is usually safe to ignore', e);
+            }
         }
 
-        if (document.getElementById(editorFieldId)) {
-            CKEDITOR.replace(editorFieldId, {
-                height: 360,
-                toolbar: [
-                    { name: 'document', items: ['Source'] },
-                    { name: 'clipboard', items: ['Undo', 'Redo'] },
-                    { name: 'basicstyles', items: ['Bold', 'Italic', 'Underline', 'RemoveFormat'] },
-                    { name: 'paragraph', items: ['NumberedList', 'BulletedList', 'Outdent', 'Indent', 'Blockquote'] },
-                    { name: 'links', items: ['Link', 'Unlink'] },
-                    { name: 'insert', items: ['Table', 'HorizontalRule', 'SpecialChar'] },
-                    { name: 'styles', items: ['Format', 'Font', 'FontSize'] },
-                    { name: 'colors', items: ['TextColor', 'BGColor'] },
-                    { name: 'tools', items: ['Maximize'] }
-                ]
-            });
-        }
+        // Small delay to ensure DOM is ready and cleanup is complete
+        setTimeout(function() {
+            try {
+                CKEDITOR.replace(editorFieldId, {
+                    height: 360,
+                    toolbar: [
+                        { name: 'document', items: ['Source'] },
+                        { name: 'clipboard', items: ['Undo', 'Redo'] },
+                        { name: 'basicstyles', items: ['Bold', 'Italic', 'Underline', 'RemoveFormat'] },
+                        { name: 'paragraph', items: ['NumberedList', 'BulletedList', 'Outdent', 'Indent', 'Blockquote'] },
+                        { name: 'links', items: ['Link', 'Unlink'] },
+                        { name: 'insert', items: ['Table', 'HorizontalRule', 'SpecialChar'] },
+                        { name: 'styles', items: ['Format', 'Font', 'FontSize'] },
+                        { name: 'colors', items: ['TextColor', 'BGColor'] },
+                        { name: 'tools', items: ['Maximize'] }
+                    ]
+                });
+            } catch (e) {
+                console.error('CKEditor replace failed:', e);
+            }
+        }, 100);
     }
 
     function toggleCustomSizeFields() {
@@ -468,16 +502,29 @@ $status = (int) ($edit['status'] ?? 1);
     }
 
     function syncTemplateEditor() {
-        if (!window.CKEDITOR) {
+        if (typeof CKEDITOR === 'undefined') {
             return;
         }
 
-        if (CKEDITOR.instances[editorFieldId]) {
-            CKEDITOR.instances[editorFieldId].updateElement();
+        if (CKEDITOR.instances && CKEDITOR.instances[editorFieldId]) {
+            try {
+                CKEDITOR.instances[editorFieldId].updateElement();
+            } catch (e) {
+                console.warn('CKEditor updateElement failed:', e);
+            }
         }
     }
 
-    initTemplateEditor();
+    // Initialize editor after a short delay to ensure DOM is ready
+    // This is especially important when loaded via AJAX
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(initTemplateEditor, 150);
+        });
+    } else {
+        setTimeout(initTemplateEditor, 150);
+    }
+
     toggleCustomSizeFields();
 
     if (pageSizeEl) {
@@ -545,6 +592,12 @@ $status = (int) ($edit['status'] ?? 1);
                     }
 
                     setFormFromTemplateRow(data.row);
+                    
+                    // Reinitialize editor after data is loaded to ensure proper state
+                    if (typeof CKEDITOR !== 'undefined' && CKEDITOR.instances && !CKEDITOR.instances[editorFieldId]) {
+                        setTimeout(initTemplateEditor, 200);
+                    }
+                    
                     if (fieldTemplateName) {
                         fieldTemplateName.focus();
                     }
