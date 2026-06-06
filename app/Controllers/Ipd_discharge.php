@@ -943,9 +943,16 @@ class Ipd_discharge extends BaseController
             return '';
         }
 
+        // Try doc_list field (comma-separated IDs)
         $docList = trim((string) ($ipd->doc_list ?? ''));
         if ($docList === '' || $docList === '0') {
-            return '';
+            // Fallback: try single doctor_id or doc_id field
+            $singleDocId = (int) ($ipd->doctor_id ?? $ipd->doc_id ?? $ipd->consultant_id ?? 0);
+            if ($singleDocId > 0) {
+                $docList = (string) $singleDocId;
+            } else {
+                return '';
+            }
         }
 
         if (! $this->db->tableExists('doctor_master')) {
@@ -975,6 +982,10 @@ class Ipd_discharge extends BaseController
             $title = trim((string) ($doc->p_title ?? ''));
             $name = trim((string) ($doc->p_fname ?? ''));
             $spec = trim((string) ($doc->SpecName ?? ''));
+
+            if ($name === '') {
+                continue;
+            }
 
             $fullName = ($title !== '' ? $title . ' ' : 'Dr. ') . $name;
             if ($spec !== '') {
@@ -1357,7 +1368,14 @@ class Ipd_discharge extends BaseController
 
     private function getDischargeDepartmentName(?object $ipd): string
     {
-        $deptId = (int) ($ipd->dept_id ?? 0);
+        if (! $ipd) {
+            return '';
+        }
+
+        // Try dept_id first (common field name)
+        $deptId = (int) ($ipd->dept_id ?? $ipd->department_id ?? 0);
+        
+        // Try hc_department table first
         if ($deptId > 0 && $this->tableHasColumns('hc_department', ['id', 'vName'])) {
             $row = $this->db->table('hc_department')
                 ->select('vName')
@@ -1368,6 +1386,25 @@ class Ipd_discharge extends BaseController
             if ($name !== '') {
                 return $name;
             }
+        }
+
+        // Try ipd_department table as fallback
+        if ($deptId > 0 && $this->tableHasColumns('ipd_department', ['id', 'department_name'])) {
+            $row = $this->db->table('ipd_department')
+                ->select('department_name')
+                ->where('id', $deptId)
+                ->get(1)
+                ->getRowArray();
+            $name = trim((string) ($row['department_name'] ?? ''));
+            if ($name !== '') {
+                return $name;
+            }
+        }
+
+        // Fallback: try direct department field if it exists as a string
+        $directDept = trim((string) ($ipd->department ?? $ipd->department_name ?? ''));
+        if ($directDept !== '') {
+            return $directDept;
         }
 
         return '';
@@ -1530,6 +1567,31 @@ class Ipd_discharge extends BaseController
         // NOTE: Patient demographic table is NOT included in auto-generated content.
         // It is available as {{PATIENT_INFO_TABLE}} token for templates to use if needed.
         // This matches CI3 behavior where template controlled the patient info display.
+
+        // Build Discharge Summary section (high-level overview)
+        $dischargeSummaryParts = [];
+        $admitDate = trim((string) ($ipd->admit_date ?? ''));
+        $dischargeDate = trim((string) ($ipd->discharge_date ?? ''));
+        $deptName = $this->getDischargeDepartmentName($ipd);
+        $doctorNames = $this->getDischargeDoctorNames($ipd);
+        
+        if ($deptName !== '') {
+            $dischargeSummaryParts[] = '<b>Department:</b> ' . esc($deptName);
+        }
+        if ($doctorNames !== '') {
+            $dischargeSummaryParts[] = '<b>Treating Doctor(s):</b> ' . esc($doctorNames);
+        }
+        if ($admitDate !== '') {
+            $dischargeSummaryParts[] = '<b>Date of Admission:</b> ' . esc($admitDate);
+        }
+        if ($dischargeDate !== '') {
+            $dischargeSummaryParts[] = '<b>Date of Discharge:</b> ' . esc($dischargeDate);
+        }
+        
+        if (! empty($dischargeSummaryParts)) {
+            $sections[] = '<h4 style="margin:16px 0 8px 0;">Discharge Summary</h4>'
+                . '<div>' . implode('<br>', $dischargeSummaryParts) . '</div>';
+        }
 
         $complaints = $this->byIpdRows('ipd_discharge_complaint', ['comp_report', 'comp_remark'], 'id ASC', $ipdId);
         $complaintRemark = $this->firstRowByIpd('ipd_discharge_complaint_remark', $ipdId);

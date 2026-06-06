@@ -67,7 +67,7 @@
 ### 4.2 Section Placeholders for Custom Layout/Order
 
 ```
-{{DISCHARGE_SUMMARY}}             - Discharge summary section
+{{DISCHARGE_SUMMARY}}             - High-level summary (department, treating doctors, dates)
 {{FINAL_DIAGNOSIS}}               - Final diagnosis at discharge
 {{SURGERY}}                       - Surgical procedures performed
 {{PROCEDURE}}                     - Medical procedures
@@ -85,6 +85,12 @@
 {{DISCHARGE_INSTRUCTIONS}}        - Discharge instructions and follow-up advice
 {{SIGNATURE_BLOCK}}               - Signature block for consultant
 ```
+
+**Note:** `{{DISCHARGE_SUMMARY}}` section now includes:
+- Department name (from `ipd_master.dept_id` or `department_id`)
+- Treating doctor(s) with specializations (from `ipd_master.doc_list`)
+- Date of admission
+- Date of discharge
 
 ### 4.3 Pre-Built Patient Table
 
