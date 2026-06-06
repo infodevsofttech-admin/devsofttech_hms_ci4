@@ -1663,6 +1663,131 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
             statusEl.textContent = text || '';
         }
 
+        // Client-side complaint management (OPD-style) - MUST BE DECLARED BEFORE initComplaintTools
+        var selectedDischargeComplaints = [];
+
+        function initDischargeComplaintsTable() {
+            // Load existing complaints from PHP (if any)
+            <?php if (!empty($complaintRows)): ?>
+                selectedDischargeComplaints = [
+                    <?php foreach ($complaintRows as $row): ?>
+                    {
+                        id: <?= (int) ($row['id'] ?? 0) ?>,
+                        term: <?= json_encode((string) ($row['comp_report'] ?? '')) ?>,
+                        frequency: '',
+                        severity: '',
+                        duration: <?= json_encode((string) ($row['comp_remark'] ?? '')) ?>,
+                        date: ''
+                    },
+                    <?php endforeach; ?>
+                ];
+            <?php endif; ?>
+            
+            renderDischargeComplaintTable();
+        }
+
+        function renderDischargeComplaintTable() {
+            var tbody = document.getElementById('discharge_complaint_tbody');
+            if (!tbody) return;
+            
+            tbody.innerHTML = '';
+            
+            if (selectedDischargeComplaints.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-muted text-center">No complaints yet. Add using the input below.</td></tr>';
+                return;
+            }
+            
+            selectedDischargeComplaints.forEach(function(item, idx) {
+                var tr = document.createElement('tr');
+                tr.setAttribute('data-idx', idx);
+                
+                // # column
+                var td1 = document.createElement('td');
+                td1.className = 'text-center text-muted';
+                td1.textContent = idx + 1;
+                tr.appendChild(td1);
+                
+                // Complaint name
+                var td2 = document.createElement('td');
+                td2.className = 'p-1';
+                var nameInput = document.createElement('input');
+                nameInput.type = 'text';
+                nameInput.className = 'form-control form-control-sm';
+                nameInput.value = item.term || '';
+                nameInput.placeholder = 'Complaint…';
+                nameInput.style.fontSize = '.82rem';
+                nameInput.setAttribute('data-idx', idx);
+                nameInput.addEventListener('input', function() {
+                    selectedDischargeComplaints[idx].term = this.value;
+                });
+                td2.appendChild(nameInput);
+                tr.appendChild(td2);
+                
+                // Frequency
+                var td3 = document.createElement('td');
+                td3.className = 'p-1';
+                var freqInput = document.createElement('input');
+                freqInput.type = 'text';
+                freqInput.className = 'form-control form-control-sm';
+                freqInput.value = item.frequency || '';
+                freqInput.placeholder = 'daily…';
+                freqInput.style.fontSize = '.82rem';
+                freqInput.addEventListener('input', function() {
+                    selectedDischargeComplaints[idx].frequency = this.value;
+                });
+                td3.appendChild(freqInput);
+                tr.appendChild(td3);
+                
+                // Severity
+                var td4 = document.createElement('td');
+                td4.className = 'p-1';
+                var sevInput = document.createElement('input');
+                sevInput.type = 'text';
+                sevInput.className = 'form-control form-control-sm';
+                sevInput.value = item.severity || '';
+                sevInput.placeholder = 'mild…';
+                sevInput.style.fontSize = '.82rem';
+                sevInput.addEventListener('input', function() {
+                    selectedDischargeComplaints[idx].severity = this.value;
+                });
+                td4.appendChild(sevInput);
+                tr.appendChild(td4);
+                
+                // Duration
+                var td5 = document.createElement('td');
+                td5.className = 'p-1';
+                var durInput = document.createElement('input');
+                durInput.type = 'text';
+                durInput.className = 'form-control form-control-sm';
+                durInput.value = item.duration || '';
+                durInput.placeholder = '2 days…';
+                durInput.style.fontSize = '.82rem';
+                durInput.addEventListener('input', function() {
+                    selectedDischargeComplaints[idx].duration = this.value;
+                });
+                td5.appendChild(durInput);
+                tr.appendChild(td5);
+                
+                // Remove button
+                var td6 = document.createElement('td');
+                td6.className = 'p-1 text-center';
+                var removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'btn btn-sm text-danger p-0';
+                removeBtn.style.lineHeight = '1';
+                removeBtn.style.fontSize = '.9rem';
+                removeBtn.innerHTML = '×';
+                removeBtn.addEventListener('click', function() {
+                    selectedDischargeComplaints.splice(idx, 1);
+                    renderDischargeComplaintTable();
+                });
+                td6.appendChild(removeBtn);
+                tr.appendChild(td6);
+                
+                tbody.appendChild(tr);
+            });
+        }
+
         function initComplaintTools() {
             var section = document.getElementById('section-complaints');
             if (!section || section.dataset.toolsBound === '1') {
@@ -1958,138 +2083,6 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
             
             // Initialize table with existing data
             initDischargeComplaintsTable();
-        }
-
-        // Client-side complaint management (OPD-style)
-        var selectedDischargeComplaints = [];
-
-        function initDischargeComplaintsTable() {
-            // Load existing complaints from PHP (if any)
-            <?php if (!empty($complaintRows)): ?>
-                selectedDischargeComplaints = [
-                    <?php foreach ($complaintRows as $row): ?>
-                    {
-                        id: <?= (int) ($row['id'] ?? 0) ?>,
-                        term: <?= json_encode((string) ($row['comp_report'] ?? '')) ?>,
-                        frequency: '',
-                        severity: '',
-                        duration: <?= json_encode((string) ($row['comp_remark'] ?? '')) ?>,
-                        date: ''
-                    },
-                    <?php endforeach; ?>
-                ];
-            <?php endif; ?>
-            
-            renderDischargeComplaintTable();
-        }
-
-        function renderDischargeComplaintTable() {
-            var tbody = document.getElementById('discharge_complaint_tbody');
-            if (!tbody) return;
-            
-            tbody.innerHTML = '';
-            
-            if (selectedDischargeComplaints.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-muted text-center">No complaints yet. Add using the input below.</td></tr>';
-                return;
-            }
-            
-            selectedDischargeComplaints.forEach(function(item, idx) {
-                var tr = document.createElement('tr');
-                tr.setAttribute('data-idx', idx);
-                
-                // # column
-                var td1 = document.createElement('td');
-                td1.className = 'text-center text-muted';
-                td1.textContent = idx + 1;
-                tr.appendChild(td1);
-                
-                // Complaint name
-                var td2 = document.createElement('td');
-                td2.className = 'p-1';
-                var nameInput = document.createElement('input');
-                nameInput.type = 'text';
-                nameInput.className = 'form-control form-control-sm';
-                nameInput.value = item.term || '';
-                nameInput.placeholder = 'Complaint…';
-                nameInput.style.fontSize = '.82rem';
-                nameInput.setAttribute('data-idx', idx);
-                nameInput.addEventListener('input', function() {
-                    selectedDischargeComplaints[idx].term = this.value;
-                });
-                td2.appendChild(nameInput);
-                tr.appendChild(td2);
-                
-                // Frequency
-                var td3 = document.createElement('td');
-                td3.className = 'p-1';
-                var freqInput = document.createElement('input');
-                freqInput.type = 'text';
-                freqInput.className = 'form-control form-control-sm';
-                freqInput.value = item.frequency || '';
-                freqInput.placeholder = 'daily…';
-                freqInput.style.fontSize = '.82rem';
-                freqInput.addEventListener('input', function() {
-                    selectedDischargeComplaints[idx].frequency = this.value;
-                });
-                td3.appendChild(freqInput);
-                tr.appendChild(td3);
-                
-                // Severity
-                var td4 = document.createElement('td');
-                td4.className = 'p-1';
-                var sevInput = document.createElement('input');
-                sevInput.type = 'text';
-                sevInput.className = 'form-control form-control-sm';
-                sevInput.value = item.severity || '';
-                sevInput.placeholder = 'mild…';
-                sevInput.style.fontSize = '.82rem';
-                sevInput.addEventListener('input', function() {
-                    selectedDischargeComplaints[idx].severity = this.value;
-                });
-                td4.appendChild(sevInput);
-                tr.appendChild(td4);
-                
-                // Duration
-                var td5 = document.createElement('td');
-                td5.className = 'p-1';
-                var durInput = document.createElement('input');
-                durInput.type = 'text';
-                durInput.className = 'form-control form-control-sm';
-                durInput.value = item.duration || '';
-                durInput.placeholder = '2 days…';
-                durInput.style.fontSize = '.82rem';
-                durInput.addEventListener('input', function() {
-                    selectedDischargeComplaints[idx].duration = this.value;
-                });
-                td5.appendChild(durInput);
-                tr.appendChild(td5);
-                
-                // Remove button
-                var td6 = document.createElement('td');
-                td6.className = 'p-1 text-center';
-                var removeBtn = document.createElement('button');
-                removeBtn.type = 'button';
-                removeBtn.className = 'btn btn-sm text-danger p-0';
-                removeBtn.style.lineHeight = '1';
-                removeBtn.style.fontSize = '.9rem';
-                removeBtn.innerHTML = '×';
-                removeBtn.addEventListener('click', function() {
-                    selectedDischargeComplaints.splice(idx, 1);
-                    renderDischargeComplaintTable();
-                });
-                td6.appendChild(removeBtn);
-                tr.appendChild(td6);
-                
-                tbody.appendChild(tr);
-            });
-        }
-
-        // REMOVED: Old database-save-on-blur code that was causing errors
-        // Now using client-side array management like OPD
-        
-        function attachComplaintFieldHandlers(section, form) {
-            // DISABLED - no longer needed, using client-side management
         }
 
         function setSectionStatus(id, text, level) {
