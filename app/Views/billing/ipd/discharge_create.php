@@ -2007,7 +2007,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                         lookup.value = '';
                     }
 
-                    setComplaintStatus('Complaint added. Edit inline if needed.', 'success');
+                    // No status message needed - table update is visual confirmation
                 });
             }
 
