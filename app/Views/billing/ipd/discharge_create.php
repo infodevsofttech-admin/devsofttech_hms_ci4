@@ -1668,9 +1668,9 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
 
         function initDischargeComplaintsTable() {
             // Load existing complaints from PHP (if any)
-            <?php if (!empty($complaintRows)): ?>
+            <?php if (!empty($complaint_rows)): ?>
                 selectedDischargeComplaints = [
-                    <?php foreach ($complaintRows as $row): ?>
+                    <?php foreach ($complaint_rows as $row): ?>
                     {
                         id: <?= (int) ($row['id'] ?? 0) ?>,
                         term: <?= json_encode((string) ($row['comp_report'] ?? '')) ?>,
