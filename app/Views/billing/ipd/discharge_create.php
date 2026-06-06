@@ -3852,58 +3852,12 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                 return;
             }
 
-            var suggestRows = [];
             var rxGroupCache = [];
-            var medInput = section.querySelector('#new_drug_name');
-            var medSuggest = section.querySelector('#discharge_med_suggest');
-            var medType = section.querySelector('#new_drug_type');
-            var medWhen = section.querySelector('#new_drug_when');
-            var medFreq = section.querySelector('#new_drug_freq');
             var rxGroupInput = section.querySelector('#selected_rx_group_id');
             var rxGroupName = section.querySelector('#rx_group_selected_name');
             var rxGroupList = document.getElementById('discharge_rx_group_list');
             var rxGroupSearch = document.getElementById('discharge_rx_group_search');
             var applyBtn = section.querySelector('#btn_apply_rx_group');
-
-            function normalizeRxShortCode(raw, kind) {
-                var v = String(raw || '').trim();
-                if (v === '') {
-                    return '';
-                }
-
-                var key = v.replace(/\./g, '').replace(/\s+/g, '').toUpperCase();
-                if (kind === 'when') {
-                    var whenMap = {
-                        'BEFOREFOOD': 'BF',
-                        'BFOOD': 'BF',
-                        'BF': 'BF',
-                        'AF': 'AF',
-                        'AFOOD': 'AF',
-                        'AFTERFOOD': 'AF',
-                        'WF': 'WF',
-                        'WFOOD': 'WF',
-                        'WITHFOOD': 'WF'
-                    };
-                    return whenMap[key] || key;
-                }
-
-                var freqMap = {
-                    'OD': 'OD',
-                    'QD': 'OD',
-                    'ONCEDAILY': 'OD',
-                    'BD': 'BD',
-                    'BID': 'BD',
-                    'TWICEDAILY': 'BD',
-                    'TDS': 'TDS',
-                    'TID': 'TDS',
-                    'THRICEDAILY': 'TDS',
-                    'HS': 'HS',
-                    'QHS': 'HS',
-                    'QID': 'QID',
-                    'SOS': 'SOS'
-                };
-                return freqMap[key] || key;
-            }
 
             function setMedicineStatus(text, level) {
                 setSectionStatus('discharge_medicine_status', text, level || 'muted');
@@ -3940,83 +3894,6 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                     renderRxGroups();
                 }, 'json').fail(function() {
                     setMedicineStatus('Unable to load Rx Groups.', 'error');
-                });
-            }
-
-            medInput.addEventListener('input', function() {
-                var q = String(medInput.value || '').trim();
-                if (q.length < 2) {
-                    return;
-                }
-
-                $.get('<?= base_url('Opd_prescription/medicine_search') ?>?q=' + encodeURIComponent(q) + '&scope=active', function(data) {
-                    suggestRows = (data && data.rows) ? data.rows : [];
-                    var html = '';
-                    suggestRows.forEach(function(row) {
-                        var name = String(row.med_name || '').trim();
-                        if (name === '') {
-                            return;
-                        }
-                        html += '<option value="' + $('<div>').text(name).html() + '"></option>';
-                    });
-                    if (medSuggest) {
-                        medSuggest.innerHTML = html;
-                    }
-                }, 'json');
-            });
-
-            medInput.addEventListener('change', function() {
-                var value = String(medInput.value || '').trim().toUpperCase();
-                if (value === '') {
-                    return;
-                }
-
-                var matched = null;
-                suggestRows.forEach(function(row) {
-                    if (String(row.med_name || '').trim().toUpperCase() === value) {
-                        matched = row;
-                    }
-                });
-
-                if (matched && medType && String(medType.value || '').trim() === '') {
-                    medType.value = String(matched.med_type || '').trim();
-                }
-            });
-
-            section.querySelectorAll('.rx-quick-btn').forEach(function(btn) {
-                btn.addEventListener('click', function() {
-                    var targetId = String(btn.getAttribute('data-fill-target') || '').trim();
-                    var value = String(btn.getAttribute('data-fill-value') || '').trim();
-                    var target = targetId ? section.querySelector('#' + targetId) : null;
-                    if (target) {
-                        if (targetId === 'new_drug_when') {
-                            target.value = normalizeRxShortCode(value, 'when');
-                        } else if (targetId === 'new_drug_freq') {
-                            target.value = normalizeRxShortCode(value, 'freq');
-                        } else {
-                            target.value = value;
-                        }
-                    }
-                });
-            });
-
-            if (medWhen && medWhen.dataset.shortBound !== '1') {
-                medWhen.dataset.shortBound = '1';
-                medWhen.addEventListener('blur', function() {
-                    medWhen.value = normalizeRxShortCode(medWhen.value, 'when');
-                });
-                medWhen.addEventListener('change', function() {
-                    medWhen.value = normalizeRxShortCode(medWhen.value, 'when');
-                });
-            }
-
-            if (medFreq && medFreq.dataset.shortBound !== '1') {
-                medFreq.dataset.shortBound = '1';
-                medFreq.addEventListener('blur', function() {
-                    medFreq.value = normalizeRxShortCode(medFreq.value, 'freq');
-                });
-                medFreq.addEventListener('change', function() {
-                    medFreq.value = normalizeRxShortCode(medFreq.value, 'freq');
                 });
             }
 
