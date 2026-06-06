@@ -4206,44 +4206,93 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                         formattedDuration = num + (num === 1 ? ' day' : ' days');
                     }
 
-                    // Add row to table
-                    var tbody = section.querySelector('#discharge_medicine_tbody');
-                    if (!tbody) {
+                    // AJAX auto-save medicine
+                    if (!window.jQuery) {
+                        setMedicineStatus('jQuery not available. Cannot save medicine.', 'error');
                         return;
                     }
 
-                    // Remove "No medicine added" row if present
-                    var emptyRow = tbody.querySelector('tr td[colspan="9"]');
-                    if (emptyRow) {
-                        emptyRow.closest('tr').remove();
+                    var activeForm = section.closest('form') || getDischargeForm();
+                    if (!activeForm) {
+                        setMedicineStatus('Form not found.', 'error');
+                        return;
                     }
 
-                    var tr = document.createElement('tr');
-                    tr.innerHTML = '<td>' + $('<div>').text(medType).html() + '</td>'
-                        + '<td>' + $('<div>').text(medName).html() + '</td>'
-                        + '<td>' + $('<div>').text(doseLabel).html() + '</td>'
-                        + '<td>' + $('<div>').text(whenLabel).html() + '</td>'
-                        + '<td>' + $('<div>').text(freqLabel).html() + '</td>'
-                        + '<td>' + $('<div>').text(formattedDuration).html() + '</td>'
-                        + '<td>' + $('<div>').text(qty).html() + '</td>'
-                        + '<td>' + $('<div>').text(remark).html() + '</td>'
-                        + '<td><button type="button" class="btn btn-outline-danger btn-sm btn-remove-discharge-med">Remove</button></td>';
-                    tbody.appendChild(tr);
+                    var csrf = getCsrfPair(activeForm);
+                    var payload = {
+                        action: 'add_drug',
+                        ajax_mode: 'json',
+                        new_drug_name: medName,
+                        new_drug_type: medType,
+                        new_drug_dose: dosage,
+                        new_drug_when: dosageWhen,
+                        new_drug_freq: dosageFreq,
+                        new_drug_day: noOfDays,
+                        new_drug_qty: qty,
+                        new_drug_remark: remark
+                    };
+                    payload[csrf.name] = csrf.value;
 
-                    // Clear form
-                    $('#discharge_med_name, #discharge_med_type, #discharge_no_of_days, #discharge_qty, #discharge_remark').val('');
-                    $('#discharge_dosage, #discharge_dosage_when, #discharge_dosage_freq, #discharge_dose_where').val('');
-                    $('#discharge_med_name').focus();
+                    setMedicineStatus('Saving medicine...', 'muted');
 
-                    setMedicineStatus('Medicine added to list. Remember to save discharge form.', 'success');
+                    window.jQuery.ajax({
+                        url: activeForm.getAttribute('action') || window.location.href,
+                        type: 'POST',
+                        data: payload,
+                        dataType: 'json',
+                        timeout: 30000
+                    }).done(function(data) {
+                        updateFormCsrf(activeForm, data || {});
 
-                    // Bind remove button
-                    tr.querySelector('.btn-remove-discharge-med').addEventListener('click', function() {
-                        tr.remove();
-                        if (tbody.children.length === 0) {
-                            tbody.innerHTML = '<tr><td colspan="9" class="text-muted text-center">No medicine added</td></tr>';
+                        if (data && parseInt(data.update || '0', 10) === 1) {
+                            // Add row to table
+                            var tbody = section.querySelector('#discharge_medicine_tbody');
+                            if (!tbody) {
+                                setMedicineStatus('Medicine table not found.', 'error');
+                                return;
+                            }
+
+                            // Remove "No medicine added" row if present
+                            var emptyRow = tbody.querySelector('tr td[colspan="9"]');
+                            if (emptyRow) {
+                                emptyRow.closest('tr').remove();
+                            }
+
+                            var tr = document.createElement('tr');
+                            tr.innerHTML = '<td>' + $('<div>').text(medType).html() + '</td>'
+                                + '<td>' + $('<div>').text(medName).html() + '</td>'
+                                + '<td>' + $('<div>').text(doseLabel).html() + '</td>'
+                                + '<td>' + $('<div>').text(whenLabel).html() + '</td>'
+                                + '<td>' + $('<div>').text(freqLabel).html() + '</td>'
+                                + '<td>' + $('<div>').text(formattedDuration).html() + '</td>'
+                                + '<td>' + $('<div>').text(qty).html() + '</td>'
+                                + '<td>' + $('<div>').text(remark).html() + '</td>'
+                                + '<td><button type="button" class="btn btn-outline-danger btn-sm btn-remove-discharge-med">Remove</button></td>';
+                            tbody.appendChild(tr);
+
+                            // Clear form
+                            $('#discharge_med_name, #discharge_med_type, #discharge_no_of_days, #discharge_qty, #discharge_remark').val('');
+                            $('#discharge_dosage, #discharge_dosage_when, #discharge_dosage_freq, #discharge_dose_where').val('');
+                            $('#discharge_med_name').focus();
+
+                            setMedicineStatus('Medicine saved successfully.', 'success');
+
+                            // Bind remove button (Note: Remove is not yet AJAX - medicines load from DB on page reload)
+                            tr.querySelector('.btn-remove-discharge-med').addEventListener('click', function() {
+                                if (confirm('Remove this medicine? This will only remove from the current view. Reload the page to see saved medicines.')) {
+                                    tr.remove();
+                                    if (tbody.children.length === 0) {
+                                        tbody.innerHTML = '<tr><td colspan="9" class="text-muted text-center">No medicine added</td></tr>';
+                                    }
+                                    setMedicineStatus('Medicine removed from view. Reload to see saved data.', 'info');
+                                }
+                            });
+                        } else {
+                            var errorMsg = (data && data.error_text) ? data.error_text : 'Unable to save medicine.';
+                            setMedicineStatus(errorMsg, 'error');
                         }
-                        setMedicineStatus('Medicine removed from list.', 'info');
+                    }).fail(function(xhr, status, error) {
+                        setMedicineStatus('Network error: ' + (error || status), 'error');
                     });
                 });
             }
