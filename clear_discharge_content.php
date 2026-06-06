@@ -9,20 +9,6 @@
  * php clear_discharge_content.php 1
  */
 
-define('FCPATH', __DIR__ . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR);
-require __DIR__ . '/vendor/autoload.php';
-
-// Bootstrap CI4
-$paths = new Config\Paths();
-$paths->systemDirectory = __DIR__ . '/system/';
-$paths->appDirectory = __DIR__ . '/app/';
-
-require_once FCPATH . '../system/bootstrap.php';
-$app = Config\Services::codeigniter();
-$app->initialize();
-
-$db = \Config\Database::connect();
-
 $ipdId = isset($argv[1]) ? (int) $argv[1] : 0;
 
 if ($ipdId <= 0) {
@@ -33,12 +19,25 @@ if ($ipdId <= 0) {
 
 echo "Clearing discharge content for IPD ID: $ipdId\n\n";
 
+// Database connection settings - UPDATE THESE IF NEEDED
+$host = 'localhost';
+$database = 'hms_data_ci4';
+$username = 'root';
+$password = '';
+$port = 3306;
+
 try {
+    $pdo = new PDO(
+        "mysql:host=$host;port=$port;dbname=$database;charset=utf8mb4",
+        $username,
+        $password,
+        [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+    );
+    
     // Check if content exists
-    $existing = $db->table('ipd_discharge')
-        ->where('ipd_id', $ipdId)
-        ->get()
-        ->getResultArray();
+    $stmt = $pdo->prepare('SELECT id, ipd_id FROM ipd_discharge WHERE ipd_id = ?');
+    $stmt->execute([$ipdId]);
+    $existing = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
     if (empty($existing)) {
         echo "✓ No discharge content found for IPD ID $ipdId\n";
@@ -49,9 +48,8 @@ try {
     echo "Found " . count($existing) . " discharge record(s) for IPD ID $ipdId\n";
     
     // Delete the content
-    $deleted = $db->table('ipd_discharge')
-        ->where('ipd_id', $ipdId)
-        ->delete();
+    $stmt = $pdo->prepare('DELETE FROM ipd_discharge WHERE ipd_id = ?');
+    $deleted = $stmt->execute([$ipdId]);
     
     if ($deleted) {
         echo "\n✓ Successfully cleared discharge content for IPD ID $ipdId\n";
