@@ -1,7 +1,7 @@
 <br /><br />
 <div class="box">
 <div class="box-header">
-  <h3 class="box-title">Result</h3>
+  <h3 class="box-title">Patient Search Results</h3>
 </div>
 <!-- /.box-header -->
 <div class="box-body">
@@ -11,35 +11,20 @@
       <th>Sr.No.</th>
       <th>Patient/UHID Code</th>
       <th>Name {Relative Name}</th>
-	    <th>Age</th>
+      <th>Age</th>
       <th>Last Visit</th>
       <th>Insurance</th>
       <th>Patient History</th>
     </tr>
     </thead>
     <tbody>
-    <?php for ($i = 0; $i < count($data); ++$i) { ?>
-    <tr>
-      <td><?=$i+1?></td>
-      <td><a href="javascript:load_form('<?= base_url('billing/patient/person_record') ?>/<?=$data[$i]->id ?>');"><?=$data[$i]->p_code ?></a></td>
-      <td><?=$data[$i]->p_fname ?> {<?=$data[$i]->p_rname ?>}</td>
-      <td><?= esc(get_age_1($data[$i]->dob ?? null, $data[$i]->age ?? '', $data[$i]->age_in_month ?? '', $data[$i]->estimate_dob ?? '', $data[$i]->Last_Visit ?? null)) ?></td>
-      <td><?=$data[$i]->Last_Visit ?></td>
-      <td><?php echo ($data[$i]->insurance_id==0 ? 'Self': 'Insuranced'); ?></td>
-      <td>
-        <a href="javascript:load_form('<?= base_url('billing/patient/show_profile_opd') ?>/<?=$data[$i]->id ?>/1');" class="btn btn-info btn-xs">
-          <span class="fa fa-history"></span> Patient History
-        </a>
-      </td>
-    </tr>
-    <?php } ?>
     </tbody>
     <tfoot>
     <tr>
       <th>Sr.No.</th>
       <th>Patient/UHID Code</th>
       <th>Name {Relative Name}</th>
-	    <th>Age</th>
+      <th>Age</th>
       <th>Last Visit</th>
       <th>Insurance</th>
       <th>Patient History</th>
@@ -49,4 +34,45 @@
 </div>
 <!-- /.box-body -->
 </div>
+
+<script>
+(function() {
+    var searchQuery = '<?= esc($search_query ?? '', 'js') ?>';
+    
+    if (window.jQuery && $.fn.DataTable) {
+        $('#example1').DataTable({
+            processing: true,
+            serverSide: true,
+            ajax: {
+                url: '<?= base_url('billing/patient/search_ajax') ?>',
+                type: 'GET',
+                data: {
+                    search_query: searchQuery
+                }
+            },
+            columns: [
+                { data: 0, orderable: false },
+                { data: 1, orderable: true },
+                { data: 2, orderable: true },
+                { data: 3, orderable: true },
+                { data: 4, orderable: true },
+                { data: 5, orderable: true },
+                { data: 6, orderable: false }
+            ],
+            order: [[4, 'desc']], // Order by Last Visit (column index 4) DESC
+            pageLength: 25,
+            lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+            language: {
+                processing: '<i class="fa fa-spinner fa-spin fa-3x fa-fw"></i><span class="sr-only">Loading...</span>',
+                emptyTable: searchQuery ? 'No patients found matching your search' : 'No patient records available',
+                info: 'Showing _START_ to _END_ of _TOTAL_ patients',
+                infoEmpty: 'Showing 0 to 0 of 0 patients',
+                infoFiltered: '(filtered from _MAX_ total patients)',
+                lengthMenu: 'Show _MENU_ patients per page',
+                zeroRecords: 'No matching patients found'
+            }
+        });
+    }
+})();
+</script>
     

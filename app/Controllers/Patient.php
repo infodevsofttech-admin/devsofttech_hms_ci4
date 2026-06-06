@@ -408,6 +408,16 @@ class Patient extends BaseController
 		$sdata = (string) $this->request->getPost('txtsearch');
 		$sdata = preg_replace('/[^A-Za-z0-9 _.@\-]/', '', trim($sdata ?? ''));
 
+		$data['search_query'] = $sdata;
+		return view('billing/Patient_Search_V', $data);
+	}
+
+	public function search_ajax()
+	{
+		$request = $this->request->getGet();
+		$sdata = trim((string) ($request['search_query'] ?? ''));
+		$sdata = preg_replace('/[^A-Za-z0-9 _.@\-]/', '', $sdata);
+
 		// Detect ABHA column name in patient_master
 		$abhaField = null;
 		$pmFields  = $this->db->getFieldNames('patient_master') ?? [];
@@ -415,16 +425,10 @@ class Patient extends BaseController
 			if (in_array($f, $pmFields, true)) { $abhaField = $f; break; }
 		}
 
-		if (strlen($sdata) === 0) {
-			$sql = "SELECT p.*, 
-					Date_Format(p.last_visit,'%d-%m-%Y')  AS Last_Visit
-					FROM patient_master p 
-					GROUP BY p.id 
-					ORDER BY p.last_visit DESC
-					LIMIT 100 ";
-		} else {
+		// Build WHERE clause based on search query
+		$searchString = ' 1=1 ';
+		if (strlen($sdata) > 0) {
 			$sdateArray = explode(' ', $sdata);
-			$searchString = ' 1=1 ';
 
 			foreach ($sdateArray as $rowData) {
 				if ($rowData === '') {
@@ -432,37 +436,86 @@ class Patient extends BaseController
 				}
 
 				if (is_numeric($rowData)) {
-					$abhaClause = $abhaField ? " or p.{$abhaField} = '$rowData'" : '';
-					$searchString .= " and (p.p_code like '%$rowData' 
-									or p.mphone1 = '$rowData' 
-									or p.udai='$rowData'$abhaClause)";
+					$abhaClause = $abhaField ? " or p.{$abhaField} = " . $this->db->escape($rowData) : '';
+					$searchString .= " and (p.p_code like " . $this->db->escape('%' . $rowData) . " 
+									or p.mphone1 = " . $this->db->escape($rowData) . " 
+									or p.udai=" . $this->db->escape($rowData) . $abhaClause . ")";
 				} elseif (ctype_alpha($rowData)) {
-					$searchString .= " and (p.p_fname like '%$rowData%' 
-						or p.email1 = '$rowData' 
-						or SUBSTRING_INDEX(p.p_fname,' ',1) sounds like '$rowData')";
+					$searchString .= " and (p.p_fname like " . $this->db->escape('%' . $rowData . '%') . " 
+						or p.email1 = " . $this->db->escape($rowData) . " 
+						or SUBSTRING_INDEX(p.p_fname,' ',1) sounds like " . $this->db->escape($rowData) . ")";
 				} else {
 					// Handle dashed ABHA format: XX-XXXX-XXXX-XXXX
 					$rawDigits = preg_replace('/\D/', '', $rowData);
 					$abhaElse  = ($abhaField && strlen($rawDigits) === 14)
-						? " or p.{$abhaField} = '$rawDigits' or p.{$abhaField} = '$rowData'"
+						? " or p.{$abhaField} = " . $this->db->escape($rawDigits) . " or p.{$abhaField} = " . $this->db->escape($rowData)
 						: '';
-					$searchString .= " and (p.p_code like '$rowData' 
-						or p.email1 = '$rowData'$abhaElse)";
+					$searchString .= " and (p.p_code like " . $this->db->escape($rowData) . " 
+						or p.email1 = " . $this->db->escape($rowData) . $abhaElse . ")";
 				}
 			}
-
-			$sql = "SELECT p.*, 
-					Date_Format(p.last_visit,'%d-%m-%Y') AS Last_Visit
-					FROM patient_master p 
-					WHERE  $searchString
-					GROUP BY p.id 
-					ORDER BY p.last_visit DESC";
 		}
 
-		$query = $this->db->query($sql);
-		$data['data'] = $query->getResult();
+		// Count total records (without filtering)
+		$totalSql = "SELECT COUNT(DISTINCT p.id) as total FROM patient_master p";
+		$totalData = (int) $this->db->query($totalSql)->getRow()->total;
 
-		return view('billing/Patient_Search_V', $data);
+		// Count filtered records
+		$filteredSql = "SELECT COUNT(DISTINCT p.id) as total FROM patient_master p WHERE $searchString";
+		$totalFiltered = (int) $this->db->query($filteredSql)->getRow()->total;
+
+		// Get pagination and sorting parameters
+		$start = isset($request['start']) ? (int) $request['start'] : 0;
+		$length = isset($request['length']) ? (int) $request['length'] : 10;
+		
+		// Columns for ordering
+		$columns = ['', 'p.p_code', 'p.p_fname', 'p.age', 'p.last_visit', 'p.insurance_id', ''];
+		$orderColumn = 'p.last_visit';
+		$orderDir = 'DESC';
+		
+		if (!empty($request['order'][0]['column']) && is_numeric($request['order'][0]['column'])) {
+			$orderIndex = (int) $request['order'][0]['column'];
+			if (isset($columns[$orderIndex]) && $columns[$orderIndex] !== '') {
+				$orderColumn = $columns[$orderIndex];
+			}
+			$orderDir = strtoupper($request['order'][0]['dir'] ?? 'DESC') === 'ASC' ? 'ASC' : 'DESC';
+		}
+
+		// Get data
+		$sql = "SELECT p.*, 
+				Date_Format(p.last_visit,'%d-%m-%Y') AS Last_Visit,
+				IF(p.insurance_id = 0 OR p.insurance_id IS NULL, 'Self', 'Insuranced') as insurance_status
+				FROM patient_master p 
+				WHERE $searchString
+				GROUP BY p.id 
+				ORDER BY $orderColumn $orderDir
+				LIMIT $start, $length";
+
+		$records = $this->db->query($sql)->getResult();
+
+		// Format data for DataTables
+		$data = [];
+		foreach ($records as $index => $row) {
+			$patientId = (int) ($row->id ?? 0);
+			$age = esc(get_age_1($row->dob ?? null, $row->age ?? '', $row->age_in_month ?? '', $row->estimate_dob ?? '', $row->Last_Visit ?? null));
+			
+			$data[] = [
+				$start + $index + 1,
+				'<a href="javascript:load_form(\'' . base_url('billing/patient/person_record/' . $patientId) . '\');">' . esc($row->p_code ?? '') . '</a>',
+				esc(($row->p_fname ?? '') . ' {' . ($row->p_rname ?? '') . '}'),
+				$age,
+				esc($row->Last_Visit ?? ''),
+				esc($row->insurance_status ?? 'Self'),
+				'<a href="javascript:load_form(\'' . base_url('billing/patient/show_profile_opd/' . $patientId . '/1') . '\');" class="btn btn-info btn-xs"><span class="fa fa-history"></span> Patient History</a>'
+			];
+		}
+
+		return $this->response->setJSON([
+			'draw' => isset($request['draw']) ? (int) $request['draw'] : 0,
+			'recordsTotal' => $totalData,
+			'recordsFiltered' => $totalFiltered,
+			'data' => $data
+		]);
 	}
 
 	public function person_record(int $pno, int $edit = 0)
