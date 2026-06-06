@@ -2010,6 +2010,9 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
 
                 fetch('<?= site_url('Ipd_discharge/update_complaint_field') ?>', {
                     method: 'POST',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
                     body: formData
                 }).then(function(response) {
                     return response.json();
