@@ -10,10 +10,45 @@
 5. ✅ Keyboard highlight (blue background)
 6. ✅ Code badges (blue for SNOMED, gray for ICD)
 7. ✅ Master CRUD integration
+8. ✅ **NEW: Quick "Save in Master" buttons** - Add new terms without opening full CRUD modal
 
 ---
 
 ## 🧪 Testing Procedure
+
+### **Quick-Add Workflow Overview** ⭐ **NEW FEATURE**
+
+The **"Save in Master"** button provides a fast way to add new surgery/procedure terms without leaving the discharge form:
+
+**Traditional Flow (Master CRUD):**
+1. Click "Master CRUD" button → Modal opens
+2. Select type (Surgery/Procedure)
+3. Type name
+4. Enter codes
+5. Save
+6. Close modal
+7. Return to discharge form
+8. Type the name again in autocomplete
+9. Select from dropdown
+
+**New Quick-Add Flow:**
+1. Type new surgery/procedure name in input
+2. Click "Save in Master" button → Quick modal opens
+3. Name already filled (from input)
+4. Enter SNOMED/ICD codes (optional)
+5. Click "Save in Master"
+6. Modal auto-closes
+7. Input keeps the name, master_id set
+8. **Ready to click "+ADD Row"** immediately!
+
+**Benefits:**
+- ⚡ **Faster:** 3 fewer steps
+- 🎯 **Context-aware:** Name pre-filled
+- ✅ **No re-typing:** Input value preserved
+- 🔗 **Auto-linked:** Master ID set automatically
+- 📊 **ABDM-ready:** Can add codes during workflow
+
+---
 
 ### **Test 1: Surgery Autocomplete Basic Flow**
 **Steps:**
@@ -30,19 +65,20 @@
   - Blue badge with SNOMED/term code (if exists)
   - Gray badge with ICD code (if exists)
 - ✅ Items are clickable with mouse hover highlighting
+- ✅ **NEW:** Green "Save in Master" button visible next to input
 
 **Screenshot:**
 ```
-┌─────────────────────────────────────────────┐
-│ Surgery name input: "append"               │
-│ ┌───────────────────────────────────────┐ │
-│ │ Appendectomy                          │ │
-│ │ [SNOMED: 80146002] [ICD: K35.80]     │ │
-│ ├───────────────────────────────────────┤ │
-│ │ Appendectomy, laparoscopic            │ │
-│ │ [SNOMED: 174041007] [ICD: K35.89]    │ │
-│ └───────────────────────────────────────┘ │
-└─────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│ Surgery name input: "append" [+Save in Master]      │
+│ ┌───────────────────────────────────────┐           │
+│ │ Appendectomy                          │           │
+│ │ [SNOMED: 80146002] [ICD: K35.80]     │           │
+│ ├───────────────────────────────────────┤           │
+│ │ Appendectomy, laparoscopic            │           │
+│ │ [SNOMED: 174041007] [ICD: K35.89]    │           │
+│ └───────────────────────────────────────┘           │
+└──────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -124,12 +160,110 @@
 
 ---
 
-### **Test 7: Add Row Flow**
+### **Test 7: Quick "Save in Master" Feature** ⭐ **NEW**
+**Steps:**
+1. Type a NEW surgery name (not in master): "Minimally Invasive Heart Surgery"
+2. Click the green **"Save in Master"** button next to the input
+3. Modal should open with the name pre-filled
+4. Enter optional codes:
+   - SNOMED CT Code: "232717009"
+   - ICD Code: "Z95.1"
+5. Click **"Save in Master"** button in modal
+
+**Expected Results:**
+- ✅ Modal opens with title "Save New Surgery in Master"
+- ✅ Name field shows typed name (read-only)
+- ✅ SNOMED CT Code field is editable (optional)
+- ✅ ICD Code field is editable (optional)
+- ✅ Status shows "Saving..." while processing
+- ✅ Success message "✓ Saved successfully!" appears
+- ✅ Input field still shows the surgery name
+- ✅ Hidden field `new_surgery_master_id` is populated with new ID
+- ✅ Modal closes automatically after 1 second
+- ✅ Can now click "+ADD Row" to add the surgery to discharge
+
+**Verification:**
+```sql
+-- Check if record was saved
+SELECT * FROM ipd_discharge_surgery_master 
+WHERE term_name = 'Minimally Invasive Heart Surgery'
+ORDER BY id DESC LIMIT 1;
+```
+
+**UI Screenshot:**
+```
+┌─────────────────────────────────────────┐
+│ Save New Surgery in Master          [X] │
+├─────────────────────────────────────────┤
+│ Name *                                  │
+│ [Minimally Invasive Heart Surgery]     │
+│ This will be saved to the master table  │
+│                                         │
+│ SNOMED CT Code                          │
+│ [232717009                        ]     │
+│ Optional - SNOMED CT terminology code   │
+│                                         │
+│ ICD Code                                │
+│ [Z95.1                            ]     │
+│ Optional - ICD-10 code                  │
+│                                         │
+│ ✓ Saved successfully!                   │
+├─────────────────────────────────────────┤
+│ [Cancel] [✓ Save in Master]             │
+└─────────────────────────────────────────┘
+```
+
+---
+
+### **Test 8: Quick-Add for Procedure** *(Same as Surgery)*
+**Steps:**
+1. Type a NEW procedure name: "Endoscopic Biopsy"
+2. Click **"Save in Master"** button next to Procedure input
+3. Modal opens with "Save New Procedure in Master" title
+4. Enter codes if needed
+5. Save and verify
+
+**Expected Results:**
+- ✅ All behavior same as Surgery quick-add
+- ✅ Modal title shows "Procedure" instead of "Surgery"
+- ✅ Saves to master with `term_type='procedure'`
+- ✅ Procedure input and `new_procedure_master_id` populated correctly
+
+---
+
+### **Test 9: Quick-Add Validation**
+**Steps:**
+1. Leave Surgery input EMPTY
+2. Click **"Save in Master"** button
+
+**Expected Results:**
+- ✅ Alert: "Please enter a surgery name first"
+- ✅ Modal does NOT open
+- ✅ Focus remains on input field
+
+---
+
+### **Test 10: Quick-Add Integration with Autocomplete**
+**Steps:**
+1. Use quick-add to save "Test Surgery XYZ"
+2. Clear the input
+3. Type "test" to trigger autocomplete
+4. Verify new term appears in dropdown
+
+**Expected Results:**
+- ✅ Newly saved term appears in autocomplete results
+- ✅ Shows any SNOMED/ICD codes that were entered
+- ✅ Can be selected from dropdown
+- ✅ Master linkage works correctly
+
+---
+
+### **Test 7 (OLD): Add Row Flow**
 **Steps:**
 1. Use autocomplete to select a surgery
 2. Fill in Date field (optional)
 3. Fill in Remark field (optional)
-4. Click **+ADD** button
+4. Click **+ADD Row** button
 
 **Expected Results:**
 - ✅ New row appears in Surgery table above input
@@ -139,7 +273,7 @@
 
 ---
 
-### **Test 8: Code Display Variations**
+### **Test 11: Code Display Variations**
 **Test different master records:**
 - Record with both SNOMED and ICD → Shows both badges
 - Record with only SNOMED → Shows blue badge only
@@ -152,7 +286,20 @@
 
 ---
 
-### **Test 9: Performance & Responsiveness**
+### **Test 11: Code Display Variations**
+**Test different master records:**
+- Record with both SNOMED and ICD → Shows both badges
+- Record with only SNOMED → Shows blue badge only
+- Record with only ICD → Shows gray badge only
+- Record with no codes → Shows name only (no badges)
+
+**Expected Results:**
+- ✅ Badge display adapts correctly to available data
+- ✅ Layout remains clean and readable
+
+---
+
+### **Test 12: Performance & Responsiveness**
 **Steps:**
 1. Type characters rapidly
 2. Delete and retype
@@ -166,7 +313,7 @@
 
 ---
 
-### **Test 10: Edge Cases**
+### **Test 13: Edge Cases**
 **Steps:**
 1. Type only 1 character → Dropdown should NOT appear
 2. Type 2+ characters → Dropdown appears
@@ -281,12 +428,18 @@ WHERE p.ipd_id = {test_ipd_id};
 ### **Code Changes:**
 - [x] HTML: Replaced datalist with custom dropdown divs
 - [x] HTML: Added position-relative wrapper for dropdown positioning
+- [x] HTML: Added input-group layout for Surgery/Procedure inputs
+- [x] HTML: Added "Save in Master" buttons with Bootstrap styling
+- [x] HTML: Created quickAddTermModal with SNOMED/ICD fields
 - [x] JavaScript: Created `initSurgeryProcedureAutocomplete()` function
 - [x] JavaScript: Created `initTermAutocomplete()` with full keyboard support
+- [x] JavaScript: Created `initQuickAddTermHandlers()` for quick-add functionality
 - [x] JavaScript: Arrow key navigation with visual highlighting
 - [x] JavaScript: Click and hover event handlers
 - [x] JavaScript: 300ms debounce on input for performance
 - [x] JavaScript: Badge rendering for SNOMED/ICD codes
+- [x] JavaScript: Quick-add modal handlers with validation
+- [x] JavaScript: Auto-populate input and master_id after quick-add save
 - [x] JavaScript: Removed old `bindSurgeryTermLookup` calls from `initSurgeryTools()`
 - [x] CSS: Dropdown styling with Bootstrap classes
 - [x] Integration: Called from `initSurgeryProcedureAutocomplete()` on page load
@@ -298,10 +451,14 @@ WHERE p.ipd_id = {test_ipd_id};
 - [ ] Test 4: Escape key closes dropdown
 - [ ] Test 5: Procedure autocomplete (independent operation)
 - [ ] Test 6: Master CRUD integration
-- [ ] Test 7: Add row with selected item
-- [ ] Test 8: Code badge display variations
-- [ ] Test 9: Performance and debouncing
-- [ ] Test 10: Edge cases (min length, no results, blur)
+- [ ] Test 7: Quick "Save in Master" for Surgery ⭐ NEW
+- [ ] Test 8: Quick "Save in Master" for Procedure ⭐ NEW
+- [ ] Test 9: Quick-add validation (empty input) ⭐ NEW
+- [ ] Test 10: Quick-add integration with autocomplete ⭐ NEW
+- [ ] Test 11: Add row with selected item
+- [ ] Test 12: Code badge display variations
+- [ ] Test 13: Performance and debouncing
+- [ ] Test 14: Edge cases (min length, no results, blur)
 
 ### **Verification:**
 - [ ] No JavaScript console errors
