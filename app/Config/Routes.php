@@ -457,7 +457,7 @@ $routes->group('billing', function($routes) {
     $routes->get('patient/search_opd', 'Patient::search_opd');
     $routes->post('patient/create', 'Patient::create');
     $routes->post('patient/search', 'Patient::search');
-    $routes->get('billing/patient/search_ajax', 'Patient::search_ajax');
+    $routes->get('patient/search_ajax', 'Patient::search_ajax');
     $routes->post('patient/search_adv', 'Patient::search_adv');
     $routes->post('patient/abha_fetch_profile', 'Patient::abha_fetch_profile');
     $routes->post('patient/abha_aadhaar_generate_otp', 'Patient::abhaAadhaarGenerateOtp');
