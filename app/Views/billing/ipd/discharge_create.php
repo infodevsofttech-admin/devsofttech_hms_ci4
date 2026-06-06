@@ -710,62 +710,26 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                             <div class="card-header py-2"><strong>Complaints with Duration and Reason for Admission</strong></div>
                             <div class="card-body">
                                 <input type="hidden" name="complaint_remove_id" id="complaint_remove_id" value="0">
-                                <input type="hidden" name="new_complaint_name" id="new_complaint_name" value="">
-                                <input type="hidden" name="new_complaint_remark" id="new_complaint_remark" value="">
-                                <button type="submit" class="d-none" id="btn_add_complaint_row" name="action" value="add_complaint" data-reload-section="section-complaints">Add Complaint Row</button>
 
-                                <!-- Healthplix-style inline complaint table -->
+                                <!-- Healthplix-style inline complaint table (OPD-like) -->
                                 <table class="table table-sm table-bordered align-middle mb-1" id="discharge_complaint_table" style="font-size:.82rem">
                                     <thead class="table-light" style="font-size:.75rem">
                                         <tr>
                                             <th style="width:28px">#</th>
                                             <th>Complaint</th>
-                                            <th>Remark</th>
+                                            <th style="width:110px">Frequency</th>
+                                            <th style="width:100px">Severity</th>
+                                            <th style="width:120px">Duration</th>
                                             <th style="width:24px"></th>
                                         </tr>
                                     </thead>
                                     <tbody id="discharge_complaint_tbody">
-                                        <?php if (empty($complaintRows)): ?>
-                                            <tr><td colspan="4" class="text-muted text-center">No complaint rows yet.</td></tr>
-                                        <?php else: 
-                                            $rowNum = 0;
-                                            foreach ($complaintRows as $row): 
-                                                $rowNum++;
-                                        ?>
-                                            <tr data-complaint-id="<?= (int) ($row['id'] ?? 0) ?>">
-                                                <td class="text-center text-muted"><?= $rowNum ?></td>
-                                                <td>
-                                                    <input 
-                                                        type="text" 
-                                                        class="form-control form-control-sm discharge-complaint-name-input" 
-                                                        data-complaint-id="<?= (int) ($row['id'] ?? 0) ?>"
-                                                        data-original-value="<?= esc((string) ($row['comp_report'] ?? '')) ?>"
-                                                        value="<?= esc((string) ($row['comp_report'] ?? '')) ?>"
-                                                        placeholder="Enter complaint name"
-                                                        style="border:1px solid #dee2e6;font-size:.82rem"
-                                                    >
-                                                </td>
-                                                <td>
-                                                    <input 
-                                                        type="text" 
-                                                        class="form-control form-control-sm discharge-complaint-remark-input" 
-                                                        data-complaint-id="<?= (int) ($row['id'] ?? 0) ?>"
-                                                        data-original-value="<?= esc((string) ($row['comp_remark'] ?? '')) ?>"
-                                                        value="<?= esc((string) ($row['comp_remark'] ?? '')) ?>"
-                                                        placeholder="Enter remark/duration"
-                                                        style="border:1px solid #dee2e6;font-size:.82rem"
-                                                    >
-                                                </td>
-                                                <td class="text-center">
-                                                    <button type="submit" class="btn btn-sm p-0 border-0 text-danger" name="action" value="remove_complaint" data-reload-section="section-complaints" onclick="document.getElementById('complaint_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';" title="Remove" style="width:24px;height:24px">×</button>
-                                                </td>
-                                            </tr>
-                                        <?php endforeach; endif; ?>
+                                        <!-- Rows will be dynamically populated by JavaScript -->
                                     </tbody>
                                     <tfoot>
                                         <tr>
                                             <td></td>
-                                            <td colspan="2" class="p-1 position-relative">
+                                            <td colspan="4" class="p-1 position-relative">
                                                 <input type="text" class="form-control form-control-sm" id="discharge_complaint_lookup"
                                                        autocomplete="off" placeholder="Type: bukhar, khansi, pet dard, chakkar… (English + Hinglish)" style="font-size:.82rem">
                                                 <div id="discharge_complaint_dropdown" class="border rounded bg-white shadow-sm"
@@ -777,6 +741,14 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                         </tr>
                                     </tfoot>
                                 </table>
+
+                                <!-- Hidden fields to store data for form submission -->
+                                <input type="hidden" name="discharge_complaints_json" id="discharge_complaints_json" value="">
+                                
+                                <!-- Fixed dropdowns for table cell inputs -->
+                                <div id="discharge_freq_dd" style="display:none;position:fixed;z-index:1090;min-width:160px;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:180px;overflow-y:auto;"></div>
+                                <div id="discharge_sev_dd" style="display:none;position:fixed;z-index:1090;min-width:140px;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:180px;overflow-y:auto;"></div>
+                                <div id="discharge_dur_dd" style="display:none;position:fixed;z-index:1090;min-width:160px;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:180px;overflow-y:auto;"></div>
 
                                 <div id="discharge_complaint_status" class="small text-muted mb-2"></div>
 
