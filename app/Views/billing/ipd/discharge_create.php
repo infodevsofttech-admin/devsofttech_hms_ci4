@@ -627,7 +627,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                         <li class="nav-item"><a href="#section-course" class="nav-link discharge-nav-link" data-target="section-course">Course / Treatment in the hospital</a></li>
                         <li class="nav-item"><a href="#section-condition" class="nav-link discharge-nav-link" data-target="section-condition">Condition at the time of Discharge</a></li>
                         <li class="nav-item"><a href="#section-medicine" class="nav-link discharge-nav-link" data-target="section-medicine">Discharge Medicine Prescribed</a></li>
-                        <li class="nav-item"><a href="#section-instructions" class="nav-link discharge-nav-link" data-target="section-instructions">Discharge Instructions/Advise</a></li>
+                        <li class="nav-item"><a href="#section-instructions" class="nav-link discharge-nav-link" data-target="section-instructions">Discharge Summary</a></li>
                     </ul>
 
                     <div class="discharge-side-actions">
@@ -1238,8 +1238,8 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                             <table class="table table-sm table-bordered">
                                                 <thead>
                                                     <tr>
-                                                        <th>Medicine</th>
                                                         <th>Type</th>
+                                                        <th>Medicine</th>
                                                         <th>Dose</th>
                                                         <th>When</th>
                                                         <th>Freq</th>
@@ -1254,8 +1254,8 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                                         <tr><td colspan="9" class="text-muted text-center">No medicine added</td></tr>
                                                     <?php else: foreach ($medicineRows as $row): ?>
                                                         <tr>
-                                                            <td><?= esc((string) ($row['med_name'] ?? '')) ?></td>
                                                             <td><?= esc((string) ($row['med_type'] ?? '')) ?></td>
+                                                            <td><?= esc((string) ($row['med_name'] ?? '')) ?></td>
                                                             <td><?= esc((string) ($row['dosage'] ?? '')) ?></td>
                                                             <td><?= esc((string) ($row['dosage_when'] ?? '')) ?></td>
                                                             <td><?= esc((string) ($row['dosage_freq'] ?? '')) ?></td>
@@ -1368,7 +1368,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
 
                         <div class="card border-secondary mt-3" id="section-instructions">
                             <div class="card-header py-2 d-flex justify-content-between align-items-center">
-                                <strong>Discharge Instructions / Advice</strong>
+                                <strong>Discharge Summary</strong>
                                 <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_discharge_manage_food_master">Dietary Master CRUD</button>
                             </div>
                             <div class="card-body row g-2">
@@ -1423,7 +1423,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                 </div>
 
                                 <div class="col-md-12">
-                                    <label class="form-label">Discharge Instructions / Advice</label>
+                                    <label class="form-label">Discharge Summary</label>
                                     <textarea class="form-control" name="instruction_remark" id="instruction_remark" rows="3"><?= esc((string) ($instruction_remark ?? '')) ?></textarea>
                                 </div>
                                 <div class="col-md-4">
@@ -4126,26 +4126,31 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                         return;
                     }
 
-                    // Build dose plan label from IDs
-                    var dosePlan = '';
+                    // Get dose labels from cache
+                    var doseLabel = dosage;
                     if (dosage) {
                         var doseRow = doseMasterCache.dose.find(function(r) { return String(r.id) === dosage; });
-                        dosePlan += (doseRow ? doseRow.label : dosage) + ' ';
+                        if (doseRow) doseLabel = doseRow.label;
                     }
+                    
+                    var whenLabel = dosageWhen;
                     if (dosageWhen) {
                         var whenRow = doseMasterCache.when.find(function(r) { return String(r.id) === dosageWhen; });
-                        dosePlan += (whenRow ? whenRow.label : dosageWhen) + ' ';
+                        if (whenRow) whenLabel = whenRow.label;
                     }
+                    
+                    var freqLabel = dosageFreq;
                     if (dosageFreq) {
                         var freqRow = doseMasterCache.freq.find(function(r) { return String(r.id) === dosageFreq; });
-                        dosePlan += (freqRow ? freqRow.label : dosageFreq) + ' ';
+                        if (freqRow) freqLabel = freqRow.label;
                     }
-                    if (doseWhere) {
-                        var whereRow = doseMasterCache.where.find(function(r) { return String(r.id) === doseWhere; });
-                        dosePlan += (whereRow ? whereRow.label : doseWhere) + ' ';
+                    
+                    // Format duration (e.g., "5" -> "5 days", "1 month" -> "1 month")
+                    var formattedDuration = noOfDays;
+                    if (noOfDays && /^\d+$/.test(noOfDays.trim())) {
+                        var num = parseInt(noOfDays.trim(), 10);
+                        formattedDuration = num + (num === 1 ? ' day' : ' days');
                     }
-                    dosePlan += noOfDays;
-                    dosePlan = dosePlan.trim();
 
                     // Add row to table
                     var tbody = section.querySelector('#discharge_medicine_tbody');
@@ -4160,12 +4165,12 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                     }
 
                     var tr = document.createElement('tr');
-                    tr.innerHTML = '<td>' + $('<div>').text(medName).html() + '</td>'
-                        + '<td>' + $('<div>').text(medType).html() + '</td>'
-                        + '<td>' + $('<div>').text(dosage).html() + '</td>'
-                        + '<td>' + $('<div>').text(dosageWhen).html() + '</td>'
-                        + '<td>' + $('<div>').text(dosageFreq).html() + '</td>'
-                        + '<td>' + $('<div>').text(noOfDays).html() + '</td>'
+                    tr.innerHTML = '<td>' + $('<div>').text(medType).html() + '</td>'
+                        + '<td>' + $('<div>').text(medName).html() + '</td>'
+                        + '<td>' + $('<div>').text(doseLabel).html() + '</td>'
+                        + '<td>' + $('<div>').text(whenLabel).html() + '</td>'
+                        + '<td>' + $('<div>').text(freqLabel).html() + '</td>'
+                        + '<td>' + $('<div>').text(formattedDuration).html() + '</td>'
                         + '<td>' + $('<div>').text(qty).html() + '</td>'
                         + '<td>' + $('<div>').text(remark).html() + '</td>'
                         + '<td><button type="button" class="btn btn-outline-danger btn-sm btn-remove-discharge-med">Remove</button></td>';
