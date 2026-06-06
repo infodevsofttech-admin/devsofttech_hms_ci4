@@ -444,17 +444,42 @@ class Ipd_discharge extends BaseController
             $guardianCombined = $guardianName !== '' ? $guardianName : $guardianRelation;
         }
 
+        // Patient phone number
+        $patientPhone = '';
+        if ($person) {
+            $patientPhone = trim((string) ($person->mphone1 ?? $person->phone ?? $person->contact_no ?? ''));
+        }
+        if ($patientPhone === '' && $ipd) {
+            $patientPhone = trim((string) ($ipd->P_mobile1 ?? $ipd->P_mobile2 ?? $ipd->contact_phone ?? ''));
+        }
+
+        // Insurance company name
+        $insuranceCompany = '';
+        if ($ipd) {
+            $insuranceCompany = trim((string) ($ipd->ins_short_name ?? $ipd->ins_company_name ?? ''));
+            if ($insuranceCompany === '') {
+                $insuranceCompany = 'Direct';
+            }
+        }
+
+        // Doctor names (from doc_list field in ipd_master)
+        $doctorNames = $this->getDischargeDoctorNames($ipd);
+
         return [
             'GUARDIAN_RELATION' => esc($guardianRelation !== '' ? $guardianRelation . ' of ' : ''),
             'GUARDIAN_NAME' => esc($guardianName),
             'GUARDIAN' => esc($guardianCombined),
             'PATIENT_ADDRESS' => esc($address),
+            'PATIENT_PHONE' => esc($patientPhone),
             'DEPARTMENT' => esc($this->getDischargeDepartmentName($ipd)),
             'ADMIT_DATE_ONLY' => esc($this->safeDate((string) ($ipd->str_register_date ?? $ipd->register_date ?? ''))),
             'DISCHARGE_DATE_ONLY' => esc($this->safeDate((string) ($ipd->str_discharge_date ?? $ipd->discharge_date ?? ''))),
             'ADMISSION_TIME' => esc($this->safeTime((string) ($ipd->register_date ?? $ipd->register_time ?? $ipd->admission_time ?? $ipd->str_register_date ?? ''))),
             'DISCHARGE_TIME' => esc($this->safeTime((string) ($ipd->discharge_date ?? $ipd->discharge_time ?? $ipd->str_discharge_date ?? ''))),
             'ADMIT_TIME' => esc($this->safeTime((string) ($ipd->register_date ?? $ipd->register_time ?? $ipd->admission_time ?? $ipd->str_register_date ?? ''))),
+            'INSURANCE_COMPANY' => esc($insuranceCompany),
+            'DOCTOR_NAMES' => esc($doctorNames),
+            'DOCTOR_NAME' => esc($doctorNames),
         ];
     }
 
@@ -910,6 +935,55 @@ class Ipd_discharge extends BaseController
         }
 
         return 'user-' . (string) ($user->id ?? 0);
+    }
+
+    private function getDischargeDoctorNames($ipd): string
+    {
+        if (! $ipd) {
+            return '';
+        }
+
+        $docList = trim((string) ($ipd->doc_list ?? ''));
+        if ($docList === '' || $docList === '0') {
+            return '';
+        }
+
+        if (! $this->db->tableExists('doctor_master')) {
+            return '';
+        }
+
+        $docIds = array_filter(array_map('intval', explode(',', $docList)));
+        if (empty($docIds)) {
+            return '';
+        }
+
+        $doctors = $this->db->table('doctor_master d')
+            ->select("d.id, d.p_fname, d.p_title, group_concat(distinct m.SpecName SEPARATOR ', ') as SpecName", false)
+            ->join('doc_spec s', 'd.id = s.doc_id', 'left')
+            ->join('med_spec m', 's.med_spec_id = m.id', 'left')
+            ->whereIn('d.id', $docIds)
+            ->groupBy('d.id')
+            ->get()
+            ->getResult();
+
+        if (empty($doctors)) {
+            return '';
+        }
+
+        $names = [];
+        foreach ($doctors as $doc) {
+            $title = trim((string) ($doc->p_title ?? ''));
+            $name = trim((string) ($doc->p_fname ?? ''));
+            $spec = trim((string) ($doc->SpecName ?? ''));
+
+            $fullName = ($title !== '' ? $title . ' ' : 'Dr. ') . $name;
+            if ($spec !== '') {
+                $fullName .= ' [' . $spec . ']';
+            }
+            $names[] = $fullName;
+        }
+
+        return implode(', ', $names);
     }
 
     private function saveDischargeContent(int $ipdId, string $content): bool

@@ -87,12 +87,26 @@ The CI4 discharge template system now **correctly matches** CI3 behavior where:
 | `{{IPD_CODE}}` | IPD admission number | A26050000001 |
 | `{{AGE_GENDER}}` | Age and gender | 26 Year / Female |
 | `{{GUARDIAN}}` | Guardian relation and name | W/O of RAM SINGH |
+| `{{GUARDIAN_RELATION}}` | Guardian relation only | W/O of |
+| `{{GUARDIAN_NAME}}` | Guardian name only | RAM SINGH |
 | `{{PATIENT_ADDRESS}}` | Full address | KASHIPUR, District, State |
+| `{{PATIENT_PHONE}}` | Patient phone number | 9876543210 |
+
+### IPD Information Tokens
+
+| Token | Description | Example Output |
+|-------|-------------|----------------|
 | `{{DEPARTMENT}}` | Department name | General Medicine |
 | `{{ADMIT_DATE}}` | Admission date | 23-05-2026 |
 | `{{DISCHARGE_DATE}}` | Discharge date | 05-06-2026 |
+| `{{ADMIT_DATE_ONLY}}` | Admission date (same as ADMIT_DATE) | 23-05-2026 |
+| `{{DISCHARGE_DATE_ONLY}}` | Discharge date (same as DISCHARGE_DATE) | 05-06-2026 |
 | `{{ADMISSION_TIME}}` | Admission time | 10:30 AM |
 | `{{DISCHARGE_TIME}}` | Discharge time | 03:45 PM |
+| `{{ADMIT_TIME}}` | Admission time (same as ADMISSION_TIME) | 10:30 AM |
+| `{{INSURANCE_COMPANY}}` | Insurance company name | Star Health Insurance |
+| `{{DOCTOR_NAMES}}` | Treating doctor(s) with specialties | Dr. Rajesh Kumar [General Medicine], Dr. Priya Sharma [Cardiology] |
+| `{{DOCTOR_NAME}}` | Same as DOCTOR_NAMES | Dr. Rajesh Kumar [General Medicine] |
 
 ### Hospital Information Tokens
 
@@ -197,6 +211,18 @@ The CI4 discharge template system now **correctly matches** CI3 behavior where:
       <td><b>Discharge:</b></td>
       <td>{{DISCHARGE_DATE}}</td>
     </tr>
+    <tr>
+      <td><b>Phone:</b></td>
+      <td>{{PATIENT_PHONE}}</td>
+      <td><b>Insurance:</b></td>
+      <td>{{INSURANCE_COMPANY}}</td>
+    </tr>
+    <tr>
+      <td><b>Department:</b></td>
+      <td>{{DEPARTMENT}}</td>
+      <td><b>Doctor(s):</b></td>
+      <td>{{DOCTOR_NAMES}}</td>
+    </tr>
   </table>
   
   <hr>
@@ -205,7 +231,7 @@ The CI4 discharge template system now **correctly matches** CI3 behavior where:
 </div>
 ```
 
-**Output:** Custom-styled discharge with full control over layout
+**Output:** Custom-styled discharge with full control over layout, including phone, insurance, and doctor information
 
 ---
 
@@ -318,6 +344,9 @@ The CI4 discharge template system now **correctly matches** CI3 behavior where:
 | `$ipd_master[0]->p_code` | `{{UHID}}` |
 | `$ipd_master[0]->ipd_code` | `{{IPD_CODE}}` |
 | `$ipd_master[0]->str_age . ' / ' . $xgender` | `{{AGE_GENDER}}` |
+| `$person->mphone1` | `{{PATIENT_PHONE}}` |
+| `$ipd_master[0]->ins_company_name` | `{{INSURANCE_COMPANY}}` |
+| `$doc_list_main_sign` (doctor names) | `{{DOCTOR_NAMES}}` |
 | `$FinalDiagnosis` | `{{FINAL_DIAGNOSIS}}` |
 | `$Surgery` | `{{SURGERY}}` |
 | `$Procedure` | `{{PROCEDURE}}` |
