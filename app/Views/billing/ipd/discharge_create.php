@@ -1820,15 +1820,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                             item.style.fontWeight = '';
                         }
                     });
-                }kup.addEventListener('keydown', function(e) {
-                    if (e.key === 'Enter' && btnAdd) {
-                        e.preventDefault();
-                        dropdown.style.display = 'none';
-                        btnAdd.click();
-                    } else if (e.key === 'Escape') {
-                        dropdown.style.display = 'none';
-                    }
-                });
+                }
 
                 lookup.addEventListener('blur', function() {
                     setTimeout(function() {
