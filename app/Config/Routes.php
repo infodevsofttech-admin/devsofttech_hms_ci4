@@ -375,6 +375,10 @@ $routes->get('Ipd_discharge/surgery_master_lookup', 'Ipd_discharge::surgery_mast
 $routes->get('Ipd_discharge/surgery_master_list', 'Ipd_discharge::surgery_master_list');
 $routes->post('Ipd_discharge/surgery_master_save', 'Ipd_discharge::surgery_master_save');
 $routes->post('Ipd_discharge/surgery_master_delete', 'Ipd_discharge::surgery_master_delete');
+$routes->get('Ipd_discharge/course_master_lookup', 'Ipd_discharge::course_master_lookup');
+$routes->get('Ipd_discharge/course_master_list', 'Ipd_discharge::course_master_list');
+$routes->post('Ipd_discharge/course_master_save', 'Ipd_discharge::course_master_save');
+$routes->post('Ipd_discharge/course_master_delete', 'Ipd_discharge::course_master_delete');
 $routes->get('Ipd_discharge/diagnosis_icd_lookup', 'Ipd_discharge::diagnosis_icd_lookup');
 $routes->post('Ipd_discharge/diagnosis_icd_seed_starter', 'Ipd_discharge::diagnosis_icd_seed_starter');
 $routes->post('Ipd_discharge/update_complaint_field', 'Ipd_discharge::update_complaint_field');

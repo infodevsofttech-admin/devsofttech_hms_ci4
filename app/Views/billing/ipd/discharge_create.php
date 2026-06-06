@@ -1165,10 +1165,19 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                     </tbody>
                                 </table>
                                 <input type="hidden" name="course_remove_id" id="course_remove_id" value="0">
+                                <input type="hidden" name="new_course_master_id" id="new_course_master_id" value="0">
                                 <div class="row g-2">
-                                    <div class="col-md-6"><input type="text" class="form-control" name="new_course_name" id="new_course_name" list="discharge_course_suggest" autocomplete="off" placeholder="Course / treatment"></div>
-                                    <div class="col-md-5"><input type="text" class="form-control" name="new_course_remark" placeholder="Remark"></div>
-                                    <div class="col-md-1"><button type="submit" class="btn btn-primary btn-sm" name="action" value="add_course">+ADD</button></div>
+                                    <div class="col-md-6 position-relative">
+                                        <div class="input-group">
+                                            <input type="text" class="form-control" name="new_course_name" id="new_course_name" autocomplete="off" placeholder="Course / treatment (type to search master)">
+                                            <button type="button" class="btn btn-outline-success btn-sm" id="btn_quick_add_course" title="Save new term in master">
+                                                <i class="bi bi-plus-circle"></i> Save in Master
+                                            </button>
+                                        </div>
+                                        <div id="discharge_course_dropdown" class="dropdown-menu" style="display:none;position:absolute;z-index:1050;max-height:250px;overflow-y:auto;width:100%;"></div>
+                                    </div>
+                                    <div class="col-md-4"><input type="text" class="form-control" name="new_course_remark" placeholder="Remark"></div>
+                                    <div class="col-md-2"><button type="submit" class="btn btn-primary btn-sm w-100" name="action" value="add_course">+ADD Row</button></div>
                                 </div>
                                 <datalist id="discharge_course_suggest"></datalist>
                                 <div id="discharge_course_status" class="complaint-status text-muted"></div>
@@ -2247,18 +2256,28 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                     var csrf = getCsrfPair(form);
                     var payload = {
                         id: 0,
-                        type: type,
                         name: name,
                         code: code,
                         icd_code: icd,
                         is_active: 1
                     };
+                    
+                    // For surgery/procedure, include type in payload
+                    if (type === 'surgery' || type === 'procedure') {
+                        payload.type = type;
+                    }
+                    
                     payload[csrf.name] = csrf.value;
 
                     setQuickStatus('Saving...', 'muted');
                     btnSave.disabled = true;
 
-                    $.post('<?= base_url('Ipd_discharge/surgery_master_save') ?>', payload, function(data) {
+                    // Use appropriate endpoint based on type
+                    var saveUrl = type === 'course' 
+                        ? '<?= base_url('Ipd_discharge/course_master_save') ?>'
+                        : '<?= base_url('Ipd_discharge/surgery_master_save') ?>';
+
+                    $.post(saveUrl, payload, function(data) {
                         updateFormCsrf(form, data);
                         btnSave.disabled = false;
 
@@ -2281,6 +2300,11 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                             var procedureMasterId = document.getElementById('new_procedure_master_id');
                             if (procedureInput) procedureInput.value = name;
                             if (procedureMasterId) procedureMasterId.value = savedId;
+                        } else if (type === 'course') {
+                            var courseInput = document.getElementById('new_course_name');
+                            var courseMasterId = document.getElementById('new_course_master_id');
+                            if (courseInput) courseInput.value = name;
+                            if (courseMasterId) courseMasterId.value = savedId;
                         }
 
                         // Close modal after short delay
@@ -2467,6 +2491,162 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
             var statusId = statusIdByNarrativeSection(section);
             if (statusId !== '') {
                 setSectionStatus(statusId, text, level);
+            }
+        }
+
+        // Course/Treatment autocomplete with SNOMED/ICD code display
+        function initCourseAutocomplete() {
+            var input = document.getElementById('new_course_name');
+            var dropdown = document.getElementById('discharge_course_dropdown');
+            var hidden = document.getElementById('new_course_master_id');
+            if (!input || !dropdown || !hidden) return;
+
+            var searchTimer = null;
+            var highlightedIndex = -1;
+            var currentResults = [];
+
+            input.addEventListener('input', function() {
+                var q = input.value.trim();
+                highlightedIndex = -1;
+                
+                if (q.length < 2) {
+                    dropdown.style.display = 'none';
+                    return;
+                }
+
+                clearTimeout(searchTimer);
+                searchTimer = setTimeout(function() {
+                    if (!window.jQuery) return;
+                    
+                    $.get('<?= base_url('Ipd_discharge/course_master_lookup') ?>?q=' + encodeURIComponent(q), function(data) {
+                        currentResults = (data && data.rows) ? data.rows : [];
+                        if (!currentResults.length) {
+                            dropdown.style.display = 'none';
+                            return;
+                        }
+
+                        var html = '';
+                        currentResults.forEach(function(row) {
+                            var name = row.term_name || '';
+                            var code = row.term_code || '';
+                            var icd = row.icd_code || '';
+                            var codeDisplay = '';
+                            
+                            if (code && icd) {
+                                codeDisplay = '<span class="badge bg-info text-dark me-1">' + code + '</span><span class="badge bg-secondary">' + icd + '</span>';
+                            } else if (code) {
+                                codeDisplay = '<span class="badge bg-info text-dark">' + code + '</span>';
+                            } else if (icd) {
+                                codeDisplay = '<span class="badge bg-secondary">' + icd + '</span>';
+                            }
+
+                            html += '<div class="dropdown-item px-2 py-2" data-id="' + (row.id || 0) + '" data-name="' + name.replace(/"/g, '&quot;') + '" style="cursor:pointer;font-size:.9rem;border-bottom:1px solid #f0f0f0;">';
+                            html += '<div class="fw-semibold">' + name + '</div>';
+                            if (codeDisplay) {
+                                html += '<div class="small mt-1">' + codeDisplay + '</div>';
+                            }
+                            html += '</div>';
+                        });
+
+                        dropdown.innerHTML = html;
+                        dropdown.style.display = 'block';
+
+                        dropdown.querySelectorAll('.dropdown-item').forEach(function(item, idx) {
+                            item.addEventListener('mouseenter', function() {
+                                dropdown.querySelectorAll('.dropdown-item').forEach(function(el) {
+                                    el.style.backgroundColor = '';
+                                });
+                                this.style.backgroundColor = '#f8f9fa';
+                                highlightedIndex = idx;
+                            });
+                            item.addEventListener('mouseleave', function() {
+                                this.style.backgroundColor = '';
+                            });
+                            item.addEventListener('click', function() {
+                                var id = this.getAttribute('data-id');
+                                var name = this.getAttribute('data-name');
+                                input.value = name;
+                                hidden.value = id;
+                                dropdown.style.display = 'none';
+                            });
+                        });
+                    }, 'json');
+                }, 300);
+            });
+
+            input.addEventListener('keydown', function(e) {
+                var items = dropdown.querySelectorAll('.dropdown-item');
+                var isVisible = dropdown.style.display === 'block' && items.length > 0;
+
+                if (e.key === 'ArrowDown' && isVisible) {
+                    e.preventDefault();
+                    highlightedIndex = Math.min(highlightedIndex + 1, items.length - 1);
+                    updateHighlight(items);
+                } else if (e.key === 'ArrowUp' && isVisible) {
+                    e.preventDefault();
+                    highlightedIndex = Math.max(highlightedIndex - 1, 0);
+                    updateHighlight(items);
+                } else if (e.key === 'Enter' && isVisible) {
+                    e.preventDefault();
+                    if (highlightedIndex >= 0 && items[highlightedIndex]) {
+                        items[highlightedIndex].click();
+                    }
+                } else if (e.key === 'Escape') {
+                    dropdown.style.display = 'none';
+                    highlightedIndex = -1;
+                }
+            });
+
+            input.addEventListener('blur', function() {
+                setTimeout(function() {
+                    dropdown.style.display = 'none';
+                }, 200);
+            });
+
+            function updateHighlight(items) {
+                items.forEach(function(item, idx) {
+                    if (idx === highlightedIndex) {
+                        item.style.backgroundColor = '#007bff';
+                        item.style.color = '#fff';
+                        item.scrollIntoView({ block: 'nearest' });
+                    } else {
+                        item.style.backgroundColor = '';
+                        item.style.color = '';
+                    }
+                });
+            }
+
+            // Quick-add button handler
+            var btnQuickCourse = document.getElementById('btn_quick_add_course');
+            if (btnQuickCourse) {
+                btnQuickCourse.addEventListener('click', function() {
+                    var courseName = input.value.trim();
+                    
+                    if (!courseName) {
+                        alert('Please enter a course/treatment name first');
+                        return;
+                    }
+
+                    var quickModal = document.getElementById('quickAddTermModal');
+                    var quickType = document.getElementById('quick_term_type');
+                    var quickTypeLabel = document.getElementById('quick_term_type_label');
+                    var quickName = document.getElementById('quick_term_name');
+                    var quickCode = document.getElementById('quick_term_code');
+                    var quickIcd = document.getElementById('quick_term_icd');
+                    var quickStatus = document.getElementById('quick_term_status');
+
+                    if (!quickModal || !quickName) return;
+
+                    quickType.value = 'course';
+                    quickTypeLabel.textContent = 'Course/Treatment';
+                    quickName.value = courseName;
+                    quickCode.value = '';
+                    quickIcd.value = '';
+                    quickStatus.textContent = '';
+                    quickStatus.className = 'text-muted';
+                    
+                    showModalById('quickAddTermModal');
+                });
             }
         }
 
@@ -3837,6 +4017,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
         initComplaintTools();
         initSurgeryProcedureAutocomplete();
         initSurgeryTools(getDischargeForm());
+        initCourseAutocomplete();
         initDiagnosisTools();
         initCourseTools();
         initMedicineTools();

@@ -2631,6 +2631,218 @@ class Ipd_discharge extends BaseController
         ]);
     }
 
+    // Course/Treatment Master CRUD
+    private function ensureDischargeCourseMasterTable(): bool
+    {
+        if ($this->db->tableExists('ipd_discharge_course_master')) {
+            return true;
+        }
+
+        try {
+            $sql = "CREATE TABLE IF NOT EXISTS ipd_discharge_course_master (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                term_name VARCHAR(255) NOT NULL,
+                term_code VARCHAR(60) DEFAULT NULL,
+                icd_code VARCHAR(60) DEFAULT NULL,
+                is_active TINYINT(1) NOT NULL DEFAULT 1,
+                created_at DATETIME NULL,
+                updated_at DATETIME NULL,
+                UNIQUE KEY uniq_term_name (term_name),
+                INDEX idx_active_name (is_active, term_name)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+            $this->db->query($sql);
+        } catch (\Throwable $e) {
+            return false;
+        }
+
+        return $this->db->tableExists('ipd_discharge_course_master');
+    }
+
+    public function course_master_lookup()
+    {
+        $q = trim((string) $this->request->getGet('q'));
+        $rows = [];
+
+        if ($q !== '') {
+            if ($this->ensureDischargeCourseMasterTable()) {
+                $dbRows = $this->db->table('ipd_discharge_course_master')
+                    ->select('id, term_name, term_code, icd_code')
+                    ->where('is_active', 1)
+                    ->groupStart()
+                    ->like('term_name', $q)
+                    ->orLike('term_code', $q)
+                    ->orLike('icd_code', $q)
+                    ->groupEnd()
+                    ->orderBy('term_name', 'ASC')
+                    ->limit(20)
+                    ->get()
+                    ->getResultArray();
+
+                foreach ($dbRows as $row) {
+                    $rows[] = [
+                        'id' => (int) ($row['id'] ?? 0),
+                        'term_name' => (string) ($row['term_name'] ?? ''),
+                        'term_code' => (string) ($row['term_code'] ?? ''),
+                        'icd_code' => (string) ($row['icd_code'] ?? ''),
+                    ];
+                }
+            }
+        }
+
+        return $this->response->setJSON(['rows' => $rows]);
+    }
+
+    public function course_master_list()
+    {
+        $q = trim((string) $this->request->getGet('q'));
+        $rows = [];
+
+        if (! $this->ensureDischargeCourseMasterTable()) {
+            return $this->response->setJSON(['rows' => []]);
+        }
+
+        $builder = $this->db->table('ipd_discharge_course_master')
+            ->select('id, term_name, term_code, icd_code, is_active');
+
+        if ($q !== '') {
+            $builder->groupStart()
+                ->like('term_name', $q)
+                ->orLike('term_code', $q)
+                ->orLike('icd_code', $q)
+                ->groupEnd();
+        }
+
+        $dbRows = $builder->orderBy('term_name', 'ASC')
+            ->limit(100)
+            ->get()
+            ->getResultArray();
+
+        foreach ($dbRows as $row) {
+            $rows[] = [
+                'id' => (int) ($row['id'] ?? 0),
+                'term_name' => (string) ($row['term_name'] ?? ''),
+                'term_code' => (string) ($row['term_code'] ?? ''),
+                'icd_code' => (string) ($row['icd_code'] ?? ''),
+                'is_active' => (int) ($row['is_active'] ?? 1),
+            ];
+        }
+
+        return $this->response->setJSON(['rows' => $rows]);
+    }
+
+    public function course_master_save()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        if (! $this->ensureDischargeCourseMasterTable()) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Unable to access course master table',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $id = (int) $this->request->getPost('id');
+        $name = trim((string) $this->request->getPost('name'));
+        $code = trim((string) $this->request->getPost('code'));
+        $icdCode = trim((string) $this->request->getPost('icd_code'));
+        $isActive = (int) $this->request->getPost('is_active') === 0 ? 0 : 1;
+
+        if ($name === '') {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Name is required',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $payload = [
+            'term_name' => $name,
+            'term_code' => $code !== '' ? $code : null,
+            'icd_code' => $icdCode !== '' ? $icdCode : null,
+            'is_active' => $isActive,
+            'updated_at' => $now,
+        ];
+
+        try {
+            $table = $this->db->table('ipd_discharge_course_master');
+
+            if ($id > 0) {
+                $ok = (bool) $table->where('id', $id)->update($payload);
+            } else {
+                $payload['created_at'] = $now;
+                $ok = (bool) $table->insert($payload);
+                $id = (int) ($this->db->insertID() ?: 0);
+            }
+
+            if (! $ok) {
+                return $this->response->setJSON([
+                    'update' => 0,
+                    'error_text' => 'Unable to save record',
+                    'csrfName' => csrf_token(),
+                    'csrfHash' => csrf_hash(),
+                ]);
+            }
+
+            return $this->response->setJSON([
+                'update' => 1,
+                'id' => $id,
+                'error_text' => 'Master record saved',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        } catch (\Throwable $e) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Save failed: ' . $e->getMessage(),
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+    }
+
+    public function course_master_delete()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        if (! $this->ensureDischargeCourseMasterTable()) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Unable to access course master table',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $id = (int) $this->request->getPost('id');
+        if ($id <= 0) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => 'Invalid record id',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $ok = (bool) $this->db->table('ipd_discharge_course_master')
+            ->where('id', $id)
+            ->delete();
+
+        return $this->response->setJSON([
+            'update' => $ok ? 1 : 0,
+            'error_text' => $ok ? 'Record deleted' : 'Unable to delete record',
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
     public function diagnosis_icd_lookup()
     {
         $q = trim((string) $this->request->getGet('q'));
