@@ -35,18 +35,14 @@ $status = (int) ($edit['status'] ?? 1);
             <?php endif; ?>
 
             <div class="alert alert-info py-2 small">
-                Available placeholders: <code>{{CONTENT}}</code>, <code>{{PATIENT_NAME}}</code>, <code>{{UHID}}</code>, <code>{{IPD_CODE}}</code>,
-                <code>{{AGE_GENDER}}</code>, <code>{{GUARDIAN}}</code>, <code>{{GUARDIAN_RELATION}}</code>, <code>{{GUARDIAN_NAME}}</code>, <code>{{PATIENT_ADDRESS}}</code>,
-                <code>{{DEPARTMENT}}</code>, <code>{{ADMIT_DATE}}</code>, <code>{{DISCHARGE_DATE}}</code>, <code>{{ADMIT_DATE_ONLY}}</code>, <code>{{DISCHARGE_DATE_ONLY}}</code>,
-                <code>{{ADMISSION_TIME}}</code>, <code>{{DISCHARGE_TIME}}</code>, <code>{{ADMIT_TIME}}</code>, <code>{{CURRENT_DATE}}</code>,
-                <code>{{H_Name}}</code>, <code>{{H_address_1}}</code>, <code>{{H_address_2}}</code>, <code>{{H_phone_No}}</code>, <code>{{H_Email}}</code>,
-                <code>{{hospital_name}}</code>, <code>{{hospital_address}}</code>, <code>{{hospital_phone}}</code>, <code>{{hospital_email}}</code>,
-                <code>{{PRINT_TIME}}</code>.<br>
-                Section placeholders for custom layout/order: <code>{{DISCHARGE_SUMMARY}}</code>, <code>{{FINAL_DIAGNOSIS}}</code>, <code>{{SURGERY}}</code>,
-                <code>{{PROCEDURE}}</code>, <code>{{PERSONAL_HISTORY}}</code>, <code>{{PRESENTING_COMPLAINTS}}</code>, <code>{{PAIN_MEASUREMENT_SCALE}}</code>,
-                <code>{{GENERAL_EXAM_ADMISSION}}</code>, <code>{{CLINICAL_INVESTIGATION_REPORTS}}</code>, <code>{{COURSE_IN_HOSPITAL}}</code>,
-                <code>{{EXAMINATION_ON_DISCHARGE}}</code>, <code>{{DRUG_ALLERGY_ADR}}</code>, <code>{{CO_MORBIDITIES}}</code>,
-                <code>{{DISCHARGE_MEDICATIONS}}</code>, <code>{{DIETARY_ADVICE}}</code>, <code>{{DISCHARGE_INSTRUCTIONS}}</code>, <code>{{SIGNATURE_BLOCK}}</code>.
+                <strong>Available placeholders:</strong><br>
+                <strong>1. Hospital Information:</strong> <code>{{H_Name}}</code>, <code>{{H_address_1}}</code>, <code>{{H_address_2}}</code>, <code>{{H_phone_No}}</code>, <code>{{H_Email}}</code>, <code>{{H_logo}}</code>, <code>{{H_logo_abs}}</code>, <code>{{hospital_name}}</code>, <code>{{hospital_address}}</code>, <code>{{hospital_phone}}</code>, <code>{{hospital_email}}</code><br>
+                <strong>2. Patient Information:</strong> <code>{{PATIENT_NAME}}</code>, <code>{{UHID}}</code>, <code>{{IPD_CODE}}</code>, <code>{{AGE_GENDER}}</code>, <code>{{GUARDIAN}}</code>, <code>{{GUARDIAN_RELATION}}</code>, <code>{{GUARDIAN_NAME}}</code>, <code>{{PATIENT_ADDRESS}}</code>, <code>{{PATIENT_PHONE}}</code> ✨<br>
+                <strong>3. IPD Information:</strong> <code>{{DEPARTMENT}}</code>, <code>{{ADMIT_DATE}}</code>, <code>{{DISCHARGE_DATE}}</code>, <code>{{ADMIT_DATE_ONLY}}</code>, <code>{{DISCHARGE_DATE_ONLY}}</code>, <code>{{ADMISSION_TIME}}</code>, <code>{{DISCHARGE_TIME}}</code>, <code>{{ADMIT_TIME}}</code>, <code>{{ISDELIVERY}}</code>, <code>{{INSURANCE_COMPANY}}</code> ✨, <code>{{DOCTOR_NAMES}}</code> ✨, <code>{{DOCTOR_NAME}}</code> ✨<br>
+                <strong>4. IPD Discharge Content:</strong> <code>{{CONTENT}}</code> (all sections), <code>{{PATIENT_INFO_TABLE}}</code> (pre-built patient table)<br>
+                <strong>Section placeholders for custom layout/order:</strong> <code>{{DISCHARGE_SUMMARY}}</code>, <code>{{FINAL_DIAGNOSIS}}</code>, <code>{{SURGERY}}</code>, <code>{{PROCEDURE}}</code>, <code>{{PERSONAL_HISTORY}}</code>, <code>{{PRESENTING_COMPLAINTS}}</code>, <code>{{PAIN_MEASUREMENT_SCALE}}</code>, <code>{{GENERAL_EXAM_ADMISSION}}</code>, <code>{{CLINICAL_INVESTIGATION_REPORTS}}</code>, <code>{{COURSE_IN_HOSPITAL}}</code>, <code>{{EXAMINATION_ON_DISCHARGE}}</code>, <code>{{DRUG_ALLERGY_ADR}}</code>, <code>{{CO_MORBIDITIES}}</code>, <code>{{DISCHARGE_MEDICATIONS}}</code>, <code>{{DIETARY_ADVICE}}</code>, <code>{{DISCHARGE_INSTRUCTIONS}}</code>, <code>{{SIGNATURE_BLOCK}}</code><br>
+                <strong>5. Common/Meta:</strong> <code>{{CURRENT_DATE}}</code>, <code>{{PRINT_TIME}}</code><br>
+                <small class="text-muted">✨ = Newly added tokens | All tokens are case-insensitive | Empty values auto-hide</small>
             </div>
 
             <div class="alert alert-warning py-2 small">
