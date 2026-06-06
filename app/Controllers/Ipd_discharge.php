@@ -2836,12 +2836,16 @@ class Ipd_discharge extends BaseController
         $columnName = $fieldType === 'name' ? 'comp_report' : 'comp_remark';
         
         try {
+            $updateData = [$columnName => $fieldValue];
+            
+            // Only set update_by if column exists
+            if ($this->db->fieldExists('update_by', $table)) {
+                $updateData['update_by'] = $this->session->get('full_name') ?? 'System';
+            }
+
             $updated = $this->db->table($table)
                 ->where('id', $complaintId)
-                ->update([
-                    $columnName => $fieldValue,
-                    'updated_at' => date('Y-m-d H:i:s')
-                ]);
+                ->update($updateData);
 
             if ($updated) {
                 return $this->response->setJSON(['success' => true]);
