@@ -1668,7 +1668,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
 
         function initDischargeComplaintsTable() {
             // Load existing complaints from PHP (if any)
-            <?php if (!empty($complaint_rows)): ?>
+            <?php if (isset($complaint_rows) && is_array($complaint_rows) && !empty($complaint_rows)): ?>
                 selectedDischargeComplaints = [
                     <?php 
                     $itemCount = count($complaint_rows);
