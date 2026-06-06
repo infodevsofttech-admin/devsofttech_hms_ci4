@@ -1797,81 +1797,38 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                         return;
                     }
 
-                    var chosen = '';
-                    complaintSuggestions.forEach(function(row) {
-                        var label = row.name || '';
-                        if (row.name_hinglish) {
-                            label += ' (' + row.name_hinglish + ')';
-                        }
-                        if (label.toUpperCase() === inputVal.toUpperCase() || (row.name || '').toUpperCase() === inputVal.toUpperCase()) {
-                            chosen = row.name || inputVal;
-                        }
+                    // Check if already exists
+                    var exists = selectedDischargeComplaints.some(function(item) {
+                        return item.term.toUpperCase() === inputVal.toUpperCase();
                     });
-
-                    function submitComplaint(value) {
-                        if (!nameInput || !addRowBtn) {
-                            return;
-                        }
-                        nameInput.value = value;
-                        if (remarkInput) {
-                            remarkInput.value = '';
-                        }
-                        addRowBtn.click();
-                    }
-
-                    if (chosen !== '') {
-                        addComplaintValue(chosen);
-                        submitComplaint(chosen);
+                    
+                    if (exists) {
+                        setComplaintStatus('Complaint already added.', 'error');
                         if (lookup) {
                             lookup.value = '';
                         }
-                        setComplaintStatus('Complaint added.', 'success');
                         return;
                     }
 
-                    if (!window.jQuery) {
-                        submitComplaint(inputVal);
-                        return;
-                    }
-
-                    var csrf = getCsrfPair(form);
-                    var payload = {
-                        text: inputVal
-                    };
-                    payload[csrf.name] = csrf.value;
-
-                    $.post('<?= base_url('Opd_prescription/complaints_parse') ?>', payload, function(data) {
-                        if (data && data.csrfName && data.csrfHash) {
-                            var csrfInput = form.querySelector('input[name="' + data.csrfName + '"]');
-                            if (csrfInput) {
-                                csrfInput.value = data.csrfHash;
-                            }
-                        }
-
-                        var rows = (data && data.rows) ? data.rows : [];
-                        if (!rows.length) {
-                            submitComplaint(inputVal);
-                            if (lookup) {
-                                lookup.value = '';
-                            }
-                            setComplaintStatus('Added custom complaint text.', 'success');
-                            return;
-                        }
-
-                        var first = (rows[0] || '').toString().trim();
-                        if (first === '') {
-                            submitComplaint(inputVal);
-                        } else {
-                            addComplaintValue(first);
-                            submitComplaint(first);
-                        }
-                        if (lookup) {
-                            lookup.value = '';
-                        }
-                        setComplaintStatus((data && data.error_text) ? data.error_text : 'Complaint term matched.', 'success');
-                    }, 'json').fail(function() {
-                        setComplaintStatus('Unable to parse complaint text right now.', 'error');
+                    // Add to array
+                    selectedDischargeComplaints.push({
+                        id: 0,
+                        term: inputVal,
+                        frequency: '',
+                        severity: '',
+                        duration: '',
+                        date: ''
                     });
+
+                    // Refresh table
+                    renderDischargeComplaintTable();
+
+                    // Clear input
+                    if (lookup) {
+                        lookup.value = '';
+                    }
+
+                    setComplaintStatus('Complaint added. Edit inline if needed.', 'success');
                 });
             }
 
