@@ -1,0 +1,982 @@
+{
+    "resourceType": "Bundle",
+    "id": "be5ce2e5-0e82-49e5-8d6b-137259130d72",
+    "meta": {
+        "profile": [
+            "https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle"
+        ],
+        "security": [
+            {
+                "system": "http://terminology.hl7.org/CodeSystem/v3-Confidentiality",
+                "code": "V",
+                "display": "very restricted"
+            }
+        ]
+    },
+    "identifier": {
+        "system": "https://in0510000828.hfr.abdm.gov.in",
+        "value": "LAB-24"
+    },
+    "type": "document",
+    "timestamp": "2026-05-31T03:27:38+05:30",
+    "entry": [
+        {
+            "fullUrl": "urn:uuid:d69a5070-6e71-4391-a6d3-c6f6db596f8c",
+            "resource": {
+                "resourceType": "Composition",
+                "id": "d69a5070-6e71-4391-a6d3-c6f6db596f8c",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/DiagnosticReportRecord"
+                    ]
+                },
+                "language": "en-IN",
+                "identifier": {
+                    "system": "https://ndhm.in/phr",
+                    "value": "d69a5070-6e71-4391-a6d3-c6f6db596f8c"
+                },
+                "status": "final",
+                "type": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "721979004",
+                            "display": "Diagnostic Report- Imaging"
+                        }
+                    ],
+                    "text": "Diagnostic Report- Imaging"
+                },
+                "subject": {
+                    "reference": "urn:uuid:ddc0b57a-0e23-4064-a7bf-0f8e0918be71",
+                    "display": "Patient"
+                },
+                "date": "2026-05-31T03:27:38+05:30",
+                "author": [
+                    {
+                        "reference": "urn:uuid:0a3a334b-2fe0-4466-b528-0dffd612a1c6"
+                    }
+                ],
+                "title": "Radiology Report",
+                "section": [
+                    {
+                        "title": "Computed tomography imaging report",
+                        "code": {
+                            "coding": [
+                                {
+                                    "system": "http://snomed.info/sct",
+                                    "code": "371531008",
+                                    "display": "Computed tomography imaging report"
+                                }
+                            ]
+                        },
+                        "entry": [
+                            {
+                                "reference": "urn:uuid:42c3c982-963f-4286-97b6-0e6f47384ec1",
+                                "type": "DiagnosticReport"
+                            },
+                            {
+                                "reference": "urn:uuid:5ae8c7fd-3612-4dd2-8b9c-c7678fd5ea2c",
+                                "type": "DocumentReference"
+                            }
+                        ]
+                    }
+                ],
+                "encounter": {
+                    "reference": "urn:uuid:1bf6a0f5-be01-470e-b431-150383993673"
+                },
+                "custodian": {
+                    "reference": "urn:uuid:0a3a334b-2fe0-4466-b528-0dffd612a1c6"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:0a3a334b-2fe0-4466-b528-0dffd612a1c6",
+            "resource": {
+                "resourceType": "Organization",
+                "id": "0a3a334b-2fe0-4466-b528-0dffd612a1c6",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Organization"
+                    ]
+                },
+                "name": "DevSoft Tech HMS",
+                "identifier": [
+                    {
+                        "type": {
+                            "coding": [
+                                {
+                                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                    "code": "PRN",
+                                    "display": "Provider number"
+                                }
+                            ]
+                        },
+                        "system": "https://facility.ndhm.gov.in",
+                        "value": "IN0510000828"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:ddc0b57a-0e23-4064-a7bf-0f8e0918be71",
+            "resource": {
+                "resourceType": "Patient",
+                "id": "ddc0b57a-0e23-4064-a7bf-0f8e0918be71",
+                "name": [
+                    {
+                        "text": "KAMLA SINGH 0",
+                        "given": [
+                            "KAMLA SINGH"
+                        ],
+                        "family": "0"
+                    }
+                ],
+                "gender": "2",
+                "birthDate": "1999-12-03",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Patient"
+                    ]
+                },
+                "identifier": [
+                    {
+                        "type": {
+                            "coding": [
+                                {
+                                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                    "code": "NI",
+                                    "display": "National unique individual identifier"
+                                }
+                            ]
+                        },
+                        "system": "https://healthid.ndhm.gov.in",
+                        "value": "unknown@abdm"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:1bf6a0f5-be01-470e-b431-150383993673",
+            "resource": {
+                "resourceType": "Encounter",
+                "id": "1bf6a0f5-be01-470e-b431-150383993673",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Encounter"
+                    ]
+                },
+                "identifier": [
+                    {
+                        "system": "https://ndhm.in",
+                        "value": "RAD-24"
+                    }
+                ],
+                "status": "finished",
+                "class": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+                    "code": "AMB",
+                    "display": "Ambulatory"
+                },
+                "subject": {
+                    "reference": "urn:uuid:ddc0b57a-0e23-4064-a7bf-0f8e0918be71",
+                    "display": "Patient"
+                },
+                "period": {
+                    "start": "2026-05-31T01:13:43+05:30"
+                },
+                "serviceProvider": {
+                    "reference": "urn:uuid:0a3a334b-2fe0-4466-b528-0dffd612a1c6"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:cf3cdee1-de65-478c-b607-6fef3bb4579e",
+            "resource": {
+                "resourceType": "Binary",
+                "id": "cf3cdee1-de65-478c-b607-6fef3bb4579e",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Binary"
+                    ]
+                },
+                "contentType": "text/html; charset=utf-8",
+                "data": "PHRhYmxlIGJvcmRlcj0iMCIgY2VsbHBhZGRpbmc9IjEiIGNlbGxzcGFjaW5nPSIxIiBzdHlsZT0id2lkdGg6MTAwJSI+PHRib2R5Pjx0cj48dGQ+PGgzPkNCQyBQYW5lbDwvaDM+PC90ZD48L3RyPjwvdGJvZHk+PC90YWJsZT48cD48c3Ryb25nPkNCQyBQYW5lbDwvc3Ryb25nPjwvcD48dGFibGUgc3R5bGU9IndpZHRoOjEwMCU7Ym9yZGVyLWNvbGxhcHNlOmNvbGxhcHNlO2ZvbnQtc2l6ZToxMnB4OyIgYm9yZGVyPSIxIiBjZWxscGFkZGluZz0iNiIgY2VsbHNwYWNpbmc9IjAiPjx0aGVhZD48dHIgc3R5bGU9ImJhY2tncm91bmQ6I2Y0ZjZmODsiPjx0aCBzdHlsZT0idGV4dC1hbGlnbjpsZWZ0OyI+VGVzdCBOYW1lPC90aD48dGggc3R5bGU9InRleHQtYWxpZ246bGVmdDsiPlJlc3VsdDwvdGg+PHRoIHN0eWxlPSJ0ZXh0LWFsaWduOmxlZnQ7Ij5Vbml0PC90aD48dGggc3R5bGU9InRleHQtYWxpZ246bGVmdDsiPkJpby4gUmVmLiBJbnRlcnZhbDwvdGg+PC90cj48L3RoZWFkPjx0Ym9keT48dHI+PHRkPkVvc2lub3BoaWxzPC90ZD48dGQ+MzA8L3RkPjx0ZD4lPC90ZD48dGQ+Jm5ic3A7PC90ZD48L3RyPjx0cj48dGQ+SGVtb2dsb2JpbjwvdGQ+PHRkPjExPC90ZD48dGQ+Zy9kTDwvdGQ+PHRkPiZuYnNwOzwvdGQ+PC90cj48dHI+PHRkPlRvdGFsIExldWtvY3l0ZSBDb3VudDwvdGQ+PHRkPjEwPC90ZD48dGQ+MTBeMy91TDwvdGQ+PHRkPiZuYnNwOzwvdGQ+PC90cj48dHI+PHRkPk5ldXRyb3BoaWxzPC90ZD48dGQ+MTA8L3RkPjx0ZD4lPC90ZD48dGQ+Jm5ic3A7PC90ZD48L3RyPjx0cj48dGQ+THltcGhvY3l0ZXM8L3RkPjx0ZD4xMDwvdGQ+PHRkPiU8L3RkPjx0ZD4mbmJzcDs8L3RkPjwvdHI+PHRyPjx0ZD5Nb25vY3l0ZXM8L3RkPjx0ZD4xMDwvdGQ+PHRkPiU8L3RkPjx0ZD4mbmJzcDs8L3RkPjwvdHI+PHRyPjx0ZD5CYW5kIENlbGxzPC90ZD48dGQ+MTA8L3RkPjx0ZD4lPC90ZD48dGQ+Jm5ic3A7PC90ZD48L3RyPjx0cj48dGQ+SW1tYXR1cmUgQ2VsbHM8L3RkPjx0ZD45PC90ZD48dGQ+JTwvdGQ+PHRkPiZuYnNwOzwvdGQ+PC90cj48dHI+PHRkPlJlZCBCbG9vZCBDZWxsczwvdGQ+PHRkPjEwPC90ZD48dGQ+MTBeNi91TDwvdGQ+PHRkPiZuYnNwOzwvdGQ+PC90cj48dHI+PHRkPlBhY2tlZCBDZWxsIFZvbHVtZTwvdGQ+PHRkPjEwPC90ZD48dGQ+JTwvdGQ+PHRkPiZuYnNwOzwvdGQ+PC90cj48dHI+PHRkPk1lYW4gQ29ycHVzY3VsYXIgVm9sdW1lPC90ZD48dGQ+MTA8L3RkPjx0ZD5mTDwvdGQ+PHRkPiZuYnNwOzwvdGQ+PC90cj48dHI+PHRkPk1lYW4gQ29ycHVzY3VsYXIgSGVtb2dsb2JpbjwvdGQ+PHRkPjEwPC90ZD48dGQ+cGc8L3RkPjx0ZD4mbmJzcDs8L3RkPjwvdHI+PHRyPjx0ZD5NZWFuIENvcnB1c2N1bGFyIEhlbW9nbG9iaW4gQ29uY2VudHJhdGlvbjwvdGQ+PHRkPjE8L3RkPjx0ZD5nL2RMPC90ZD48dGQ+Jm5ic3A7PC90ZD48L3RyPjx0cj48dGQ+UGxhdGVsZXQgQ291bnQ8L3RkPjx0ZD4wMTA8L3RkPjx0ZD4xMF4zL3VMPC90ZD48dGQ+Jm5ic3A7PC90ZD48L3RyPjwvdGJvZHk+PC90YWJsZT4="
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:6d86bc6d-89c3-4ca4-9e64-4c3e20a0fa6d",
+            "resource": {
+                "resourceType": "DocumentReference",
+                "id": "6d86bc6d-89c3-4ca4-9e64-4c3e20a0fa6d",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentReference"
+                    ]
+                },
+                "status": "current",
+                "type": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "721981007",
+                            "display": "Diagnostic studies report"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:ddc0b57a-0e23-4064-a7bf-0f8e0918be71"
+                },
+                "content": [
+                    {
+                        "attachment": {
+                            "contentType": "text/html; charset=utf-8",
+                            "url": "urn:uuid:cf3cdee1-de65-478c-b607-6fef3bb4579e",
+                            "data": "PHRhYmxlIGJvcmRlcj0iMCIgY2VsbHBhZGRpbmc9IjEiIGNlbGxzcGFjaW5nPSIxIiBzdHlsZT0id2lkdGg6MTAwJSI+PHRib2R5Pjx0cj48dGQ+PGgzPkNCQyBQYW5lbDwvaDM+PC90ZD48L3RyPjwvdGJvZHk+PC90YWJsZT48cD48c3Ryb25nPkNCQyBQYW5lbDwvc3Ryb25nPjwvcD48dGFibGUgc3R5bGU9IndpZHRoOjEwMCU7Ym9yZGVyLWNvbGxhcHNlOmNvbGxhcHNlO2ZvbnQtc2l6ZToxMnB4OyIgYm9yZGVyPSIxIiBjZWxscGFkZGluZz0iNiIgY2VsbHNwYWNpbmc9IjAiPjx0aGVhZD48dHIgc3R5bGU9ImJhY2tncm91bmQ6I2Y0ZjZmODsiPjx0aCBzdHlsZT0idGV4dC1hbGlnbjpsZWZ0OyI+VGVzdCBOYW1lPC90aD48dGggc3R5bGU9InRleHQtYWxpZ246bGVmdDsiPlJlc3VsdDwvdGg+PHRoIHN0eWxlPSJ0ZXh0LWFsaWduOmxlZnQ7Ij5Vbml0PC90aD48dGggc3R5bGU9InRleHQtYWxpZ246bGVmdDsiPkJpby4gUmVmLiBJbnRlcnZhbDwvdGg+PC90cj48L3RoZWFkPjx0Ym9keT48dHI+PHRkPkVvc2lub3BoaWxzPC90ZD48dGQ+MzA8L3RkPjx0ZD4lPC90ZD48dGQ+Jm5ic3A7PC90ZD48L3RyPjx0cj48dGQ+SGVtb2dsb2JpbjwvdGQ+PHRkPjExPC90ZD48dGQ+Zy9kTDwvdGQ+PHRkPiZuYnNwOzwvdGQ+PC90cj48dHI+PHRkPlRvdGFsIExldWtvY3l0ZSBDb3VudDwvdGQ+PHRkPjEwPC90ZD48dGQ+MTBeMy91TDwvdGQ+PHRkPiZuYnNwOzwvdGQ+PC90cj48dHI+PHRkPk5ldXRyb3BoaWxzPC90ZD48dGQ+MTA8L3RkPjx0ZD4lPC90ZD48dGQ+Jm5ic3A7PC90ZD48L3RyPjx0cj48dGQ+THltcGhvY3l0ZXM8L3RkPjx0ZD4xMDwvdGQ+PHRkPiU8L3RkPjx0ZD4mbmJzcDs8L3RkPjwvdHI+PHRyPjx0ZD5Nb25vY3l0ZXM8L3RkPjx0ZD4xMDwvdGQ+PHRkPiU8L3RkPjx0ZD4mbmJzcDs8L3RkPjwvdHI+PHRyPjx0ZD5CYW5kIENlbGxzPC90ZD48dGQ+MTA8L3RkPjx0ZD4lPC90ZD48dGQ+Jm5ic3A7PC90ZD48L3RyPjx0cj48dGQ+SW1tYXR1cmUgQ2VsbHM8L3RkPjx0ZD45PC90ZD48dGQ+JTwvdGQ+PHRkPiZuYnNwOzwvdGQ+PC90cj48dHI+PHRkPlJlZCBCbG9vZCBDZWxsczwvdGQ+PHRkPjEwPC90ZD48dGQ+MTBeNi91TDwvdGQ+PHRkPiZuYnNwOzwvdGQ+PC90cj48dHI+PHRkPlBhY2tlZCBDZWxsIFZvbHVtZTwvdGQ+PHRkPjEwPC90ZD48dGQ+JTwvdGQ+PHRkPiZuYnNwOzwvdGQ+PC90cj48dHI+PHRkPk1lYW4gQ29ycHVzY3VsYXIgVm9sdW1lPC90ZD48dGQ+MTA8L3RkPjx0ZD5mTDwvdGQ+PHRkPiZuYnNwOzwvdGQ+PC90cj48dHI+PHRkPk1lYW4gQ29ycHVzY3VsYXIgSGVtb2dsb2JpbjwvdGQ+PHRkPjEwPC90ZD48dGQ+cGc8L3RkPjx0ZD4mbmJzcDs8L3RkPjwvdHI+PHRyPjx0ZD5NZWFuIENvcnB1c2N1bGFyIEhlbW9nbG9iaW4gQ29uY2VudHJhdGlvbjwvdGQ+PHRkPjE8L3RkPjx0ZD5nL2RMPC90ZD48dGQ+Jm5ic3A7PC90ZD48L3RyPjx0cj48dGQ+UGxhdGVsZXQgQ291bnQ8L3RkPjx0ZD4wMTA8L3RkPjx0ZD4xMF4zL3VMPC90ZD48dGQ+Jm5ic3A7PC90ZD48L3RyPjwvdGJvZHk+PC90YWJsZT4=",
+                            "title": "Radiology Report"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:71fcc33b-443f-46d0-a391-b252972ce2d3",
+            "resource": {
+                "resourceType": "Binary",
+                "id": "71fcc33b-443f-46d0-a391-b252972ce2d3",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Binary"
+                    ]
+                },
+                "contentType": "application/pdf",
+                "data": "JVBERi0xLjQgbW9jayByYWRpb2xvZ3kgcmVwb3J0JQ=="
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:5ae8c7fd-3612-4dd2-8b9c-c7678fd5ea2c",
+            "resource": {
+                "resourceType": "DocumentReference",
+                "id": "5ae8c7fd-3612-4dd2-8b9c-c7678fd5ea2c",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentReference"
+                    ]
+                },
+                "status": "current",
+                "type": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "721981007",
+                            "display": "Diagnostic studies report"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:ddc0b57a-0e23-4064-a7bf-0f8e0918be71"
+                },
+                "content": [
+                    {
+                        "attachment": {
+                            "contentType": "application/pdf",
+                            "url": "urn:uuid:71fcc33b-443f-46d0-a391-b252972ce2d3",
+                            "data": "JVBERi0xLjQgbW9jayByYWRpb2xvZ3kgcmVwb3J0JQ==",
+                            "title": "Radiology Report PDF Report"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:de2c94ac-c652-43f1-affe-126e6fa73591",
+            "resource": {
+                "resourceType": "Media",
+                "id": "de2c94ac-c652-43f1-affe-126e6fa73591",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Media"
+                    ]
+                },
+                "status": "completed",
+                "type": "photo",
+                "subject": {
+                    "reference": "urn:uuid:ddc0b57a-0e23-4064-a7bf-0f8e0918be71"
+                },
+                "createdDateTime": "2026-05-31T01:13:43+05:30",
+                "content": {
+                    "contentType": "application/pdf",
+                    "url": "urn:uuid:71fcc33b-443f-46d0-a391-b252972ce2d3",
+                    "data": "JVBERi0xLjQgbW9jayByYWRpb2xvZ3kgcmVwb3J0JQ==",
+                    "title": "Radiology Report PDF Report"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:42c3c982-963f-4286-97b6-0e6f47384ec1",
+            "resource": {
+                "resourceType": "DiagnosticReport",
+                "id": "42c3c982-963f-4286-97b6-0e6f47384ec1",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/DiagnosticReportImaging"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Radiology Report"
+                },
+                "subject": {
+                    "reference": "urn:uuid:ddc0b57a-0e23-4064-a7bf-0f8e0918be71",
+                    "display": "Patient"
+                },
+                "issued": "2026-05-31T01:13:43+05:30",
+                "result": [
+                    {
+                        "reference": "urn:uuid:cc593cb8-28e4-469b-a497-11e9fb4e6ddf"
+                    },
+                    {
+                        "reference": "urn:uuid:547f3806-bf50-4d73-91a4-6c8e4fa1c186"
+                    },
+                    {
+                        "reference": "urn:uuid:2de0d2a8-0c3d-4d3a-9f21-60ebb11159d9"
+                    },
+                    {
+                        "reference": "urn:uuid:a87806b9-10de-421a-ae84-3b691c57df16"
+                    },
+                    {
+                        "reference": "urn:uuid:596c48ad-2cd3-48d2-8a8a-8a1e56567cfe"
+                    },
+                    {
+                        "reference": "urn:uuid:497992c4-b44a-46ff-8835-7e8210050e19"
+                    },
+                    {
+                        "reference": "urn:uuid:6c74b672-9d99-4176-8d8c-32c96ae68c8e"
+                    },
+                    {
+                        "reference": "urn:uuid:06fe2455-d11d-49ff-be6b-76258e0e9548"
+                    },
+                    {
+                        "reference": "urn:uuid:32f51bf0-c4ae-4be9-a25d-2f05fba2926e"
+                    },
+                    {
+                        "reference": "urn:uuid:b81a986d-8550-4679-b399-d33c61adcd68"
+                    },
+                    {
+                        "reference": "urn:uuid:86acf390-0c6d-444b-b1b4-4db516bbc3ad"
+                    },
+                    {
+                        "reference": "urn:uuid:4759bd0e-390e-4265-a099-66079e4f1abd"
+                    },
+                    {
+                        "reference": "urn:uuid:be897524-eafe-433a-bfa2-076d8b0b0cd8"
+                    },
+                    {
+                        "reference": "urn:uuid:c1c5e2a6-59f5-429d-90c2-f39b370100a7"
+                    }
+                ],
+                "performer": [
+                    {
+                        "reference": "urn:uuid:0a3a334b-2fe0-4466-b528-0dffd612a1c6"
+                    }
+                ],
+                "resultsInterpreter": [
+                    {
+                        "reference": "urn:uuid:0a3a334b-2fe0-4466-b528-0dffd612a1c6"
+                    }
+                ],
+                "encounter": {
+                    "reference": "urn:uuid:1bf6a0f5-be01-470e-b431-150383993673"
+                },
+                "conclusion": "Laboratory report generated",
+                "media": [
+                    {
+                        "link": {
+                            "reference": "urn:uuid:de2c94ac-c652-43f1-affe-126e6fa73591"
+                        }
+                    }
+                ],
+                "presentedForm": [
+                    {
+                        "contentType": "application/pdf",
+                        "title": "Radiology Report PDF Report",
+                        "url": "urn:uuid:5ae8c7fd-3612-4dd2-8b9c-c7678fd5ea2c"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:cc593cb8-28e4-469b-a497-11e9fb4e6ddf",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "cc593cb8-28e4-469b-a497-11e9fb4e6ddf",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Eosinophils",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "713-8",
+                            "display": "Eosinophils"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:ddc0b57a-0e23-4064-a7bf-0f8e0918be71"
+                },
+                "effectiveDateTime": "2026-05-31T01:13:43+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:1bf6a0f5-be01-470e-b431-150383993673"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:0a3a334b-2fe0-4466-b528-0dffd612a1c6"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 30,
+                    "unit": "%",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "%"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:547f3806-bf50-4d73-91a4-6c8e4fa1c186",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "547f3806-bf50-4d73-91a4-6c8e4fa1c186",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Hemoglobin",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "718-7",
+                            "display": "Hemoglobin"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:ddc0b57a-0e23-4064-a7bf-0f8e0918be71"
+                },
+                "effectiveDateTime": "2026-05-31T01:13:43+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:1bf6a0f5-be01-470e-b431-150383993673"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:0a3a334b-2fe0-4466-b528-0dffd612a1c6"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 11,
+                    "unit": "g/dL",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "g/dL"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:2de0d2a8-0c3d-4d3a-9f21-60ebb11159d9",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "2de0d2a8-0c3d-4d3a-9f21-60ebb11159d9",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Total Leukocyte Count",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "6690-2",
+                            "display": "Total Leukocyte Count"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:ddc0b57a-0e23-4064-a7bf-0f8e0918be71"
+                },
+                "effectiveDateTime": "2026-05-31T01:13:43+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:1bf6a0f5-be01-470e-b431-150383993673"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:0a3a334b-2fe0-4466-b528-0dffd612a1c6"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 10,
+                    "unit": "10^3/uL",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "10^3/uL"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:a87806b9-10de-421a-ae84-3b691c57df16",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "a87806b9-10de-421a-ae84-3b691c57df16",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Neutrophils",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "770-8",
+                            "display": "Neutrophils"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:ddc0b57a-0e23-4064-a7bf-0f8e0918be71"
+                },
+                "effectiveDateTime": "2026-05-31T01:13:43+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:1bf6a0f5-be01-470e-b431-150383993673"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:0a3a334b-2fe0-4466-b528-0dffd612a1c6"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 10,
+                    "unit": "%",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "%"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:596c48ad-2cd3-48d2-8a8a-8a1e56567cfe",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "596c48ad-2cd3-48d2-8a8a-8a1e56567cfe",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Lymphocytes",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "736-9",
+                            "display": "Lymphocytes"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:ddc0b57a-0e23-4064-a7bf-0f8e0918be71"
+                },
+                "effectiveDateTime": "2026-05-31T01:13:43+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:1bf6a0f5-be01-470e-b431-150383993673"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:0a3a334b-2fe0-4466-b528-0dffd612a1c6"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 10,
+                    "unit": "%",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "%"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:497992c4-b44a-46ff-8835-7e8210050e19",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "497992c4-b44a-46ff-8835-7e8210050e19",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Monocytes",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "5905-5",
+                            "display": "Monocytes"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:ddc0b57a-0e23-4064-a7bf-0f8e0918be71"
+                },
+                "effectiveDateTime": "2026-05-31T01:13:43+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:1bf6a0f5-be01-470e-b431-150383993673"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:0a3a334b-2fe0-4466-b528-0dffd612a1c6"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 10,
+                    "unit": "%",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "%"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:6c74b672-9d99-4176-8d8c-32c96ae68c8e",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "6c74b672-9d99-4176-8d8c-32c96ae68c8e",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Band Cells",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "764-1",
+                            "display": "Band Cells"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:ddc0b57a-0e23-4064-a7bf-0f8e0918be71"
+                },
+                "effectiveDateTime": "2026-05-31T01:13:43+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:1bf6a0f5-be01-470e-b431-150383993673"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:0a3a334b-2fe0-4466-b528-0dffd612a1c6"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 10,
+                    "unit": "%",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "%"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:06fe2455-d11d-49ff-be6b-76258e0e9548",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "06fe2455-d11d-49ff-be6b-76258e0e9548",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Immature Cells",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "38518-7",
+                            "display": "Immature Cells"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:ddc0b57a-0e23-4064-a7bf-0f8e0918be71"
+                },
+                "effectiveDateTime": "2026-05-31T01:13:43+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:1bf6a0f5-be01-470e-b431-150383993673"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:0a3a334b-2fe0-4466-b528-0dffd612a1c6"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 9,
+                    "unit": "%",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "%"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:32f51bf0-c4ae-4be9-a25d-2f05fba2926e",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "32f51bf0-c4ae-4be9-a25d-2f05fba2926e",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Red Blood Cells",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "789-8",
+                            "display": "Red Blood Cells"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:ddc0b57a-0e23-4064-a7bf-0f8e0918be71"
+                },
+                "effectiveDateTime": "2026-05-31T01:13:43+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:1bf6a0f5-be01-470e-b431-150383993673"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:0a3a334b-2fe0-4466-b528-0dffd612a1c6"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 10,
+                    "unit": "10^6/uL",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "10^6/uL"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:b81a986d-8550-4679-b399-d33c61adcd68",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "b81a986d-8550-4679-b399-d33c61adcd68",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Packed Cell Volume",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "4544-3",
+                            "display": "Packed Cell Volume"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:ddc0b57a-0e23-4064-a7bf-0f8e0918be71"
+                },
+                "effectiveDateTime": "2026-05-31T01:13:43+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:1bf6a0f5-be01-470e-b431-150383993673"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:0a3a334b-2fe0-4466-b528-0dffd612a1c6"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 10,
+                    "unit": "%",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "%"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:86acf390-0c6d-444b-b1b4-4db516bbc3ad",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "86acf390-0c6d-444b-b1b4-4db516bbc3ad",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Mean Corpuscular Volume",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "8457-4",
+                            "display": "Mean Corpuscular Volume"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:ddc0b57a-0e23-4064-a7bf-0f8e0918be71"
+                },
+                "effectiveDateTime": "2026-05-31T01:13:43+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:1bf6a0f5-be01-470e-b431-150383993673"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:0a3a334b-2fe0-4466-b528-0dffd612a1c6"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 10,
+                    "unit": "fL",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "fL"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:4759bd0e-390e-4265-a099-66079e4f1abd",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "4759bd0e-390e-4265-a099-66079e4f1abd",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Mean Corpuscular Hemoglobin",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "785-6",
+                            "display": "Mean Corpuscular Hemoglobin"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:ddc0b57a-0e23-4064-a7bf-0f8e0918be71"
+                },
+                "effectiveDateTime": "2026-05-31T01:13:43+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:1bf6a0f5-be01-470e-b431-150383993673"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:0a3a334b-2fe0-4466-b528-0dffd612a1c6"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 10,
+                    "unit": "pg",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "pg"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:be897524-eafe-433a-bfa2-076d8b0b0cd8",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "be897524-eafe-433a-bfa2-076d8b0b0cd8",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Mean Corpuscular Hemoglobin Concentration",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "59260-0",
+                            "display": "Mean Corpuscular Hemoglobin Concentration"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:ddc0b57a-0e23-4064-a7bf-0f8e0918be71"
+                },
+                "effectiveDateTime": "2026-05-31T01:13:43+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:1bf6a0f5-be01-470e-b431-150383993673"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:0a3a334b-2fe0-4466-b528-0dffd612a1c6"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 1,
+                    "unit": "g/dL",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "g/dL"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:c1c5e2a6-59f5-429d-90c2-f39b370100a7",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "c1c5e2a6-59f5-429d-90c2-f39b370100a7",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Platelet Count",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "777-3",
+                            "display": "Platelet Count"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:ddc0b57a-0e23-4064-a7bf-0f8e0918be71"
+                },
+                "effectiveDateTime": "2026-05-31T01:13:43+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:1bf6a0f5-be01-470e-b431-150383993673"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:0a3a334b-2fe0-4466-b528-0dffd612a1c6"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 10,
+                    "unit": "10^3/uL",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "10^3/uL"
+                }
+            }
+        }
+    ]
+}

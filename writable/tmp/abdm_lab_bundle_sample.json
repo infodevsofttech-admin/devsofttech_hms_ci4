@@ -1,0 +1,485 @@
+{
+    "resourceType": "Bundle",
+    "id": "8b32a3dc-90b7-4663-9706-4e1b7dddcb08",
+    "meta": {
+        "profile": [
+            "https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle"
+        ],
+        "security": [
+            {
+                "system": "http://terminology.hl7.org/CodeSystem/v3-Confidentiality",
+                "code": "V",
+                "display": "very restricted"
+            }
+        ]
+    },
+    "identifier": {
+        "system": "https://in0510000828.hfr.abdm.gov.in",
+        "value": "LAB-5234342"
+    },
+    "type": "document",
+    "timestamp": "2026-05-31T02:55:24+05:30",
+    "entry": [
+        {
+            "fullUrl": "urn:uuid:8dfb434d-9a89-4edd-85d2-c8d5f83b9789",
+            "resource": {
+                "resourceType": "Composition",
+                "id": "8dfb434d-9a89-4edd-85d2-c8d5f83b9789",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/DiagnosticReportRecord"
+                    ]
+                },
+                "language": "en-IN",
+                "identifier": {
+                    "system": "https://ndhm.in/phr",
+                    "value": "8dfb434d-9a89-4edd-85d2-c8d5f83b9789"
+                },
+                "status": "final",
+                "type": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "721981007",
+                            "display": "Diagnostic Report- Lab"
+                        }
+                    ],
+                    "text": "Diagnostic Report- Lab"
+                },
+                "subject": {
+                    "reference": "urn:uuid:20985d9e-052b-4bf3-9fd8-48536dd9a983",
+                    "display": "Patient"
+                },
+                "date": "2026-05-31T02:55:24+05:30",
+                "author": [
+                    {
+                        "reference": "urn:uuid:c603b863-6bcd-42ee-bda3-a879109a5d7f"
+                    }
+                ],
+                "title": "Diagnostic Report- Lab",
+                "section": [
+                    {
+                        "title": "Hematology report",
+                        "code": {
+                            "coding": [
+                                {
+                                    "system": "http://snomed.info/sct",
+                                    "code": "4321000179101",
+                                    "display": "Hematology report"
+                                }
+                            ]
+                        },
+                        "entry": [
+                            {
+                                "reference": "urn:uuid:ca6f12a8-bf1a-4524-8c53-1fa799a786e4",
+                                "type": "DiagnosticReport"
+                            },
+                            {
+                                "reference": "urn:uuid:0a00ee19-3066-4cc4-82c2-80326bb62117",
+                                "type": "DocumentReference"
+                            }
+                        ]
+                    }
+                ],
+                "encounter": {
+                    "reference": "urn:uuid:189c3210-c036-4a61-9064-a1034314f686"
+                },
+                "custodian": {
+                    "reference": "urn:uuid:c603b863-6bcd-42ee-bda3-a879109a5d7f"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:c603b863-6bcd-42ee-bda3-a879109a5d7f",
+            "resource": {
+                "resourceType": "Organization",
+                "id": "c603b863-6bcd-42ee-bda3-a879109a5d7f",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Organization"
+                    ]
+                },
+                "name": "XYZ Lab Pvt.Ltd.",
+                "identifier": [
+                    {
+                        "type": {
+                            "coding": [
+                                {
+                                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                    "code": "PRN",
+                                    "display": "Provider number"
+                                }
+                            ]
+                        },
+                        "system": "https://facility.ndhm.gov.in",
+                        "value": "IN0510000828"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:20985d9e-052b-4bf3-9fd8-48536dd9a983",
+            "resource": {
+                "resourceType": "Patient",
+                "id": "20985d9e-052b-4bf3-9fd8-48536dd9a983",
+                "name": [
+                    {
+                        "text": "ABC Male",
+                        "given": [
+                            "ABC"
+                        ],
+                        "family": "Male"
+                    }
+                ],
+                "gender": "male",
+                "birthDate": "1981-01-12",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Patient"
+                    ]
+                },
+                "identifier": [
+                    {
+                        "type": {
+                            "coding": [
+                                {
+                                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                    "code": "NI",
+                                    "display": "National unique individual identifier"
+                                }
+                            ]
+                        },
+                        "system": "https://healthid.ndhm.gov.in",
+                        "value": "abha_2@sbx"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:189c3210-c036-4a61-9064-a1034314f686",
+            "resource": {
+                "resourceType": "Encounter",
+                "id": "189c3210-c036-4a61-9064-a1034314f686",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Encounter"
+                    ]
+                },
+                "identifier": [
+                    {
+                        "system": "https://ndhm.in",
+                        "value": "LAB-5234342"
+                    }
+                ],
+                "status": "finished",
+                "class": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+                    "code": "AMB",
+                    "display": "Ambulatory"
+                },
+                "subject": {
+                    "reference": "urn:uuid:20985d9e-052b-4bf3-9fd8-48536dd9a983",
+                    "display": "Patient"
+                },
+                "period": {
+                    "start": "2020-07-10T11:45:33+05:30"
+                },
+                "serviceProvider": {
+                    "reference": "urn:uuid:c603b863-6bcd-42ee-bda3-a879109a5d7f"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:54e676df-4db0-4cc2-b28c-5fcf2c93ce1e",
+            "resource": {
+                "resourceType": "Binary",
+                "id": "54e676df-4db0-4cc2-b28c-5fcf2c93ce1e",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Binary"
+                    ]
+                },
+                "contentType": "text/html; charset=utf-8",
+                "data": "PGh0bWw+PGJvZHk+PGgxPkxhYiBSZXBvcnQ8L2gxPjxwPkNCQyBhbmQgbGlwaWQgcGFuZWwuPC9wPjwvYm9keT48L2h0bWw+"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:93486ce6-6250-4317-b0c8-32bb8a853605",
+            "resource": {
+                "resourceType": "DocumentReference",
+                "id": "93486ce6-6250-4317-b0c8-32bb8a853605",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentReference"
+                    ]
+                },
+                "status": "current",
+                "type": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "721981007",
+                            "display": "Diagnostic studies report"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:20985d9e-052b-4bf3-9fd8-48536dd9a983"
+                },
+                "content": [
+                    {
+                        "attachment": {
+                            "contentType": "text/html; charset=utf-8",
+                            "url": "urn:uuid:54e676df-4db0-4cc2-b28c-5fcf2c93ce1e",
+                            "data": "PGh0bWw+PGJvZHk+PGgxPkxhYiBSZXBvcnQ8L2gxPjxwPkNCQyBhbmQgbGlwaWQgcGFuZWwuPC9wPjwvYm9keT48L2h0bWw+",
+                            "title": "Diagnostic Report- Lab"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:99d0bcfc-31cf-4c85-9bdc-550fe8f3bada",
+            "resource": {
+                "resourceType": "Binary",
+                "id": "99d0bcfc-31cf-4c85-9bdc-550fe8f3bada",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Binary"
+                    ]
+                },
+                "contentType": "application/pdf",
+                "data": "JVBERi0xLjQgbW9jayBsYWIgcmVwb3J0JQ=="
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:0a00ee19-3066-4cc4-82c2-80326bb62117",
+            "resource": {
+                "resourceType": "DocumentReference",
+                "id": "0a00ee19-3066-4cc4-82c2-80326bb62117",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentReference"
+                    ]
+                },
+                "status": "current",
+                "type": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "721981007",
+                            "display": "Diagnostic studies report"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:20985d9e-052b-4bf3-9fd8-48536dd9a983"
+                },
+                "content": [
+                    {
+                        "attachment": {
+                            "contentType": "application/pdf",
+                            "url": "urn:uuid:99d0bcfc-31cf-4c85-9bdc-550fe8f3bada",
+                            "data": "JVBERi0xLjQgbW9jayBsYWIgcmVwb3J0JQ==",
+                            "title": "Laboratory report"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:ca6f12a8-bf1a-4524-8c53-1fa799a786e4",
+            "resource": {
+                "resourceType": "DiagnosticReport",
+                "id": "ca6f12a8-bf1a-4524-8c53-1fa799a786e4",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/DiagnosticReportLab"
+                    ]
+                },
+                "status": "final",
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "24331-1",
+                            "display": "Diagnostic Report- Lab"
+                        }
+                    ],
+                    "text": "Diagnostic Report- Lab"
+                },
+                "subject": {
+                    "reference": "urn:uuid:20985d9e-052b-4bf3-9fd8-48536dd9a983",
+                    "display": "Patient"
+                },
+                "issued": "2020-07-10T11:45:33+05:30",
+                "result": [
+                    {
+                        "reference": "urn:uuid:dac84873-63d4-4623-a4b6-df9f29762bc3"
+                    },
+                    {
+                        "reference": "urn:uuid:ad4d6e30-2421-4158-879e-ef0c8773817f"
+                    }
+                ],
+                "performer": [
+                    {
+                        "reference": "urn:uuid:c603b863-6bcd-42ee-bda3-a879109a5d7f"
+                    }
+                ],
+                "resultsInterpreter": [
+                    {
+                        "reference": "urn:uuid:c603b863-6bcd-42ee-bda3-a879109a5d7f"
+                    }
+                ],
+                "encounter": {
+                    "reference": "urn:uuid:189c3210-c036-4a61-9064-a1034314f686"
+                },
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://snomed.info/sct",
+                                "code": "708196005",
+                                "display": "Hematology service"
+                            }
+                        ]
+                    }
+                ],
+                "conclusion": "Elevated cholesterol/high density lipoprotein ratio",
+                "presentedForm": [
+                    {
+                        "contentType": "application/pdf",
+                        "title": "Laboratory report",
+                        "url": "urn:uuid:0a00ee19-3066-4cc4-82c2-80326bb62117"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:dac84873-63d4-4623-a4b6-df9f29762bc3",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "dac84873-63d4-4623-a4b6-df9f29762bc3",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "final",
+                "code": {
+                    "text": "Triglyceride [Mass/volume] in Serum or Plasma",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "2571-8",
+                            "display": "Triglyceride [Mass/volume] in Serum or Plasma"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:20985d9e-052b-4bf3-9fd8-48536dd9a983"
+                },
+                "effectiveDateTime": "2020-07-10T11:45:33+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:189c3210-c036-4a61-9064-a1034314f686"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:c603b863-6bcd-42ee-bda3-a879109a5d7f"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 146,
+                    "unit": "mg/dL",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "mg/dL"
+                },
+                "referenceRange": [
+                    {
+                        "high": {
+                            "value": 150,
+                            "unit": "mg/dL",
+                            "system": "http://unitsofmeasure.org",
+                            "code": "mg/dL"
+                        }
+                    }
+                ],
+                "interpretation": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
+                                "code": "N",
+                                "display": "N"
+                            }
+                        ],
+                        "text": "N"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:ad4d6e30-2421-4158-879e-ef0c8773817f",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "ad4d6e30-2421-4158-879e-ef0c8773817f",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "final",
+                "code": {
+                    "text": "Cholesterol in HDL [Mass/volume] in Serum or Plasma",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "2085-9",
+                            "display": "Cholesterol in HDL [Mass/volume] in Serum or Plasma"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:20985d9e-052b-4bf3-9fd8-48536dd9a983"
+                },
+                "effectiveDateTime": "2020-07-10T11:45:33+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:189c3210-c036-4a61-9064-a1034314f686"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:c603b863-6bcd-42ee-bda3-a879109a5d7f"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 45,
+                    "unit": "mg/dL",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "mg/dL"
+                },
+                "referenceRange": [
+                    {
+                        "low": {
+                            "value": 40,
+                            "unit": "mg/dL",
+                            "system": "http://unitsofmeasure.org",
+                            "code": "mg/dL"
+                        }
+                    }
+                ],
+                "interpretation": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
+                                "code": "N",
+                                "display": "N"
+                            }
+                        ],
+                        "text": "N"
+                    }
+                ]
+            }
+        }
+    ]
+}

@@ -1,0 +1,1063 @@
+{
+    "resourceType": "Bundle",
+    "id": "46e4b9fb-c2fa-4ef5-9f72-4c8a42d3683c",
+    "meta": {
+        "profile": [
+            "https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle"
+        ],
+        "security": [
+            {
+                "system": "http://terminology.hl7.org/CodeSystem/v3-Confidentiality",
+                "code": "V",
+                "display": "very restricted"
+            }
+        ]
+    },
+    "identifier": {
+        "system": "https://in0510000828.hfr.abdm.gov.in",
+        "value": "LAB-24"
+    },
+    "type": "document",
+    "timestamp": "2026-06-01T05:55:28+05:30",
+    "entry": [
+        {
+            "fullUrl": "urn:uuid:86c5dc0f-b961-4613-b51a-9990ae518d6e",
+            "resource": {
+                "resourceType": "Composition",
+                "id": "86c5dc0f-b961-4613-b51a-9990ae518d6e",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/DiagnosticReportRecord"
+                    ]
+                },
+                "language": "en-IN",
+                "identifier": {
+                    "system": "https://ndhm.in/phr",
+                    "value": "86c5dc0f-b961-4613-b51a-9990ae518d6e"
+                },
+                "status": "final",
+                "type": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "721981007",
+                            "display": "Diagnostic Report- Lab"
+                        }
+                    ],
+                    "text": "Diagnostic Report- Lab"
+                },
+                "subject": {
+                    "reference": "urn:uuid:6d70bbfb-30d5-4cd8-a1b1-96cb289cc545",
+                    "display": "Patient"
+                },
+                "date": "2026-06-01T05:55:28+05:30",
+                "author": [
+                    {
+                        "reference": "urn:uuid:93b37534-d7ed-4d0a-89ac-ecec3967aabf"
+                    }
+                ],
+                "title": "Pathology / Cytology",
+                "section": [
+                    {
+                        "title": "Hematology report",
+                        "code": {
+                            "coding": [
+                                {
+                                    "system": "http://snomed.info/sct",
+                                    "code": "4321000179101",
+                                    "display": "Hematology report"
+                                }
+                            ]
+                        },
+                        "entry": [
+                            {
+                                "reference": "urn:uuid:e1f47726-cf20-416c-a49c-6732c052023f",
+                                "type": "DiagnosticReport"
+                            },
+                            {
+                                "reference": "urn:uuid:f96d951e-1d17-4fa0-94ae-1300052c9197",
+                                "type": "DocumentReference"
+                            }
+                        ]
+                    }
+                ],
+                "encounter": {
+                    "reference": "urn:uuid:b047b527-5c2b-4edd-aaa8-d983d59bb2a0"
+                },
+                "custodian": {
+                    "reference": "urn:uuid:93b37534-d7ed-4d0a-89ac-ecec3967aabf"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:93b37534-d7ed-4d0a-89ac-ecec3967aabf",
+            "resource": {
+                "resourceType": "Organization",
+                "id": "93b37534-d7ed-4d0a-89ac-ecec3967aabf",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Organization"
+                    ]
+                },
+                "name": "DevSoft Tech HMS",
+                "identifier": [
+                    {
+                        "type": {
+                            "coding": [
+                                {
+                                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                    "code": "PRN",
+                                    "display": "Provider number"
+                                }
+                            ]
+                        },
+                        "system": "https://facility.ndhm.gov.in",
+                        "value": "IN0510000828"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:6d70bbfb-30d5-4cd8-a1b1-96cb289cc545",
+            "resource": {
+                "resourceType": "Patient",
+                "id": "6d70bbfb-30d5-4cd8-a1b1-96cb289cc545",
+                "name": [
+                    {
+                        "text": "KAMLA SINGH 0",
+                        "given": [
+                            "KAMLA SINGH"
+                        ],
+                        "family": "0"
+                    }
+                ],
+                "gender": "female",
+                "birthDate": "1999-12-03",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Patient"
+                    ]
+                },
+                "identifier": [
+                    {
+                        "type": {
+                            "coding": [
+                                {
+                                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                    "code": "NI",
+                                    "display": "National unique individual identifier"
+                                }
+                            ]
+                        },
+                        "system": "https://healthid.ndhm.gov.in",
+                        "value": "unknown@abdm"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:b047b527-5c2b-4edd-aaa8-d983d59bb2a0",
+            "resource": {
+                "resourceType": "Encounter",
+                "id": "b047b527-5c2b-4edd-aaa8-d983d59bb2a0",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Encounter"
+                    ]
+                },
+                "identifier": [
+                    {
+                        "system": "https://ndhm.in",
+                        "value": "LAB-24"
+                    }
+                ],
+                "status": "finished",
+                "class": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+                    "code": "AMB",
+                    "display": "Ambulatory"
+                },
+                "subject": {
+                    "reference": "urn:uuid:6d70bbfb-30d5-4cd8-a1b1-96cb289cc545",
+                    "display": "Patient"
+                },
+                "period": {
+                    "start": "2026-05-31T01:13:43+05:30"
+                },
+                "serviceProvider": {
+                    "reference": "urn:uuid:93b37534-d7ed-4d0a-89ac-ecec3967aabf"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:bd2e583f-a527-4fbb-8a02-266f209425e8",
+            "resource": {
+                "resourceType": "Binary",
+                "id": "bd2e583f-a527-4fbb-8a02-266f209425e8",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Binary"
+                    ]
+                },
+                "contentType": "text/html; charset=utf-8",
+                "data": "PHRhYmxlIGJvcmRlcj0iMCIgY2VsbHBhZGRpbmc9IjEiIGNlbGxzcGFjaW5nPSIxIiBzdHlsZT0id2lkdGg6MTAwJSI+PHRib2R5Pjx0cj48dGQ+PGgzPkNCQyBQYW5lbDwvaDM+PC90ZD48L3RyPjwvdGJvZHk+PC90YWJsZT48cD48c3Ryb25nPkNCQyBQYW5lbDwvc3Ryb25nPjwvcD48dGFibGUgc3R5bGU9IndpZHRoOjEwMCU7Ym9yZGVyLWNvbGxhcHNlOmNvbGxhcHNlO2ZvbnQtc2l6ZToxMnB4OyIgYm9yZGVyPSIxIiBjZWxscGFkZGluZz0iNiIgY2VsbHNwYWNpbmc9IjAiPjx0aGVhZD48dHIgc3R5bGU9ImJhY2tncm91bmQ6I2Y0ZjZmODsiPjx0aCBzdHlsZT0idGV4dC1hbGlnbjpsZWZ0OyI+VGVzdCBOYW1lPC90aD48dGggc3R5bGU9InRleHQtYWxpZ246bGVmdDsiPlJlc3VsdDwvdGg+PHRoIHN0eWxlPSJ0ZXh0LWFsaWduOmxlZnQ7Ij5Vbml0PC90aD48dGggc3R5bGU9InRleHQtYWxpZ246bGVmdDsiPkJpby4gUmVmLiBJbnRlcnZhbDwvdGg+PC90cj48L3RoZWFkPjx0Ym9keT48dHI+PHRkPkVvc2lub3BoaWxzPC90ZD48dGQ+MzA8L3RkPjx0ZD4lPC90ZD48dGQ+Jm5ic3A7PC90ZD48L3RyPjx0cj48dGQ+SGVtb2dsb2JpbjwvdGQ+PHRkPjExPC90ZD48dGQ+Zy9kTDwvdGQ+PHRkPiZuYnNwOzwvdGQ+PC90cj48dHI+PHRkPlRvdGFsIExldWtvY3l0ZSBDb3VudDwvdGQ+PHRkPjEwPC90ZD48dGQ+MTBeMy91TDwvdGQ+PHRkPiZuYnNwOzwvdGQ+PC90cj48dHI+PHRkPk5ldXRyb3BoaWxzPC90ZD48dGQ+MTA8L3RkPjx0ZD4lPC90ZD48dGQ+Jm5ic3A7PC90ZD48L3RyPjx0cj48dGQ+THltcGhvY3l0ZXM8L3RkPjx0ZD4xMDwvdGQ+PHRkPiU8L3RkPjx0ZD4mbmJzcDs8L3RkPjwvdHI+PHRyPjx0ZD5Nb25vY3l0ZXM8L3RkPjx0ZD4xMDwvdGQ+PHRkPiU8L3RkPjx0ZD4mbmJzcDs8L3RkPjwvdHI+PHRyPjx0ZD5CYW5kIENlbGxzPC90ZD48dGQ+MTA8L3RkPjx0ZD4lPC90ZD48dGQ+Jm5ic3A7PC90ZD48L3RyPjx0cj48dGQ+SW1tYXR1cmUgQ2VsbHM8L3RkPjx0ZD45PC90ZD48dGQ+JTwvdGQ+PHRkPiZuYnNwOzwvdGQ+PC90cj48dHI+PHRkPlJlZCBCbG9vZCBDZWxsczwvdGQ+PHRkPjEwPC90ZD48dGQ+MTBeNi91TDwvdGQ+PHRkPiZuYnNwOzwvdGQ+PC90cj48dHI+PHRkPlBhY2tlZCBDZWxsIFZvbHVtZTwvdGQ+PHRkPjEwPC90ZD48dGQ+JTwvdGQ+PHRkPiZuYnNwOzwvdGQ+PC90cj48dHI+PHRkPk1lYW4gQ29ycHVzY3VsYXIgVm9sdW1lPC90ZD48dGQ+MTA8L3RkPjx0ZD5mTDwvdGQ+PHRkPiZuYnNwOzwvdGQ+PC90cj48dHI+PHRkPk1lYW4gQ29ycHVzY3VsYXIgSGVtb2dsb2JpbjwvdGQ+PHRkPjEwPC90ZD48dGQ+cGc8L3RkPjx0ZD4mbmJzcDs8L3RkPjwvdHI+PHRyPjx0ZD5NZWFuIENvcnB1c2N1bGFyIEhlbW9nbG9iaW4gQ29uY2VudHJhdGlvbjwvdGQ+PHRkPjE8L3RkPjx0ZD5nL2RMPC90ZD48dGQ+Jm5ic3A7PC90ZD48L3RyPjx0cj48dGQ+UGxhdGVsZXQgQ291bnQ8L3RkPjx0ZD4wMTA8L3RkPjx0ZD4xMF4zL3VMPC90ZD48dGQ+Jm5ic3A7PC90ZD48L3RyPjwvdGJvZHk+PC90YWJsZT4="
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:f96d951e-1d17-4fa0-94ae-1300052c9197",
+            "resource": {
+                "resourceType": "DocumentReference",
+                "id": "f96d951e-1d17-4fa0-94ae-1300052c9197",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentReference"
+                    ]
+                },
+                "status": "current",
+                "type": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "721981007",
+                            "display": "Diagnostic studies report"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:6d70bbfb-30d5-4cd8-a1b1-96cb289cc545"
+                },
+                "content": [
+                    {
+                        "attachment": {
+                            "contentType": "text/html; charset=utf-8",
+                            "url": "urn:uuid:bd2e583f-a527-4fbb-8a02-266f209425e8",
+                            "data": "PHRhYmxlIGJvcmRlcj0iMCIgY2VsbHBhZGRpbmc9IjEiIGNlbGxzcGFjaW5nPSIxIiBzdHlsZT0id2lkdGg6MTAwJSI+PHRib2R5Pjx0cj48dGQ+PGgzPkNCQyBQYW5lbDwvaDM+PC90ZD48L3RyPjwvdGJvZHk+PC90YWJsZT48cD48c3Ryb25nPkNCQyBQYW5lbDwvc3Ryb25nPjwvcD48dGFibGUgc3R5bGU9IndpZHRoOjEwMCU7Ym9yZGVyLWNvbGxhcHNlOmNvbGxhcHNlO2ZvbnQtc2l6ZToxMnB4OyIgYm9yZGVyPSIxIiBjZWxscGFkZGluZz0iNiIgY2VsbHNwYWNpbmc9IjAiPjx0aGVhZD48dHIgc3R5bGU9ImJhY2tncm91bmQ6I2Y0ZjZmODsiPjx0aCBzdHlsZT0idGV4dC1hbGlnbjpsZWZ0OyI+VGVzdCBOYW1lPC90aD48dGggc3R5bGU9InRleHQtYWxpZ246bGVmdDsiPlJlc3VsdDwvdGg+PHRoIHN0eWxlPSJ0ZXh0LWFsaWduOmxlZnQ7Ij5Vbml0PC90aD48dGggc3R5bGU9InRleHQtYWxpZ246bGVmdDsiPkJpby4gUmVmLiBJbnRlcnZhbDwvdGg+PC90cj48L3RoZWFkPjx0Ym9keT48dHI+PHRkPkVvc2lub3BoaWxzPC90ZD48dGQ+MzA8L3RkPjx0ZD4lPC90ZD48dGQ+Jm5ic3A7PC90ZD48L3RyPjx0cj48dGQ+SGVtb2dsb2JpbjwvdGQ+PHRkPjExPC90ZD48dGQ+Zy9kTDwvdGQ+PHRkPiZuYnNwOzwvdGQ+PC90cj48dHI+PHRkPlRvdGFsIExldWtvY3l0ZSBDb3VudDwvdGQ+PHRkPjEwPC90ZD48dGQ+MTBeMy91TDwvdGQ+PHRkPiZuYnNwOzwvdGQ+PC90cj48dHI+PHRkPk5ldXRyb3BoaWxzPC90ZD48dGQ+MTA8L3RkPjx0ZD4lPC90ZD48dGQ+Jm5ic3A7PC90ZD48L3RyPjx0cj48dGQ+THltcGhvY3l0ZXM8L3RkPjx0ZD4xMDwvdGQ+PHRkPiU8L3RkPjx0ZD4mbmJzcDs8L3RkPjwvdHI+PHRyPjx0ZD5Nb25vY3l0ZXM8L3RkPjx0ZD4xMDwvdGQ+PHRkPiU8L3RkPjx0ZD4mbmJzcDs8L3RkPjwvdHI+PHRyPjx0ZD5CYW5kIENlbGxzPC90ZD48dGQ+MTA8L3RkPjx0ZD4lPC90ZD48dGQ+Jm5ic3A7PC90ZD48L3RyPjx0cj48dGQ+SW1tYXR1cmUgQ2VsbHM8L3RkPjx0ZD45PC90ZD48dGQ+JTwvdGQ+PHRkPiZuYnNwOzwvdGQ+PC90cj48dHI+PHRkPlJlZCBCbG9vZCBDZWxsczwvdGQ+PHRkPjEwPC90ZD48dGQ+MTBeNi91TDwvdGQ+PHRkPiZuYnNwOzwvdGQ+PC90cj48dHI+PHRkPlBhY2tlZCBDZWxsIFZvbHVtZTwvdGQ+PHRkPjEwPC90ZD48dGQ+JTwvdGQ+PHRkPiZuYnNwOzwvdGQ+PC90cj48dHI+PHRkPk1lYW4gQ29ycHVzY3VsYXIgVm9sdW1lPC90ZD48dGQ+MTA8L3RkPjx0ZD5mTDwvdGQ+PHRkPiZuYnNwOzwvdGQ+PC90cj48dHI+PHRkPk1lYW4gQ29ycHVzY3VsYXIgSGVtb2dsb2JpbjwvdGQ+PHRkPjEwPC90ZD48dGQ+cGc8L3RkPjx0ZD4mbmJzcDs8L3RkPjwvdHI+PHRyPjx0ZD5NZWFuIENvcnB1c2N1bGFyIEhlbW9nbG9iaW4gQ29uY2VudHJhdGlvbjwvdGQ+PHRkPjE8L3RkPjx0ZD5nL2RMPC90ZD48dGQ+Jm5ic3A7PC90ZD48L3RyPjx0cj48dGQ+UGxhdGVsZXQgQ291bnQ8L3RkPjx0ZD4wMTA8L3RkPjx0ZD4xMF4zL3VMPC90ZD48dGQ+Jm5ic3A7PC90ZD48L3RyPjwvdGJvZHk+PC90YWJsZT4=",
+                            "title": "Pathology / Cytology"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:e1f47726-cf20-416c-a49c-6732c052023f",
+            "resource": {
+                "resourceType": "DiagnosticReport",
+                "id": "e1f47726-cf20-416c-a49c-6732c052023f",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/DiagnosticReportLab"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Pathology / Cytology"
+                },
+                "subject": {
+                    "reference": "urn:uuid:6d70bbfb-30d5-4cd8-a1b1-96cb289cc545",
+                    "display": "Patient"
+                },
+                "issued": "2026-05-31T01:13:43+05:30",
+                "result": [
+                    {
+                        "reference": "urn:uuid:c97dc010-8f29-4f3c-824a-5c931ce26186"
+                    },
+                    {
+                        "reference": "urn:uuid:edc1da53-7bc7-4821-a030-c09ad2bcdef8"
+                    },
+                    {
+                        "reference": "urn:uuid:967ce84c-fab7-4920-9e8e-146caa28c6b1"
+                    },
+                    {
+                        "reference": "urn:uuid:e9f0da9c-3deb-48b5-9297-7c413d0f22df"
+                    },
+                    {
+                        "reference": "urn:uuid:3957dce4-4787-463c-80d3-2f15eb7f28a2"
+                    },
+                    {
+                        "reference": "urn:uuid:60568db8-5693-463e-9ba5-a52e7c5170f7"
+                    },
+                    {
+                        "reference": "urn:uuid:2ca8a602-dad6-43c1-a248-2a4b75aedd04"
+                    },
+                    {
+                        "reference": "urn:uuid:7e8f7cf3-3cfa-4726-9dd5-384b4ccbf2d1"
+                    },
+                    {
+                        "reference": "urn:uuid:991f1e70-bf4e-4b4d-aa62-f558eed2ad0c"
+                    },
+                    {
+                        "reference": "urn:uuid:a516e2c7-270e-4b3a-9341-97336780d499"
+                    },
+                    {
+                        "reference": "urn:uuid:c0694c9e-525e-4fa4-95b2-22fe932ea175"
+                    },
+                    {
+                        "reference": "urn:uuid:0dc0a9b7-a99a-4cc8-a12e-6510706353af"
+                    },
+                    {
+                        "reference": "urn:uuid:acd9dc9e-8aaf-4959-9be1-5d259af0dd74"
+                    },
+                    {
+                        "reference": "urn:uuid:3a992302-b91f-4655-82cb-42dd80787279"
+                    }
+                ],
+                "performer": [
+                    {
+                        "reference": "urn:uuid:93b37534-d7ed-4d0a-89ac-ecec3967aabf"
+                    }
+                ],
+                "resultsInterpreter": [
+                    {
+                        "reference": "urn:uuid:93b37534-d7ed-4d0a-89ac-ecec3967aabf"
+                    }
+                ],
+                "encounter": {
+                    "reference": "urn:uuid:b047b527-5c2b-4edd-aaa8-d983d59bb2a0"
+                },
+                "conclusion": "Laboratory report generated"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:c97dc010-8f29-4f3c-824a-5c931ce26186",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "c97dc010-8f29-4f3c-824a-5c931ce26186",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Eosinophils",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "713-8",
+                            "display": "Eosinophils"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:6d70bbfb-30d5-4cd8-a1b1-96cb289cc545"
+                },
+                "effectiveDateTime": "2026-05-31T01:13:43+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:b047b527-5c2b-4edd-aaa8-d983d59bb2a0"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:93b37534-d7ed-4d0a-89ac-ecec3967aabf"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 30,
+                    "unit": "%",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "%"
+                },
+                "interpretation": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
+                                "code": "N",
+                                "display": "N"
+                            }
+                        ],
+                        "text": "N"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:edc1da53-7bc7-4821-a030-c09ad2bcdef8",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "edc1da53-7bc7-4821-a030-c09ad2bcdef8",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Hemoglobin",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "718-7",
+                            "display": "Hemoglobin"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:6d70bbfb-30d5-4cd8-a1b1-96cb289cc545"
+                },
+                "effectiveDateTime": "2026-05-31T01:13:43+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:b047b527-5c2b-4edd-aaa8-d983d59bb2a0"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:93b37534-d7ed-4d0a-89ac-ecec3967aabf"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 11,
+                    "unit": "g/dL",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "g/dL"
+                },
+                "interpretation": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
+                                "code": "N",
+                                "display": "N"
+                            }
+                        ],
+                        "text": "N"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:967ce84c-fab7-4920-9e8e-146caa28c6b1",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "967ce84c-fab7-4920-9e8e-146caa28c6b1",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Total Leukocyte Count",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "6690-2",
+                            "display": "Total Leukocyte Count"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:6d70bbfb-30d5-4cd8-a1b1-96cb289cc545"
+                },
+                "effectiveDateTime": "2026-05-31T01:13:43+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:b047b527-5c2b-4edd-aaa8-d983d59bb2a0"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:93b37534-d7ed-4d0a-89ac-ecec3967aabf"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 10,
+                    "unit": "10^3/uL",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "10*3/uL"
+                },
+                "interpretation": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
+                                "code": "N",
+                                "display": "N"
+                            }
+                        ],
+                        "text": "N"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:e9f0da9c-3deb-48b5-9297-7c413d0f22df",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "e9f0da9c-3deb-48b5-9297-7c413d0f22df",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Neutrophils",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "770-8",
+                            "display": "Neutrophils"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:6d70bbfb-30d5-4cd8-a1b1-96cb289cc545"
+                },
+                "effectiveDateTime": "2026-05-31T01:13:43+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:b047b527-5c2b-4edd-aaa8-d983d59bb2a0"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:93b37534-d7ed-4d0a-89ac-ecec3967aabf"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 10,
+                    "unit": "%",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "%"
+                },
+                "interpretation": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
+                                "code": "N",
+                                "display": "N"
+                            }
+                        ],
+                        "text": "N"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:3957dce4-4787-463c-80d3-2f15eb7f28a2",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "3957dce4-4787-463c-80d3-2f15eb7f28a2",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Lymphocytes",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "736-9",
+                            "display": "Lymphocytes"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:6d70bbfb-30d5-4cd8-a1b1-96cb289cc545"
+                },
+                "effectiveDateTime": "2026-05-31T01:13:43+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:b047b527-5c2b-4edd-aaa8-d983d59bb2a0"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:93b37534-d7ed-4d0a-89ac-ecec3967aabf"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 10,
+                    "unit": "%",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "%"
+                },
+                "interpretation": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
+                                "code": "N",
+                                "display": "N"
+                            }
+                        ],
+                        "text": "N"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:60568db8-5693-463e-9ba5-a52e7c5170f7",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "60568db8-5693-463e-9ba5-a52e7c5170f7",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Monocytes",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "5905-5",
+                            "display": "Monocytes"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:6d70bbfb-30d5-4cd8-a1b1-96cb289cc545"
+                },
+                "effectiveDateTime": "2026-05-31T01:13:43+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:b047b527-5c2b-4edd-aaa8-d983d59bb2a0"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:93b37534-d7ed-4d0a-89ac-ecec3967aabf"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 10,
+                    "unit": "%",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "%"
+                },
+                "interpretation": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
+                                "code": "N",
+                                "display": "N"
+                            }
+                        ],
+                        "text": "N"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:2ca8a602-dad6-43c1-a248-2a4b75aedd04",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "2ca8a602-dad6-43c1-a248-2a4b75aedd04",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Band Cells",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "764-1",
+                            "display": "Band Cells"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:6d70bbfb-30d5-4cd8-a1b1-96cb289cc545"
+                },
+                "effectiveDateTime": "2026-05-31T01:13:43+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:b047b527-5c2b-4edd-aaa8-d983d59bb2a0"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:93b37534-d7ed-4d0a-89ac-ecec3967aabf"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 10,
+                    "unit": "%",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "%"
+                },
+                "interpretation": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
+                                "code": "N",
+                                "display": "N"
+                            }
+                        ],
+                        "text": "N"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:7e8f7cf3-3cfa-4726-9dd5-384b4ccbf2d1",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "7e8f7cf3-3cfa-4726-9dd5-384b4ccbf2d1",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Immature Cells",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "38518-7",
+                            "display": "Immature Cells"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:6d70bbfb-30d5-4cd8-a1b1-96cb289cc545"
+                },
+                "effectiveDateTime": "2026-05-31T01:13:43+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:b047b527-5c2b-4edd-aaa8-d983d59bb2a0"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:93b37534-d7ed-4d0a-89ac-ecec3967aabf"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 9,
+                    "unit": "%",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "%"
+                },
+                "interpretation": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
+                                "code": "N",
+                                "display": "N"
+                            }
+                        ],
+                        "text": "N"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:991f1e70-bf4e-4b4d-aa62-f558eed2ad0c",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "991f1e70-bf4e-4b4d-aa62-f558eed2ad0c",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Red Blood Cells",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "789-8",
+                            "display": "Red Blood Cells"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:6d70bbfb-30d5-4cd8-a1b1-96cb289cc545"
+                },
+                "effectiveDateTime": "2026-05-31T01:13:43+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:b047b527-5c2b-4edd-aaa8-d983d59bb2a0"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:93b37534-d7ed-4d0a-89ac-ecec3967aabf"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 10,
+                    "unit": "10^6/uL",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "10^6/uL"
+                },
+                "interpretation": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
+                                "code": "N",
+                                "display": "N"
+                            }
+                        ],
+                        "text": "N"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:a516e2c7-270e-4b3a-9341-97336780d499",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "a516e2c7-270e-4b3a-9341-97336780d499",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Packed Cell Volume",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "4544-3",
+                            "display": "Packed Cell Volume"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:6d70bbfb-30d5-4cd8-a1b1-96cb289cc545"
+                },
+                "effectiveDateTime": "2026-05-31T01:13:43+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:b047b527-5c2b-4edd-aaa8-d983d59bb2a0"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:93b37534-d7ed-4d0a-89ac-ecec3967aabf"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 10,
+                    "unit": "%",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "%"
+                },
+                "interpretation": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
+                                "code": "N",
+                                "display": "N"
+                            }
+                        ],
+                        "text": "N"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:c0694c9e-525e-4fa4-95b2-22fe932ea175",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "c0694c9e-525e-4fa4-95b2-22fe932ea175",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Mean Corpuscular Volume",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "8457-4",
+                            "display": "Mean Corpuscular Volume"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:6d70bbfb-30d5-4cd8-a1b1-96cb289cc545"
+                },
+                "effectiveDateTime": "2026-05-31T01:13:43+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:b047b527-5c2b-4edd-aaa8-d983d59bb2a0"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:93b37534-d7ed-4d0a-89ac-ecec3967aabf"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 10,
+                    "unit": "fL",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "fL"
+                },
+                "interpretation": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
+                                "code": "N",
+                                "display": "N"
+                            }
+                        ],
+                        "text": "N"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:0dc0a9b7-a99a-4cc8-a12e-6510706353af",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "0dc0a9b7-a99a-4cc8-a12e-6510706353af",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Mean Corpuscular Hemoglobin",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "785-6",
+                            "display": "Mean Corpuscular Hemoglobin"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:6d70bbfb-30d5-4cd8-a1b1-96cb289cc545"
+                },
+                "effectiveDateTime": "2026-05-31T01:13:43+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:b047b527-5c2b-4edd-aaa8-d983d59bb2a0"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:93b37534-d7ed-4d0a-89ac-ecec3967aabf"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 10,
+                    "unit": "pg",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "pg"
+                },
+                "interpretation": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
+                                "code": "N",
+                                "display": "N"
+                            }
+                        ],
+                        "text": "N"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:acd9dc9e-8aaf-4959-9be1-5d259af0dd74",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "acd9dc9e-8aaf-4959-9be1-5d259af0dd74",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Mean Corpuscular Hemoglobin Concentration",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "59260-0",
+                            "display": "Mean Corpuscular Hemoglobin Concentration"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:6d70bbfb-30d5-4cd8-a1b1-96cb289cc545"
+                },
+                "effectiveDateTime": "2026-05-31T01:13:43+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:b047b527-5c2b-4edd-aaa8-d983d59bb2a0"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:93b37534-d7ed-4d0a-89ac-ecec3967aabf"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 1,
+                    "unit": "g/dL",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "g/dL"
+                },
+                "interpretation": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
+                                "code": "N",
+                                "display": "N"
+                            }
+                        ],
+                        "text": "N"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:3a992302-b91f-4655-82cb-42dd80787279",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "3a992302-b91f-4655-82cb-42dd80787279",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "preliminary",
+                "code": {
+                    "text": "Platelet Count",
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "777-3",
+                            "display": "Platelet Count"
+                        }
+                    ]
+                },
+                "subject": {
+                    "reference": "urn:uuid:6d70bbfb-30d5-4cd8-a1b1-96cb289cc545"
+                },
+                "effectiveDateTime": "2026-05-31T01:13:43+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:b047b527-5c2b-4edd-aaa8-d983d59bb2a0"
+                },
+                "performer": [
+                    {
+                        "reference": "urn:uuid:93b37534-d7ed-4d0a-89ac-ecec3967aabf"
+                    }
+                ],
+                "valueQuantity": {
+                    "value": 10,
+                    "unit": "10^3/uL",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "10*3/uL"
+                },
+                "interpretation": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
+                                "code": "N",
+                                "display": "N"
+                            }
+                        ],
+                        "text": "N"
+                    }
+                ]
+            }
+        }
+    ]
+}

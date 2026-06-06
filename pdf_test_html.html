@@ -1,231 +1,3 @@
-<?php
-$ipd = $ipd_info ?? null;
-$person = $person_info ?? null;
-$ipdId = (int) ($ipd_id ?? 0);
-$noticeText = (string) ($notice ?? '');
-$noticeType = (string) ($notice_type ?? 'success');
-$statusRows = $status_rows ?? [];
-$departmentRows = $department_rows ?? [];
-$master = $ipd_master_row ?? [];
-
-$patientName = trim((string) ($person->p_fname ?? ''));
-
-$patientCode = '';
-if ($person) {
-    $patientCode = trim((string) (
-        $person->uhid
-        ?? $person->UHID
-        ?? $person->patient_code
-        ?? $person->p_code
-        ?? $person->reg_no
-        ?? ''
-    ));
-}
-
-$patientId = (int) ($person->id ?? $person->p_id ?? 0);
-$patientAbha = '';
-if ($person) {
-    $patientAbha = trim((string) (
-        $person->abha_id
-        ?? $person->abha_no
-        ?? $person->abha_address
-        ?? $person->abha
-        ?? ''
-    ));
-}
-
-$age = '';
-if ($person) {
-    $age = get_age_1($person->dob ?? null, $person->age ?? '', $person->age_in_month ?? '', $person->estimate_dob ?? '');
-}
-
-$dischargeDateValue = '';
-if (! empty($master['discharge_date'])) {
-    $ts = strtotime((string) $master['discharge_date']);
-    if ($ts !== false) {
-        $dischargeDateValue = date('Y-m-d', $ts);
-    }
-}
-
-$dischargeTimeValue = (string) ($master['discharge_time'] ?? '');
-if (preg_match('/^\d{2}:\d{2}:\d{2}$/', $dischargeTimeValue)) {
-    $dischargeTimeValue = substr($dischargeTimeValue, 0, 5);
-}
-$complaintRows = $complaint_rows ?? [];
-$patientHistory = $patient_history_row ?? [];
-$physicalExamRows = $physical_exam_rows ?? [];
-$generalExamGroup1 = $physicalExamRows['general_group_1'] ?? [];
-$generalExamGroup2 = $physicalExamRows['general_group_2'] ?? [];
-$systemicExamRows = $physicalExamRows['systemic'] ?? [];
-$systemicExamText = '';
-if (! empty($systemicExamRows)) {
-    $systemicParts = [];
-    foreach ($systemicExamRows as $row) {
-        $value = trim((string) ($row['value'] ?? ''));
-        if ($value === '') {
-            continue;
-        }
-
-        // Keep saved systemic text as-is; do not auto-prefix master labels.
-        $systemicParts[] = $value;
-    }
-
-    if (! empty($systemicParts)) {
-        $systemicExamText = implode(PHP_EOL, $systemicParts);
-    }
-}
-$manualInvestRows = $manual_invest_rows ?? [];
-$specialInvestRows = $special_invest_rows ?? [];
-$clinicalLabRows = $clinical_lab_rows ?? [];
-$clinicalNonPathRows = $clinical_non_path_rows ?? [];
-$labInvestigationList = (string) ($lab_investigation_list ?? '');
-$nonPathInvestigationList = (string) ($non_path_investigation_list ?? '');
-$dischargeConditionRows = $discharge_condition_rows ?? [];
-$surgeryRows = $surgery_rows ?? [];
-$procedureRows = $procedure_rows ?? [];
-$diagnosisRows = $diagnosis_rows ?? [];
-$courseRows = $course_rows ?? [];
-$drugRows = $drug_rows ?? [];
-$legacyDrugRows = $legacy_drug_rows ?? [];
-$medicineRows = [];
-if (! empty($legacyDrugRows)) {
-    foreach ($legacyDrugRows as $row) {
-        $medicineRows[] = [
-            'id' => (int) ($row['id'] ?? 0),
-            'source' => 'legacy',
-            'med_name' => (string) ($row['med_name'] ?? ''),
-            'med_type' => (string) ($row['med_type'] ?? ''),
-            'dosage' => (string) ($row['dosage'] ?? ''),
-            'dosage_when' => (string) ($row['dosage_when'] ?? ''),
-            'dosage_freq' => (string) ($row['dosage_freq'] ?? ''),
-            'no_of_days' => (string) ($row['no_of_days'] ?? ''),
-            'qty' => (string) ($row['qty'] ?? ''),
-            'remark' => (string) ($row['remark'] ?? ''),
-        ];
-    }
-} else {
-    foreach ($drugRows as $row) {
-        $medicineRows[] = [
-            'id' => (int) ($row['id'] ?? 0),
-            'source' => 'classic',
-            'med_name' => (string) ($row['drug_name'] ?? ''),
-            'med_type' => '',
-            'dosage' => (string) ($row['drug_dose'] ?? ''),
-            'dosage_when' => '',
-            'dosage_freq' => '',
-            'no_of_days' => (string) ($row['drug_day'] ?? ''),
-            'qty' => '',
-            'remark' => '',
-        ];
-    }
-}
-$inhosRemark = (string) ($inhos_remark ?? '');
-$otherExamText = (string) ($other_exam_text ?? '');
-$painValue = (string) ($pain_value ?? '');
-$opdHistorySnapshot = $opd_history_snapshot ?? [];
-$nursingAdmissionSnapshot = $nursing_admission_snapshot ?? [];
-$instructionFoodRows = $instruction_food_rows ?? [];
-$instructionFoodIdsRaw = $instruction_food_ids ?? [];
-$instructionFoodIds = [];
-if (is_array($instructionFoodIdsRaw)) {
-    foreach ($instructionFoodIdsRaw as $fid) {
-        $fidInt = (int) $fid;
-        if ($fidInt > 0) {
-            $instructionFoodIds[$fidInt] = true;
-        }
-    }
-}
-$instructionOther = (string) ($instruction_other ?? '');
-$drugAllergyStatus = trim((string) ($opdHistorySnapshot['drug_allergy_status'] ?? ''));
-$drugAllergyDetails = trim((string) ($opdHistorySnapshot['drug_allergy_details'] ?? ''));
-$adrHistory = trim((string) ($opdHistorySnapshot['adr_history'] ?? ''));
-$currentMedications = trim((string) ($opdHistorySnapshot['current_medications'] ?? ''));
-$coMorbiditiesText = trim((string) ($opdHistorySnapshot['co_morbidities'] ?? ''));
-$womenLmp = trim((string) ($opdHistorySnapshot['women_lmp'] ?? ''));
-$womenLastBaby = trim((string) ($opdHistorySnapshot['women_last_baby'] ?? ''));
-$womenPregnancyRelated = trim((string) ($opdHistorySnapshot['women_pregnancy_related'] ?? ''));
-$womenRelatedProblems = trim((string) ($opdHistorySnapshot['women_related_problems'] ?? ''));
-$hpiNote = trim((string) ($opdHistorySnapshot['hpi_note'] ?? ''));
-$nursingHistoryRecordedAt = trim((string) ($nursingAdmissionSnapshot['recorded_at'] ?? ''));
-$isFemalePatient = strtolower(trim((string) ($person->xgender ?? ''))) === 'female';
-$hasNursingHistoryPrefill = $nursingHistoryRecordedAt !== ''
-    && ($hpiNote !== ''
-        || $drugAllergyStatus !== ''
-        || $coMorbiditiesText !== ''
-        || $womenLmp !== ''
-        || $womenLastBaby !== ''
-        || $womenPregnancyRelated !== ''
-        || $womenRelatedProblems !== '');
-if ($coMorbiditiesText === '') {
-    $coMorbidFallback = [];
-    if ((int) ($patientHistory['is_niddm'] ?? 0) === 1) {
-        $coMorbidFallback[] = 'Diabetes mellitus (DM)';
-    }
-    if ((int) ($patientHistory['is_hypertesion'] ?? 0) === 1) {
-        $coMorbidFallback[] = 'Hypertension';
-    }
-    if (! empty($coMorbidFallback)) {
-        $coMorbiditiesText = implode(', ', $coMorbidFallback);
-    }
-}
-
-$coMorbidityOptions = [
-    'dm' => ['label' => 'Diabetes mellitus (DM)', 'keywords' => ['diabetes mellitus', 'diabetes', 'dm']],
-    'htn' => ['label' => 'high blood pressure (HTn)', 'keywords' => ['high blood pressure', 'hypertension', 'htn']],
-    'cad' => ['label' => 'Coronary artery disease (CAD)', 'keywords' => ['coronary artery disease', 'cad']],
-    'copd' => ['label' => 'Chronic Obstructive Pulmonary Disease', 'keywords' => ['chronic obstructive pulmonary disease', 'copd']],
-    'cva' => ['label' => 'cerebral vascular accident (CVA)', 'keywords' => ['cerebral vascular accident', 'stroke', 'cva']],
-];
-$coMorbiditySelected = array_fill_keys(array_keys($coMorbidityOptions), false);
-$coMorbidityOtherText = '';
-if ($coMorbiditiesText !== '') {
-    $coMorbidityParts = preg_split('/[,;\n]+/', $coMorbiditiesText);
-    if (is_array($coMorbidityParts)) {
-        $otherParts = [];
-        foreach ($coMorbidityParts as $part) {
-            $cleanPart = trim((string) $part);
-            if ($cleanPart === '') {
-                continue;
-            }
-            $normalizedPart = strtolower($cleanPart);
-            $matched = false;
-            foreach ($coMorbidityOptions as $key => $opt) {
-                foreach (($opt['keywords'] ?? []) as $kw) {
-                    if ($kw !== '' && strpos($normalizedPart, strtolower((string) $kw)) !== false) {
-                        $coMorbiditySelected[$key] = true;
-                        $matched = true;
-                        break;
-                    }
-                }
-                if ($matched) {
-                    break;
-                }
-            }
-            if (! $matched) {
-                $otherParts[] = $cleanPart;
-            }
-        }
-        $coMorbidityOtherText = implode(', ', $otherParts);
-    }
-}
-
-$allergyStatusNormalized = strtolower($drugAllergyStatus);
-$allergyStatusKnown = in_array($allergyStatusNormalized, ['known'], true);
-$allergyStatusUnknown = in_array($allergyStatusNormalized, ['allergies not known', 'not known', 'unknown'], true);
-$allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug allergy', 'none', 'no known allergy'], true);
- 
- $historyFields = [
-     'is_smoking' => 'Smoking',
-     'is_alcohol' => 'Alcohol',
-     'is_tobacoo' => 'Tobacco',
-     'is_drug_abuse' => 'Drug abuse',
-     'is_hypertesion' => 'Hypertension',
-     'is_niddm' => 'Type 2 diabetes mellitus (DM)',
-     'is_hbsag' => 'HBsAg',
-     'is_hcv' => 'HCV',
-     'is_hiv_I_II' => 'HIV I & II',
- ];
-?>
 
 <style>
     .discharge-page {
@@ -594,25 +366,22 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
 
 <section class="content discharge-page">
     <div class="discharge-page-title">
-        Name : <strong><?= esc($patientName) ?></strong>
-        / Gender : <strong><?= esc((string) ($person->xgender ?? '')) ?></strong>
-        / Age : <strong><?= esc($age) ?></strong>
-        / UHID / Patient Code : <strong><?= esc($patientCode !== '' ? $patientCode : '-') ?></strong>
-        / IPD ID : <strong><?= esc((string) ($ipd->ipd_code ?? '')) ?></strong>
+        Name : <strong>KAMLA SINGH</strong>
+        / Gender : <strong>Female</strong>
+        / Age : <strong>26 Year </strong>
+        / UHID / Patient Code : <strong>P26051000001</strong>
+        / IPD ID : <strong>A26050000001</strong>
     </div>
 
     <div class="mb-3 text-end">
-        <button type="button" class="btn btn-primary" id="btn_preview_top" onclick="openDischargePreview('<?= site_url('Ipd_discharge/preview_discharge_report/' . $ipdId . '?regen=1') ?>', 'Discharge Preview');">
+        <button type="button" class="btn btn-primary" id="btn_preview_top" onclick="openDischargePreview('http://localhost:8080/Ipd_discharge/preview_discharge_report/1?regen=1', 'Discharge Preview');">
             <i class="fas fa-eye me-1"></i> Preview Discharge Summary
         </button>
     </div>
 
     <div class="card discharge-main-card">
         <div class="card-body">
-            <?php if ($noticeText !== ''): ?>
-                <div class="alert alert-<?= esc($noticeType) ?> py-2" role="alert"><?= esc($noticeText) ?></div>
-            <?php endif; ?>
-
+            
             <div class="row">
                 <div class="col-md-3">
                     <div class="discharge-side-panel">
@@ -631,28 +400,73 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                     </ul>
 
                     <div class="discharge-side-actions">
-                        <button type="button" class="btn btn-primary btn-sm" id="btn_preview_side" onclick="openDischargePreview('<?= site_url('Ipd_discharge/preview_discharge_report/' . $ipdId . '?regen=1') ?>', 'Discharge Preview');">Preview</button>
+                        <button type="button" class="btn btn-primary btn-sm" id="btn_preview_side" onclick="openDischargePreview('http://localhost:8080/Ipd_discharge/preview_discharge_report/1?regen=1', 'Discharge Preview');">Preview</button>
                     </div>
                     </div>
                 </div>
 
                 <div class="col-md-9 discharge-form-area">
-                    <form id="discharge_main_form" method="post" action="<?= site_url('Ipd_discharge/ipd_select/' . $ipdId) ?>" class="row g-3">
-                        <?= csrf_field() ?>
-
+                    <form id="discharge_main_form" method="post" action="http://localhost:8080/Ipd_discharge/ipd_select/1" class="row g-3">
+                        <input type="hidden" name="csrf_test_name" value="d592cadd744a0ee9c27e1bea9ad13abf">
                         <div class="card border-primary" id="section-personal-history">
                             <div class="card-header py-2"><strong>Personal History</strong></div>
                             <div class="card-body">
                                 <div class="row">
-                                    <?php foreach ($historyFields as $field => $label): ?>
-                                        <div class="col-md-6">
+                                                                            <div class="col-md-6">
                                             <div class="form-check mb-1">
-                                                <input class="form-check-input" type="checkbox" id="<?= esc($field) ?>" name="<?= esc($field) ?>" value="1" <?= (int) ($patientHistory[$field] ?? 0) === 1 ? 'checked' : '' ?>>
-                                                <label class="form-check-label" for="<?= esc($field) ?>"><?= esc($label) ?></label>
+                                                <input class="form-check-input" type="checkbox" id="is_smoking" name="is_smoking" value="1" >
+                                                <label class="form-check-label" for="is_smoking">Smoking</label>
                                             </div>
                                         </div>
-                                    <?php endforeach; ?>
-                                </div>
+                                                                            <div class="col-md-6">
+                                            <div class="form-check mb-1">
+                                                <input class="form-check-input" type="checkbox" id="is_alcohol" name="is_alcohol" value="1" >
+                                                <label class="form-check-label" for="is_alcohol">Alcohol</label>
+                                            </div>
+                                        </div>
+                                                                            <div class="col-md-6">
+                                            <div class="form-check mb-1">
+                                                <input class="form-check-input" type="checkbox" id="is_tobacoo" name="is_tobacoo" value="1" >
+                                                <label class="form-check-label" for="is_tobacoo">Tobacco</label>
+                                            </div>
+                                        </div>
+                                                                            <div class="col-md-6">
+                                            <div class="form-check mb-1">
+                                                <input class="form-check-input" type="checkbox" id="is_drug_abuse" name="is_drug_abuse" value="1" >
+                                                <label class="form-check-label" for="is_drug_abuse">Drug abuse</label>
+                                            </div>
+                                        </div>
+                                                                            <div class="col-md-6">
+                                            <div class="form-check mb-1">
+                                                <input class="form-check-input" type="checkbox" id="is_hypertesion" name="is_hypertesion" value="1" >
+                                                <label class="form-check-label" for="is_hypertesion">Hypertension</label>
+                                            </div>
+                                        </div>
+                                                                            <div class="col-md-6">
+                                            <div class="form-check mb-1">
+                                                <input class="form-check-input" type="checkbox" id="is_niddm" name="is_niddm" value="1" >
+                                                <label class="form-check-label" for="is_niddm">Type 2 diabetes mellitus (DM)</label>
+                                            </div>
+                                        </div>
+                                                                            <div class="col-md-6">
+                                            <div class="form-check mb-1">
+                                                <input class="form-check-input" type="checkbox" id="is_hbsag" name="is_hbsag" value="1" >
+                                                <label class="form-check-label" for="is_hbsag">HBsAg</label>
+                                            </div>
+                                        </div>
+                                                                            <div class="col-md-6">
+                                            <div class="form-check mb-1">
+                                                <input class="form-check-input" type="checkbox" id="is_hcv" name="is_hcv" value="1" >
+                                                <label class="form-check-label" for="is_hcv">HCV</label>
+                                            </div>
+                                        </div>
+                                                                            <div class="col-md-6">
+                                            <div class="form-check mb-1">
+                                                <input class="form-check-input" type="checkbox" id="is_hiv_I_II" name="is_hiv_I_II" value="1" >
+                                                <label class="form-check-label" for="is_hiv_I_II">HIV I &amp; II</label>
+                                            </div>
+                                        </div>
+                                                                    </div>
                                 <div class="mt-3 d-flex justify-content-end">
                                     <button type="submit" class="btn btn-outline-success btn-sm" name="action" value="save_main" data-reload-section="section-personal-history">Save Personal History</button>
                                 </div>
@@ -662,44 +476,35 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                         <div class="card border-info mt-3" id="section-nursing-history">
                             <div class="card-header py-2 d-flex justify-content-between align-items-center">
                                 <strong>From Nursing History &amp; Physical Assessment</strong>
-                                <?php if ($hasNursingHistoryPrefill): ?>
-                                    <span class="badge bg-success">Prefilled from Nursing H&amp;P</span>
-                                <?php else: ?>
-                                    <span class="badge bg-secondary">No Nursing H&amp;P prefill found</span>
-                                <?php endif; ?>
-                            </div>
+                                                                    <span class="badge bg-secondary">No Nursing H&amp;P prefill found</span>
+                                                            </div>
                             <div class="card-body">
-                                <?php if ($nursingHistoryRecordedAt !== ''): ?>
-                                    <div class="small text-muted mb-2">Admission snapshot time: <?= esc($nursingHistoryRecordedAt) ?></div>
-                                <?php endif; ?>
-                                <div class="row g-2">
+                                                                <div class="row g-2">
                                     <div class="col-md-12">
                                         <label class="form-label mb-1 d-flex justify-content-between align-items-center">
                                             <span>History &amp; Physical Note (HPI)</span>
                                             <button type="button" class="btn btn-outline-primary btn-sm" id="btn_copy_hpi_to_complaints">Copy H&amp;P Note to Other Complaints</button>
                                         </label>
-                                        <textarea class="form-control form-control-sm" name="hpi_note" rows="2" placeholder="Nursing H&P summary"><?= esc($hpiNote) ?></textarea>
+                                        <textarea class="form-control form-control-sm" name="hpi_note" rows="2" placeholder="Nursing H&P summary"></textarea>
                                     </div>
 
-                                    <?php if ($isFemalePatient): ?>
-                                        <div class="col-md-3">
+                                                                            <div class="col-md-3">
                                             <label class="form-label mb-1">Women Related LMP</label>
-                                            <input type="text" class="form-control form-control-sm" name="women_lmp" value="<?= esc($womenLmp) ?>">
+                                            <input type="text" class="form-control form-control-sm" name="women_lmp" value="">
                                         </div>
                                         <div class="col-md-3">
                                             <label class="form-label mb-1">Last Baby</label>
-                                            <input type="text" class="form-control form-control-sm" name="women_last_baby" value="<?= esc($womenLastBaby) ?>">
+                                            <input type="text" class="form-control form-control-sm" name="women_last_baby" value="">
                                         </div>
                                         <div class="col-md-3">
                                             <label class="form-label mb-1">Pregnancy Related</label>
-                                            <input type="text" class="form-control form-control-sm" name="women_pregnancy_related" value="<?= esc($womenPregnancyRelated) ?>">
+                                            <input type="text" class="form-control form-control-sm" name="women_pregnancy_related" value="">
                                         </div>
                                         <div class="col-md-3">
                                             <label class="form-label mb-1">Women Related Problems</label>
-                                            <input type="text" class="form-control form-control-sm" name="women_related_problems" value="<?= esc($womenRelatedProblems) ?>">
+                                            <input type="text" class="form-control form-control-sm" name="women_related_problems" value="">
                                         </div>
-                                    <?php endif; ?>
-                                </div>
+                                                                    </div>
                                 <div class="mt-3 d-flex justify-content-end">
                                     <button type="submit" class="btn btn-outline-success btn-sm" name="action" value="save_main" data-reload-section="section-nursing-history">Save Nursing H&amp;P Section</button>
                                 </div>
@@ -760,13 +565,13 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
 
                                 <div class="mt-3">
                                     <h6 class="mb-2">Pain Measurement Scale</h6>
-                                    <input type="hidden" name="pain_value" id="pain_value" value="<?= esc($painValue) ?>">
+                                    <input type="hidden" name="pain_value" id="pain_value" value="">
                                     <div class="btn-group flex-wrap" role="group" aria-label="Pain Measurement Scale">
-                                        <input type="radio" class="btn-check pain-option" name="options-pain" id="pain_0" value="0" <?= $painValue === '0' ? 'checked' : '' ?>><label class="btn btn-sm btn-outline-success" for="pain_0">No Pain</label>
-                                        <input type="radio" class="btn-check pain-option" name="options-pain" id="pain_1" value="1" <?= $painValue === '1' ? 'checked' : '' ?>><label class="btn btn-sm btn-outline-primary" for="pain_1">Mild Pain</label>
-                                        <input type="radio" class="btn-check pain-option" name="options-pain" id="pain_2" value="2" <?= $painValue === '2' ? 'checked' : '' ?>><label class="btn btn-sm btn-outline-info" for="pain_2">Moderate</label>
-                                        <input type="radio" class="btn-check pain-option" name="options-pain" id="pain_3" value="3" <?= $painValue === '3' ? 'checked' : '' ?>><label class="btn btn-sm btn-outline-warning" for="pain_3">Intense</label>
-                                        <input type="radio" class="btn-check pain-option" name="options-pain" id="pain_4" value="4" <?= $painValue === '4' ? 'checked' : '' ?>><label class="btn btn-sm btn-outline-danger" for="pain_4">Worst Pain Possible</label>
+                                        <input type="radio" class="btn-check pain-option" name="options-pain" id="pain_0" value="0" ><label class="btn btn-sm btn-outline-success" for="pain_0">No Pain</label>
+                                        <input type="radio" class="btn-check pain-option" name="options-pain" id="pain_1" value="1" ><label class="btn btn-sm btn-outline-primary" for="pain_1">Mild Pain</label>
+                                        <input type="radio" class="btn-check pain-option" name="options-pain" id="pain_2" value="2" ><label class="btn btn-sm btn-outline-info" for="pain_2">Moderate</label>
+                                        <input type="radio" class="btn-check pain-option" name="options-pain" id="pain_3" value="3" ><label class="btn btn-sm btn-outline-warning" for="pain_3">Intense</label>
+                                        <input type="radio" class="btn-check pain-option" name="options-pain" id="pain_4" value="4" ><label class="btn btn-sm btn-outline-danger" for="pain_4">Worst Pain Possible</label>
                                     </div>
                                 </div>
 
@@ -778,24 +583,24 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                                 <div class="col-md-4">
                                                     <label class="form-label mb-1">Drug Allergy Status</label>
                                                     <select class="form-select form-select-sm" id="drug_allergy_status" name="drug_allergy_status">
-                                                        <option value="Allergies Not Known" <?= ($allergyStatusUnknown || (!$allergyStatusKnown && !$allergyStatusNoKnown)) ? 'selected' : '' ?>>Allergies Not Known</option>
-                                                        <option value="Known" <?= $allergyStatusKnown ? 'selected' : '' ?>>Known</option>
-                                                        <option value="No Known Drug Allergy" <?= $allergyStatusNoKnown ? 'selected' : '' ?>>No Known Drug Allergy</option>
+                                                        <option value="Allergies Not Known" selected>Allergies Not Known</option>
+                                                        <option value="Known" >Known</option>
+                                                        <option value="No Known Drug Allergy" >No Known Drug Allergy</option>
                                                     </select>
                                                     <div id="drug_allergy_status_error" class="invalid-feedback d-block" style="display:none;"></div>
                                                 </div>
                                                 <div class="col-md-8">
                                                     <label class="form-label mb-1">Drug Allergy Details <span class="small text-muted">(when status = Known)</span></label>
-                                                    <input type="text" class="form-control form-control-sm" id="drug_allergy_details" name="drug_allergy_details" value="<?= esc($drugAllergyDetails) ?>" placeholder="e.g. Penicillin rash, NSAID gastritis">
+                                                    <input type="text" class="form-control form-control-sm" id="drug_allergy_details" name="drug_allergy_details" value="" placeholder="e.g. Penicillin rash, NSAID gastritis">
                                                     <div id="drug_allergy_details_error" class="invalid-feedback d-block" style="display:none;"></div>
                                                 </div>
                                                 <div class="col-md-6">
                                                     <label class="form-label mb-1">ADR History</label>
-                                                    <input type="text" class="form-control form-control-sm" name="adr_history" value="<?= esc($adrHistory) ?>" placeholder="Previous adverse drug reaction details">
+                                                    <input type="text" class="form-control form-control-sm" name="adr_history" value="" placeholder="Previous adverse drug reaction details">
                                                 </div>
                                                 <div class="col-md-6">
                                                     <label class="form-label mb-1">Current Medications</label>
-                                                    <input type="text" class="form-control form-control-sm" name="current_medications" value="<?= esc($currentMedications) ?>" placeholder="Current/ongoing medicines">
+                                                    <input type="text" class="form-control form-control-sm" name="current_medications" value="" placeholder="Current/ongoing medicines">
                                                 </div>
                                             </div>
                                         </div>
@@ -804,25 +609,34 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                         <div class="border rounded p-2">
                                             <h6 class="mb-2">Co-Morbidities</h6>
                                             <div class="d-flex flex-wrap gap-2 small">
-                                                <?php foreach ($coMorbidityOptions as $mKey => $mOpt): ?>
-                                                    <label class="me-2">
-                                                        <input type="checkbox" class="co-morbidity-item" value="<?= esc((string) ($mOpt['label'] ?? '')) ?>" <?= ! empty($coMorbiditySelected[$mKey]) ? 'checked' : '' ?>>
-                                                        <?= esc((string) ($mOpt['label'] ?? '')) ?>
-                                                    </label>
-                                                <?php endforeach; ?>
-                                            </div>
+                                                                                                    <label class="me-2">
+                                                        <input type="checkbox" class="co-morbidity-item" value="Diabetes mellitus (DM)" >
+                                                        Diabetes mellitus (DM)                                                    </label>
+                                                                                                    <label class="me-2">
+                                                        <input type="checkbox" class="co-morbidity-item" value="high blood pressure (HTn)" >
+                                                        high blood pressure (HTn)                                                    </label>
+                                                                                                    <label class="me-2">
+                                                        <input type="checkbox" class="co-morbidity-item" value="Coronary artery disease (CAD)" >
+                                                        Coronary artery disease (CAD)                                                    </label>
+                                                                                                    <label class="me-2">
+                                                        <input type="checkbox" class="co-morbidity-item" value="Chronic Obstructive Pulmonary Disease" >
+                                                        Chronic Obstructive Pulmonary Disease                                                    </label>
+                                                                                                    <label class="me-2">
+                                                        <input type="checkbox" class="co-morbidity-item" value="cerebral vascular accident (CVA)" >
+                                                        cerebral vascular accident (CVA)                                                    </label>
+                                                                                            </div>
                                             <div class="mt-2">
                                                 <label class="form-label small mb-1">Other Co-Morbidities</label>
-                                                <input type="text" class="form-control form-control-sm" id="co_morbidities_other" value="<?= esc($coMorbidityOtherText) ?>" placeholder="Add other co-morbidities if any">
+                                                <input type="text" class="form-control form-control-sm" id="co_morbidities_other" value="" placeholder="Add other co-morbidities if any">
                                             </div>
-                                            <input type="hidden" name="co_morbidities" id="co_morbidities" value="<?= esc($coMorbiditiesText) ?>">
+                                            <input type="hidden" name="co_morbidities" id="co_morbidities" value="">
                                         </div>
                                     </div>
                                 </div>
 
                                 <div class="mt-3">
                                     <label class="form-label">Other Complaints / Detailed History</label>
-                                    <textarea id="complaint_remark_editor" class="form-control" name="complaint_remark" rows="6"><?= esc((string) ($complaint_remark ?? '')) ?></textarea>
+                                    <textarea id="complaint_remark_editor" class="form-control" name="complaint_remark" rows="6"></textarea>
                                 </div>
 
                                 <div class="mt-3 d-flex justify-content-end">
@@ -836,30 +650,112 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                             <div class="card-body">
                                 <h6 class="mb-2">General Examination</h6>
                                 <div class="row g-2">
-                                    <?php foreach ($generalExamGroup1 as $row): ?>
-                                        <div class="col-md-3">
-                                            <label class="form-label small"><?= esc((string) ($row['label'] ?? '')) ?></label>
-                                            <input type="text" class="form-control form-control-sm" name="gen_exam_<?= (int) ($row['id'] ?? 0) ?>" value="<?= esc((string) ($row['value'] ?? '')) ?>">
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">Pulse /min</label>
+                                            <input type="text" class="form-control form-control-sm" name="gen_exam_1" value="">
                                         </div>
-                                    <?php endforeach; ?>
-                                    <?php if (empty($generalExamGroup1)): ?>
-                                        <div class="col-12 text-muted small">No general examination master rows found (cat_group=1).</div>
-                                    <?php endif; ?>
-                                </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">Respiration /min</label>
+                                            <input type="text" class="form-control form-control-sm" name="gen_exam_2" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">BP mmHg</label>
+                                            <input type="text" class="form-control form-control-sm" name="gen_exam_3" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">Height cm</label>
+                                            <input type="text" class="form-control form-control-sm" name="gen_exam_4" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">Weight kg</label>
+                                            <input type="text" class="form-control form-control-sm" name="gen_exam_5" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">Pallor</label>
+                                            <input type="text" class="form-control form-control-sm" name="gen_exam_6" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">Jaundice/Icterus</label>
+                                            <input type="text" class="form-control form-control-sm" name="gen_exam_7" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">Cyanosis</label>
+                                            <input type="text" class="form-control form-control-sm" name="gen_exam_8" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">Clubbing</label>
+                                            <input type="text" class="form-control form-control-sm" name="gen_exam_9" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">SPO2</label>
+                                            <input type="text" class="form-control form-control-sm" name="gen_exam_10" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">RBS</label>
+                                            <input type="text" class="form-control form-control-sm" name="gen_exam_11" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">Temp F</label>
+                                            <input type="text" class="form-control form-control-sm" name="gen_exam_12" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">Edema</label>
+                                            <input type="text" class="form-control form-control-sm" name="gen_exam_13" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">JVP</label>
+                                            <input type="text" class="form-control form-control-sm" name="gen_exam_14" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">Sensorium</label>
+                                            <input type="text" class="form-control form-control-sm" name="gen_exam_15" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">Oedema</label>
+                                            <input type="text" class="form-control form-control-sm" name="gen_exam_16" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">Lymphadenopathy</label>
+                                            <input type="text" class="form-control form-control-sm" name="gen_exam_19" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">HC inch</label>
+                                            <input type="text" class="form-control form-control-sm" name="gen_exam_25" value="">
+                                        </div>
+                                                                                                        </div>
 
                                 <hr>
 
                                 <div class="row g-2">
-                                    <?php foreach ($generalExamGroup2 as $row): ?>
-                                        <div class="col-md-3">
-                                            <label class="form-label small"><?= esc((string) ($row['label'] ?? '')) ?></label>
-                                            <input type="text" class="form-control form-control-sm" name="gen_exam_<?= (int) ($row['id'] ?? 0) ?>" value="<?= esc((string) ($row['value'] ?? '')) ?>">
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">CNS</label>
+                                            <input type="text" class="form-control form-control-sm" name="gen_exam_17" value="">
                                         </div>
-                                    <?php endforeach; ?>
-                                    <?php if (empty($generalExamGroup2)): ?>
-                                        <div class="col-12 text-muted small">No general examination master rows found (cat_group=2).</div>
-                                    <?php endif; ?>
-                                </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">CVS</label>
+                                            <input type="text" class="form-control form-control-sm" name="gen_exam_18" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">Pupils</label>
+                                            <input type="text" class="form-control form-control-sm" name="gen_exam_20" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">Chest</label>
+                                            <input type="text" class="form-control form-control-sm" name="gen_exam_21" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">GCS</label>
+                                            <input type="text" class="form-control form-control-sm" name="gen_exam_22" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">P/A</label>
+                                            <input type="text" class="form-control form-control-sm" name="gen_exam_23" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">Neurological Deficit</label>
+                                            <input type="text" class="form-control form-control-sm" name="gen_exam_24" value="">
+                                        </div>
+                                                                                                        </div>
 
                                 <div class="mt-3 d-flex justify-content-end">
                                     <button type="submit" class="btn btn-outline-success btn-sm" name="action" value="save_main" data-reload-section="section-physical">Save General Examination</button>
@@ -871,7 +767,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                             <div class="card-header py-2"><strong>Other / Systemic Examinations</strong></div>
                             <div class="card-body">
                                 <label class="form-label"><strong>Other / Systemic Examinations (Single Editor)</strong></label>
-                                <textarea class="form-control" id="systemic_exam_editor" name="systemic_exam_text" rows="8"><?= esc($systemicExamText) ?></textarea>
+                                <textarea class="form-control" id="systemic_exam_editor" name="systemic_exam_text" rows="8"></textarea>
                                 <div id="systemic_save_status" class="complaint-status text-muted mt-2"></div>
                                 <div class="mt-3 d-flex justify-content-end">
                                     <button type="submit" class="btn btn-outline-success btn-sm" name="action" value="save_main" data-reload-section="section-systemic" data-save-mode="json" data-status-id="systemic_save_status">Save Systemic Examination</button>
@@ -888,25 +784,18 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                         <span class="text-muted small">Blood Hb, Blood Sugar, Renal Function, Serum Bilirubin, Urine Test</span>
                                     </div>
                                     <div class="card-body py-2">
-                                        <?php if (empty($clinicalLabRows)): ?>
-                                            <div class="text-muted small">No pathology tests found between admission and discharge dates.</div>
-                                        <?php else: ?>
-                                            <?php foreach ($clinicalLabRows as $row): ?>
-                                                <div class="form-check mb-1">
+                                                                                                                                    <div class="form-check mb-1">
                                                     <input
                                                         class="form-check-input clinical-lab-check"
                                                         type="checkbox"
                                                         name="lab_investigation_dates[]"
-                                                        value="<?= esc((string) ($row['inv_date'] ?? '')) ?>"
-                                                        <?= ! empty($row['checked']) ? 'checked' : '' ?>>
+                                                        value="2026-05-31"
+                                                        checked>
                                                     <label class="form-check-label small">
-                                                        [<?= esc((string) ($row['inv_date_label'] ?? '')) ?>]
-                                                        <?= esc((string) ($row['test_list'] ?? '')) ?>
-                                                    </label>
+                                                        [31-05-2026]
+                                                        Eosinophils,Hemoglobin,Lymphocytes,Mean Corpuscular Hemoglobin,Mean Corpuscular Hemoglobin Concentration,Mean Corpuscular Volume,Monocytes,Neutrophils,Packed Cell Volume,Platelet Count,Red Blood Cells,Total Leukocyte Count                                                    </label>
                                                 </div>
-                                            <?php endforeach; ?>
-                                        <?php endif; ?>
-                                    </div>
+                                                                                                                        </div>
                                 </div>
 
                                 <div class="card border-info mb-3">
@@ -915,58 +804,129 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                         <span class="text-muted small">Select finalized impression-based reports during this admission</span>
                                     </div>
                                     <div class="card-body py-2">
-                                        <?php if (empty($clinicalNonPathRows)): ?>
-                                            <div class="text-muted small">No non-pathology impression reports found between admission and discharge dates.</div>
-                                        <?php else: ?>
-                                            <?php foreach ($clinicalNonPathRows as $row): ?>
-                                                <div class="form-check mb-2">
-                                                    <input
-                                                        class="form-check-input clinical-nonpath-check"
-                                                        type="checkbox"
-                                                        name="non_path_investigation_ids[]"
-                                                        value="<?= (int) ($row['lab_request_id'] ?? 0) ?>"
-                                                        <?= ! empty($row['checked']) ? 'checked' : '' ?>>
-                                                    <label class="form-check-label small d-block">
-                                                        [<?= esc((string) ($row['report_date_label'] ?? '')) ?>]
-                                                        <strong><?= esc((string) ($row['modality'] ?? '')) ?></strong>
-                                                        <?= esc((string) ($row['report_name'] ?? '')) ?>
-                                                    </label>
-                                                    <div class="small text-muted ms-4">
-                                                        Impression: <?= esc((string) ($row['impression'] ?? '')) ?>
-                                                    </div>
-                                                </div>
-                                            <?php endforeach; ?>
-                                        <?php endif; ?>
-                                    </div>
+                                                                                    <div class="text-muted small">No non-pathology impression reports found between admission and discharge dates.</div>
+                                                                            </div>
                                 </div>
 
                                 <div class="row g-2">
-                                    <?php foreach ($manualInvestRows as $row): ?>
-                                        <div class="col-md-3">
-                                            <label class="form-label small"><?= esc((string) ($row['label'] ?? '')) ?></label>
-                                            <input type="text" class="form-control form-control-sm" name="manual_exam_<?= (int) ($row['id'] ?? 0) ?>" value="<?= esc((string) ($row['value'] ?? '')) ?>">
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">Hb %</label>
+                                            <input type="text" class="form-control form-control-sm" name="manual_exam_1" value="">
                                         </div>
-                                    <?php endforeach; ?>
-                                </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">TLC</label>
+                                            <input type="text" class="form-control form-control-sm" name="manual_exam_2" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">DLC</label>
+                                            <input type="text" class="form-control form-control-sm" name="manual_exam_3" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">ESR</label>
+                                            <input type="text" class="form-control form-control-sm" name="manual_exam_4" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">Mx Test</label>
+                                            <input type="text" class="form-control form-control-sm" name="manual_exam_5" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">RBS</label>
+                                            <input type="text" class="form-control form-control-sm" name="manual_exam_6" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">HbA1C</label>
+                                            <input type="text" class="form-control form-control-sm" name="manual_exam_7" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">B.group &amp; RH factor</label>
+                                            <input type="text" class="form-control form-control-sm" name="manual_exam_8" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">BT</label>
+                                            <input type="text" class="form-control form-control-sm" name="manual_exam_9" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">CT</label>
+                                            <input type="text" class="form-control form-control-sm" name="manual_exam_10" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">PT</label>
+                                            <input type="text" class="form-control form-control-sm" name="manual_exam_11" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">LFT</label>
+                                            <input type="text" class="form-control form-control-sm" name="manual_exam_12" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">KFT</label>
+                                            <input type="text" class="form-control form-control-sm" name="manual_exam_13" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">S.Electrolytes</label>
+                                            <input type="text" class="form-control form-control-sm" name="manual_exam_14" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">S.Amylase</label>
+                                            <input type="text" class="form-control form-control-sm" name="manual_exam_15" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">S.Lipase</label>
+                                            <input type="text" class="form-control form-control-sm" name="manual_exam_16" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">HBsAG</label>
+                                            <input type="text" class="form-control form-control-sm" name="manual_exam_17" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">HCV</label>
+                                            <input type="text" class="form-control form-control-sm" name="manual_exam_18" value="">
+                                        </div>
+                                                                            <div class="col-md-3">
+                                            <label class="form-label small">HIV I &amp; II</label>
+                                            <input type="text" class="form-control form-control-sm" name="manual_exam_19" value="">
+                                        </div>
+                                                                    </div>
 
                                 <hr>
 
                                 <div class="row g-2">
-                                    <?php foreach ($specialInvestRows as $row): ?>
-                                        <div class="col-md-12">
-                                            <label class="form-label small"><?= esc((string) ($row['label'] ?? '')) ?></label>
-                                            <input type="text" class="form-control form-control-sm" name="special_exam_<?= (int) ($row['id'] ?? 0) ?>" value="<?= esc((string) ($row['value'] ?? '')) ?>">
+                                                                            <div class="col-md-12">
+                                            <label class="form-label small">X-ray</label>
+                                            <input type="text" class="form-control form-control-sm" name="special_exam_1" value="">
                                         </div>
-                                    <?php endforeach; ?>
-                                </div>
+                                                                            <div class="col-md-12">
+                                            <label class="form-label small">E C G</label>
+                                            <input type="text" class="form-control form-control-sm" name="special_exam_2" value="">
+                                        </div>
+                                                                            <div class="col-md-12">
+                                            <label class="form-label small">Sonography : USG</label>
+                                            <input type="text" class="form-control form-control-sm" name="special_exam_3" value="">
+                                        </div>
+                                                                            <div class="col-md-12">
+                                            <label class="form-label small">C T Scan</label>
+                                            <input type="text" class="form-control form-control-sm" name="special_exam_4" value="">
+                                        </div>
+                                                                            <div class="col-md-12">
+                                            <label class="form-label small">M R I</label>
+                                            <input type="text" class="form-control form-control-sm" name="special_exam_5" value="">
+                                        </div>
+                                                                            <div class="col-md-12">
+                                            <label class="form-label small">Urine (R/M)</label>
+                                            <input type="text" class="form-control form-control-sm" name="special_exam_9" value="">
+                                        </div>
+                                                                            <div class="col-md-12">
+                                            <label class="form-label small">Other Investigations</label>
+                                            <input type="text" class="form-control form-control-sm" name="special_exam_10" value="">
+                                        </div>
+                                                                    </div>
 
                                 <div class="mt-3">
                                     <label class="form-label">Other Examinations / Provisional Diagnosis</label>
-                                    <textarea class="form-control" name="other_exam_text" rows="4"><?= esc($otherExamText) ?></textarea>
+                                    <textarea class="form-control" name="other_exam_text" rows="4"></textarea>
                                 </div>
 
-                                <input type="hidden" name="lab_investigation_list" id="lab_investigation_list" value="<?= esc($labInvestigationList) ?>">
-                                <input type="hidden" name="non_path_investigation_list" id="non_path_investigation_list" value="<?= esc($nonPathInvestigationList) ?>">
+                                <input type="hidden" name="lab_investigation_list" id="lab_investigation_list" value="2026-05-31">
+                                <input type="hidden" name="non_path_investigation_list" id="non_path_investigation_list" value="">
 
                                 <div class="mt-3 d-flex justify-content-end">
                                     <button type="submit" class="btn btn-outline-success btn-sm" name="action" value="save_main" data-reload-section="section-investigation">Save Clinical Investigation</button>
@@ -980,33 +940,91 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                     <label class="form-label">Department</label>
                                     <select name="dept_id" class="form-select">
                                         <option value="0">Select</option>
-                                        <?php foreach ($departmentRows as $row): ?>
-                                            <?php $deptId = (int) ($row['iId'] ?? 0); ?>
-                                            <option value="<?= $deptId ?>" <?= $deptId === (int) ($master['dept_id'] ?? 0) ? 'selected' : '' ?>>
-                                                <?= esc((string) ($row['vName'] ?? '')) ?>
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
+                                                                                                                                <option value="0" >
+                                                                                             </option>
+                                                                                                                                <option value="19" >
+                                                Anesthesiology                                            </option>
+                                                                                                                                <option value="2" selected>
+                                                Cardiology                                            </option>
+                                                                                                                                <option value="12" >
+                                                Dermatology                                            </option>
+                                                                                                                                <option value="1" >
+                                                Emergency Department (ED)                                            </option>
+                                                                                                                                <option value="17" >
+                                                Endocrinology                                            </option>
+                                                                                                                                <option value="23" >
+                                                ENT (Otorhinolaryngology)                                            </option>
+                                                                                                                                <option value="13" >
+                                                Gastroenterology                                            </option>
+                                                                                                                                <option value="27" >
+                                                General Medicine                                            </option>
+                                                                                                                                <option value="10" >
+                                                General Surgery                                            </option>
+                                                                                                                                <option value="24" >
+                                                Hematology                                            </option>
+                                                                                                                                <option value="21" >
+                                                Infectious Diseases                                            </option>
+                                                                                                                                <option value="20" >
+                                                Intensive Care Unit (ICU)                                            </option>
+                                                                                                                                <option value="14" >
+                                                Nephrology                                            </option>
+                                                                                                                                <option value="3" >
+                                                Neurology                                            </option>
+                                                                                                                                <option value="5" >
+                                                Obstetrics and Gynecology                                            </option>
+                                                                                                                                <option value="6" >
+                                                Oncology                                            </option>
+                                                                                                                                <option value="22" >
+                                                Ophthalmology                                            </option>
+                                                                                                                                <option value="7" >
+                                                Orthopedics                                            </option>
+                                                                                                                                <option value="9" >
+                                                Pathology                                            </option>
+                                                                                                                                <option value="4" >
+                                                Pediatrics                                            </option>
+                                                                                                                                <option value="25" >
+                                                Physical Medicine and Rehab                                            </option>
+                                                                                                                                <option value="16" >
+                                                Psychiatry                                            </option>
+                                                                                                                                <option value="15" >
+                                                Pulmonology                                            </option>
+                                                                                                                                <option value="8" >
+                                                Radiology                                            </option>
+                                                                                                                                <option value="18" >
+                                                Rheumatology                                            </option>
+                                                                                                                                <option value="11" >
+                                                Urology                                            </option>
+                                                                            </select>
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label">Patient Status</label>
                                     <select name="discarge_patient_status" class="form-select">
                                         <option value="0">Select</option>
-                                        <?php foreach ($statusRows as $row): ?>
-                                            <?php $statusId = (int) ($row['id'] ?? 0); ?>
-                                            <option value="<?= $statusId ?>" <?= $statusId === (int) ($master['discarge_patient_status'] ?? 0) ? 'selected' : '' ?>>
-                                                <?= esc((string) ($row['status_desc'] ?? '')) ?>
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
+                                                                                                                                <option value="0" >
+                                                Status Pending                                            </option>
+                                                                                                                                <option value="1" selected>
+                                                Improved/ Recovered                                            </option>
+                                                                                                                                <option value="2" >
+                                                LAMA                                            </option>
+                                                                                                                                <option value="3" >
+                                                Referred                                            </option>
+                                                                                                                                <option value="4" >
+                                                Satisfactory                                            </option>
+                                                                                                                                <option value="5" >
+                                                Expired                                            </option>
+                                                                                                                                <option value="6" >
+                                                Admission Cancelled                                            </option>
+                                                                                                                                <option value="7" >
+                                                Discharge on Request                                            </option>
+                                                                            </select>
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label">Discharge Date</label>
-                                    <input type="date" class="form-control" name="discharge_date" value="<?= esc($dischargeDateValue) ?>">
+                                    <input type="date" class="form-control" name="discharge_date" value="2026-06-05">
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label">Discharge Time</label>
-                                    <input type="time" class="form-control" name="discharge_time" value="<?= esc($dischargeTimeValue) ?>">
+                                    <input type="time" class="form-control" name="discharge_time" value="05:30">
                                 </div>
                                 <div class="col-md-12 d-flex justify-content-end">
                                     <button type="submit" class="btn btn-outline-success btn-sm" name="action" value="save_main" data-reload-section="section-admission">Save Admission/Discharge</button>
@@ -1024,53 +1042,40 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                 <table class="table table-sm table-bordered">
                                     <thead><tr><th>Name</th><th>Date</th><th>Remark</th><th style="width:90px;">Action</th></tr></thead>
                                     <tbody>
-                                        <?php if (empty($surgeryRows)): ?>
-                                            <tr><td colspan="4" class="text-muted text-center">No surgery rows.</td></tr>
-                                        <?php else: foreach ($surgeryRows as $row): ?>
-                                            <tr>
-                                                <td><?= esc((string) ($row['surgery_name'] ?? '')) ?></td>
-                                                <td><?= esc((string) ($row['surgery_date'] ?? '')) ?></td>
-                                                <td><?= esc((string) ($row['surgery_remark'] ?? '')) ?></td>
-                                                <td><button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_surgery" onclick="document.getElementById('surgery_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';">Remove</button></td>
+                                                                                    <tr>
+                                                <td>LML</td>
+                                                <td>2026-06-04</td>
+                                                <td></td>
+                                                <td><button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_surgery" onclick="document.getElementById('surgery_remove_id').value='1226';">Remove</button></td>
                                             </tr>
-                                        <?php endforeach; endif; ?>
-                                    </tbody>
+                                                                            </tbody>
                                 </table>
                                 <input type="hidden" name="surgery_remove_id" id="surgery_remove_id" value="0">
                                 <input type="hidden" name="new_surgery_master_id" id="new_surgery_master_id" value="0">
                                 <div class="row g-2 mb-3">
-                                    <div class="col-md-5 position-relative">
-                                        <input type="text" class="form-control" name="new_surgery_name" id="new_surgery_name" autocomplete="off" placeholder="Surgery name (type to search master)">
-                                        <div id="discharge_surgery_dropdown" class="dropdown-menu" style="display:none;position:absolute;z-index:1050;max-height:250px;overflow-y:auto;width:100%;"></div>
-                                    </div>
+                                    <div class="col-md-5"><input type="text" class="form-control" name="new_surgery_name" id="new_surgery_name" list="discharge_surgery_suggest" autocomplete="off" placeholder="Surgery name"></div>
                                     <div class="col-md-3"><input type="date" class="form-control" name="new_surgery_date"></div>
                                     <div class="col-md-3"><input type="text" class="form-control" name="new_surgery_remark" placeholder="Remark"></div>
                                     <div class="col-md-1"><button type="submit" class="btn btn-primary btn-sm" name="action" value="add_surgery">+ADD</button></div>
                                 </div>
+                                <datalist id="discharge_surgery_suggest"></datalist>
 
                                 <h6>Procedure</h6>
                                 <table class="table table-sm table-bordered">
                                     <thead><tr><th>Name</th><th>Date</th><th>Remark</th><th style="width:90px;">Action</th></tr></thead>
                                     <tbody>
-                                        <?php if (empty($procedureRows)): ?>
-                                            <tr><td colspan="4" class="text-muted text-center">No procedure rows.</td></tr>
-                                        <?php else: foreach ($procedureRows as $row): ?>
-                                            <tr>
-                                                <td><?= esc((string) ($row['procedure_name'] ?? '')) ?></td>
-                                                <td><?= esc((string) ($row['procedure_date'] ?? '')) ?></td>
-                                                <td><?= esc((string) ($row['procedure_remark'] ?? '')) ?></td>
-                                                <td><button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_procedure" onclick="document.getElementById('procedure_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';">Remove</button></td>
+                                                                                    <tr>
+                                                <td>Procedure TEST</td>
+                                                <td>2026-06-03</td>
+                                                <td></td>
+                                                <td><button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_procedure" onclick="document.getElementById('procedure_remove_id').value='2041';">Remove</button></td>
                                             </tr>
-                                        <?php endforeach; endif; ?>
-                                    </tbody>
+                                                                            </tbody>
                                 </table>
                                 <input type="hidden" name="procedure_remove_id" id="procedure_remove_id" value="0">
                                 <input type="hidden" name="new_procedure_master_id" id="new_procedure_master_id" value="0">
                                 <div class="row g-2">
-                                    <div class="col-md-5 position-relative">
-                                        <input type="text" class="form-control" name="new_procedure_name" id="new_procedure_name" autocomplete="off" placeholder="Procedure name (type to search master)">
-                                        <div id="discharge_procedure_dropdown" class="dropdown-menu" style="display:none;position:absolute;z-index:1050;max-height:250px;overflow-y:auto;width:100%;"></div>
-                                    </div>
+                                    <div class="col-md-5"><input type="text" class="form-control" name="new_procedure_name" id="new_procedure_name" list="discharge_procedure_suggest" autocomplete="off" placeholder="Procedure name"></div>
                                     <div class="col-md-3"><input type="date" class="form-control" name="new_procedure_date"></div>
                                     <div class="col-md-3"><input type="text" class="form-control" name="new_procedure_remark" placeholder="Remark"></div>
                                     <div class="col-md-1"><button type="submit" class="btn btn-primary btn-sm" name="action" value="add_procedure">+ADD</button></div>
@@ -1089,16 +1094,8 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                 <table class="table table-sm table-bordered">
                                     <thead><tr><th>Diagnosis</th><th>Remark</th><th style="width:90px;">Action</th></tr></thead>
                                     <tbody>
-                                        <?php if (empty($diagnosisRows)): ?>
-                                            <tr><td colspan="3" class="text-muted text-center">No diagnosis rows.</td></tr>
-                                        <?php else: foreach ($diagnosisRows as $row): ?>
-                                            <tr>
-                                                <td><?= esc((string) ($row['comp_report'] ?? '')) ?></td>
-                                                <td><?= esc((string) ($row['comp_remark'] ?? '')) ?></td>
-                                                <td><button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_diagnosis" onclick="document.getElementById('diagnosis_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';">Remove</button></td>
-                                            </tr>
-                                        <?php endforeach; endif; ?>
-                                    </tbody>
+                                                                                    <tr><td colspan="3" class="text-muted text-center">No diagnosis rows.</td></tr>
+                                                                            </tbody>
                                 </table>
                                 <input type="hidden" name="diagnosis_remove_id" id="diagnosis_remove_id" value="0">
                                 <div class="row g-2">
@@ -1118,7 +1115,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                         <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-template-load" data-section="diagnosis_remark" data-target="diagnosis_remark">Load Template</button>
                                         <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-template-save" data-section="diagnosis_remark" data-target="diagnosis_remark">Save as Template</button>
                                     </label>
-                                    <textarea class="form-control" name="diagnosis_remark" id="diagnosis_remark" rows="3"><?= esc((string) ($diagnosis_remark ?? '')) ?></textarea>
+                                    <textarea class="form-control" name="diagnosis_remark" id="diagnosis_remark" rows="3">test 2</textarea>
                                 </div>
 
                                 <div class="mt-3 d-flex justify-content-end">
@@ -1130,7 +1127,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                         <div class="card border-secondary mt-3" id="section-summary-invest">
                             <div class="card-header py-2"><strong>Summary of key investigation during Hospitalization</strong></div>
                             <div class="card-body">
-                                <textarea class="form-control" name="inhos_remark" rows="4"><?= esc($inhosRemark) ?></textarea>
+                                <textarea class="form-control" name="inhos_remark" rows="4"></textarea>
                                 <div class="mt-3 d-flex justify-content-end">
                                     <button type="submit" class="btn btn-outline-success btn-sm" name="action" value="save_main" data-reload-section="section-summary-invest">Save Summary Investigation</button>
                                 </div>
@@ -1143,16 +1140,8 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                 <table class="table table-sm table-bordered">
                                     <thead><tr><th>Course</th><th>Remark</th><th style="width:90px;">Action</th></tr></thead>
                                     <tbody>
-                                        <?php if (empty($courseRows)): ?>
-                                            <tr><td colspan="3" class="text-muted text-center">No course rows.</td></tr>
-                                        <?php else: foreach ($courseRows as $row): ?>
-                                            <tr>
-                                                <td><?= esc((string) ($row['comp_report'] ?? '')) ?></td>
-                                                <td><?= esc((string) ($row['comp_remark'] ?? '')) ?></td>
-                                                <td><button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_course" onclick="document.getElementById('course_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';">Remove</button></td>
-                                            </tr>
-                                        <?php endforeach; endif; ?>
-                                    </tbody>
+                                                                                    <tr><td colspan="3" class="text-muted text-center">No course rows.</td></tr>
+                                                                            </tbody>
                                 </table>
                                 <input type="hidden" name="course_remove_id" id="course_remove_id" value="0">
                                 <div class="row g-2">
@@ -1171,7 +1160,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                         <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-template-load" data-section="course_remark" data-target="course_remark">Load Template</button>
                                         <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-template-save" data-section="course_remark" data-target="course_remark">Save as Template</button>
                                     </label>
-                                    <textarea class="form-control" name="course_remark" id="course_remark" rows="3"><?= esc((string) ($course_remark ?? '')) ?></textarea>
+                                    <textarea class="form-control" name="course_remark" id="course_remark" rows="3"></textarea>
                                 </div>
 
                                 <div class="mt-3 d-flex justify-content-end">
@@ -1183,15 +1172,107 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                         <div class="card border-secondary mt-3" id="section-condition">
                             <div class="card-header py-2"><strong>Condition at the time of Discharge</strong></div>
                             <div class="card-body row g-2">
-                                <?php if (empty($dischargeConditionRows)): ?>
-                                    <div class="col-12 text-muted small">No discharge condition master rows found.</div>
-                                <?php else: foreach ($dischargeConditionRows as $row): ?>
-                                    <div class="col-md-3">
-                                        <label class="form-label small"><?= esc((string) ($row['label'] ?? '')) ?></label>
-                                        <input type="text" class="form-control form-control-sm" name="dis_exam_<?= (int) ($row['id'] ?? 0) ?>" value="<?= esc((string) ($row['value'] ?? '')) ?>">
+                                                                    <div class="col-md-3">
+                                        <label class="form-label small">Pulse /min</label>
+                                        <input type="text" class="form-control form-control-sm" name="dis_exam_1" value="80">
                                     </div>
-                                <?php endforeach; endif; ?>
-                                <div class="col-md-12 d-flex justify-content-end">
+                                                                    <div class="col-md-3">
+                                        <label class="form-label small">Respiration /min</label>
+                                        <input type="text" class="form-control form-control-sm" name="dis_exam_2" value="30">
+                                    </div>
+                                                                    <div class="col-md-3">
+                                        <label class="form-label small">BP mmHg</label>
+                                        <input type="text" class="form-control form-control-sm" name="dis_exam_3" value="80/120">
+                                    </div>
+                                                                    <div class="col-md-3">
+                                        <label class="form-label small">Height cm</label>
+                                        <input type="text" class="form-control form-control-sm" name="dis_exam_4" value="">
+                                    </div>
+                                                                    <div class="col-md-3">
+                                        <label class="form-label small">Weight kg</label>
+                                        <input type="text" class="form-control form-control-sm" name="dis_exam_5" value="">
+                                    </div>
+                                                                    <div class="col-md-3">
+                                        <label class="form-label small">Pallor</label>
+                                        <input type="text" class="form-control form-control-sm" name="dis_exam_6" value="">
+                                    </div>
+                                                                    <div class="col-md-3">
+                                        <label class="form-label small">Jaundice/Icterus</label>
+                                        <input type="text" class="form-control form-control-sm" name="dis_exam_7" value="">
+                                    </div>
+                                                                    <div class="col-md-3">
+                                        <label class="form-label small">Cyanosis</label>
+                                        <input type="text" class="form-control form-control-sm" name="dis_exam_8" value="">
+                                    </div>
+                                                                    <div class="col-md-3">
+                                        <label class="form-label small">Clubbing</label>
+                                        <input type="text" class="form-control form-control-sm" name="dis_exam_9" value="">
+                                    </div>
+                                                                    <div class="col-md-3">
+                                        <label class="form-label small">SPO2</label>
+                                        <input type="text" class="form-control form-control-sm" name="dis_exam_10" value="95">
+                                    </div>
+                                                                    <div class="col-md-3">
+                                        <label class="form-label small">RBS</label>
+                                        <input type="text" class="form-control form-control-sm" name="dis_exam_11" value="">
+                                    </div>
+                                                                    <div class="col-md-3">
+                                        <label class="form-label small">Temp F</label>
+                                        <input type="text" class="form-control form-control-sm" name="dis_exam_12" value="">
+                                    </div>
+                                                                    <div class="col-md-3">
+                                        <label class="form-label small">Edema</label>
+                                        <input type="text" class="form-control form-control-sm" name="dis_exam_13" value="">
+                                    </div>
+                                                                    <div class="col-md-3">
+                                        <label class="form-label small">JVP</label>
+                                        <input type="text" class="form-control form-control-sm" name="dis_exam_14" value="">
+                                    </div>
+                                                                    <div class="col-md-3">
+                                        <label class="form-label small">Sensorium</label>
+                                        <input type="text" class="form-control form-control-sm" name="dis_exam_15" value="">
+                                    </div>
+                                                                    <div class="col-md-3">
+                                        <label class="form-label small">Oedema</label>
+                                        <input type="text" class="form-control form-control-sm" name="dis_exam_16" value="">
+                                    </div>
+                                                                    <div class="col-md-3">
+                                        <label class="form-label small">CNS</label>
+                                        <input type="text" class="form-control form-control-sm" name="dis_exam_17" value="">
+                                    </div>
+                                                                    <div class="col-md-3">
+                                        <label class="form-label small">CVS</label>
+                                        <input type="text" class="form-control form-control-sm" name="dis_exam_18" value="">
+                                    </div>
+                                                                    <div class="col-md-3">
+                                        <label class="form-label small">Lymphadenopathy</label>
+                                        <input type="text" class="form-control form-control-sm" name="dis_exam_19" value="">
+                                    </div>
+                                                                    <div class="col-md-3">
+                                        <label class="form-label small">Pupils</label>
+                                        <input type="text" class="form-control form-control-sm" name="dis_exam_20" value="">
+                                    </div>
+                                                                    <div class="col-md-3">
+                                        <label class="form-label small">Chest</label>
+                                        <input type="text" class="form-control form-control-sm" name="dis_exam_21" value="">
+                                    </div>
+                                                                    <div class="col-md-3">
+                                        <label class="form-label small">GCS</label>
+                                        <input type="text" class="form-control form-control-sm" name="dis_exam_22" value="">
+                                    </div>
+                                                                    <div class="col-md-3">
+                                        <label class="form-label small">P/A</label>
+                                        <input type="text" class="form-control form-control-sm" name="dis_exam_23" value="">
+                                    </div>
+                                                                    <div class="col-md-3">
+                                        <label class="form-label small">Neurological Deficit</label>
+                                        <input type="text" class="form-control form-control-sm" name="dis_exam_24" value="">
+                                    </div>
+                                                                    <div class="col-md-3">
+                                        <label class="form-label small">HC inch</label>
+                                        <input type="text" class="form-control form-control-sm" name="dis_exam_25" value="">
+                                    </div>
+                                                                <div class="col-md-12 d-flex justify-content-end">
                                     <button type="submit" class="btn btn-outline-success btn-sm" name="action" value="save_main" data-reload-section="section-condition">Save Discharge Condition</button>
                                 </div>
                             </div>
@@ -1215,22 +1296,8 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                 <table class="table table-sm table-bordered">
                                     <thead><tr><th>Medicine</th><th>Type</th><th>Dose</th><th>When</th><th>Freq</th><th>Days</th><th>Qty</th><th>Remark</th><th style="width:90px;">Action</th></tr></thead>
                                     <tbody>
-                                        <?php if (empty($medicineRows)): ?>
-                                            <tr><td colspan="9" class="text-muted text-center">No medicine added</td></tr>
-                                        <?php else: foreach ($medicineRows as $row): ?>
-                                            <tr>
-                                                <td><?= esc((string) ($row['med_name'] ?? '')) ?></td>
-                                                <td><?= esc((string) ($row['med_type'] ?? '')) ?></td>
-                                                <td><?= esc((string) ($row['dosage'] ?? '')) ?></td>
-                                                <td><?= esc((string) ($row['dosage_when'] ?? '')) ?></td>
-                                                <td><?= esc((string) ($row['dosage_freq'] ?? '')) ?></td>
-                                                <td><?= esc((string) ($row['no_of_days'] ?? '')) ?></td>
-                                                <td><?= esc((string) ($row['qty'] ?? '')) ?></td>
-                                                <td><?= esc((string) ($row['remark'] ?? '')) ?></td>
-                                                <td><button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_drug" data-reload-section="section-medicine" onclick="document.getElementById('drug_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';document.getElementById('drug_remove_source').value='<?= esc((string) ($row['source'] ?? 'legacy')) ?>';">Remove</button></td>
-                                            </tr>
-                                        <?php endforeach; endif; ?>
-                                    </tbody>
+                                                                                    <tr><td colspan="9" class="text-muted text-center">No medicine added</td></tr>
+                                                                            </tbody>
                                 </table>
                                 <input type="hidden" name="drug_remove_id" id="drug_remove_id" value="0">
 
@@ -1290,35 +1357,161 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                 <div class="col-md-12">
                                     <label class="form-label mb-1">Dietary Advice</label>
                                     <div class="border rounded p-2" style="max-height: 220px; overflow-y: auto;">
-                                        <?php if (empty($instructionFoodRows)): ?>
-                                            <div class="text-muted small">No dietary advice master found.</div>
-                                        <?php else: ?>
-                                            <?php foreach ($instructionFoodRows as $food): ?>
-                                                <?php
-                                                    $foodId = (int) ($food['id'] ?? 0);
-                                                    $foodShort = trim((string) ($food['food_short'] ?? ''));
-                                                    $foodDesc = trim((string) ($food['food_desc'] ?? ''));
-                                                    $foodLang = trim((string) ($food['food_desc_lang'] ?? ''));
-                                                    $labelText = $foodShort !== '' ? $foodShort : $foodDesc;
-                                                ?>
-                                                <div class="form-check mb-1">
+                                                                                                                                                                                    <div class="form-check mb-1">
                                                     <input
                                                         class="form-check-input instruction-food-item"
                                                         type="checkbox"
                                                         name="instruction_food_ids[]"
-                                                        id="instruction_food_<?= $foodId ?>"
-                                                        value="<?= $foodId ?>"
-                                                        data-food-short="<?= esc($foodShort !== '' ? $foodShort : $foodDesc) ?>"
-                                                        data-food-desc="<?= esc($foodDesc !== '' ? $foodDesc : $foodShort) ?>"
-                                                            data-food-lang="<?= esc($foodLang) ?>"
-                                                        <?= ! empty($instructionFoodIds[$foodId]) ? 'checked' : '' ?>>
-                                                    <label class="form-check-label" for="instruction_food_<?= $foodId ?>">
-                                                        <?= esc($labelText) ?>
-                                                    </label>
+                                                        id="instruction_food_11"
+                                                        value="11"
+                                                        data-food-short="DIET AS ADVICE"
+                                                        data-food-desc="DIET AS ADVICE"
+                                                            data-food-lang=""
+                                                        >
+                                                    <label class="form-check-label" for="instruction_food_11">
+                                                        DIET AS ADVICE                                                    </label>
                                                 </div>
-                                            <?php endforeach; ?>
-                                        <?php endif; ?>
-                                    </div>
+                                                                                                                                            <div class="form-check mb-1">
+                                                    <input
+                                                        class="form-check-input instruction-food-item"
+                                                        type="checkbox"
+                                                        name="instruction_food_ids[]"
+                                                        id="instruction_food_12"
+                                                        value="12"
+                                                        data-food-short="Eat Nutritious diet,Stay away from smoking and alcohol altogether."
+                                                        data-food-desc="Eat Nutritious diet,Stay away from smoking and alcohol altogether."
+                                                            data-food-lang="पौष्टिक आहार लें, धूम्रपान और शराब से पूरी तरह दूर रहें।"
+                                                        >
+                                                    <label class="form-check-label" for="instruction_food_12">
+                                                        Eat Nutritious diet,Stay away from smoking and alcohol altogether.                                                    </label>
+                                                </div>
+                                                                                                                                            <div class="form-check mb-1">
+                                                    <input
+                                                        class="form-check-input instruction-food-item"
+                                                        type="checkbox"
+                                                        name="instruction_food_ids[]"
+                                                        id="instruction_food_13"
+                                                        value="13"
+                                                        data-food-short="Use appropriate medicine as Prescribed."
+                                                        data-food-desc="Use appropriate medicine as Prescribed."
+                                                            data-food-lang="निर्धारित अनुसार उचित दवा का उपयोग करें।"
+                                                        checked>
+                                                    <label class="form-check-label" for="instruction_food_13">
+                                                        Use appropriate medicine as Prescribed.                                                    </label>
+                                                </div>
+                                                                                                                                            <div class="form-check mb-1">
+                                                    <input
+                                                        class="form-check-input instruction-food-item"
+                                                        type="checkbox"
+                                                        name="instruction_food_ids[]"
+                                                        id="instruction_food_14"
+                                                        value="14"
+                                                        data-food-short="Hydration"
+                                                        data-food-desc="Drink at least 8–10 glasses of water daily unless restricted by your doctor."
+                                                            data-food-lang="जब तक कि आपके डॉक्टर द्वारा प्रतिबंधित न किया गया हो, प्रतिदिन कम से कम 8-10 गिलास पानी पिएं।"
+                                                        >
+                                                    <label class="form-check-label" for="instruction_food_14">
+                                                        Hydration                                                    </label>
+                                                </div>
+                                                                                                                                            <div class="form-check mb-1">
+                                                    <input
+                                                        class="form-check-input instruction-food-item"
+                                                        type="checkbox"
+                                                        name="instruction_food_ids[]"
+                                                        id="instruction_food_15"
+                                                        value="15"
+                                                        data-food-short="Balanced Meals"
+                                                        data-food-desc="Incorporate a mix of carbohydrates, proteins, and healthy fats in every meal."
+                                                            data-food-lang="प्रत्येक भोजन में कार्बोहाइड्रेट, प्रोटीन और स्वस्थ वसा का मिश्रण शामिल करें।"
+                                                        >
+                                                    <label class="form-check-label" for="instruction_food_15">
+                                                        Balanced Meals                                                    </label>
+                                                </div>
+                                                                                                                                            <div class="form-check mb-1">
+                                                    <input
+                                                        class="form-check-input instruction-food-item"
+                                                        type="checkbox"
+                                                        name="instruction_food_ids[]"
+                                                        id="instruction_food_16"
+                                                        value="16"
+                                                        data-food-short="Fruits and Vegetables"
+                                                        data-food-desc="Consume a variety of fresh fruits and vegetables daily to ensure adequate vitamins and minerals."
+                                                            data-food-lang="पर्याप्त विटामिन और खनिज सुनिश्चित करने के लिए प्रतिदिन विभिन्न प्रकार के ताजे फल और सब्जियों का सेवन करें।"
+                                                        checked>
+                                                    <label class="form-check-label" for="instruction_food_16">
+                                                        Fruits and Vegetables                                                    </label>
+                                                </div>
+                                                                                                                                            <div class="form-check mb-1">
+                                                    <input
+                                                        class="form-check-input instruction-food-item"
+                                                        type="checkbox"
+                                                        name="instruction_food_ids[]"
+                                                        id="instruction_food_17"
+                                                        value="17"
+                                                        data-food-short="Small, Frequent Meals"
+                                                        data-food-desc="Eat smaller portions 5–6 times a day instead of three large meals to avoid overburdening the digestive system."
+                                                            data-food-lang="पाचन तंत्र पर अधिक बोझ से बचने के लिए तीन बार अधिक भोजन करने के बजाय दिन में 5-6 बार छोटी मात्रा में भोजन करें।"
+                                                        >
+                                                    <label class="form-check-label" for="instruction_food_17">
+                                                        Small, Frequent Meals                                                    </label>
+                                                </div>
+                                                                                                                                            <div class="form-check mb-1">
+                                                    <input
+                                                        class="form-check-input instruction-food-item"
+                                                        type="checkbox"
+                                                        name="instruction_food_ids[]"
+                                                        id="instruction_food_18"
+                                                        value="18"
+                                                        data-food-short="Avoid Processed Foods"
+                                                        data-food-desc="Limit intake of sugary, salty, and fried foods. Avoid packaged snacks and beverages high in preservatives."
+                                                            data-food-lang="मीठे, नमकीन और तले हुए खाद्य पदार्थों का सेवन सीमित करें। डिब्बाबंद स्नैक्स और ज़्यादा प्रिज़र्वेटिव वाले पेय पदार्थों से बचें।"
+                                                        >
+                                                    <label class="form-check-label" for="instruction_food_18">
+                                                        Avoid Processed Foods                                                    </label>
+                                                </div>
+                                                                                                                                            <div class="form-check mb-1">
+                                                    <input
+                                                        class="form-check-input instruction-food-item"
+                                                        type="checkbox"
+                                                        name="instruction_food_ids[]"
+                                                        id="instruction_food_19"
+                                                        value="19"
+                                                        data-food-short="Special Considerations"
+                                                        data-food-desc="If you have specific conditions like diabetes, hypertension, or kidney issues, follow the dietary restrictions advised by your healthcare provider. For post-surgical recovery, include protein-rich foods like eggs, lentils, and dairy products to promote healing."
+                                                            data-food-lang="यदि आपको मधुमेह, उच्च रक्तचाप या किडनी संबंधी समस्या जैसी कोई विशेष समस्या है, तो अपने स्वास्थ्य सेवा प्रदाता द्वारा बताए गए आहार प्रतिबंधों का पालन करें। सर्जरी के बाद ठीक होने के लिए, उपचार को बढ़ावा देने के लिए अंडे, दाल और डेयरी उत्पादों जैसे प्रोटीन युक्त खाद्य पदार्थों को शामिल करें।"
+                                                        checked>
+                                                    <label class="form-check-label" for="instruction_food_19">
+                                                        Special Considerations                                                    </label>
+                                                </div>
+                                                                                                                                            <div class="form-check mb-1">
+                                                    <input
+                                                        class="form-check-input instruction-food-item"
+                                                        type="checkbox"
+                                                        name="instruction_food_ids[]"
+                                                        id="instruction_food_20"
+                                                        value="20"
+                                                        data-food-short="Supplements"
+                                                        data-food-desc="Take any prescribed vitamins or supplements as directed by your doctor."
+                                                            data-food-lang="अपने चिकित्सक द्वारा निर्देशित कोई भी निर्धारित विटामिन या पूरक लें।"
+                                                        >
+                                                    <label class="form-check-label" for="instruction_food_20">
+                                                        Supplements                                                    </label>
+                                                </div>
+                                                                                                                                            <div class="form-check mb-1">
+                                                    <input
+                                                        class="form-check-input instruction-food-item"
+                                                        type="checkbox"
+                                                        name="instruction_food_ids[]"
+                                                        id="instruction_food_21"
+                                                        value="21"
+                                                        data-food-short="Food Safety"
+                                                        data-food-desc="Ensure all meals are freshly prepared and hygienically cooked. Avoid raw or undercooked foods to reduce the risk of infections."
+                                                            data-food-lang="सुनिश्चित करें कि सभी भोजन ताज़ा तैयार किए गए हों और स्वच्छतापूर्वक पकाए गए हों। संक्रमण के जोखिम को कम करने के लिए कच्चे या अधपके खाद्य पदार्थों से बचें।"
+                                                        >
+                                                    <label class="form-check-label" for="instruction_food_21">
+                                                        Food Safety                                                    </label>
+                                                </div>
+                                                                                                                        </div>
                                     <div class="mt-2 d-flex flex-wrap gap-2">
                                         <button type="button" class="btn btn-outline-primary btn-sm" id="btn_instruction_add_selected_food">Add Selected To Advice</button>
                                         <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_instruction_clear_food">Clear Selection</button>
@@ -1334,16 +1527,16 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
 
                                 <div class="col-md-12">
                                     <label class="form-label">Other Advice</label>
-                                    <textarea class="form-control" name="instruction_other" id="instruction_other" rows="2" placeholder="Additional custom advice..."><?= esc($instructionOther) ?></textarea>
+                                    <textarea class="form-control" name="instruction_other" id="instruction_other" rows="2" placeholder="Additional custom advice..."></textarea>
                                 </div>
 
                                 <div class="col-md-12">
                                     <label class="form-label">Discharge Instructions / Advice</label>
-                                    <textarea class="form-control" name="instruction_remark" id="instruction_remark" rows="3"><?= esc((string) ($instruction_remark ?? '')) ?></textarea>
+                                    <textarea class="form-control" name="instruction_remark" id="instruction_remark" rows="3"></textarea>
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label">Review After (days/text)</label>
-                                    <input type="text" class="form-control" name="review_after" value="<?= esc((string) ($review_after ?? '')) ?>">
+                                    <input type="text" class="form-control" name="review_after" value="">
                                 </div>
                                 <div class="col-md-12 d-flex justify-content-end">
                                     <button type="submit" class="btn btn-outline-success btn-sm" name="action" value="save_main" data-reload-section="section-instructions">Save Discharge Advice</button>
@@ -1614,8 +1807,8 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
             }
 
             return {
-                name: '<?= csrf_token() ?>',
-                value: '<?= csrf_hash() ?>'
+                name: 'csrf_test_name',
+                value: 'd592cadd744a0ee9c27e1bea9ad13abf'
             };
         }
 
@@ -1673,27 +1866,25 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
 
         function initDischargeComplaintsTable() {
             // Load existing complaints from PHP (if any)
-            <?php if (isset($complaint_rows) && is_array($complaint_rows) && !empty($complaint_rows)): ?>
-                selectedDischargeComplaints = [
-                    <?php 
-                    $itemCount = count($complaint_rows);
-                    $currentIndex = 0;
-                    foreach ($complaint_rows as $row): 
-                        $currentIndex++;
-                    ?>
-                    {
-                        id: <?= (int) ($row['id'] ?? 0) ?>,
-                        term: <?= json_encode((string) ($row['comp_report'] ?? '')) ?>,
+                            selectedDischargeComplaints = [
+                                        {
+                        id: 7225,
+                        term: "Acute rheumatic fever with acute arthritis",
                         frequency: '',
                         severity: '',
-                        duration: <?= json_encode((string) ($row['comp_remark'] ?? '')) ?>,
+                        duration: "",
                         date: ''
-                    }<?= $currentIndex < $itemCount ? ',' : '' ?>
-
-                    <?php endforeach; ?>
-                ];
-            <?php endif; ?>
-            
+                    },
+                                        {
+                        id: 7226,
+                        term: "Able to cough",
+                        frequency: '',
+                        severity: '',
+                        duration: "",
+                        date: ''
+                    }
+                                    ];
+                        
             renderDischargeComplaintTable();
         }
 
@@ -1872,7 +2063,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                         return;
                     }
 
-                    $.get('<?= base_url('Opd_prescription/complaints_search') ?>?q=' + encodeURIComponent(q), function(data) {
+                    $.get('http://localhost:8080/Opd_prescription/complaints_search?q=' + encodeURIComponent(q), function(data) {
                         complaintSuggestions = (data && data.rows) ? data.rows : [];
                         highlightedIndex = -1; // Reset on new results
                         
@@ -1910,14 +2101,6 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                 lookup.value = value;
                                 dropdown.style.display = 'none';
                                 if (btnAdd) {
-                                    btnAdd.click();
-                                }
-                            });
-                        });
-                    }, 'json');
-                });
-
-                lookup.addEventListener('keydown', function(e) {
                     var items = dropdown.querySelectorAll('.dropdown-item');
                     var isVisible = dropdown.style.display === 'block' && items.length > 0;
                     
@@ -2012,7 +2195,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                         lookup.value = '';
                     }
 
-                    // No status message needed - table update is visual confirmation
+                    setComplaintStatus('Complaint added. Edit inline if needed.', 'success');
                 });
             }
 
@@ -2035,7 +2218,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                     };
                     payload[csrf.name] = csrf.value;
 
-                    $.post('<?= base_url('Opd_prescription/complaints_ai_draft') ?>', payload, function(data) {
+                    $.post('http://localhost:8080/Opd_prescription/complaints_ai_draft', payload, function(data) {
                         if (data && data.csrfName && data.csrfHash) {
                             var csrfInput = form.querySelector('input[name="' + data.csrfName + '"]');
                             if (csrfInput) {
@@ -2075,7 +2258,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                     };
                     payload[csrf.name] = csrf.value;
 
-                    $.post('<?= base_url('Opd_prescription/clinical_autotype') ?>', payload, function(data) {
+                    $.post('http://localhost:8080/Opd_prescription/clinical_autotype', payload, function(data) {
                         if (data && data.csrfName && data.csrfHash) {
                             var csrfInput = form.querySelector('input[name="' + data.csrfName + '"]');
                             if (csrfInput) {
@@ -2102,134 +2285,6 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
             
             // Initialize table with existing data
             initDischargeComplaintsTable();
-        }
-
-        // Surgery/Procedure autocomplete with SNOMED/ICD code display
-        function initSurgeryProcedureAutocomplete() {
-            initTermAutocomplete('surgery', 'new_surgery_name', 'discharge_surgery_dropdown', 'new_surgery_master_id');
-            initTermAutocomplete('procedure', 'new_procedure_name', 'discharge_procedure_dropdown', 'new_procedure_master_id');
-        }
-
-        function initTermAutocomplete(type, inputId, dropdownId, hiddenId) {
-            var input = document.getElementById(inputId);
-            var dropdown = document.getElementById(dropdownId);
-            var hidden = document.getElementById(hiddenId);
-            if (!input || !dropdown || !hidden) return;
-
-            var searchTimer = null;
-            var highlightedIndex = -1;
-            var currentResults = [];
-
-            input.addEventListener('input', function() {
-                var q = input.value.trim();
-                highlightedIndex = -1;
-                
-                if (q.length < 2) {
-                    dropdown.style.display = 'none';
-                    return;
-                }
-
-                clearTimeout(searchTimer);
-                searchTimer = setTimeout(function() {
-                    if (!window.jQuery) return;
-                    
-                    $.get('<?= base_url('Ipd_discharge/surgery_master_lookup') ?>?type=' + type + '&q=' + encodeURIComponent(q), function(data) {
-                        currentResults = (data && data.rows) ? data.rows : [];
-                        if (!currentResults.length) {
-                            dropdown.style.display = 'none';
-                            return;
-                        }
-
-                        var html = '';
-                        currentResults.forEach(function(row) {
-                            var name = row.term_name || '';
-                            var code = row.term_code || '';
-                            var icd = row.icd_code || '';
-                            var codeDisplay = '';
-                            
-                            if (code && icd) {
-                                codeDisplay = '<span class="badge bg-info text-dark me-1">' + code + '</span><span class="badge bg-secondary">' + icd + '</span>';
-                            } else if (code) {
-                                codeDisplay = '<span class="badge bg-info text-dark">' + code + '</span>';
-                            } else if (icd) {
-                                codeDisplay = '<span class="badge bg-secondary">' + icd + '</span>';
-                            }
-
-                            html += '<div class="dropdown-item px-2 py-2" data-id="' + (row.id || 0) + '" data-name="' + name.replace(/"/g, '&quot;') + '" style="cursor:pointer;font-size:.9rem;border-bottom:1px solid #f0f0f0;">';
-                            html += '<div class="fw-semibold">' + name + '</div>';
-                            if (codeDisplay) {
-                                html += '<div class="small mt-1">' + codeDisplay + '</div>';
-                            }
-                            html += '</div>';
-                        });
-
-                        dropdown.innerHTML = html;
-                        dropdown.style.display = 'block';
-
-                        dropdown.querySelectorAll('.dropdown-item').forEach(function(item, idx) {
-                            item.addEventListener('mouseenter', function() {
-                                dropdown.querySelectorAll('.dropdown-item').forEach(function(el) {
-                                    el.style.backgroundColor = '';
-                                });
-                                this.style.backgroundColor = '#f8f9fa';
-                                highlightedIndex = idx;
-                            });
-                            item.addEventListener('mouseleave', function() {
-                                this.style.backgroundColor = '';
-                            });
-                            item.addEventListener('click', function() {
-                                var id = this.getAttribute('data-id');
-                                var name = this.getAttribute('data-name');
-                                input.value = name;
-                                hidden.value = id;
-                                dropdown.style.display = 'none';
-                            });
-                        });
-                    }, 'json');
-                }, 300);
-            });
-
-            input.addEventListener('keydown', function(e) {
-                var items = dropdown.querySelectorAll('.dropdown-item');
-                var isVisible = dropdown.style.display === 'block' && items.length > 0;
-
-                if (e.key === 'ArrowDown' && isVisible) {
-                    e.preventDefault();
-                    highlightedIndex = Math.min(highlightedIndex + 1, items.length - 1);
-                    updateHighlight(items);
-                } else if (e.key === 'ArrowUp' && isVisible) {
-                    e.preventDefault();
-                    highlightedIndex = Math.max(highlightedIndex - 1, 0);
-                    updateHighlight(items);
-                } else if (e.key === 'Enter' && isVisible) {
-                    e.preventDefault();
-                    if (highlightedIndex >= 0 && items[highlightedIndex]) {
-                        items[highlightedIndex].click();
-                    }
-                } else if (e.key === 'Escape') {
-                    dropdown.style.display = 'none';
-                    highlightedIndex = -1;
-                }
-            });
-
-            input.addEventListener('blur', function() {
-                setTimeout(function() {
-                    dropdown.style.display = 'none';
-                }, 200);
-            });
-
-            function updateHighlight(items) {
-                items.forEach(function(item, idx) {
-                    if (idx === highlightedIndex) {
-                        item.style.backgroundColor = '#007bff';
-                        item.style.color = '#fff';
-                        item.scrollIntoView({ block: 'nearest' });
-                    } else {
-                        item.style.backgroundColor = '';
-                        item.style.color = '';
-                    }
-                });
-            }
         }
 
         function setSectionStatus(id, text, level) {
@@ -2317,7 +2372,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                     return;
                 }
 
-                var url = '<?= base_url('Ipd_discharge/section_past_data') ?>?section=' + encodeURIComponent(section) + '&ipd_id=' + encodeURIComponent('<?= (int) $ipdId ?>');
+                var url = 'http://localhost:8080/Ipd_discharge/section_past_data?section=' + encodeURIComponent(section) + '&ipd_id=' + encodeURIComponent('1');
                 $.get(url, function(data) {
                     if ((data && parseInt(data.update || '0', 10)) !== 1) {
                         setNarrativeStatus(section, (data && data.error_text) ? data.error_text : 'No past data found.', 'error');
@@ -2381,7 +2436,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                 };
                 payload[csrf.name] = csrf.value;
 
-                $.post('<?= base_url('Ipd_discharge/section_template_save') ?>', payload, function(data) {
+                $.post('http://localhost:8080/Ipd_discharge/section_template_save', payload, function(data) {
                     if (data && data.csrfName && data.csrfHash) {
                         var csrfInput = form.querySelector('input[name="' + data.csrfName + '"]');
                         if (csrfInput) {
@@ -2408,7 +2463,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                     return;
                 }
 
-                var url = '<?= base_url('Ipd_discharge/section_template_list') ?>?section=' + encodeURIComponent(section);
+                var url = 'http://localhost:8080/Ipd_discharge/section_template_list?section=' + encodeURIComponent(section);
                 $.get(url, function(data) {
                     var rows = (data && data.rows) ? data.rows : [];
                     if (!rows.length) {
@@ -2488,7 +2543,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                     return;
                 }
 
-                $.get('<?= base_url('Opd_prescription/complaints_search') ?>?q=' + encodeURIComponent(q), function(data) {
+                $.get('http://localhost:8080/Opd_prescription/complaints_search?q=' + encodeURIComponent(q), function(data) {
                     suggestions = (data && data.rows) ? data.rows : [];
                     if (!suggest) {
                         return;
@@ -2541,7 +2596,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                 var payload = { text: inputVal };
                 payload[csrf.name] = csrf.value;
 
-                $.post('<?= base_url('Opd_prescription/complaints_parse') ?>', payload, function(data) {
+                $.post('http://localhost:8080/Opd_prescription/complaints_parse', payload, function(data) {
                     updateFormCsrf(form, data);
 
                     var rows = (data && data.rows) ? data.rows : [];
@@ -2606,7 +2661,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                 var payload = { text: inputVal };
                 payload[csrf.name] = csrf.value;
 
-                $.post('<?= base_url('Opd_prescription/complaints_parse') ?>', payload, function(data) {
+                $.post('http://localhost:8080/Opd_prescription/complaints_parse', payload, function(data) {
                     updateFormCsrf(form, data);
 
                     var rows = (data && data.rows) ? data.rows : [];
@@ -2623,7 +2678,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                     return;
                 }
 
-                $.get('<?= base_url('Opd_prescription/complaints_search') ?>?q=' + encodeURIComponent(q), function(data) {
+                $.get('http://localhost:8080/Opd_prescription/complaints_search?q=' + encodeURIComponent(q), function(data) {
                     suggestions = (data && data.rows) ? data.rows : [];
                     if (!suggest) {
                         return;
@@ -2700,7 +2755,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                     return;
                 }
 
-                $.get('<?= base_url('Ipd_discharge/surgery_master_lookup') ?>?type=' + encodeURIComponent(type) + '&q=' + encodeURIComponent(q), function(data) {
+                $.get('http://localhost:8080/Ipd_discharge/surgery_master_lookup?type=' + encodeURIComponent(type) + '&q=' + encodeURIComponent(q), function(data) {
                     var rows = (data && data.rows) ? data.rows : [];
                     surgeryMasterState[type] = rows;
 
@@ -2766,7 +2821,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
             function fetchMasterRows() {
                 var type = ($type.val() || 'surgery').toString();
                 var q = ($search.val() || '').toString().trim();
-                $.get('<?= base_url('Ipd_discharge/surgery_master_list') ?>?type=' + encodeURIComponent(type) + '&q=' + encodeURIComponent(q), function(data) {
+                $.get('http://localhost:8080/Ipd_discharge/surgery_master_list?type=' + encodeURIComponent(type) + '&q=' + encodeURIComponent(q), function(data) {
                     var rows = (data && data.rows) ? data.rows : [];
                     surgeryMasterState[type] = rows;
                     if (!rows.length) {
@@ -2835,7 +2890,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                 var payload = { id: id };
                 payload[csrf.name] = csrf.value;
 
-                $.post('<?= base_url('Ipd_discharge/surgery_master_delete') ?>', payload, function(data) {
+                $.post('http://localhost:8080/Ipd_discharge/surgery_master_delete', payload, function(data) {
                     updateFormCsrf(form, data);
                     if (!data || parseInt(data.update || '0', 10) !== 1) {
                         setMasterStatus((data && data.error_text) ? data.error_text : 'Unable to delete record.', 'error');
@@ -2867,7 +2922,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                 };
                 payload[csrf.name] = csrf.value;
 
-                $.post('<?= base_url('Ipd_discharge/surgery_master_save') ?>', payload, function(data) {
+                $.post('http://localhost:8080/Ipd_discharge/surgery_master_save', payload, function(data) {
                     updateFormCsrf(form, data);
                     if (!data || parseInt(data.update || '0', 10) !== 1) {
                         setMasterStatus((data && data.error_text) ? data.error_text : 'Unable to save record.', 'error');
@@ -2884,8 +2939,8 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
         }
 
         function initSurgeryTools(form) {
-            // Surgery/Procedure autocomplete now handled by initSurgeryProcedureAutocomplete()
-            // Old bindSurgeryTermLookup removed - using custom dropdown instead of datalist
+            bindSurgeryTermLookup(form, 'surgery', 'new_surgery_name', 'discharge_surgery_suggest', 'new_surgery_master_id', 'discharge_surgery_status');
+            bindSurgeryTermLookup(form, 'procedure', 'new_procedure_name', 'discharge_procedure_suggest', 'new_procedure_master_id', 'discharge_surgery_status');
             initSurgeryMasterCrud(form);
         }
 
@@ -2919,7 +2974,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                     return;
                 }
 
-                $.get('<?= base_url('Ipd_discharge/diagnosis_icd_lookup') ?>?q=' + encodeURIComponent(q), function(data) {
+                $.get('http://localhost:8080/Ipd_discharge/diagnosis_icd_lookup?q=' + encodeURIComponent(q), function(data) {
                     suggestions = (data && data.rows) ? data.rows : [];
                     var html = '';
                     suggestions.forEach(function(row) {
@@ -2973,7 +3028,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                     var payload = {};
                     payload[csrf.name] = csrf.value;
 
-                    $.post('<?= base_url('Ipd_discharge/diagnosis_icd_seed_starter') ?>', payload, function(data) {
+                    $.post('http://localhost:8080/Ipd_discharge/diagnosis_icd_seed_starter', payload, function(data) {
                         updateFormCsrf(form, data);
                         if (!data || parseInt(data.update || '0', 10) !== 1) {
                             setSectionStatus('discharge_diagnosis_status', (data && data.error_text) ? data.error_text : 'Unable to load ICD starter.', 'error');
@@ -3013,7 +3068,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                 };
                 payload[csrf.name] = csrf.value;
 
-                $.post('<?= base_url('Opd_prescription/clinical_autotype') ?>', payload, function(data) {
+                $.post('http://localhost:8080/Opd_prescription/clinical_autotype', payload, function(data) {
                     if (data && data.csrfName && data.csrfHash) {
                         var csrfInput = form.querySelector('input[name="' + data.csrfName + '"]');
                         if (csrfInput) {
@@ -3294,7 +3349,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
 
             function fetchFoodRows() {
                 var q = ($search.val() || '').toString().trim();
-                $.get('<?= base_url('Ipd_discharge/dietary_master_list') ?>?q=' + encodeURIComponent(q), function(data) {
+                $.get('http://localhost:8080/Ipd_discharge/dietary_master_list?q=' + encodeURIComponent(q), function(data) {
                     var rows = (data && data.rows) ? data.rows : [];
                     foodMasterState = rows;
                     if (!rows.length) {
@@ -3351,7 +3406,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                 var payload = { id: id };
                 payload[csrf.name] = csrf.value;
 
-                $.post('<?= base_url('Ipd_discharge/dietary_master_delete') ?>', payload, function(data) {
+                $.post('http://localhost:8080/Ipd_discharge/dietary_master_delete', payload, function(data) {
                     updateFormCsrf(form, data);
                     if (!data || parseInt(data.update || '0', 10) !== 1) {
                         setFoodStatus((data && data.error_text) ? data.error_text : 'Unable to delete record.', 'error');
@@ -3380,7 +3435,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                 };
                 payload[csrf.name] = csrf.value;
 
-                $.post('<?= base_url('Ipd_discharge/dietary_master_save') ?>', payload, function(data) {
+                $.post('http://localhost:8080/Ipd_discharge/dietary_master_save', payload, function(data) {
                     updateFormCsrf(form, data);
                     if (!data || parseInt(data.update || '0', 10) !== 1) {
                         setFoodStatus((data && data.error_text) ? data.error_text : 'Unable to save record.', 'error');
@@ -3490,7 +3545,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
             }
 
             function loadRxGroups() {
-                $.get('<?= base_url('Opd_prescription/save_rx_group_list') ?>/0', function(data) {
+                $.get('http://localhost:8080/Opd_prescription/save_rx_group_list/0', function(data) {
                     rxGroupCache = (data && data.rows) ? data.rows : [];
                     renderRxGroups();
                 }, 'json').fail(function() {
@@ -3504,7 +3559,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                     return;
                 }
 
-                $.get('<?= base_url('Opd_prescription/medicine_search') ?>?q=' + encodeURIComponent(q) + '&scope=active', function(data) {
+                $.get('http://localhost:8080/Opd_prescription/medicine_search?q=' + encodeURIComponent(q) + '&scope=active', function(data) {
                     suggestRows = (data && data.rows) ? data.rows : [];
                     var html = '';
                     suggestRows.forEach(function(row) {
@@ -3636,7 +3691,6 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
 
         initComplaintEditor();
         initComplaintTools();
-        initSurgeryProcedureAutocomplete();
         initSurgeryTools(getDischargeForm());
         initDiagnosisTools();
         initCourseTools();
