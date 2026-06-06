@@ -2047,6 +2047,7 @@ class AbdmGateway extends BaseController
                 'margin_left' => 10,
                 'margin_right' => 10,
                 'tempDir' => $mpdfTempDir,
+                'default_font' => 'freeserif',
             ]);
             $mpdf->WriteHTML($wrappedHtml, HTMLParserMode::HTML_BODY);
 

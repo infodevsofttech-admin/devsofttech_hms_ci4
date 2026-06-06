@@ -1144,6 +1144,7 @@ class Charges extends BaseController
                 'margin_bottom' => 10,
                 'margin_left' => 5,
                 'margin_right' => 5,
+                'default_font' => 'freeserif',
             ]);
             $mpdf->WriteHTML($htmlContent);
         } else {
@@ -1155,6 +1156,7 @@ class Charges extends BaseController
                 'margin_bottom' => 10,
                 'margin_left' => 10,
                 'margin_right' => 10,
+                'default_font' => 'freeserif',
             ]);
             $mpdf->WriteHTML($htmlContent);
         }

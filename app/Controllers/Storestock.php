@@ -784,6 +784,7 @@ class Storestock extends BaseController
             'margin_bottom' => 12,
             'margin_left'   => 10,
             'margin_right'  => 5,
+            'default_font'  => 'freeserif',
         ]);
         $mpdf->showWatermarkText = false;
         $mpdf->WriteHTML($html);

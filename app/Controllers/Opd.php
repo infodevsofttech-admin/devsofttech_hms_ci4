@@ -2033,7 +2033,7 @@ class Opd extends BaseController
             'margin_right' => 10,
             'margin_top' => 10,
             'margin_bottom' => 10,
-            'default_font' => 'dejavusans',
+            'default_font' => 'freeserif',
             'tempDir' => WRITEPATH . 'cache',
         ]);
 
@@ -2189,7 +2189,7 @@ class Opd extends BaseController
                     'margin_bottom'    => 5,
                     'margin_header'    => 5,
                     'margin_footer'    => 5,
-                    'default_font'     => 'dejavusans',
+                    'default_font'     => 'freeserif',
                     'autoScriptToLang' => true,
                     'autoLangToFont'   => true,
                     'tempDir'          => WRITEPATH . 'cache',
@@ -2305,7 +2305,7 @@ class Opd extends BaseController
             'margin_bottom' => $marginBottom,
             'margin_header' => $marginHeader,
             'margin_footer' => $marginFooter,
-            'default_font' => 'dejavusans',
+            'default_font' => 'freeserif',
             'autoScriptToLang' => true,
             'autoLangToFont' => true,
             'tempDir' => WRITEPATH . 'cache',

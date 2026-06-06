@@ -2205,6 +2205,7 @@ class Diagnosis extends BaseController
                 'margin_left' => 10,
                 'margin_right' => 10,
                 'tempDir' => $mpdfTempDir,
+                'default_font' => 'freeserif',
             ]);
             $mpdf->WriteHTML($wrappedHtml);
 
@@ -2462,6 +2463,7 @@ class Diagnosis extends BaseController
             'margin_header'         => $marginHeader,
             'margin_footer'         => $marginFooter,
             'tempDir'               => $mpdfTempDir,
+            'default_font'          => 'freeserif',
             'autoScriptToLang'      => false,
             'autoLanguageDetection' => false,
             'autoArabic'            => false,
