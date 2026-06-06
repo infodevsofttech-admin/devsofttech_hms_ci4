@@ -1040,12 +1040,17 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                 <input type="hidden" name="new_surgery_master_id" id="new_surgery_master_id" value="0">
                                 <div class="row g-2 mb-3">
                                     <div class="col-md-5 position-relative">
-                                        <input type="text" class="form-control" name="new_surgery_name" id="new_surgery_name" autocomplete="off" placeholder="Surgery name (type to search master)">
+                                        <div class="input-group">
+                                            <input type="text" class="form-control" name="new_surgery_name" id="new_surgery_name" autocomplete="off" placeholder="Surgery name (type to search master)">
+                                            <button type="button" class="btn btn-outline-success btn-sm" id="btn_quick_add_surgery" title="Save new term in master">
+                                                <i class="bi bi-plus-circle"></i> Save in Master
+                                            </button>
+                                        </div>
                                         <div id="discharge_surgery_dropdown" class="dropdown-menu" style="display:none;position:absolute;z-index:1050;max-height:250px;overflow-y:auto;width:100%;"></div>
                                     </div>
                                     <div class="col-md-3"><input type="date" class="form-control" name="new_surgery_date"></div>
-                                    <div class="col-md-3"><input type="text" class="form-control" name="new_surgery_remark" placeholder="Remark"></div>
-                                    <div class="col-md-1"><button type="submit" class="btn btn-primary btn-sm" name="action" value="add_surgery">+ADD</button></div>
+                                    <div class="col-md-2"><input type="text" class="form-control" name="new_surgery_remark" placeholder="Remark"></div>
+                                    <div class="col-md-2"><button type="submit" class="btn btn-primary btn-sm w-100" name="action" value="add_surgery">+ADD Row</button></div>
                                 </div>
 
                                 <h6>Procedure</h6>
@@ -1068,12 +1073,17 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                 <input type="hidden" name="new_procedure_master_id" id="new_procedure_master_id" value="0">
                                 <div class="row g-2">
                                     <div class="col-md-5 position-relative">
-                                        <input type="text" class="form-control" name="new_procedure_name" id="new_procedure_name" autocomplete="off" placeholder="Procedure name (type to search master)">
+                                        <div class="input-group">
+                                            <input type="text" class="form-control" name="new_procedure_name" id="new_procedure_name" autocomplete="off" placeholder="Procedure name (type to search master)">
+                                            <button type="button" class="btn btn-outline-success btn-sm" id="btn_quick_add_procedure" title="Save new term in master">
+                                                <i class="bi bi-plus-circle"></i> Save in Master
+                                            </button>
+                                        </div>
                                         <div id="discharge_procedure_dropdown" class="dropdown-menu" style="display:none;position:absolute;z-index:1050;max-height:250px;overflow-y:auto;width:100%;"></div>
                                     </div>
                                     <div class="col-md-3"><input type="date" class="form-control" name="new_procedure_date"></div>
-                                    <div class="col-md-3"><input type="text" class="form-control" name="new_procedure_remark" placeholder="Remark"></div>
-                                    <div class="col-md-1"><button type="submit" class="btn btn-primary btn-sm" name="action" value="add_procedure">+ADD</button></div>
+                                    <div class="col-md-2"><input type="text" class="form-control" name="new_procedure_remark" placeholder="Remark"></div>
+                                    <div class="col-md-2"><button type="submit" class="btn btn-primary btn-sm w-100" name="action" value="add_procedure">+ADD Row</button></div>
                                 </div>
                                 <datalist id="discharge_procedure_suggest"></datalist>
                                 <div id="discharge_surgery_status" class="complaint-status text-muted"></div>
@@ -1554,6 +1564,43 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                         <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_surgery_master_clear">New</button>
                     </div>
                     <div id="surgery_master_status" class="complaint-status text-muted mt-2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Add Surgery/Procedure Modal -->
+    <div class="modal fade" id="quickAddTermModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Save New <span id="quick_term_type_label">Surgery</span> in Master</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="quick_term_type" value="surgery">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="quick_term_name" placeholder="Enter surgery/procedure name" readonly>
+                        <div class="form-text">This will be saved to the master table</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">SNOMED CT Code</label>
+                        <input type="text" class="form-control" id="quick_term_code" placeholder="e.g., 80146002">
+                        <div class="form-text">Optional - SNOMED CT terminology code</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">ICD Code</label>
+                        <input type="text" class="form-control" id="quick_term_icd" placeholder="e.g., K35.80">
+                        <div class="form-text">Optional - ICD-10 code</div>
+                    </div>
+                    <div id="quick_term_status" class="text-muted"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" id="btn_quick_term_save">
+                        <i class="bi bi-check-circle"></i> Save in Master
+                    </button>
                 </div>
             </div>
         </div>
@@ -2108,6 +2155,158 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
         function initSurgeryProcedureAutocomplete() {
             initTermAutocomplete('surgery', 'new_surgery_name', 'discharge_surgery_dropdown', 'new_surgery_master_id');
             initTermAutocomplete('procedure', 'new_procedure_name', 'discharge_procedure_dropdown', 'new_procedure_master_id');
+            
+            // Quick-add button handlers
+            initQuickAddTermHandlers();
+        }
+
+        function initQuickAddTermHandlers() {
+            var quickModal = document.getElementById('quickAddTermModal');
+            var quickType = document.getElementById('quick_term_type');
+            var quickTypeLabel = document.getElementById('quick_term_type_label');
+            var quickName = document.getElementById('quick_term_name');
+            var quickCode = document.getElementById('quick_term_code');
+            var quickIcd = document.getElementById('quick_term_icd');
+            var quickStatus = document.getElementById('quick_term_status');
+            var btnSave = document.getElementById('btn_quick_term_save');
+
+            if (!quickModal || !quickName) return;
+
+            // Surgery quick-add button
+            var btnQuickSurgery = document.getElementById('btn_quick_add_surgery');
+            if (btnQuickSurgery) {
+                btnQuickSurgery.addEventListener('click', function() {
+                    var surgeryInput = document.getElementById('new_surgery_name');
+                    var surgeryName = surgeryInput ? surgeryInput.value.trim() : '';
+                    
+                    if (!surgeryName) {
+                        alert('Please enter a surgery name first');
+                        return;
+                    }
+
+                    quickType.value = 'surgery';
+                    quickTypeLabel.textContent = 'Surgery';
+                    quickName.value = surgeryName;
+                    quickCode.value = '';
+                    quickIcd.value = '';
+                    quickStatus.textContent = '';
+                    quickStatus.className = 'text-muted';
+                    
+                    showModalById('quickAddTermModal');
+                });
+            }
+
+            // Procedure quick-add button
+            var btnQuickProcedure = document.getElementById('btn_quick_add_procedure');
+            if (btnQuickProcedure) {
+                btnQuickProcedure.addEventListener('click', function() {
+                    var procedureInput = document.getElementById('new_procedure_name');
+                    var procedureName = procedureInput ? procedureInput.value.trim() : '';
+                    
+                    if (!procedureName) {
+                        alert('Please enter a procedure name first');
+                        return;
+                    }
+
+                    quickType.value = 'procedure';
+                    quickTypeLabel.textContent = 'Procedure';
+                    quickName.value = procedureName;
+                    quickCode.value = '';
+                    quickIcd.value = '';
+                    quickStatus.textContent = '';
+                    quickStatus.className = 'text-muted';
+                    
+                    showModalById('quickAddTermModal');
+                });
+            }
+
+            // Save button in modal
+            if (btnSave) {
+                btnSave.addEventListener('click', function() {
+                    var name = quickName.value.trim();
+                    var type = quickType.value;
+                    var code = quickCode.value.trim();
+                    var icd = quickIcd.value.trim();
+
+                    if (!name) {
+                        setQuickStatus('Name is required', 'error');
+                        return;
+                    }
+
+                    if (!window.jQuery) {
+                        setQuickStatus('jQuery not loaded', 'error');
+                        return;
+                    }
+
+                    var form = getDischargeForm();
+                    if (!form) {
+                        setQuickStatus('Form not found', 'error');
+                        return;
+                    }
+
+                    var csrf = getCsrfPair(form);
+                    var payload = {
+                        id: 0,
+                        type: type,
+                        name: name,
+                        code: code,
+                        icd_code: icd,
+                        is_active: 1
+                    };
+                    payload[csrf.name] = csrf.value;
+
+                    setQuickStatus('Saving...', 'muted');
+                    btnSave.disabled = true;
+
+                    $.post('<?= base_url('Ipd_discharge/surgery_master_save') ?>', payload, function(data) {
+                        updateFormCsrf(form, data);
+                        btnSave.disabled = false;
+
+                        if (!data || parseInt(data.update || '0', 10) !== 1) {
+                            setQuickStatus((data && data.error_text) ? data.error_text : 'Save failed', 'error');
+                            return;
+                        }
+
+                        setQuickStatus('✓ Saved successfully!', 'success');
+                        
+                        // Update the input with saved name and set master_id
+                        var savedId = parseInt(data.id || '0', 10);
+                        if (type === 'surgery') {
+                            var surgeryInput = document.getElementById('new_surgery_name');
+                            var surgeryMasterId = document.getElementById('new_surgery_master_id');
+                            if (surgeryInput) surgeryInput.value = name;
+                            if (surgeryMasterId) surgeryMasterId.value = savedId;
+                        } else if (type === 'procedure') {
+                            var procedureInput = document.getElementById('new_procedure_name');
+                            var procedureMasterId = document.getElementById('new_procedure_master_id');
+                            if (procedureInput) procedureInput.value = name;
+                            if (procedureMasterId) procedureMasterId.value = savedId;
+                        }
+
+                        // Close modal after short delay
+                        setTimeout(function() {
+                            hideModalById('quickAddTermModal');
+                        }, 1000);
+                    }, 'json').fail(function() {
+                        btnSave.disabled = false;
+                        setQuickStatus('Network error', 'error');
+                    });
+                });
+            }
+
+            function setQuickStatus(text, level) {
+                if (!quickStatus) return;
+                
+                quickStatus.classList.remove('text-success', 'text-danger', 'text-muted');
+                if (level === 'success') {
+                    quickStatus.classList.add('text-success');
+                } else if (level === 'error') {
+                    quickStatus.classList.add('text-danger');
+                } else {
+                    quickStatus.classList.add('text-muted');
+                }
+                quickStatus.textContent = text;
+            }
         }
 
         function initTermAutocomplete(type, inputId, dropdownId, hiddenId) {
