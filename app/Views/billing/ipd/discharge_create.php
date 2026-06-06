@@ -1688,6 +1688,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
 
             var selectedComplaints = [];
             var complaintSuggestions = [];
+            var highlightedIndex = -1; // Track keyboard navigation
 
             section.querySelectorAll('table tbody tr').forEach(function(row) {
                 var firstCell = row.querySelector('.discharge-complaint-name-input');
@@ -1737,6 +1738,8 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
 
                     $.get('<?= base_url('Opd_prescription/complaints_search') ?>?q=' + encodeURIComponent(q), function(data) {
                         complaintSuggestions = (data && data.rows) ? data.rows : [];
+                        highlightedIndex = -1; // Reset on new results
+                        
                         if (!complaintSuggestions.length) {
                             dropdown.style.display = 'none';
                             return;
@@ -1753,9 +1756,15 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                         dropdown.innerHTML = html;
                         dropdown.style.display = 'block';
                         
-                        dropdown.querySelectorAll('.dropdown-item').forEach(function(item) {
+                        dropdown.querySelectorAll('.dropdown-item').forEach(function(item, idx) {
                             item.addEventListener('mouseenter', function() {
+                                // Clear keyboard highlight on mouse hover
+                                dropdown.querySelectorAll('.dropdown-item').forEach(function(el) {
+                                    el.style.backgroundColor = '';
+                                    el.style.fontWeight = '';
+                                });
                                 this.style.backgroundColor = '#f8f9fa';
+                                highlightedIndex = idx;
                             });
                             item.addEventListener('mouseleave', function() {
                                 this.style.backgroundColor = '';
@@ -1765,14 +1774,53 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                 lookup.value = value;
                                 dropdown.style.display = 'none';
                                 if (btnAdd) {
-                                    btnAdd.click();
-                                }
-                            });
-                        });
-                    }, 'json');
+                    var items = dropdown.querySelectorAll('.dropdown-item');
+                    var isVisible = dropdown.style.display === 'block' && items.length > 0;
+                    
+                    if (e.key === 'ArrowDown' && isVisible) {
+                        e.preventDefault();
+                        highlightedIndex = Math.min(highlightedIndex + 1, items.length - 1);
+                        updateDropdownHighlight(items);
+                    } else if (e.key === 'ArrowUp' && isVisible) {
+                        e.preventDefault();
+                        highlightedIndex = Math.max(highlightedIndex - 1, 0);
+                        updateDropdownHighlight(items);
+                    } else if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (isVisible && highlightedIndex >= 0 && items[highlightedIndex]) {
+                            // Select highlighted item
+                            var value = items[highlightedIndex].getAttribute('data-value');
+                            lookup.value = value;
+                            dropdown.style.display = 'none';
+                            highlightedIndex = -1;
+                            if (btnAdd) {
+                                btnAdd.click();
+                            }
+                        } else if (btnAdd) {
+                            // No item highlighted, add whatever is typed
+                            dropdown.style.display = 'none';
+                            btnAdd.click();
+                        }
+                    } else if (e.key === 'Escape') {
+                        dropdown.style.display = 'none';
+                        highlightedIndex = -1;
+                    }
                 });
-
-                lookup.addEventListener('keydown', function(e) {
+                
+                function updateDropdownHighlight(items) {
+                    items.forEach(function(item, idx) {
+                        if (idx === highlightedIndex) {
+                            item.style.backgroundColor = '#007bff';
+                            item.style.color = '#fff';
+                            item.style.fontWeight = 'bold';
+                            item.scrollIntoView({ block: 'nearest' });
+                        } else {
+                            item.style.backgroundColor = '';
+                            item.style.color = '';
+                            item.style.fontWeight = '';
+                        }
+                    });
+                }kup.addEventListener('keydown', function(e) {
                     if (e.key === 'Enter' && btnAdd) {
                         e.preventDefault();
                         dropdown.style.display = 'none';
