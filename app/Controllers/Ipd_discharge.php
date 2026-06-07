@@ -5901,8 +5901,11 @@ class Ipd_discharge extends BaseController
             return $this->response->setStatusCode(404)->setBody('IPD not found');
         }
 
+        // Check if user wants to force regenerate content (ignoring cache)
+        $forceRegenerate = (int) ($this->request->getGet('refresh') ?? 0) === 1;
+
         $content = $this->getDischargeContent($ipdId);
-        if (trim(strip_tags($content)) === '') {
+        if ($forceRegenerate || trim(strip_tags($content)) === '') {
             $content = $this->buildAutoDischargeContent($ipdId, $panelData);
             if (trim(strip_tags($content)) !== '') {
                 $this->saveDischargeContent($ipdId, $content);
