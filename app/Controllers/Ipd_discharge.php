@@ -380,7 +380,7 @@ class Ipd_discharge extends BaseController
             $tokens[$key] = $value;
         }
 
-        $sectionVars = $this->buildDischargeSectionTokenVars($content);
+        $sectionVars = $this->buildDischargeSectionTokenVars($content, $panelData);
         foreach ($sectionVars as $key => $value) {
             $tokens[$key] = $value;
         }
@@ -483,12 +483,15 @@ class Ipd_discharge extends BaseController
         ];
     }
 
-    private function buildDischargeSectionTokenVars(string $content): array
+    private function buildDischargeSectionTokenVars(string $content, array $panelData): array
     {
         $full = trim($content);
         if ($full === '') {
             return [];
         }
+
+        $ipd = $panelData['ipd_info'] ?? null;
+        $dischargeStatus = $this->getDischargeStatusText($ipd);
 
         $allMarkers = [
             'Discharge Summary',
@@ -517,6 +520,33 @@ class Ipd_discharge extends BaseController
         };
 
         $summary = $section(['Discharge Summary']);
+        
+        // Replace "Discharge Summary" header with discharge status
+        if ($dischargeStatus !== '' && $summary !== '') {
+            $summary = preg_replace(
+                '/<h[1-6][^>]*>\s*Discharge\s+Summary\s*<\/h[1-6]>/i',
+                '<h2>' . esc($dischargeStatus) . '</h2>',
+                $summary
+            );
+            // Also handle bold/strong tags
+            $summary = preg_replace(
+                '/<(b|strong)>\s*Discharge\s+Summary\s*<\/\1>/i',
+                '<strong>' . esc($dischargeStatus) . '</strong>',
+                $summary
+            );
+            // Remove "Date of Discharge" line
+            $summary = preg_replace(
+                '/Date\s+of\s+Discharge\s*:\s*[0-9\-\/]+\s*<br\s*\/?>/i',
+                '',
+                $summary
+            );
+            $summary = preg_replace(
+                '/<p[^>]*>\s*Date\s+of\s+Discharge\s*:\s*[0-9\-\/]+\s*<\/p>/i',
+                '',
+                $summary
+            );
+        }
+        
         $finalDiagnosis = $section(['Final Diagnosis']);
         $surgery = $section(['Surgery']);
         $procedure = $section(['Procedure']);
@@ -1014,6 +1044,38 @@ class Ipd_discharge extends BaseController
         }
 
         return implode(', ', $names);
+    }
+
+    private function getDischargeStatusText(?object $ipd): string
+    {
+        if (! $ipd) {
+            return 'Discharge Summary';
+        }
+
+        $ipdStatus = (int) ($ipd->ipd_status ?? 0);
+
+        // Check if ipd_discharge_status table exists
+        if (! $this->db->tableExists('ipd_discharge_status')) {
+            return 'Discharge Summary';
+        }
+
+        $row = $this->db->table('ipd_discharge_status')
+            ->select('status_desc, status_details')
+            ->where('id', $ipdStatus)
+            ->get(1)
+            ->getRowArray();
+
+        if (empty($row)) {
+            return 'Discharge Summary';
+        }
+
+        // Prefer status_details if available, otherwise use status_desc
+        $statusText = trim((string) ($row['status_details'] ?? ''));
+        if ($statusText === '') {
+            $statusText = trim((string) ($row['status_desc'] ?? ''));
+        }
+
+        return $statusText !== '' ? $statusText : 'Discharge Summary';
     }
 
     private function saveDischargeContent(int $ipdId, string $content): bool
@@ -4564,6 +4626,44 @@ class Ipd_discharge extends BaseController
         $fields['safeTime(discharge_time)'] = $this->safeTime((string)($ipdMaster->discharge_time ?? ''));
 
         return $this->response->setJSON($fields, JSON_PRETTY_PRINT);
+    }
+
+    /**
+     * Debug endpoint to show discharge HTML source
+     * Access via: /Ipd_discharge/debug_discharge_html/{ipdId}
+     */
+    public function debug_discharge_html(int $ipdId)
+    {
+        if ($ipdId <= 0) {
+            return $this->response->setJSON(['error' => 'Invalid IPD ID']);
+        }
+
+        $panelData = $this->ipdBillingModel->getIpdPanelInfo($ipdId);
+        if (empty($panelData)) {
+            return $this->response->setStatusCode(404)->setBody('IPD not found');
+        }
+
+        $content = $this->getDischargeContent($ipdId);
+        if (trim(strip_tags($content)) === '') {
+            $content = $this->buildAutoDischargeContent($ipdId, $panelData);
+        }
+
+        $templatePack = $this->applyDischargeTemplate($content, $panelData);
+        $renderedHtml = (string) ($templatePack['rendered_html'] ?? $content);
+
+        // Show HTML with syntax highlighting
+        return $this->response
+            ->setContentType('text/html')
+            ->setBody(
+                '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Discharge HTML Source</title><style>' .
+                'body{font-family:monospace;padding:20px;background:#f5f5f5;} ' .
+                'h1{color:#333;} ' .
+                'pre{background:#fff;padding:20px;border:1px solid #ddd;overflow:auto;white-space:pre-wrap;word-wrap:break-word;} ' .
+                '</style></head><body>' .
+                '<h1>Discharge Summary HTML Source (IPD ID: ' . $ipdId . ')</h1>' .
+                '<pre>' . htmlspecialchars($renderedHtml, ENT_QUOTES, 'UTF-8') . '</pre>' .
+                '</body></html>'
+            );
     }
 
     public function ipd_select(int $ipdId, int $reCreate = 0)
