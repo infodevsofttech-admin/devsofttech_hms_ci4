@@ -475,14 +475,21 @@ $status = (int) ($edit['status'] ?? 1);
                     toolbar: [
                         { name: 'document', items: ['Source'] },
                         { name: 'clipboard', items: ['Undo', 'Redo'] },
-                        { name: 'basicstyles', items: ['Bold', 'Italic', 'Underline', 'RemoveFormat'] },
+                        { name: 'basicstyles', items: ['Bold', 'Italic', 'Underline', 'Strike', 'Subscript', 'Superscript', 'RemoveFormat'] },
                         { name: 'paragraph', items: ['NumberedList', 'BulletedList', 'Outdent', 'Indent', 'Blockquote'] },
+                        { name: 'align', items: ['JustifyLeft', 'JustifyCenter', 'JustifyRight', 'JustifyBlock'] },
                         { name: 'links', items: ['Link', 'Unlink'] },
-                        { name: 'insert', items: ['Table', 'HorizontalRule', 'SpecialChar'] },
+                        { name: 'insert', items: ['Image', 'Table', 'HorizontalRule', 'SpecialChar', 'PageBreak'] },
                         { name: 'styles', items: ['Format', 'Font', 'FontSize'] },
                         { name: 'colors', items: ['TextColor', 'BGColor'] },
-                        { name: 'tools', items: ['Maximize'] }
-                    ]
+                        { name: 'tools', items: ['Maximize', 'ShowBlocks'] }
+                    ],
+                    removeButtons: '',
+                    extraPlugins: 'justify,pagebreak',
+                    allowedContent: true,
+                    entities: false,
+                    basicEntities: false,
+                    fillEmptyBlocks: false
                 });
             } catch (e) {
                 console.error('CKEditor replace failed:', e);
