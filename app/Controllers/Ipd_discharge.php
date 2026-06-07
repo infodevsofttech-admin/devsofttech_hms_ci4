@@ -1676,30 +1676,13 @@ class Ipd_discharge extends BaseController
         // It is available as {{PATIENT_INFO_TABLE}} token for templates to use if needed.
         // This matches CI3 behavior where template controlled the patient info display.
 
-        // Build Discharge Summary section (high-level overview)
-        $dischargeSummaryParts = [];
-        $admitDate = trim((string) ($ipd->admit_date ?? ''));
-        $dischargeDate = trim((string) ($ipd->discharge_date ?? ''));
-        $deptName = $this->getDischargeDepartmentName($ipd);
-        $doctorNames = $this->getDischargeDoctorNames($ipd);
+        // Build Discharge Summary section - ONLY the status header
+        // Get discharge status text based on ipd_status from ipd_discharg_status table
+        $dischargeStatusHeader = $this->getDischargeStatusText($ipd);
         
-        if ($deptName !== '') {
-            $dischargeSummaryParts[] = '<b>Department:</b> ' . esc($deptName);
-        }
-        if ($doctorNames !== '') {
-            $dischargeSummaryParts[] = '<b>Treating Doctor(s):</b> ' . esc($doctorNames);
-        }
-        if ($admitDate !== '') {
-            $dischargeSummaryParts[] = '<b>Date of Admission:</b> ' . esc($admitDate);
-        }
-        // NOTE: Date of Discharge removed per user request
-        
-        if (! empty($dischargeSummaryParts)) {
-            // Get discharge status text based on ipd_status
-            $dischargeStatusHeader = $this->getDischargeStatusText($ipd);
-            
-            $sections[] = '<h4 class="discharge-section-heading">' . esc($dischargeStatusHeader) . '</h4>'
-                . '<div class="discharge-summary-info">' . implode('<br>', $dischargeSummaryParts) . '</div>';
+        if ($dischargeStatusHeader !== '') {
+            // {{DISCHARGE_SUMMARY}} placeholder - ONLY the status header, no additional info
+            $sections[] = '<h4 class="discharge-section-heading">' . esc($dischargeStatusHeader) . '</h4>';
         }
 
         $complaints = $this->byIpdRows('ipd_discharge_complaint', ['comp_report', 'comp_remark'], 'id ASC', $ipdId);
