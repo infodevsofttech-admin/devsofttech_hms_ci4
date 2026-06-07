@@ -873,6 +873,7 @@ $routes->post('Lab_Admin/pathology_master_add_component', 'Setting\Template::pat
 $routes->get('Lab_Admin/pathology_bridge_debug', 'Setting\Template::pathologyBridgeDebug');
 
 $routes->match(['get', 'post'], 'setting/template/discharge_templates', 'Setting\Template::discharge_templates');
+$routes->post('setting/template/discharge_templates_seed', 'Setting\Template::discharge_templates_seed');
 $routes->get('setting/template/discharge_template_get/(:num)', 'Setting\Template::discharge_template_get/$1');
 $routes->match(['get', 'post'], 'setting/template/discharge_templates/delete/(:num)', 'Setting\Template::discharge_template_delete/$1');
 $routes->match(['get', 'post'], 'setting/template/ipd_document_templates', 'Setting\Template::ipd_document_templates');

@@ -272,7 +272,9 @@ class Ipd_discharge extends BaseController
 
     private function getDischargeTemplateRows(): array
     {
-        $this->ensureDefaultDischargeTemplateSeeded();
+        // Ensure table structure exists, but don't auto-seed templates
+        // This allows users to delete all templates without them auto-regenerating
+        $this->ensureDischargeTemplateTable();
         if (! $this->db->tableExists('ipd_discharge_templates')) {
             return [];
         }

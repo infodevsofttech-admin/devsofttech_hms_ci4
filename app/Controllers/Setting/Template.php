@@ -2804,7 +2804,9 @@ HTML;
             return $resp;
         }
 
-        $this->ensureDefaultDischargeTemplateSeeded();
+        // Ensure table structure exists, but don't auto-seed templates
+        // This allows users to delete all templates without them auto-regenerating
+        $this->ensureDischargeTemplateTable();
 
         $notice = '';
         $noticeType = 'success';
@@ -2964,6 +2966,27 @@ HTML;
             'csrfName' => csrf_token(),
             'csrfHash' => csrf_hash(),
         ]);
+    }
+
+    public function discharge_templates_seed()
+    {
+        if ($resp = $this->requireAnyPermission(['template.discharge'])) {
+            return $resp;
+        }
+
+        // Manually seed default templates (on user request)
+        $this->ensureDefaultDischargeTemplateSeeded();
+
+        if ($this->request->isAJAX()) {
+            return $this->response->setJSON([
+                'update' => 1,
+                'error_text' => 'Default templates created successfully.',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        return redirect()->to(base_url('setting/template/discharge_templates'));
     }
 
     public function discharge_template_delete(int $id)

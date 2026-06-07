@@ -181,7 +181,15 @@ $status = (int) ($edit['status'] ?? 1);
                     </thead>
                     <tbody>
                         <?php if (empty($rows)): ?>
-                            <tr><td colspan="5" class="text-center text-muted">No templates found.</td></tr>
+                            <tr>
+                                <td colspan="5" class="text-center py-4">
+                                    <div class="text-muted mb-2">No templates found.</div>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" id="btn_create_defaults">
+                                        <i class="fas fa-plus-circle"></i> Create Default Templates
+                                    </button>
+                                    <div class="small text-muted mt-2">Creates "Default Discharge Template" and "NABH Compliant Discharge Summary"</div>
+                                </td>
+                            </tr>
                         <?php else: ?>
                             <?php foreach ($rows as $row): ?>
                                 <tr>
@@ -663,6 +671,46 @@ $status = (int) ($edit['status'] ?? 1);
         pdfBtn.addEventListener('click', function () {
             var ipdId = parseInt((previewIpdInput && previewIpdInput.value) ? previewIpdInput.value : '0', 10);
             openDischargeUrl('<?= site_url('Ipd_discharge/show_discharge') ?>', ipdId, 1);
+        });
+    }
+
+    // Handle "Create Default Templates" button
+    var createDefaultsBtn = document.getElementById('btn_create_defaults');
+    if (createDefaultsBtn) {
+        createDefaultsBtn.addEventListener('click', function () {
+            if (!window.confirm('Create 2 default discharge templates?')) {
+                return;
+            }
+
+            var formData = new FormData();
+            formData.append('<?= csrf_token() ?>', '<?= csrf_hash() ?>');
+            formData.append('action', 'seed_defaults');
+
+            fetch('<?= base_url('setting/template/discharge_templates_seed') ?>', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+                .then(function (res) { return res.json(); })
+                .then(function (data) {
+                    updateCsrfToken(data);
+                    if (!data || parseInt(data.update || 0, 10) !== 1) {
+                        setNotice('danger', (data && data.error_text) ? data.error_text : 'Failed to create templates.');
+                        return;
+                    }
+
+                    setNotice('success', data.error_text || 'Default templates created successfully.');
+
+                    // Reload page to show new templates
+                    setTimeout(function() {
+                        window.location.reload();
+                    }, 500);
+                })
+                .catch(function () {
+                    setNotice('danger', 'Network error while creating templates.');
+                });
         });
     }
 })();
