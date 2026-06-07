@@ -4494,6 +4494,60 @@ class Ipd_discharge extends BaseController
         }
     }
 
+    /**
+     * Debug endpoint to check IPD master fields
+     * Access via: /Ipd_discharge/debug_ipd_fields/{ipdId}
+     */
+    public function debug_ipd_fields(int $ipdId)
+    {
+        if ($ipdId <= 0) {
+            return $this->response->setJSON(['error' => 'Invalid IPD ID']);
+        }
+
+        // Get all fields from ipd_master
+        $ipdMaster = $this->db->table('ipd_master')
+            ->where('id', $ipdId)
+            ->get()
+            ->getRow();
+
+        if (!$ipdMaster) {
+            return $this->response->setJSON(['error' => 'IPD not found']);
+        }
+
+        // Get panel info (what getIpdPanelInfo returns)
+        $panelData = $this->ipdBillingModel->getIpdPanelInfo($ipdId);
+        $ipd = $panelData['ipd_info'] ?? null;
+
+        // Check what fields exist
+        $fields = [
+            'Available Fields in ipd_master' => array_keys((array)$ipdMaster),
+            'register_date' => $ipdMaster->register_date ?? 'NOT FOUND',
+            'discharge_date' => $ipdMaster->discharge_date ?? 'NOT FOUND',
+            'register_time' => $ipdMaster->register_time ?? 'NOT FOUND',
+            'discharge_time' => $ipdMaster->discharge_time ?? 'NOT FOUND',
+            'admission_time' => $ipdMaster->admission_time ?? 'NOT FOUND',
+            'dept_id' => $ipdMaster->dept_id ?? 'NOT FOUND',
+            'department_id' => $ipdMaster->department_id ?? 'NOT FOUND',
+            'department' => $ipdMaster->department ?? 'NOT FOUND',
+            'doc_list' => $ipdMaster->doc_list ?? 'NOT FOUND',
+            'doctor_id' => $ipdMaster->doctor_id ?? 'NOT FOUND',
+            'doc_id' => $ipdMaster->doc_id ?? 'NOT FOUND',
+            'consultant_id' => $ipdMaster->consultant_id ?? 'NOT FOUND',
+        ];
+
+        // Check what getDischargeDepartmentName returns
+        $fields['getDischargeDepartmentName()'] = $this->getDischargeDepartmentName($ipd);
+
+        // Check what getDischargeDoctorNames returns
+        $fields['getDischargeDoctorNames()'] = $this->getDischargeDoctorNames($ipd);
+
+        // Check safeTime results
+        $fields['safeTime(register_date)'] = $this->safeTime((string)($ipdMaster->register_date ?? ''));
+        $fields['safeTime(discharge_date)'] = $this->safeTime((string)($ipdMaster->discharge_date ?? ''));
+
+        return $this->response->setJSON($fields, JSON_PRETTY_PRINT);
+    }
+
     public function ipd_select(int $ipdId, int $reCreate = 0)
     {
         $permission = $this->requireAnyPermission([
