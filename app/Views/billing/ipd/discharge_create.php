@@ -4689,7 +4689,8 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
             form.addEventListener('submit', function(e) {
                 e.preventDefault();
                 syncEditorValues();
-                serializeDischargeMedicineTable();
+                // DISABLED: No longer needed since medicines are saved via AJAX on Add button
+                // serializeDischargeMedicineTable();
                 syncClinicalLabSelection(form);
                 syncCoMorbidityHidden(form);
 

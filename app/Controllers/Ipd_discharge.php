@@ -5479,7 +5479,10 @@ class Ipd_discharge extends BaseController
                     $savedAny = $this->upsertByIpd('ipd_discharge_drug_food_interaction', $ipdId, $legacyData) || $savedAny;
                 }
 
-                // Process discharge medicine JSON (newly added medicines from the form).
+                // DISABLED: Legacy code that re-saved medicines on "Save Discharge Advice" button.
+                // Medicines are now saved immediately via Add button AJAX (action='add_drug').
+                // Keeping this code would create duplicate medicine entries.
+                /*
                 $medicineJson = trim((string) ($this->request->getPost('discharge_medicine_json') ?? ''));
                 if ($medicineJson !== '') {
                     $medicines = json_decode($medicineJson, true);
@@ -5490,10 +5493,6 @@ class Ipd_discharge extends BaseController
                         ]);
 
                         if ($legacyTable !== null) {
-                            // Clear previously added client-side medicines (optional - keeps only DB-saved ones).
-                            // Comment out if you want to preserve all medicines.
-                            // $this->db->table($legacyTable)->where('ipd_id', $ipdId)->where('med_id', 0)->delete();
-
                             foreach ($medicines as $med) {
                                 $medName = trim((string) ($med['med_name'] ?? ''));
                                 if ($medName === '') {
@@ -5507,7 +5506,6 @@ class Ipd_discharge extends BaseController
                                     'update_by' => $userLabel,
                                 ];
 
-                                // Add optional fields if columns exist.
                                 $optionalFields = [
                                     'med_type' => 'med_type',
                                     'dosage' => 'dosage',
@@ -5530,6 +5528,7 @@ class Ipd_discharge extends BaseController
                         }
                     }
                 }
+                */
 
                 // Examination on Admission (General Examination values).
                 if ($this->tableHasColumns('ipd_discharge_general_exam_col', ['id', 'col_name'])
