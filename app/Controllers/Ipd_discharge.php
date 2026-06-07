@@ -5475,7 +5475,7 @@ class Ipd_discharge extends BaseController
                         'food_id_list' => implode(',', array_values($foodIds)),
                     ];
                     if ($this->db->fieldExists('food_text', 'ipd_discharge_drug_food_interaction')) {
-                        $legacyData['food_text'] = $instructionRemark;
+                        $legacyData['food_text'] = $instructionOther;
                     }
 
                     $savedAny = $this->upsertByIpd('ipd_discharge_drug_food_interaction', $ipdId, $legacyData) || $savedAny;
