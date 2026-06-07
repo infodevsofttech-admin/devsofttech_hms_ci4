@@ -1428,6 +1428,154 @@ class Ipd_discharge extends BaseController
         return date('h:i A', $ts);
     }
 
+    /**
+     * Load dose master rows from a dose table (opd_dose_shed, opd_dose_when, opd_dose_frequency).
+     * Returns array of ['id' => int, 'label' => string, 'local_label' => string].
+     */
+    private function getDoseMasterRows(string $table): array
+    {
+        if (! $this->db->tableExists($table)) {
+            return [];
+        }
+
+        $fields = $this->db->getFieldNames($table);
+        $idFields = ($table === 'opd_dose_shed') ? ['dose_shed_id', 'id'] : (($table === 'opd_dose_when') ? ['dose_when_id', 'id'] : ['dose_freq_id', 'id']);
+        $idField = null;
+        foreach ($idFields as $candidate) {
+            if (in_array($candidate, $fields, true)) {
+                $idField = $candidate;
+                break;
+            }
+        }
+        if ($idField === null) {
+            return [];
+        }
+
+        $labelField = null;
+        $localLabelField = null;
+        if ($table === 'opd_dose_shed') {
+            foreach (['dose_show_sign', 'dose_sign', 'dose_sign_desc', 'name'] as $candidate) {
+                if (in_array($candidate, $fields, true)) {
+                    $labelField = $candidate;
+                    break;
+                }
+            }
+            foreach (['dose_show_desc', 'dose_sign_hindi', 'dose_sign_desc'] as $candidate) {
+                if (in_array($candidate, $fields, true)) {
+                    $localLabelField = $candidate;
+                    break;
+                }
+            }
+        } else {
+            foreach (['dose_sign', 'dose_sign_desc', 'name'] as $candidate) {
+                if (in_array($candidate, $fields, true)) {
+                    $labelField = $candidate;
+                    break;
+                }
+            }
+            foreach (['dose_sign_hindi', 'dose_sign_desc'] as $candidate) {
+                if (in_array($candidate, $fields, true)) {
+                    $localLabelField = $candidate;
+                    break;
+                }
+            }
+        }
+
+        if ($labelField === null) {
+            return [];
+        }
+
+        $select = [$idField . ' as id', $labelField . ' as label'];
+        if ($localLabelField !== null) {
+            $select[] = $localLabelField . ' as local_label';
+        }
+
+        $rows = $this->db->table($table)
+            ->select(implode(',', $select))
+            ->where($labelField . ' !=', '')
+            ->orderBy('id', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        $result = [];
+        foreach ($rows as $row) {
+            $result[(int) ($row['id'] ?? 0)] = [
+                'id' => (int) ($row['id'] ?? 0),
+                'label' => trim((string) ($row['label'] ?? '')),
+                'local_label' => trim((string) ($row['local_label'] ?? '')),
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * Build dosage display string from dosage IDs.
+     * Returns format: "BID (TWO TIME A DAY) / दिन में दो बार लेना"
+     */
+    private function buildDosageDisplay(int $doseId, int $whenId, int $freqId): string
+    {
+        static $doseMap = null;
+        static $whenMap = null;
+        static $freqMap = null;
+
+        if ($doseMap === null) {
+            $doseMap = $this->getDoseMasterRows('opd_dose_shed');
+        }
+        if ($whenMap === null) {
+            $whenMap = $this->getDoseMasterRows('opd_dose_when');
+        }
+        if ($freqMap === null) {
+            $freqMap = $this->getDoseMasterRows('opd_dose_frequency');
+        }
+
+        $parts = [];
+        $localParts = [];
+
+        if ($doseId > 0 && isset($doseMap[$doseId])) {
+            $dose = $doseMap[$doseId];
+            if ($dose['label'] !== '') {
+                $parts[] = $dose['label'];
+            }
+            if ($dose['local_label'] !== '') {
+                $localParts[] = $dose['local_label'];
+            }
+        }
+
+        if ($whenId > 0 && isset($whenMap[$whenId])) {
+            $when = $whenMap[$whenId];
+            if ($when['label'] !== '') {
+                $parts[] = $when['label'];
+            }
+            if ($when['local_label'] !== '') {
+                $localParts[] = $when['local_label'];
+            }
+        }
+
+        if ($freqId > 0 && isset($freqMap[$freqId])) {
+            $freq = $freqMap[$freqId];
+            if ($freq['label'] !== '') {
+                $parts[] = $freq['label'];
+            }
+            if ($freq['local_label'] !== '') {
+                $localParts[] = $freq['local_label'];
+            }
+        }
+
+        $english = implode(' ', $parts);
+        $local = implode(' ', $localParts);
+
+        if ($english !== '' && $local !== '') {
+            return $english . ' / ' . $local;
+        } elseif ($english !== '') {
+            return $english;
+        } elseif ($local !== '') {
+            return $local;
+        }
+
+        return '';
+    }
+
     private function normalizeRichText(string $raw): string
     {
         $value = trim($raw);
@@ -1992,11 +2140,12 @@ class Ipd_discharge extends BaseController
             $html .= '</ol>';
             $sections[] = $html;
         } else {
-            $medRows = $this->byIpdRows('ipd_discharge_prescrption_prescribed', ['med_name', 'med_type', 'qty', 'no_of_days', 'remark'], 'id ASC', $ipdId);
+            $medRows = $this->byIpdRows('ipd_discharge_prescrption_prescribed', ['med_name', 'med_type', 'dosage', 'dosage_when', 'dosage_freq', 'qty', 'no_of_days', 'remark'], 'id ASC', $ipdId);
             if (! empty($medRows)) {
                 $html = '<h4 class="discharge-section-heading">Discharge Medications</h4>'
                     . '<table class="discharge-medicine-table" border="0" cellpadding="6">'
-                    . '<tr><th>#</th><th>Medicine</th><th>Qty</th><th>Days</th><th>Notes</th></tr>';
+                    . '<thead><tr><th>Medicine Name</th><th>Dosage</th><th>Qty</th><th>Day</th></tr></thead>'
+                    . '<tbody>';
                 $sr = 1;
                 foreach ($medRows as $row) {
                     $medName = trim((string) ($row['med_name'] ?? ''));
@@ -2004,17 +2153,40 @@ class Ipd_discharge extends BaseController
                         continue;
                     }
                     $medType = trim((string) ($row['med_type'] ?? ''));
-                    $label = trim($medType . ' ' . $medName);
+                    $label = ($medType !== '' ? esc($medType) . ' ' : '') . esc($medName);
+                    
+                    // Build dosage display with English + Hindi labels
+                    $doseId = (int) ($row['dosage'] ?? 0);
+                    $whenId = (int) ($row['dosage_when'] ?? 0);
+                    $freqId = (int) ($row['dosage_freq'] ?? 0);
+                    $dosageDisplay = $this->buildDosageDisplay($doseId, $whenId, $freqId);
+                    
+                    // Add composition if med_type contains it (for legacy compatibility)
+                    $composition = '';
+                    if (stripos($medType, ':') !== false) {
+                        $parts = explode(':', $medType, 2);
+                        if (count($parts) === 2) {
+                            $medType = trim($parts[0]);
+                            $composition = trim($parts[1]);
+                            $label = ($medType !== '' ? esc($medType) . ' ' : '') . esc($medName);
+                        }
+                    }
+                    
                     $html .= '<tr>'
-                        . '<td>' . $sr . '</td>'
-                        . '<td>' . esc($label) . '</td>'
+                        . '<td>' . $label;
+                    
+                    if ($composition !== '') {
+                        $html .= '<br><small class="discharge-composition">Composition : ' . esc($composition) . '</small>';
+                    }
+                    
+                    $html .= '</td>'
+                        . '<td>' . ($dosageDisplay !== '' ? esc($dosageDisplay) : '-') . '</td>'
                         . '<td>' . esc((string) ($row['qty'] ?? '')) . '</td>'
                         . '<td>' . esc((string) ($row['no_of_days'] ?? '')) . '</td>'
-                        . '<td>' . esc((string) ($row['remark'] ?? '')) . '</td>'
                         . '</tr>';
                     $sr++;
                 }
-                $html .= '</table>';
+                $html .= '</tbody></table>';
                 $sections[] = $html;
             }
         }
