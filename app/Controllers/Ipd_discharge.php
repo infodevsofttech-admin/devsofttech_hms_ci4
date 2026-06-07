@@ -127,8 +127,8 @@ class Ipd_discharge extends BaseController
 
     private function defaultDischargeTemplateHtml(): string
     {
-        return '<h3 style="margin:0 0 8px 0;">Discharge Summary</h3>'
-            . '<table style="width:100%;border-collapse:collapse;margin-bottom:10px;" border="1" cellpadding="6">'
+        return '<h3 class="discharge-title">Discharge Summary</h3>'
+            . '<table class="discharge-info-table" border="1" cellpadding="6">'
             . '<tr>'
             . '<td><b>Patient</b>: {{PATIENT_NAME}}</td>'
             . '<td><b>UHID</b>: {{UHID}}</td>'
@@ -184,8 +184,8 @@ class Ipd_discharge extends BaseController
 
     private function nabhDischargeTemplateHtml(): string
     {
-        return '<h2 style="margin:0 0 10px 0;text-align:center;">DISCHARGE SUMMARY</h2>'
-            . '<table style="width:100%;border-collapse:collapse;margin-bottom:10px;" border="1" cellpadding="6">'
+        return '<h2 class="discharge-title">DISCHARGE SUMMARY</h2>'
+            . '<table class="discharge-info-table" border="1" cellpadding="6">'
             . '<tr>'
             . '<td><b>Patient Name</b>: {{PATIENT_NAME}}</td>'
             . '<td><b>UHID</b>: {{UHID}}</td>'
@@ -202,37 +202,37 @@ class Ipd_discharge extends BaseController
             . '<td><b>Prepared On</b>: {{CURRENT_DATE}}</td>'
             . '</tr>'
             . '</table>'
-            . '<div style="font-size:11px;color:#334155;margin-bottom:10px;">'
+            . '<div class="nabh-guidance">'
             . 'NABH guidance note: Ensure diagnosis, procedures, clinical course, condition at discharge, medication with dose/duration, follow-up advice, red-flag signs, and emergency contact are documented.'
             . '</div>'
-            . '<div style="margin-bottom:10px;">{{DISCHARGE_SUMMARY}}</div>'
-            . '<div style="margin-bottom:10px;">{{PRESENTING_COMPLAINTS}}</div>'
-            . '<div style="margin-bottom:10px;">{{PAIN_MEASUREMENT_SCALE}}</div>'
-            . '<div style="margin-bottom:10px;">{{GENERAL_EXAM_ADMISSION}}</div>'
-            . '<div style="margin-bottom:10px;">{{CLINICAL_INVESTIGATION_REPORTS}}</div>'
-            . '<div style="margin-bottom:10px;">{{FINAL_DIAGNOSIS}}</div>'
-            . '<div style="margin-bottom:10px;">{{COURSE_IN_HOSPITAL}}</div>'
-            . '<div style="margin-bottom:10px;">{{EXAMINATION_ON_DISCHARGE}}</div>'
-            . '<div style="margin-bottom:10px;">{{SURGERY}}</div>'
-            . '<div style="margin-bottom:10px;">{{PROCEDURE}}</div>'
-            . '<div style="margin-bottom:10px;">{{PERSONAL_HISTORY}}</div>'
-            . '<div style="margin-bottom:10px;">{{DRUG_ALLERGY_ADR}}</div>'
-            . '<div style="margin-bottom:10px;">{{CO_MORBIDITIES}}</div>'
-            . '<div style="margin-bottom:10px;">{{DISCHARGE_MEDICATIONS}}</div>'
-            . '<div style="margin-bottom:10px;">{{DIETARY_ADVICE}}</div>'
-            . '<div style="margin-bottom:10px;">{{DISCHARGE_INSTRUCTIONS}}</div>'
-            . '<h4 style="margin:12px 0 6px 0;">Counselling & Handover Confirmation</h4>'
-            . '<table style="width:100%;border-collapse:collapse;margin-bottom:10px;" border="1" cellpadding="6">'
-            . '<tr><td style="width:32%;">Medication explained to patient/attendant</td><td style="width:8%;"></td><td style="width:60%;">Remarks:</td></tr>'
+            . '<div class="discharge-section">{{DISCHARGE_SUMMARY}}</div>'
+            . '<div class="discharge-section">{{PRESENTING_COMPLAINTS}}</div>'
+            . '<div class="discharge-section">{{PAIN_MEASUREMENT_SCALE}}</div>'
+            . '<div class="discharge-section">{{GENERAL_EXAM_ADMISSION}}</div>'
+            . '<div class="discharge-section">{{CLINICAL_INVESTIGATION_REPORTS}}</div>'
+            . '<div class="discharge-section">{{FINAL_DIAGNOSIS}}</div>'
+            . '<div class="discharge-section">{{COURSE_IN_HOSPITAL}}</div>'
+            . '<div class="discharge-section">{{EXAMINATION_ON_DISCHARGE}}</div>'
+            . '<div class="discharge-section">{{SURGERY}}</div>'
+            . '<div class="discharge-section">{{PROCEDURE}}</div>'
+            . '<div class="discharge-section">{{PERSONAL_HISTORY}}</div>'
+            . '<div class="discharge-section">{{DRUG_ALLERGY_ADR}}</div>'
+            . '<div class="discharge-section">{{CO_MORBIDITIES}}</div>'
+            . '<div class="discharge-section">{{DISCHARGE_MEDICATIONS}}</div>'
+            . '<div class="discharge-section">{{DIETARY_ADVICE}}</div>'
+            . '<div class="discharge-section">{{DISCHARGE_INSTRUCTIONS}}</div>'
+            . '<h4 class="discharge-section-heading">Counselling & Handover Confirmation</h4>'
+            . '<table class="discharge-table" border="1" cellpadding="6">'
+            . '<tr><td>Medication explained to patient/attendant</td><td></td><td>Remarks:</td></tr>'
             . '<tr><td>Follow-up date and department explained</td><td></td><td>Next Visit: __________________</td></tr>'
             . '<tr><td>Red-flag symptoms explained</td><td></td><td>Emergency Contact: __________________</td></tr>'
             . '<tr><td>Diet and activity instructions explained</td><td></td><td></td></tr>'
             . '</table>'
-            . '<table style="width:100%;border-collapse:collapse;margin-top:20px;" border="1" cellpadding="10">'
+            . '<table class="discharge-signature-table" border="1" cellpadding="10">'
             . '<tr>'
-            . '<td style="width:33%;vertical-align:bottom;">____________________<br>Consultant Name/Signature</td>'
-            . '<td style="width:33%;vertical-align:bottom;">____________________<br>Medical Officer Signature</td>'
-            . '<td style="width:34%;vertical-align:bottom;">____________________<br>Patient/Attendant Signature & Date</td>'
+            . '<td>____________________<br>Consultant Name/Signature</td>'
+            . '<td>____________________<br>Medical Officer Signature</td>'
+            . '<td>____________________<br>Patient/Attendant Signature & Date</td>'
             . '</tr>'
             . '</table>';
     }
@@ -1451,7 +1451,7 @@ class Ipd_discharge extends BaseController
             return;
         }
 
-        $html = '<h4 style="margin:16px 0 8px 0;">' . esc($title) . '</h4><ul style="margin:0 0 10px 20px;">';
+        $html = '<h4 class="discharge-section-heading">' . esc($title) . '</h4><ul class="discharge-list">';
         foreach ($rows as $row) {
             $report = trim((string) ($row['comp_report'] ?? ''));
             $remark = trim((string) ($row['comp_remark'] ?? ''));
@@ -1461,7 +1461,7 @@ class Ipd_discharge extends BaseController
 
             $line = esc($report);
             if ($remark !== '') {
-                $line .= ' <span style="color:#475569;">(' . esc($remark) . ')</span>';
+                $line .= ' <span class="discharge-remark">(' . esc($remark) . ')</span>';
             }
 
             $html .= '<li>' . $line . '</li>';
@@ -1541,8 +1541,8 @@ class Ipd_discharge extends BaseController
         // Get discharge status header
         $statusHeader = $this->getDischargeStatusText($ipd);
 
-        return '<h2 style="text-align:center;margin:1px;padding:0px;">' . esc($statusHeader) . '</h2>'
-            . '<hr style="margin:1px;padding:0px;" />'
+        return '<h2 class="discharge-title">' . esc($statusHeader) . '</h2>'
+            . '<hr class="discharge-separator" />'
             . '<table width="100%" cellpadding="0" cellspacing="0">'
             . '<tr><td width="150px"><b>Name</b></td><td width="250px">' . esc($patientName) . '</td><td width="150px"><b>UHID</b></td><td width="250px">' . esc($patientCode) . '</td></tr>'
             . '<tr><td width="150px"><b>Age & Gender</b></td><td width="250px">' . esc(trim($age . ' / ' . ((string) ($person->xgender ?? '')))) . '</td><td width="150px"><b>IPD No.</b></td><td width="250px">' . esc((string) ($ipd->ipd_code ?? '')) . '</td></tr>'
@@ -1551,7 +1551,7 @@ class Ipd_discharge extends BaseController
             . '<tr><td width="150px"><b>Address</b></td><td width="250px">' . esc($address) . '</td><td width="150px"><b>Org. Name</b></td><td width="250px">' . esc($orgName) . '</td></tr>'
             . '<tr><td width="150px"><b>Department</b></td><td width="250px">' . esc($department) . '</td><td width="150px"></td><td width="250px"></td></tr>'
             . '</table>'
-            . '<hr style="margin:1px;padding:0px;" />';
+            . '<hr class="discharge-separator" />';
     }
 
     private function renderStoredHtmlFragment(string $raw): string
@@ -1698,8 +1698,8 @@ class Ipd_discharge extends BaseController
             // Get discharge status text based on ipd_status
             $dischargeStatusHeader = $this->getDischargeStatusText($ipd);
             
-            $sections[] = '<h4 style="margin:16px 0 8px 0;">' . esc($dischargeStatusHeader) . '</h4>'
-                . '<div>' . implode('<br>', $dischargeSummaryParts) . '</div>';
+            $sections[] = '<h4 class="discharge-section-heading">' . esc($dischargeStatusHeader) . '</h4>'
+                . '<div class="discharge-summary-info">' . implode('<br>', $dischargeSummaryParts) . '</div>';
         }
 
         $complaints = $this->byIpdRows('ipd_discharge_complaint', ['comp_report', 'comp_remark'], 'id ASC', $ipdId);
@@ -1750,10 +1750,10 @@ class Ipd_discharge extends BaseController
                 continue;
             }
 
-            $sysHtml .= '<div style="margin-bottom:6px;">' . nl2br(esc($value)) . '</div>';
+            $sysHtml .= '<div class="discharge-item">' . nl2br(esc($value)) . '</div>';
         }
         if ($sysHtml !== '') {
-            $sections[] = '<h4 style="margin:16px 0 8px 0;">Other / Systemic Examinations</h4>' . $sysHtml;
+            $sections[] = '<h4 class="discharge-section-heading">Other / Systemic Examinations</h4>' . $sysHtml;
         }
 
         $personalHistory = [];
@@ -1780,7 +1780,7 @@ class Ipd_discharge extends BaseController
         }
 
         if (! empty($personalHistory)) {
-            $sections[] = '<h4 style="margin:16px 0 8px 0;">Personal History</h4><div>' . esc(implode(', ', $personalHistory)) . '</div>';
+            $sections[] = '<h4 class="discharge-section-heading">Personal History</h4><div>' . esc(implode(', ', $personalHistory)) . '</div>';
         }
 
         $allergySection = '';
@@ -1799,12 +1799,12 @@ class Ipd_discharge extends BaseController
             $allergyLines[] = '<div><b>Current Medications:</b> ' . esc((string) ($opdHistory['current_medications'] ?? '')) . '</div>';
         }
         if (! empty($allergyLines)) {
-            $allergySection = '<h4 style="margin:16px 0 8px 0;">Drug Allergy / ADR</h4>' . implode('', $allergyLines);
+            $allergySection = '<h4 class="discharge-section-heading">Drug Allergy / ADR</h4>' . implode('', $allergyLines);
         }
 
         $coMorbText = trim((string) ($opdHistory['co_morbidities'] ?? ''));
         if ($coMorbText !== '') {
-            $sections[] = '<h4 style="margin:16px 0 8px 0;">Co-Morbidities</h4><div>' . esc($coMorbText) . '</div>';
+            $sections[] = '<h4 class="discharge-section-heading">Co-Morbidities</h4><div>' . esc($coMorbText) . '</div>';
         }
 
         $admitDate = $this->normalizeDateValue((string) ($ipd->register_date ?? '')) ?? '';
@@ -1856,17 +1856,17 @@ class Ipd_discharge extends BaseController
         }
 
         if (! empty($pathologyMatrix['rows']) || ! empty($selectedLabRows) || ! empty($selectedNonPathRows) || trim((string) ($otherExamParsed['text'] ?? '')) !== '') {
-            $html = '<h4 style="margin:16px 0 8px 0;">Clinical Investigation Reports</h4>';
+            $html = '<h4 class="discharge-section-heading">Clinical Investigation Reports</h4>';
 
             if (! empty($pathologyMatrix['rows'])) {
                 $html .= '<div><b>In-Hospital Lab:</b></div>'
-                    . '<table style="width:100%;border-collapse:collapse;margin:4px 0 8px 0;" border="1" cellpadding="6">'
+                    . '<table class="discharge-table" border="1" cellpadding="6">'
                     . '<tr>'
-                    . '<th style="text-align:left;">Test</th>'
-                    . '<th style="text-align:left;">Fixed Normals</th>';
+                    . '<th>Test</th>'
+                    . '<th>Fixed Normals</th>';
 
                 foreach (($pathologyMatrix['dates'] ?? []) as $dt) {
-                    $html .= '<th style="text-align:left;">' . esc((string) ($pathologyMatrix['date_labels'][$dt] ?? $dt)) . '</th>';
+                    $html .= '<th>' . esc((string) ($pathologyMatrix['date_labels'][$dt] ?? $dt)) . '</th>';
                 }
 
                 $html .= '</tr>';
@@ -1886,7 +1886,7 @@ class Ipd_discharge extends BaseController
                 $html .= '</table>';
             } elseif (! empty($selectedLabRows)) {
                 // Fallback when value-matrix cannot be built from current schema/data.
-                $html .= '<div><b>In-Hospital Lab:</b></div><ul style="margin:4px 0 8px 20px;">';
+                $html .= '<div><b>In-Hospital Lab:</b></div><ul class="discharge-sublist">';
                 foreach ($selectedLabRows as $row) {
                     $html .= '<li>[' . esc((string) ($row['inv_date_label'] ?? '')) . '] ' . esc((string) ($row['test_list'] ?? '')) . '</li>';
                 }
@@ -1894,7 +1894,7 @@ class Ipd_discharge extends BaseController
             }
 
             if (! empty($selectedNonPathRows)) {
-                $html .= '<div><b>X-Ray / ECG / Sonography / CT / MRI:</b></div><ul style="margin:4px 0 8px 20px;">';
+                $html .= '<div><b>X-Ray / ECG / Sonography / CT / MRI:</b></div><ul class="discharge-sublist">';
                 foreach ($selectedNonPathRows as $row) {
                     $html .= '<li>[' . esc((string) ($row['report_date_label'] ?? '')) . '] '
                         . esc((string) ($row['modality'] ?? ''))
@@ -1902,7 +1902,7 @@ class Ipd_discharge extends BaseController
 
                     $impression = trim((string) ($row['impression'] ?? ''));
                     if ($impression !== '') {
-                        $html .= '<br><span style="color:#475569;">Impression: ' . nl2br(esc($impression)) . '</span>';
+                        $html .= '<br><span class="discharge-remark">Impression: ' . nl2br(esc($impression)) . '</span>';
                     }
 
                     $html .= '</li>';
@@ -1929,7 +1929,7 @@ class Ipd_discharge extends BaseController
         $inhosRow = $this->firstRowByIpd('ipd_discharge_investigtions_inhos', $ipdId);
         $inhosRemark = $this->normalizeRichText((string) ($inhosRow['comp_remark'] ?? ''));
         if ($inhosRemark !== '') {
-            $sections[] = '<h4 style="margin:16px 0 8px 0;">Summary of key investigations during Hospitalization</h4><div>'
+            $sections[] = '<h4 class="discharge-section-heading">Summary of key investigations during Hospitalization</h4><div>'
                 . nl2br(esc($inhosRemark))
                 . '</div>';
         }
@@ -1986,7 +1986,7 @@ class Ipd_discharge extends BaseController
 
         $drugRows = $this->byIpdRows('ipd_discharge_drug', ['drug_name', 'drug_dose', 'drug_day'], 'id ASC', $ipdId);
         if (! empty($drugRows)) {
-            $html = '<h4 style="margin:16px 0 8px 0;">Discharge Medications</h4><ol style="margin:0 0 10px 20px;">';
+            $html = '<h4 class="discharge-section-heading">Discharge Medications</h4><ol class="discharge-list">';
             foreach ($drugRows as $row) {
                 $drugName = trim((string) ($row['drug_name'] ?? ''));
                 if ($drugName === '') {
@@ -1998,10 +1998,10 @@ class Ipd_discharge extends BaseController
                 $days = trim((string) ($row['drug_day'] ?? ''));
 
                 if ($dose !== '') {
-                    $line .= ' <span style="color:#475569;">' . esc($dose) . '</span>';
+                    $line .= ' <span class="discharge-remark">' . esc($dose) . '</span>';
                 }
                 if ($days !== '') {
-                    $line .= ' <span style="color:#475569;">[' . esc($days) . ' days]</span>';
+                    $line .= ' <span class="discharge-remark">[' . esc($days) . ' days]</span>';
                 }
 
                 $html .= '<li>' . $line . '</li>';
@@ -2011,9 +2011,9 @@ class Ipd_discharge extends BaseController
         } else {
             $medRows = $this->byIpdRows('ipd_discharge_prescrption_prescribed', ['med_name', 'med_type', 'qty', 'no_of_days', 'remark'], 'id ASC', $ipdId);
             if (! empty($medRows)) {
-                $html = '<h4 style="margin:16px 0 8px 0;">Discharge Medications</h4>'
-                    . '<table  style="width:100%;border-style: inset;;margin-bottom:10px;" border="0" cellpadding="6">'
-                    . '<tr><th style="width:40px;">#</th><th>Medicine</th><th style="width:90px;">Qty</th><th style="width:100px;">Days</th><th>Notes</th></tr>';
+                $html = '<h4 class="discharge-section-heading">Discharge Medications</h4>'
+                    . '<table class="discharge-medicine-table" border="0" cellpadding="6">'
+                    . '<tr><th>#</th><th>Medicine</th><th>Qty</th><th>Days</th><th>Notes</th></tr>';
                 $sr = 1;
                 foreach ($medRows as $row) {
                     $medName = trim((string) ($row['med_name'] ?? ''));
@@ -2039,7 +2039,7 @@ class Ipd_discharge extends BaseController
         $instructions = $this->byIpdRows('ipd_discharge_instructions', ['comp_report', 'comp_remark', 'review_after', 'footer_text'], 'id DESC', $ipdId);
         if (! empty($instructions)) {
             $first = $instructions[0];
-            $html = '<h4 style="margin:16px 0 8px 0;">Discharge Advice/Instructions/Summary</h4>';
+            $html = '<h4 class="discharge-section-heading">Discharge Advice/Instructions/Summary</h4>';
 
             $instructionMeta = $this->parseInstructionMetaPayload((string) ($first['comp_report'] ?? ''));
             $foodIds = is_array($instructionMeta['food_ids'] ?? null) ? ($instructionMeta['food_ids'] ?? []) : [];
@@ -2061,8 +2061,8 @@ class Ipd_discharge extends BaseController
             }
 
             if (! empty($foodIds)) {
-                $html .= '<div style="margin-bottom:8px;"><strong>Dietary Advice:</strong></div>';
-                $html .= '<ol style="margin:0 0 10px 20px;">';
+                $html .= '<div class="discharge-field"><strong>Dietary Advice:</strong></div>';
+                $html .= '<ol class="discharge-list">';
                 foreach ($foodIds as $foodId) {
                     $id = (int) $foodId;
                     $row = $foodMap[$id] ?? null;
@@ -2091,7 +2091,7 @@ class Ipd_discharge extends BaseController
 
             $otherText = trim((string) ($instructionMeta['other_text'] ?? ''));
             if ($otherText !== '') {
-                $html .= '<div style="margin-bottom:8px;"><strong>Other Advice:</strong> ' . $this->renderStoredHtmlFragment($otherText) . '</div>';
+                $html .= '<div class="discharge-field"><strong>Other Advice:</strong> ' . $this->renderStoredHtmlFragment($otherText) . '</div>';
             }
 
             $remark = trim((string) ($first['comp_remark'] ?? ''));
@@ -2109,29 +2109,29 @@ class Ipd_discharge extends BaseController
                         $reviewDate = ' (' . date('d-m-Y', $reviewTs) . ')';
                     }
                 }
-                $html .= '<div style="margin-top:6px;">Review after ' . esc($reviewAfter) . ' Days' . esc($reviewDate) . ' days / as and when required</div>';
+                $html .= '<div class="discharge-footer">Review after ' . esc($reviewAfter) . ' Days' . esc($reviewDate) . ' days / as and when required</div>';
             }
 
             $footerText = trim((string) ($first['footer_text'] ?? ''));
             if ($footerText !== '') {
-                $html .= '<div style="margin-top:6px;">' . $this->renderStoredHtmlFragment($footerText) . '</div>';
+                $html .= '<div class="discharge-footer">' . $this->renderStoredHtmlFragment($footerText) . '</div>';
             }
 
             $sections[] = $html;
         }
 
-        $sections[] = '<table border="0" cellpadding="1" cellspacing="1" style="width:100%">'
+        $sections[] = '<table class="discharge-signature-table" border="0" cellpadding="1" cellspacing="1">'
             . '<tbody>'
             . '<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>'
             . '<tr>'
-            . '<td style="text-align:left; vertical-align:middle">_________________________</td>'
             . '<td>_________________________</td>'
-            . '<td style="text-align:right; vertical-align:middle">_________________________</td>'
+            . '<td>_________________________</td>'
+            . '<td>_________________________</td>'
             . '</tr>'
             . '<tr>'
-            . '<td style="text-align:center; vertical-align:middle">Signature of Consultant</td>'
-            . '<td style="text-align:center; vertical-align:middle">Signature of Medical Officer</td>'
-            . '<td style="text-align:center; vertical-align:middle">Signature of Receiver / Date</td>'
+            . '<td>Signature of Consultant</td>'
+            . '<td>Signature of Medical Officer</td>'
+            . '<td>Signature of Receiver / Date</td>'
             . '</tr>'
             . '</tbody>'
             . '</table>';
@@ -2234,8 +2234,8 @@ class Ipd_discharge extends BaseController
             return '';
         }
 
-        $html = '<h4 style="margin:16px 0 8px 0;">Nursing Trend Summary (Last 24 Hours)</h4>';
-        $html .= '<ul style="margin:0 0 10px 20px;">';
+        $html = '<h4 class="discharge-section-heading">Nursing Trend Summary (Last 24 Hours)</h4>';
+        $html .= '<ul class="discharge-list">';
         if ($vitalsCount > 0) {
             $html .= '<li>Vitals charted entries: ' . esc((string) $vitalsCount) . '</li>';
             if ($latestVitalsLine !== '') {
@@ -2246,8 +2246,8 @@ class Ipd_discharge extends BaseController
             $html .= '<li>Fluid balance (approx): Intake ' . esc((string) $fluidIn) . ' ml, Output ' . esc((string) $fluidOut) . ' ml, Net ' . esc((string) ($fluidIn - $fluidOut)) . ' ml</li>';
         }
         if (! empty($treatments)) {
-            $html .= '<li>Key nursing treatments:</li><li style="list-style:none;">';
-            $html .= '<ul style="margin:4px 0 0 18px;">';
+            $html .= '<li>Key nursing treatments:</li><li class="no-bullet">';
+            $html .= '<ul class="discharge-sublist">';
             foreach (array_slice($treatments, -5) as $line) {
                 $html .= '<li>' . esc($line) . '</li>';
             }
