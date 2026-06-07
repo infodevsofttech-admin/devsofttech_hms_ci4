@@ -641,11 +641,10 @@ $status = (int) ($edit['status'] ?? 1);
 
                     setNotice('success', data.error_text || 'Template deleted successfully.');
 
-                    if (typeof load_form_div === 'function') {
-                        load_form_div('<?= base_url('setting/template/discharge_templates') ?>', 'maindiv', 'IPD Discharge Template');
-                    } else {
-                        window.location.assign('<?= base_url('setting/template/discharge_templates') ?>');
-                    }
+                    // Force page reload to show updated list
+                    setTimeout(function() {
+                        window.location.reload();
+                    }, 500);
                 })
                 .catch(function () {
                     setNotice('danger', 'Network error while deleting template.');

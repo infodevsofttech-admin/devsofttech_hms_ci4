@@ -2977,23 +2977,58 @@ HTML;
         $id = (int) $id;
         $ok = false;
         $message = 'Unable to delete template.';
+        
+        log_message('debug', 'Delete request for template ID: ' . $id);
+        
         if ($id > 0 && $this->db->tableExists('ipd_discharge_templates')) {
             $row = $this->db->table('ipd_discharge_templates')
                 ->where('id', $id)
                 ->get(1)
                 ->getRowArray() ?? [];
 
-            if (! empty($row)) {
-                $ok = (bool) $this->db->table('ipd_discharge_templates')->where('id', $id)->delete();
+            log_message('debug', 'Row fetched: ' . json_encode($row));
 
-                if (! $ok) {
-                    // Some legacy/live schemas may reject delete via engine constraints; archive instead.
-                    $ok = (bool) $this->db->table('ipd_discharge_templates')
-                        ->where('id', $id)
-                        ->update(['status' => 0, 'is_default' => 0]);
-                    if ($ok) {
-                        $message = 'Template archived.';
+            if (! empty($row)) {
+                try {
+                    // Try to delete the record
+                    $deleteQuery = $this->db->table('ipd_discharge_templates')->where('id', $id);
+                    log_message('debug', 'Delete query: ' . $deleteQuery->getCompiledDelete(false));
+                    
+                    $deleteQuery->delete();
+                    $affectedRows = $this->db->affectedRows();
+                    log_message('debug', 'Delete affected rows: ' . $affectedRows);
+                    
+                    if ($affectedRows > 0) {
+                        $ok = true;
+                        $message = 'Template deleted.';
+                        log_message('debug', 'Delete successful');
+                    } else {
+                        // Delete didn't affect any rows - try archive instead
+                        log_message('error', 'Delete affected 0 rows for template ID: ' . $id);
+                        
+                        $updateQuery = $this->db->table('ipd_discharge_templates')->where('id', $id);
+                        log_message('debug', 'Archive query: ' . $updateQuery->getCompiledUpdate(['status' => 0, 'is_default' => 0], false));
+                        
+                        $updateResult = $updateQuery->update(['status' => 0, 'is_default' => 0]);
+                        $updateAffected = $this->db->affectedRows();
+                        
+                        log_message('debug', 'Archive affected rows: ' . $updateAffected);
+                        
+                        if ($updateResult && $updateAffected > 0) {
+                            $ok = true;
+                            $message = 'Template archived.';
+                        } else {
+                            log_message('error', 'Archive also affected 0 rows for template ID: ' . $id);
+                            $dbError = $this->db->error();
+                            log_message('error', 'Database error code: ' . $dbError['code'] . ', message: ' . $dbError['message']);
+                            $message = 'Database error: ' . ($dbError['message'] ?? 'No rows affected');
+                        }
                     }
+                } catch (\Exception $e) {
+                    log_message('error', 'Exception during delete: ' . $e->getMessage());
+                    log_message('error', 'Exception trace: ' . $e->getTraceAsString());
+                    $message = 'Exception: ' . $e->getMessage();
+                    $ok = false;
                 }
 
                 if ($ok && (int) ($row['is_default'] ?? 0) === 1) {
@@ -3014,8 +3049,14 @@ HTML;
                 if ($ok && $message === 'Unable to delete template.') {
                     $message = 'Template deleted.';
                 }
+            } else {
+                log_message('error', 'Row not found for template ID: ' . $id);
             }
+        } else {
+            log_message('error', 'Invalid ID or table does not exist. ID: ' . $id . ', Table exists: ' . ($this->db->tableExists('ipd_discharge_templates') ? 'yes' : 'no'));
         }
+
+        log_message('debug', 'Final result - OK: ' . ($ok ? 'true' : 'false') . ', Message: ' . $message);
 
         if ($this->request->isAJAX()) {
             return $this->response->setJSON([
