@@ -964,12 +964,10 @@ class Ipd_discharge extends BaseController
             return '';
         }
 
+        // Simplified query to avoid GROUP_CONCAT issues
         $doctors = $this->db->table('doctor_master d')
-            ->select("d.id, d.p_fname, d.p_title, group_concat(distinct m.SpecName SEPARATOR ', ') as SpecName", false)
-            ->join('doc_spec s', 'd.id = s.doc_id', 'left')
-            ->join('med_spec m', 's.med_spec_id = m.id', 'left')
+            ->select('d.id, d.p_fname, d.p_title')
             ->whereIn('d.id', $docIds)
-            ->groupBy('d.id')
             ->get()
             ->getResult();
 
@@ -979,17 +977,35 @@ class Ipd_discharge extends BaseController
 
         $names = [];
         foreach ($doctors as $doc) {
+            $docId = (int) ($doc->id ?? 0);
             $title = trim((string) ($doc->p_title ?? ''));
             $name = trim((string) ($doc->p_fname ?? ''));
-            $spec = trim((string) ($doc->SpecName ?? ''));
 
             if ($name === '') {
                 continue;
             }
 
+            // Get specializations separately
+            $specs = [];
+            if ($this->db->tableExists('doc_spec') && $this->db->tableExists('med_spec')) {
+                $specRows = $this->db->table('doc_spec s')
+                    ->select('m.SpecName')
+                    ->join('med_spec m', 's.med_spec_id = m.id', 'inner')
+                    ->where('s.doc_id', $docId)
+                    ->get()
+                    ->getResult();
+
+                foreach ($specRows as $specRow) {
+                    $specName = trim((string) ($specRow->SpecName ?? ''));
+                    if ($specName !== '') {
+                        $specs[] = $specName;
+                    }
+                }
+            }
+
             $fullName = ($title !== '' ? $title . ' ' : 'Dr. ') . $name;
-            if ($spec !== '') {
-                $fullName .= ' [' . $spec . ']';
+            if (! empty($specs)) {
+                $fullName .= ' [' . implode(', ', $specs) . ']';
             }
             $names[] = $fullName;
         }
