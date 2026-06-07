@@ -474,9 +474,9 @@ class Ipd_discharge extends BaseController
             'DEPARTMENT' => esc($this->getDischargeDepartmentName($ipd)),
             'ADMIT_DATE_ONLY' => esc($this->safeDate((string) ($ipd->str_register_date ?? $ipd->register_date ?? ''))),
             'DISCHARGE_DATE_ONLY' => esc($this->safeDate((string) ($ipd->str_discharge_date ?? $ipd->discharge_date ?? ''))),
-            'ADMISSION_TIME' => esc($this->safeTime((string) ($ipd->register_date ?? $ipd->register_time ?? $ipd->admission_time ?? $ipd->str_register_date ?? ''))),
-            'DISCHARGE_TIME' => esc($this->safeTime((string) ($ipd->discharge_date ?? $ipd->discharge_time ?? $ipd->str_discharge_date ?? ''))),
-            'ADMIT_TIME' => esc($this->safeTime((string) ($ipd->register_date ?? $ipd->register_time ?? $ipd->admission_time ?? $ipd->str_register_date ?? ''))),
+            'ADMISSION_TIME' => esc($this->safeTime((string) ($ipd->reg_time ?? $ipd->register_time ?? ''))),
+            'DISCHARGE_TIME' => esc($this->safeTime((string) ($ipd->discharge_time ?? ''))),
+            'ADMIT_TIME' => esc($this->safeTime((string) ($ipd->reg_time ?? $ipd->register_time ?? ''))),
             'INSURANCE_COMPANY' => esc($insuranceCompany),
             'DOCTOR_NAMES' => esc($doctorNames),
             'DOCTOR_NAME' => esc($doctorNames),
@@ -943,10 +943,13 @@ class Ipd_discharge extends BaseController
             return '';
         }
 
-        // Try doc_list field (comma-separated IDs)
-        $docList = trim((string) ($ipd->doc_list ?? ''));
-        if ($docList === '' || $docList === '0') {
-            // Fallback: try single doctor_id or doc_id field
+        // Try r_doc_id field first (referring doctor)
+        $docList = '';
+        $singleDocId = (int) ($ipd->r_doc_id ?? $ipd->doc_list ?? 0);
+        if ($singleDocId > 0) {
+            $docList = (string) $singleDocId;
+        } else {
+            // Fallback: try other doctor fields
             $singleDocId = (int) ($ipd->doctor_id ?? $ipd->doc_id ?? $ipd->consultant_id ?? 0);
             if ($singleDocId > 0) {
                 $docList = (string) $singleDocId;
@@ -1331,6 +1334,24 @@ class Ipd_discharge extends BaseController
             return '';
         }
 
+        // Try to parse as time (HH:MM or HH:MM:SS format)
+        if (preg_match('/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/', $value, $matches)) {
+            $hour = (int)$matches[1];
+            $minute = (int)$matches[2];
+            
+            // Validate hour and minute
+            if ($hour >= 0 && $hour <= 23 && $minute >= 0 && $minute <= 59) {
+                // Convert to 12-hour format with AM/PM
+                $ampm = $hour >= 12 ? 'PM' : 'AM';
+                $hour12 = $hour % 12;
+                if ($hour12 === 0) {
+                    $hour12 = 12;
+                }
+                return sprintf('%02d:%02d %s', $hour12, $minute, $ampm);
+            }
+        }
+
+        // Fallback: try strtotime for datetime formats
         $ts = strtotime($value);
         if ($ts === false) {
             return '';
@@ -1391,11 +1412,11 @@ class Ipd_discharge extends BaseController
         // Try dept_id first (common field name)
         $deptId = (int) ($ipd->dept_id ?? $ipd->department_id ?? 0);
         
-        // Try hc_department table first
-        if ($deptId > 0 && $this->tableHasColumns('hc_department', ['id', 'vName'])) {
+        // Try hc_department table first (field is iId, not id)
+        if ($deptId > 0 && $this->db->tableExists('hc_department')) {
             $row = $this->db->table('hc_department')
                 ->select('vName')
-                ->where('id', $deptId)
+                ->where('iId', $deptId)
                 ->get(1)
                 ->getRowArray();
             $name = trim((string) ($row['vName'] ?? ''));
@@ -4523,16 +4544,13 @@ class Ipd_discharge extends BaseController
             'Available Fields in ipd_master' => array_keys((array)$ipdMaster),
             'register_date' => $ipdMaster->register_date ?? 'NOT FOUND',
             'discharge_date' => $ipdMaster->discharge_date ?? 'NOT FOUND',
-            'register_time' => $ipdMaster->register_time ?? 'NOT FOUND',
+            'reg_time' => $ipdMaster->reg_time ?? 'NOT FOUND',
+            'reg_time_bak' => $ipdMaster->reg_time_bak ?? 'NOT FOUND',
             'discharge_time' => $ipdMaster->discharge_time ?? 'NOT FOUND',
-            'admission_time' => $ipdMaster->admission_time ?? 'NOT FOUND',
+            'discharge_time_bak' => $ipdMaster->discharge_time_bak ?? 'NOT FOUND',
             'dept_id' => $ipdMaster->dept_id ?? 'NOT FOUND',
-            'department_id' => $ipdMaster->department_id ?? 'NOT FOUND',
-            'department' => $ipdMaster->department ?? 'NOT FOUND',
-            'doc_list' => $ipdMaster->doc_list ?? 'NOT FOUND',
-            'doctor_id' => $ipdMaster->doctor_id ?? 'NOT FOUND',
-            'doc_id' => $ipdMaster->doc_id ?? 'NOT FOUND',
-            'consultant_id' => $ipdMaster->consultant_id ?? 'NOT FOUND',
+            'r_doc_id' => $ipdMaster->r_doc_id ?? 'NOT FOUND',
+            'r_doc_name' => $ipdMaster->r_doc_name ?? 'NOT FOUND',
         ];
 
         // Check what getDischargeDepartmentName returns
@@ -4542,8 +4560,8 @@ class Ipd_discharge extends BaseController
         $fields['getDischargeDoctorNames()'] = $this->getDischargeDoctorNames($ipd);
 
         // Check safeTime results
-        $fields['safeTime(register_date)'] = $this->safeTime((string)($ipdMaster->register_date ?? ''));
-        $fields['safeTime(discharge_date)'] = $this->safeTime((string)($ipdMaster->discharge_date ?? ''));
+        $fields['safeTime(reg_time)'] = $this->safeTime((string)($ipdMaster->reg_time ?? ''));
+        $fields['safeTime(discharge_time)'] = $this->safeTime((string)($ipdMaster->discharge_time ?? ''));
 
         return $this->response->setJSON($fields, JSON_PRETTY_PRINT);
     }
