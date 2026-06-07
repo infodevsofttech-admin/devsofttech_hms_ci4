@@ -6,18 +6,16 @@ This document shows the exact HTML structure used for each discharge summary pla
 
 ## {{DISCHARGE_SUMMARY}}
 
-**Source:** Auto-generated from IPD data  
+**Source:** `getDischargeStatusText()` - Status from `ipd_discharge_status` table  
+**Join:** `ipd_master.ipd_status = ipd_discharge_status.id`  
 **HTML Structure:**
 ```html
-<h4 style="margin:16px 0 8px 0;">Discharge Summary</h4>
+<h4 class="discharge-section-heading">Discharge Summary</h4>
 <!-- OR dynamic header based on ipd_status -->
-<h4 style="margin:16px 0 8px 0;">Leave Against Medical Advice</h4>
-<div>
-    <b>Department:</b> General Surgery<br>
-    <b>Treating Doctor(s):</b> Dr. Name [Specialization]<br>
-    <b>Date of Admission:</b> 04-06-2026
-</div>
+<h4 class="discharge-section-heading">Leave Against Medical Advice</h4>
 ```
+
+**Note:** This placeholder contains **ONLY** the status header text. No additional information like department, doctor, or dates.
 
 **Status-based headers:**
 - ipd_status = 0 → "Discharge Summary"
@@ -26,6 +24,14 @@ This document shows the exact HTML structure used for each discharge summary pla
 - ipd_status = 3 → "Refer To Higher Centre"
 - ipd_status = 5 → "Dead Summary"
 - ipd_status = 7 → "Discharge on Request"
+
+**For additional info, use separate tokens:**
+- `{{DEPARTMENT}}` - Department name
+- `{{DOCTOR_NAMES}}` - Treating doctor(s)
+- `{{ADMIT_DATE_ONLY}}` - Admission date
+- `{{DISCHARGE_DATE_ONLY}}` - Discharge date
+- `{{ADMISSION_TIME}}` - Admission time
+- `{{DISCHARGE_TIME}}` - Discharge time
 
 ---
 
