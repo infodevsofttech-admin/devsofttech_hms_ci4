@@ -566,7 +566,8 @@ class Ipd_discharge extends BaseController
         $dischargeInstructions = $section(['Discharge Advice/Instructions/Summary']);
         $drugAllergyAdr = $section(['Drug Allergy / ADR']);
         $coMorbidities = $section(['Co-Morbidities']);
-        $signatureBlock = $section(['Signature of Consultant'], ['Signature of Medical Officer', 'Signature of Receiver / Date']);
+        // Extract entire signature table - no end markers (it's the last section)
+        $signatureBlock = $section(['Signature of Consultant'], []);
         
         // Extract individual instruction fields for template flexibility
         $otherAdvice = $section(['Other Advice:']);
