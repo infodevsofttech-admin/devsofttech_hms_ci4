@@ -1054,6 +1054,11 @@ class Ipd_discharge extends BaseController
 
         $ipdStatus = (int) ($ipd->ipd_status ?? 0);
 
+        // If status is 0 (Status Pending), show "Discharge Summary" only
+        if ($ipdStatus === 0) {
+            return 'Discharge Summary';
+        }
+
         // Check if ipd_discharge_status table exists
         if (! $this->db->tableExists('ipd_discharge_status')) {
             return 'Discharge Summary';
@@ -1069,9 +1074,10 @@ class Ipd_discharge extends BaseController
             return 'Discharge Summary';
         }
 
-        // Prefer status_details if available, otherwise use status_desc
+        // Use status_details field (e.g., "Discharge Summary", "Leave Against Medical Advice", "Dead Summary")
         $statusText = trim((string) ($row['status_details'] ?? ''));
         if ($statusText === '') {
+            // Fallback to status_desc if status_details is empty
             $statusText = trim((string) ($row['status_desc'] ?? ''));
         }
 
@@ -1532,7 +1538,10 @@ class Ipd_discharge extends BaseController
         $admitDate = $this->safeDate((string) ($ipd->str_register_date ?? $ipd->register_date ?? ''));
         $dischargeDate = $this->safeDate((string) ($ipd->str_discharge_date ?? $ipd->discharge_date ?? ''));
 
-        return '<h2 style="text-align:center;margin:1px;padding:0px;">Discharge Summary</h2>'
+        // Get discharge status header
+        $statusHeader = $this->getDischargeStatusText($ipd);
+
+        return '<h2 style="text-align:center;margin:1px;padding:0px;">' . esc($statusHeader) . '</h2>'
             . '<hr style="margin:1px;padding:0px;" />'
             . '<table width="100%" cellpadding="0" cellspacing="0">'
             . '<tr><td width="150px"><b>Name</b></td><td width="250px">' . esc($patientName) . '</td><td width="150px"><b>UHID</b></td><td width="250px">' . esc($patientCode) . '</td></tr>'
@@ -1683,12 +1692,13 @@ class Ipd_discharge extends BaseController
         if ($admitDate !== '') {
             $dischargeSummaryParts[] = '<b>Date of Admission:</b> ' . esc($admitDate);
         }
-        if ($dischargeDate !== '') {
-            $dischargeSummaryParts[] = '<b>Date of Discharge:</b> ' . esc($dischargeDate);
-        }
+        // NOTE: Date of Discharge removed per user request
         
         if (! empty($dischargeSummaryParts)) {
-            $sections[] = '<h4 style="margin:16px 0 8px 0;">Discharge Summary</h4>'
+            // Get discharge status text based on ipd_status
+            $dischargeStatusHeader = $this->getDischargeStatusText($ipd);
+            
+            $sections[] = '<h4 style="margin:16px 0 8px 0;">' . esc($dischargeStatusHeader) . '</h4>'
                 . '<div>' . implode('<br>', $dischargeSummaryParts) . '</div>';
         }
 
