@@ -626,9 +626,13 @@ $status = (int) ($edit['status'] ?? 1);
                 return;
             }
 
+            // Create fresh FormData with only CSRF token
+            var deleteFormData = new FormData();
+            deleteFormData.append('<?= csrf_token() ?>', '<?= csrf_hash() ?>');
+
             fetch('<?= base_url('setting/template/discharge_templates/delete') ?>/' + id, {
                 method: 'POST',
-                body: new FormData(form),
+                body: deleteFormData,
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest'
                 }
@@ -640,6 +644,8 @@ $status = (int) ($edit['status'] ?? 1);
                         setNotice('danger', (data && data.error_text) ? data.error_text : 'Unable to delete template.');
                         return;
                     }
+
+                    setNotice('success', data.error_text || 'Template deleted successfully.');
 
                     if (typeof load_form_div === 'function') {
                         load_form_div('<?= base_url('setting/template/discharge_templates') ?>', 'maindiv', 'IPD Discharge Template');
