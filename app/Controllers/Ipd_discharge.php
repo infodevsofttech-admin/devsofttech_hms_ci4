@@ -512,6 +512,8 @@ class Ipd_discharge extends BaseController
             'Discharge Medications',
             'Discharge Advice/Instructions/Summary',
             'Dietary Advice',
+            'Other Advice:',
+            'Discharge Summary:',
             'Signature of Consultant',
             'Summary of key investigations during Hospitalization',
             'Nursing Trend',
@@ -565,6 +567,10 @@ class Ipd_discharge extends BaseController
         $drugAllergyAdr = $section(['Drug Allergy / ADR']);
         $coMorbidities = $section(['Co-Morbidities']);
         $signatureBlock = $section(['Signature of Consultant'], ['Signature of Medical Officer', 'Signature of Receiver / Date']);
+        
+        // Extract individual instruction fields for template flexibility
+        $otherAdvice = $section(['Other Advice:']);
+        $dischargeSummaryAdvice = $section(['Discharge Summary:']);
 
         $vars = [
             'DISCHARGE_SUMMARY' => $summary,
@@ -584,6 +590,9 @@ class Ipd_discharge extends BaseController
             'DRUG_ALLERGY_ADR' => $drugAllergyAdr,
             'CO_MORBIDITIES' => $coMorbidities,
             'SIGNATURE_BLOCK' => $signatureBlock,
+            'OTHER_ADVICE' => $otherAdvice,
+            'INSTRUCTION_REMARK' => $dischargeSummaryAdvice,
+            'DISCHARGE_ADVICE' => $dischargeSummaryAdvice,
             // Legacy style aliases to ease migration from CI3-style template variables.
             'FinalDiagnosis' => $finalDiagnosis,
             'Surgery' => $surgery,
@@ -2253,7 +2262,7 @@ class Ipd_discharge extends BaseController
 
             $remark = trim((string) ($first['comp_remark'] ?? ''));
             if ($remark !== '') {
-                $html .= '<div>' . $this->renderStoredHtmlFragment($remark) . '</div>';
+                $html .= '<div class="discharge-field"><strong>Discharge Summary:</strong> ' . $this->renderStoredHtmlFragment($remark) . '</div>';
             }
 
             $reviewAfter = trim((string) ($first['review_after'] ?? ''));
