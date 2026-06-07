@@ -6290,6 +6290,9 @@ class Ipd_discharge extends BaseController
         $out = str_replace("\0", '', $html);
         $out = (string) preg_replace('/^\xEF\xBB\xBF/u', '', $out);
 
+        // Sanitize CKEditor special characters that can break mPDF
+        $out = $this->sanitizeCKEditorSpecialChars($out);
+
         if ($stripNamedHeaderFooterWrappers) {
             // For body/template HTML, strip legacy named header/footer wrapper blocks.
             $out = (string) preg_replace('/<htmlpageheader\b[^>]*>[\s\S]*?<\/htmlpageheader>/i', '', $out);
@@ -6305,6 +6308,57 @@ class Ipd_discharge extends BaseController
         $out = (string) preg_replace('/\bfooter\s*:\s*html[_a-z0-9-]+\s*;?/i', '', $out);
 
         return $this->forceValidUtf8($out);
+    }
+
+    private function sanitizeCKEditorSpecialChars(string $html): string
+    {
+        if ($html === '') {
+            return '';
+        }
+
+        // Remove zero-width spaces and other invisible characters
+        $html = str_replace([
+            "\xE2\x80\x8B", // Zero-width space
+            "\xE2\x80\x8C", // Zero-width non-joiner
+            "\xE2\x80\x8D", // Zero-width joiner
+            "\xE2\x80\x8E", // Left-to-right mark
+            "\xE2\x80\x8F", // Right-to-left mark
+            "\xEF\xBB\xBF", // Zero-width no-break space (BOM)
+        ], '', $html);
+
+        // Replace smart quotes and special punctuation with standard ASCII equivalents
+        $replacements = [
+            // Smart quotes
+            "\xE2\x80\x9C" => '"',  // Left double quote
+            "\xE2\x80\x9D" => '"',  // Right double quote
+            "\xE2\x80\x98" => "'",  // Left single quote
+            "\xE2\x80\x99" => "'",  // Right single quote
+            "\xE2\x80\x9B" => "'",  // Single high-reversed-9 quotation mark
+            
+            // Dashes
+            "\xE2\x80\x93" => '-',  // En dash
+            "\xE2\x80\x94" => '-',  // Em dash
+            "\xE2\x80\x95" => '-',  // Horizontal bar
+            
+            // Ellipsis
+            "\xE2\x80\xA6" => '...',  // Horizontal ellipsis
+            
+            // Spaces (keep non-breaking space as HTML entity)
+            "\xC2\xA0" => '&nbsp;',  // Non-breaking space
+        ];
+        
+        $html = str_replace(array_keys($replacements), array_values($replacements), $html);
+
+        // Decode HTML entities to actual characters (mPDF handles UTF-8 better than entities)
+        $html = html_entity_decode($html, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+        // Remove or replace problematic HTML comments that might break parsing
+        $html = (string) preg_replace('/<!--\[if[^\]]*\]>[\s\S]*?<!\[endif\]-->/i', '', $html);
+        
+        // Clean up any malformed or nested comment blocks
+        $html = (string) preg_replace('/<!--(?!<!)[^\[>][\s\S]*?-->/s', '', $html);
+
+        return $html;
     }
 
     private function forceValidUtf8(string $text): string
