@@ -3569,6 +3569,40 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
             }
             section.dataset.toolsBound = '1';
 
+            // Re-initialize CKEditor for instruction fields after section reload
+            if (typeof CKEDITOR !== 'undefined') {
+                // Destroy existing instances first to avoid duplication
+                if (CKEDITOR.instances['instruction_other']) {
+                    CKEDITOR.instances['instruction_other'].destroy(true);
+                }
+                if (CKEDITOR.instances['instruction_remark']) {
+                    CKEDITOR.instances['instruction_remark'].destroy(true);
+                }
+
+                // Re-create CKEditor instances
+                if (document.getElementById('instruction_other')) {
+                    CKEDITOR.replace('instruction_other', {
+                        height: 120,
+                        toolbar: [
+                            { name: 'basicstyles', items: ['Bold', 'Italic', 'Underline'] },
+                            { name: 'paragraph', items: ['NumberedList', 'BulletedList'] },
+                            { name: 'editing', items: ['Undo', 'Redo'] }
+                        ]
+                    });
+                }
+
+                if (document.getElementById('instruction_remark')) {
+                    CKEDITOR.replace('instruction_remark', {
+                        height: 150,
+                        toolbar: [
+                            { name: 'basicstyles', items: ['Bold', 'Italic', 'Underline'] },
+                            { name: 'paragraph', items: ['NumberedList', 'BulletedList'] },
+                            { name: 'editing', items: ['Undo', 'Redo'] }
+                        ]
+                    });
+                }
+            }
+
             var addSelectedBtn = section.querySelector('#btn_instruction_add_selected_food');
             var clearBtn = section.querySelector('#btn_instruction_clear_food');
             var remark = section.querySelector('#instruction_remark');
