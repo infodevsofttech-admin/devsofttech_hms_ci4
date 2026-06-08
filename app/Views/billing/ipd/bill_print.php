@@ -14,6 +14,7 @@ $hasBalanceTotal = array_key_exists('balance', $billTotals);
 
 $printMode = (int) ($print_mode ?? 1);
 $showPaymentDetails = (bool) ($show_payment_details ?? true);
+$showHeader = (bool) ($show_header ?? true);
 
 $hospitalName = defined('H_Name') ? (string) constant('H_Name') : 'Hospital';
 $hospitalAddress1 = defined('H_address_1') ? (string) constant('H_address_1') : '';
@@ -131,6 +132,7 @@ $billHeadingText = $isDischargeFinal
     </style>
 </head>
 <body>
+    <?php if ($showHeader) : ?>
     <table class="meta-top" cellspacing="0" cellpadding="0">
         <tr>
             <td>Page: {PAGENO}/{nbpg}</td>
@@ -161,6 +163,7 @@ $billHeadingText = $isDischargeFinal
             </td>
         </tr>
     </table>
+    <?php endif; ?>
 
     <div class="title"><?= esc($billHeadingText) ?></div>
 

@@ -894,11 +894,16 @@ class Ipd extends BaseController
         $panelData = $this->ipdModel->getIpdPanelInfo($ipdId);
 
         $mode = max(1, min(6, $mode));
+        
+        // Get header parameter from query string (default: show header)
+        $showHeader = $this->request->getGet('header') !== '0';
+        
         $data = $this->buildBillDetailsTabData($panelData, $ipdId);
         $data['show_print_actions'] = false;
         $data['show_payment_details'] = in_array($mode, [1, 6], true);
         $data['letterhead_mode'] = in_array($mode, [5, 6], true);
         $data['print_mode'] = $mode;
+        $data['show_header'] = $showHeader;
 
         $html = view('billing/ipd/bill_print', $data);
 

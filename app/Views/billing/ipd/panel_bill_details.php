@@ -53,14 +53,37 @@ $billHeaderTitle = $isDischargeFinal ? 'Bill No. : ' . (string) ($ipd->ipd_code 
                 <span class="text-muted">/ IPD ID: <?= esc($ipd->ipd_code ?? '') ?></span>
             </div>
             <?php if ($showPrintActions && $canPrintBill && ! empty($ipd->id)) : ?>
-                <div class="d-flex flex-wrap gap-2">
-                    <a class="btn btn-sm btn-outline-primary" target="_blank" href="<?= site_url('billing/ipd/bill-print/' . (int) $ipd->id . '/1') ?>">Print Bill</a>
-                    <a class="btn btn-sm btn-outline-secondary" target="_blank" href="<?= site_url('billing/ipd/bill-print/' . (int) $ipd->id . '/2') ?>">Print Without Payment</a>
-                    <a class="btn btn-sm btn-outline-dark" target="_blank" href="<?= site_url('billing/ipd/bill-print/' . (int) $ipd->id . '/5') ?>">Letter Head w/o Payment</a>
-                    <a class="btn btn-sm btn-outline-dark" target="_blank" href="<?= site_url('billing/ipd/bill-print/' . (int) $ipd->id . '/6') ?>">Letter Head</a>
-                    <a class="btn btn-sm btn-outline-info" target="_blank" href="<?= site_url('billing/ipd/bill-print/' . (int) $ipd->id . '/3') ?>">Item Amt. With Discount</a>
-                    <a class="btn btn-sm btn-outline-success" target="_blank" href="<?= site_url('billing/ipd/bill-print/' . (int) $ipd->id . '/4') ?>">TPA Final Bill</a>
+                <div class="d-flex flex-wrap gap-2 align-items-center">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="printHeaderCheckbox" checked>
+                        <label class="form-check-label" for="printHeaderCheckbox" style="font-size: 0.9rem;">
+                            Print Header
+                        </label>
+                    </div>
+                    <a class="btn btn-sm btn-outline-primary ipd-bill-print-btn" data-mode="1" data-ipd-id="<?= (int) $ipd->id ?>" target="_blank">Print Bill</a>
+                    <a class="btn btn-sm btn-outline-secondary ipd-bill-print-btn" data-mode="2" data-ipd-id="<?= (int) $ipd->id ?>" target="_blank">Print Without Payment</a>
+                    <a class="btn btn-sm btn-outline-dark ipd-bill-print-btn" data-mode="5" data-ipd-id="<?= (int) $ipd->id ?>" target="_blank">Letter Head w/o Payment</a>
+                    <a class="btn btn-sm btn-outline-dark ipd-bill-print-btn" data-mode="6" data-ipd-id="<?= (int) $ipd->id ?>" target="_blank">Letter Head</a>
+                    <a class="btn btn-sm btn-outline-info ipd-bill-print-btn" data-mode="3" data-ipd-id="<?= (int) $ipd->id ?>" target="_blank">Item Amt. With Discount</a>
+                    <a class="btn btn-sm btn-outline-success ipd-bill-print-btn" data-mode="4" data-ipd-id="<?= (int) $ipd->id ?>" target="_blank">TPA Final Bill</a>
                 </div>
+                <script>
+                (function() {
+                    const printBtns = document.querySelectorAll('.ipd-bill-print-btn');
+                    const checkbox = document.getElementById('printHeaderCheckbox');
+                    
+                    printBtns.forEach(function(btn) {
+                        btn.addEventListener('click', function(e) {
+                            e.preventDefault();
+                            const ipdId = this.getAttribute('data-ipd-id');
+                            const mode = this.getAttribute('data-mode');
+                            const showHeader = checkbox.checked ? '1' : '0';
+                            const url = '<?= site_url("billing/ipd/bill-print/") ?>' + ipdId + '/' + mode + '?header=' + showHeader;
+                            window.open(url, '_blank');
+                        });
+                    });
+                })();
+                </script>
             <?php endif; ?>
         </div>
     </div>
