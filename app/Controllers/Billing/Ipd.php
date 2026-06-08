@@ -912,11 +912,16 @@ class Ipd extends BaseController
             mkdir($mpdfTempDir, 0755, true);
         }
 
+        // Adjust margins based on header visibility
+        // When header is hidden (letterhead mode), use larger top margin
+        $marginTop = $showHeader ? 8 : 50;      // 50mm = ~5cm for letterhead
+        $marginBottom = $showHeader ? 8 : 20;   // 20mm = 2cm
+        
         $mpdf = new Mpdf([
             'tempDir' => $mpdfTempDir,
             'format' => 'A4',
-            'margin_top' => 8,
-            'margin_bottom' => 8,
+            'margin_top' => $marginTop,
+            'margin_bottom' => $marginBottom,
             'margin_left' => 8,
             'margin_right' => 8,
         ]);
