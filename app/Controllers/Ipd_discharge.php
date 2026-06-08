@@ -6170,7 +6170,10 @@ class Ipd_discharge extends BaseController
             });
             return $this->response
                 ->setHeader('Content-Type', 'application/pdf')
-                ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
+                ->setHeader('Content-Length', (string) strlen($pdfBinary))
+                ->setHeader('Content-Disposition', 'inline; filename="' . rawurlencode($fileName) . '"; filename*=UTF-8\'\''. rawurlencode($fileName))
+                ->setHeader('Cache-Control', 'private, max-age=0, must-revalidate')
+                ->setHeader('Accept-Ranges', 'bytes')
                 ->setBody($pdfBinary);
         } catch (\Throwable $e) {
             log_message('error', 'PDF generation failed for IPD {ipd}: {msg}', [
@@ -6213,7 +6216,10 @@ class Ipd_discharge extends BaseController
 
                     return $this->response
                         ->setHeader('Content-Type', 'application/pdf')
-                        ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
+                        ->setHeader('Content-Length', (string) strlen($pdfBinary))
+                        ->setHeader('Content-Disposition', 'inline; filename="' . rawurlencode($fileName) . '"; filename*=UTF-8\'\''. rawurlencode($fileName))
+                        ->setHeader('Cache-Control', 'private, max-age=0, must-revalidate')
+                        ->setHeader('Accept-Ranges', 'bytes')
                         ->setBody($pdfBinary);
                 } catch (\Throwable $fallbackError) {
                     log_message('error', 'Discharge PDF fallback failed for IPD {ipd}: {msg}', [
@@ -6262,7 +6268,10 @@ class Ipd_discharge extends BaseController
 
                         return $this->response
                             ->setHeader('Content-Type', 'application/pdf')
-                            ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
+                            ->setHeader('Content-Length', (string) strlen($pdfBinary))
+                            ->setHeader('Content-Disposition', 'inline; filename="' . rawurlencode($fileName) . '"; filename*=UTF-8\'\''. rawurlencode($fileName))
+                            ->setHeader('Cache-Control', 'private, max-age=0, must-revalidate')
+                            ->setHeader('Accept-Ranges', 'bytes')
                             ->setBody($pdfBinary);
                     } catch (\Throwable $ultimateError) {
                         log_message('error', 'Discharge PDF ultimate fallback failed for IPD {ipd}: {msg}', [
