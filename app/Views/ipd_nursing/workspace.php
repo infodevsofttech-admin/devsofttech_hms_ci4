@@ -199,9 +199,175 @@ ksort($nurseNames);
                     <li class="nav-item" role="presentation">
                         <button type="button" class="nav-link" data-nursing-tab="nursing_tab_charge">Charge Entry</button>
                     </li>
+                    <li class="nav-item" role="presentation">
+                        <button type="button" class="nav-link" data-nursing-tab="nursing_tab_bed">Bed Management</button>
+                    </li>
                 </ul>
             </div>
             <div class="card-body">
+
+                <!-- Bed Management Tab -->
+                <div class="nursing-tab-pane d-none" id="nursing_tab_bed">
+                    <?php 
+                    $currentBedData = $current_bed ?? null;
+                    $availableBedsData = $available_beds ?? [];
+                    $bedHistoryData = $bed_history ?? [];
+                    $bedTransferUrl = site_url('ipd/patient/bed/transfer/' . $ipdId);
+                    ?>
+                    
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0">Current Bed Assignment</h6>
+                        </div>
+                        <div class="card-body">
+                            <?php if ($currentBedData): ?>
+                                <div class="row g-3">
+                                    <div class="col-md-3">
+                                        <strong>Bed Number:</strong> <?= esc($currentBedData->bed_number) ?>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <strong>Bed Code:</strong> <?= esc($currentBedData->bed_code) ?>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <strong>Ward:</strong> <?= esc($currentBedData->ward_name ?? 'N/A') ?>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <strong>Status:</strong> 
+                                        <span class="badge bg-success"><?= esc($currentBedData->bed_status) ?></span>
+                                    </div>
+                                </div>
+                            <?php else: ?>
+                                <div class="alert alert-warning mb-0">
+                                    <i class="bi bi-exclamation-triangle"></i> No bed currently assigned to this patient.
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <div class="card mt-3">
+                        <div class="card-header">
+                            <h6 class="mb-0">Transfer to New Bed</h6>
+                        </div>
+                        <div class="card-body">
+                            <form id="bed_transfer_form" class="row g-3">
+                                <?= csrf_field() ?>
+                                
+                                <div class="col-md-6">
+                                    <label class="form-label">Select New Bed <span class="text-danger">*</span></label>
+                                    <select name="bed_id" class="form-select" required>
+                                        <option value="">-- Select Bed --</option>
+                                        <?php foreach ($availableBedsData as $wardName => $beds): ?>
+                                            <optgroup label="<?= esc($wardName) ?>">
+                                                <?php foreach ($beds as $bed): ?>
+                                                    <option value="<?= esc($bed->id) ?>">
+                                                        <?= esc($bed->bed_number) ?> - <?= esc($bed->bed_code) ?>
+                                                        <?php if ($bed->category_name): ?>
+                                                            (<?= esc($bed->category_name) ?>)
+                                                        <?php endif; ?>
+                                                    </option>
+                                                <?php endforeach; ?>
+                                            </optgroup>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <label class="form-label">Transfer Reason <span class="text-danger">*</span></label>
+                                    <select name="transfer_reason" class="form-select" required>
+                                        <option value="">-- Select Reason --</option>
+                                        <option value="Medical Requirement">Medical Requirement</option>
+                                        <option value="ICU Transfer">ICU Transfer</option>
+                                        <option value="Ward Transfer">Ward Transfer</option>
+                                        <option value="Room Upgrade">Room Upgrade</option>
+                                        <option value="Patient Request">Patient Request</option>
+                                        <option value="Isolation Required">Isolation Required</option>
+                                        <option value="Bed Maintenance">Bed Maintenance</option>
+                                        <option value="Other">Other</option>
+                                    </select>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <label class="form-label">Assignment Date/Time <span class="text-danger">*</span></label>
+                                    <input type="datetime-local" name="assignment_datetime" class="form-control" value="<?= date('Y-m-d\\TH:i') ?>" required>
+                                    <small class="form-text text-muted">Time when bed assignment takes effect</small>
+                                </div>
+
+                                <div class="col-md-12">
+                                    <label class="form-label">Additional Remarks</label>
+                                    <textarea name="remarks" class="form-control" rows="2" placeholder="Any additional notes about the transfer..."></textarea>
+                                </div>
+
+                                <div class="col-md-12">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="bi bi-arrow-left-right"></i> Transfer Bed
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="card mt-3">
+                        <div class="card-header">
+                            <h6 class="mb-0">Bed Assignment History</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Bed</th>
+                                            <th>Ward</th>
+                                            <th>Assigned Date</th>
+                                            <th>Released Date</th>
+                                            <th>Duration</th>
+                                            <th>Type</th>
+                                            <th>Remarks</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php if (!empty($bedHistoryData)): ?>
+                                            <?php foreach ($bedHistoryData as $history): ?>
+                                                <tr>
+                                                    <td><?= esc($history->bed_number ?? '') ?> (<?= esc($history->bed_code ?? '') ?>)</td>
+                                                    <td><?= esc($history->ward_name ?? '') ?></td>
+                                                    <td><?= esc($history->assigned_date ?? '') ?></td>
+                                                    <td>
+                                                        <?php if ($history->released_date): ?>
+                                                            <?= esc($history->released_date) ?>
+                                                        <?php else: ?>
+                                                            <span class="badge bg-success">Current</span>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                    <td>
+                                                        <?php if (isset($history->duration_hours) && $history->duration_hours !== null): ?>
+                                                            <?php 
+                                                            $hours = floor($history->duration_hours);
+                                                            $minutes = round(($history->duration_hours - $hours) * 60);
+                                                            ?>
+                                                            <strong><?= $hours ?>h <?= $minutes ?>m</strong>
+                                                            <?php if (!$history->released_date): ?>
+                                                                <small class="text-muted">(ongoing)</small>
+                                                            <?php endif; ?>
+                                                        <?php else: ?>
+                                                            <span class="text-muted">-</span>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                    <td><?= esc($history->assignment_type ?? 'admission') ?></td>
+                                                    <td><?= esc($history->remarks ?? '') ?></td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        <?php else: ?>
+                                            <tr>
+                                                <td colspan="7" class="text-center text-muted">No bed assignment history found</td>
+                                            </tr>
+                                        <?php endif; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="nursing-tab-pane d-none" id="nursing_tab_admission">
                     <form class="row g-2 nursing-form" data-save-url="<?= esc($saveUrl) ?>">
                         <?= csrf_field() ?>
@@ -1438,5 +1604,52 @@ ksort($nurseNames);
     nursingRefreshBedsideItems();
     nursingRefreshDoctorVisitTypes();
     nursingRefreshDoctorVisitRate();
+
+    // Bed Transfer Form Handler
+    var bedTransferForm = document.getElementById('bed_transfer_form');
+    if (bedTransferForm) {
+        bedTransferForm.addEventListener('submit', function (event) {
+            event.preventDefault();
+            
+            var bedId = bedTransferForm.querySelector('[name="bed_id"]').value;
+            var transferReason = bedTransferForm.querySelector('[name="transfer_reason"]').value;
+            
+            if (!bedId) {
+                notify('error', 'Bed Transfer', 'Please select a bed');
+                return;
+            }
+            
+            if (!transferReason) {
+                notify('error', 'Bed Transfer', 'Please select a transfer reason');
+                return;
+            }
+            
+            var formData = new window.FormData(bedTransferForm);
+            
+            $.ajax({
+                url: '<?= esc(site_url('ipd/patient/bed/transfer/' . $ipdId)) ?>',
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                dataType: 'json'
+            }).done(function (resp) {
+                if (!resp || String(resp.status) !== '1') {
+                    notify('error', 'Bed Transfer', (resp && resp.message) ? resp.message : 'Bed transfer failed');
+                    return;
+                }
+                
+                notify('success', 'Bed Transfer', resp.message || 'Bed transferred successfully');
+                
+                if (resp.reload) {
+                    setTimeout(function () {
+                        window.location.reload();
+                    }, 1500);
+                }
+            }).fail(function () {
+                notify('error', 'Bed Transfer', 'Failed to transfer bed. Please try again.');
+            });
+        });
+    }
 })();
 </script>

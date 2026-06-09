@@ -531,6 +531,7 @@ $routes->post('ipd/patient/history/save/(:num)', 'IpdPatient::saveAdmissionHisto
 $routes->post('ipd/patient/nursing/scan/(:num)', 'IpdPatient::scanNursingPaper/$1');
 $routes->post('ipd/patient/nursing/scan-save/(:num)', 'IpdPatient::saveScannedNursingEntries/$1');
 $routes->get('ipd/patient/nursing/print/(:num)', 'IpdPatient::nursingChartPrint/$1');
+$routes->post('ipd/patient/bed/transfer/(:num)', 'IpdPatient::bedTransfer/$1');
 
 $routes->get('nursing-bedside-items', 'Setting\\NursingBedsideItems::index');
 $routes->get('nursing-bedside-items/(:num)', 'Setting\\NursingBedsideItems::get/$1');

@@ -871,6 +871,11 @@ class Ipd extends BaseController
         $this->ipdEditModel->updateIpd($update, $ipdId);
         $this->ipdEditModel->calculateIPD($ipdId);
 
+        // Release bed when discharging patient
+        if (isset($update['ipd_status']) && $update['ipd_status'] == 1) {
+            $this->ipdEditModel->releaseBed($ipdId);
+        }
+
         return $this->buildDischargeProcessResponse($ipdId, 'Discharge status updated.');
     }
 

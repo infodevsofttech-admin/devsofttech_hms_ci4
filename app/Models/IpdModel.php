@@ -193,15 +193,40 @@ class IpdModel extends Model
 
             $assignedBy = (int) ($this->getUserIdentity()['id'] ?? 0);
 
-            $inserted = $this->db->table('bed_assignment_history')->insert([
+            // Prepare insert data with optional fields
+            $insertData = [
                 'ipd_id' => $ipdId,
                 'bed_id' => $bedId,
-                'assignment_type' => 'admission',
+                'assignment_type' => $data['assignment_type'] ?? 'admission',
                 'assigned_date' => $fromDate,
                 'discharged_date' => $toDate,
                 'assigned_by' => $assignedBy > 0 ? $assignedBy : null,
                 'ward_id' => $wardId,
-            ]);
+            ];
+
+            // Add transfer-specific fields if provided
+            if (isset($data['transfer_reason']) && !empty($data['transfer_reason'])) {
+                $insertData['transfer_reason'] = $data['transfer_reason'];
+            }
+            if (isset($data['transfer_from_bed_id']) && $data['transfer_from_bed_id'] > 0) {
+                $insertData['transfer_from_bed_id'] = (int) $data['transfer_from_bed_id'];
+            }
+            if (isset($data['remarks']) && !empty($data['remarks'])) {
+                $insertData['remarks'] = $data['remarks'];
+            }
+
+            // If this is a transfer, mark previous bed assignment as released
+            if (($data['assignment_type'] ?? 'admission') === 'transfer') {
+                $this->db->table('bed_assignment_history')
+                    ->where('ipd_id', $ipdId)
+                    ->where('released_date IS NULL')
+                    ->update([
+                        'released_date' => $fromDate,
+                        'release_reason' => 'Transferred to another bed',
+                    ]);
+            }
+
+            $inserted = $this->db->table('bed_assignment_history')->insert($insertData);
 
             if (! $inserted) {
                 return 0;
@@ -225,6 +250,37 @@ class IpdModel extends Model
             return 0;
         }
 
+        // Update bed_master table (new system)
+        if ($this->db->tableExists('bed_master')) {
+            $bedFields = $this->db->getFieldNames('bed_master') ?? [];
+            
+            // Release any previous bed assigned to this IPD
+            if (in_array('current_ipd_id', $bedFields) && in_array('bed_status', $bedFields)) {
+                $this->db->table('bed_master')
+                    ->where('current_ipd_id', $ipdId)
+                    ->update([
+                        'current_ipd_id' => null,
+                        'bed_status' => 'available'
+                    ]);
+            }
+            
+            // Assign new bed
+            $bedUpdate = [];
+            if (in_array('bed_status', $bedFields)) {
+                $bedUpdate['bed_status'] = 'occupied';
+            }
+            if (in_array('current_ipd_id', $bedFields)) {
+                $bedUpdate['current_ipd_id'] = $ipdId;
+            }
+            
+            if (!empty($bedUpdate)) {
+                $this->db->table('bed_master')
+                    ->where('id', $bedId)
+                    ->update($bedUpdate);
+            }
+        }
+        
+        // Legacy hc_bed_master support (if needed for backward compatibility)
         if ($this->db->tableExists('hc_bed_master') && in_array('bed_used_p_id', $this->db->getFieldNames('hc_bed_master') ?? [], true)) {
             $this->db->table('hc_bed_master')
                 ->where('bed_used_p_id', $ipdId)
@@ -235,13 +291,51 @@ class IpdModel extends Model
                 ->update(['bed_used_p_id' => $ipdId]);
         }
 
-        if ($this->db->tableExists('bed_master') && in_array('bed_status', $this->db->getFieldNames('bed_master') ?? [], true)) {
-            $this->db->table('bed_master')
-                ->where('id', $bedId)
-                ->update(['bed_status' => 'occupied']);
+        return $insertId;
+    }
+
+    public function releaseBed(int $ipdId): void
+    {
+        if ($ipdId <= 0) {
+            return;
         }
 
-        return $insertId;
+        // Release bed in bed_master table (new system)
+        if ($this->db->tableExists('bed_master')) {
+            $bedFields = $this->db->getFieldNames('bed_master') ?? [];
+            $bedUpdate = [];
+            
+            if (in_array('bed_status', $bedFields)) {
+                $bedUpdate['bed_status'] = 'available';
+            }
+            if (in_array('current_ipd_id', $bedFields)) {
+                $bedUpdate['current_ipd_id'] = null;
+            }
+            
+            if (!empty($bedUpdate)) {
+                $this->db->table('bed_master')
+                    ->where('current_ipd_id', $ipdId)
+                    ->update($bedUpdate);
+            }
+        }
+        
+        // Legacy hc_bed_master support (if needed for backward compatibility)
+        if ($this->db->tableExists('hc_bed_master') && in_array('bed_used_p_id', $this->db->getFieldNames('hc_bed_master') ?? [], true)) {
+            $this->db->table('hc_bed_master')
+                ->where('bed_used_p_id', $ipdId)
+                ->update(['bed_used_p_id' => 0]);
+        }
+
+        // Update bed_assignment_history to mark beds as released
+        if ($this->db->tableExists('bed_assignment_history') && in_array('released_date', $this->db->getFieldNames('bed_assignment_history') ?? [], true)) {
+            $this->db->table('bed_assignment_history')
+                ->where('ipd_id', $ipdId)
+                ->where('released_date IS NULL')
+                ->update([
+                    'released_date' => date('Y-m-d H:i:s'),
+                    'release_reason' => 'Patient Discharged',
+                ]);
+        }
     }
 
     public function calculateIPD(int $ipdNo): void

@@ -30,16 +30,43 @@ class BedAssignmentHistoryModel extends Model
             ->join('bed_master', 'bed_master.id = bed_assignment_history.bed_id', 'left')
             ->join('ward_master', 'ward_master.id = bed_assignment_history.ward_id', 'left')
             ->orderBy('bed_assignment_history.id', 'DESC')
-            ->findAll();
+            ->get()
+            ->getResult();
     }
 
     public function getByIpd(int $ipdId): array
     {
-        return $this->select('bed_assignment_history.*, bed_master.bed_code, bed_master.bed_number, ward_master.ward_name')
+        $results = $this->select('bed_assignment_history.*, bed_master.bed_code, bed_master.bed_number, ward_master.ward_name')
             ->join('bed_master', 'bed_master.id = bed_assignment_history.bed_id', 'left')
             ->join('ward_master', 'ward_master.id = bed_assignment_history.ward_id', 'left')
             ->where('bed_assignment_history.ipd_id', $ipdId)
             ->orderBy('bed_assignment_history.id', 'DESC')
-            ->findAll();
+            ->get()
+            ->getResult();
+
+        // Calculate duration for each record
+        foreach ($results as $record) {
+            $record->duration_hours = $this->calculateDurationHours($record->assigned_date, $record->released_date);
+        }
+
+        return $results;
+    }
+
+    /**
+     * Calculate duration in hours between two dates
+     */
+    private function calculateDurationHours(?string $startDate, ?string $endDate): ?float
+    {
+        if (empty($startDate)) {
+            return null;
+        }
+
+        $start = new \DateTime($startDate);
+        $end = $endDate ? new \DateTime($endDate) : new \DateTime();
+        
+        $interval = $start->diff($end);
+        $hours = ($interval->days * 24) + $interval->h + ($interval->i / 60);
+        
+        return round($hours, 1);
     }
 }

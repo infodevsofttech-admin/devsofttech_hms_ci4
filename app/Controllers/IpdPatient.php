@@ -3,7 +3,10 @@
 namespace App\Controllers;
 
 use App\Libraries\NursingScanExtractionService;
+use App\Models\BedAssignmentHistoryModel;
+use App\Models\BedMasterModel;
 use App\Models\IpdBillingModel;
+use App\Models\IpdModel;
 use App\Models\IpdNursingEntryModel;
 use App\Models\NursingBedsideItemModel;
 
@@ -13,6 +16,9 @@ class IpdPatient extends BaseController
     protected IpdNursingEntryModel $ipdNursingEntryModel;
     protected NursingBedsideItemModel $nursingBedsideItemModel;
     protected NursingScanExtractionService $nursingScanExtractionService;
+    protected BedMasterModel $bedMasterModel;
+    protected BedAssignmentHistoryModel $bedAssignmentModel;
+    protected IpdModel $ipdModel;
 
     public function __construct()
     {
@@ -20,6 +26,9 @@ class IpdPatient extends BaseController
         $this->ipdNursingEntryModel = new IpdNursingEntryModel();
         $this->nursingBedsideItemModel = new NursingBedsideItemModel();
         $this->nursingScanExtractionService = new NursingScanExtractionService();
+        $this->bedMasterModel = new BedMasterModel();
+        $this->bedAssignmentModel = new BedAssignmentHistoryModel();
+        $this->ipdModel = new IpdModel();
         helper(['common', 'form', 'age']);
     }
 
@@ -85,6 +94,18 @@ class IpdPatient extends BaseController
         $opdHistorySnapshot = $this->getLatestOpdHistorySnapshot($patientId);
         $isFemalePatient = strtolower((string) ($person->xgender ?? '')) === 'female';
 
+        // Get current bed assignment with ward info
+        $currentBed = $this->bedMasterModel
+            ->select('bed_master.*, ward_master.ward_name')
+            ->join('ward_master', 'ward_master.id = bed_master.ward_id', 'left')
+            ->where('bed_master.current_ipd_id', $ipdId)
+            ->first();
+        
+        // Get available beds for transfer
+        $availableBeds = $this->bedMasterModel->getAvailableBedsGroupedByWard();
+        // Get bed assignment history
+        $bedHistory = $this->bedAssignmentModel->getByIpd($ipdId);
+
         return view('ipd_nursing/workspace', [
             'ipd_info' => $panelData['ipd_info'] ?? null,
             'person_info' => $person,
@@ -98,6 +119,9 @@ class IpdPatient extends BaseController
             'patient_history_row' => $patientHistoryRow,
             'opd_history_snapshot' => $opdHistorySnapshot,
             'is_female_patient' => $isFemalePatient,
+            'current_bed' => $currentBed,
+            'available_beds' => $availableBeds,
+            'bed_history' => $bedHistory,
         ]);
     }
 
@@ -821,5 +845,70 @@ class IpdPatient extends BaseController
         }
 
         return trim(implode(PHP_EOL, $lines));
+    }
+
+    public function bedTransfer(int $ipdId)
+    {
+        $permission = $this->requireAnyPermission([
+            'billing.access',
+            'billing.ipd.current-admission',
+            'billing.ipd.invoice',
+        ]);
+        if ($permission) {
+            return $permission;
+        }
+
+        if (!$this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['status' => 0, 'message' => 'Invalid request']);
+        }
+
+        $newBedId = (int) $this->request->getPost('bed_id');
+        $transferReason = trim((string) $this->request->getPost('transfer_reason'));
+        $remarks = trim((string) $this->request->getPost('remarks'));
+        $assignmentDateTime = trim((string) $this->request->getPost('assignment_datetime'));
+
+        if ($newBedId <= 0) {
+            return $this->response->setJSON(['status' => 0, 'message' => 'Please select a bed']);
+        }
+
+        // Validate and format assignment date/time
+        if (empty($assignmentDateTime)) {
+            $assignmentDateTime = date('Y-m-d H:i:s');
+        } else {
+            // Convert from HTML5 datetime-local format to MySQL datetime
+            $assignmentDateTime = date('Y-m-d H:i:s', strtotime($assignmentDateTime));
+        }
+
+        try {
+            // Get current bed assignment
+            $currentBed = $this->bedMasterModel->where('current_ipd_id', $ipdId)->first();
+
+            // Check if new bed is available
+            $newBed = $this->bedMasterModel->find($newBedId);
+            if (!$newBed || $newBed->bed_status !== 'available' || $newBed->current_ipd_id !== null) {
+                return $this->response->setJSON(['status' => 0, 'message' => 'Selected bed is not available']);
+            }
+
+            // Transfer bed
+            $this->ipdModel->bedAssign([
+                'ipd_id' => $ipdId,
+                'bed_id' => $newBedId,
+                'Fdate' => $assignmentDateTime,
+                'TDate' => $assignmentDateTime,
+                'transfer_reason' => $transferReason,
+                'transfer_from_bed_id' => $currentBed ? $currentBed->id : null,
+                'remarks' => $remarks,
+                'assignment_type' => 'transfer',
+            ]);
+
+            return $this->response->setJSON([
+                'status' => 1,
+                'message' => 'Bed transferred successfully',
+                'reload' => true,
+            ]);
+        } catch (\Throwable $e) {
+            log_message('error', 'Bed transfer failed for IPD #' . $ipdId . ': ' . $e->getMessage());
+            return $this->response->setJSON(['status' => 0, 'message' => 'Bed transfer failed: ' . $e->getMessage()]);
+        }
     }
 }
