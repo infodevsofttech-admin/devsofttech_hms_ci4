@@ -87,6 +87,17 @@ $diagnosisRows = $diagnosis_rows ?? [];
 $courseRows = $course_rows ?? [];
 $drugRows = $drug_rows ?? [];
 $legacyDrugRows = $legacy_drug_rows ?? [];
+$doseMasterMaps = $dose_master_maps ?? ['dose' => [], 'when' => [], 'freq' => [], 'where' => []];
+
+// Helper function to get dose label from ID
+$getDoseLabel = function($id, $type) use ($doseMasterMaps) {
+    $id = (int) $id;
+    if ($id <= 0 || !isset($doseMasterMaps[$type][$id])) {
+        return '';
+    }
+    return $doseMasterMaps[$type][$id]['label'] ?? '';
+};
+
 $medicineRows = [];
 if (! empty($legacyDrugRows)) {
     foreach ($legacyDrugRows as $row) {
@@ -95,9 +106,9 @@ if (! empty($legacyDrugRows)) {
             'source' => 'legacy',
             'med_name' => (string) ($row['med_name'] ?? ''),
             'med_type' => (string) ($row['med_type'] ?? ''),
-            'dosage' => (string) ($row['dosage'] ?? ''),
-            'dosage_when' => (string) ($row['dosage_when'] ?? ''),
-            'dosage_freq' => (string) ($row['dosage_freq'] ?? ''),
+            'dosage' => $getDoseLabel($row['dosage'] ?? 0, 'dose'),
+            'dosage_when' => $getDoseLabel($row['dosage_when'] ?? 0, 'when'),
+            'dosage_freq' => $getDoseLabel($row['dosage_freq'] ?? 0, 'freq'),
             'no_of_days' => (string) ($row['no_of_days'] ?? ''),
             'qty' => (string) ($row['qty'] ?? ''),
             'remark' => (string) ($row['remark'] ?? ''),
@@ -1275,7 +1286,12 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                     <!-- Add Medicine Form -->
                                     <div class="col-md-5">
                                         <div class="card border">
-                                            <div class="card-header py-2 bg-light"><strong>Prescribed:</strong></div>
+                                            <div class="card-header py-2 bg-light d-flex justify-content-between align-items-center">
+                                                <strong>Prescribed:</strong>
+                                                <div>
+                                                    <button type="button" class="btn btn-sm btn-outline-success" id="btn_discharge_rx_group" title="Select from Rx-Group">+ Rx-Group</button>
+                                                </div>
+                                            </div>
                                             <div class="card-body">
                                                 <input type="hidden" id="discharge_med_item_id" value="0">
                                                 <input type="hidden" id="discharge_med_id" value="0">
@@ -1284,6 +1300,13 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                                     <label class="form-label small">Medicine Name (Brand)</label>
                                                     <input type="text" id="discharge_med_name" list="discharge_med_suggest" class="form-control form-control-sm" placeholder="Type medicine name" autocomplete="off">
                                                     <datalist id="discharge_med_suggest"></datalist>
+                                                </div>
+
+                                                <!-- Substitute Medicines Box -->
+                                                <div id="discharge_substitute_box" style="display:none;margin-bottom:0.5rem;">
+                                                    <div class="small text-muted" id="discharge_substitute_note"></div>
+                                                    <div class="small text-muted" id="discharge_substitute_empty" style="display:none;">No substitute found.</div>
+                                                    <div id="discharge_substitute_rows" style="max-height:200px;overflow-y:auto;"></div>
                                                 </div>
 
                                                 <div class="mb-2">
@@ -1687,6 +1710,29 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                     <button type="button" class="btn btn-success" id="btn_quick_term_save">
                         <i class="bi bi-check-circle"></i> Save in Master
                     </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rx-Group Modal -->
+    <div class="modal fade" id="dischargeRxGroupModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Select Rx-Group</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <input type="text" class="form-control" id="discharge_rx_group_search" placeholder="Search Rx-Group by name...">
+                    </div>
+                    <div id="discharge_rx_group_list" style="max-height:400px;overflow-y:auto;">
+                        <div class="text-muted">Loading Rx-Groups...</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                 </div>
             </div>
         </div>
@@ -4073,46 +4119,105 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
             var dischargeMedSuggest = section.querySelector('#discharge_med_suggest');
             var dischargeMedType = section.querySelector('#discharge_med_type');
             var dischargeMedSuggestRows = [];
+            var dischargeMedInputTimer = null;
 
             if (dischargeMedInput) {
                 dischargeMedInput.addEventListener('input', function() {
                     var q = String(dischargeMedInput.value || '').trim();
+                    
+                    if (dischargeMedInputTimer) {
+                        clearTimeout(dischargeMedInputTimer);
+                        dischargeMedInputTimer = null;
+                    }
+                    
                     if (q.length < 2) {
+                        dischargeMedSuggestRows = [];
+                        if (dischargeMedSuggest) {
+                            dischargeMedSuggest.innerHTML = '';
+                        }
                         return;
                     }
 
-                    $.get('<?= base_url('Opd_prescription/medicine_search') ?>?q=' + encodeURIComponent(q) + '&scope=active&limit=10', function(data) {
-                        var rows = (data && data.rows) ? data.rows : [];
-                        dischargeMedSuggestRows = rows;
-                        var html = '';
-                        rows.forEach(function(row) {
-                            var name = String(row.med_name || '').trim();
-                            if (name === '') {
-                                return;
+                    dischargeMedInputTimer = setTimeout(function() {
+                        $.get('<?= base_url('Opd_prescription/medicine_search') ?>?q=' + encodeURIComponent(q) + '&scope=all&limit=10', function(data) {
+                            var rows = (data && data.rows) ? data.rows : [];
+                            dischargeMedSuggestRows = rows;
+                            var html = '';
+                            rows.forEach(function(row) {
+                                var name = String(row.med_name || '').trim();
+                                if (name === '') {
+                                    return;
+                                }
+                                html += '<option value="' + $('<div>').text(name).html() + '" '
+                                    + 'data-id="' + (row.id || 0) + '" '
+                                    + 'data-type="' + $('<div>').text(row.med_type || '').html() + '" '
+                                    + 'data-dosage="' + $('<div>').text(row.dosage || '').html() + '" '
+                                    + 'data-dosage-when="' + $('<div>').text(row.dosage_when || '').html() + '" '
+                                    + 'data-dosage-freq="' + $('<div>').text(row.dosage_freq || '').html() + '" '
+                                    + 'data-dosage-where="' + $('<div>').text(row.dosage_where || '').html() + '" '
+                                    + 'data-no-of-days="' + $('<div>').text(row.no_of_days || '').html() + '" '
+                                    + 'data-qty="' + $('<div>').text(row.qty || '').html() + '" '
+                                    + 'data-remark="' + $('<div>').text(row.remark || '').html() + '"></option>';
+                            });
+                            if (dischargeMedSuggest) {
+                                dischargeMedSuggest.innerHTML = html;
                             }
-                            html += '<option value="' + $('<div>').text(name).html() + '" data-type="' + $('<div>').text(row.med_type || '').html() + '" data-id="' + (row.id || 0) + '"></option>';
+                            
+                            // Auto-fill if exact match (Chrome fires input on datalist pick)
+                            var matched = null;
+                            dischargeMedSuggestRows.forEach(function(row) {
+                                if (String(row.med_name || '').trim().toUpperCase() === q.toUpperCase()) {
+                                    matched = row;
+                                }
+                            });
+                            if (matched) {
+                                // Store med_id
+                                $(dischargeMedInput).data('med-id', parseInt(matched.id || 0, 10));
+                                if (section.querySelector('#discharge_med_id')) {
+                                    section.querySelector('#discharge_med_id').value = String(matched.id || '0');
+                                }
+                                // Auto-fill type if empty
+                                if (dischargeMedType && dischargeMedType.value.trim() === '') {
+                                    dischargeMedType.value = String(matched.med_type || '').trim();
+                                }
+                            }
+                        }, 'json').fail(function() {
+                            dischargeMedSuggestRows = [];
+                            if (dischargeMedSuggest) {
+                                dischargeMedSuggest.innerHTML = '';
+                            }
                         });
-                        if (dischargeMedSuggest) {
-                            dischargeMedSuggest.innerHTML = html;
-                        }
-                    }, 'json');
+                    }, 180);
                 });
 
                 dischargeMedInput.addEventListener('change', function() {
-                    var value = String(dischargeMedInput.value || '').trim().toUpperCase();
+                    var value = String(dischargeMedInput.value || '').trim();
+                    var valueUpper = value.toUpperCase();
+                    
                     if (value === '') {
+                        // Clear stored med_id when input is cleared
+                        $(dischargeMedInput).data('med-id', 0);
+                        if (section.querySelector('#discharge_med_id')) {
+                            section.querySelector('#discharge_med_id').value = '0';
+                        }
                         return;
                     }
 
                     // Find matching medicine and auto-fill all fields
                     var matched = null;
                     dischargeMedSuggestRows.forEach(function(row) {
-                        if (String(row.med_name || '').trim().toUpperCase() === value) {
+                        if (String(row.med_name || '').trim().toUpperCase() === valueUpper) {
                             matched = row;
                         }
                     });
 
                     if (matched) {
+                        // Store med_id for reference
+                        $(dischargeMedInput).data('med-id', parseInt(matched.id || 0, 10));
+                        if (section.querySelector('#discharge_med_id')) {
+                            section.querySelector('#discharge_med_id').value = String(matched.id || '0');
+                        }
+                        
                         // Auto-fill Type
                         if (dischargeMedType && dischargeMedType.value.trim() === '') {
                             dischargeMedType.value = String(matched.med_type || '').trim();
@@ -4152,9 +4257,236 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                         if (matched.remark && remarkInput && remarkInput.value === '') {
                             remarkInput.value = String(matched.remark || '').trim();
                         }
+                    } else {
+                        // No match found - clear med_id
+                        $(dischargeMedInput).data('med-id', 0);
+                        if (section.querySelector('#discharge_med_id')) {
+                            section.querySelector('#discharge_med_id').value = '0';
+                        }
                     }
                 });
             }
+            
+            // ─── Load Medicine Substitutes ──────────────────────────────────────
+            function loadDischargeMedicineSubstitutes(medId, medName) {
+                medId = parseInt(medId || '0', 10);
+                medName = (medName || '').toString().trim();
+                var $box = $('#discharge_substitute_box');
+                var $note = $('#discharge_substitute_note');
+                var $empty = $('#discharge_substitute_empty');
+                var $rows = $('#discharge_substitute_rows');
+                
+                if (medId <= 0 && medName === '') {
+                    $box.hide();
+                    return;
+                }
+                
+                $note.text('loading...');
+                $empty.show();
+                $rows.empty();
+                $box.show();
+                
+                var url = '<?= base_url('Opd_prescription/medicine_substitutes') ?>?med_id=' + encodeURIComponent(medId)
+                    + '&med_name=' + encodeURIComponent(medName);
+                    
+                $.get(url, function(data) {
+                    var rows = (data && data.rows) ? data.rows : [];
+                    $note.text(rows.length ? (rows.length + ' substitute(s)') : '');
+                    
+                    if (!rows.length) {
+                        $empty.show();
+                        $rows.empty();
+                        return;
+                    }
+                    
+                    $empty.hide();
+                    $rows.empty();
+                    
+                    rows.forEach(function(row) {
+                        var medId = parseInt(row.id || 0, 10);
+                        var name = String(row.med_name || '').trim();
+                        var type = String(row.med_type || '').trim();
+                        var generic = String(row.genericname || row.salt_name || '').trim();
+                        
+                        if (name === '') {
+                            return;
+                        }
+                        
+                        var card = '<div class=\"card mb-1\" style=\"font-size:0.875rem;\">'
+                            + '<div class=\"card-body py-1 px-2\">'
+                            + '<div class=\"d-flex justify-content-between align-items-center\">'
+                            + '<div><strong>' + $('<div>').text(name).html() + '</strong>'
+                            + (type ? ' <small class=\"text-muted\">(' + $('<div>').text(type).html() + ')</small>' : '')
+                            + (generic ? '<br><small class=\"text-muted\">' + $('<div>').text(generic).html() + '</small>' : '')
+                            + '</div>'
+                            + '<div class=\"btn-group btn-group-sm\">'
+                            + '<button type=\"button\" class=\"btn btn-sm btn-outline-primary btn-discharge-substitute-use\" '
+                                + 'data-id=\"' + medId + '\" '
+                                + 'data-name=\"' + $('<div>').text(name).html() + '\" '
+                                + 'data-type=\"' + $('<div>').text(type).html() + '\">Use</button>'
+                            + '</div></div></div></div>';
+                        
+                        $rows.append(card);
+                    });
+                }, 'json').fail(function() {
+                    $note.text('');
+                    $empty.show();
+                    $rows.empty();
+                });
+            }
+            
+            // Handle substitute "Use" button
+            $(document).on('click', '.btn-discharge-substitute-use', function() {
+                var medId = parseInt($(this).data('id') || '0', 10);
+                var medName = String($(this).data('name') || '').trim();
+                var medType = String($(this).data('type') || '').trim();
+                
+                if (medName === '') {
+                    return;
+                }
+                
+                $('#discharge_med_id').val(medId);
+                $('#discharge_med_name').val(medName);
+                if (medType !== '' && $('#discharge_med_type').val().trim() === '') {
+                    $('#discharge_med_type').val(medType);
+                }
+                
+                $('#discharge_substitute_box').hide();
+                $('#discharge_med_name').trigger('focus');
+            });
+            
+            // Load substitutes when medicine is selected
+            dischargeMedInput.addEventListener('change', function() {
+                var medId = parseInt($('#discharge_med_id').val() || '0', 10);
+                var medName = String(dischargeMedInput.value || '').trim();
+                
+                if (medId > 0 || medName !== '') {
+                    setTimeout(function() {
+                        loadDischargeMedicineSubstitutes(medId, medName);
+                    }, 100);
+                }
+            });
+            
+            // ─── Rx-Group Functionality ──────────────────────────────────────
+            var dischargeRxGroupCache = [];
+            
+            $('#btn_discharge_rx_group').on('click', function() {
+                loadDischargeRxGroups();
+                var modal = new bootstrap.Modal(document.getElementById('dischargeRxGroupModal'));
+                modal.show();
+            });
+            
+            function loadDischargeRxGroups() {
+                $('#discharge_rx_group_list').html('<div class=\"text-muted\">Loading...</div>');
+                
+                $.get('<?= base_url('Opd_prescription/rx_group_list') ?>', function(data) {
+                    var rows = (data && data.rows) ? data.rows : [];
+                    dischargeRxGroupCache = rows;
+                    renderDischargeRxGroups(rows);
+                }, 'json').fail(function() {
+                    $('#discharge_rx_group_list').html('<div class=\"text-danger\">Failed to load Rx-Groups</div>');
+                });
+            }
+            
+            function renderDischargeRxGroups(rows) {
+                var $list = $('#discharge_rx_group_list');
+                var query = ($('#discharge_rx_group_search').val() || '').toLowerCase();
+                
+                if (query) {
+                    rows = rows.filter(function(row) {
+                        var name = (row.rx_group_name || '').toLowerCase();
+                        return name.indexOf(query) !== -1;
+                    });
+                }
+                
+                if (!rows.length) {
+                    $list.html('<div class=\"text-muted\">No Rx-Groups found</div>');
+                    return;
+                }
+                
+                var html = '';
+                rows.forEach(function(row) {
+                    var id = parseInt(row.id || 0, 10);
+                    var name = String(row.rx_group_name || '').trim();
+                    var medCount = parseInt(row.med_count || 0, 10);
+                    
+                    if (id <= 0 || name === '') {
+                        return;
+                    }
+                    
+                    html += '<div class=\"card mb-2\">'
+                        + '<div class=\"card-body py-2\">'
+                        + '<div class=\"d-flex justify-content-between align-items-center\">'
+                        + '<div>'
+                        + '<strong>' + $('<div>').text(name).html() + '</strong>'
+                        + '<span class=\"badge bg-secondary ms-2\">' + medCount + ' med(s)</span>'
+                        + '</div>'
+                        + '<button type=\"button\" class=\"btn btn-sm btn-primary btn-discharge-rx-apply\" data-id=\"' + id + '\">Add</button>'
+                        + '</div></div></div>';
+                });
+                
+                $list.html(html);
+            }
+            
+            $('#discharge_rx_group_search').on('input', function() {
+                renderDischargeRxGroups(dischargeRxGroupCache);
+            });
+            
+            $(document).on('click', '.btn-discharge-rx-apply', function() {
+                var rxGroupId = parseInt($(this).data('id') || 0, 10);
+                if (rxGroupId <= 0) {
+                    return;
+                }
+                
+                $(this).prop('disabled', true).text('Loading...');
+                
+                $.get('<?= base_url('Opd_prescription/rx_group_medicine_list') ?>/' + rxGroupId, function(data) {
+                    var rows = (data && data.rows) ? data.rows : [];
+                    
+                    if (!rows.length) {
+                        setMedicineStatus('No medicines found in selected Rx-Group', 'error');
+                        $('.btn-discharge-rx-apply').prop('disabled', false).text('Add');
+                        return;
+                    }
+                    
+                    // Add each medicine from the group
+                    rows.forEach(function(med) {
+                        var dosageLabel = med.dosage_label || med.dosage || '';
+                        var whenLabel = med.dosage_when_label || med.dosage_when || '';
+                        var freqLabel = med.dosage_freq_label || med.dosage_freq || '';
+                        
+                        var tbody = section.querySelector('#discharge_medicine_tbody');
+                        if (!tbody) {
+                            return;
+                        }
+                        
+                        // Remove "No medicine added" row if present
+                        var emptyRow = tbody.querySelector('tr td[colspan=\"9\"]');
+                        if (emptyRow) {
+                            emptyRow.closest('tr').remove();
+                        }
+                        
+                        var tr = document.createElement('tr');
+                        tr.innerHTML = '<td>' + $('<div>').text(med.med_type || '').html() + '</td>'
+                            + '<td>' + $('<div>').text(med.med_name || '').html() + '</td>'
+                            + '<td>' + $('<div>').text(dosageLabel).html() + '</td>'
+                            + '<td>' + $('<div>').text(whenLabel).html() + '</td>'
+                            + '<td>' + $('<div>').text(freqLabel).html() + '</td>'
+                            + '<td>' + $('<div>').text(med.no_of_days || '').html() + '</td>'
+                            + '<td>' + $('<div>').text(med.qty || '').html() + '</td>'
+                            + '<td>' + $('<div>').text(med.remark || '').html() + '</td>'
+                            + '<td><button type=\"button\" class=\"btn btn-outline-danger btn-sm btn-remove-discharge-med\">Remove</button></td>';
+                        tbody.appendChild(tr);
+                    });
+                    
+                    setMedicineStatus('Rx-Group medicines added (client-side only, save form to persist)', 'success');
+                    $('.btn-discharge-rx-apply').prop('disabled', false).text('Add');
+                    bootstrap.Modal.getInstance(document.getElementById('dischargeRxGroupModal')).hide();
+                }, 'json').fail(function() {
+                    setMedicineStatus('Failed to load Rx-Group medicines', 'error');
+                    $('.btn-discharge-rx-apply').prop('disabled', false).text('Add');
+                });
+            });
 
             function ensureDoseOption(select, value) {
                 value = (value || '').toString().trim();

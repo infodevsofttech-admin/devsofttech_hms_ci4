@@ -5884,6 +5884,15 @@ class Ipd_discharge extends BaseController
         if (empty($legacyDrugRows)) {
             $legacyDrugRows = $this->byIpdRows('ipd_discharge_prescription_prescribed', ['id', 'med_name', 'med_type', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days', 'qty', 'remark'], 'id ASC', $ipdId);
         }
+        
+        // Load dose master maps for label display
+        $doseMasterMaps = [
+            'dose' => $this->getDoseMasterRows('opd_dose_shed'),
+            'when' => $this->getDoseMasterRows('opd_dose_when'),
+            'freq' => $this->getDoseMasterRows('opd_dose_frequency'),
+            'where' => $this->getDoseMasterRows('opd_dose_where'),
+        ];
+        
         $diagnosisRemarkRow = $this->firstRowByIpd('ipd_discharge_diagnosis_remark', $ipdId);
         $courseRemarkRow = $this->firstRowByIpd('ipd_discharge_course_remark', $ipdId);
         $instructionRow = $this->firstRowByIpd('ipd_discharge_instructions', $ipdId);
@@ -6003,6 +6012,7 @@ class Ipd_discharge extends BaseController
             'inhos_remark' => (string) ($inhosRow['comp_remark'] ?? ''),
             'other_exam_text' => (string) ($otherExamParsed['text'] ?? ''),
             'next_visit_options' => $this->getNextVisitOptions(date('Y-m-d')),
+            'dose_master_maps' => $doseMasterMaps,
         ]);
     }
 
