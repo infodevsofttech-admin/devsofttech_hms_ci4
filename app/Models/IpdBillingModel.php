@@ -159,11 +159,18 @@ class IpdBillingModel extends Model
             ->select("o.final_bill_send as final_bill_send", false)
             ->select("o.org_approved_status as org_approved_status", false)
             ->select("o.remark as remark", false)
-            ->select("bm.bed_number as bed_no", false)
+            ->select("COALESCE(bm.bed_number, bm2.bed_number) as bed_no", false)
             ->select("group_concat(distinct concat_ws(' ', 'Dr.', d.p_fname, d.p_mname, d.p_lname) separator ', ') as r_doc_name", false)
             ->join('organization_case_master o', 'i.case_id = o.id', 'left')
             ->join('hc_insurance in_master', 'in_master.id = o.insurance_id', 'left')
             ->join('bed_master bm', 'bm.current_ipd_id = i.id', 'left')
+            ->join(
+                '(select ipd_id, bed_id from bed_assignment_history where released_date is null order by id desc) bah_active',
+                'bah_active.ipd_id = i.id',
+                'left',
+                false
+            )
+            ->join('bed_master bm2', 'bm2.id = bah_active.bed_id', 'left')
             ->join('ipd_master_doc_list imdl', 'imdl.ipd_id = i.id', 'left')
             ->join('doctor_master d', 'd.id = imdl.doc_id', 'left')
             ->where('i.id', $ipdId)
