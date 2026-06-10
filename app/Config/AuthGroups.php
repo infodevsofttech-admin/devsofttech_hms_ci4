@@ -131,6 +131,7 @@ class AuthGroups extends ShieldAuthGroups
         'billing.ipd.admission.edit' => 'Can edit IPD admission details (date, mode, department, refer, doctors, contact, clinical notes)',
         'billing.ipd.bill.print' => 'Can print IPD bill variants',
         'billing.ipd.discharge.edit' => 'Can edit IPD discharge process details (discount, extra charges, status, date, time)',
+        'billing.ipd.status.manage' => 'Can toggle IPD status between Active and Discharged (controls bill edit lock)',
         'settings.bed_status.view' => 'Can view bed status and bed management screens',
         'settings.charges.access' => 'Can access charges settings',
         'reports.access' => 'Can access reports section',

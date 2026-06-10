@@ -879,6 +879,57 @@ class Ipd extends BaseController
         return $this->buildDischargeProcessResponse($ipdId, 'Discharge status updated.');
     }
 
+    public function toggleIpdStatus(int $ipdId)
+    {
+        $permission = $this->requireAnyPermission([
+            'billing.ipd.status.manage',
+        ]);
+        if ($permission) {
+            return $permission;
+        }
+
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0, 'message' => 'Invalid request']);
+        }
+
+        $fieldMap = $this->getIpdFieldMap();
+        if (! isset($fieldMap['ipd_status'])) {
+            return $this->response->setStatusCode(422)->setJSON([
+                'update' => 0,
+                'message' => 'ipd_status field not available in schema'
+            ]);
+        }
+
+        $newStatus = (int) ($this->request->getPost('ipd_status') ?? -1);
+        if ($newStatus !== 0 && $newStatus !== 1) {
+            return $this->response->setStatusCode(422)->setJSON([
+                'update' => 0,
+                'message' => 'Invalid status value (must be 0 or 1)'
+            ]);
+        }
+
+        // Get current status
+        $currentIpd = $this->ipdModel->getById($ipdId);
+        if (! $currentIpd) {
+            return $this->response->setStatusCode(404)->setJSON(['update' => 0, 'message' => 'IPD not found']);
+        }
+
+        $currentStatus = (int) ($currentIpd['ipd_status'] ?? 0);
+        
+        // Update status
+        $update = ['ipd_status' => $newStatus];
+        $this->ipdEditModel->updateIpd($update, $ipdId);
+
+        // Release bed when setting to discharged (status = 1)
+        if ($newStatus === 1 && $currentStatus === 0) {
+            $this->ipdEditModel->releaseBed($ipdId);
+        }
+
+        $statusText = $newStatus === 0 ? 'Active (Bills unlocked)' : 'Discharged (Bills locked)';
+        
+        return $this->buildDischargeProcessResponse($ipdId, 'IPD status set to: ' . $statusText);
+    }
+
     public function billPrint(int $ipdId, int $mode = 1)
     {
         $permission = $this->requireAnyPermission([

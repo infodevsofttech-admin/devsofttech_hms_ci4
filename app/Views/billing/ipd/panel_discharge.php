@@ -22,6 +22,25 @@ if (strlen($dischargeTime) > 5) {
 }
 ?>
 
+<?php 
+$currentIpdStatus = (int) ($ipd->ipd_status ?? 0);
+$canManageIpdStatus = auth()->user()?->can('billing.ipd.status.manage') ?? false;
+?>
+
+<?php if ($canManageIpdStatus) : ?>
+<div class="alert alert-warning border-warning d-flex align-items-center gap-3 mb-3">
+    <div class="flex-grow-1">
+        <strong>IPD Status Control:</strong> 
+        Current status is <strong><?= $currentIpdStatus === 0 ? 'Active (Bills can be edited)' : 'Discharged (Bills are locked)' ?></strong>
+    </div>
+    <div>
+        <button type="button" class="btn btn-sm <?= $currentIpdStatus === 0 ? 'btn-danger' : 'btn-success' ?> js-toggle-ipd-status" data-current="<?= $currentIpdStatus ?>">
+            <?= $currentIpdStatus === 0 ? 'Lock Bills (Set Discharged)' : 'Unlock Bills (Set Active)' ?>
+        </button>
+    </div>
+</div>
+<?php endif; ?>
+
 <div class="row g-3">
     <div class="col-lg-6">
         <div class="card h-100">
@@ -225,6 +244,38 @@ if (strlen($dischargeTime) > 5) {
                     balance_remark: $('#balance_remark').val()
                 }).done(refreshDischargeTab).fail(function(xhr) {
                     var msg = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Unable to update discharge status';
+                    alert(msg);
+                });
+            });
+
+            $(document).on('click', '#tab_discharge_content .js-toggle-ipd-status', function() {
+                var currentStatus = Number($(this).data('current') || 0);
+                var newStatus = currentStatus === 0 ? 1 : 0;
+                var action = newStatus === 1 ? 'lock bills (set discharged)' : 'unlock bills (set active)';
+                
+                if (!confirm('Are you sure you want to ' + action + '?\n\nThis will ' + (newStatus === 1 ? 'PREVENT' : 'ALLOW') + ' editing of IPD charges and medical bills.')) {
+                    return;
+                }
+
+                post('<?= site_url('billing/ipd/panel/' . $ipdId . '/discharge/toggle-status') ?>', {
+                    ipd_status: newStatus
+                }).done(function(response) {
+                    if (response && Number(response.update || 0) === 1) {
+                        refreshDischargeTab(response);
+                        if (typeof window.notify === 'function') {
+                            window.notify('success', 'IPD Status', response.message || 'Status updated successfully');
+                        }
+                        // Refresh entire panel to update other tabs
+                        setTimeout(function() {
+                            if (typeof window.loadIpdPanel === 'function') {
+                                window.loadIpdPanel(ipdId);
+                            }
+                        }, 500);
+                    } else {
+                        alert(response.message || 'Unable to update IPD status');
+                    }
+                }).fail(function(xhr) {
+                    var msg = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Unable to update IPD status';
                     alert(msg);
                 });
             });

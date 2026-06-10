@@ -3511,21 +3511,10 @@ class Medical extends BaseController
             return false;
         }
 
-        foreach (['ipd_status', 'discharge_status', 'discharg_status', 'is_discharged'] as $statusCol) {
-            if (in_array($statusCol, $ipdFields, true) && (int) ($ipd[$statusCol] ?? 0) !== 0) {
-                return true;
-            }
-        }
-
-        foreach (['discharge_date', 'discharge_datetime', 'discharged_at'] as $dateCol) {
-            if (! in_array($dateCol, $ipdFields, true)) {
-                continue;
-            }
-
-            $value = trim((string) ($ipd[$dateCol] ?? ''));
-            if ($value !== '' && $value !== '0000-00-00' && $value !== '0000-00-00 00:00:00') {
-                return true;
-            }
+        // PRIMARY CHECK ONLY: ipd_status = 1 means discharged
+        // No fallback checks - this gives flexibility to edit bills even if discharge_date is set
+        if (in_array('ipd_status', $ipdFields, true)) {
+            return (int) ($ipd['ipd_status'] ?? 0) === 1;
         }
 
         return false;
