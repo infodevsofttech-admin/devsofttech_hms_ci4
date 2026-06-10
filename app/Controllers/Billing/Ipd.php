@@ -879,7 +879,7 @@ class Ipd extends BaseController
         return $this->buildDischargeProcessResponse($ipdId, 'Discharge status updated.');
     }
 
-    public function toggleIpdStatus(int $ipdId)
+    public function updateDischargeToggleStatus(int $ipdId)
     {
         $permission = $this->requireAnyPermission([
             'billing.ipd.status.manage',

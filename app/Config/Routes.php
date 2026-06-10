@@ -424,6 +424,7 @@ $routes->group('billing', function($routes) {
     $routes->post('ipd/panel/(:num)/discharge/update', 'Billing\\Ipd::updateDischargeProcess/$1');
     $routes->post('ipd/panel/(:num)/discharge/discount/(:num)', 'Billing\\Ipd::updateDischargeDiscount/$1/$2');
     $routes->post('ipd/panel/(:num)/discharge/charge/(:num)', 'Billing\\Ipd::updateDischargeCharge/$1/$2');
+    $routes->post('ipd/panel/(:num)/discharge/toggle-status', 'Billing\\Ipd::updateDischargeToggleStatus/$1');
     $routes->get('ipd/bill-print/(:num)', 'Billing\\Ipd::billPrint/$1');
     $routes->get('ipd/bill-print/(:num)/(:num)', 'Billing\\Ipd::billPrint/$1/$2');
     $routes->get('ipd/show-form/(:num)', 'Billing\\Ipd::showIpdForm/$1/1');
