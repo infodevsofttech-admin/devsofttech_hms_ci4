@@ -293,14 +293,14 @@ $billHeadingText = $isDischargeFinal
 
             <tr class="totalline">
                 <td></td>
-                <td colspan="<?= $mode3ShowAmountAfterDiscount ? '4' : '3' ?>" class="right">Gross Total</td>
+                <td colspan="<?= $mode3ShowAmountAfterDiscount ? '5' : '4' ?>" class="right">Gross Total</td>
                 <td class="right"><?= esc(number_format($grossAmount, 2)) ?></td>
                 <?php if ($mode3ShowAmountAfterDiscount) : ?><td class="right"></td><?php endif; ?>
             </tr>
 
             <tr class="totalline">
                 <td></td>
-                <td colspan="<?= $mode3ShowAmountAfterDiscount ? '4' : '3' ?>" class="right">Net Amount</td>
+                <td colspan="<?= $mode3ShowAmountAfterDiscount ? '5' : '4' ?>" class="right">Net Amount</td>
                 <td class="right"><?= esc(number_format($netAmount, 2)) ?></td>
                 <?php if ($mode3ShowAmountAfterDiscount) : ?><td class="right"></td><?php endif; ?>
             </tr>
@@ -308,13 +308,13 @@ $billHeadingText = $isDischargeFinal
             <?php if ($showPaymentDetails) : ?>
                 <tr>
                     <td></td>
-                    <td colspan="<?= $mode3ShowAmountAfterDiscount ? '4' : '3' ?>" class="totalline">Payment Recd.</td>
+                    <td colspan="<?= $mode3ShowAmountAfterDiscount ? '5' : '4' ?>" class="totalline">Payment Recd.</td>
                     <td class="right"><?= esc(number_format($paidAmount, 2)) ?></td>
                     <?php if ($mode3ShowAmountAfterDiscount) : ?><td></td><?php endif; ?>
                 </tr>
                 <tr class="totalline">
                     <td></td>
-                    <td colspan="<?= $mode3ShowAmountAfterDiscount ? '4' : '3' ?>" class="right">Balance</td>
+                    <td colspan="<?= $mode3ShowAmountAfterDiscount ? '5' : '4' ?>" class="right">Balance</td>
                     <td class="right"><?= esc(number_format($balanceAmount, 2)) ?></td>
                     <?php if ($mode3ShowAmountAfterDiscount) : ?><td></td><?php endif; ?>
                 </tr>
