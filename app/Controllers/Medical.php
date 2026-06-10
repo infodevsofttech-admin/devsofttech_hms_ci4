@@ -4321,11 +4321,10 @@ class Medical extends BaseController
             return [];
         }
 
-        $patientTable = $this->db->tableExists('patient_master_exten')
-            ? 'patient_master_exten'
-            : ($this->db->tableExists('patient_master') ? 'patient_master' : null);
-
-        if (! $patientTable) {
+        // Use patient_master table directly (patient_master_exten may not have all fields)
+        $patientTable = 'patient_master';
+        
+        if (! $this->db->tableExists($patientTable)) {
             return [];
         }
 
