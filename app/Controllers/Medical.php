@@ -461,7 +461,7 @@ class Medical extends BaseController
         }
         $search = preg_replace('/[^A-Za-z0-9 _.@\-]/', '', trim($searchRaw));
 
-        $table = $this->db->tableExists('patient_master_exten') ? 'patient_master_exten' : 'patient_master';
+        $table = 'patient_master';
         if (! $this->db->tableExists($table)) {
             return view('medical/patient_search_result', [
                 'patients' => [],
@@ -905,7 +905,7 @@ class Medical extends BaseController
         $docId = 0;
 
         if ($pno > 0) {
-            $patientTable = $this->db->tableExists('patient_master_exten') ? 'patient_master_exten' : 'patient_master';
+            $patientTable = 'patient_master';
             if ($this->db->tableExists($patientTable)) {
                 $patient = $this->db->table($patientTable)->where('id', $pno)->get()->getRow();
                 if ($patient) {
@@ -975,7 +975,7 @@ class Medical extends BaseController
             return view('medical/placeholder', ['title' => 'Invalid patient']);
         }
 
-        $patientTable = $this->db->tableExists('patient_master_exten') ? 'patient_master_exten' : 'patient_master';
+        $patientTable = 'patient_master';
         $patient = $this->db->table($patientTable)->where('id', $patientId)->get()->getRow();
         if (! $patient) {
             return view('medical/placeholder', ['title' => 'Patient not found']);
@@ -1182,7 +1182,7 @@ class Medical extends BaseController
 
     private function findPatientByIdOrCode($patientId, string $patientCode = ''): ?object
     {
-        $patientTable = $this->db->tableExists('patient_master_exten') ? 'patient_master_exten' : 'patient_master';
+        $patientTable = 'patient_master';
         if (! $this->db->tableExists($patientTable)) {
             return null;
         }
@@ -2131,9 +2131,7 @@ class Medical extends BaseController
         }
 
         $patient = null;
-        if (! empty($invoice->patient_id) && $this->db->tableExists('patient_master_exten')) {
-            $patient = $this->db->table('patient_master_exten')->where('id', (int) $invoice->patient_id)->get()->getRow();
-        } elseif (! empty($invoice->patient_id) && $this->db->tableExists('patient_master')) {
+        if (! empty($invoice->patient_id) && $this->db->tableExists('patient_master')) {
             $patient = $this->db->table('patient_master')->where('id', (int) $invoice->patient_id)->get()->getRow();
         }
 
@@ -2483,12 +2481,10 @@ class Medical extends BaseController
         }
 
         $patientId = (int) ($ipd->p_id ?? ($ipd->patient_id ?? 0));
-        $patientTable = $this->db->tableExists('patient_master_exten')
-            ? 'patient_master_exten'
-            : ($this->db->tableExists('patient_master') ? 'patient_master' : null);
+        $patientTable = 'patient_master';
 
         $patient = null;
-        if ($patientId > 0 && $patientTable) {
+        if ($patientId > 0 && $this->db->tableExists($patientTable)) {
             $patient = $this->db->table($patientTable)->where('id', $patientId)->get()->getRow();
         }
 
@@ -2954,10 +2950,8 @@ class Medical extends BaseController
 
         $patient = null;
         $patientId = (int) ($ipd->p_id ?? ($ipd->patient_id ?? 0));
-        $patientTable = $this->db->tableExists('patient_master_exten')
-            ? 'patient_master_exten'
-            : ($this->db->tableExists('patient_master') ? 'patient_master' : null);
-        if ($patientId > 0 && $patientTable) {
+        $patientTable = 'patient_master';
+        if ($patientId > 0 && $this->db->tableExists($patientTable)) {
             $patient = $this->db->table($patientTable)->where('id', $patientId)->get()->getRow();
         }
 
@@ -3277,9 +3271,7 @@ class Medical extends BaseController
         }
 
         $patient = null;
-        if (! empty($invoice->patient_id) && $this->db->tableExists('patient_master_exten')) {
-            $patient = $this->db->table('patient_master_exten')->where('id', (int) $invoice->patient_id)->get()->getRow();
-        } elseif (! empty($invoice->patient_id) && $this->db->tableExists('patient_master')) {
+        if (! empty($invoice->patient_id) && $this->db->tableExists('patient_master')) {
             $patient = $this->db->table('patient_master')->where('id', (int) $invoice->patient_id)->get()->getRow();
         }
 
@@ -3745,12 +3737,10 @@ class Medical extends BaseController
         }
 
         $patientId = (int) ($ipd->p_id ?? ($ipd->patient_id ?? 0));
-        $patientTable = $this->db->tableExists('patient_master_exten')
-            ? 'patient_master_exten'
-            : ($this->db->tableExists('patient_master') ? 'patient_master' : null);
+        $patientTable = 'patient_master';
 
         $patient = null;
-        if ($patientId > 0 && $patientTable) {
+        if ($patientId > 0 && $this->db->tableExists($patientTable)) {
             $patient = $this->db->table($patientTable)->where('id', $patientId)->get()->getRow();
         }
 
@@ -4543,11 +4533,9 @@ class Medical extends BaseController
             return [];
         }
 
-        $patientTable = $this->db->tableExists('patient_master_exten')
-            ? 'patient_master_exten'
-            : ($this->db->tableExists('patient_master') ? 'patient_master' : null);
+        $patientTable = 'patient_master';
 
-        if (! $patientTable) {
+        if (! $this->db->tableExists($patientTable)) {
             return [];
         }
 
@@ -8749,11 +8737,9 @@ class Medical extends BaseController
             return $this->response->setStatusCode(400)->setBody('UHID is required.');
         }
 
-        $patientTable = $this->db->tableExists('patient_master_exten')
-            ? 'patient_master_exten'
-            : ($this->db->tableExists('patient_master') ? 'patient_master' : null);
+        $patientTable = 'patient_master';
 
-        if ($patientTable === null) {
+        if (! $this->db->tableExists($patientTable)) {
             return $this->response->setStatusCode(404)->setBody('Patient table not found.');
         }
 
