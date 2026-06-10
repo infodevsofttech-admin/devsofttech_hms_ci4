@@ -909,7 +909,7 @@ class Ipd extends BaseController
         }
 
         // Get current status
-        $currentIpd = $this->ipdModel->getById($ipdId);
+        $currentIpd = $this->ipdEditModel->find($ipdId);
         if (! $currentIpd) {
             return $this->response->setStatusCode(404)->setJSON(['update' => 0, 'message' => 'IPD not found']);
         }
