@@ -2193,12 +2193,11 @@ class Medical extends BaseController
         }
 
         $patientId = (int) ($ipd->p_id ?? ($ipd->patient_id ?? 0));
-        $patientTable = $this->db->tableExists('patient_master_exten')
-            ? 'patient_master_exten'
-            : ($this->db->tableExists('patient_master') ? 'patient_master' : null);
+        // Use patient_master table directly (patient_master_exten may not have all fields)
+        $patientTable = 'patient_master';
 
         $patient = null;
-        if ($patientId > 0 && $patientTable) {
+        if ($patientId > 0 && $this->db->tableExists($patientTable)) {
             $patient = $this->db->table($patientTable)->where('id', $patientId)->get()->getRow();
         }
 
@@ -2323,11 +2322,10 @@ class Medical extends BaseController
         $orgBuilder = $this->db->table('organization_case_master o');
         $orgBuilder->where('o.id', $orgId);
 
-        $patientTable = $this->db->tableExists('patient_master_exten')
-            ? 'patient_master_exten'
-            : ($this->db->tableExists('patient_master') ? 'patient_master' : null);
+        // Use patient_master table directly (patient_master_exten may not have all fields)
+        $patientTable = 'patient_master';
 
-        $patientFields = $patientTable ? ($this->db->getFieldNames($patientTable) ?? []) : [];
+        $patientFields = $this->db->tableExists($patientTable) ? ($this->db->getFieldNames($patientTable) ?? []) : [];
 
         $select = [
             'o.id',
