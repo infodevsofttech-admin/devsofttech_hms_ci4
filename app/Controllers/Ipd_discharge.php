@@ -1364,7 +1364,7 @@ class Ipd_discharge extends BaseController
 
     private function isNarrativeTemplateSectionAllowed(string $section): bool
     {
-        return in_array($section, ['diagnosis_remark', 'course_remark'], true);
+        return in_array($section, ['diagnosis_remark', 'course_remark', 'instruction_other', 'instruction_remark'], true);
     }
 
     private function narrativeSectionTable(string $section): ?string

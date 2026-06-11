@@ -918,6 +918,16 @@ class Patient extends BaseController
 			return $this->response->setStatusCode(404)->setBody('Patient not found');
 		}
 
+		$request = service('request');
+		$backUrl = trim((string) $request->getGet('back_url'));
+		$backTitle = trim((string) $request->getGet('back_title'));
+		if ($backUrl === '') {
+			$backUrl = base_url('billing/patient/person_record') . '/' . $pno . '/0';
+		}
+		if ($backTitle === '') {
+			$backTitle = 'Profile';
+		}
+
 		$opdFields = $this->db->getFieldNames('opd_master') ?? [];
 		$opdSelect = [
 			'opd_id',
@@ -1041,6 +1051,8 @@ class Patient extends BaseController
 		return view('billing/Patient_Profile_Opd_V', [
 			'patient' => $patient,
 			'opdGroups' => $opdGroups,
+			'backUrl' => $backUrl,
+			'backTitle' => $backTitle,
 		]);
 	}
 

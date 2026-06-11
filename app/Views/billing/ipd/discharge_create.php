@@ -389,105 +389,25 @@ $historyFields = [
         border-color: var(--dc-border);
     }
 
+    @media (min-width: 768px) {
+        .discharge-left-col {
+            flex: 0 0 25%;
+            max-width: 25%;
+        }
+
+        .discharge-right-col {
+            flex: 0 0 75%;
+            max-width: 75%;
+        }
+    }
+
     .discharge-form-area form>.card:first-child {
         margin-top: 0;
-    }
-
-    .discharge-form-area .card-header {
-        font-size: 14px;
-        background: var(--dc-muted-bg);
-    }
-
-    .discharge-form-area .card-body {
-        padding: 0.95rem;
-    }
-
-    .discharge-page .btn {
-        border-radius: 0.45rem;
-        font-weight: 500;
-        letter-spacing: 0.01em;
-    }
-
-    .discharge-page .btn-sm {
-        padding: 0.34rem 0.68rem;
-        font-size: 0.79rem;
-        line-height: 1.25;
-    }
-
-    .discharge-page .btn-outline-primary {
-        color: #4154f1;
-        border-color: #c7d2fe;
-        background: #f8f9ff;
-    }
-
-    .discharge-page .btn-outline-primary:hover,
-    .discharge-page .btn-outline-primary:focus {
-        color: #fff;
-        background: #4154f1;
-        border-color: #4154f1;
-    }
-
-    .discharge-page .btn-outline-success {
-        color: #198754;
-        border-color: #bfe5d3;
-        background: #f6fcf9;
-    }
-
-    .discharge-page .btn-outline-success:hover,
-    .discharge-page .btn-outline-success:focus {
-        color: #fff;
-        background: #198754;
-        border-color: #198754;
-    }
-
-    .discharge-page .btn-outline-info {
-        color: #0dcaf0;
-        border-color: #bdeaf4;
-        background: #f5fdff;
-    }
-
-    .discharge-page .btn-outline-info:hover,
-    .discharge-page .btn-outline-info:focus {
-        color: #fff;
-        background: #0aa2c0;
-        border-color: #0aa2c0;
-    }
-
-    .discharge-page .btn-outline-warning {
-        color: #b45309;
-        border-color: #f4d6a6;
-        background: #fffaf1;
-    }
-
-    .discharge-page .btn-outline-warning:hover,
-    .discharge-page .btn-outline-warning:focus {
-        color: #fff;
-        background: #d97706;
-        border-color: #d97706;
-    }
-
-    .discharge-page .btn-outline-danger {
-        color: #dc3545;
-        border-color: #f2c4c9;
-        background: #fff8f8;
-    }
-
-    .discharge-page .btn-outline-danger:hover,
-    .discharge-page .btn-outline-danger:focus {
-        color: #fff;
-        background: #dc3545;
-        border-color: #dc3545;
-    }
-
-    .discharge-form-area .form-label {
-        font-size: 13px;
-        margin-bottom: 4px;
     }
 
     .discharge-form-area table th,
     .discharge-form-area table td {
         vertical-align: middle;
-        font-size: 13px;
     }
 
     .discharge-page .table {
@@ -612,7 +532,10 @@ $historyFields = [
         / IPD ID : <strong><?= esc((string) ($ipd->ipd_code ?? '')) ?></strong>
     </div>
 
-    <div class="mb-3 text-end">
+    <div class="mb-3 text-end d-flex justify-content-end gap-2">
+        <button type="button" class="btn btn-outline-primary" id="btn_print_top" onclick="window.open('<?= site_url('Ipd_discharge/show_discharge/' . $ipdId . '/1') ?>', '_blank');">
+            <i class="fas fa-print me-1"></i> Print Discharge Summary
+        </button>
         <button type="button" class="btn btn-primary" id="btn_preview_top" onclick="openDischargePreview('<?= site_url('Ipd_discharge/preview_discharge_report/' . $ipdId . '?regen=1') ?>', 'Discharge Preview');">
             <i class="fas fa-eye me-1"></i> Preview Discharge Summary
         </button>
@@ -625,7 +548,7 @@ $historyFields = [
             <?php endif; ?>
 
             <div class="row">
-                <div class="col-md-3">
+                <div class="col-md-3 discharge-left-col">
                     <div class="discharge-side-panel">
                         <ul class="nav flex-column nav-pills" id="discharge_section_nav" role="tablist" aria-orientation="vertical">
                             <li class="nav-item"><a href="#section-complaints" class="nav-link discharge-nav-link active" data-target="section-complaints">Presenting Complaints with Duration and Reason for Admission</a></li>
@@ -641,13 +564,10 @@ $historyFields = [
                             <li class="nav-item"><a href="#section-instructions" class="nav-link discharge-nav-link" data-target="section-instructions">Discharge Summary</a></li>
                         </ul>
 
-                        <div class="discharge-side-actions">
-                            <button type="button" class="btn btn-primary btn-sm" id="btn_preview_side" onclick="openDischargePreview('<?= site_url('Ipd_discharge/preview_discharge_report/' . $ipdId . '?regen=1') ?>', 'Discharge Preview');">Preview</button>
-                        </div>
                     </div>
                 </div>
 
-                <div class="col-md-9 discharge-form-area">
+                <div class="col-md-9 discharge-form-area discharge-right-col">
                     <form id="discharge_main_form" method="post" action="<?= site_url('Ipd_discharge/ipd_select/' . $ipdId) ?>" class="row g-3">
                         <?= csrf_field() ?>
 
@@ -791,8 +711,8 @@ $historyFields = [
                                 <input type="hidden" name="complaint_remove_id" id="complaint_remove_id" value="0">
 
                                 <!-- Healthplix-style inline complaint table (OPD-like) -->
-                                <table class="table table-sm table-bordered align-middle mb-1" id="discharge_complaint_table" style="font-size:.82rem">
-                                    <thead class="table-light" style="font-size:.75rem">
+                                <table class="table table-sm table-bordered align-middle mb-1" id="discharge_complaint_table">
+                                    <thead class="table-light">
                                         <tr>
                                             <th style="width:28px">#</th>
                                             <th>Complaint</th>
@@ -810,7 +730,7 @@ $historyFields = [
                                             <td></td>
                                             <td colspan="4" class="p-1 position-relative">
                                                 <input type="text" class="form-control form-control-sm" id="discharge_complaint_lookup"
-                                                    autocomplete="off" placeholder="fever , cough , headache..." style="font-size:.82rem">
+                                                    autocomplete="off" placeholder="fever , cough , headache...">
                                                 <div id="discharge_complaint_dropdown" class="border rounded bg-white shadow-sm"
                                                     style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1060;max-height:260px;overflow-y:auto;"></div>
                                             </td>
@@ -1167,8 +1087,6 @@ $historyFields = [
 
                                 <div class="mt-3">
                                     <label class="form-label">Final Diagnosis (Narrative)
-                                        <button type="button" class="btn btn-outline-primary btn-sm" id="btn_discharge_ai_diagnosis">AI Assist</button>
-                                        <button type="button" class="btn btn-outline-primary btn-sm" id="btn_discharge_hinglish_diagnosis">Hinglish -> English</button>
                                         <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-field-past" data-section="diagnosis_remark" data-target="diagnosis_remark">Past Data</button>
                                         <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-template-load" data-section="diagnosis_remark" data-target="diagnosis_remark">Load Template</button>
                                         <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-template-save" data-section="diagnosis_remark" data-target="diagnosis_remark">Save as Template</button>
@@ -1238,8 +1156,6 @@ $historyFields = [
 
                                 <div class="mt-3">
                                     <label class="form-label">Course / Treatment in Hospital (Narrative)
-                                        <button type="button" class="btn btn-outline-primary btn-sm" id="btn_discharge_ai_course">AI Assist</button>
-                                        <button type="button" class="btn btn-outline-primary btn-sm" id="btn_discharge_hinglish_course">Hinglish -> English</button>
                                         <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-field-past" data-section="course_remark" data-target="course_remark">Past Data</button>
                                         <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-template-load" data-section="course_remark" data-target="course_remark">Load Template</button>
                                         <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-template-save" data-section="course_remark" data-target="course_remark">Save as Template</button>
@@ -1288,7 +1204,7 @@ $historyFields = [
 
                                 <div class="row g-3">
                                     <!-- Medicine List Table -->
-                                    <div class="col-md-7">
+                                    <div class="col-md-12">
                                         <div class="table-responsive">
                                             <table class="table table-sm table-bordered">
                                                 <thead>
@@ -1331,7 +1247,7 @@ $historyFields = [
                                     </div>
 
                                     <!-- Add Medicine Form -->
-                                    <div class="col-md-5">
+                                    <div class="col-md-12">
                                         <div class="card border">
                                             <div class="card-header py-2 bg-light d-flex justify-content-between align-items-center">
                                                 <strong>Prescribed:</strong>
@@ -1342,8 +1258,8 @@ $historyFields = [
                                             <div class="card-body">
                                                 <input type="hidden" id="discharge_med_item_id" value="0">
                                                 <input type="hidden" id="discharge_med_id" value="0">
-
-                                                <div class="mb-2">
+<div class="row g-2 mb-2">
+                                                <div class="col-8">
                                                     <label class="form-label small">Medicine Name (Brand)</label>
                                                     <input type="text" id="discharge_med_name" list="discharge_med_suggest" class="form-control form-control-sm" placeholder="Type medicine name" autocomplete="off">
                                                     <datalist id="discharge_med_suggest"></datalist>
@@ -1356,11 +1272,11 @@ $historyFields = [
                                                     <div id="discharge_substitute_rows" style="max-height:200px;overflow-y:auto;"></div>
                                                 </div>
 
-                                                <div class="mb-2">
+                                                <div class="col-4">
                                                     <label class="form-label small">Type</label>
                                                     <input type="text" id="discharge_med_type" class="form-control form-control-sm" placeholder="TAB,CAP,SYR,INJ">
                                                 </div>
-
+</div>
                                                 <div class="row g-2 mb-2">
                                                     <div class="col-4">
                                                         <label class="form-label small">Dose:</label>
@@ -1414,14 +1330,12 @@ $historyFields = [
                                                     <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_dosage_when" data-fill-value="BF">Before Food</button>
                                                     <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_dosage_when" data-fill-value="AF">After Food</button>
                                                     <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_dosage_when" data-fill-value="WF">With Food</button>
-                                                </div>
-                                                <div class="mb-2">
+                                                &nbsp;
                                                     <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_dosage_freq" data-fill-value="OD">OD</button>
                                                     <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_dosage_freq" data-fill-value="BD">BD</button>
                                                     <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_dosage_freq" data-fill-value="TDS">TDS</button>
                                                     <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_dosage_freq" data-fill-value="HS">HS</button>
-                                                </div>
-                                                <div class="mb-2">
+                                                &nbsp;
                                                     <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_no_of_days" data-fill-value="3 Days">3 Days</button>
                                                     <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_no_of_days" data-fill-value="5 Days">5 Days</button>
                                                     <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_no_of_days" data-fill-value="7 Days">7 Days</button>
@@ -1489,13 +1403,21 @@ $historyFields = [
                                 </div>
 
                                 <div class="col-md-12">
-                                    <label class="form-label">Other Advice</label>
+                                    <label class="form-label">Other Advice
+                                        <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-template-load" data-section="instruction_other" data-target="instruction_other">Load Template</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-template-save" data-section="instruction_other" data-target="instruction_other">Save as Template</button>
+                                    </label>
                                     <textarea class="form-control" name="instruction_other" id="instruction_other" rows="2" placeholder="Additional custom advice..."><?= esc($instructionOther) ?></textarea>
+                                    <div id="discharge_instruction_other_status" class="complaint-status text-muted"></div>
                                 </div>
 
                                 <div class="col-md-12">
-                                    <label class="form-label">Discharge Summary</label>
+                                    <label class="form-label">Discharge Summary
+                                        <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-template-load" data-section="instruction_remark" data-target="instruction_remark">Load Template</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-template-save" data-section="instruction_remark" data-target="instruction_remark">Save as Template</button>
+                                    </label>
                                     <textarea class="form-control" name="instruction_remark" id="instruction_remark" rows="3"><?= esc((string) ($instruction_remark ?? '')) ?></textarea>
+                                    <div id="discharge_instruction_remark_status" class="complaint-status text-muted"></div>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label">Review After (days/text)</label>
@@ -2075,7 +1997,6 @@ $historyFields = [
                     removeBtn.type = 'button';
                     removeBtn.className = 'btn btn-sm text-danger p-0';
                     removeBtn.style.lineHeight = '1';
-                    removeBtn.style.fontSize = '.9rem';
                     removeBtn.innerHTML = '×';
                     removeBtn.addEventListener('click', function() {
                         selectedDischargeComplaints.splice(idx, 1);
@@ -2439,7 +2360,7 @@ $historyFields = [
                                     codeDisplay = '<span class="badge bg-secondary">' + icd + '</span>';
                                 }
 
-                                html += '<div class="dropdown-item px-2 py-2" data-id="' + (row.id || 0) + '" data-name="' + name.replace(/"/g, '&quot;') + '" style="cursor:pointer;font-size:.9rem;border-bottom:1px solid #f0f0f0;">';
+                                html += '<div class="dropdown-item px-2 py-2" data-id="' + (row.id || 0) + '" data-name="' + name.replace(/"/g, '&quot;') + '" style="cursor:pointer;border-bottom:1px solid #f0f0f0;">';
                                 html += '<div class="fw-semibold">' + name + '</div>';
                                 if (codeDisplay) {
                                     html += '<div class="small mt-1">' + codeDisplay + '</div>';
@@ -2546,6 +2467,12 @@ $historyFields = [
                 if (section === 'course_remark') {
                     return 'discharge_course_status';
                 }
+                if (section === 'instruction_other') {
+                    return 'discharge_instruction_other_status';
+                }
+                if (section === 'instruction_remark') {
+                    return 'discharge_instruction_remark_status';
+                }
 
                 return '';
             }
@@ -2555,6 +2482,32 @@ $historyFields = [
                 if (statusId !== '') {
                     setSectionStatus(statusId, text, level);
                 }
+            }
+
+            function getNarrativeFieldText(target) {
+                if (!target) {
+                    return '';
+                }
+
+                if (window.CKEDITOR && CKEDITOR.instances && CKEDITOR.instances[target]) {
+                    return (CKEDITOR.instances[target].getData() || '').toString();
+                }
+
+                return ($('#' + target).val() || '').toString();
+            }
+
+            function setNarrativeFieldText(target, value) {
+                if (!target) {
+                    return;
+                }
+
+                var textValue = (value || '').toString();
+                if (window.CKEDITOR && CKEDITOR.instances && CKEDITOR.instances[target]) {
+                    CKEDITOR.instances[target].setData(textValue);
+                    return;
+                }
+
+                $('#' + target).val(textValue);
             }
 
             // Course/Treatment autocomplete with SNOMED/ICD code display
@@ -2603,7 +2556,7 @@ $historyFields = [
                                     codeDisplay = '<span class="badge bg-secondary">' + icd + '</span>';
                                 }
 
-                                html += '<div class="dropdown-item px-2 py-2" data-id="' + (row.id || 0) + '" data-name="' + name.replace(/"/g, '&quot;') + '" style="cursor:pointer;font-size:.9rem;border-bottom:1px solid #f0f0f0;">';
+                                html += '<div class="dropdown-item px-2 py-2" data-id="' + (row.id || 0) + '" data-name="' + name.replace(/"/g, '&quot;') + '" style="cursor:pointer;border-bottom:1px solid #f0f0f0;">';
                                 html += '<div class="fw-semibold">' + name + '</div>';
                                 if (codeDisplay) {
                                     html += '<div class="small mt-1">' + codeDisplay + '</div>';
@@ -2768,7 +2721,7 @@ $historyFields = [
                             return;
                         }
 
-                        $('#' + target).val((data && data.past_text) ? data.past_text : '');
+                        setNarrativeFieldText(target, (data && data.past_text) ? data.past_text : '');
                         setNarrativeStatus(section, (data && data.error_text) ? data.error_text : 'Past data loaded.', 'success');
                     }, 'json').fail(function() {
                         setNarrativeStatus(section, 'Unable to load past data right now.', 'error');
@@ -2782,7 +2735,7 @@ $historyFields = [
                         return;
                     }
 
-                    var text = ($('#' + target).val() || '').toString().trim();
+                    var text = getNarrativeFieldText(target).trim();
                     if (!text) {
                         setNarrativeStatus(section, 'Type text first, then save as template.', 'error');
                         return;
@@ -2877,7 +2830,7 @@ $historyFields = [
                             $sel.append('<option value="' + idx + '">' + $('<div>').text(src + name).html() + '</option>');
                         });
 
-                        var existingText = ($('#' + target).val() || '').toString().trim();
+                        var existingText = getNarrativeFieldText(target).trim();
                         $('#ipd_narrative_apply_mode').val(existingText ? 'append' : 'replace');
                         $('#ipd_narrative_template_preview').val((rows[0] && rows[0].template_text) ? rows[0].template_text : '');
 
@@ -2905,8 +2858,7 @@ $historyFields = [
 
                     var mode = ($('#ipd_narrative_apply_mode').val() || 'replace').toString();
                     var selectedText = (row.template_text || '').toString().trim();
-                    var $target = $('#' + target);
-                    var currentText = ($target.val() || '').toString().trim();
+                    var currentText = getNarrativeFieldText(target).trim();
                     var finalText = selectedText;
 
                     if (mode === 'append' && currentText !== '') {
@@ -2917,7 +2869,7 @@ $historyFields = [
                         }
                     }
 
-                    $target.val(finalText);
+                    setNarrativeFieldText(target, finalText);
                     setNarrativeStatus(section, mode === 'append' ? 'Template appended.' : 'Template loaded.', 'success');
                     hideModalById('ipdNarrativeTemplateModal');
                 });
@@ -3446,52 +3398,6 @@ $historyFields = [
                 }
             }
 
-            function bindAiRewrite(form, btnId, sourceId, mode, statusId, emptyMsg) {
-                var btn = document.getElementById(btnId);
-                var source = document.getElementById(sourceId);
-                if (!btn || !source) {
-                    return;
-                }
-
-                btn.addEventListener('click', function() {
-                    var text = (source.value || '').trim();
-                    if (text === '') {
-                        setSectionStatus(statusId, emptyMsg || 'Type text first.', 'error');
-                        return;
-                    }
-
-                    if (!window.jQuery) {
-                        return;
-                    }
-
-                    var csrf = getCsrfPair(form);
-                    var payload = {
-                        text: text,
-                        mode: mode
-                    };
-                    payload[csrf.name] = csrf.value;
-
-                    $.post('<?= base_url('Opd_prescription/clinical_autotype') ?>', payload, function(data) {
-                        if (data && data.csrfName && data.csrfHash) {
-                            var csrfInput = form.querySelector('input[name="' + data.csrfName + '"]');
-                            if (csrfInput) {
-                                csrfInput.value = data.csrfHash;
-                            }
-                        }
-
-                        if (!data || parseInt(data.update || '0', 10) !== 1) {
-                            setSectionStatus(statusId, (data && data.error_text) ? data.error_text : 'Unable to process AI text.', 'error');
-                            return;
-                        }
-
-                        source.value = (data.draft_text || text);
-                        setSectionStatus(statusId, (data.error_text || 'AI text ready.'), 'success');
-                    }, 'json').fail(function() {
-                        setSectionStatus(statusId, 'AI request failed.', 'error');
-                    });
-                });
-            }
-
             function initDiagnosisTools() {
                 var section = document.getElementById('section-diagnosis');
                 if (!section || section.dataset.toolsBound === '1') {
@@ -3505,9 +3411,6 @@ $historyFields = [
                 }
 
                 bindDiagnosisIcdLookup(form);
-
-                bindAiRewrite(form, 'btn_discharge_ai_diagnosis', 'diagnosis_remark', 'diagnosis', 'discharge_diagnosis_status', 'Type diagnosis narrative first.');
-                bindAiRewrite(form, 'btn_discharge_hinglish_diagnosis', 'diagnosis_remark', 'hinglish_to_english', 'discharge_diagnosis_status', 'Type diagnosis narrative first.');
             }
 
             function initCourseTools() {
@@ -3529,9 +3432,6 @@ $historyFields = [
                     'discharge_course_status',
                     'Custom term ready. Click +ADD to save row.'
                 );
-
-                bindAiRewrite(form, 'btn_discharge_ai_course', 'course_remark', 'autotype', 'discharge_course_status', 'Type course narrative first.');
-                bindAiRewrite(form, 'btn_discharge_hinglish_course', 'course_remark', 'hinglish_to_english', 'discharge_course_status', 'Type course narrative first.');
             }
 
             function initInstructionTools() {

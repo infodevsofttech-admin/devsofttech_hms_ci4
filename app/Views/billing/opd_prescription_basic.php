@@ -73,13 +73,11 @@
             margin-top: .4rem;
         }
         .rx-counter {
-            font-size: .8rem;
             color: #6c757d;
             text-align: right;
             margin-top: .25rem;
         }
         .rx-save-status {
-            font-size: .875rem;
             display: flex;
             align-items: center;
             gap: .4rem;
@@ -173,7 +171,6 @@
             font-weight: 600;
             color: #334155;
             margin: 0;
-            font-size: .88rem;
             letter-spacing: .01em;
         }
         .rx-foldable .rx-fold-body {
@@ -482,13 +479,13 @@
         <div id="rx_scan_banner" class="rx-scan-banner"></div>
 
         <div class="row g-3 rx-two-panel">
-            <div class="col-lg-4 rx-left-panel">
+            <div class="col-lg-3 rx-left-panel">
                 <div class="rx-meta-box mb-3">
                     <div class="row g-2 align-items-start">
                         <div class="col-8">
-                            <div class="rx-meta-line"><strong>Patient Name:</strong> <span style="font-size:1.18rem;font-weight:700;color:#0b3b91;"><?= esc($patientName !== '' ? $patientName : '-') ?></span></div>
+                            <div class="rx-meta-line"><strong>Patient Name:</strong> <span class="fw-bold text-primary"><?= esc($patientName !== '' ? $patientName : '-') ?></span></div>
                             <?php if ($relationLabel !== '') { ?>
-                            <div class="rx-meta-line" style="font-size:0.88rem;font-weight:400;color:#374151;margin-top:1px;"><?= esc($relationLabel) ?></div>
+                            <div class="rx-meta-line text-body-secondary"><?= esc($relationLabel) ?></div>
                             <?php } ?>
                             <div class="rx-meta-line"><strong>UHID:</strong> <?= esc($patient_master[0]->p_code ?? '') ?></div>
                             <div class="rx-meta-line"><strong>Age:</strong> <?= esc($patient_master[0]->str_age ?? '') ?></div>
@@ -607,7 +604,7 @@
                 </div>
             </div>
 
-            <div class="col-lg-8 rx-right-panel">
+            <div class="col-lg-9 rx-right-panel">
                 <div class="card mb-3">
                     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                         <div>
@@ -853,14 +850,14 @@
                             <div class="mb-3" id="rx_sec_complaints">
                                 <div class="d-flex align-items-center justify-content-between mb-2">
                                     <h6 class="mb-0">Chief Complaints</h6>
-                                    <button type="button" class="btn btn-sm btn-outline-secondary btn-save-autotype-keyword"
+                                        <button type="button" class="btn btn-sm btn-outline-secondary btn-save-autotype-keyword"
                                             data-section="complaints" data-target="complaints"
-                                            style="font-size:.75rem" title="Save as custom keyword">+keyword</button>
+                                            title="Save as custom keyword">+keyword</button>
                                 </div>
 
                                 <!-- Healthplix-style inline complaint table -->
-                                <table class="table table-sm table-bordered align-middle mb-1" id="complaint_table" style="font-size:.82rem">
-                                    <thead class="table-light" style="font-size:.75rem">
+                                <table class="table table-sm table-bordered align-middle mb-1" id="complaint_table">
+                                    <thead class="table-light">
                                         <tr>
                                             <th style="width:28px">#</th>
                                             <th>Complaint</th>
@@ -918,14 +915,14 @@
                             <div class="mb-3" id="rx_sec_diagnosis">
                                 <div class="d-flex align-items-center justify-content-between mb-2">
                                     <h6 class="mb-0">Diagnosis</h6>
-                                    <button type="button" class="btn btn-sm btn-outline-secondary btn-save-autotype-keyword"
+                                        <button type="button" class="btn btn-sm btn-outline-secondary btn-save-autotype-keyword"
                                             data-section="diagnosis" data-target="diagnosis"
-                                            style="font-size:.75rem" title="Save as custom keyword">+keyword</button>
+                                            title="Save as custom keyword">+keyword</button>
                                 </div>
 
                                 <!-- Healthplix-style inline diagnosis table -->
-                                <table class="table table-sm table-bordered align-middle mb-1" id="diagnosis_table" style="font-size:.82rem">
-                                    <thead class="table-light" style="font-size:.75rem">
+                                <table class="table table-sm table-bordered align-middle mb-1" id="diagnosis_table">
+                                    <thead class="table-light">
                                         <tr>
                                             <th style="width:28px">#</th>
                                             <th>Diagnosis</th>
