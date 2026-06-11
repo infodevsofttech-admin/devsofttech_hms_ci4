@@ -161,7 +161,7 @@ class Ipd_discharge extends BaseController
             . '<div>{{DISCHARGE_MEDICATIONS}}</div>'
             . '<div>{{DIETARY_ADVICE}}</div>'
             . '<div>{{REVIEW_AFTER}}</div>'
-            . '<div>{{SIGNATURE_BLOCK}}</div>';
+            ;
     }
 
     private function defaultDischargeTemplateSettings(): array
@@ -672,7 +672,7 @@ class Ipd_discharge extends BaseController
             'PAIN_MEASUREMENT_SCALE' => $painMeasurement,
             'DRUG_ALLERGY_ADR' => $drugAllergyAdr,
             'CO_MORBIDITIES' => $coMorbidities,
-            'SIGNATURE_BLOCK' => $signatureBlock,
+            'SIGNATURE_BLOCK' => '',
             // Legacy style aliases to ease migration from CI3-style template variables.
             'FinalDiagnosis' => $finalDiagnosis,
             'Surgery' => $surgery,
@@ -5147,7 +5147,6 @@ class Ipd_discharge extends BaseController
             'FOLLOW_UP_INSTRUCTIONS' => 'Follow-up Instructions Section',
             'DISCHARGE_ADVICE' => 'Follow-up Advice (legacy alias)',
             'INSTRUCTION_REMARK' => 'Instruction Remark (legacy alias)',
-            'SIGNATURE_BLOCK' => 'Signature Block',
         ];
 
         if ($ipdId <= 0) {
