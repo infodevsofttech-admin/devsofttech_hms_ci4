@@ -3925,6 +3925,7 @@ class Opd_prescription extends BaseController
         $jPrintOrder = $this->resolveFirstField($jFields, ['printOrder', 'print_order', 'id']);
         $iCode = $this->resolveFirstField($iFields, ['Code', 'code']);
         $iName = $this->resolveFirstField($iFields, ['Name', 'name']);
+        $iSortOrder = $this->resolveFirstField($iFields, ['sort_id', 'sort_order', 'id', 'Code', 'code']);
 
         if ($pCode === null || $pName === null || $jProfileCode === null || $jInvestCode === null || $iCode === null || $iName === null) {
             return [];
@@ -3946,7 +3947,9 @@ class Opd_prescription extends BaseController
             $params[] = '%' . $filter . '%';
         }
         $sql .= 'ORDER BY p.`' . $pName . '` ASC';
-        if ($jPrintOrder !== null) {
+        if ($iSortOrder !== null) {
+            $sql .= ', i.`' . $iSortOrder . '` ASC';
+        } elseif ($jPrintOrder !== null) {
             $sql .= ', j.`' . $jPrintOrder . '` ASC';
         }
 
@@ -6991,10 +6994,13 @@ class Opd_prescription extends BaseController
             $jPrintOrder = $this->resolveFirstField($jFields, ['printOrder', 'print_order', 'id']);
             $iCode = $this->resolveFirstField($iFields, ['Code', 'code']);
             $iName = $this->resolveFirstField($iFields, ['Name', 'name']);
+            $iSortOrder = $this->resolveFirstField($iFields, ['sort_id', 'sort_order', 'id', 'Code', 'code']);
 
             if ($pCode !== null && $pName !== null && $jProfileCode !== null && $jInvestCode !== null && $iCode !== null && $iName !== null) {
                 $orderExpr = 'p.`' . $pName . '` ASC';
-                if ($jPrintOrder !== null) {
+                if ($iSortOrder !== null) {
+                    $orderExpr .= ', i.`' . $iSortOrder . '` ASC';
+                } elseif ($jPrintOrder !== null) {
                     $orderExpr .= ', j.`' . $jPrintOrder . '` ASC';
                 }
 
