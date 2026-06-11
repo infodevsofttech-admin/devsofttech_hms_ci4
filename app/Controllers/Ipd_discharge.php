@@ -523,31 +523,32 @@ class Ipd_discharge extends BaseController
             return $this->extractDischargeSectionByMarkers($full, $starts, array_merge($allMarkers, $extraEnds));
         };
 
-        $summary = $section(['Discharge Summary']);
+        // Main clinical discharge summary from HTML editor
+        $clinicalSummary = $section(['Discharge Summary']);
         
         // Replace "Discharge Summary" header with discharge status
-        if ($dischargeStatus !== '' && $summary !== '') {
-            $summary = preg_replace(
+        if ($dischargeStatus !== '' && $clinicalSummary !== '') {
+            $clinicalSummary = preg_replace(
                 '/<h[1-6][^>]*>\s*Discharge\s+Summary\s*<\/h[1-6]>/i',
                 '<h2>' . esc($dischargeStatus) . '</h2>',
-                $summary
+                $clinicalSummary
             );
             // Also handle bold/strong tags
-            $summary = preg_replace(
+            $clinicalSummary = preg_replace(
                 '/<(b|strong)>\s*Discharge\s+Summary\s*<\/\1>/i',
                 '<strong>' . esc($dischargeStatus) . '</strong>',
-                $summary
+                $clinicalSummary
             );
             // Remove "Date of Discharge" line
-            $summary = preg_replace(
+            $clinicalSummary = preg_replace(
                 '/Date\s+of\s+Discharge\s*:\s*[0-9\-\/]+\s*<br\s*\/?>/i',
                 '',
-                $summary
+                $clinicalSummary
             );
-            $summary = preg_replace(
+            $clinicalSummary = preg_replace(
                 '/<p[^>]*>\s*Date\s+of\s+Discharge\s*:\s*[0-9\-\/]+\s*<\/p>/i',
                 '',
-                $summary
+                $clinicalSummary
             );
         }
         
@@ -571,10 +572,15 @@ class Ipd_discharge extends BaseController
         
         // Extract individual instruction fields for template flexibility
         $otherAdvice = $section(['Other Advice:']);
-        $dischargeSummaryAdvice = $section(['Discharge Summary:']);
+        $followUpInstructions = $section(['Discharge Summary:']);
 
         $vars = [
-            'DISCHARGE_SUMMARY' => $summary,
+            // Main discharge summary from HTML editor (instruction_remark field)
+            'CLINICAL_SUMMARY' => $clinicalSummary,
+            // Legacy alias for backward compatibility
+            'DISCHARGE_SUMMARY' => $clinicalSummary,
+            
+            // Clinical sections
             'FINAL_DIAGNOSIS' => $finalDiagnosis,
             'SURGERY' => $surgery,
             'PROCEDURE' => $procedure,
@@ -584,16 +590,19 @@ class Ipd_discharge extends BaseController
             'CLINICAL_INVESTIGATION_REPORTS' => $clinicalInvestigations,
             'COURSE_IN_HOSPITAL' => $courseInHospital,
             'EXAMINATION_ON_DISCHARGE' => $examOnDischarge,
+            
+            // Discharge instructions and advice
             'DISCHARGE_MEDICATIONS' => $dischargeMedications,
             'DIETARY_ADVICE' => $dietaryAdvice,
             'DISCHARGE_INSTRUCTIONS' => $dischargeInstructions,
+            'OTHER_ADVICE' => $otherAdvice,
+            'FOLLOW_UP_INSTRUCTIONS' => $followUpInstructions,
+            
+            // Other sections
             'PAIN_MEASUREMENT_SCALE' => $painMeasurement,
             'DRUG_ALLERGY_ADR' => $drugAllergyAdr,
             'CO_MORBIDITIES' => $coMorbidities,
             'SIGNATURE_BLOCK' => $signatureBlock,
-            'OTHER_ADVICE' => $otherAdvice,
-            'INSTRUCTION_REMARK' => $dischargeSummaryAdvice,
-            'DISCHARGE_ADVICE' => $dischargeSummaryAdvice,
             // Legacy style aliases to ease migration from CI3-style template variables.
             'FinalDiagnosis' => $finalDiagnosis,
             'Surgery' => $surgery,
