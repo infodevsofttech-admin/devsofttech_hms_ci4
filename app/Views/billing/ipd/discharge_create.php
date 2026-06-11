@@ -90,7 +90,7 @@ $legacyDrugRows = $legacy_drug_rows ?? [];
 $doseMasterMaps = $dose_master_maps ?? ['dose' => [], 'when' => [], 'freq' => [], 'where' => []];
 
 // Helper function to get dose label from ID
-$getDoseLabel = function($id, $type) use ($doseMasterMaps) {
+$getDoseLabel = function ($id, $type) use ($doseMasterMaps) {
     $id = (int) $id;
     if ($id <= 0 || !isset($doseMasterMaps[$type][$id])) {
         return '';
@@ -224,18 +224,18 @@ $allergyStatusNormalized = strtolower($drugAllergyStatus);
 $allergyStatusKnown = in_array($allergyStatusNormalized, ['known'], true);
 $allergyStatusUnknown = in_array($allergyStatusNormalized, ['allergies not known', 'not known', 'unknown'], true);
 $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug allergy', 'none', 'no known allergy'], true);
- 
- $historyFields = [
-     'is_smoking' => 'Smoking',
-     'is_alcohol' => 'Alcohol',
-     'is_tobacoo' => 'Tobacco',
-     'is_drug_abuse' => 'Drug abuse',
-     'is_hypertesion' => 'Hypertension',
-     'is_niddm' => 'Type 2 diabetes mellitus (DM)',
-     'is_hbsag' => 'HBsAg',
-     'is_hcv' => 'HCV',
-     'is_hiv_I_II' => 'HIV I & II',
- ];
+
+$historyFields = [
+    'is_smoking' => 'Smoking',
+    'is_alcohol' => 'Alcohol',
+    'is_tobacoo' => 'Tobacco',
+    'is_drug_abuse' => 'Drug abuse',
+    'is_hypertesion' => 'Hypertension',
+    'is_niddm' => 'Type 2 diabetes mellitus (DM)',
+    'is_hbsag' => 'HBsAg',
+    'is_hcv' => 'HCV',
+    'is_hiv_I_II' => 'HIV I & II',
+];
 ?>
 
 <style>
@@ -261,7 +261,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
         box-shadow: 0 2px 8px rgba(19, 44, 76, 0.06);
     }
 
-    .discharge-main-card > .card-body {
+    .discharge-main-card>.card-body {
         padding: 1rem 1rem 1.15rem;
     }
 
@@ -286,7 +286,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
             margin-bottom: 0;
         }
 
-        .discharge-main-card > .card-body {
+        .discharge-main-card>.card-body {
             /* Let notices consume natural height; keep form row as flexible remainder */
             height: 100%;
             display: flex;
@@ -295,7 +295,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
             overflow: hidden;
         }
 
-        .discharge-main-card > .card-body > .row {
+        .discharge-main-card>.card-body>.row {
             flex: 1 1 auto;
             min-height: 0;
         }
@@ -389,7 +389,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
         border-color: var(--dc-border);
     }
 
-    .discharge-form-area form > .card:first-child {
+    .discharge-form-area form>.card:first-child {
         margin-top: 0;
     }
 
@@ -495,7 +495,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
         margin-bottom: 0.5rem;
     }
 
-    .discharge-page .table > :not(caption) > * > * {
+    .discharge-page .table> :not(caption)>*>* {
         padding: 0.48rem 0.52rem;
     }
 
@@ -570,7 +570,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
             overflow: visible;
         }
 
-        .discharge-main-card > .card-body {
+        .discharge-main-card>.card-body {
             max-height: none;
             overflow: visible;
         }
@@ -627,23 +627,23 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
             <div class="row">
                 <div class="col-md-3">
                     <div class="discharge-side-panel">
-                    <ul class="nav flex-column nav-pills" id="discharge_section_nav" role="tablist" aria-orientation="vertical">
-                        <li class="nav-item"><a href="#section-complaints" class="nav-link discharge-nav-link active" data-target="section-complaints">Presenting Complaints with Duration and Reason for Admission</a></li>
-                        <li class="nav-item"><a href="#section-physical" class="nav-link discharge-nav-link" data-target="section-physical">Physical Examinations</a></li>
-                        <li class="nav-item"><a href="#section-investigation" class="nav-link discharge-nav-link" data-target="section-investigation">Clinical Investigation Reports</a></li>
-                        <li class="nav-item"><a href="#section-admission" class="nav-link discharge-nav-link" data-target="section-admission">Admission / Discharge Information</a></li>
-                        <li class="nav-item"><a href="#section-surgery" class="nav-link discharge-nav-link" data-target="section-surgery">Surgery / Procedure / delivery if any</a></li>
-                        <li class="nav-item"><a href="#section-diagnosis" class="nav-link discharge-nav-link" data-target="section-diagnosis">Final Diagnosis</a></li>
-                        <li class="nav-item"><a href="#section-summary-invest" class="nav-link discharge-nav-link" data-target="section-summary-invest">Summary of key investigation during Hospitalization</a></li>
-                        <li class="nav-item"><a href="#section-course" class="nav-link discharge-nav-link" data-target="section-course">Course / Treatment in the hospital</a></li>
-                        <li class="nav-item"><a href="#section-condition" class="nav-link discharge-nav-link" data-target="section-condition">Condition at the time of Discharge</a></li>
-                        <li class="nav-item"><a href="#section-medicine" class="nav-link discharge-nav-link" data-target="section-medicine">Discharge Medicine Prescribed</a></li>
-                        <li class="nav-item"><a href="#section-instructions" class="nav-link discharge-nav-link" data-target="section-instructions">Discharge Summary</a></li>
-                    </ul>
+                        <ul class="nav flex-column nav-pills" id="discharge_section_nav" role="tablist" aria-orientation="vertical">
+                            <li class="nav-item"><a href="#section-complaints" class="nav-link discharge-nav-link active" data-target="section-complaints">Presenting Complaints with Duration and Reason for Admission</a></li>
+                            <li class="nav-item"><a href="#section-physical" class="nav-link discharge-nav-link" data-target="section-physical">Physical Examinations</a></li>
+                            <li class="nav-item"><a href="#section-investigation" class="nav-link discharge-nav-link" data-target="section-investigation">Clinical Investigation Reports</a></li>
+                            <li class="nav-item"><a href="#section-admission" class="nav-link discharge-nav-link" data-target="section-admission">Admission / Discharge Information</a></li>
+                            <li class="nav-item"><a href="#section-surgery" class="nav-link discharge-nav-link" data-target="section-surgery">Surgery / Procedure / delivery if any</a></li>
+                            <li class="nav-item"><a href="#section-diagnosis" class="nav-link discharge-nav-link" data-target="section-diagnosis">Final Diagnosis</a></li>
+                            <li class="nav-item"><a href="#section-summary-invest" class="nav-link discharge-nav-link" data-target="section-summary-invest">Summary of key investigation during Hospitalization</a></li>
+                            <li class="nav-item"><a href="#section-course" class="nav-link discharge-nav-link" data-target="section-course">Course / Treatment in the hospital</a></li>
+                            <li class="nav-item"><a href="#section-condition" class="nav-link discharge-nav-link" data-target="section-condition">Condition at the time of Discharge</a></li>
+                            <li class="nav-item"><a href="#section-medicine" class="nav-link discharge-nav-link" data-target="section-medicine">Discharge Medicine Prescribed</a></li>
+                            <li class="nav-item"><a href="#section-instructions" class="nav-link discharge-nav-link" data-target="section-instructions">Discharge Summary</a></li>
+                        </ul>
 
-                    <div class="discharge-side-actions">
-                        <button type="button" class="btn btn-primary btn-sm" id="btn_preview_side" onclick="openDischargePreview('<?= site_url('Ipd_discharge/preview_discharge_report/' . $ipdId . '?regen=1') ?>', 'Discharge Preview');">Preview</button>
-                    </div>
+                        <div class="discharge-side-actions">
+                            <button type="button" class="btn btn-primary btn-sm" id="btn_preview_side" onclick="openDischargePreview('<?= site_url('Ipd_discharge/preview_discharge_report/' . $ipdId . '?regen=1') ?>', 'Discharge Preview');">Preview</button>
+                        </div>
                     </div>
                 </div>
 
@@ -669,6 +669,74 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                 </div>
                             </div>
                         </div>
+
+                        <div class="card border-primary" id="section-pain-measurement">
+                            <div class="card-header py-2"><strong>Pain Measurement</strong></div>
+                            <div class="card-body">
+                                <h6 class="mb-2">Pain Measurement Scale</h6>
+                                <input type="hidden" name="pain_value" id="pain_value" value="<?= esc($painValue) ?>">
+                                <div class="btn-group flex-wrap" role="group" aria-label="Pain Measurement Scale">
+                                    <input type="radio" class="btn-check pain-option" name="options-pain" id="pain_0" value="0" <?= $painValue === '0' ? 'checked' : '' ?>><label class="btn btn-sm btn-outline-success" for="pain_0">No Pain</label>
+                                    <input type="radio" class="btn-check pain-option" name="options-pain" id="pain_1" value="1" <?= $painValue === '1' ? 'checked' : '' ?>><label class="btn btn-sm btn-outline-primary" for="pain_1">Mild Pain</label>
+                                    <input type="radio" class="btn-check pain-option" name="options-pain" id="pain_2" value="2" <?= $painValue === '2' ? 'checked' : '' ?>><label class="btn btn-sm btn-outline-info" for="pain_2">Moderate</label>
+                                    <input type="radio" class="btn-check pain-option" name="options-pain" id="pain_3" value="3" <?= $painValue === '3' ? 'checked' : '' ?>><label class="btn btn-sm btn-outline-warning" for="pain_3">Intense</label>
+                                    <input type="radio" class="btn-check pain-option" name="options-pain" id="pain_4" value="4" <?= $painValue === '4' ? 'checked' : '' ?>><label class="btn btn-sm btn-outline-danger" for="pain_4">Worst Pain Possible</label>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Drug  -->
+
+                        <div class="card border-primary" id="section-drug-allergy">
+                            <div class="card-header py-2"><strong>Drug Allergy / ADR History</strong></div>
+                            <div class="card-body">
+                                <div class="col-md-4">
+                                    <label class="form-label mb-1">Drug Allergy Status</label>
+                                    <select class="form-select form-select-sm" id="drug_allergy_status" name="drug_allergy_status">
+                                        <option value="Allergies Not Known" <?= ($allergyStatusUnknown || (!$allergyStatusKnown && !$allergyStatusNoKnown)) ? 'selected' : '' ?>>Allergies Not Known</option>
+                                        <option value="Known" <?= $allergyStatusKnown ? 'selected' : '' ?>>Known</option>
+                                        <option value="No Known Drug Allergy" <?= $allergyStatusNoKnown ? 'selected' : '' ?>>No Known Drug Allergy</option>
+                                    </select>
+                                    <div id="drug_allergy_status_error" class="invalid-feedback d-block" style="display:none;"></div>
+                                </div>
+                                <div class="col-md-8">
+                                    <label class="form-label mb-1">Drug Allergy Details <span class="small text-muted">(when status = Known)</span></label>
+                                    <input type="text" class="form-control form-control-sm" id="drug_allergy_details" name="drug_allergy_details" value="<?= esc($drugAllergyDetails) ?>" placeholder="e.g. Penicillin rash, NSAID gastritis">
+                                    <div id="drug_allergy_details_error" class="invalid-feedback d-block" style="display:none;"></div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label mb-1">ADR History</label>
+                                    <input type="text" class="form-control form-control-sm" name="adr_history" value="<?= esc($adrHistory) ?>" placeholder="Previous adverse drug reaction details">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label mb-1">Current Medications</label>
+                                    <input type="text" class="form-control form-control-sm" name="current_medications" value="<?= esc($currentMedications) ?>" placeholder="Current/ongoing medicines">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card border-primary mt-3" id="section-co-morbidities">
+                            <div class="card-header py-2"><strong>Co-morbidities</strong></div>
+                            <div class="card-body">
+                               <div class="d-flex flex-wrap gap-2 small">
+                                            <?php foreach ($coMorbidityOptions as $mKey => $mOpt): ?>
+                                                <label class="me-2">
+                                                    <input type="checkbox" class="co-morbidity-item" value="<?= esc((string) ($mOpt['label'] ?? '')) ?>" <?= ! empty($coMorbiditySelected[$mKey]) ? 'checked' : '' ?>>
+                                                    <?= esc((string) ($mOpt['label'] ?? '')) ?>
+                                                </label>
+                                            <?php endforeach; ?>
+                                        </div>
+                                        <div class="mt-2">
+                                            <label class="form-label small mb-1">Other Co-Morbidities</label>
+                                            <input type="text" class="form-control form-control-sm" id="co_morbidities_other" value="<?= esc($coMorbidityOtherText) ?>" placeholder="Add other co-morbidities if any">
+                                        </div>
+                                        <input type="hidden" name="co_morbidities" id="co_morbidities" value="<?= esc($coMorbiditiesText) ?>">
+                                        <div class="mt-3 d-flex justify-content-end">
+                                            <button type="submit" class="btn btn-outline-success btn-sm" name="action" value="save_main" data-reload-section="section-co-morbidities">Save Pain / Allergy / Co-morbidities</button>
+                                        </div>
+                            </div>
+                        </div>
+
+
+                        <!--- End Drug -->
 
                         <div class="card border-info mt-3" id="section-nursing-history">
                             <div class="card-header py-2 d-flex justify-content-between align-items-center">
@@ -742,9 +810,9 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                             <td></td>
                                             <td colspan="4" class="p-1 position-relative">
                                                 <input type="text" class="form-control form-control-sm" id="discharge_complaint_lookup"
-                                                       autocomplete="off" placeholder="Type: bukhar, khansi, pet dard, chakkar… (English + Hinglish)" style="font-size:.82rem">
+                                                    autocomplete="off" placeholder="fever , cough , headache..." style="font-size:.82rem">
                                                 <div id="discharge_complaint_dropdown" class="border rounded bg-white shadow-sm"
-                                                     style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1060;max-height:260px;overflow-y:auto;"></div>
+                                                    style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1060;max-height:260px;overflow-y:auto;"></div>
                                             </td>
                                             <td class="text-center">
                                                 <button type="button" class="btn btn-sm btn-outline-primary p-0" id="btn_discharge_add_complaint" title="Add Complaint" style="width:24px;height:24px;line-height:1">+</button>
@@ -755,7 +823,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
 
                                 <!-- Hidden fields to store data for form submission -->
                                 <input type="hidden" name="discharge_complaints_json" id="discharge_complaints_json" value="">
-                                
+
                                 <!-- Fixed dropdowns for table cell inputs -->
                                 <div id="discharge_freq_dd" style="display:none;position:fixed;z-index:1090;min-width:160px;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:180px;overflow-y:auto;"></div>
                                 <div id="discharge_sev_dd" style="display:none;position:fixed;z-index:1090;min-width:140px;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:180px;overflow-y:auto;"></div>
@@ -763,73 +831,10 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
 
                                 <div id="discharge_complaint_status" class="small text-muted mb-2"></div>
 
-                                <div class="d-flex flex-wrap gap-1 mb-3">
-                                    <button type="button" class="btn btn-outline-success btn-sm" id="btn_discharge_ai_draft">✨ AI Draft from Complaints</button>
-                                    <button type="button" class="btn btn-outline-primary btn-sm" id="btn_discharge_hinglish_to_english">🔤 Hinglish → English</button>
-                                </div>
+                                
 
 
-                                <div class="mt-3">
-                                    <h6 class="mb-2">Pain Measurement Scale</h6>
-                                    <input type="hidden" name="pain_value" id="pain_value" value="<?= esc($painValue) ?>">
-                                    <div class="btn-group flex-wrap" role="group" aria-label="Pain Measurement Scale">
-                                        <input type="radio" class="btn-check pain-option" name="options-pain" id="pain_0" value="0" <?= $painValue === '0' ? 'checked' : '' ?>><label class="btn btn-sm btn-outline-success" for="pain_0">No Pain</label>
-                                        <input type="radio" class="btn-check pain-option" name="options-pain" id="pain_1" value="1" <?= $painValue === '1' ? 'checked' : '' ?>><label class="btn btn-sm btn-outline-primary" for="pain_1">Mild Pain</label>
-                                        <input type="radio" class="btn-check pain-option" name="options-pain" id="pain_2" value="2" <?= $painValue === '2' ? 'checked' : '' ?>><label class="btn btn-sm btn-outline-info" for="pain_2">Moderate</label>
-                                        <input type="radio" class="btn-check pain-option" name="options-pain" id="pain_3" value="3" <?= $painValue === '3' ? 'checked' : '' ?>><label class="btn btn-sm btn-outline-warning" for="pain_3">Intense</label>
-                                        <input type="radio" class="btn-check pain-option" name="options-pain" id="pain_4" value="4" <?= $painValue === '4' ? 'checked' : '' ?>><label class="btn btn-sm btn-outline-danger" for="pain_4">Worst Pain Possible</label>
-                                    </div>
-                                </div>
 
-                                <div class="row g-2 mt-2">
-                                    <div class="col-md-12">
-                                        <div class="border rounded p-2">
-                                            <h6 class="mb-2">Drug Allergy / ADR (NABH)</h6>
-                                            <div class="row g-2">
-                                                <div class="col-md-4">
-                                                    <label class="form-label mb-1">Drug Allergy Status</label>
-                                                    <select class="form-select form-select-sm" id="drug_allergy_status" name="drug_allergy_status">
-                                                        <option value="Allergies Not Known" <?= ($allergyStatusUnknown || (!$allergyStatusKnown && !$allergyStatusNoKnown)) ? 'selected' : '' ?>>Allergies Not Known</option>
-                                                        <option value="Known" <?= $allergyStatusKnown ? 'selected' : '' ?>>Known</option>
-                                                        <option value="No Known Drug Allergy" <?= $allergyStatusNoKnown ? 'selected' : '' ?>>No Known Drug Allergy</option>
-                                                    </select>
-                                                    <div id="drug_allergy_status_error" class="invalid-feedback d-block" style="display:none;"></div>
-                                                </div>
-                                                <div class="col-md-8">
-                                                    <label class="form-label mb-1">Drug Allergy Details <span class="small text-muted">(when status = Known)</span></label>
-                                                    <input type="text" class="form-control form-control-sm" id="drug_allergy_details" name="drug_allergy_details" value="<?= esc($drugAllergyDetails) ?>" placeholder="e.g. Penicillin rash, NSAID gastritis">
-                                                    <div id="drug_allergy_details_error" class="invalid-feedback d-block" style="display:none;"></div>
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label mb-1">ADR History</label>
-                                                    <input type="text" class="form-control form-control-sm" name="adr_history" value="<?= esc($adrHistory) ?>" placeholder="Previous adverse drug reaction details">
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label mb-1">Current Medications</label>
-                                                    <input type="text" class="form-control form-control-sm" name="current_medications" value="<?= esc($currentMedications) ?>" placeholder="Current/ongoing medicines">
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-12">
-                                        <div class="border rounded p-2">
-                                            <h6 class="mb-2">Co-Morbidities</h6>
-                                            <div class="d-flex flex-wrap gap-2 small">
-                                                <?php foreach ($coMorbidityOptions as $mKey => $mOpt): ?>
-                                                    <label class="me-2">
-                                                        <input type="checkbox" class="co-morbidity-item" value="<?= esc((string) ($mOpt['label'] ?? '')) ?>" <?= ! empty($coMorbiditySelected[$mKey]) ? 'checked' : '' ?>>
-                                                        <?= esc((string) ($mOpt['label'] ?? '')) ?>
-                                                    </label>
-                                                <?php endforeach; ?>
-                                            </div>
-                                            <div class="mt-2">
-                                                <label class="form-label small mb-1">Other Co-Morbidities</label>
-                                                <input type="text" class="form-control form-control-sm" id="co_morbidities_other" value="<?= esc($coMorbidityOtherText) ?>" placeholder="Add other co-morbidities if any">
-                                            </div>
-                                            <input type="hidden" name="co_morbidities" id="co_morbidities" value="<?= esc($coMorbiditiesText) ?>">
-                                        </div>
-                                    </div>
-                                </div>
 
                                 <div class="mt-3">
                                     <label class="form-label">Other Complaints / Detailed History</label>
@@ -984,7 +989,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                 </div>
                             </div>
                         </div>
-                                        <div class="card border-secondary mt-3" id="section-admission">
+                        <div class="card border-secondary mt-3" id="section-admission">
                             <div class="card-header py-2"><strong>Admission / Discharge Information</strong></div>
                             <div class="card-body row g-2">
                                 <div class="col-md-3">
@@ -1033,18 +1038,28 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                             <div class="card-body">
                                 <h6>Surgery</h6>
                                 <table class="table table-sm table-bordered">
-                                    <thead><tr><th>Name</th><th>Date</th><th>Remark</th><th style="width:90px;">Action</th></tr></thead>
+                                    <thead>
+                                        <tr>
+                                            <th>Name</th>
+                                            <th>Date</th>
+                                            <th>Remark</th>
+                                            <th style="width:90px;">Action</th>
+                                        </tr>
+                                    </thead>
                                     <tbody>
                                         <?php if (empty($surgeryRows)): ?>
-                                            <tr><td colspan="4" class="text-muted text-center">No surgery rows.</td></tr>
-                                        <?php else: foreach ($surgeryRows as $row): ?>
                                             <tr>
-                                                <td><?= esc((string) ($row['surgery_name'] ?? '')) ?></td>
-                                                <td><?= esc((string) ($row['surgery_date'] ?? '')) ?></td>
-                                                <td><?= esc((string) ($row['surgery_remark'] ?? '')) ?></td>
-                                                <td><button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_surgery" onclick="document.getElementById('surgery_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';">Remove</button></td>
+                                                <td colspan="4" class="text-muted text-center">No surgery rows.</td>
                                             </tr>
-                                        <?php endforeach; endif; ?>
+                                            <?php else: foreach ($surgeryRows as $row): ?>
+                                                <tr>
+                                                    <td><?= esc((string) ($row['surgery_name'] ?? '')) ?></td>
+                                                    <td><?= esc((string) ($row['surgery_date'] ?? '')) ?></td>
+                                                    <td><?= esc((string) ($row['surgery_remark'] ?? '')) ?></td>
+                                                    <td><button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_surgery" onclick="document.getElementById('surgery_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';">Remove</button></td>
+                                                </tr>
+                                        <?php endforeach;
+                                        endif; ?>
                                     </tbody>
                                 </table>
                                 <input type="hidden" name="surgery_remove_id" id="surgery_remove_id" value="0">
@@ -1066,18 +1081,28 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
 
                                 <h6>Procedure</h6>
                                 <table class="table table-sm table-bordered">
-                                    <thead><tr><th>Name</th><th>Date</th><th>Remark</th><th style="width:90px;">Action</th></tr></thead>
+                                    <thead>
+                                        <tr>
+                                            <th>Name</th>
+                                            <th>Date</th>
+                                            <th>Remark</th>
+                                            <th style="width:90px;">Action</th>
+                                        </tr>
+                                    </thead>
                                     <tbody>
                                         <?php if (empty($procedureRows)): ?>
-                                            <tr><td colspan="4" class="text-muted text-center">No procedure rows.</td></tr>
-                                        <?php else: foreach ($procedureRows as $row): ?>
                                             <tr>
-                                                <td><?= esc((string) ($row['procedure_name'] ?? '')) ?></td>
-                                                <td><?= esc((string) ($row['procedure_date'] ?? '')) ?></td>
-                                                <td><?= esc((string) ($row['procedure_remark'] ?? '')) ?></td>
-                                                <td><button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_procedure" onclick="document.getElementById('procedure_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';">Remove</button></td>
+                                                <td colspan="4" class="text-muted text-center">No procedure rows.</td>
                                             </tr>
-                                        <?php endforeach; endif; ?>
+                                            <?php else: foreach ($procedureRows as $row): ?>
+                                                <tr>
+                                                    <td><?= esc((string) ($row['procedure_name'] ?? '')) ?></td>
+                                                    <td><?= esc((string) ($row['procedure_date'] ?? '')) ?></td>
+                                                    <td><?= esc((string) ($row['procedure_remark'] ?? '')) ?></td>
+                                                    <td><button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_procedure" onclick="document.getElementById('procedure_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';">Remove</button></td>
+                                                </tr>
+                                        <?php endforeach;
+                                        endif; ?>
                                     </tbody>
                                 </table>
                                 <input type="hidden" name="procedure_remove_id" id="procedure_remove_id" value="0">
@@ -1108,17 +1133,26 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                             </div>
                             <div class="card-body">
                                 <table class="table table-sm table-bordered">
-                                    <thead><tr><th>Diagnosis</th><th>Remark</th><th style="width:90px;">Action</th></tr></thead>
+                                    <thead>
+                                        <tr>
+                                            <th>Diagnosis</th>
+                                            <th>Remark</th>
+                                            <th style="width:90px;">Action</th>
+                                        </tr>
+                                    </thead>
                                     <tbody>
                                         <?php if (empty($diagnosisRows)): ?>
-                                            <tr><td colspan="3" class="text-muted text-center">No diagnosis rows.</td></tr>
-                                        <?php else: foreach ($diagnosisRows as $row): ?>
                                             <tr>
-                                                <td><?= esc((string) ($row['comp_report'] ?? '')) ?></td>
-                                                <td><?= esc((string) ($row['comp_remark'] ?? '')) ?></td>
-                                                <td><button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_diagnosis" onclick="document.getElementById('diagnosis_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';">Remove</button></td>
+                                                <td colspan="3" class="text-muted text-center">No diagnosis rows.</td>
                                             </tr>
-                                        <?php endforeach; endif; ?>
+                                            <?php else: foreach ($diagnosisRows as $row): ?>
+                                                <tr>
+                                                    <td><?= esc((string) ($row['comp_report'] ?? '')) ?></td>
+                                                    <td><?= esc((string) ($row['comp_remark'] ?? '')) ?></td>
+                                                    <td><button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_diagnosis" onclick="document.getElementById('diagnosis_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';">Remove</button></td>
+                                                </tr>
+                                        <?php endforeach;
+                                        endif; ?>
                                     </tbody>
                                 </table>
                                 <input type="hidden" name="diagnosis_remove_id" id="diagnosis_remove_id" value="0">
@@ -1162,17 +1196,26 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                             <div class="card-header py-2"><strong>Course / Treatment in the hospital</strong></div>
                             <div class="card-body">
                                 <table class="table table-sm table-bordered">
-                                    <thead><tr><th>Course</th><th>Remark</th><th style="width:90px;">Action</th></tr></thead>
+                                    <thead>
+                                        <tr>
+                                            <th>Course</th>
+                                            <th>Remark</th>
+                                            <th style="width:90px;">Action</th>
+                                        </tr>
+                                    </thead>
                                     <tbody>
                                         <?php if (empty($courseRows)): ?>
-                                            <tr><td colspan="3" class="text-muted text-center">No course rows.</td></tr>
-                                        <?php else: foreach ($courseRows as $row): ?>
                                             <tr>
-                                                <td><?= esc((string) ($row['comp_report'] ?? '')) ?></td>
-                                                <td><?= esc((string) ($row['comp_remark'] ?? '')) ?></td>
-                                                <td><button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_course" onclick="document.getElementById('course_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';">Remove</button></td>
+                                                <td colspan="3" class="text-muted text-center">No course rows.</td>
                                             </tr>
-                                        <?php endforeach; endif; ?>
+                                            <?php else: foreach ($courseRows as $row): ?>
+                                                <tr>
+                                                    <td><?= esc((string) ($row['comp_report'] ?? '')) ?></td>
+                                                    <td><?= esc((string) ($row['comp_remark'] ?? '')) ?></td>
+                                                    <td><button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_course" onclick="document.getElementById('course_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';">Remove</button></td>
+                                                </tr>
+                                        <?php endforeach;
+                                        endif; ?>
                                     </tbody>
                                 </table>
                                 <input type="hidden" name="course_remove_id" id="course_remove_id" value="0">
@@ -1215,12 +1258,13 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                             <div class="card-body row g-2">
                                 <?php if (empty($dischargeConditionRows)): ?>
                                     <div class="col-12 text-muted small">No discharge condition master rows found.</div>
-                                <?php else: foreach ($dischargeConditionRows as $row): ?>
-                                    <div class="col-md-3">
-                                        <label class="form-label small"><?= esc((string) ($row['label'] ?? '')) ?></label>
-                                        <input type="text" class="form-control form-control-sm" name="dis_exam_<?= (int) ($row['id'] ?? 0) ?>" value="<?= esc((string) ($row['value'] ?? '')) ?>">
-                                    </div>
-                                <?php endforeach; endif; ?>
+                                    <?php else: foreach ($dischargeConditionRows as $row): ?>
+                                        <div class="col-md-3">
+                                            <label class="form-label small"><?= esc((string) ($row['label'] ?? '')) ?></label>
+                                            <input type="text" class="form-control form-control-sm" name="dis_exam_<?= (int) ($row['id'] ?? 0) ?>" value="<?= esc((string) ($row['value'] ?? '')) ?>">
+                                        </div>
+                                <?php endforeach;
+                                endif; ?>
                                 <div class="col-md-12 d-flex justify-content-end">
                                     <button type="submit" class="btn btn-outline-success btn-sm" name="action" value="save_main" data-reload-section="section-condition">Save Discharge Condition</button>
                                 </div>
@@ -1262,20 +1306,23 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                                 </thead>
                                                 <tbody id="discharge_medicine_tbody">
                                                     <?php if (empty($medicineRows)): ?>
-                                                        <tr><td colspan="9" class="text-muted text-center">No medicine added</td></tr>
-                                                    <?php else: foreach ($medicineRows as $row): ?>
                                                         <tr>
-                                                            <td><?= esc((string) ($row['med_type'] ?? '')) ?></td>
-                                                            <td><?= esc((string) ($row['med_name'] ?? '')) ?></td>
-                                                            <td><?= esc((string) ($row['dosage'] ?? '')) ?></td>
-                                                            <td><?= esc((string) ($row['dosage_when'] ?? '')) ?></td>
-                                                            <td><?= esc((string) ($row['dosage_freq'] ?? '')) ?></td>
-                                                            <td><?= esc((string) ($row['no_of_days'] ?? '')) ?></td>
-                                                            <td><?= esc((string) ($row['qty'] ?? '')) ?></td>
-                                                            <td><?= esc((string) ($row['remark'] ?? '')) ?></td>
-                                                            <td><button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_drug" data-reload-section="section-medicine" onclick="document.getElementById('drug_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';document.getElementById('drug_remove_source').value='<?= esc((string) ($row['source'] ?? 'legacy')) ?>';">Remove</button></td>
+                                                            <td colspan="9" class="text-muted text-center">No medicine added</td>
                                                         </tr>
-                                                    <?php endforeach; endif; ?>
+                                                        <?php else: foreach ($medicineRows as $row): ?>
+                                                            <tr>
+                                                                <td><?= esc((string) ($row['med_type'] ?? '')) ?></td>
+                                                                <td><?= esc((string) ($row['med_name'] ?? '')) ?></td>
+                                                                <td><?= esc((string) ($row['dosage'] ?? '')) ?></td>
+                                                                <td><?= esc((string) ($row['dosage_when'] ?? '')) ?></td>
+                                                                <td><?= esc((string) ($row['dosage_freq'] ?? '')) ?></td>
+                                                                <td><?= esc((string) ($row['no_of_days'] ?? '')) ?></td>
+                                                                <td><?= esc((string) ($row['qty'] ?? '')) ?></td>
+                                                                <td><?= esc((string) ($row['remark'] ?? '')) ?></td>
+                                                                <td><button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_drug" data-reload-section="section-medicine" onclick="document.getElementById('drug_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';document.getElementById('drug_remove_source').value='<?= esc((string) ($row['source'] ?? 'legacy')) ?>';">Remove</button></td>
+                                                            </tr>
+                                                    <?php endforeach;
+                                                    endif; ?>
                                                 </tbody>
                                             </table>
                                         </div>
@@ -1388,7 +1435,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                             </div>
                         </div>
 
-                        
+
 
                         <div class="card border-secondary mt-3" id="section-instructions">
                             <div class="card-header py-2 d-flex justify-content-between align-items-center">
@@ -1404,11 +1451,11 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                         <?php else: ?>
                                             <?php foreach ($instructionFoodRows as $food): ?>
                                                 <?php
-                                                    $foodId = (int) ($food['id'] ?? 0);
-                                                    $foodShort = trim((string) ($food['food_short'] ?? ''));
-                                                    $foodDesc = trim((string) ($food['food_desc'] ?? ''));
-                                                    $foodLang = trim((string) ($food['food_desc_lang'] ?? ''));
-                                                    $labelText = $foodShort !== '' ? $foodShort : $foodDesc;
+                                                $foodId = (int) ($food['id'] ?? 0);
+                                                $foodShort = trim((string) ($food['food_short'] ?? ''));
+                                                $foodDesc = trim((string) ($food['food_desc'] ?? ''));
+                                                $foodLang = trim((string) ($food['food_desc_lang'] ?? ''));
+                                                $labelText = $foodShort !== '' ? $foodShort : $foodDesc;
                                                 ?>
                                                 <div class="form-check mb-1">
                                                     <input
@@ -1419,7 +1466,7 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                                         value="<?= $foodId ?>"
                                                         data-food-short="<?= esc($foodShort !== '' ? $foodShort : $foodDesc) ?>"
                                                         data-food-desc="<?= esc($foodDesc !== '' ? $foodDesc : $foodShort) ?>"
-                                                            data-food-lang="<?= esc($foodLang) ?>"
+                                                        data-food-lang="<?= esc($foodLang) ?>"
                                                         <?= ! empty($instructionFoodIds[$foodId]) ? 'checked' : '' ?>>
                                                     <label class="form-check-label" for="instruction_food_<?= $foodId ?>">
                                                         <?= esc($labelText) ?>
@@ -1456,10 +1503,12 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                 </div>
                                 <div class="col-md-12">
                                     <div class="d-flex flex-wrap gap-2">
-                                        <?php $nextVisitOptions = is_array($next_visit_options ?? null) ? $next_visit_options : []; ?>
+                                        <?php $nextVisitOptions = is_array($next_visit_options ?? null) ? ($next_visit_options ?? []) : []; ?>
                                         <?php foreach ($nextVisitOptions as $nextVisitOpt) : ?>
                                             <?php $nextVisitValue = trim((string) ($nextVisitOpt['value'] ?? '')); ?>
-                                            <?php if ($nextVisitValue === '') { continue; } ?>
+                                            <?php if ($nextVisitValue === '') {
+                                                continue;
+                                            } ?>
                                             <button type="button" class="btn btn-outline-secondary btn-sm discharge-review-chip" data-value="<?= esc($nextVisitValue) ?>"><?= esc($nextVisitValue) ?></button>
                                         <?php endforeach; ?>
                                     </div>
@@ -1520,7 +1569,9 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                 </tr>
                             </thead>
                             <tbody id="food_master_rows">
-                                <tr><td colspan="4" class="text-center text-muted">No records.</td></tr>
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted">No records.</td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
@@ -1640,7 +1691,9 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                                 </tr>
                             </thead>
                             <tbody id="surgery_master_rows">
-                                <tr><td colspan="5" class="text-center text-muted">No records.</td></tr>
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted">No records.</td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
@@ -1739,512 +1792,1044 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
     </div>
 
     <script>
-    (function() {
-        var narrativeTemplateLoadState = { section: '', target: '', rows: [] };
-        var narrativeTemplateSaveState = { section: '', text: '', target: '' };
-        var narrativeTemplateToolsBound = false;
-        var surgeryMasterState = { surgery: [], procedure: [] };
-        var foodMasterState = [];
+        (function() {
+            var narrativeTemplateLoadState = {
+                section: '',
+                target: '',
+                rows: []
+            };
+            var narrativeTemplateSaveState = {
+                section: '',
+                text: '',
+                target: ''
+            };
+            var narrativeTemplateToolsBound = false;
+            var surgeryMasterState = {
+                surgery: [],
+                procedure: []
+            };
+            var foodMasterState = [];
 
-        window.openDischargePreview = function(url, title) {
-            if (typeof window.load_form === 'function') {
-                window.load_form(url, title || 'Discharge Preview');
-                return;
+            window.openDischargePreview = function(url, title) {
+                if (typeof window.load_form === 'function') {
+                    window.load_form(url, title || 'Discharge Preview');
+                    return;
+                }
+
+                window.location.href = url;
+            };
+
+            function initComplaintEditor() {
+                if (!window.CKEDITOR) {
+                    return;
+                }
+
+                CKEDITOR.config.versionCheck = false;
+                CKEDITOR.config.removePlugins = '';
+                if (CKEDITOR.instances.complaint_remark_editor) {
+                    CKEDITOR.instances.complaint_remark_editor.destroy(true);
+                }
+
+                if (CKEDITOR.instances.systemic_exam_editor) {
+                    CKEDITOR.instances.systemic_exam_editor.destroy(true);
+                }
+
+                if (CKEDITOR.instances.instruction_other) {
+                    CKEDITOR.instances.instruction_other.destroy(true);
+                }
+
+                if (CKEDITOR.instances.instruction_remark) {
+                    CKEDITOR.instances.instruction_remark.destroy(true);
+                }
+
+                if (document.getElementById('complaint_remark_editor')) {
+                    CKEDITOR.replace('complaint_remark_editor', {
+                        height: 180
+                    });
+                }
+
+                if (document.getElementById('systemic_exam_editor')) {
+                    CKEDITOR.replace('systemic_exam_editor', {
+                        height: 200
+                    });
+                }
+
+                if (document.getElementById('instruction_other')) {
+                    CKEDITOR.replace('instruction_other', {
+                        height: 120,
+                        toolbar: [{
+                                name: 'basicstyles',
+                                items: ['Bold', 'Italic', 'Underline']
+                            },
+                            {
+                                name: 'paragraph',
+                                items: ['NumberedList', 'BulletedList']
+                            },
+                            {
+                                name: 'editing',
+                                items: ['Undo', 'Redo']
+                            }
+                        ]
+                    });
+                }
+
+                if (document.getElementById('instruction_remark')) {
+                    CKEDITOR.replace('instruction_remark', {
+                        height: 150,
+                        toolbar: [{
+                                name: 'basicstyles',
+                                items: ['Bold', 'Italic', 'Underline']
+                            },
+                            {
+                                name: 'paragraph',
+                                items: ['NumberedList', 'BulletedList']
+                            },
+                            {
+                                name: 'editing',
+                                items: ['Undo', 'Redo']
+                            }
+                        ]
+                    });
+                }
             }
 
-            window.location.href = url;
-        };
+            function getCsrfPair(form) {
+                var tokenInput = form ? form.querySelector('input[name^="csrf_"]') : null;
+                if (tokenInput) {
+                    return {
+                        name: tokenInput.name,
+                        value: tokenInput.value
+                    };
+                }
 
-        function initComplaintEditor() {
-            if (!window.CKEDITOR) {
-                return;
-            }
-
-            CKEDITOR.config.versionCheck = false;
-            CKEDITOR.config.removePlugins = '';
-            if (CKEDITOR.instances.complaint_remark_editor) {
-                CKEDITOR.instances.complaint_remark_editor.destroy(true);
-            }
-
-            if (CKEDITOR.instances.systemic_exam_editor) {
-                CKEDITOR.instances.systemic_exam_editor.destroy(true);
-            }
-
-            if (CKEDITOR.instances.instruction_other) {
-                CKEDITOR.instances.instruction_other.destroy(true);
-            }
-
-            if (CKEDITOR.instances.instruction_remark) {
-                CKEDITOR.instances.instruction_remark.destroy(true);
-            }
-
-            if (document.getElementById('complaint_remark_editor')) {
-                CKEDITOR.replace('complaint_remark_editor', {
-                    height: 180
-                });
-            }
-
-            if (document.getElementById('systemic_exam_editor')) {
-                CKEDITOR.replace('systemic_exam_editor', {
-                    height: 200
-                });
-            }
-
-            if (document.getElementById('instruction_other')) {
-                CKEDITOR.replace('instruction_other', {
-                    height: 120,
-                    toolbar: [
-                        { name: 'basicstyles', items: ['Bold', 'Italic', 'Underline'] },
-                        { name: 'paragraph', items: ['NumberedList', 'BulletedList'] },
-                        { name: 'editing', items: ['Undo', 'Redo'] }
-                    ]
-                });
-            }
-
-            if (document.getElementById('instruction_remark')) {
-                CKEDITOR.replace('instruction_remark', {
-                    height: 150,
-                    toolbar: [
-                        { name: 'basicstyles', items: ['Bold', 'Italic', 'Underline'] },
-                        { name: 'paragraph', items: ['NumberedList', 'BulletedList'] },
-                        { name: 'editing', items: ['Undo', 'Redo'] }
-                    ]
-                });
-            }
-        }
-
-        function getCsrfPair(form) {
-            var tokenInput = form ? form.querySelector('input[name^="csrf_"]') : null;
-            if (tokenInput) {
                 return {
-                    name: tokenInput.name,
-                    value: tokenInput.value
+                    name: '<?= csrf_token() ?>',
+                    value: '<?= csrf_hash() ?>'
                 };
             }
 
-            return {
-                name: '<?= csrf_token() ?>',
-                value: '<?= csrf_hash() ?>'
-            };
-        }
-
-        function updateFormCsrf(form, data) {
-            if (!form || !data || !data.csrfName || !data.csrfHash) {
-                return;
-            }
-
-            var csrfInput = form.querySelector('input[name="' + data.csrfName + '"]');
-            if (csrfInput) {
-                csrfInput.value = data.csrfHash;
-            }
-        }
-
-        function getComplaintEditorText() {
-            if (window.CKEDITOR && CKEDITOR.instances.complaint_remark_editor) {
-                return CKEDITOR.instances.complaint_remark_editor.getData() || '';
-            }
-
-            var textarea = document.getElementById('complaint_remark_editor');
-            return textarea ? (textarea.value || '') : '';
-        }
-
-        function setComplaintEditorText(value) {
-            if (window.CKEDITOR && CKEDITOR.instances.complaint_remark_editor) {
-                CKEDITOR.instances.complaint_remark_editor.setData(value || '');
-                return;
-            }
-
-            var textarea = document.getElementById('complaint_remark_editor');
-            if (textarea) {
-                textarea.value = value || '';
-            }
-        }
-
-        function setComplaintStatus(text, level) {
-            var statusEl = document.getElementById('discharge_complaint_status');
-            if (!statusEl) {
-                return;
-            }
-
-            statusEl.classList.remove('text-success', 'text-danger', 'text-muted');
-            if (level === 'success') {
-                statusEl.classList.add('text-success');
-            } else if (level === 'error') {
-                statusEl.classList.add('text-danger');
-            } else {
-                statusEl.classList.add('text-muted');
-            }
-            statusEl.textContent = text || '';
-        }
-
-        // Client-side complaint management (OPD-style) - MUST BE DECLARED BEFORE initComplaintTools
-        var selectedDischargeComplaints = [];
-
-        function initDischargeComplaintsTable() {
-            // Load existing complaints from PHP (if any)
-            <?php if (isset($complaint_rows) && is_array($complaint_rows) && !empty($complaint_rows)): ?>
-                selectedDischargeComplaints = [
-                    <?php 
-                    $itemCount = count($complaint_rows);
-                    $currentIndex = 0;
-                    foreach ($complaint_rows as $row): 
-                        $currentIndex++;
-                    ?>
-                    {
-                        id: <?= (int) ($row['id'] ?? 0) ?>,
-                        term: <?= json_encode((string) ($row['comp_report'] ?? '')) ?>,
-                        frequency: '',
-                        severity: '',
-                        duration: <?= json_encode((string) ($row['comp_remark'] ?? '')) ?>,
-                        date: ''
-                    }<?= $currentIndex < $itemCount ? ',' : '' ?>
-
-                    <?php endforeach; ?>
-                ];
-            <?php endif; ?>
-            
-            renderDischargeComplaintTable();
-        }
-
-        function renderDischargeComplaintTable() {
-            var tbody = document.getElementById('discharge_complaint_tbody');
-            if (!tbody) return;
-            
-            tbody.innerHTML = '';
-            
-            if (selectedDischargeComplaints.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-muted text-center">No complaints yet. Add using the input below.</td></tr>';
-                return;
-            }
-            
-            selectedDischargeComplaints.forEach(function(item, idx) {
-                var tr = document.createElement('tr');
-                tr.setAttribute('data-idx', idx);
-                
-                // # column
-                var td1 = document.createElement('td');
-                td1.className = 'text-center text-muted';
-                td1.textContent = idx + 1;
-                tr.appendChild(td1);
-                
-                // Complaint name
-                var td2 = document.createElement('td');
-                td2.className = 'p-1';
-                var nameInput = document.createElement('input');
-                nameInput.type = 'text';
-                nameInput.className = 'form-control form-control-sm';
-                nameInput.value = item.term || '';
-                nameInput.placeholder = 'Complaint…';
-                nameInput.style.fontSize = '.82rem';
-                nameInput.setAttribute('data-idx', idx);
-                nameInput.addEventListener('input', function() {
-                    selectedDischargeComplaints[idx].term = this.value;
-                });
-                td2.appendChild(nameInput);
-                tr.appendChild(td2);
-                
-                // Frequency
-                var td3 = document.createElement('td');
-                td3.className = 'p-1';
-                var freqInput = document.createElement('input');
-                freqInput.type = 'text';
-                freqInput.className = 'form-control form-control-sm';
-                freqInput.value = item.frequency || '';
-                freqInput.placeholder = 'daily…';
-                freqInput.style.fontSize = '.82rem';
-                freqInput.addEventListener('input', function() {
-                    selectedDischargeComplaints[idx].frequency = this.value;
-                });
-                td3.appendChild(freqInput);
-                tr.appendChild(td3);
-                
-                // Severity
-                var td4 = document.createElement('td');
-                td4.className = 'p-1';
-                var sevInput = document.createElement('input');
-                sevInput.type = 'text';
-                sevInput.className = 'form-control form-control-sm';
-                sevInput.value = item.severity || '';
-                sevInput.placeholder = 'mild…';
-                sevInput.style.fontSize = '.82rem';
-                sevInput.addEventListener('input', function() {
-                    selectedDischargeComplaints[idx].severity = this.value;
-                });
-                td4.appendChild(sevInput);
-                tr.appendChild(td4);
-                
-                // Duration
-                var td5 = document.createElement('td');
-                td5.className = 'p-1';
-                var durInput = document.createElement('input');
-                durInput.type = 'text';
-                durInput.className = 'form-control form-control-sm';
-                durInput.value = item.duration || '';
-                durInput.placeholder = '2 days…';
-                durInput.style.fontSize = '.82rem';
-                durInput.addEventListener('input', function() {
-                    selectedDischargeComplaints[idx].duration = this.value;
-                });
-                td5.appendChild(durInput);
-                tr.appendChild(td5);
-                
-                // Remove button
-                var td6 = document.createElement('td');
-                td6.className = 'p-1 text-center';
-                var removeBtn = document.createElement('button');
-                removeBtn.type = 'button';
-                removeBtn.className = 'btn btn-sm text-danger p-0';
-                removeBtn.style.lineHeight = '1';
-                removeBtn.style.fontSize = '.9rem';
-                removeBtn.innerHTML = '×';
-                removeBtn.addEventListener('click', function() {
-                    selectedDischargeComplaints.splice(idx, 1);
-                    renderDischargeComplaintTable();
-                });
-                td6.appendChild(removeBtn);
-                tr.appendChild(td6);
-                
-                tbody.appendChild(tr);
-            });
-        }
-
-        function initComplaintTools() {
-            var section = document.getElementById('section-complaints');
-            if (!section || section.dataset.toolsBound === '1') {
-                return;
-            }
-            section.dataset.toolsBound = '1';
-
-            var form = section.closest('form');
-            if (!form) {
-                return;
-            }
-
-            var lookup = document.getElementById('discharge_complaint_lookup');
-            var dropdown = document.getElementById('discharge_complaint_dropdown');
-            var nameInput = document.getElementById('new_complaint_name');
-            var remarkInput = document.getElementById('new_complaint_remark');
-            var addRowBtn = document.getElementById('btn_add_complaint_row');
-            var btnAdd = document.getElementById('btn_discharge_add_complaint');
-            var btnAiDraft = document.getElementById('btn_discharge_ai_draft');
-            var btnHinglish = document.getElementById('btn_discharge_hinglish_to_english');
-            var painHidden = document.getElementById('pain_value');
-            var painOptions = section.querySelectorAll('.pain-option');
-
-            var selectedComplaints = [];
-            var complaintSuggestions = [];
-            var highlightedIndex = -1; // Track keyboard navigation
-
-            section.querySelectorAll('table tbody tr').forEach(function(row) {
-                var firstCell = row.querySelector('.discharge-complaint-name-input');
-                if (!firstCell) {
+            function updateFormCsrf(form, data) {
+                if (!form || !data || !data.csrfName || !data.csrfHash) {
                     return;
                 }
-                var value = (firstCell.value || '').trim();
-                if (value !== '' && value.toLowerCase() !== 'no complaint rows yet.') {
-                    selectedComplaints.push(value);
-                }
-            });
 
-            function addComplaintValue(value) {
-                value = (value || '').trim();
-                if (value === '') {
-                    return false;
+                var csrfInput = form.querySelector('input[name="' + data.csrfName + '"]');
+                if (csrfInput) {
+                    csrfInput.value = data.csrfHash;
                 }
-
-                var exists = selectedComplaints.some(function(item) {
-                    return item.toUpperCase() === value.toUpperCase();
-                });
-                if (exists) {
-                    return false;
-                }
-
-                selectedComplaints.push(value);
-                return true;
             }
 
-            if (painOptions && painOptions.length && painHidden) {
-                painOptions.forEach(function(option) {
-                    option.addEventListener('change', function() {
-                        if (this.checked) {
-                            painHidden.value = this.value || '';
+            function getComplaintEditorText() {
+                if (window.CKEDITOR && CKEDITOR.instances.complaint_remark_editor) {
+                    return CKEDITOR.instances.complaint_remark_editor.getData() || '';
+                }
+
+                var textarea = document.getElementById('complaint_remark_editor');
+                return textarea ? (textarea.value || '') : '';
+            }
+
+            function setComplaintEditorText(value) {
+                if (window.CKEDITOR && CKEDITOR.instances.complaint_remark_editor) {
+                    CKEDITOR.instances.complaint_remark_editor.setData(value || '');
+                    return;
+                }
+
+                var textarea = document.getElementById('complaint_remark_editor');
+                if (textarea) {
+                    textarea.value = value || '';
+                }
+            }
+
+            function setComplaintStatus(text, level) {
+                var statusEl = document.getElementById('discharge_complaint_status');
+                if (!statusEl) {
+                    return;
+                }
+
+                statusEl.classList.remove('text-success', 'text-danger', 'text-muted');
+                if (level === 'success') {
+                    statusEl.classList.add('text-success');
+                } else if (level === 'error') {
+                    statusEl.classList.add('text-danger');
+                } else {
+                    statusEl.classList.add('text-muted');
+                }
+                statusEl.textContent = text || '';
+            }
+
+            // Client-side complaint management (OPD-style) - MUST BE DECLARED BEFORE initComplaintTools
+            var selectedDischargeComplaints = [];
+
+            function initDischargeComplaintsTable() {
+                // Load existing complaints from PHP (if any)
+                <?php if (isset($complaint_rows) && is_array($complaint_rows) && !empty($complaint_rows)): ?>
+                    selectedDischargeComplaints = [
+                        <?php
+                        $itemCount = count($complaint_rows);
+                        $currentIndex = 0;
+                        foreach ($complaint_rows as $row):
+                            $currentIndex++;
+                        ?> {
+                                id: <?= (int) ($row['id'] ?? 0) ?>,
+                                term: <?= json_encode((string) ($row['comp_report'] ?? '')) ?>,
+                                frequency: '',
+                                severity: '',
+                                duration: <?= json_encode((string) ($row['comp_remark'] ?? '')) ?>,
+                                date: ''
+                            }
+                            <?= $currentIndex < $itemCount ? ',' : '' ?>
+
+                        <?php endforeach; ?>
+                    ];
+                <?php endif; ?>
+
+                renderDischargeComplaintTable();
+            }
+
+            function renderDischargeComplaintTable() {
+                var tbody = document.getElementById('discharge_complaint_tbody');
+                if (!tbody) return;
+
+                tbody.innerHTML = '';
+
+                if (selectedDischargeComplaints.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-muted text-center">No complaints yet. Add using the input below.</td></tr>';
+                    return;
+                }
+
+                selectedDischargeComplaints.forEach(function(item, idx) {
+                    var tr = document.createElement('tr');
+                    tr.setAttribute('data-idx', idx);
+
+                    // # column
+                    var td1 = document.createElement('td');
+                    td1.className = 'text-center text-muted';
+                    td1.textContent = idx + 1;
+                    tr.appendChild(td1);
+
+                    // Complaint name
+                    var td2 = document.createElement('td');
+                    td2.className = 'p-1';
+                    var nameInput = document.createElement('input');
+                    nameInput.type = 'text';
+                    nameInput.className = 'form-control form-control-sm';
+                    nameInput.value = item.term || '';
+                    nameInput.placeholder = 'Complaint…';
+                    nameInput.style.fontSize = '.82rem';
+                    nameInput.setAttribute('data-idx', idx);
+                    nameInput.addEventListener('input', function() {
+                        selectedDischargeComplaints[idx].term = this.value;
+                    });
+                    td2.appendChild(nameInput);
+                    tr.appendChild(td2);
+
+                    // Frequency
+                    var td3 = document.createElement('td');
+                    td3.className = 'p-1';
+                    var freqInput = document.createElement('input');
+                    freqInput.type = 'text';
+                    freqInput.className = 'form-control form-control-sm';
+                    freqInput.value = item.frequency || '';
+                    freqInput.placeholder = 'daily…';
+                    freqInput.style.fontSize = '.82rem';
+                    freqInput.addEventListener('input', function() {
+                        selectedDischargeComplaints[idx].frequency = this.value;
+                    });
+                    td3.appendChild(freqInput);
+                    tr.appendChild(td3);
+
+                    // Severity
+                    var td4 = document.createElement('td');
+                    td4.className = 'p-1';
+                    var sevInput = document.createElement('input');
+                    sevInput.type = 'text';
+                    sevInput.className = 'form-control form-control-sm';
+                    sevInput.value = item.severity || '';
+                    sevInput.placeholder = 'mild…';
+                    sevInput.style.fontSize = '.82rem';
+                    sevInput.addEventListener('input', function() {
+                        selectedDischargeComplaints[idx].severity = this.value;
+                    });
+                    td4.appendChild(sevInput);
+                    tr.appendChild(td4);
+
+                    // Duration
+                    var td5 = document.createElement('td');
+                    td5.className = 'p-1';
+                    var durInput = document.createElement('input');
+                    durInput.type = 'text';
+                    durInput.className = 'form-control form-control-sm';
+                    durInput.value = item.duration || '';
+                    durInput.placeholder = '2 days…';
+                    durInput.style.fontSize = '.82rem';
+                    durInput.addEventListener('input', function() {
+                        selectedDischargeComplaints[idx].duration = this.value;
+                    });
+                    td5.appendChild(durInput);
+                    tr.appendChild(td5);
+
+                    // Remove button
+                    var td6 = document.createElement('td');
+                    td6.className = 'p-1 text-center';
+                    var removeBtn = document.createElement('button');
+                    removeBtn.type = 'button';
+                    removeBtn.className = 'btn btn-sm text-danger p-0';
+                    removeBtn.style.lineHeight = '1';
+                    removeBtn.style.fontSize = '.9rem';
+                    removeBtn.innerHTML = '×';
+                    removeBtn.addEventListener('click', function() {
+                        selectedDischargeComplaints.splice(idx, 1);
+                        renderDischargeComplaintTable();
+                    });
+                    td6.appendChild(removeBtn);
+                    tr.appendChild(td6);
+
+                    tbody.appendChild(tr);
+                });
+            }
+
+            function initComplaintTools() {
+                var section = document.getElementById('section-complaints');
+                if (!section || section.dataset.toolsBound === '1') {
+                    return;
+                }
+                section.dataset.toolsBound = '1';
+
+                var form = section.closest('form');
+                if (!form) {
+                    return;
+                }
+
+                var lookup = document.getElementById('discharge_complaint_lookup');
+                var dropdown = document.getElementById('discharge_complaint_dropdown');
+                var nameInput = document.getElementById('new_complaint_name');
+                var remarkInput = document.getElementById('new_complaint_remark');
+                var addRowBtn = document.getElementById('btn_add_complaint_row');
+                var btnAdd = document.getElementById('btn_discharge_add_complaint');
+                var painHidden = document.getElementById('pain_value');
+                var painOptions = section.querySelectorAll('.pain-option');
+
+                var selectedComplaints = [];
+                var highlightedIndex = -1;
+
+                section.querySelectorAll('table tbody tr').forEach(function(row) {
+                    var firstCell = row.querySelector('.discharge-complaint-name-input');
+                    if (!firstCell) {
+                        return;
+                    }
+                    var value = (firstCell.value || '').trim();
+                    if (value !== '' && value.toLowerCase() !== 'no complaint rows yet.') {
+                        selectedComplaints.push(value);
+                    }
+                });
+
+                function syncPainHidden() {
+                    if (!painHidden) {
+                        return;
+                    }
+
+                    var selected = '';
+                    painOptions.forEach(function(option) {
+                        if (option.checked) {
+                            selected = option.value || '';
                         }
                     });
-                });
+
+                    painHidden.value = selected;
+                }
+
+                if (painOptions && painOptions.length && painHidden) {
+                    painOptions.forEach(function(option) {
+                        option.addEventListener('change', syncPainHidden);
+                    });
+                    syncPainHidden();
+                }
+
+                if (lookup) {
+                    lookup.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (dropdown) {
+                                dropdown.style.display = 'none';
+                            }
+                            if (btnAdd) {
+                                btnAdd.click();
+                            }
+                        } else if (e.key === 'Escape' && dropdown) {
+                            dropdown.style.display = 'none';
+                            highlightedIndex = -1;
+                        }
+                    });
+
+                    lookup.addEventListener('blur', function() {
+                        if (dropdown) {
+                            setTimeout(function() {
+                                dropdown.style.display = 'none';
+                            }, 200);
+                        }
+                    });
+                }
+
+                if (btnAdd) {
+                    btnAdd.addEventListener('click', function() {
+                        var inputVal = lookup ? (lookup.value || '').trim() : '';
+                        if (inputVal === '') {
+                            setComplaintStatus('Type complaint text first.', 'error');
+                            return;
+                        }
+
+                        // Check if already exists
+                        var exists = selectedDischargeComplaints.some(function(item) {
+                            return item.term.toUpperCase() === inputVal.toUpperCase();
+                        });
+
+                        if (exists) {
+                            setComplaintStatus('Complaint already added.', 'error');
+                            if (lookup) {
+                                lookup.value = '';
+                            }
+                            return;
+                        }
+
+                        // Add to array
+                        selectedDischargeComplaints.push({
+                            id: 0,
+                            term: inputVal,
+                            frequency: '',
+                            severity: '',
+                            duration: '',
+                            date: ''
+                        });
+
+                        // Refresh table
+                        renderDischargeComplaintTable();
+
+                        // Clear input
+                        if (lookup) {
+                            lookup.value = '';
+                        }
+
+                        // No status message needed - table update is visual confirmation
+                    });
+                }
+
+                // Attach event handlers to editable complaint fields (name and remark)
+                // DISABLED: Database save on blur - will implement OPD-style client-side editing
+                // attachComplaintFieldHandlers(section, form);
+
+                // Initialize table with existing data
+                initDischargeComplaintsTable();
             }
 
-            if (lookup && dropdown) {
-                lookup.addEventListener('input', function() {
-                    var q = (lookup.value || '').trim();
-                    if (q.length < 2 || !window.jQuery) {
+            // Surgery/Procedure autocomplete with SNOMED/ICD code display
+            function initSurgeryProcedureAutocomplete() {
+                initTermAutocomplete('surgery', 'new_surgery_name', 'discharge_surgery_dropdown', 'new_surgery_master_id');
+                initTermAutocomplete('procedure', 'new_procedure_name', 'discharge_procedure_dropdown', 'new_procedure_master_id');
+
+                // Quick-add button handlers
+                initQuickAddTermHandlers();
+            }
+
+            function initQuickAddTermHandlers() {
+                var quickModal = document.getElementById('quickAddTermModal');
+                var quickType = document.getElementById('quick_term_type');
+                var quickTypeLabel = document.getElementById('quick_term_type_label');
+                var quickName = document.getElementById('quick_term_name');
+                var quickCode = document.getElementById('quick_term_code');
+                var quickIcd = document.getElementById('quick_term_icd');
+                var quickStatus = document.getElementById('quick_term_status');
+                var btnSave = document.getElementById('btn_quick_term_save');
+
+                if (!quickModal || !quickName) return;
+
+                // Surgery quick-add button
+                var btnQuickSurgery = document.getElementById('btn_quick_add_surgery');
+                if (btnQuickSurgery) {
+                    btnQuickSurgery.addEventListener('click', function() {
+                        var surgeryInput = document.getElementById('new_surgery_name');
+                        var surgeryName = surgeryInput ? surgeryInput.value.trim() : '';
+
+                        if (!surgeryName) {
+                            alert('Please enter a surgery name first');
+                            return;
+                        }
+
+                        quickType.value = 'surgery';
+                        quickTypeLabel.textContent = 'Surgery';
+                        quickName.value = surgeryName;
+                        quickCode.value = '';
+                        quickIcd.value = '';
+                        quickStatus.textContent = '';
+                        quickStatus.className = 'text-muted';
+
+                        showModalById('quickAddTermModal');
+                    });
+                }
+
+                // Procedure quick-add button
+                var btnQuickProcedure = document.getElementById('btn_quick_add_procedure');
+                if (btnQuickProcedure) {
+                    btnQuickProcedure.addEventListener('click', function() {
+                        var procedureInput = document.getElementById('new_procedure_name');
+                        var procedureName = procedureInput ? procedureInput.value.trim() : '';
+
+                        if (!procedureName) {
+                            alert('Please enter a procedure name first');
+                            return;
+                        }
+
+                        quickType.value = 'procedure';
+                        quickTypeLabel.textContent = 'Procedure';
+                        quickName.value = procedureName;
+                        quickCode.value = '';
+                        quickIcd.value = '';
+                        quickStatus.textContent = '';
+                        quickStatus.className = 'text-muted';
+
+                        showModalById('quickAddTermModal');
+                    });
+                }
+
+                // Save button in modal
+                if (btnSave) {
+                    btnSave.addEventListener('click', function() {
+                        var name = quickName.value.trim();
+                        var type = quickType.value;
+                        var code = quickCode.value.trim();
+                        var icd = quickIcd.value.trim();
+
+                        if (!name) {
+                            setQuickStatus('Name is required', 'error');
+                            return;
+                        }
+
+                        if (!window.jQuery) {
+                            setQuickStatus('jQuery not loaded', 'error');
+                            return;
+                        }
+
+                        var form = getDischargeForm();
+                        if (!form) {
+                            setQuickStatus('Form not found', 'error');
+                            return;
+                        }
+
+                        var csrf = getCsrfPair(form);
+                        var payload = {
+                            id: 0,
+                            name: name,
+                            code: code,
+                            icd_code: icd,
+                            is_active: 1
+                        };
+
+                        // For surgery/procedure, include type in payload
+                        if (type === 'surgery' || type === 'procedure') {
+                            payload.type = type;
+                        }
+
+                        payload[csrf.name] = csrf.value;
+
+                        setQuickStatus('Saving...', 'muted');
+                        btnSave.disabled = true;
+
+                        // Use appropriate endpoint based on type
+                        var saveUrl = type === 'course' ?
+                            '<?= base_url('Ipd_discharge/course_master_save') ?>' :
+                            '<?= base_url('Ipd_discharge/surgery_master_save') ?>';
+
+                        $.post(saveUrl, payload, function(data) {
+                            updateFormCsrf(form, data);
+                            btnSave.disabled = false;
+
+                            if (!data || parseInt(data.update || '0', 10) !== 1) {
+                                setQuickStatus((data && data.error_text) ? data.error_text : 'Save failed', 'error');
+                                return;
+                            }
+
+                            setQuickStatus('✓ Saved successfully!', 'success');
+
+                            // Update the input with saved name and set master_id
+                            var savedId = parseInt(data.id || '0', 10);
+                            if (type === 'surgery') {
+                                var surgeryInput = document.getElementById('new_surgery_name');
+                                var surgeryMasterId = document.getElementById('new_surgery_master_id');
+                                if (surgeryInput) surgeryInput.value = name;
+                                if (surgeryMasterId) surgeryMasterId.value = savedId;
+                            } else if (type === 'procedure') {
+                                var procedureInput = document.getElementById('new_procedure_name');
+                                var procedureMasterId = document.getElementById('new_procedure_master_id');
+                                if (procedureInput) procedureInput.value = name;
+                                if (procedureMasterId) procedureMasterId.value = savedId;
+                            } else if (type === 'course') {
+                                var courseInput = document.getElementById('new_course_name');
+                                var courseMasterId = document.getElementById('new_course_master_id');
+                                if (courseInput) courseInput.value = name;
+                                if (courseMasterId) courseMasterId.value = savedId;
+                            }
+
+                            // Close modal after short delay
+                            setTimeout(function() {
+                                hideModalById('quickAddTermModal');
+                            }, 1000);
+                        }, 'json').fail(function() {
+                            btnSave.disabled = false;
+                            setQuickStatus('Network error', 'error');
+                        });
+                    });
+                }
+
+                function setQuickStatus(text, level) {
+                    if (!quickStatus) return;
+
+                    quickStatus.classList.remove('text-success', 'text-danger', 'text-muted');
+                    if (level === 'success') {
+                        quickStatus.classList.add('text-success');
+                    } else if (level === 'error') {
+                        quickStatus.classList.add('text-danger');
+                    } else {
+                        quickStatus.classList.add('text-muted');
+                    }
+                    quickStatus.textContent = text;
+                }
+            }
+
+            function initTermAutocomplete(type, inputId, dropdownId, hiddenId) {
+                var input = document.getElementById(inputId);
+                var dropdown = document.getElementById(dropdownId);
+                var hidden = document.getElementById(hiddenId);
+                if (!input || !dropdown || !hidden) return;
+
+                var searchTimer = null;
+                var highlightedIndex = -1;
+                var currentResults = [];
+
+                input.addEventListener('input', function() {
+                    var q = input.value.trim();
+                    highlightedIndex = -1;
+
+                    if (q.length < 2) {
                         dropdown.style.display = 'none';
                         return;
                     }
 
-                    $.get('<?= base_url('Opd_prescription/complaints_search') ?>?q=' + encodeURIComponent(q), function(data) {
-                        complaintSuggestions = (data && data.rows) ? data.rows : [];
-                        highlightedIndex = -1; // Reset on new results
-                        
-                        if (!complaintSuggestions.length) {
-                            dropdown.style.display = 'none';
-                            return;
-                        }
-                        
-                        var html = '';
-                        complaintSuggestions.forEach(function(row) {
-                            var label = row.name || '';
-                            var hinglish = row.name_hinglish ? ' (' + row.name_hinglish + ')' : '';
-                            html += '<div class="dropdown-item px-2 py-1" data-value="' + $('<div>').text(label).html() + '" style="cursor:pointer;font-size:.82rem">' + 
-                                    $('<div>').text(label).html() + 
-                                    '<span class="text-muted small">' + hinglish + '</span></div>';
-                        });
-                        dropdown.innerHTML = html;
-                        dropdown.style.display = 'block';
-                        
-                        dropdown.querySelectorAll('.dropdown-item').forEach(function(item, idx) {
-                            item.addEventListener('mouseenter', function() {
-                                // Clear keyboard highlight on mouse hover
-                                dropdown.querySelectorAll('.dropdown-item').forEach(function(el) {
-                                    el.style.backgroundColor = '';
-                                    el.style.fontWeight = '';
-                                });
-                                this.style.backgroundColor = '#f8f9fa';
-                                highlightedIndex = idx;
-                            });
-                            item.addEventListener('mouseleave', function() {
-                                this.style.backgroundColor = '';
-                            });
-                            item.addEventListener('click', function() {
-                                var value = this.getAttribute('data-value');
-                                lookup.value = value;
+                    clearTimeout(searchTimer);
+                    searchTimer = setTimeout(function() {
+                        if (!window.jQuery) return;
+
+                        $.get('<?= base_url('Ipd_discharge/surgery_master_lookup') ?>?type=' + type + '&q=' + encodeURIComponent(q), function(data) {
+                            currentResults = (data && data.rows) ? data.rows : [];
+                            if (!currentResults.length) {
                                 dropdown.style.display = 'none';
-                                if (btnAdd) {
-                                    btnAdd.click();
+                                return;
+                            }
+
+                            var html = '';
+                            currentResults.forEach(function(row) {
+                                var name = row.term_name || '';
+                                var code = row.term_code || '';
+                                var icd = row.icd_code || '';
+                                var codeDisplay = '';
+
+                                if (code && icd) {
+                                    codeDisplay = '<span class="badge bg-info text-dark me-1">' + code + '</span><span class="badge bg-secondary">' + icd + '</span>';
+                                } else if (code) {
+                                    codeDisplay = '<span class="badge bg-info text-dark">' + code + '</span>';
+                                } else if (icd) {
+                                    codeDisplay = '<span class="badge bg-secondary">' + icd + '</span>';
                                 }
+
+                                html += '<div class="dropdown-item px-2 py-2" data-id="' + (row.id || 0) + '" data-name="' + name.replace(/"/g, '&quot;') + '" style="cursor:pointer;font-size:.9rem;border-bottom:1px solid #f0f0f0;">';
+                                html += '<div class="fw-semibold">' + name + '</div>';
+                                if (codeDisplay) {
+                                    html += '<div class="small mt-1">' + codeDisplay + '</div>';
+                                }
+                                html += '</div>';
                             });
-                        });
-                    }, 'json');
+
+                            dropdown.innerHTML = html;
+                            dropdown.style.display = 'block';
+
+                            dropdown.querySelectorAll('.dropdown-item').forEach(function(item, idx) {
+                                item.addEventListener('mouseenter', function() {
+                                    dropdown.querySelectorAll('.dropdown-item').forEach(function(el) {
+                                        el.style.backgroundColor = '';
+                                    });
+                                    this.style.backgroundColor = '#f8f9fa';
+                                    highlightedIndex = idx;
+                                });
+                                item.addEventListener('mouseleave', function() {
+                                    this.style.backgroundColor = '';
+                                });
+                                item.addEventListener('click', function() {
+                                    var id = this.getAttribute('data-id');
+                                    var name = this.getAttribute('data-name');
+                                    input.value = name;
+                                    hidden.value = id;
+                                    dropdown.style.display = 'none';
+                                });
+                            });
+                        }, 'json');
+                    }, 300);
                 });
 
-                lookup.addEventListener('keydown', function(e) {
+                input.addEventListener('keydown', function(e) {
                     var items = dropdown.querySelectorAll('.dropdown-item');
                     var isVisible = dropdown.style.display === 'block' && items.length > 0;
-                    
+
                     if (e.key === 'ArrowDown' && isVisible) {
                         e.preventDefault();
                         highlightedIndex = Math.min(highlightedIndex + 1, items.length - 1);
-                        updateDropdownHighlight(items);
+                        updateHighlight(items);
                     } else if (e.key === 'ArrowUp' && isVisible) {
                         e.preventDefault();
                         highlightedIndex = Math.max(highlightedIndex - 1, 0);
-                        updateDropdownHighlight(items);
-                    } else if (e.key === 'Enter') {
+                        updateHighlight(items);
+                    } else if (e.key === 'Enter' && isVisible) {
                         e.preventDefault();
-                        if (isVisible && highlightedIndex >= 0 && items[highlightedIndex]) {
-                            // Select highlighted item
-                            var value = items[highlightedIndex].getAttribute('data-value');
-                            lookup.value = value;
-                            dropdown.style.display = 'none';
-                            highlightedIndex = -1;
-                            if (btnAdd) {
-                                btnAdd.click();
-                            }
-                        } else if (btnAdd) {
-                            // No item highlighted, add whatever is typed
-                            dropdown.style.display = 'none';
-                            btnAdd.click();
+                        if (highlightedIndex >= 0 && items[highlightedIndex]) {
+                            items[highlightedIndex].click();
                         }
                     } else if (e.key === 'Escape') {
                         dropdown.style.display = 'none';
                         highlightedIndex = -1;
                     }
                 });
-                
-                function updateDropdownHighlight(items) {
-                    items.forEach(function(item, idx) {
-                        if (idx === highlightedIndex) {
-                            item.style.backgroundColor = '#007bff';
-                            item.style.color = '#fff';
-                            item.style.fontWeight = 'bold';
-                            item.scrollIntoView({ block: 'nearest' });
-                        } else {
-                            item.style.backgroundColor = '';
-                            item.style.color = '';
-                            item.style.fontWeight = '';
-                        }
-                    });
-                }
 
-                lookup.addEventListener('blur', function() {
+                input.addEventListener('blur', function() {
                     setTimeout(function() {
                         dropdown.style.display = 'none';
                     }, 200);
                 });
-            }
 
-            if (btnAdd) {
-                btnAdd.addEventListener('click', function() {
-                    var inputVal = lookup ? (lookup.value || '').trim() : '';
-                    if (inputVal === '') {
-                        setComplaintStatus('Type complaint text first.', 'error');
-                        return;
-                    }
-
-                    // Check if already exists
-                    var exists = selectedDischargeComplaints.some(function(item) {
-                        return item.term.toUpperCase() === inputVal.toUpperCase();
-                    });
-                    
-                    if (exists) {
-                        setComplaintStatus('Complaint already added.', 'error');
-                        if (lookup) {
-                            lookup.value = '';
+                function updateHighlight(items) {
+                    items.forEach(function(item, idx) {
+                        if (idx === highlightedIndex) {
+                            item.style.backgroundColor = '#007bff';
+                            item.style.color = '#fff';
+                            item.scrollIntoView({
+                                block: 'nearest'
+                            });
+                        } else {
+                            item.style.backgroundColor = '';
+                            item.style.color = '';
                         }
-                        return;
-                    }
-
-                    // Add to array
-                    selectedDischargeComplaints.push({
-                        id: 0,
-                        term: inputVal,
-                        frequency: '',
-                        severity: '',
-                        duration: '',
-                        date: ''
                     });
-
-                    // Refresh table
-                    renderDischargeComplaintTable();
-
-                    // Clear input
-                    if (lookup) {
-                        lookup.value = '';
-                    }
-
-                    // No status message needed - table update is visual confirmation
-                });
+                }
             }
 
-            if (btnAiDraft) {
-                btnAiDraft.addEventListener('click', function() {
-                    if (!window.jQuery) {
+            function setSectionStatus(id, text, level) {
+                var el = document.getElementById(id);
+                if (!el) {
+                    return;
+                }
+
+                el.classList.remove('text-success', 'text-danger', 'text-muted');
+                if (level === 'success') {
+                    el.classList.add('text-success');
+                } else if (level === 'error') {
+                    el.classList.add('text-danger');
+                } else {
+                    el.classList.add('text-muted');
+                }
+                el.textContent = text || '';
+            }
+
+            function getDischargeForm() {
+                return document.querySelector('form[action*="Ipd_discharge/ipd_select/"]');
+            }
+
+            function statusIdByNarrativeSection(section) {
+                if (section === 'diagnosis_remark') {
+                    return 'discharge_diagnosis_status';
+                }
+                if (section === 'course_remark') {
+                    return 'discharge_course_status';
+                }
+
+                return '';
+            }
+
+            function setNarrativeStatus(section, text, level) {
+                var statusId = statusIdByNarrativeSection(section);
+                if (statusId !== '') {
+                    setSectionStatus(statusId, text, level);
+                }
+            }
+
+            // Course/Treatment autocomplete with SNOMED/ICD code display
+            function initCourseAutocomplete() {
+                var input = document.getElementById('new_course_name');
+                var dropdown = document.getElementById('discharge_course_dropdown');
+                var hidden = document.getElementById('new_course_master_id');
+                if (!input || !dropdown || !hidden) return;
+
+                var searchTimer = null;
+                var highlightedIndex = -1;
+                var currentResults = [];
+
+                input.addEventListener('input', function() {
+                    var q = input.value.trim();
+                    highlightedIndex = -1;
+
+                    if (q.length < 2) {
+                        dropdown.style.display = 'none';
                         return;
                     }
 
-                    var currentText = getComplaintEditorText();
-                    if (!selectedComplaints.length && (currentText || '').trim() === '') {
-                        setComplaintStatus('Please add at least one complaint first.', 'error');
+                    clearTimeout(searchTimer);
+                    searchTimer = setTimeout(function() {
+                        if (!window.jQuery) return;
+
+                        $.get('<?= base_url('Ipd_discharge/course_master_lookup') ?>?q=' + encodeURIComponent(q), function(data) {
+                            currentResults = (data && data.rows) ? data.rows : [];
+                            if (!currentResults.length) {
+                                dropdown.style.display = 'none';
+                                return;
+                            }
+
+                            var html = '';
+                            currentResults.forEach(function(row) {
+                                var name = row.term_name || '';
+                                var code = row.term_code || '';
+                                var icd = row.icd_code || '';
+                                var codeDisplay = '';
+
+                                if (code && icd) {
+                                    codeDisplay = '<span class="badge bg-info text-dark me-1">' + code + '</span><span class="badge bg-secondary">' + icd + '</span>';
+                                } else if (code) {
+                                    codeDisplay = '<span class="badge bg-info text-dark">' + code + '</span>';
+                                } else if (icd) {
+                                    codeDisplay = '<span class="badge bg-secondary">' + icd + '</span>';
+                                }
+
+                                html += '<div class="dropdown-item px-2 py-2" data-id="' + (row.id || 0) + '" data-name="' + name.replace(/"/g, '&quot;') + '" style="cursor:pointer;font-size:.9rem;border-bottom:1px solid #f0f0f0;">';
+                                html += '<div class="fw-semibold">' + name + '</div>';
+                                if (codeDisplay) {
+                                    html += '<div class="small mt-1">' + codeDisplay + '</div>';
+                                }
+                                html += '</div>';
+                            });
+
+                            dropdown.innerHTML = html;
+                            dropdown.style.display = 'block';
+
+                            dropdown.querySelectorAll('.dropdown-item').forEach(function(item, idx) {
+                                item.addEventListener('mouseenter', function() {
+                                    dropdown.querySelectorAll('.dropdown-item').forEach(function(el) {
+                                        el.style.backgroundColor = '';
+                                    });
+                                    this.style.backgroundColor = '#f8f9fa';
+                                    highlightedIndex = idx;
+                                });
+                                item.addEventListener('mouseleave', function() {
+                                    this.style.backgroundColor = '';
+                                });
+                                item.addEventListener('click', function() {
+                                    var id = this.getAttribute('data-id');
+                                    var name = this.getAttribute('data-name');
+                                    input.value = name;
+                                    hidden.value = id;
+                                    dropdown.style.display = 'none';
+                                });
+                            });
+                        }, 'json');
+                    }, 300);
+                });
+
+                input.addEventListener('keydown', function(e) {
+                    var items = dropdown.querySelectorAll('.dropdown-item');
+                    var isVisible = dropdown.style.display === 'block' && items.length > 0;
+
+                    if (e.key === 'ArrowDown' && isVisible) {
+                        e.preventDefault();
+                        highlightedIndex = Math.min(highlightedIndex + 1, items.length - 1);
+                        updateHighlight(items);
+                    } else if (e.key === 'ArrowUp' && isVisible) {
+                        e.preventDefault();
+                        highlightedIndex = Math.max(highlightedIndex - 1, 0);
+                        updateHighlight(items);
+                    } else if (e.key === 'Enter' && isVisible) {
+                        e.preventDefault();
+                        if (highlightedIndex >= 0 && items[highlightedIndex]) {
+                            items[highlightedIndex].click();
+                        }
+                    } else if (e.key === 'Escape') {
+                        dropdown.style.display = 'none';
+                        highlightedIndex = -1;
+                    }
+                });
+
+                input.addEventListener('blur', function() {
+                    setTimeout(function() {
+                        dropdown.style.display = 'none';
+                    }, 200);
+                });
+
+                function updateHighlight(items) {
+                    items.forEach(function(item, idx) {
+                        if (idx === highlightedIndex) {
+                            item.style.backgroundColor = '#007bff';
+                            item.style.color = '#fff';
+                            item.scrollIntoView({
+                                block: 'nearest'
+                            });
+                        } else {
+                            item.style.backgroundColor = '';
+                            item.style.color = '';
+                        }
+                    });
+                }
+
+                // Quick-add button handler
+                var btnQuickCourse = document.getElementById('btn_quick_add_course');
+                if (btnQuickCourse) {
+                    btnQuickCourse.addEventListener('click', function() {
+                        var courseName = input.value.trim();
+
+                        if (!courseName) {
+                            alert('Please enter a course/treatment name first');
+                            return;
+                        }
+
+                        var quickModal = document.getElementById('quickAddTermModal');
+                        var quickType = document.getElementById('quick_term_type');
+                        var quickTypeLabel = document.getElementById('quick_term_type_label');
+                        var quickName = document.getElementById('quick_term_name');
+                        var quickCode = document.getElementById('quick_term_code');
+                        var quickIcd = document.getElementById('quick_term_icd');
+                        var quickStatus = document.getElementById('quick_term_status');
+
+                        if (!quickModal || !quickName) return;
+
+                        quickType.value = 'course';
+                        quickTypeLabel.textContent = 'Course/Treatment';
+                        quickName.value = courseName;
+                        quickCode.value = '';
+                        quickIcd.value = '';
+                        quickStatus.textContent = '';
+                        quickStatus.className = 'text-muted';
+
+                        showModalById('quickAddTermModal');
+                    });
+                }
+            }
+
+            function showModalById(modalId) {
+                var el = document.getElementById(modalId);
+                if (!el) {
+                    return;
+                }
+
+                if (window.bootstrap && window.bootstrap.Modal) {
+                    window.bootstrap.Modal.getOrCreateInstance(el).show();
+                    return;
+                }
+
+                if (window.jQuery) {
+                    window.jQuery(el).show();
+                }
+            }
+
+            function hideModalById(modalId) {
+                var el = document.getElementById(modalId);
+                if (!el) {
+                    return;
+                }
+
+                if (window.bootstrap && window.bootstrap.Modal) {
+                    window.bootstrap.Modal.getOrCreateInstance(el).hide();
+                    return;
+                }
+
+                if (window.jQuery) {
+                    window.jQuery(el).hide();
+                }
+            }
+
+            function bindNarrativeTemplateTools() {
+                if (narrativeTemplateToolsBound || !window.jQuery) {
+                    return;
+                }
+                narrativeTemplateToolsBound = true;
+
+                $(document).on('click', '.btn-discharge-field-past', function() {
+                    var target = ($(this).data('target') || '').toString();
+                    var section = ($(this).data('section') || '').toString();
+                    var form = getDischargeForm();
+                    if (!target || !section || !form || !$('#' + target).length) {
+                        return;
+                    }
+
+                    var url = '<?= base_url('Ipd_discharge/section_past_data') ?>?section=' + encodeURIComponent(section) + '&ipd_id=' + encodeURIComponent('<?= (int) $ipdId ?>');
+                    $.get(url, function(data) {
+                        if ((data && parseInt(data.update || '0', 10)) !== 1) {
+                            setNarrativeStatus(section, (data && data.error_text) ? data.error_text : 'No past data found.', 'error');
+                            return;
+                        }
+
+                        $('#' + target).val((data && data.past_text) ? data.past_text : '');
+                        setNarrativeStatus(section, (data && data.error_text) ? data.error_text : 'Past data loaded.', 'success');
+                    }, 'json').fail(function() {
+                        setNarrativeStatus(section, 'Unable to load past data right now.', 'error');
+                    });
+                });
+
+                $(document).on('click', '.btn-discharge-template-save', function() {
+                    var target = ($(this).data('target') || '').toString();
+                    var section = ($(this).data('section') || '').toString();
+                    if (!target || !section || !$('#' + target).length) {
+                        return;
+                    }
+
+                    var text = ($('#' + target).val() || '').toString().trim();
+                    if (!text) {
+                        setNarrativeStatus(section, 'Type text first, then save as template.', 'error');
+                        return;
+                    }
+
+                    narrativeTemplateSaveState = {
+                        section: section,
+                        text: text,
+                        target: target
+                    };
+                    var sectionLabel = section.replace(/_/g, ' ').replace(/\b\w/g, function(ch) {
+                        return ch.toUpperCase();
+                    });
+                    $('#ipdNarrativeTemplateSaveModalTitle').text('Save Template - ' + sectionLabel);
+                    $('#ipd_narrative_template_save_name').val(section.replace(/_/g, ' '));
+                    $('#ipd_narrative_template_save_scope').val('doctor');
+                    $('#ipd_narrative_template_save_preview').val(text);
+
+                    showModalById('ipdNarrativeTemplateSaveModal');
+                });
+
+                $('#btn_save_ipd_template_choice').on('click', function() {
+                    var section = (narrativeTemplateSaveState.section || '').toString();
+                    var text = (narrativeTemplateSaveState.text || '').toString().trim();
+                    var form = getDischargeForm();
+                    if (!form || !section || !text) {
+                        setNarrativeStatus(section, 'Nothing to save for this section.', 'error');
+                        return;
+                    }
+
+                    var templateName = ($('#ipd_narrative_template_save_name').val() || '').toString().trim();
+                    var templateScope = ($('#ipd_narrative_template_save_scope').val() || 'doctor').toString().trim().toLowerCase();
+                    if (!templateName) {
+                        setNarrativeStatus(section, 'Template name is required.', 'error');
                         return;
                     }
 
                     var csrf = getCsrfPair(form);
                     var payload = {
-                        complaints: selectedComplaints,
-                        current_text: currentText
+                        section: section,
+                        template_name: templateName,
+                        template_text: text,
+                        template_scope: templateScope
                     };
                     payload[csrf.name] = csrf.value;
 
-                    $.post('<?= base_url('Opd_prescription/complaints_ai_draft') ?>', payload, function(data) {
+                    $.post('<?= base_url('Ipd_discharge/section_template_save') ?>', payload, function(data) {
                         if (data && data.csrfName && data.csrfHash) {
                             var csrfInput = form.querySelector('input[name="' + data.csrfName + '"]');
                             if (csrfInput) {
@@ -2253,34 +2838,636 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                         }
 
                         if (!data || parseInt(data.update || '0', 10) !== 1) {
-                            setComplaintStatus((data && data.error_text) ? data.error_text : 'Unable to draft complaint text.', 'error');
+                            setNarrativeStatus(section, (data && data.error_text) ? data.error_text : 'Unable to save template.', 'error');
                             return;
                         }
 
-                        setComplaintEditorText(data.draft_text || currentText);
-                        setComplaintStatus((data.error_text || 'Complaint draft ready.'), 'success');
+                        setNarrativeStatus(section, (data.error_text || 'Template saved.'), 'success');
+                        hideModalById('ipdNarrativeTemplateSaveModal');
                     }, 'json').fail(function() {
-                        setComplaintStatus('AI draft request failed.', 'error');
+                        setNarrativeStatus(section, 'Unable to save template right now.', 'error');
+                    });
+                });
+
+                $(document).on('click', '.btn-discharge-template-load', function() {
+                    var target = ($(this).data('target') || '').toString();
+                    var section = ($(this).data('section') || '').toString();
+                    if (!target || !section || !$('#' + target).length) {
+                        return;
+                    }
+
+                    var url = '<?= base_url('Ipd_discharge/section_template_list') ?>?section=' + encodeURIComponent(section);
+                    $.get(url, function(data) {
+                        var rows = (data && data.rows) ? data.rows : [];
+                        if (!rows.length) {
+                            setNarrativeStatus(section, 'No template found for this section.', 'error');
+                            return;
+                        }
+
+                        narrativeTemplateLoadState = {
+                            target: target,
+                            section: section,
+                            rows: rows
+                        };
+                        var $sel = $('#ipd_narrative_template_select');
+                        $sel.empty();
+                        rows.forEach(function(row, idx) {
+                            var name = row.template_name || ('Template ' + (idx + 1));
+                            var src = parseInt(row.doc_id || '0', 10) === 0 ? '[Master] ' : '[My] ';
+                            $sel.append('<option value="' + idx + '">' + $('<div>').text(src + name).html() + '</option>');
+                        });
+
+                        var existingText = ($('#' + target).val() || '').toString().trim();
+                        $('#ipd_narrative_apply_mode').val(existingText ? 'append' : 'replace');
+                        $('#ipd_narrative_template_preview').val((rows[0] && rows[0].template_text) ? rows[0].template_text : '');
+
+                        showModalById('ipdNarrativeTemplateModal');
+                    }, 'json').fail(function() {
+                        setNarrativeStatus(section, 'Unable to load template list.', 'error');
+                    });
+                });
+
+                $('#ipd_narrative_template_select').on('change', function() {
+                    var idx = parseInt($(this).val() || '0', 10);
+                    var row = (narrativeTemplateLoadState.rows || [])[idx] || {};
+                    $('#ipd_narrative_template_preview').val(row.template_text || '');
+                });
+
+                $('#btn_apply_ipd_template_choice').on('click', function() {
+                    var idx = parseInt($('#ipd_narrative_template_select').val() || '0', 10);
+                    var row = (narrativeTemplateLoadState.rows || [])[idx] || null;
+                    var section = (narrativeTemplateLoadState.section || '').toString();
+                    var target = (narrativeTemplateLoadState.target || '').toString();
+                    if (!row || !target || !$('#' + target).length) {
+                        setNarrativeStatus(section, 'Invalid template selection.', 'error');
+                        return;
+                    }
+
+                    var mode = ($('#ipd_narrative_apply_mode').val() || 'replace').toString();
+                    var selectedText = (row.template_text || '').toString().trim();
+                    var $target = $('#' + target);
+                    var currentText = ($target.val() || '').toString().trim();
+                    var finalText = selectedText;
+
+                    if (mode === 'append' && currentText !== '') {
+                        if (selectedText !== '' && currentText.toLowerCase() !== selectedText.toLowerCase()) {
+                            finalText = currentText + '\n' + selectedText;
+                        } else {
+                            finalText = currentText;
+                        }
+                    }
+
+                    $target.val(finalText);
+                    setNarrativeStatus(section, mode === 'append' ? 'Template appended.' : 'Template loaded.', 'success');
+                    hideModalById('ipdNarrativeTemplateModal');
+                });
+            }
+
+            function bindSmartTermLookup(form, lookupId, suggestId, addBtnId, targetInputId, statusId, emptyText) {
+                var lookup = document.getElementById(lookupId);
+                var suggest = document.getElementById(suggestId);
+                var addBtn = document.getElementById(addBtnId);
+                var targetInput = document.getElementById(targetInputId);
+                if (!lookup || !addBtn || !targetInput) {
+                    return;
+                }
+
+                var suggestions = [];
+
+                lookup.addEventListener('input', function() {
+                    var q = (lookup.value || '').trim();
+                    if (q.length < 2 || !window.jQuery) {
+                        return;
+                    }
+
+                    $.get('<?= base_url('Opd_prescription/complaints_search') ?>?q=' + encodeURIComponent(q), function(data) {
+                        suggestions = (data && data.rows) ? data.rows : [];
+                        if (!suggest) {
+                            return;
+                        }
+
+                        var html = '';
+                        suggestions.forEach(function(row) {
+                            var label = row.name || '';
+                            if (row.name_hinglish) {
+                                label += ' (' + row.name_hinglish + ')';
+                            }
+                            html += '<option value="' + $('<div>').text(label).html() + '"></option>';
+                        });
+                        suggest.innerHTML = html;
+                    }, 'json');
+                });
+
+                addBtn.addEventListener('click', function() {
+                    var inputVal = (lookup.value || '').trim();
+                    if (inputVal === '') {
+                        setSectionStatus(statusId, emptyText || 'Type text first.', 'error');
+                        return;
+                    }
+
+                    var chosen = '';
+                    suggestions.forEach(function(row) {
+                        var label = row.name || '';
+                        if (row.name_hinglish) {
+                            label += ' (' + row.name_hinglish + ')';
+                        }
+                        if (label.toUpperCase() === inputVal.toUpperCase() || (row.name || '').toUpperCase() === inputVal.toUpperCase()) {
+                            chosen = row.name || inputVal;
+                        }
+                    });
+
+                    if (chosen !== '') {
+                        targetInput.value = chosen;
+                        lookup.value = '';
+                        setSectionStatus(statusId, 'Term added to input. Click +ADD to save row.', 'success');
+                        return;
+                    }
+
+                    if (!window.jQuery) {
+                        targetInput.value = inputVal;
+                        lookup.value = '';
+                        return;
+                    }
+
+                    var csrf = getCsrfPair(form);
+                    var payload = {
+                        text: inputVal
+                    };
+                    payload[csrf.name] = csrf.value;
+
+                    $.post('<?= base_url('Opd_prescription/complaints_parse') ?>', payload, function(data) {
+                        updateFormCsrf(form, data);
+
+                        var rows = (data && data.rows) ? data.rows : [];
+                        targetInput.value = rows.length ? String(rows[0] || inputVal) : inputVal;
+                        lookup.value = '';
+                        setSectionStatus(statusId, rows.length ? 'Matched predefined term. Click +ADD to save row.' : 'Custom term ready. Click +ADD to save row.', 'success');
+                    }, 'json').fail(function() {
+                        setSectionStatus(statusId, 'Lookup failed right now.', 'error');
                     });
                 });
             }
 
-            if (btnHinglish) {
-                btnHinglish.addEventListener('click', function() {
-                    if (!window.jQuery) {
+            function bindSmartTermInputLookup(form, lookupId, suggestId, statusId, emptyText) {
+                var lookup = document.getElementById(lookupId);
+                var suggest = document.getElementById(suggestId);
+                if (!lookup) {
+                    return;
+                }
+
+                if (lookup.dataset.lookupBound === '1') {
+                    return;
+                }
+                lookup.dataset.lookupBound = '1';
+
+                var suggestions = [];
+
+                function optionLabel(row) {
+                    var label = row.name || '';
+                    if (row.name_hinglish) {
+                        label += ' (' + row.name_hinglish + ')';
+                    }
+                    return label;
+                }
+
+                function applySelection() {
+                    var inputVal = (lookup.value || '').trim();
+                    if (inputVal === '') {
+                        setSectionStatus(statusId, '', 'muted');
                         return;
                     }
 
-                    var text = (getComplaintEditorText() || '').trim();
+                    var chosen = '';
+                    suggestions.forEach(function(row) {
+                        var label = optionLabel(row);
+                        if (label.toUpperCase() === inputVal.toUpperCase() || (row.name || '').toUpperCase() === inputVal.toUpperCase()) {
+                            chosen = row.name || inputVal;
+                        }
+                    });
+
+                    if (chosen !== '') {
+                        lookup.value = chosen;
+                        setSectionStatus(statusId, 'Term selected. Click +ADD to save row.', 'success');
+                        return;
+                    }
+
+                    if (!window.jQuery) {
+                        setSectionStatus(statusId, emptyText || 'Custom term ready. Click +ADD to save row.', 'success');
+                        return;
+                    }
+
+                    var csrf = getCsrfPair(form);
+                    var payload = {
+                        text: inputVal
+                    };
+                    payload[csrf.name] = csrf.value;
+
+                    $.post('<?= base_url('Opd_prescription/complaints_parse') ?>', payload, function(data) {
+                        updateFormCsrf(form, data);
+
+                        var rows = (data && data.rows) ? data.rows : [];
+                        lookup.value = rows.length ? String(rows[0] || inputVal) : inputVal;
+                        setSectionStatus(statusId, rows.length ? 'Matched predefined term. Click +ADD to save row.' : 'Custom term ready. Click +ADD to save row.', 'success');
+                    }, 'json').fail(function() {
+                        setSectionStatus(statusId, 'Lookup failed right now.', 'error');
+                    });
+                }
+
+                lookup.addEventListener('input', function() {
+                    var q = (lookup.value || '').trim();
+                    if (q.length < 2 || !window.jQuery) {
+                        return;
+                    }
+
+                    $.get('<?= base_url('Opd_prescription/complaints_search') ?>?q=' + encodeURIComponent(q), function(data) {
+                        suggestions = (data && data.rows) ? data.rows : [];
+                        if (!suggest) {
+                            return;
+                        }
+
+                        var html = '';
+                        suggestions.forEach(function(row) {
+                            html += '<option value="' + $('<div>').text(optionLabel(row)).html() + '"></option>';
+                        });
+                        suggest.innerHTML = html;
+                    }, 'json');
+                });
+
+                lookup.addEventListener('change', applySelection);
+                lookup.addEventListener('blur', applySelection);
+            }
+
+            function bindSurgeryTermLookup(form, type, lookupId, suggestId, targetMasterId, statusId) {
+                var lookup = document.getElementById(lookupId);
+                var suggest = document.getElementById(suggestId);
+                var targetMaster = document.getElementById(targetMasterId);
+                if (!lookup || !targetMaster || !window.jQuery) {
+                    return;
+                }
+
+                if (lookup.dataset.lookupBound === '1') {
+                    return;
+                }
+                lookup.dataset.lookupBound = '1';
+
+                function optionLabel(row) {
+                    var label = (row.term_name || '').toString();
+                    var code = (row.term_code || '').toString().trim();
+                    var icd = (row.icd_code || '').toString().trim();
+                    if (code !== '') {
+                        label += ' [' + code + ']';
+                    }
+                    if (icd !== '') {
+                        label += ' (ICD ' + icd + ')';
+                    }
+                    return label.trim();
+                }
+
+                function applySelectionFromInput() {
+                    var inputVal = (lookup.value || '').trim();
+                    if (inputVal === '') {
+                        targetMaster.value = '0';
+                        return;
+                    }
+
+                    var chosen = null;
+                    (surgeryMasterState[type] || []).forEach(function(row) {
+                        var label = optionLabel(row);
+                        var name = (row.term_name || '').toString();
+                        if (label.toUpperCase() === inputVal.toUpperCase() || name.toUpperCase() === inputVal.toUpperCase()) {
+                            chosen = row;
+                        }
+                    });
+
+                    if (chosen) {
+                        lookup.value = (chosen.term_name || '').toString();
+                        targetMaster.value = String(chosen.id || 0);
+                        setSectionStatus(statusId, 'Master term selected. Click +ADD to save row.', 'success');
+                        return;
+                    }
+
+                    targetMaster.value = '0';
+                }
+
+                lookup.addEventListener('input', function() {
+                    targetMaster.value = '0';
+                    var q = (lookup.value || '').trim();
+                    if (q.length < 2) {
+                        return;
+                    }
+
+                    $.get('<?= base_url('Ipd_discharge/surgery_master_lookup') ?>?type=' + encodeURIComponent(type) + '&q=' + encodeURIComponent(q), function(data) {
+                        var rows = (data && data.rows) ? data.rows : [];
+                        surgeryMasterState[type] = rows;
+
+                        if (!suggest) {
+                            return;
+                        }
+
+                        var html = '';
+                        rows.forEach(function(row) {
+                            html += '<option value="' + $('<div>').text(optionLabel(row)).html() + '"></option>';
+                        });
+                        suggest.innerHTML = html;
+                    }, 'json');
+                });
+
+                lookup.addEventListener('change', applySelectionFromInput);
+                lookup.addEventListener('blur', applySelectionFromInput);
+            }
+
+            function initSurgeryMasterCrud(form) {
+                if (!window.jQuery) {
+                    return;
+                }
+
+                if (window.__ipdSurgeryCrudBound === true) {
+                    return;
+                }
+                window.__ipdSurgeryCrudBound = true;
+
+                var $type = $('#surgery_master_type');
+                var $search = $('#surgery_master_search');
+                var $rows = $('#surgery_master_rows');
+
+                function setMasterStatus(text, level) {
+                    setSectionStatus('surgery_master_status', text, level || 'muted');
+                }
+
+                function rowHtml(row) {
+                    var status = parseInt(row.is_active || '0', 10) === 1 ? 'Active' : 'Inactive';
+                    var safeName = $('<div>').text(row.term_name || '').html();
+                    var safeCode = $('<div>').text(row.term_code || '').html();
+                    var safeIcd = $('<div>').text(row.icd_code || '').html();
+                    return '<tr>' +
+                        '<td>' + safeName + '</td>' +
+                        '<td>' + safeCode + '</td>' +
+                        '<td>' + safeIcd + '</td>' +
+                        '<td>' + status + '</td>' +
+                        '<td>' +
+                        '<button type="button" class="btn btn-outline-primary btn-sm btn-master-edit" data-id="' + (row.id || 0) + '">Edit</button> ' +
+                        '<button type="button" class="btn btn-outline-danger btn-sm btn-master-delete" data-id="' + (row.id || 0) + '">Del</button>' +
+                        '</td>' +
+                        '</tr>';
+                }
+
+                function clearMasterForm() {
+                    $('#surgery_master_id').val('0');
+                    $('#surgery_master_name').val('');
+                    $('#surgery_master_code').val('');
+                    $('#surgery_master_icd').val('');
+                    $('#surgery_master_active').val('1');
+                }
+
+                function fetchMasterRows() {
+                    var type = ($type.val() || 'surgery').toString();
+                    var q = ($search.val() || '').toString().trim();
+                    $.get('<?= base_url('Ipd_discharge/surgery_master_list') ?>?type=' + encodeURIComponent(type) + '&q=' + encodeURIComponent(q), function(data) {
+                        var rows = (data && data.rows) ? data.rows : [];
+                        surgeryMasterState[type] = rows;
+                        if (!rows.length) {
+                            $rows.html('<tr><td colspan="5" class="text-center text-muted">No records.</td></tr>');
+                            return;
+                        }
+
+                        var html = '';
+                        rows.forEach(function(row) {
+                            html += rowHtml(row);
+                        });
+                        $rows.html(html);
+                    }, 'json').fail(function() {
+                        setMasterStatus('Unable to load master list.', 'error');
+                    });
+                }
+
+                $(document).on('click', '#btn_discharge_manage_surgery_master', function() {
+                    clearMasterForm();
+                    setMasterStatus('', 'muted');
+                    fetchMasterRows();
+                    showModalById('ipdSurgeryMasterModal');
+                });
+
+                $('#btn_surgery_master_refresh').on('click', fetchMasterRows);
+                $type.on('change', function() {
+                    clearMasterForm();
+                    fetchMasterRows();
+                });
+                $search.on('input', function() {
+                    fetchMasterRows();
+                });
+
+                $('#btn_surgery_master_clear').on('click', function() {
+                    clearMasterForm();
+                });
+
+                $(document).on('click', '.btn-master-edit', function() {
+                    var id = parseInt($(this).data('id') || '0', 10);
+                    var type = ($type.val() || 'surgery').toString();
+                    var row = (surgeryMasterState[type] || []).find(function(item) {
+                        return parseInt(item.id || '0', 10) === id;
+                    }) || null;
+                    if (!row) {
+                        return;
+                    }
+
+                    $('#surgery_master_id').val(String(row.id || 0));
+                    $('#surgery_master_name').val((row.term_name || '').toString());
+                    $('#surgery_master_code').val((row.term_code || '').toString());
+                    $('#surgery_master_icd').val((row.icd_code || '').toString());
+                    $('#surgery_master_active').val(parseInt(row.is_active || '0', 10) === 1 ? '1' : '0');
+                });
+
+                $(document).on('click', '.btn-master-delete', function() {
+                    var id = parseInt($(this).data('id') || '0', 10);
+                    if (id <= 0) {
+                        return;
+                    }
+
+                    if (!window.confirm('Delete this master row?')) {
+                        return;
+                    }
+
+                    var csrf = getCsrfPair(form);
+                    var payload = {
+                        id: id
+                    };
+                    payload[csrf.name] = csrf.value;
+
+                    $.post('<?= base_url('Ipd_discharge/surgery_master_delete') ?>', payload, function(data) {
+                        updateFormCsrf(form, data);
+                        if (!data || parseInt(data.update || '0', 10) !== 1) {
+                            setMasterStatus((data && data.error_text) ? data.error_text : 'Unable to delete record.', 'error');
+                            return;
+                        }
+
+                        setMasterStatus('Record deleted.', 'success');
+                        fetchMasterRows();
+                    }, 'json').fail(function() {
+                        setMasterStatus('Delete failed.', 'error');
+                    });
+                });
+
+                $('#btn_surgery_master_save').on('click', function() {
+                    var name = ($('#surgery_master_name').val() || '').toString().trim();
+                    if (name === '') {
+                        setMasterStatus('Name is required.', 'error');
+                        return;
+                    }
+
+                    var csrf = getCsrfPair(form);
+                    var payload = {
+                        id: parseInt($('#surgery_master_id').val() || '0', 10),
+                        type: ($type.val() || 'surgery').toString(),
+                        name: name,
+                        code: ($('#surgery_master_code').val() || '').toString().trim(),
+                        icd_code: ($('#surgery_master_icd').val() || '').toString().trim(),
+                        is_active: parseInt($('#surgery_master_active').val() || '1', 10)
+                    };
+                    payload[csrf.name] = csrf.value;
+
+                    $.post('<?= base_url('Ipd_discharge/surgery_master_save') ?>', payload, function(data) {
+                        updateFormCsrf(form, data);
+                        if (!data || parseInt(data.update || '0', 10) !== 1) {
+                            setMasterStatus((data && data.error_text) ? data.error_text : 'Unable to save record.', 'error');
+                            return;
+                        }
+
+                        setMasterStatus('Record saved.', 'success');
+                        clearMasterForm();
+                        fetchMasterRows();
+                    }, 'json').fail(function() {
+                        setMasterStatus('Save failed.', 'error');
+                    });
+                });
+            }
+
+            function initSurgeryTools(form) {
+                // Surgery/Procedure autocomplete now handled by initSurgeryProcedureAutocomplete()
+                // Old bindSurgeryTermLookup removed - using custom dropdown instead of datalist
+                initSurgeryMasterCrud(form);
+            }
+
+            function bindDiagnosisIcdLookup(form) {
+                var lookup = document.getElementById('new_diagnosis_name');
+                var suggest = document.getElementById('discharge_diagnosis_suggest');
+                var seedBtn = document.getElementById('btn_discharge_seed_icd');
+                if (!lookup || !suggest || !window.jQuery) {
+                    return;
+                }
+
+                if (lookup.dataset.lookupBound === '1') {
+                    return;
+                }
+                lookup.dataset.lookupBound = '1';
+
+                var suggestions = [];
+
+                function diagnosisLabel(row) {
+                    var name = (row.name || '').toString();
+                    var code = (row.icd_code || '').toString().trim();
+                    if (code !== '') {
+                        return name + ' (ICD ' + code + ')';
+                    }
+                    return name;
+                }
+
+                lookup.addEventListener('input', function() {
+                    var q = (lookup.value || '').trim();
+                    if (q.length < 2) {
+                        return;
+                    }
+
+                    $.get('<?= base_url('Ipd_discharge/diagnosis_icd_lookup') ?>?q=' + encodeURIComponent(q), function(data) {
+                        suggestions = (data && data.rows) ? data.rows : [];
+                        var html = '';
+                        suggestions.forEach(function(row) {
+                            html += '<option value="' + $('<div>').text(diagnosisLabel(row)).html() + '"></option>';
+                        });
+                        suggest.innerHTML = html;
+                    }, 'json');
+                });
+
+                function applyDiagnosisSelection() {
+                    var inputVal = (lookup.value || '').trim();
+                    if (inputVal === '') {
+                        setSectionStatus('discharge_diagnosis_status', '', 'muted');
+                        return;
+                    }
+
+                    var chosen = null;
+                    suggestions.forEach(function(row) {
+                        var label = diagnosisLabel(row);
+                        var name = (row.name || '').toString();
+                        if (label.toUpperCase() === inputVal.toUpperCase() || name.toUpperCase() === inputVal.toUpperCase()) {
+                            chosen = row;
+                        }
+                    });
+
+                    if (chosen) {
+                        var diagnosisText = (chosen.name || '').toString().trim();
+                        var code = (chosen.icd_code || '').toString().trim();
+                        if (code !== '') {
+                            diagnosisText += ' [ICD: ' + code + ']';
+                        }
+                        lookup.value = diagnosisText;
+                        setSectionStatus('discharge_diagnosis_status', code !== '' ? 'Diagnosis with ICD selected. Click +ADD to save row.' : 'Diagnosis selected. Click +ADD to save row.', 'success');
+                        return;
+                    }
+
+                    setSectionStatus('discharge_diagnosis_status', 'Custom diagnosis ready. Click +ADD to save row.', 'success');
+                }
+
+                lookup.addEventListener('change', applyDiagnosisSelection);
+                lookup.addEventListener('blur', applyDiagnosisSelection);
+
+                if (seedBtn) {
+                    if (seedBtn.dataset.seedBound === '1') {
+                        return;
+                    }
+                    seedBtn.dataset.seedBound = '1';
+
+                    seedBtn.addEventListener('click', function() {
+                        var csrf = getCsrfPair(form);
+                        var payload = {};
+                        payload[csrf.name] = csrf.value;
+
+                        $.post('<?= base_url('Ipd_discharge/diagnosis_icd_seed_starter') ?>', payload, function(data) {
+                            updateFormCsrf(form, data);
+                            if (!data || parseInt(data.update || '0', 10) !== 1) {
+                                setSectionStatus('discharge_diagnosis_status', (data && data.error_text) ? data.error_text : 'Unable to load ICD starter.', 'error');
+                                return;
+                            }
+
+                            setSectionStatus('discharge_diagnosis_status', data.error_text || 'ICD starter loaded.', 'success');
+                        }, 'json').fail(function() {
+                            setSectionStatus('discharge_diagnosis_status', 'ICD starter request failed.', 'error');
+                        });
+                    });
+                }
+            }
+
+            function bindAiRewrite(form, btnId, sourceId, mode, statusId, emptyMsg) {
+                var btn = document.getElementById(btnId);
+                var source = document.getElementById(sourceId);
+                if (!btn || !source) {
+                    return;
+                }
+
+                btn.addEventListener('click', function() {
+                    var text = (source.value || '').trim();
                     if (text === '') {
-                        setComplaintStatus('Enter complaint text first.', 'error');
+                        setSectionStatus(statusId, emptyMsg || 'Type text first.', 'error');
+                        return;
+                    }
+
+                    if (!window.jQuery) {
                         return;
                     }
 
                     var csrf = getCsrfPair(form);
                     var payload = {
                         text: text,
-                        mode: 'hinglish_to_english'
+                        mode: mode
                     };
                     payload[csrf.name] = csrf.value;
 
@@ -2293,2857 +3480,1667 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                         }
 
                         if (!data || parseInt(data.update || '0', 10) !== 1) {
-                            setComplaintStatus((data && data.error_text) ? data.error_text : 'Unable to rewrite text.', 'error');
+                            setSectionStatus(statusId, (data && data.error_text) ? data.error_text : 'Unable to process AI text.', 'error');
                             return;
                         }
 
-                        setComplaintEditorText((data.draft_text || '').toString());
-                        setComplaintStatus((data.error_text || 'Text rewritten.'), 'success');
+                        source.value = (data.draft_text || text);
+                        setSectionStatus(statusId, (data.error_text || 'AI text ready.'), 'success');
                     }, 'json').fail(function() {
-                        setComplaintStatus('Hinglish rewrite failed.', 'error');
+                        setSectionStatus(statusId, 'AI request failed.', 'error');
                     });
                 });
             }
 
-            // Attach event handlers to editable complaint fields (name and remark)
-            // DISABLED: Database save on blur - will implement OPD-style client-side editing
-            // attachComplaintFieldHandlers(section, form);
-            
-            // Initialize table with existing data
-            initDischargeComplaintsTable();
-        }
-
-        // Surgery/Procedure autocomplete with SNOMED/ICD code display
-        function initSurgeryProcedureAutocomplete() {
-            initTermAutocomplete('surgery', 'new_surgery_name', 'discharge_surgery_dropdown', 'new_surgery_master_id');
-            initTermAutocomplete('procedure', 'new_procedure_name', 'discharge_procedure_dropdown', 'new_procedure_master_id');
-            
-            // Quick-add button handlers
-            initQuickAddTermHandlers();
-        }
-
-        function initQuickAddTermHandlers() {
-            var quickModal = document.getElementById('quickAddTermModal');
-            var quickType = document.getElementById('quick_term_type');
-            var quickTypeLabel = document.getElementById('quick_term_type_label');
-            var quickName = document.getElementById('quick_term_name');
-            var quickCode = document.getElementById('quick_term_code');
-            var quickIcd = document.getElementById('quick_term_icd');
-            var quickStatus = document.getElementById('quick_term_status');
-            var btnSave = document.getElementById('btn_quick_term_save');
-
-            if (!quickModal || !quickName) return;
-
-            // Surgery quick-add button
-            var btnQuickSurgery = document.getElementById('btn_quick_add_surgery');
-            if (btnQuickSurgery) {
-                btnQuickSurgery.addEventListener('click', function() {
-                    var surgeryInput = document.getElementById('new_surgery_name');
-                    var surgeryName = surgeryInput ? surgeryInput.value.trim() : '';
-                    
-                    if (!surgeryName) {
-                        alert('Please enter a surgery name first');
-                        return;
-                    }
-
-                    quickType.value = 'surgery';
-                    quickTypeLabel.textContent = 'Surgery';
-                    quickName.value = surgeryName;
-                    quickCode.value = '';
-                    quickIcd.value = '';
-                    quickStatus.textContent = '';
-                    quickStatus.className = 'text-muted';
-                    
-                    showModalById('quickAddTermModal');
-                });
-            }
-
-            // Procedure quick-add button
-            var btnQuickProcedure = document.getElementById('btn_quick_add_procedure');
-            if (btnQuickProcedure) {
-                btnQuickProcedure.addEventListener('click', function() {
-                    var procedureInput = document.getElementById('new_procedure_name');
-                    var procedureName = procedureInput ? procedureInput.value.trim() : '';
-                    
-                    if (!procedureName) {
-                        alert('Please enter a procedure name first');
-                        return;
-                    }
-
-                    quickType.value = 'procedure';
-                    quickTypeLabel.textContent = 'Procedure';
-                    quickName.value = procedureName;
-                    quickCode.value = '';
-                    quickIcd.value = '';
-                    quickStatus.textContent = '';
-                    quickStatus.className = 'text-muted';
-                    
-                    showModalById('quickAddTermModal');
-                });
-            }
-
-            // Save button in modal
-            if (btnSave) {
-                btnSave.addEventListener('click', function() {
-                    var name = quickName.value.trim();
-                    var type = quickType.value;
-                    var code = quickCode.value.trim();
-                    var icd = quickIcd.value.trim();
-
-                    if (!name) {
-                        setQuickStatus('Name is required', 'error');
-                        return;
-                    }
-
-                    if (!window.jQuery) {
-                        setQuickStatus('jQuery not loaded', 'error');
-                        return;
-                    }
-
-                    var form = getDischargeForm();
-                    if (!form) {
-                        setQuickStatus('Form not found', 'error');
-                        return;
-                    }
-
-                    var csrf = getCsrfPair(form);
-                    var payload = {
-                        id: 0,
-                        name: name,
-                        code: code,
-                        icd_code: icd,
-                        is_active: 1
-                    };
-                    
-                    // For surgery/procedure, include type in payload
-                    if (type === 'surgery' || type === 'procedure') {
-                        payload.type = type;
-                    }
-                    
-                    payload[csrf.name] = csrf.value;
-
-                    setQuickStatus('Saving...', 'muted');
-                    btnSave.disabled = true;
-
-                    // Use appropriate endpoint based on type
-                    var saveUrl = type === 'course' 
-                        ? '<?= base_url('Ipd_discharge/course_master_save') ?>'
-                        : '<?= base_url('Ipd_discharge/surgery_master_save') ?>';
-
-                    $.post(saveUrl, payload, function(data) {
-                        updateFormCsrf(form, data);
-                        btnSave.disabled = false;
-
-                        if (!data || parseInt(data.update || '0', 10) !== 1) {
-                            setQuickStatus((data && data.error_text) ? data.error_text : 'Save failed', 'error');
-                            return;
-                        }
-
-                        setQuickStatus('✓ Saved successfully!', 'success');
-                        
-                        // Update the input with saved name and set master_id
-                        var savedId = parseInt(data.id || '0', 10);
-                        if (type === 'surgery') {
-                            var surgeryInput = document.getElementById('new_surgery_name');
-                            var surgeryMasterId = document.getElementById('new_surgery_master_id');
-                            if (surgeryInput) surgeryInput.value = name;
-                            if (surgeryMasterId) surgeryMasterId.value = savedId;
-                        } else if (type === 'procedure') {
-                            var procedureInput = document.getElementById('new_procedure_name');
-                            var procedureMasterId = document.getElementById('new_procedure_master_id');
-                            if (procedureInput) procedureInput.value = name;
-                            if (procedureMasterId) procedureMasterId.value = savedId;
-                        } else if (type === 'course') {
-                            var courseInput = document.getElementById('new_course_name');
-                            var courseMasterId = document.getElementById('new_course_master_id');
-                            if (courseInput) courseInput.value = name;
-                            if (courseMasterId) courseMasterId.value = savedId;
-                        }
-
-                        // Close modal after short delay
-                        setTimeout(function() {
-                            hideModalById('quickAddTermModal');
-                        }, 1000);
-                    }, 'json').fail(function() {
-                        btnSave.disabled = false;
-                        setQuickStatus('Network error', 'error');
-                    });
-                });
-            }
-
-            function setQuickStatus(text, level) {
-                if (!quickStatus) return;
-                
-                quickStatus.classList.remove('text-success', 'text-danger', 'text-muted');
-                if (level === 'success') {
-                    quickStatus.classList.add('text-success');
-                } else if (level === 'error') {
-                    quickStatus.classList.add('text-danger');
-                } else {
-                    quickStatus.classList.add('text-muted');
+            function initDiagnosisTools() {
+                var section = document.getElementById('section-diagnosis');
+                if (!section || section.dataset.toolsBound === '1') {
+                    return;
                 }
-                quickStatus.textContent = text;
-            }
-        }
+                section.dataset.toolsBound = '1';
 
-        function initTermAutocomplete(type, inputId, dropdownId, hiddenId) {
-            var input = document.getElementById(inputId);
-            var dropdown = document.getElementById(dropdownId);
-            var hidden = document.getElementById(hiddenId);
-            if (!input || !dropdown || !hidden) return;
-
-            var searchTimer = null;
-            var highlightedIndex = -1;
-            var currentResults = [];
-
-            input.addEventListener('input', function() {
-                var q = input.value.trim();
-                highlightedIndex = -1;
-                
-                if (q.length < 2) {
-                    dropdown.style.display = 'none';
+                var form = section.closest('form');
+                if (!form) {
                     return;
                 }
 
-                clearTimeout(searchTimer);
-                searchTimer = setTimeout(function() {
-                    if (!window.jQuery) return;
-                    
-                    $.get('<?= base_url('Ipd_discharge/surgery_master_lookup') ?>?type=' + type + '&q=' + encodeURIComponent(q), function(data) {
-                        currentResults = (data && data.rows) ? data.rows : [];
-                        if (!currentResults.length) {
-                            dropdown.style.display = 'none';
-                            return;
-                        }
+                bindDiagnosisIcdLookup(form);
 
-                        var html = '';
-                        currentResults.forEach(function(row) {
-                            var name = row.term_name || '';
-                            var code = row.term_code || '';
-                            var icd = row.icd_code || '';
-                            var codeDisplay = '';
-                            
-                            if (code && icd) {
-                                codeDisplay = '<span class="badge bg-info text-dark me-1">' + code + '</span><span class="badge bg-secondary">' + icd + '</span>';
-                            } else if (code) {
-                                codeDisplay = '<span class="badge bg-info text-dark">' + code + '</span>';
-                            } else if (icd) {
-                                codeDisplay = '<span class="badge bg-secondary">' + icd + '</span>';
-                            }
+                bindAiRewrite(form, 'btn_discharge_ai_diagnosis', 'diagnosis_remark', 'diagnosis', 'discharge_diagnosis_status', 'Type diagnosis narrative first.');
+                bindAiRewrite(form, 'btn_discharge_hinglish_diagnosis', 'diagnosis_remark', 'hinglish_to_english', 'discharge_diagnosis_status', 'Type diagnosis narrative first.');
+            }
 
-                            html += '<div class="dropdown-item px-2 py-2" data-id="' + (row.id || 0) + '" data-name="' + name.replace(/"/g, '&quot;') + '" style="cursor:pointer;font-size:.9rem;border-bottom:1px solid #f0f0f0;">';
-                            html += '<div class="fw-semibold">' + name + '</div>';
-                            if (codeDisplay) {
-                                html += '<div class="small mt-1">' + codeDisplay + '</div>';
-                            }
-                            html += '</div>';
-                        });
-
-                        dropdown.innerHTML = html;
-                        dropdown.style.display = 'block';
-
-                        dropdown.querySelectorAll('.dropdown-item').forEach(function(item, idx) {
-                            item.addEventListener('mouseenter', function() {
-                                dropdown.querySelectorAll('.dropdown-item').forEach(function(el) {
-                                    el.style.backgroundColor = '';
-                                });
-                                this.style.backgroundColor = '#f8f9fa';
-                                highlightedIndex = idx;
-                            });
-                            item.addEventListener('mouseleave', function() {
-                                this.style.backgroundColor = '';
-                            });
-                            item.addEventListener('click', function() {
-                                var id = this.getAttribute('data-id');
-                                var name = this.getAttribute('data-name');
-                                input.value = name;
-                                hidden.value = id;
-                                dropdown.style.display = 'none';
-                            });
-                        });
-                    }, 'json');
-                }, 300);
-            });
-
-            input.addEventListener('keydown', function(e) {
-                var items = dropdown.querySelectorAll('.dropdown-item');
-                var isVisible = dropdown.style.display === 'block' && items.length > 0;
-
-                if (e.key === 'ArrowDown' && isVisible) {
-                    e.preventDefault();
-                    highlightedIndex = Math.min(highlightedIndex + 1, items.length - 1);
-                    updateHighlight(items);
-                } else if (e.key === 'ArrowUp' && isVisible) {
-                    e.preventDefault();
-                    highlightedIndex = Math.max(highlightedIndex - 1, 0);
-                    updateHighlight(items);
-                } else if (e.key === 'Enter' && isVisible) {
-                    e.preventDefault();
-                    if (highlightedIndex >= 0 && items[highlightedIndex]) {
-                        items[highlightedIndex].click();
-                    }
-                } else if (e.key === 'Escape') {
-                    dropdown.style.display = 'none';
-                    highlightedIndex = -1;
+            function initCourseTools() {
+                var section = document.getElementById('section-course');
+                if (!section || section.dataset.toolsBound === '1') {
+                    return;
                 }
-            });
+                section.dataset.toolsBound = '1';
 
-            input.addEventListener('blur', function() {
-                setTimeout(function() {
-                    dropdown.style.display = 'none';
-                }, 200);
-            });
-
-            function updateHighlight(items) {
-                items.forEach(function(item, idx) {
-                    if (idx === highlightedIndex) {
-                        item.style.backgroundColor = '#007bff';
-                        item.style.color = '#fff';
-                        item.scrollIntoView({ block: 'nearest' });
-                    } else {
-                        item.style.backgroundColor = '';
-                        item.style.color = '';
-                    }
-                });
-            }
-        }
-
-        function setSectionStatus(id, text, level) {
-            var el = document.getElementById(id);
-            if (!el) {
-                return;
-            }
-
-            el.classList.remove('text-success', 'text-danger', 'text-muted');
-            if (level === 'success') {
-                el.classList.add('text-success');
-            } else if (level === 'error') {
-                el.classList.add('text-danger');
-            } else {
-                el.classList.add('text-muted');
-            }
-            el.textContent = text || '';
-        }
-
-        function getDischargeForm() {
-            return document.querySelector('form[action*="Ipd_discharge/ipd_select/"]');
-        }
-
-        function statusIdByNarrativeSection(section) {
-            if (section === 'diagnosis_remark') {
-                return 'discharge_diagnosis_status';
-            }
-            if (section === 'course_remark') {
-                return 'discharge_course_status';
-            }
-
-            return '';
-        }
-
-        function setNarrativeStatus(section, text, level) {
-            var statusId = statusIdByNarrativeSection(section);
-            if (statusId !== '') {
-                setSectionStatus(statusId, text, level);
-            }
-        }
-
-        // Course/Treatment autocomplete with SNOMED/ICD code display
-        function initCourseAutocomplete() {
-            var input = document.getElementById('new_course_name');
-            var dropdown = document.getElementById('discharge_course_dropdown');
-            var hidden = document.getElementById('new_course_master_id');
-            if (!input || !dropdown || !hidden) return;
-
-            var searchTimer = null;
-            var highlightedIndex = -1;
-            var currentResults = [];
-
-            input.addEventListener('input', function() {
-                var q = input.value.trim();
-                highlightedIndex = -1;
-                
-                if (q.length < 2) {
-                    dropdown.style.display = 'none';
+                var form = section.closest('form');
+                if (!form) {
                     return;
                 }
 
-                clearTimeout(searchTimer);
-                searchTimer = setTimeout(function() {
-                    if (!window.jQuery) return;
-                    
-                    $.get('<?= base_url('Ipd_discharge/course_master_lookup') ?>?q=' + encodeURIComponent(q), function(data) {
-                        currentResults = (data && data.rows) ? data.rows : [];
-                        if (!currentResults.length) {
-                            dropdown.style.display = 'none';
-                            return;
-                        }
+                bindSmartTermInputLookup(
+                    form,
+                    'new_course_name',
+                    'discharge_course_suggest',
+                    'discharge_course_status',
+                    'Custom term ready. Click +ADD to save row.'
+                );
 
-                        var html = '';
-                        currentResults.forEach(function(row) {
-                            var name = row.term_name || '';
-                            var code = row.term_code || '';
-                            var icd = row.icd_code || '';
-                            var codeDisplay = '';
-                            
-                            if (code && icd) {
-                                codeDisplay = '<span class="badge bg-info text-dark me-1">' + code + '</span><span class="badge bg-secondary">' + icd + '</span>';
-                            } else if (code) {
-                                codeDisplay = '<span class="badge bg-info text-dark">' + code + '</span>';
-                            } else if (icd) {
-                                codeDisplay = '<span class="badge bg-secondary">' + icd + '</span>';
-                            }
-
-                            html += '<div class="dropdown-item px-2 py-2" data-id="' + (row.id || 0) + '" data-name="' + name.replace(/"/g, '&quot;') + '" style="cursor:pointer;font-size:.9rem;border-bottom:1px solid #f0f0f0;">';
-                            html += '<div class="fw-semibold">' + name + '</div>';
-                            if (codeDisplay) {
-                                html += '<div class="small mt-1">' + codeDisplay + '</div>';
-                            }
-                            html += '</div>';
-                        });
-
-                        dropdown.innerHTML = html;
-                        dropdown.style.display = 'block';
-
-                        dropdown.querySelectorAll('.dropdown-item').forEach(function(item, idx) {
-                            item.addEventListener('mouseenter', function() {
-                                dropdown.querySelectorAll('.dropdown-item').forEach(function(el) {
-                                    el.style.backgroundColor = '';
-                                });
-                                this.style.backgroundColor = '#f8f9fa';
-                                highlightedIndex = idx;
-                            });
-                            item.addEventListener('mouseleave', function() {
-                                this.style.backgroundColor = '';
-                            });
-                            item.addEventListener('click', function() {
-                                var id = this.getAttribute('data-id');
-                                var name = this.getAttribute('data-name');
-                                input.value = name;
-                                hidden.value = id;
-                                dropdown.style.display = 'none';
-                            });
-                        });
-                    }, 'json');
-                }, 300);
-            });
-
-            input.addEventListener('keydown', function(e) {
-                var items = dropdown.querySelectorAll('.dropdown-item');
-                var isVisible = dropdown.style.display === 'block' && items.length > 0;
-
-                if (e.key === 'ArrowDown' && isVisible) {
-                    e.preventDefault();
-                    highlightedIndex = Math.min(highlightedIndex + 1, items.length - 1);
-                    updateHighlight(items);
-                } else if (e.key === 'ArrowUp' && isVisible) {
-                    e.preventDefault();
-                    highlightedIndex = Math.max(highlightedIndex - 1, 0);
-                    updateHighlight(items);
-                } else if (e.key === 'Enter' && isVisible) {
-                    e.preventDefault();
-                    if (highlightedIndex >= 0 && items[highlightedIndex]) {
-                        items[highlightedIndex].click();
-                    }
-                } else if (e.key === 'Escape') {
-                    dropdown.style.display = 'none';
-                    highlightedIndex = -1;
-                }
-            });
-
-            input.addEventListener('blur', function() {
-                setTimeout(function() {
-                    dropdown.style.display = 'none';
-                }, 200);
-            });
-
-            function updateHighlight(items) {
-                items.forEach(function(item, idx) {
-                    if (idx === highlightedIndex) {
-                        item.style.backgroundColor = '#007bff';
-                        item.style.color = '#fff';
-                        item.scrollIntoView({ block: 'nearest' });
-                    } else {
-                        item.style.backgroundColor = '';
-                        item.style.color = '';
-                    }
-                });
+                bindAiRewrite(form, 'btn_discharge_ai_course', 'course_remark', 'autotype', 'discharge_course_status', 'Type course narrative first.');
+                bindAiRewrite(form, 'btn_discharge_hinglish_course', 'course_remark', 'hinglish_to_english', 'discharge_course_status', 'Type course narrative first.');
             }
 
-            // Quick-add button handler
-            var btnQuickCourse = document.getElementById('btn_quick_add_course');
-            if (btnQuickCourse) {
-                btnQuickCourse.addEventListener('click', function() {
-                    var courseName = input.value.trim();
-                    
-                    if (!courseName) {
-                        alert('Please enter a course/treatment name first');
-                        return;
-                    }
-
-                    var quickModal = document.getElementById('quickAddTermModal');
-                    var quickType = document.getElementById('quick_term_type');
-                    var quickTypeLabel = document.getElementById('quick_term_type_label');
-                    var quickName = document.getElementById('quick_term_name');
-                    var quickCode = document.getElementById('quick_term_code');
-                    var quickIcd = document.getElementById('quick_term_icd');
-                    var quickStatus = document.getElementById('quick_term_status');
-
-                    if (!quickModal || !quickName) return;
-
-                    quickType.value = 'course';
-                    quickTypeLabel.textContent = 'Course/Treatment';
-                    quickName.value = courseName;
-                    quickCode.value = '';
-                    quickIcd.value = '';
-                    quickStatus.textContent = '';
-                    quickStatus.className = 'text-muted';
-                    
-                    showModalById('quickAddTermModal');
-                });
-            }
-        }
-
-        function showModalById(modalId) {
-            var el = document.getElementById(modalId);
-            if (!el) {
-                return;
-            }
-
-            if (window.bootstrap && window.bootstrap.Modal) {
-                window.bootstrap.Modal.getOrCreateInstance(el).show();
-                return;
-            }
-
-            if (window.jQuery) {
-                window.jQuery(el).show();
-            }
-        }
-
-        function hideModalById(modalId) {
-            var el = document.getElementById(modalId);
-            if (!el) {
-                return;
-            }
-
-            if (window.bootstrap && window.bootstrap.Modal) {
-                window.bootstrap.Modal.getOrCreateInstance(el).hide();
-                return;
-            }
-
-            if (window.jQuery) {
-                window.jQuery(el).hide();
-            }
-        }
-
-        function bindNarrativeTemplateTools() {
-            if (narrativeTemplateToolsBound || !window.jQuery) {
-                return;
-            }
-            narrativeTemplateToolsBound = true;
-
-            $(document).on('click', '.btn-discharge-field-past', function() {
-                var target = ($(this).data('target') || '').toString();
-                var section = ($(this).data('section') || '').toString();
-                var form = getDischargeForm();
-                if (!target || !section || !form || !$('#' + target).length) {
+            function initInstructionTools() {
+                var section = document.getElementById('section-instructions');
+                if (!section || section.dataset.toolsBound === '1') {
                     return;
                 }
+                section.dataset.toolsBound = '1';
 
-                var url = '<?= base_url('Ipd_discharge/section_past_data') ?>?section=' + encodeURIComponent(section) + '&ipd_id=' + encodeURIComponent('<?= (int) $ipdId ?>');
-                $.get(url, function(data) {
-                    if ((data && parseInt(data.update || '0', 10)) !== 1) {
-                        setNarrativeStatus(section, (data && data.error_text) ? data.error_text : 'No past data found.', 'error');
-                        return;
+                // Re-initialize CKEditor for instruction fields after section reload
+                if (typeof CKEDITOR !== 'undefined') {
+                    // Destroy existing instances first to avoid duplication
+                    if (CKEDITOR.instances['instruction_other']) {
+                        CKEDITOR.instances['instruction_other'].destroy(true);
+                    }
+                    if (CKEDITOR.instances['instruction_remark']) {
+                        CKEDITOR.instances['instruction_remark'].destroy(true);
                     }
 
-                    $('#' + target).val((data && data.past_text) ? data.past_text : '');
-                    setNarrativeStatus(section, (data && data.error_text) ? data.error_text : 'Past data loaded.', 'success');
-                }, 'json').fail(function() {
-                    setNarrativeStatus(section, 'Unable to load past data right now.', 'error');
-                });
-            });
-
-            $(document).on('click', '.btn-discharge-template-save', function() {
-                var target = ($(this).data('target') || '').toString();
-                var section = ($(this).data('section') || '').toString();
-                if (!target || !section || !$('#' + target).length) {
-                    return;
-                }
-
-                var text = ($('#' + target).val() || '').toString().trim();
-                if (!text) {
-                    setNarrativeStatus(section, 'Type text first, then save as template.', 'error');
-                    return;
-                }
-
-                narrativeTemplateSaveState = { section: section, text: text, target: target };
-                var sectionLabel = section.replace(/_/g, ' ').replace(/\b\w/g, function(ch) {
-                    return ch.toUpperCase();
-                });
-                $('#ipdNarrativeTemplateSaveModalTitle').text('Save Template - ' + sectionLabel);
-                $('#ipd_narrative_template_save_name').val(section.replace(/_/g, ' '));
-                $('#ipd_narrative_template_save_scope').val('doctor');
-                $('#ipd_narrative_template_save_preview').val(text);
-
-                showModalById('ipdNarrativeTemplateSaveModal');
-            });
-
-            $('#btn_save_ipd_template_choice').on('click', function() {
-                var section = (narrativeTemplateSaveState.section || '').toString();
-                var text = (narrativeTemplateSaveState.text || '').toString().trim();
-                var form = getDischargeForm();
-                if (!form || !section || !text) {
-                    setNarrativeStatus(section, 'Nothing to save for this section.', 'error');
-                    return;
-                }
-
-                var templateName = ($('#ipd_narrative_template_save_name').val() || '').toString().trim();
-                var templateScope = ($('#ipd_narrative_template_save_scope').val() || 'doctor').toString().trim().toLowerCase();
-                if (!templateName) {
-                    setNarrativeStatus(section, 'Template name is required.', 'error');
-                    return;
-                }
-
-                var csrf = getCsrfPair(form);
-                var payload = {
-                    section: section,
-                    template_name: templateName,
-                    template_text: text,
-                    template_scope: templateScope
-                };
-                payload[csrf.name] = csrf.value;
-
-                $.post('<?= base_url('Ipd_discharge/section_template_save') ?>', payload, function(data) {
-                    if (data && data.csrfName && data.csrfHash) {
-                        var csrfInput = form.querySelector('input[name="' + data.csrfName + '"]');
-                        if (csrfInput) {
-                            csrfInput.value = data.csrfHash;
-                        }
-                    }
-
-                    if (!data || parseInt(data.update || '0', 10) !== 1) {
-                        setNarrativeStatus(section, (data && data.error_text) ? data.error_text : 'Unable to save template.', 'error');
-                        return;
-                    }
-
-                    setNarrativeStatus(section, (data.error_text || 'Template saved.'), 'success');
-                    hideModalById('ipdNarrativeTemplateSaveModal');
-                }, 'json').fail(function() {
-                    setNarrativeStatus(section, 'Unable to save template right now.', 'error');
-                });
-            });
-
-            $(document).on('click', '.btn-discharge-template-load', function() {
-                var target = ($(this).data('target') || '').toString();
-                var section = ($(this).data('section') || '').toString();
-                if (!target || !section || !$('#' + target).length) {
-                    return;
-                }
-
-                var url = '<?= base_url('Ipd_discharge/section_template_list') ?>?section=' + encodeURIComponent(section);
-                $.get(url, function(data) {
-                    var rows = (data && data.rows) ? data.rows : [];
-                    if (!rows.length) {
-                        setNarrativeStatus(section, 'No template found for this section.', 'error');
-                        return;
-                    }
-
-                    narrativeTemplateLoadState = { target: target, section: section, rows: rows };
-                    var $sel = $('#ipd_narrative_template_select');
-                    $sel.empty();
-                    rows.forEach(function(row, idx) {
-                        var name = row.template_name || ('Template ' + (idx + 1));
-                        var src = parseInt(row.doc_id || '0', 10) === 0 ? '[Master] ' : '[My] ';
-                        $sel.append('<option value="' + idx + '">' + $('<div>').text(src + name).html() + '</option>');
-                    });
-
-                    var existingText = ($('#' + target).val() || '').toString().trim();
-                    $('#ipd_narrative_apply_mode').val(existingText ? 'append' : 'replace');
-                    $('#ipd_narrative_template_preview').val((rows[0] && rows[0].template_text) ? rows[0].template_text : '');
-
-                    showModalById('ipdNarrativeTemplateModal');
-                }, 'json').fail(function() {
-                    setNarrativeStatus(section, 'Unable to load template list.', 'error');
-                });
-            });
-
-            $('#ipd_narrative_template_select').on('change', function() {
-                var idx = parseInt($(this).val() || '0', 10);
-                var row = (narrativeTemplateLoadState.rows || [])[idx] || {};
-                $('#ipd_narrative_template_preview').val(row.template_text || '');
-            });
-
-            $('#btn_apply_ipd_template_choice').on('click', function() {
-                var idx = parseInt($('#ipd_narrative_template_select').val() || '0', 10);
-                var row = (narrativeTemplateLoadState.rows || [])[idx] || null;
-                var section = (narrativeTemplateLoadState.section || '').toString();
-                var target = (narrativeTemplateLoadState.target || '').toString();
-                if (!row || !target || !$('#' + target).length) {
-                    setNarrativeStatus(section, 'Invalid template selection.', 'error');
-                    return;
-                }
-
-                var mode = ($('#ipd_narrative_apply_mode').val() || 'replace').toString();
-                var selectedText = (row.template_text || '').toString().trim();
-                var $target = $('#' + target);
-                var currentText = ($target.val() || '').toString().trim();
-                var finalText = selectedText;
-
-                if (mode === 'append' && currentText !== '') {
-                    if (selectedText !== '' && currentText.toLowerCase() !== selectedText.toLowerCase()) {
-                        finalText = currentText + '\n' + selectedText;
-                    } else {
-                        finalText = currentText;
-                    }
-                }
-
-                $target.val(finalText);
-                setNarrativeStatus(section, mode === 'append' ? 'Template appended.' : 'Template loaded.', 'success');
-                hideModalById('ipdNarrativeTemplateModal');
-            });
-        }
-
-        function bindSmartTermLookup(form, lookupId, suggestId, addBtnId, targetInputId, statusId, emptyText) {
-            var lookup = document.getElementById(lookupId);
-            var suggest = document.getElementById(suggestId);
-            var addBtn = document.getElementById(addBtnId);
-            var targetInput = document.getElementById(targetInputId);
-            if (!lookup || !addBtn || !targetInput) {
-                return;
-            }
-
-            var suggestions = [];
-
-            lookup.addEventListener('input', function() {
-                var q = (lookup.value || '').trim();
-                if (q.length < 2 || !window.jQuery) {
-                    return;
-                }
-
-                $.get('<?= base_url('Opd_prescription/complaints_search') ?>?q=' + encodeURIComponent(q), function(data) {
-                    suggestions = (data && data.rows) ? data.rows : [];
-                    if (!suggest) {
-                        return;
-                    }
-
-                    var html = '';
-                    suggestions.forEach(function(row) {
-                        var label = row.name || '';
-                        if (row.name_hinglish) {
-                            label += ' (' + row.name_hinglish + ')';
-                        }
-                        html += '<option value="' + $('<div>').text(label).html() + '"></option>';
-                    });
-                    suggest.innerHTML = html;
-                }, 'json');
-            });
-
-            addBtn.addEventListener('click', function() {
-                var inputVal = (lookup.value || '').trim();
-                if (inputVal === '') {
-                    setSectionStatus(statusId, emptyText || 'Type text first.', 'error');
-                    return;
-                }
-
-                var chosen = '';
-                suggestions.forEach(function(row) {
-                    var label = row.name || '';
-                    if (row.name_hinglish) {
-                        label += ' (' + row.name_hinglish + ')';
-                    }
-                    if (label.toUpperCase() === inputVal.toUpperCase() || (row.name || '').toUpperCase() === inputVal.toUpperCase()) {
-                        chosen = row.name || inputVal;
-                    }
-                });
-
-                if (chosen !== '') {
-                    targetInput.value = chosen;
-                    lookup.value = '';
-                    setSectionStatus(statusId, 'Term added to input. Click +ADD to save row.', 'success');
-                    return;
-                }
-
-                if (!window.jQuery) {
-                    targetInput.value = inputVal;
-                    lookup.value = '';
-                    return;
-                }
-
-                var csrf = getCsrfPair(form);
-                var payload = { text: inputVal };
-                payload[csrf.name] = csrf.value;
-
-                $.post('<?= base_url('Opd_prescription/complaints_parse') ?>', payload, function(data) {
-                    updateFormCsrf(form, data);
-
-                    var rows = (data && data.rows) ? data.rows : [];
-                    targetInput.value = rows.length ? String(rows[0] || inputVal) : inputVal;
-                    lookup.value = '';
-                    setSectionStatus(statusId, rows.length ? 'Matched predefined term. Click +ADD to save row.' : 'Custom term ready. Click +ADD to save row.', 'success');
-                }, 'json').fail(function() {
-                    setSectionStatus(statusId, 'Lookup failed right now.', 'error');
-                });
-            });
-        }
-
-        function bindSmartTermInputLookup(form, lookupId, suggestId, statusId, emptyText) {
-            var lookup = document.getElementById(lookupId);
-            var suggest = document.getElementById(suggestId);
-            if (!lookup) {
-                return;
-            }
-
-            if (lookup.dataset.lookupBound === '1') {
-                return;
-            }
-            lookup.dataset.lookupBound = '1';
-
-            var suggestions = [];
-
-            function optionLabel(row) {
-                var label = row.name || '';
-                if (row.name_hinglish) {
-                    label += ' (' + row.name_hinglish + ')';
-                }
-                return label;
-            }
-
-            function applySelection() {
-                var inputVal = (lookup.value || '').trim();
-                if (inputVal === '') {
-                    setSectionStatus(statusId, '', 'muted');
-                    return;
-                }
-
-                var chosen = '';
-                suggestions.forEach(function(row) {
-                    var label = optionLabel(row);
-                    if (label.toUpperCase() === inputVal.toUpperCase() || (row.name || '').toUpperCase() === inputVal.toUpperCase()) {
-                        chosen = row.name || inputVal;
-                    }
-                });
-
-                if (chosen !== '') {
-                    lookup.value = chosen;
-                    setSectionStatus(statusId, 'Term selected. Click +ADD to save row.', 'success');
-                    return;
-                }
-
-                if (!window.jQuery) {
-                    setSectionStatus(statusId, emptyText || 'Custom term ready. Click +ADD to save row.', 'success');
-                    return;
-                }
-
-                var csrf = getCsrfPair(form);
-                var payload = { text: inputVal };
-                payload[csrf.name] = csrf.value;
-
-                $.post('<?= base_url('Opd_prescription/complaints_parse') ?>', payload, function(data) {
-                    updateFormCsrf(form, data);
-
-                    var rows = (data && data.rows) ? data.rows : [];
-                    lookup.value = rows.length ? String(rows[0] || inputVal) : inputVal;
-                    setSectionStatus(statusId, rows.length ? 'Matched predefined term. Click +ADD to save row.' : 'Custom term ready. Click +ADD to save row.', 'success');
-                }, 'json').fail(function() {
-                    setSectionStatus(statusId, 'Lookup failed right now.', 'error');
-                });
-            }
-
-            lookup.addEventListener('input', function() {
-                var q = (lookup.value || '').trim();
-                if (q.length < 2 || !window.jQuery) {
-                    return;
-                }
-
-                $.get('<?= base_url('Opd_prescription/complaints_search') ?>?q=' + encodeURIComponent(q), function(data) {
-                    suggestions = (data && data.rows) ? data.rows : [];
-                    if (!suggest) {
-                        return;
-                    }
-
-                    var html = '';
-                    suggestions.forEach(function(row) {
-                        html += '<option value="' + $('<div>').text(optionLabel(row)).html() + '"></option>';
-                    });
-                    suggest.innerHTML = html;
-                }, 'json');
-            });
-
-            lookup.addEventListener('change', applySelection);
-            lookup.addEventListener('blur', applySelection);
-        }
-
-        function bindSurgeryTermLookup(form, type, lookupId, suggestId, targetMasterId, statusId) {
-            var lookup = document.getElementById(lookupId);
-            var suggest = document.getElementById(suggestId);
-            var targetMaster = document.getElementById(targetMasterId);
-            if (!lookup || !targetMaster || !window.jQuery) {
-                return;
-            }
-
-            if (lookup.dataset.lookupBound === '1') {
-                return;
-            }
-            lookup.dataset.lookupBound = '1';
-
-            function optionLabel(row) {
-                var label = (row.term_name || '').toString();
-                var code = (row.term_code || '').toString().trim();
-                var icd = (row.icd_code || '').toString().trim();
-                if (code !== '') {
-                    label += ' [' + code + ']';
-                }
-                if (icd !== '') {
-                    label += ' (ICD ' + icd + ')';
-                }
-                return label.trim();
-            }
-
-            function applySelectionFromInput() {
-                var inputVal = (lookup.value || '').trim();
-                if (inputVal === '') {
-                    targetMaster.value = '0';
-                    return;
-                }
-
-                var chosen = null;
-                (surgeryMasterState[type] || []).forEach(function(row) {
-                    var label = optionLabel(row);
-                    var name = (row.term_name || '').toString();
-                    if (label.toUpperCase() === inputVal.toUpperCase() || name.toUpperCase() === inputVal.toUpperCase()) {
-                        chosen = row;
-                    }
-                });
-
-                if (chosen) {
-                    lookup.value = (chosen.term_name || '').toString();
-                    targetMaster.value = String(chosen.id || 0);
-                    setSectionStatus(statusId, 'Master term selected. Click +ADD to save row.', 'success');
-                    return;
-                }
-
-                targetMaster.value = '0';
-            }
-
-            lookup.addEventListener('input', function() {
-                targetMaster.value = '0';
-                var q = (lookup.value || '').trim();
-                if (q.length < 2) {
-                    return;
-                }
-
-                $.get('<?= base_url('Ipd_discharge/surgery_master_lookup') ?>?type=' + encodeURIComponent(type) + '&q=' + encodeURIComponent(q), function(data) {
-                    var rows = (data && data.rows) ? data.rows : [];
-                    surgeryMasterState[type] = rows;
-
-                    if (!suggest) {
-                        return;
-                    }
-
-                    var html = '';
-                    rows.forEach(function(row) {
-                        html += '<option value="' + $('<div>').text(optionLabel(row)).html() + '"></option>';
-                    });
-                    suggest.innerHTML = html;
-                }, 'json');
-            });
-
-            lookup.addEventListener('change', applySelectionFromInput);
-            lookup.addEventListener('blur', applySelectionFromInput);
-        }
-
-        function initSurgeryMasterCrud(form) {
-            if (!window.jQuery) {
-                return;
-            }
-
-            if (window.__ipdSurgeryCrudBound === true) {
-                return;
-            }
-            window.__ipdSurgeryCrudBound = true;
-
-            var $type = $('#surgery_master_type');
-            var $search = $('#surgery_master_search');
-            var $rows = $('#surgery_master_rows');
-
-            function setMasterStatus(text, level) {
-                setSectionStatus('surgery_master_status', text, level || 'muted');
-            }
-
-            function rowHtml(row) {
-                var status = parseInt(row.is_active || '0', 10) === 1 ? 'Active' : 'Inactive';
-                var safeName = $('<div>').text(row.term_name || '').html();
-                var safeCode = $('<div>').text(row.term_code || '').html();
-                var safeIcd = $('<div>').text(row.icd_code || '').html();
-                return '<tr>'
-                    + '<td>' + safeName + '</td>'
-                    + '<td>' + safeCode + '</td>'
-                    + '<td>' + safeIcd + '</td>'
-                    + '<td>' + status + '</td>'
-                    + '<td>'
-                    + '<button type="button" class="btn btn-outline-primary btn-sm btn-master-edit" data-id="' + (row.id || 0) + '">Edit</button> '
-                    + '<button type="button" class="btn btn-outline-danger btn-sm btn-master-delete" data-id="' + (row.id || 0) + '">Del</button>'
-                    + '</td>'
-                    + '</tr>';
-            }
-
-            function clearMasterForm() {
-                $('#surgery_master_id').val('0');
-                $('#surgery_master_name').val('');
-                $('#surgery_master_code').val('');
-                $('#surgery_master_icd').val('');
-                $('#surgery_master_active').val('1');
-            }
-
-            function fetchMasterRows() {
-                var type = ($type.val() || 'surgery').toString();
-                var q = ($search.val() || '').toString().trim();
-                $.get('<?= base_url('Ipd_discharge/surgery_master_list') ?>?type=' + encodeURIComponent(type) + '&q=' + encodeURIComponent(q), function(data) {
-                    var rows = (data && data.rows) ? data.rows : [];
-                    surgeryMasterState[type] = rows;
-                    if (!rows.length) {
-                        $rows.html('<tr><td colspan="5" class="text-center text-muted">No records.</td></tr>');
-                        return;
-                    }
-
-                    var html = '';
-                    rows.forEach(function(row) {
-                        html += rowHtml(row);
-                    });
-                    $rows.html(html);
-                }, 'json').fail(function() {
-                    setMasterStatus('Unable to load master list.', 'error');
-                });
-            }
-
-            $(document).on('click', '#btn_discharge_manage_surgery_master', function() {
-                clearMasterForm();
-                setMasterStatus('', 'muted');
-                fetchMasterRows();
-                showModalById('ipdSurgeryMasterModal');
-            });
-
-            $('#btn_surgery_master_refresh').on('click', fetchMasterRows);
-            $type.on('change', function() {
-                clearMasterForm();
-                fetchMasterRows();
-            });
-            $search.on('input', function() {
-                fetchMasterRows();
-            });
-
-            $('#btn_surgery_master_clear').on('click', function() {
-                clearMasterForm();
-            });
-
-            $(document).on('click', '.btn-master-edit', function() {
-                var id = parseInt($(this).data('id') || '0', 10);
-                var type = ($type.val() || 'surgery').toString();
-                var row = (surgeryMasterState[type] || []).find(function(item) {
-                    return parseInt(item.id || '0', 10) === id;
-                }) || null;
-                if (!row) {
-                    return;
-                }
-
-                $('#surgery_master_id').val(String(row.id || 0));
-                $('#surgery_master_name').val((row.term_name || '').toString());
-                $('#surgery_master_code').val((row.term_code || '').toString());
-                $('#surgery_master_icd').val((row.icd_code || '').toString());
-                $('#surgery_master_active').val(parseInt(row.is_active || '0', 10) === 1 ? '1' : '0');
-            });
-
-            $(document).on('click', '.btn-master-delete', function() {
-                var id = parseInt($(this).data('id') || '0', 10);
-                if (id <= 0) {
-                    return;
-                }
-
-                if (!window.confirm('Delete this master row?')) {
-                    return;
-                }
-
-                var csrf = getCsrfPair(form);
-                var payload = { id: id };
-                payload[csrf.name] = csrf.value;
-
-                $.post('<?= base_url('Ipd_discharge/surgery_master_delete') ?>', payload, function(data) {
-                    updateFormCsrf(form, data);
-                    if (!data || parseInt(data.update || '0', 10) !== 1) {
-                        setMasterStatus((data && data.error_text) ? data.error_text : 'Unable to delete record.', 'error');
-                        return;
-                    }
-
-                    setMasterStatus('Record deleted.', 'success');
-                    fetchMasterRows();
-                }, 'json').fail(function() {
-                    setMasterStatus('Delete failed.', 'error');
-                });
-            });
-
-            $('#btn_surgery_master_save').on('click', function() {
-                var name = ($('#surgery_master_name').val() || '').toString().trim();
-                if (name === '') {
-                    setMasterStatus('Name is required.', 'error');
-                    return;
-                }
-
-                var csrf = getCsrfPair(form);
-                var payload = {
-                    id: parseInt($('#surgery_master_id').val() || '0', 10),
-                    type: ($type.val() || 'surgery').toString(),
-                    name: name,
-                    code: ($('#surgery_master_code').val() || '').toString().trim(),
-                    icd_code: ($('#surgery_master_icd').val() || '').toString().trim(),
-                    is_active: parseInt($('#surgery_master_active').val() || '1', 10)
-                };
-                payload[csrf.name] = csrf.value;
-
-                $.post('<?= base_url('Ipd_discharge/surgery_master_save') ?>', payload, function(data) {
-                    updateFormCsrf(form, data);
-                    if (!data || parseInt(data.update || '0', 10) !== 1) {
-                        setMasterStatus((data && data.error_text) ? data.error_text : 'Unable to save record.', 'error');
-                        return;
-                    }
-
-                    setMasterStatus('Record saved.', 'success');
-                    clearMasterForm();
-                    fetchMasterRows();
-                }, 'json').fail(function() {
-                    setMasterStatus('Save failed.', 'error');
-                });
-            });
-        }
-
-        function initSurgeryTools(form) {
-            // Surgery/Procedure autocomplete now handled by initSurgeryProcedureAutocomplete()
-            // Old bindSurgeryTermLookup removed - using custom dropdown instead of datalist
-            initSurgeryMasterCrud(form);
-        }
-
-        function bindDiagnosisIcdLookup(form) {
-            var lookup = document.getElementById('new_diagnosis_name');
-            var suggest = document.getElementById('discharge_diagnosis_suggest');
-            var seedBtn = document.getElementById('btn_discharge_seed_icd');
-            if (!lookup || !suggest || !window.jQuery) {
-                return;
-            }
-
-            if (lookup.dataset.lookupBound === '1') {
-                return;
-            }
-            lookup.dataset.lookupBound = '1';
-
-            var suggestions = [];
-
-            function diagnosisLabel(row) {
-                var name = (row.name || '').toString();
-                var code = (row.icd_code || '').toString().trim();
-                if (code !== '') {
-                    return name + ' (ICD ' + code + ')';
-                }
-                return name;
-            }
-
-            lookup.addEventListener('input', function() {
-                var q = (lookup.value || '').trim();
-                if (q.length < 2) {
-                    return;
-                }
-
-                $.get('<?= base_url('Ipd_discharge/diagnosis_icd_lookup') ?>?q=' + encodeURIComponent(q), function(data) {
-                    suggestions = (data && data.rows) ? data.rows : [];
-                    var html = '';
-                    suggestions.forEach(function(row) {
-                        html += '<option value="' + $('<div>').text(diagnosisLabel(row)).html() + '"></option>';
-                    });
-                    suggest.innerHTML = html;
-                }, 'json');
-            });
-
-            function applyDiagnosisSelection() {
-                var inputVal = (lookup.value || '').trim();
-                if (inputVal === '') {
-                    setSectionStatus('discharge_diagnosis_status', '', 'muted');
-                    return;
-                }
-
-                var chosen = null;
-                suggestions.forEach(function(row) {
-                    var label = diagnosisLabel(row);
-                    var name = (row.name || '').toString();
-                    if (label.toUpperCase() === inputVal.toUpperCase() || name.toUpperCase() === inputVal.toUpperCase()) {
-                        chosen = row;
-                    }
-                });
-
-                if (chosen) {
-                    var diagnosisText = (chosen.name || '').toString().trim();
-                    var code = (chosen.icd_code || '').toString().trim();
-                    if (code !== '') {
-                        diagnosisText += ' [ICD: ' + code + ']';
-                    }
-                    lookup.value = diagnosisText;
-                    setSectionStatus('discharge_diagnosis_status', code !== '' ? 'Diagnosis with ICD selected. Click +ADD to save row.' : 'Diagnosis selected. Click +ADD to save row.', 'success');
-                    return;
-                }
-
-                setSectionStatus('discharge_diagnosis_status', 'Custom diagnosis ready. Click +ADD to save row.', 'success');
-            }
-
-            lookup.addEventListener('change', applyDiagnosisSelection);
-            lookup.addEventListener('blur', applyDiagnosisSelection);
-
-            if (seedBtn) {
-                if (seedBtn.dataset.seedBound === '1') {
-                    return;
-                }
-                seedBtn.dataset.seedBound = '1';
-
-                seedBtn.addEventListener('click', function() {
-                    var csrf = getCsrfPair(form);
-                    var payload = {};
-                    payload[csrf.name] = csrf.value;
-
-                    $.post('<?= base_url('Ipd_discharge/diagnosis_icd_seed_starter') ?>', payload, function(data) {
-                        updateFormCsrf(form, data);
-                        if (!data || parseInt(data.update || '0', 10) !== 1) {
-                            setSectionStatus('discharge_diagnosis_status', (data && data.error_text) ? data.error_text : 'Unable to load ICD starter.', 'error');
-                            return;
-                        }
-
-                        setSectionStatus('discharge_diagnosis_status', data.error_text || 'ICD starter loaded.', 'success');
-                    }, 'json').fail(function() {
-                        setSectionStatus('discharge_diagnosis_status', 'ICD starter request failed.', 'error');
-                    });
-                });
-            }
-        }
-
-        function bindAiRewrite(form, btnId, sourceId, mode, statusId, emptyMsg) {
-            var btn = document.getElementById(btnId);
-            var source = document.getElementById(sourceId);
-            if (!btn || !source) {
-                return;
-            }
-
-            btn.addEventListener('click', function() {
-                var text = (source.value || '').trim();
-                if (text === '') {
-                    setSectionStatus(statusId, emptyMsg || 'Type text first.', 'error');
-                    return;
-                }
-
-                if (!window.jQuery) {
-                    return;
-                }
-
-                var csrf = getCsrfPair(form);
-                var payload = {
-                    text: text,
-                    mode: mode
-                };
-                payload[csrf.name] = csrf.value;
-
-                $.post('<?= base_url('Opd_prescription/clinical_autotype') ?>', payload, function(data) {
-                    if (data && data.csrfName && data.csrfHash) {
-                        var csrfInput = form.querySelector('input[name="' + data.csrfName + '"]');
-                        if (csrfInput) {
-                            csrfInput.value = data.csrfHash;
-                        }
-                    }
-
-                    if (!data || parseInt(data.update || '0', 10) !== 1) {
-                        setSectionStatus(statusId, (data && data.error_text) ? data.error_text : 'Unable to process AI text.', 'error');
-                        return;
-                    }
-
-                    source.value = (data.draft_text || text);
-                    setSectionStatus(statusId, (data.error_text || 'AI text ready.'), 'success');
-                }, 'json').fail(function() {
-                    setSectionStatus(statusId, 'AI request failed.', 'error');
-                });
-            });
-        }
-
-        function initDiagnosisTools() {
-            var section = document.getElementById('section-diagnosis');
-            if (!section || section.dataset.toolsBound === '1') {
-                return;
-            }
-            section.dataset.toolsBound = '1';
-
-            var form = section.closest('form');
-            if (!form) {
-                return;
-            }
-
-            bindDiagnosisIcdLookup(form);
-
-            bindAiRewrite(form, 'btn_discharge_ai_diagnosis', 'diagnosis_remark', 'diagnosis', 'discharge_diagnosis_status', 'Type diagnosis narrative first.');
-            bindAiRewrite(form, 'btn_discharge_hinglish_diagnosis', 'diagnosis_remark', 'hinglish_to_english', 'discharge_diagnosis_status', 'Type diagnosis narrative first.');
-        }
-
-        function initCourseTools() {
-            var section = document.getElementById('section-course');
-            if (!section || section.dataset.toolsBound === '1') {
-                return;
-            }
-            section.dataset.toolsBound = '1';
-
-            var form = section.closest('form');
-            if (!form) {
-                return;
-            }
-
-            bindSmartTermInputLookup(
-                form,
-                'new_course_name',
-                'discharge_course_suggest',
-                'discharge_course_status',
-                'Custom term ready. Click +ADD to save row.'
-            );
-
-            bindAiRewrite(form, 'btn_discharge_ai_course', 'course_remark', 'autotype', 'discharge_course_status', 'Type course narrative first.');
-            bindAiRewrite(form, 'btn_discharge_hinglish_course', 'course_remark', 'hinglish_to_english', 'discharge_course_status', 'Type course narrative first.');
-        }
-
-        function initInstructionTools() {
-            var section = document.getElementById('section-instructions');
-            if (!section || section.dataset.toolsBound === '1') {
-                return;
-            }
-            section.dataset.toolsBound = '1';
-
-            // Re-initialize CKEditor for instruction fields after section reload
-            if (typeof CKEDITOR !== 'undefined') {
-                // Destroy existing instances first to avoid duplication
-                if (CKEDITOR.instances['instruction_other']) {
-                    CKEDITOR.instances['instruction_other'].destroy(true);
-                }
-                if (CKEDITOR.instances['instruction_remark']) {
-                    CKEDITOR.instances['instruction_remark'].destroy(true);
-                }
-
-                // Re-create CKEditor instances
-                if (document.getElementById('instruction_other')) {
-                    CKEDITOR.replace('instruction_other', {
-                        height: 120,
-                        toolbar: [
-                            { name: 'basicstyles', items: ['Bold', 'Italic', 'Underline'] },
-                            { name: 'paragraph', items: ['NumberedList', 'BulletedList'] },
-                            { name: 'editing', items: ['Undo', 'Redo'] }
-                        ]
-                    });
-                }
-
-                if (document.getElementById('instruction_remark')) {
-                    CKEDITOR.replace('instruction_remark', {
-                        height: 150,
-                        toolbar: [
-                            { name: 'basicstyles', items: ['Bold', 'Italic', 'Underline'] },
-                            { name: 'paragraph', items: ['NumberedList', 'BulletedList'] },
-                            { name: 'editing', items: ['Undo', 'Redo'] }
-                        ]
-                    });
-                }
-            }
-
-            var addSelectedBtn = section.querySelector('#btn_instruction_add_selected_food');
-            var clearBtn = section.querySelector('#btn_instruction_clear_food');
-            var remark = section.querySelector('#instruction_remark');
-            var other = section.querySelector('#instruction_other');
-            var preview = section.querySelector('#instruction_selected_preview');
-            var autoSaveTimer = null;
-            var autoSaveBusy = false;
-
-            function saveInstructionSectionImmediate() {
-                var activeForm = section.closest('form') || getDischargeForm();
-                if (!activeForm || autoSaveBusy) {
-                    return;
-                }
-
-                if (!window.jQuery) {
-                    return;
-                }
-
-                autoSaveBusy = true;
-                var csrf = getCsrfPair(activeForm);
-                var payload = {
-                    action: 'save_main',
-                    dietary_autosave: '1',
-                    instruction_other: other ? String(other.value || '').trim() : ''
-                };
-                payload[csrf.name] = csrf.value;
-
-                section.querySelectorAll('.instruction-food-item:checked').forEach(function(item) {
-                    var id = parseInt(item.value || '0', 10);
-                    if (id > 0) {
-                        if (!Array.isArray(payload.instruction_food_ids)) {
-                            payload.instruction_food_ids = [];
-                        }
-                        payload.instruction_food_ids.push(String(id));
-                    }
-                });
-
-                window.jQuery.ajax({
-                    url: activeForm.getAttribute('action') || window.location.href,
-                    type: 'POST',
-                    data: payload,
-                    dataType: 'json',
-                    timeout: 120000
-                }).done(function(data) {
-                    updateFormCsrf(activeForm, data || {});
-                    if (data && parseInt(data.update || '0', 10) === 1) {
-                        setSectionStatus('discharge_instruction_status', 'Dietary advice saved.', 'success');
-                    } else {
-                        setSectionStatus('discharge_instruction_status', (data && data.error_text) ? data.error_text : 'Unable to save dietary advice.', 'error');
-                    }
-                }).always(function() {
-                    autoSaveBusy = false;
-                });
-            }
-
-            function saveInstructionSection() {
-                if (autoSaveTimer) {
-                    window.clearTimeout(autoSaveTimer);
-                }
-                autoSaveTimer = window.setTimeout(function() {
-                    saveInstructionSectionImmediate();
-                }, 180);
-            }
-
-            function refreshInstructionPreview() {
-                if (!preview) {
-                    return;
-                }
-
-                var lines = [];
-                section.querySelectorAll('.instruction-food-item:checked').forEach(function(item) {
-                    var heading = String(item.getAttribute('data-food-short') || '').trim();
-                    var lang = String(item.getAttribute('data-food-lang') || '').trim();
-                    var desc = String(item.getAttribute('data-food-desc') || '').trim();
-                    var body = lang !== '' ? lang : desc;
-                    if (heading === '' && body === '') {
-                        return;
-                    }
-
-                    var line = heading !== '' ? ('<strong>' + heading + ':</strong> ') : '';
-                    line += body !== '' ? body : heading;
-                    lines.push('<div>' + line + '</div>');
-                });
-
-                var otherText = other ? String(other.value || '').trim() : '';
-                if (otherText !== '') {
-                    lines.push('<div><strong>Other:</strong> ' + otherText + '</div>');
-                }
-
-                preview.innerHTML = lines.length ? lines.join('') : '<span class="text-muted">No dietary advice selected.</span>';
-            }
-
-            function appendLinesToAdvice(lines) {
-                if (!remark || !Array.isArray(lines) || !lines.length) {
-                    return;
-                }
-
-                var existing = String(remark.value || '').trim();
-                var bucket = existing === '' ? [] : existing.split(/\r?\n/).map(function(line) {
-                    return String(line || '').trim();
-                }).filter(function(line) {
-                    return line !== '';
-                });
-
-                lines.forEach(function(line) {
-                    var normalized = String(line || '').trim();
-                    if (normalized === '') {
-                        return;
-                    }
-                    if (bucket.some(function(prev) { return prev.toUpperCase() === normalized.toUpperCase(); })) {
-                        return;
-                    }
-                    bucket.push(normalized);
-                });
-
-                remark.value = bucket.join('\n');
-            }
-
-            if (addSelectedBtn && addSelectedBtn.dataset.bound !== '1') {
-                addSelectedBtn.dataset.bound = '1';
-                addSelectedBtn.addEventListener('click', function() {
-                    var lines = [];
-                    section.querySelectorAll('.instruction-food-item:checked').forEach(function(item) {
-                        var desc = String(item.getAttribute('data-food-desc') || '').trim();
-                        var shortText = String(item.getAttribute('data-food-short') || '').trim();
-                        var text = desc !== '' ? desc : shortText;
-                        if (text !== '') {
-                            lines.push(text);
-                        }
-                    });
-
-                    var otherText = other ? String(other.value || '').trim() : '';
-                    if (otherText !== '') {
-                        lines.push(otherText);
-                    }
-
-                    appendLinesToAdvice(lines);
-                });
-            }
-
-            if (clearBtn && clearBtn.dataset.bound !== '1') {
-                clearBtn.dataset.bound = '1';
-                clearBtn.addEventListener('click', function() {
-                    section.querySelectorAll('.instruction-food-item:checked').forEach(function(item) {
-                        item.checked = false;
-                    });
-                    refreshInstructionPreview();
-                    saveInstructionSection();
-                });
-            }
-
-            section.querySelectorAll('.instruction-food-item').forEach(function(item) {
-                if (item.dataset.bound === '1') {
-                    return;
-                }
-                item.dataset.bound = '1';
-                item.addEventListener('change', function() {
-                    refreshInstructionPreview();
-                    saveInstructionSection();
-                });
-            });
-
-            if (other && other.dataset.bound !== '1') {
-                other.dataset.bound = '1';
-                other.addEventListener('input', refreshInstructionPreview);
-            }
-
-            refreshInstructionPreview();
-            initDietaryMasterCrud(getDischargeForm());
-
-            // Review After quick select buttons
-            var reviewChips = section.querySelectorAll('.discharge-review-chip');
-            var reviewInput = section.querySelector('#discharge_review_after');
-            reviewChips.forEach(function(chip) {
-                chip.addEventListener('click', function() {
-                    var value = chip.getAttribute('data-value') || chip.textContent.trim();
-                    if (reviewInput) {
-                        reviewInput.value = value;
-                        reviewInput.focus();
-                    }
-                });
-            });
-        }
-
-        function initDietaryMasterCrud(form) {
-            if (!window.jQuery) {
-                return;
-            }
-            if (window.__ipdFoodCrudBound === true) {
-                return;
-            }
-            window.__ipdFoodCrudBound = true;
-
-            var $search = $('#food_master_search');
-            var $rows = $('#food_master_rows');
-
-            function setFoodStatus(text, level) {
-                setSectionStatus('food_master_status', text, level || 'muted');
-            }
-
-            function clearFoodForm() {
-                $('#food_master_id').val('0');
-                $('#food_master_short').val('');
-                $('#food_master_desc').val('');
-                $('#food_master_lang').val('');
-            }
-
-            function rowHtml(row) {
-                var safeShort = $('<div>').text(row.food_short || '').html();
-                var safeDesc = $('<div>').text(row.food_desc || '').html();
-                var safeLang = $('<div>').text(row.food_desc_lang || '').html();
-                return '<tr>'
-                    + '<td>' + safeShort + '</td>'
-                    + '<td>' + safeDesc + '</td>'
-                    + '<td>' + safeLang + '</td>'
-                    + '<td>'
-                    + '<button type="button" class="btn btn-outline-primary btn-sm btn-food-edit" data-id="' + (row.id || 0) + '">Edit</button> '
-                    + '<button type="button" class="btn btn-outline-danger btn-sm btn-food-delete" data-id="' + (row.id || 0) + '">Del</button>'
-                    + '</td>'
-                    + '</tr>';
-            }
-
-            function fetchFoodRows() {
-                var q = ($search.val() || '').toString().trim();
-                $.get('<?= base_url('Ipd_discharge/dietary_master_list') ?>?q=' + encodeURIComponent(q), function(data) {
-                    var rows = (data && data.rows) ? data.rows : [];
-                    foodMasterState = rows;
-                    if (!rows.length) {
-                        $rows.html('<tr><td colspan="4" class="text-center text-muted">No records.</td></tr>');
-                        return;
-                    }
-
-                    var html = '';
-                    rows.forEach(function(row) {
-                        html += rowHtml(row);
-                    });
-                    $rows.html(html);
-                }, 'json').fail(function() {
-                    setFoodStatus('Unable to load dietary master list.', 'error');
-                });
-            }
-
-            $(document).on('click', '#btn_discharge_manage_food_master', function() {
-                clearFoodForm();
-                setFoodStatus('', 'muted');
-                fetchFoodRows();
-                showModalById('ipdDietaryMasterModal');
-            });
-
-            $('#btn_food_master_refresh').on('click', fetchFoodRows);
-            $search.on('input', fetchFoodRows);
-            $('#btn_food_master_clear').on('click', clearFoodForm);
-
-            $(document).on('click', '.btn-food-edit', function() {
-                var id = parseInt($(this).data('id') || '0', 10);
-                var row = (foodMasterState || []).find(function(item) {
-                    return parseInt(item.id || '0', 10) === id;
-                }) || null;
-                if (!row) {
-                    return;
-                }
-
-                $('#food_master_id').val(String(row.id || 0));
-                $('#food_master_short').val((row.food_short || '').toString());
-                $('#food_master_desc').val((row.food_desc || '').toString());
-                $('#food_master_lang').val((row.food_desc_lang || '').toString());
-            });
-
-            $(document).on('click', '.btn-food-delete', function() {
-                var id = parseInt($(this).data('id') || '0', 10);
-                if (id <= 0) {
-                    return;
-                }
-                if (!window.confirm('Delete this dietary master row?')) {
-                    return;
-                }
-
-                var csrf = getCsrfPair(form);
-                var payload = { id: id };
-                payload[csrf.name] = csrf.value;
-
-                $.post('<?= base_url('Ipd_discharge/dietary_master_delete') ?>', payload, function(data) {
-                    updateFormCsrf(form, data);
-                    if (!data || parseInt(data.update || '0', 10) !== 1) {
-                        setFoodStatus((data && data.error_text) ? data.error_text : 'Unable to delete record.', 'error');
-                        return;
-                    }
-                    setFoodStatus('Record deleted.', 'success');
-                    fetchFoodRows();
-                }, 'json').fail(function() {
-                    setFoodStatus('Delete failed.', 'error');
-                });
-            });
-
-            $('#btn_food_master_save').on('click', function() {
-                var shortText = ($('#food_master_short').val() || '').toString().trim();
-                if (shortText === '') {
-                    setFoodStatus('Short heading is required.', 'error');
-                    return;
-                }
-
-                var csrf = getCsrfPair(form);
-                var payload = {
-                    id: parseInt($('#food_master_id').val() || '0', 10),
-                    food_short: shortText,
-                    food_desc: ($('#food_master_desc').val() || '').toString().trim(),
-                    food_desc_lang: ($('#food_master_lang').val() || '').toString().trim()
-                };
-                payload[csrf.name] = csrf.value;
-
-                $.post('<?= base_url('Ipd_discharge/dietary_master_save') ?>', payload, function(data) {
-                    updateFormCsrf(form, data);
-                    if (!data || parseInt(data.update || '0', 10) !== 1) {
-                        setFoodStatus((data && data.error_text) ? data.error_text : 'Unable to save record.', 'error');
-                        return;
-                    }
-
-                    setFoodStatus('Record saved.', 'success');
-                    clearFoodForm();
-                    fetchFoodRows();
-                }, 'json').fail(function() {
-                    setFoodStatus('Save failed.', 'error');
-                });
-            });
-        }
-
-        function initMedicineTools() {
-            var section = document.getElementById('section-medicine');
-            if (!section || section.dataset.toolsBound === '1') {
-                return;
-            }
-            section.dataset.toolsBound = '1';
-
-            if (!window.jQuery) {
-                return;
-            }
-
-            var rxGroupCache = [];
-            var rxGroupInput = section.querySelector('#selected_rx_group_id');
-            var rxGroupName = section.querySelector('#rx_group_selected_name');
-            var rxGroupList = document.getElementById('discharge_rx_group_list');
-            var rxGroupSearch = document.getElementById('discharge_rx_group_search');
-            var applyBtn = section.querySelector('#btn_apply_rx_group');
-
-            function setMedicineStatus(text, level) {
-                setSectionStatus('discharge_medicine_status', text, level || 'muted');
-            }
-
-            function renderRxGroups() {
-                if (!rxGroupList) {
-                    return;
-                }
-
-                var q = rxGroupSearch ? String(rxGroupSearch.value || '').trim().toLowerCase() : '';
-                var html = '';
-                rxGroupCache.forEach(function(row) {
-                    var id = parseInt(row.id || '0', 10);
-                    var name = String(row.rx_group_name || '').trim();
-                    if (id <= 0 || name === '') {
-                        return;
-                    }
-                    if (q !== '' && name.toLowerCase().indexOf(q) === -1) {
-                        return;
-                    }
-
-                    var medCount = parseInt(row.med_count || '0', 10);
-                    var label = name + (medCount > 0 ? (' (' + medCount + ')') : '');
-                    html += '<button type="button" class="btn btn-outline-secondary btn-sm js-discharge-rx-group" data-id="' + id + '" data-name="' + $('<div>').text(name).html() + '">' + $('<div>').text(label).html() + '</button>';
-                });
-
-                rxGroupList.innerHTML = html || '<div class="text-muted small">No Rx Group found.</div>';
-            }
-
-            function loadRxGroups() {
-                $.get('<?= base_url('Opd_prescription/save_rx_group_list') ?>/0', function(data) {
-                    rxGroupCache = (data && data.rows) ? data.rows : [];
-                    renderRxGroups();
-                }, 'json').fail(function() {
-                    setMedicineStatus('Unable to load Rx Groups.', 'error');
-                });
-            }
-
-            var openRxBtn = section.querySelector('#btn_open_rx_group_modal');
-            if (openRxBtn) {
-                openRxBtn.addEventListener('click', function() {
-                    loadRxGroups();
-                    showModalById('dischargeRxGroupModal');
-                });
-            }
-
-            if (rxGroupSearch) {
-                if (rxGroupSearch.dataset.bound !== '1') {
-                    rxGroupSearch.dataset.bound = '1';
-                    rxGroupSearch.addEventListener('input', function() {
-                        renderRxGroups();
-                    });
-                }
-            }
-
-            if (window.__dischargeRxGroupSelectBound !== true) {
-                window.__dischargeRxGroupSelectBound = true;
-                $(document).on('click', '.js-discharge-rx-group', function() {
-                    var id = parseInt($(this).data('id') || '0', 10);
-                    var name = String($(this).data('name') || '').trim();
-                    var activeSection = document.getElementById('section-medicine');
-                    if (!activeSection || id <= 0) {
-                        return;
-                    }
-
-                    var activeRxInput = activeSection.querySelector('#selected_rx_group_id');
-                    var activeRxLabel = activeSection.querySelector('#rx_group_selected_name');
-                    var activeApplyBtn = activeSection.querySelector('#btn_apply_rx_group');
-                    if (!activeRxInput) {
-                        return;
-                    }
-
-                    activeRxInput.value = String(id);
-                    if (activeRxLabel) {
-                        activeRxLabel.textContent = name ? ('Selected: ' + name) : ('Selected Rx Group #' + id);
-                    }
-                    hideModalById('dischargeRxGroupModal');
-
-                    if (activeApplyBtn) {
-                        activeApplyBtn.click();
-                    }
-                });
-            }
-
-            // Load dose masters (Dose, When, Frequency, Route)
-            var doseMasterCache = { dose: [], when: [], freq: [], where: [] };
-            
-            function renderSelectOptions($select, rows, placeholder) {
-                var html = '<option value="">' + $('<div>').text(placeholder || 'Select').html() + '</option>';
-                (rows || []).forEach(function(row) {
-                    var id = (row && row.id !== undefined) ? String(row.id) : '';
-                    var label = (row && row.label !== undefined) ? String(row.label) : '';
-                    if (!id || !label) {
-                        return;
-                    }
-                    html += '<option value="' + $('<div>').text(id).html() + '">' + $('<div>').text(label).html() + '</option>';
-                });
-                $select.html(html);
-            }
-            
-            function loadDischargeDoseMasters() {
-                $.get('<?= base_url('Opd_prescription/rx_group_dose_masters') ?>', function(data) {
-                    doseMasterCache = {
-                        dose: (data && data.dose) ? data.dose : [],
-                        when: (data && data.when) ? data.when : [],
-                        freq: (data && data.freq) ? data.freq : [],
-                        where: (data && data.where) ? data.where : []
-                    };
-
-                    renderSelectOptions($('#discharge_dosage'), doseMasterCache.dose, 'Dose');
-                    renderSelectOptions($('#discharge_dosage_when'), doseMasterCache.when, 'When');
-                    renderSelectOptions($('#discharge_dosage_freq'), doseMasterCache.freq, 'Frequency');
-                    renderSelectOptions($('#discharge_dose_where'), doseMasterCache.where, 'Route');
-                }, 'json').fail(function() {
-                    setMedicineStatus('Unable to load dose masters.', 'error');
-                });
-            }
-
-            // Load dose masters on init
-            loadDischargeDoseMasters();
-
-            // Handle medicine autocomplete with full suggestions
-            var dischargeMedInput = section.querySelector('#discharge_med_name');
-            var dischargeMedSuggest = section.querySelector('#discharge_med_suggest');
-            var dischargeMedType = section.querySelector('#discharge_med_type');
-            var dischargeMedSuggestRows = [];
-            var dischargeMedInputTimer = null;
-
-            if (dischargeMedInput) {
-                dischargeMedInput.addEventListener('input', function() {
-                    var q = String(dischargeMedInput.value || '').trim();
-                    
-                    if (dischargeMedInputTimer) {
-                        clearTimeout(dischargeMedInputTimer);
-                        dischargeMedInputTimer = null;
-                    }
-                    
-                    if (q.length < 2) {
-                        dischargeMedSuggestRows = [];
-                        if (dischargeMedSuggest) {
-                            dischargeMedSuggest.innerHTML = '';
-                        }
-                        return;
-                    }
-
-                    dischargeMedInputTimer = setTimeout(function() {
-                        $.get('<?= base_url('Opd_prescription/medicine_search') ?>?q=' + encodeURIComponent(q) + '&scope=all&limit=10', function(data) {
-                            var rows = (data && data.rows) ? data.rows : [];
-                            dischargeMedSuggestRows = rows;
-                            var html = '';
-                            rows.forEach(function(row) {
-                                var name = String(row.med_name || '').trim();
-                                if (name === '') {
-                                    return;
+                    // Re-create CKEditor instances
+                    if (document.getElementById('instruction_other')) {
+                        CKEDITOR.replace('instruction_other', {
+                            height: 120,
+                            toolbar: [{
+                                    name: 'basicstyles',
+                                    items: ['Bold', 'Italic', 'Underline']
+                                },
+                                {
+                                    name: 'paragraph',
+                                    items: ['NumberedList', 'BulletedList']
+                                },
+                                {
+                                    name: 'editing',
+                                    items: ['Undo', 'Redo']
                                 }
-                                html += '<option value="' + $('<div>').text(name).html() + '" '
-                                    + 'data-id="' + (row.id || 0) + '" '
-                                    + 'data-type="' + $('<div>').text(row.med_type || '').html() + '" '
-                                    + 'data-dosage="' + $('<div>').text(row.dosage || '').html() + '" '
-                                    + 'data-dosage-when="' + $('<div>').text(row.dosage_when || '').html() + '" '
-                                    + 'data-dosage-freq="' + $('<div>').text(row.dosage_freq || '').html() + '" '
-                                    + 'data-dosage-where="' + $('<div>').text(row.dosage_where || '').html() + '" '
-                                    + 'data-no-of-days="' + $('<div>').text(row.no_of_days || '').html() + '" '
-                                    + 'data-qty="' + $('<div>').text(row.qty || '').html() + '" '
-                                    + 'data-remark="' + $('<div>').text(row.remark || '').html() + '"></option>';
-                            });
-                            if (dischargeMedSuggest) {
-                                dischargeMedSuggest.innerHTML = html;
-                            }
-                            
-                            // Auto-fill if exact match (Chrome fires input on datalist pick)
-                            var matched = null;
-                            dischargeMedSuggestRows.forEach(function(row) {
-                                if (String(row.med_name || '').trim().toUpperCase() === q.toUpperCase()) {
-                                    matched = row;
-                                }
-                            });
-                            if (matched) {
-                                // Store med_id
-                                $(dischargeMedInput).data('med-id', parseInt(matched.id || 0, 10));
-                                if (section.querySelector('#discharge_med_id')) {
-                                    section.querySelector('#discharge_med_id').value = String(matched.id || '0');
-                                }
-                                // Auto-fill type if empty
-                                if (dischargeMedType && dischargeMedType.value.trim() === '') {
-                                    dischargeMedType.value = String(matched.med_type || '').trim();
-                                }
-                            }
-                        }, 'json').fail(function() {
-                            dischargeMedSuggestRows = [];
-                            if (dischargeMedSuggest) {
-                                dischargeMedSuggest.innerHTML = '';
-                            }
+                            ]
                         });
-                    }, 180);
-                });
-
-                dischargeMedInput.addEventListener('change', function() {
-                    var value = String(dischargeMedInput.value || '').trim();
-                    var valueUpper = value.toUpperCase();
-                    
-                    if (value === '') {
-                        // Clear stored med_id when input is cleared
-                        $(dischargeMedInput).data('med-id', 0);
-                        if (section.querySelector('#discharge_med_id')) {
-                            section.querySelector('#discharge_med_id').value = '0';
-                        }
-                        return;
                     }
 
-                    // Find matching medicine and auto-fill all fields
-                    var matched = null;
-                    dischargeMedSuggestRows.forEach(function(row) {
-                        if (String(row.med_name || '').trim().toUpperCase() === valueUpper) {
-                            matched = row;
-                        }
-                    });
-
-                    if (matched) {
-                        // Store med_id for reference
-                        $(dischargeMedInput).data('med-id', parseInt(matched.id || 0, 10));
-                        if (section.querySelector('#discharge_med_id')) {
-                            section.querySelector('#discharge_med_id').value = String(matched.id || '0');
-                        }
-                        
-                        // Auto-fill Type
-                        if (dischargeMedType && dischargeMedType.value.trim() === '') {
-                            dischargeMedType.value = String(matched.med_type || '').trim();
-                        }
-                        
-                        // Auto-fill dose fields if they have values
-                        var dosageSelect = section.querySelector('#discharge_dosage');
-                        var whenSelect = section.querySelector('#discharge_dosage_when');
-                        var freqSelect = section.querySelector('#discharge_dosage_freq');
-                        var whereSelect = section.querySelector('#discharge_dose_where');
-                        var daysInput = section.querySelector('#discharge_no_of_days');
-                        var qtyInput = section.querySelector('#discharge_qty');
-                        var remarkInput = section.querySelector('#discharge_remark');
-                        
-                        if (matched.dosage && dosageSelect && dosageSelect.value === '') {
-                            ensureDoseOption(dosageSelect, matched.dosage);
-                            dosageSelect.value = matched.dosage;
-                        }
-                        if (matched.dosage_when && whenSelect && whenSelect.value === '') {
-                            ensureDoseOption(whenSelect, matched.dosage_when);
-                            whenSelect.value = matched.dosage_when;
-                        }
-                        if (matched.dosage_freq && freqSelect && freqSelect.value === '') {
-                            ensureDoseOption(freqSelect, matched.dosage_freq);
-                            freqSelect.value = matched.dosage_freq;
-                        }
-                        if (matched.dosage_where && whereSelect && whereSelect.value === '') {
-                            ensureDoseOption(whereSelect, matched.dosage_where);
-                            whereSelect.value = matched.dosage_where;
-                        }
-                        if (matched.no_of_days && daysInput && daysInput.value === '') {
-                            daysInput.value = String(matched.no_of_days || '').trim();
-                        }
-                        if (matched.qty && qtyInput && qtyInput.value === '') {
-                            qtyInput.value = String(matched.qty || '').trim();
-                        }
-                        if (matched.remark && remarkInput && remarkInput.value === '') {
-                            remarkInput.value = String(matched.remark || '').trim();
-                        }
-                    } else {
-                        // No match found - clear med_id
-                        $(dischargeMedInput).data('med-id', 0);
-                        if (section.querySelector('#discharge_med_id')) {
-                            section.querySelector('#discharge_med_id').value = '0';
-                        }
+                    if (document.getElementById('instruction_remark')) {
+                        CKEDITOR.replace('instruction_remark', {
+                            height: 150,
+                            toolbar: [{
+                                    name: 'basicstyles',
+                                    items: ['Bold', 'Italic', 'Underline']
+                                },
+                                {
+                                    name: 'paragraph',
+                                    items: ['NumberedList', 'BulletedList']
+                                },
+                                {
+                                    name: 'editing',
+                                    items: ['Undo', 'Redo']
+                                }
+                            ]
+                        });
                     }
-                });
-            }
-            
-            // ─── Load Medicine Substitutes ──────────────────────────────────────
-            function loadDischargeMedicineSubstitutes(medId, medName) {
-                medId = parseInt(medId || '0', 10);
-                medName = (medName || '').toString().trim();
-                var $box = $('#discharge_substitute_box');
-                var $note = $('#discharge_substitute_note');
-                var $empty = $('#discharge_substitute_empty');
-                var $rows = $('#discharge_substitute_rows');
-                
-                if (medId <= 0 && medName === '') {
-                    $box.hide();
-                    return;
                 }
-                
-                $note.text('loading...');
-                $empty.show();
-                $rows.empty();
-                $box.show();
-                
-                var url = '<?= base_url('Opd_prescription/medicine_substitutes') ?>?med_id=' + encodeURIComponent(medId)
-                    + '&med_name=' + encodeURIComponent(medName);
-                    
-                $.get(url, function(data) {
-                    var rows = (data && data.rows) ? data.rows : [];
-                    $note.text(rows.length ? (rows.length + ' substitute(s)') : '');
-                    
-                    if (!rows.length) {
-                        $empty.show();
-                        $rows.empty();
-                        return;
-                    }
-                    
-                    $empty.hide();
-                    $rows.empty();
-                    
-                    rows.forEach(function(row) {
-                        var medId = parseInt(row.id || 0, 10);
-                        var name = String(row.med_name || '').trim();
-                        var type = String(row.med_type || '').trim();
-                        var generic = String(row.genericname || row.salt_name || '').trim();
-                        
-                        if (name === '') {
-                            return;
-                        }
-                        
-                        var card = '<div class=\"card mb-1\" style=\"font-size:0.875rem;\">'
-                            + '<div class=\"card-body py-1 px-2\">'
-                            + '<div class=\"d-flex justify-content-between align-items-center\">'
-                            + '<div><strong>' + $('<div>').text(name).html() + '</strong>'
-                            + (type ? ' <small class=\"text-muted\">(' + $('<div>').text(type).html() + ')</small>' : '')
-                            + (generic ? '<br><small class=\"text-muted\">' + $('<div>').text(generic).html() + '</small>' : '')
-                            + '</div>'
-                            + '<div class=\"btn-group btn-group-sm\">'
-                            + '<button type=\"button\" class=\"btn btn-sm btn-outline-primary btn-discharge-substitute-use\" '
-                                + 'data-id=\"' + medId + '\" '
-                                + 'data-name=\"' + $('<div>').text(name).html() + '\" '
-                                + 'data-type=\"' + $('<div>').text(type).html() + '\">Use</button>'
-                            + '</div></div></div></div>';
-                        
-                        $rows.append(card);
-                    });
-                }, 'json').fail(function() {
-                    $note.text('');
-                    $empty.show();
-                    $rows.empty();
-                });
-            }
-            
-            // Handle substitute "Use" button
-            $(document).on('click', '.btn-discharge-substitute-use', function() {
-                var medId = parseInt($(this).data('id') || '0', 10);
-                var medName = String($(this).data('name') || '').trim();
-                var medType = String($(this).data('type') || '').trim();
-                
-                if (medName === '') {
-                    return;
-                }
-                
-                $('#discharge_med_id').val(medId);
-                $('#discharge_med_name').val(medName);
-                if (medType !== '' && $('#discharge_med_type').val().trim() === '') {
-                    $('#discharge_med_type').val(medType);
-                }
-                
-                $('#discharge_substitute_box').hide();
-                $('#discharge_med_name').trigger('focus');
-            });
-            
-            // Load substitutes when medicine is selected
-            dischargeMedInput.addEventListener('change', function() {
-                var medId = parseInt($('#discharge_med_id').val() || '0', 10);
-                var medName = String(dischargeMedInput.value || '').trim();
-                
-                if (medId > 0 || medName !== '') {
-                    setTimeout(function() {
-                        loadDischargeMedicineSubstitutes(medId, medName);
-                    }, 100);
-                }
-            });
-            
-            // ─── Rx-Group Functionality ──────────────────────────────────────
-            var dischargeRxGroupCache = [];
-            
-            $('#btn_discharge_rx_group').on('click', function() {
-                loadDischargeRxGroups();
-                var modal = new bootstrap.Modal(document.getElementById('dischargeRxGroupModal'));
-                modal.show();
-            });
-            
-            function loadDischargeRxGroups() {
-                $('#discharge_rx_group_list').html('<div class=\"text-muted\">Loading...</div>');
-                
-                $.get('<?= base_url('Opd_prescription/rx_group_list') ?>', function(data) {
-                    var rows = (data && data.rows) ? data.rows : [];
-                    dischargeRxGroupCache = rows;
-                    renderDischargeRxGroups(rows);
-                }, 'json').fail(function() {
-                    $('#discharge_rx_group_list').html('<div class=\"text-danger\">Failed to load Rx-Groups</div>');
-                });
-            }
-            
-            function renderDischargeRxGroups(rows) {
-                var $list = $('#discharge_rx_group_list');
-                var query = ($('#discharge_rx_group_search').val() || '').toLowerCase();
-                
-                if (query) {
-                    rows = rows.filter(function(row) {
-                        var name = (row.rx_group_name || '').toLowerCase();
-                        return name.indexOf(query) !== -1;
-                    });
-                }
-                
-                if (!rows.length) {
-                    $list.html('<div class=\"text-muted\">No Rx-Groups found</div>');
-                    return;
-                }
-                
-                var html = '';
-                rows.forEach(function(row) {
-                    var id = parseInt(row.id || 0, 10);
-                    var name = String(row.rx_group_name || '').trim();
-                    var medCount = parseInt(row.med_count || 0, 10);
-                    
-                    if (id <= 0 || name === '') {
-                        return;
-                    }
-                    
-                    html += '<div class=\"card mb-2\">'
-                        + '<div class=\"card-body py-2\">'
-                        + '<div class=\"d-flex justify-content-between align-items-center\">'
-                        + '<div>'
-                        + '<strong>' + $('<div>').text(name).html() + '</strong>'
-                        + '<span class=\"badge bg-secondary ms-2\">' + medCount + ' med(s)</span>'
-                        + '</div>'
-                        + '<button type=\"button\" class=\"btn btn-sm btn-primary btn-discharge-rx-apply\" data-id=\"' + id + '\">Add</button>'
-                        + '</div></div></div>';
-                });
-                
-                $list.html(html);
-            }
-            
-            $('#discharge_rx_group_search').on('input', function() {
-                renderDischargeRxGroups(dischargeRxGroupCache);
-            });
-            
-            $(document).on('click', '.btn-discharge-rx-apply', function() {
-                var rxGroupId = parseInt($(this).data('id') || 0, 10);
-                if (rxGroupId <= 0) {
-                    return;
-                }
-                
-                $(this).prop('disabled', true).text('Loading...');
-                
-                $.get('<?= base_url('Opd_prescription/rx_group_medicine_list') ?>/' + rxGroupId, function(data) {
-                    var rows = (data && data.rows) ? data.rows : [];
-                    
-                    if (!rows.length) {
-                        setMedicineStatus('No medicines found in selected Rx-Group', 'error');
-                        $('.btn-discharge-rx-apply').prop('disabled', false).text('Add');
-                        return;
-                    }
-                    
-                    // Add each medicine from the group
-                    rows.forEach(function(med) {
-                        var dosageLabel = med.dosage_label || med.dosage || '';
-                        var whenLabel = med.dosage_when_label || med.dosage_when || '';
-                        var freqLabel = med.dosage_freq_label || med.dosage_freq || '';
-                        
-                        var tbody = section.querySelector('#discharge_medicine_tbody');
-                        if (!tbody) {
-                            return;
-                        }
-                        
-                        // Remove "No medicine added" row if present
-                        var emptyRow = tbody.querySelector('tr td[colspan=\"9\"]');
-                        if (emptyRow) {
-                            emptyRow.closest('tr').remove();
-                        }
-                        
-                        var tr = document.createElement('tr');
-                        tr.innerHTML = '<td>' + $('<div>').text(med.med_type || '').html() + '</td>'
-                            + '<td>' + $('<div>').text(med.med_name || '').html() + '</td>'
-                            + '<td>' + $('<div>').text(dosageLabel).html() + '</td>'
-                            + '<td>' + $('<div>').text(whenLabel).html() + '</td>'
-                            + '<td>' + $('<div>').text(freqLabel).html() + '</td>'
-                            + '<td>' + $('<div>').text(med.no_of_days || '').html() + '</td>'
-                            + '<td>' + $('<div>').text(med.qty || '').html() + '</td>'
-                            + '<td>' + $('<div>').text(med.remark || '').html() + '</td>'
-                            + '<td><button type=\"button\" class=\"btn btn-outline-danger btn-sm btn-remove-discharge-med\">Remove</button></td>';
-                        tbody.appendChild(tr);
-                    });
-                    
-                    setMedicineStatus('Rx-Group medicines added (client-side only, save form to persist)', 'success');
-                    $('.btn-discharge-rx-apply').prop('disabled', false).text('Add');
-                    bootstrap.Modal.getInstance(document.getElementById('dischargeRxGroupModal')).hide();
-                }, 'json').fail(function() {
-                    setMedicineStatus('Failed to load Rx-Group medicines', 'error');
-                    $('.btn-discharge-rx-apply').prop('disabled', false).text('Add');
-                });
-            });
 
-            function ensureDoseOption(select, value) {
-                value = (value || '').toString().trim();
-                if (!value) {
-                    return;
-                }
-                
-                var exists = false;
-                $(select).find('option').each(function() {
-                    if ($(this).val() === value) {
-                        exists = true;
-                        return false;
-                    }
-                });
-                
-                if (!exists) {
-                    $(select).append('<option value="' + $('<div>').text(value).html() + '">' + $('<div>').text(value + ' (Current)').html() + '</option>');
-                }
-            }
+                var addSelectedBtn = section.querySelector('#btn_instruction_add_selected_food');
+                var clearBtn = section.querySelector('#btn_instruction_clear_food');
+                var remark = section.querySelector('#instruction_remark');
+                var other = section.querySelector('#instruction_other');
+                var preview = section.querySelector('#instruction_selected_preview');
+                var autoSaveTimer = null;
+                var autoSaveBusy = false;
 
-            // Handle quick buttons
-            section.querySelectorAll('.discharge-quick-btn').forEach(function(btn) {
-                btn.addEventListener('click', function() {
-                    var targetId = String(btn.getAttribute('data-fill-target') || '').trim();
-                    var value = String(btn.getAttribute('data-fill-value') || '').trim();
-                    var target = targetId ? section.querySelector('#' + targetId) : null;
-                    if (target) {
-                        if (target.tagName.toLowerCase() === 'select') {
-                            // For select elements, set the value or add it if needed
-                            target.value = value;
-                        } else {
-                            target.value = value;
-                        }
-                        target.focus();
-                    }
-                });
-            });
-
-            // Handle Add/Update button
-            var btnAddMed = section.querySelector('#btn_discharge_med_add');
-            if (btnAddMed && btnAddMed.dataset.bound !== '1') {
-                btnAddMed.dataset.bound = '1';
-                btnAddMed.addEventListener('click', function() {
-                    var medName = $('#discharge_med_name').val().trim();
-                    var medType = $('#discharge_med_type').val().trim();
-                    var dosage = $('#discharge_dosage').val();
-                    var dosageWhen = $('#discharge_dosage_when').val();
-                    var dosageFreq = $('#discharge_dosage_freq').val();
-                    var noOfDays = $('#discharge_no_of_days').val().trim();
-                    var qty = $('#discharge_qty').val().trim();
-                    var doseWhere = $('#discharge_dose_where').val();
-                    var remark = $('#discharge_remark').val().trim();
-
-                    if (medName === '') {
-                        setMedicineStatus('Please enter medicine name.', 'error');
-                        $('#discharge_med_name').focus();
-                        return;
-                    }
-
-                    // Get dose labels from cache
-                    var doseLabel = dosage;
-                    if (dosage) {
-                        var doseRow = doseMasterCache.dose.find(function(r) { return String(r.id) === dosage; });
-                        if (doseRow) doseLabel = doseRow.label;
-                    }
-                    
-                    var whenLabel = dosageWhen;
-                    if (dosageWhen) {
-                        var whenRow = doseMasterCache.when.find(function(r) { return String(r.id) === dosageWhen; });
-                        if (whenRow) whenLabel = whenRow.label;
-                    }
-                    
-                    var freqLabel = dosageFreq;
-                    if (dosageFreq) {
-                        var freqRow = doseMasterCache.freq.find(function(r) { return String(r.id) === dosageFreq; });
-                        if (freqRow) freqLabel = freqRow.label;
-                    }
-                    
-                    // Format duration (e.g., "5" -> "5 days", "1 month" -> "1 month")
-                    var formattedDuration = noOfDays;
-                    if (noOfDays && /^\d+$/.test(noOfDays.trim())) {
-                        var num = parseInt(noOfDays.trim(), 10);
-                        formattedDuration = num + (num === 1 ? ' day' : ' days');
-                    }
-
-                    // AJAX auto-save medicine
-                    if (!window.jQuery) {
-                        setMedicineStatus('jQuery not available. Cannot save medicine.', 'error');
-                        return;
-                    }
-
+                function saveInstructionSectionImmediate() {
                     var activeForm = section.closest('form') || getDischargeForm();
-                    if (!activeForm) {
-                        setMedicineStatus('Form not found.', 'error');
+                    if (!activeForm || autoSaveBusy) {
                         return;
                     }
 
+                    if (!window.jQuery) {
+                        return;
+                    }
+
+                    autoSaveBusy = true;
                     var csrf = getCsrfPair(activeForm);
                     var payload = {
-                        action: 'add_drug',
-                        ajax_mode: 'json',
-                        new_drug_name: medName,
-                        new_drug_type: medType,
-                        new_drug_dose: dosage,
-                        new_drug_when: dosageWhen,
-                        new_drug_freq: dosageFreq,
-                        new_drug_day: noOfDays,
-                        new_drug_qty: qty,
-                        new_drug_remark: remark
+                        action: 'save_main',
+                        dietary_autosave: '1',
+                        instruction_other: other ? String(other.value || '').trim() : ''
                     };
                     payload[csrf.name] = csrf.value;
 
-                    setMedicineStatus('Saving medicine...', 'muted');
+                    section.querySelectorAll('.instruction-food-item:checked').forEach(function(item) {
+                        var id = parseInt(item.value || '0', 10);
+                        if (id > 0) {
+                            if (!Array.isArray(payload.instruction_food_ids)) {
+                                payload.instruction_food_ids = [];
+                            }
+                            payload.instruction_food_ids.push(String(id));
+                        }
+                    });
 
                     window.jQuery.ajax({
                         url: activeForm.getAttribute('action') || window.location.href,
                         type: 'POST',
                         data: payload,
                         dataType: 'json',
-                        timeout: 30000
+                        timeout: 120000
                     }).done(function(data) {
                         updateFormCsrf(activeForm, data || {});
-
                         if (data && parseInt(data.update || '0', 10) === 1) {
-                            // Add row to table
+                            setSectionStatus('discharge_instruction_status', 'Dietary advice saved.', 'success');
+                        } else {
+                            setSectionStatus('discharge_instruction_status', (data && data.error_text) ? data.error_text : 'Unable to save dietary advice.', 'error');
+                        }
+                    }).always(function() {
+                        autoSaveBusy = false;
+                    });
+                }
+
+                function saveInstructionSection() {
+                    if (autoSaveTimer) {
+                        window.clearTimeout(autoSaveTimer);
+                    }
+                    autoSaveTimer = window.setTimeout(function() {
+                        saveInstructionSectionImmediate();
+                    }, 180);
+                }
+
+                function refreshInstructionPreview() {
+                    if (!preview) {
+                        return;
+                    }
+
+                    var lines = [];
+                    section.querySelectorAll('.instruction-food-item:checked').forEach(function(item) {
+                        var heading = String(item.getAttribute('data-food-short') || '').trim();
+                        var lang = String(item.getAttribute('data-food-lang') || '').trim();
+                        var desc = String(item.getAttribute('data-food-desc') || '').trim();
+                        var body = lang !== '' ? lang : desc;
+                        if (heading === '' && body === '') {
+                            return;
+                        }
+
+                        var line = heading !== '' ? ('<strong>' + heading + ':</strong> ') : '';
+                        line += body !== '' ? body : heading;
+                        lines.push('<div>' + line + '</div>');
+                    });
+
+                    var otherText = other ? String(other.value || '').trim() : '';
+                    if (otherText !== '') {
+                        lines.push('<div><strong>Other:</strong> ' + otherText + '</div>');
+                    }
+
+                    preview.innerHTML = lines.length ? lines.join('') : '<span class="text-muted">No dietary advice selected.</span>';
+                }
+
+                function appendLinesToAdvice(lines) {
+                    if (!remark || !Array.isArray(lines) || !lines.length) {
+                        return;
+                    }
+
+                    var existing = String(remark.value || '').trim();
+                    var bucket = existing === '' ? [] : existing.split(/\r?\n/).map(function(line) {
+                        return String(line || '').trim();
+                    }).filter(function(line) {
+                        return line !== '';
+                    });
+
+                    lines.forEach(function(line) {
+                        var normalized = String(line || '').trim();
+                        if (normalized === '') {
+                            return;
+                        }
+                        if (bucket.some(function(prev) {
+                                return prev.toUpperCase() === normalized.toUpperCase();
+                            })) {
+                            return;
+                        }
+                        bucket.push(normalized);
+                    });
+
+                    remark.value = bucket.join('\n');
+                }
+
+                if (addSelectedBtn && addSelectedBtn.dataset.bound !== '1') {
+                    addSelectedBtn.dataset.bound = '1';
+                    addSelectedBtn.addEventListener('click', function() {
+                        var lines = [];
+                        section.querySelectorAll('.instruction-food-item:checked').forEach(function(item) {
+                            var desc = String(item.getAttribute('data-food-desc') || '').trim();
+                            var shortText = String(item.getAttribute('data-food-short') || '').trim();
+                            var text = desc !== '' ? desc : shortText;
+                            if (text !== '') {
+                                lines.push(text);
+                            }
+                        });
+
+                        var otherText = other ? String(other.value || '').trim() : '';
+                        if (otherText !== '') {
+                            lines.push(otherText);
+                        }
+
+                        appendLinesToAdvice(lines);
+                    });
+                }
+
+                if (clearBtn && clearBtn.dataset.bound !== '1') {
+                    clearBtn.dataset.bound = '1';
+                    clearBtn.addEventListener('click', function() {
+                        section.querySelectorAll('.instruction-food-item:checked').forEach(function(item) {
+                            item.checked = false;
+                        });
+                        refreshInstructionPreview();
+                        saveInstructionSection();
+                    });
+                }
+
+                section.querySelectorAll('.instruction-food-item').forEach(function(item) {
+                    if (item.dataset.bound === '1') {
+                        return;
+                    }
+                    item.dataset.bound = '1';
+                    item.addEventListener('change', function() {
+                        refreshInstructionPreview();
+                        saveInstructionSection();
+                    });
+                });
+
+                if (other && other.dataset.bound !== '1') {
+                    other.dataset.bound = '1';
+                    other.addEventListener('input', refreshInstructionPreview);
+                }
+
+                refreshInstructionPreview();
+                initDietaryMasterCrud(getDischargeForm());
+
+                // Review After quick select buttons
+                var reviewChips = section.querySelectorAll('.discharge-review-chip');
+                var reviewInput = section.querySelector('#discharge_review_after');
+                reviewChips.forEach(function(chip) {
+                    chip.addEventListener('click', function() {
+                        var value = chip.getAttribute('data-value') || chip.textContent.trim();
+                        if (reviewInput) {
+                            reviewInput.value = value;
+                            reviewInput.focus();
+                        }
+                    });
+                });
+            }
+
+            function initDietaryMasterCrud(form) {
+                if (!window.jQuery) {
+                    return;
+                }
+                if (window.__ipdFoodCrudBound === true) {
+                    return;
+                }
+                window.__ipdFoodCrudBound = true;
+
+                var $search = $('#food_master_search');
+                var $rows = $('#food_master_rows');
+
+                function setFoodStatus(text, level) {
+                    setSectionStatus('food_master_status', text, level || 'muted');
+                }
+
+                function clearFoodForm() {
+                    $('#food_master_id').val('0');
+                    $('#food_master_short').val('');
+                    $('#food_master_desc').val('');
+                    $('#food_master_lang').val('');
+                }
+
+                function rowHtml(row) {
+                    var safeShort = $('<div>').text(row.food_short || '').html();
+                    var safeDesc = $('<div>').text(row.food_desc || '').html();
+                    var safeLang = $('<div>').text(row.food_desc_lang || '').html();
+                    return '<tr>' +
+                        '<td>' + safeShort + '</td>' +
+                        '<td>' + safeDesc + '</td>' +
+                        '<td>' + safeLang + '</td>' +
+                        '<td>' +
+                        '<button type="button" class="btn btn-outline-primary btn-sm btn-food-edit" data-id="' + (row.id || 0) + '">Edit</button> ' +
+                        '<button type="button" class="btn btn-outline-danger btn-sm btn-food-delete" data-id="' + (row.id || 0) + '">Del</button>' +
+                        '</td>' +
+                        '</tr>';
+                }
+
+                function fetchFoodRows() {
+                    var q = ($search.val() || '').toString().trim();
+                    $.get('<?= base_url('Ipd_discharge/dietary_master_list') ?>?q=' + encodeURIComponent(q), function(data) {
+                        var rows = (data && data.rows) ? data.rows : [];
+                        foodMasterState = rows;
+                        if (!rows.length) {
+                            $rows.html('<tr><td colspan="4" class="text-center text-muted">No records.</td></tr>');
+                            return;
+                        }
+
+                        var html = '';
+                        rows.forEach(function(row) {
+                            html += rowHtml(row);
+                        });
+                        $rows.html(html);
+                    }, 'json').fail(function() {
+                        setFoodStatus('Unable to load dietary master list.', 'error');
+                    });
+                }
+
+                $(document).on('click', '#btn_discharge_manage_food_master', function() {
+                    clearFoodForm();
+                    setFoodStatus('', 'muted');
+                    fetchFoodRows();
+                    showModalById('ipdDietaryMasterModal');
+                });
+
+                $('#btn_food_master_refresh').on('click', fetchFoodRows);
+                $search.on('input', fetchFoodRows);
+                $('#btn_food_master_clear').on('click', clearFoodForm);
+
+                $(document).on('click', '.btn-food-edit', function() {
+                    var id = parseInt($(this).data('id') || '0', 10);
+                    var row = (foodMasterState || []).find(function(item) {
+                        return parseInt(item.id || '0', 10) === id;
+                    }) || null;
+                    if (!row) {
+                        return;
+                    }
+
+                    $('#food_master_id').val(String(row.id || 0));
+                    $('#food_master_short').val((row.food_short || '').toString());
+                    $('#food_master_desc').val((row.food_desc || '').toString());
+                    $('#food_master_lang').val((row.food_desc_lang || '').toString());
+                });
+
+                $(document).on('click', '.btn-food-delete', function() {
+                    var id = parseInt($(this).data('id') || '0', 10);
+                    if (id <= 0) {
+                        return;
+                    }
+                    if (!window.confirm('Delete this dietary master row?')) {
+                        return;
+                    }
+
+                    var csrf = getCsrfPair(form);
+                    var payload = {
+                        id: id
+                    };
+                    payload[csrf.name] = csrf.value;
+
+                    $.post('<?= base_url('Ipd_discharge/dietary_master_delete') ?>', payload, function(data) {
+                        updateFormCsrf(form, data);
+                        if (!data || parseInt(data.update || '0', 10) !== 1) {
+                            setFoodStatus((data && data.error_text) ? data.error_text : 'Unable to delete record.', 'error');
+                            return;
+                        }
+                        setFoodStatus('Record deleted.', 'success');
+                        fetchFoodRows();
+                    }, 'json').fail(function() {
+                        setFoodStatus('Delete failed.', 'error');
+                    });
+                });
+
+                $('#btn_food_master_save').on('click', function() {
+                    var shortText = ($('#food_master_short').val() || '').toString().trim();
+                    if (shortText === '') {
+                        setFoodStatus('Short heading is required.', 'error');
+                        return;
+                    }
+
+                    var csrf = getCsrfPair(form);
+                    var payload = {
+                        id: parseInt($('#food_master_id').val() || '0', 10),
+                        food_short: shortText,
+                        food_desc: ($('#food_master_desc').val() || '').toString().trim(),
+                        food_desc_lang: ($('#food_master_lang').val() || '').toString().trim()
+                    };
+                    payload[csrf.name] = csrf.value;
+
+                    $.post('<?= base_url('Ipd_discharge/dietary_master_save') ?>', payload, function(data) {
+                        updateFormCsrf(form, data);
+                        if (!data || parseInt(data.update || '0', 10) !== 1) {
+                            setFoodStatus((data && data.error_text) ? data.error_text : 'Unable to save record.', 'error');
+                            return;
+                        }
+
+                        setFoodStatus('Record saved.', 'success');
+                        clearFoodForm();
+                        fetchFoodRows();
+                    }, 'json').fail(function() {
+                        setFoodStatus('Save failed.', 'error');
+                    });
+                });
+            }
+
+            function initMedicineTools() {
+                var section = document.getElementById('section-medicine');
+                if (!section || section.dataset.toolsBound === '1') {
+                    return;
+                }
+                section.dataset.toolsBound = '1';
+
+                if (!window.jQuery) {
+                    return;
+                }
+
+                var rxGroupCache = [];
+                var rxGroupInput = section.querySelector('#selected_rx_group_id');
+                var rxGroupName = section.querySelector('#rx_group_selected_name');
+                var rxGroupList = document.getElementById('discharge_rx_group_list');
+                var rxGroupSearch = document.getElementById('discharge_rx_group_search');
+                var applyBtn = section.querySelector('#btn_apply_rx_group');
+
+                function setMedicineStatus(text, level) {
+                    setSectionStatus('discharge_medicine_status', text, level || 'muted');
+                }
+
+                function renderRxGroups() {
+                    if (!rxGroupList) {
+                        return;
+                    }
+
+                    var q = rxGroupSearch ? String(rxGroupSearch.value || '').trim().toLowerCase() : '';
+                    var html = '';
+                    rxGroupCache.forEach(function(row) {
+                        var id = parseInt(row.id || '0', 10);
+                        var name = String(row.rx_group_name || '').trim();
+                        if (id <= 0 || name === '') {
+                            return;
+                        }
+                        if (q !== '' && name.toLowerCase().indexOf(q) === -1) {
+                            return;
+                        }
+
+                        var medCount = parseInt(row.med_count || '0', 10);
+                        var label = name + (medCount > 0 ? (' (' + medCount + ')') : '');
+                        html += '<button type="button" class="btn btn-outline-secondary btn-sm js-discharge-rx-group" data-id="' + id + '" data-name="' + $('<div>').text(name).html() + '">' + $('<div>').text(label).html() + '</button>';
+                    });
+
+                    rxGroupList.innerHTML = html || '<div class="text-muted small">No Rx Group found.</div>';
+                }
+
+                function loadRxGroups() {
+                    $.get('<?= base_url('Opd_prescription/save_rx_group_list') ?>/0', function(data) {
+                        rxGroupCache = (data && data.rows) ? data.rows : [];
+                        renderRxGroups();
+                    }, 'json').fail(function() {
+                        setMedicineStatus('Unable to load Rx Groups.', 'error');
+                    });
+                }
+
+                var openRxBtn = section.querySelector('#btn_open_rx_group_modal');
+                if (openRxBtn) {
+                    openRxBtn.addEventListener('click', function() {
+                        loadRxGroups();
+                        showModalById('dischargeRxGroupModal');
+                    });
+                }
+
+                if (rxGroupSearch) {
+                    if (rxGroupSearch.dataset.bound !== '1') {
+                        rxGroupSearch.dataset.bound = '1';
+                        rxGroupSearch.addEventListener('input', function() {
+                            renderRxGroups();
+                        });
+                    }
+                }
+
+                if (window.__dischargeRxGroupSelectBound !== true) {
+                    window.__dischargeRxGroupSelectBound = true;
+                    $(document).on('click', '.js-discharge-rx-group', function() {
+                        var id = parseInt($(this).data('id') || '0', 10);
+                        var name = String($(this).data('name') || '').trim();
+                        var activeSection = document.getElementById('section-medicine');
+                        if (!activeSection || id <= 0) {
+                            return;
+                        }
+
+                        var activeRxInput = activeSection.querySelector('#selected_rx_group_id');
+                        var activeRxLabel = activeSection.querySelector('#rx_group_selected_name');
+                        var activeApplyBtn = activeSection.querySelector('#btn_apply_rx_group');
+                        if (!activeRxInput) {
+                            return;
+                        }
+
+                        activeRxInput.value = String(id);
+                        if (activeRxLabel) {
+                            activeRxLabel.textContent = name ? ('Selected: ' + name) : ('Selected Rx Group #' + id);
+                        }
+                        hideModalById('dischargeRxGroupModal');
+
+                        if (activeApplyBtn) {
+                            activeApplyBtn.click();
+                        }
+                    });
+                }
+
+                // Load dose masters (Dose, When, Frequency, Route)
+                var doseMasterCache = {
+                    dose: [],
+                    when: [],
+                    freq: [],
+                    where: []
+                };
+
+                function renderSelectOptions($select, rows, placeholder) {
+                    var html = '<option value="">' + $('<div>').text(placeholder || 'Select').html() + '</option>';
+                    (rows || []).forEach(function(row) {
+                        var id = (row && row.id !== undefined) ? String(row.id) : '';
+                        var label = (row && row.label !== undefined) ? String(row.label) : '';
+                        if (!id || !label) {
+                            return;
+                        }
+                        html += '<option value="' + $('<div>').text(id).html() + '">' + $('<div>').text(label).html() + '</option>';
+                    });
+                    $select.html(html);
+                }
+
+                function loadDischargeDoseMasters() {
+                    $.get('<?= base_url('Opd_prescription/rx_group_dose_masters') ?>', function(data) {
+                        doseMasterCache = {
+                            dose: (data && data.dose) ? data.dose : [],
+                            when: (data && data.when) ? data.when : [],
+                            freq: (data && data.freq) ? data.freq : [],
+                            where: (data && data.where) ? data.where : []
+                        };
+
+                        renderSelectOptions($('#discharge_dosage'), doseMasterCache.dose, 'Dose');
+                        renderSelectOptions($('#discharge_dosage_when'), doseMasterCache.when, 'When');
+                        renderSelectOptions($('#discharge_dosage_freq'), doseMasterCache.freq, 'Frequency');
+                        renderSelectOptions($('#discharge_dose_where'), doseMasterCache.where, 'Route');
+                    }, 'json').fail(function() {
+                        setMedicineStatus('Unable to load dose masters.', 'error');
+                    });
+                }
+
+                // Load dose masters on init
+                loadDischargeDoseMasters();
+
+                // Handle medicine autocomplete with full suggestions
+                var dischargeMedInput = section.querySelector('#discharge_med_name');
+                var dischargeMedSuggest = section.querySelector('#discharge_med_suggest');
+                var dischargeMedType = section.querySelector('#discharge_med_type');
+                var dischargeMedSuggestRows = [];
+                var dischargeMedInputTimer = null;
+
+                if (dischargeMedInput) {
+                    dischargeMedInput.addEventListener('input', function() {
+                        var q = String(dischargeMedInput.value || '').trim();
+
+                        if (dischargeMedInputTimer) {
+                            clearTimeout(dischargeMedInputTimer);
+                            dischargeMedInputTimer = null;
+                        }
+
+                        if (q.length < 2) {
+                            dischargeMedSuggestRows = [];
+                            if (dischargeMedSuggest) {
+                                dischargeMedSuggest.innerHTML = '';
+                            }
+                            return;
+                        }
+
+                        dischargeMedInputTimer = setTimeout(function() {
+                            $.get('<?= base_url('Opd_prescription/medicine_search') ?>?q=' + encodeURIComponent(q) + '&scope=all&limit=10', function(data) {
+                                var rows = (data && data.rows) ? data.rows : [];
+                                dischargeMedSuggestRows = rows;
+                                var html = '';
+                                rows.forEach(function(row) {
+                                    var name = String(row.med_name || '').trim();
+                                    if (name === '') {
+                                        return;
+                                    }
+                                    html += '<option value="' + $('<div>').text(name).html() + '" ' +
+                                        'data-id="' + (row.id || 0) + '" ' +
+                                        'data-type="' + $('<div>').text(row.med_type || '').html() + '" ' +
+                                        'data-dosage="' + $('<div>').text(row.dosage || '').html() + '" ' +
+                                        'data-dosage-when="' + $('<div>').text(row.dosage_when || '').html() + '" ' +
+                                        'data-dosage-freq="' + $('<div>').text(row.dosage_freq || '').html() + '" ' +
+                                        'data-dosage-where="' + $('<div>').text(row.dosage_where || '').html() + '" ' +
+                                        'data-no-of-days="' + $('<div>').text(row.no_of_days || '').html() + '" ' +
+                                        'data-qty="' + $('<div>').text(row.qty || '').html() + '" ' +
+                                        'data-remark="' + $('<div>').text(row.remark || '').html() + '"></option>';
+                                });
+                                if (dischargeMedSuggest) {
+                                    dischargeMedSuggest.innerHTML = html;
+                                }
+
+                                // Auto-fill if exact match (Chrome fires input on datalist pick)
+                                var matched = null;
+                                dischargeMedSuggestRows.forEach(function(row) {
+                                    if (String(row.med_name || '').trim().toUpperCase() === q.toUpperCase()) {
+                                        matched = row;
+                                    }
+                                });
+                                if (matched) {
+                                    // Store med_id
+                                    $(dischargeMedInput).data('med-id', parseInt(matched.id || 0, 10));
+                                    if (section.querySelector('#discharge_med_id')) {
+                                        section.querySelector('#discharge_med_id').value = String(matched.id || '0');
+                                    }
+                                    // Auto-fill type if empty
+                                    if (dischargeMedType && dischargeMedType.value.trim() === '') {
+                                        dischargeMedType.value = String(matched.med_type || '').trim();
+                                    }
+                                }
+                            }, 'json').fail(function() {
+                                dischargeMedSuggestRows = [];
+                                if (dischargeMedSuggest) {
+                                    dischargeMedSuggest.innerHTML = '';
+                                }
+                            });
+                        }, 180);
+                    });
+
+                    dischargeMedInput.addEventListener('change', function() {
+                        var value = String(dischargeMedInput.value || '').trim();
+                        var valueUpper = value.toUpperCase();
+
+                        if (value === '') {
+                            // Clear stored med_id when input is cleared
+                            $(dischargeMedInput).data('med-id', 0);
+                            if (section.querySelector('#discharge_med_id')) {
+                                section.querySelector('#discharge_med_id').value = '0';
+                            }
+                            return;
+                        }
+
+                        // Find matching medicine and auto-fill all fields
+                        var matched = null;
+                        dischargeMedSuggestRows.forEach(function(row) {
+                            if (String(row.med_name || '').trim().toUpperCase() === valueUpper) {
+                                matched = row;
+                            }
+                        });
+
+                        if (matched) {
+                            // Store med_id for reference
+                            $(dischargeMedInput).data('med-id', parseInt(matched.id || 0, 10));
+                            if (section.querySelector('#discharge_med_id')) {
+                                section.querySelector('#discharge_med_id').value = String(matched.id || '0');
+                            }
+
+                            // Auto-fill Type
+                            if (dischargeMedType && dischargeMedType.value.trim() === '') {
+                                dischargeMedType.value = String(matched.med_type || '').trim();
+                            }
+
+                            // Auto-fill dose fields if they have values
+                            var dosageSelect = section.querySelector('#discharge_dosage');
+                            var whenSelect = section.querySelector('#discharge_dosage_when');
+                            var freqSelect = section.querySelector('#discharge_dosage_freq');
+                            var whereSelect = section.querySelector('#discharge_dose_where');
+                            var daysInput = section.querySelector('#discharge_no_of_days');
+                            var qtyInput = section.querySelector('#discharge_qty');
+                            var remarkInput = section.querySelector('#discharge_remark');
+
+                            if (matched.dosage && dosageSelect && dosageSelect.value === '') {
+                                ensureDoseOption(dosageSelect, matched.dosage);
+                                dosageSelect.value = matched.dosage;
+                            }
+                            if (matched.dosage_when && whenSelect && whenSelect.value === '') {
+                                ensureDoseOption(whenSelect, matched.dosage_when);
+                                whenSelect.value = matched.dosage_when;
+                            }
+                            if (matched.dosage_freq && freqSelect && freqSelect.value === '') {
+                                ensureDoseOption(freqSelect, matched.dosage_freq);
+                                freqSelect.value = matched.dosage_freq;
+                            }
+                            if (matched.dosage_where && whereSelect && whereSelect.value === '') {
+                                ensureDoseOption(whereSelect, matched.dosage_where);
+                                whereSelect.value = matched.dosage_where;
+                            }
+                            if (matched.no_of_days && daysInput && daysInput.value === '') {
+                                daysInput.value = String(matched.no_of_days || '').trim();
+                            }
+                            if (matched.qty && qtyInput && qtyInput.value === '') {
+                                qtyInput.value = String(matched.qty || '').trim();
+                            }
+                            if (matched.remark && remarkInput && remarkInput.value === '') {
+                                remarkInput.value = String(matched.remark || '').trim();
+                            }
+                        } else {
+                            // No match found - clear med_id
+                            $(dischargeMedInput).data('med-id', 0);
+                            if (section.querySelector('#discharge_med_id')) {
+                                section.querySelector('#discharge_med_id').value = '0';
+                            }
+                        }
+                    });
+                }
+
+                // ─── Load Medicine Substitutes ──────────────────────────────────────
+                function loadDischargeMedicineSubstitutes(medId, medName) {
+                    medId = parseInt(medId || '0', 10);
+                    medName = (medName || '').toString().trim();
+                    var $box = $('#discharge_substitute_box');
+                    var $note = $('#discharge_substitute_note');
+                    var $empty = $('#discharge_substitute_empty');
+                    var $rows = $('#discharge_substitute_rows');
+
+                    if (medId <= 0 && medName === '') {
+                        $box.hide();
+                        return;
+                    }
+
+                    $note.text('loading...');
+                    $empty.show();
+                    $rows.empty();
+                    $box.show();
+
+                    var url = '<?= base_url('Opd_prescription/medicine_substitutes') ?>?med_id=' + encodeURIComponent(medId) +
+                        '&med_name=' + encodeURIComponent(medName);
+
+                    $.get(url, function(data) {
+                        var rows = (data && data.rows) ? data.rows : [];
+                        $note.text(rows.length ? (rows.length + ' substitute(s)') : '');
+
+                        if (!rows.length) {
+                            $empty.show();
+                            $rows.empty();
+                            return;
+                        }
+
+                        $empty.hide();
+                        $rows.empty();
+
+                        rows.forEach(function(row) {
+                            var medId = parseInt(row.id || 0, 10);
+                            var name = String(row.med_name || '').trim();
+                            var type = String(row.med_type || '').trim();
+                            var generic = String(row.genericname || row.salt_name || '').trim();
+
+                            if (name === '') {
+                                return;
+                            }
+
+                            var card = '<div class=\"card mb-1\" style=\"font-size:0.875rem;\">' +
+                                '<div class=\"card-body py-1 px-2\">' +
+                                '<div class=\"d-flex justify-content-between align-items-center\">' +
+                                '<div><strong>' + $('<div>').text(name).html() + '</strong>' +
+                                (type ? ' <small class=\"text-muted\">(' + $('<div>').text(type).html() + ')</small>' : '') +
+                                (generic ? '<br><small class=\"text-muted\">' + $('<div>').text(generic).html() + '</small>' : '') +
+                                '</div>' +
+                                '<div class=\"btn-group btn-group-sm\">' +
+                                '<button type=\"button\" class=\"btn btn-sm btn-outline-primary btn-discharge-substitute-use\" ' +
+                                'data-id=\"' + medId + '\" ' +
+                                'data-name=\"' + $('<div>').text(name).html() + '\" ' +
+                                'data-type=\"' + $('<div>').text(type).html() + '\">Use</button>' +
+                                '</div></div></div></div>';
+
+                            $rows.append(card);
+                        });
+                    }, 'json').fail(function() {
+                        $note.text('');
+                        $empty.show();
+                        $rows.empty();
+                    });
+                }
+
+                // Handle substitute "Use" button
+                $(document).on('click', '.btn-discharge-substitute-use', function() {
+                    var medId = parseInt($(this).data('id') || '0', 10);
+                    var medName = String($(this).data('name') || '').trim();
+                    var medType = String($(this).data('type') || '').trim();
+
+                    if (medName === '') {
+                        return;
+                    }
+
+                    $('#discharge_med_id').val(medId);
+                    $('#discharge_med_name').val(medName);
+                    if (medType !== '' && $('#discharge_med_type').val().trim() === '') {
+                        $('#discharge_med_type').val(medType);
+                    }
+
+                    $('#discharge_substitute_box').hide();
+                    $('#discharge_med_name').trigger('focus');
+                });
+
+                // Load substitutes when medicine is selected
+                dischargeMedInput.addEventListener('change', function() {
+                    var medId = parseInt($('#discharge_med_id').val() || '0', 10);
+                    var medName = String(dischargeMedInput.value || '').trim();
+
+                    if (medId > 0 || medName !== '') {
+                        setTimeout(function() {
+                            loadDischargeMedicineSubstitutes(medId, medName);
+                        }, 100);
+                    }
+                });
+
+                // ─── Rx-Group Functionality ──────────────────────────────────────
+                var dischargeRxGroupCache = [];
+
+                $('#btn_discharge_rx_group').on('click', function() {
+                    loadDischargeRxGroups();
+                    var modal = new bootstrap.Modal(document.getElementById('dischargeRxGroupModal'));
+                    modal.show();
+                });
+
+                function loadDischargeRxGroups() {
+                    $('#discharge_rx_group_list').html('<div class=\"text-muted\">Loading...</div>');
+
+                    $.get('<?= base_url('Opd_prescription/rx_group_list') ?>', function(data) {
+                        var rows = (data && data.rows) ? data.rows : [];
+                        dischargeRxGroupCache = rows;
+                        renderDischargeRxGroups(rows);
+                    }, 'json').fail(function() {
+                        $('#discharge_rx_group_list').html('<div class=\"text-danger\">Failed to load Rx-Groups</div>');
+                    });
+                }
+
+                function renderDischargeRxGroups(rows) {
+                    var $list = $('#discharge_rx_group_list');
+                    var query = ($('#discharge_rx_group_search').val() || '').toLowerCase();
+
+                    if (query) {
+                        rows = rows.filter(function(row) {
+                            var name = (row.rx_group_name || '').toLowerCase();
+                            return name.indexOf(query) !== -1;
+                        });
+                    }
+
+                    if (!rows.length) {
+                        $list.html('<div class=\"text-muted\">No Rx-Groups found</div>');
+                        return;
+                    }
+
+                    var html = '';
+                    rows.forEach(function(row) {
+                        var id = parseInt(row.id || 0, 10);
+                        var name = String(row.rx_group_name || '').trim();
+                        var medCount = parseInt(row.med_count || 0, 10);
+
+                        if (id <= 0 || name === '') {
+                            return;
+                        }
+
+                        html += '<div class=\"card mb-2\">' +
+                            '<div class=\"card-body py-2\">' +
+                            '<div class=\"d-flex justify-content-between align-items-center\">' +
+                            '<div>' +
+                            '<strong>' + $('<div>').text(name).html() + '</strong>' +
+                            '<span class=\"badge bg-secondary ms-2\">' + medCount + ' med(s)</span>' +
+                            '</div>' +
+                            '<button type=\"button\" class=\"btn btn-sm btn-primary btn-discharge-rx-apply\" data-id=\"' + id + '\">Add</button>' +
+                            '</div></div></div>';
+                    });
+
+                    $list.html(html);
+                }
+
+                $('#discharge_rx_group_search').on('input', function() {
+                    renderDischargeRxGroups(dischargeRxGroupCache);
+                });
+
+                $(document).on('click', '.btn-discharge-rx-apply', function() {
+                    var rxGroupId = parseInt($(this).data('id') || 0, 10);
+                    if (rxGroupId <= 0) {
+                        return;
+                    }
+
+                    $(this).prop('disabled', true).text('Loading...');
+
+                    $.get('<?= base_url('Opd_prescription/rx_group_medicine_list') ?>/' + rxGroupId, function(data) {
+                        var rows = (data && data.rows) ? data.rows : [];
+
+                        if (!rows.length) {
+                            setMedicineStatus('No medicines found in selected Rx-Group', 'error');
+                            $('.btn-discharge-rx-apply').prop('disabled', false).text('Add');
+                            return;
+                        }
+
+                        // Add each medicine from the group
+                        rows.forEach(function(med) {
+                            var dosageLabel = med.dosage_label || med.dosage || '';
+                            var whenLabel = med.dosage_when_label || med.dosage_when || '';
+                            var freqLabel = med.dosage_freq_label || med.dosage_freq || '';
+
                             var tbody = section.querySelector('#discharge_medicine_tbody');
                             if (!tbody) {
-                                setMedicineStatus('Medicine table not found.', 'error');
                                 return;
                             }
 
                             // Remove "No medicine added" row if present
-                            var emptyRow = tbody.querySelector('tr td[colspan="9"]');
+                            var emptyRow = tbody.querySelector('tr td[colspan=\"9\"]');
                             if (emptyRow) {
                                 emptyRow.closest('tr').remove();
                             }
 
                             var tr = document.createElement('tr');
-                            tr.innerHTML = '<td>' + $('<div>').text(medType).html() + '</td>'
-                                + '<td>' + $('<div>').text(medName).html() + '</td>'
-                                + '<td>' + $('<div>').text(doseLabel).html() + '</td>'
-                                + '<td>' + $('<div>').text(whenLabel).html() + '</td>'
-                                + '<td>' + $('<div>').text(freqLabel).html() + '</td>'
-                                + '<td>' + $('<div>').text(formattedDuration).html() + '</td>'
-                                + '<td>' + $('<div>').text(qty).html() + '</td>'
-                                + '<td>' + $('<div>').text(remark).html() + '</td>'
-                                + '<td><button type="button" class="btn btn-outline-danger btn-sm btn-remove-discharge-med">Remove</button></td>';
+                            tr.innerHTML = '<td>' + $('<div>').text(med.med_type || '').html() + '</td>' +
+                                '<td>' + $('<div>').text(med.med_name || '').html() + '</td>' +
+                                '<td>' + $('<div>').text(dosageLabel).html() + '</td>' +
+                                '<td>' + $('<div>').text(whenLabel).html() + '</td>' +
+                                '<td>' + $('<div>').text(freqLabel).html() + '</td>' +
+                                '<td>' + $('<div>').text(med.no_of_days || '').html() + '</td>' +
+                                '<td>' + $('<div>').text(med.qty || '').html() + '</td>' +
+                                '<td>' + $('<div>').text(med.remark || '').html() + '</td>' +
+                                '<td><button type=\"button\" class=\"btn btn-outline-danger btn-sm btn-remove-discharge-med\">Remove</button></td>';
                             tbody.appendChild(tr);
+                        });
 
-                            // Clear form
-                            $('#discharge_med_name, #discharge_med_type, #discharge_no_of_days, #discharge_qty, #discharge_remark').val('');
-                            $('#discharge_dosage, #discharge_dosage_when, #discharge_dosage_freq, #discharge_dose_where').val('');
-                            $('#discharge_med_name').focus();
-
-                            setMedicineStatus('Medicine saved successfully.', 'success');
-
-                            // Bind remove button (Note: Remove is not yet AJAX - medicines load from DB on page reload)
-                            tr.querySelector('.btn-remove-discharge-med').addEventListener('click', function() {
-                                if (confirm('Remove this medicine? This will only remove from the current view. Reload the page to see saved medicines.')) {
-                                    tr.remove();
-                                    if (tbody.children.length === 0) {
-                                        tbody.innerHTML = '<tr><td colspan="9" class="text-muted text-center">No medicine added</td></tr>';
-                                    }
-                                    setMedicineStatus('Medicine removed from view. Reload to see saved data.', 'info');
-                                }
-                            });
-                        } else {
-                            var errorMsg = (data && data.error_text) ? data.error_text : 'Unable to save medicine.';
-                            setMedicineStatus(errorMsg, 'error');
-                        }
-                    }).fail(function(xhr, status, error) {
-                        setMedicineStatus('Network error: ' + (error || status), 'error');
+                        setMedicineStatus('Rx-Group medicines added (client-side only, save form to persist)', 'success');
+                        $('.btn-discharge-rx-apply').prop('disabled', false).text('Add');
+                        bootstrap.Modal.getInstance(document.getElementById('dischargeRxGroupModal')).hide();
+                    }, 'json').fail(function() {
+                        setMedicineStatus('Failed to load Rx-Group medicines', 'error');
+                        $('.btn-discharge-rx-apply').prop('disabled', false).text('Add');
                     });
                 });
+
+                function ensureDoseOption(select, value) {
+                    value = (value || '').toString().trim();
+                    if (!value) {
+                        return;
+                    }
+
+                    var exists = false;
+                    $(select).find('option').each(function() {
+                        if ($(this).val() === value) {
+                            exists = true;
+                            return false;
+                        }
+                    });
+
+                    if (!exists) {
+                        $(select).append('<option value="' + $('<div>').text(value).html() + '">' + $('<div>').text(value + ' (Current)').html() + '</option>');
+                    }
+                }
+
+                // Handle quick buttons
+                section.querySelectorAll('.discharge-quick-btn').forEach(function(btn) {
+                    btn.addEventListener('click', function() {
+                        var targetId = String(btn.getAttribute('data-fill-target') || '').trim();
+                        var value = String(btn.getAttribute('data-fill-value') || '').trim();
+                        var target = targetId ? section.querySelector('#' + targetId) : null;
+                        if (target) {
+                            if (target.tagName.toLowerCase() === 'select') {
+                                // For select elements, set the value or add it if needed
+                                target.value = value;
+                            } else {
+                                target.value = value;
+                            }
+                            target.focus();
+                        }
+                    });
+                });
+
+                // Handle Add/Update button
+                var btnAddMed = section.querySelector('#btn_discharge_med_add');
+                if (btnAddMed && btnAddMed.dataset.bound !== '1') {
+                    btnAddMed.dataset.bound = '1';
+                    btnAddMed.addEventListener('click', function() {
+                        var medName = $('#discharge_med_name').val().trim();
+                        var medType = $('#discharge_med_type').val().trim();
+                        var dosage = $('#discharge_dosage').val();
+                        var dosageWhen = $('#discharge_dosage_when').val();
+                        var dosageFreq = $('#discharge_dosage_freq').val();
+                        var noOfDays = $('#discharge_no_of_days').val().trim();
+                        var qty = $('#discharge_qty').val().trim();
+                        var doseWhere = $('#discharge_dose_where').val();
+                        var remark = $('#discharge_remark').val().trim();
+
+                        if (medName === '') {
+                            setMedicineStatus('Please enter medicine name.', 'error');
+                            $('#discharge_med_name').focus();
+                            return;
+                        }
+
+                        // Get dose labels from cache
+                        var doseLabel = dosage;
+                        if (dosage) {
+                            var doseRow = doseMasterCache.dose.find(function(r) {
+                                return String(r.id) === dosage;
+                            });
+                            if (doseRow) doseLabel = doseRow.label;
+                        }
+
+                        var whenLabel = dosageWhen;
+                        if (dosageWhen) {
+                            var whenRow = doseMasterCache.when.find(function(r) {
+                                return String(r.id) === dosageWhen;
+                            });
+                            if (whenRow) whenLabel = whenRow.label;
+                        }
+
+                        var freqLabel = dosageFreq;
+                        if (dosageFreq) {
+                            var freqRow = doseMasterCache.freq.find(function(r) {
+                                return String(r.id) === dosageFreq;
+                            });
+                            if (freqRow) freqLabel = freqRow.label;
+                        }
+
+                        // Format duration (e.g., "5" -> "5 days", "1 month" -> "1 month")
+                        var formattedDuration = noOfDays;
+                        if (noOfDays && /^\d+$/.test(noOfDays.trim())) {
+                            var num = parseInt(noOfDays.trim(), 10);
+                            formattedDuration = num + (num === 1 ? ' day' : ' days');
+                        }
+
+                        // AJAX auto-save medicine
+                        if (!window.jQuery) {
+                            setMedicineStatus('jQuery not available. Cannot save medicine.', 'error');
+                            return;
+                        }
+
+                        var activeForm = section.closest('form') || getDischargeForm();
+                        if (!activeForm) {
+                            setMedicineStatus('Form not found.', 'error');
+                            return;
+                        }
+
+                        var csrf = getCsrfPair(activeForm);
+                        var payload = {
+                            action: 'add_drug',
+                            ajax_mode: 'json',
+                            new_drug_name: medName,
+                            new_drug_type: medType,
+                            new_drug_dose: dosage,
+                            new_drug_when: dosageWhen,
+                            new_drug_freq: dosageFreq,
+                            new_drug_day: noOfDays,
+                            new_drug_qty: qty,
+                            new_drug_remark: remark
+                        };
+                        payload[csrf.name] = csrf.value;
+
+                        setMedicineStatus('Saving medicine...', 'muted');
+
+                        window.jQuery.ajax({
+                            url: activeForm.getAttribute('action') || window.location.href,
+                            type: 'POST',
+                            data: payload,
+                            dataType: 'json',
+                            timeout: 30000
+                        }).done(function(data) {
+                            updateFormCsrf(activeForm, data || {});
+
+                            if (data && parseInt(data.update || '0', 10) === 1) {
+                                // Add row to table
+                                var tbody = section.querySelector('#discharge_medicine_tbody');
+                                if (!tbody) {
+                                    setMedicineStatus('Medicine table not found.', 'error');
+                                    return;
+                                }
+
+                                // Remove "No medicine added" row if present
+                                var emptyRow = tbody.querySelector('tr td[colspan="9"]');
+                                if (emptyRow) {
+                                    emptyRow.closest('tr').remove();
+                                }
+
+                                var tr = document.createElement('tr');
+                                tr.innerHTML = '<td>' + $('<div>').text(medType).html() + '</td>' +
+                                    '<td>' + $('<div>').text(medName).html() + '</td>' +
+                                    '<td>' + $('<div>').text(doseLabel).html() + '</td>' +
+                                    '<td>' + $('<div>').text(whenLabel).html() + '</td>' +
+                                    '<td>' + $('<div>').text(freqLabel).html() + '</td>' +
+                                    '<td>' + $('<div>').text(formattedDuration).html() + '</td>' +
+                                    '<td>' + $('<div>').text(qty).html() + '</td>' +
+                                    '<td>' + $('<div>').text(remark).html() + '</td>' +
+                                    '<td><button type="button" class="btn btn-outline-danger btn-sm btn-remove-discharge-med">Remove</button></td>';
+                                tbody.appendChild(tr);
+
+                                // Clear form
+                                $('#discharge_med_name, #discharge_med_type, #discharge_no_of_days, #discharge_qty, #discharge_remark').val('');
+                                $('#discharge_dosage, #discharge_dosage_when, #discharge_dosage_freq, #discharge_dose_where').val('');
+                                $('#discharge_med_name').focus();
+
+                                setMedicineStatus('Medicine saved successfully.', 'success');
+
+                                // Bind remove button (Note: Remove is not yet AJAX - medicines load from DB on page reload)
+                                tr.querySelector('.btn-remove-discharge-med').addEventListener('click', function() {
+                                    if (confirm('Remove this medicine? This will only remove from the current view. Reload the page to see saved medicines.')) {
+                                        tr.remove();
+                                        if (tbody.children.length === 0) {
+                                            tbody.innerHTML = '<tr><td colspan="9" class="text-muted text-center">No medicine added</td></tr>';
+                                        }
+                                        setMedicineStatus('Medicine removed from view. Reload to see saved data.', 'info');
+                                    }
+                                });
+                            } else {
+                                var errorMsg = (data && data.error_text) ? data.error_text : 'Unable to save medicine.';
+                                setMedicineStatus(errorMsg, 'error');
+                            }
+                        }).fail(function(xhr, status, error) {
+                            setMedicineStatus('Network error: ' + (error || status), 'error');
+                        });
+                    });
+                }
+
+                // Handle Reset button
+                var btnResetMed = section.querySelector('#btn_discharge_med_reset');
+                if (btnResetMed && btnResetMed.dataset.bound !== '1') {
+                    btnResetMed.dataset.bound = '1';
+                    btnResetMed.addEventListener('click', function() {
+                        if (confirm('Remove all medicines from the list?')) {
+                            var tbody = section.querySelector('#discharge_medicine_tbody');
+                            if (tbody) {
+                                tbody.innerHTML = '<tr><td colspan="9" class="text-muted text-center">No medicine added</td></tr>';
+                            }
+                            setMedicineStatus('All medicines removed.', 'info');
+                        }
+                    });
+                }
             }
 
-            // Handle Reset button
-            var btnResetMed = section.querySelector('#btn_discharge_med_reset');
-            if (btnResetMed && btnResetMed.dataset.bound !== '1') {
-                btnResetMed.dataset.bound = '1';
-                btnResetMed.addEventListener('click', function() {
-                    if (confirm('Remove all medicines from the list?')) {
-                        var tbody = section.querySelector('#discharge_medicine_tbody');
-                        if (tbody) {
-                            tbody.innerHTML = '<tr><td colspan="9" class="text-muted text-center">No medicine added</td></tr>';
+            function serializeDischargeMedicineTable() {
+                var tbody = document.querySelector('#discharge_medicine_tbody');
+                var hiddenField = document.querySelector('#discharge_medicine_json');
+                if (!tbody || !hiddenField) {
+                    return;
+                }
+
+                var rows = tbody.querySelectorAll('tr');
+                var medicines = [];
+
+                rows.forEach(function(row) {
+                    var cells = row.querySelectorAll('td');
+                    // Skip empty state row or rows with insufficient cells
+                    if (cells.length >= 8) {
+                        var cellData = {
+                            med_type: cells[0].textContent.trim(),
+                            med_name: cells[1].textContent.trim(),
+                            dosage: cells[2].textContent.trim(),
+                            dosage_when: cells[3].textContent.trim(),
+                            dosage_freq: cells[4].textContent.trim(),
+                            no_of_days: cells[5].textContent.trim(),
+                            qty: cells[6].textContent.trim(),
+                            remark: cells[7].textContent.trim()
+                        };
+
+                        // Only add non-empty medicine names
+                        if (cellData.med_name !== '' && cellData.med_name !== 'No medicine added') {
+                            medicines.push(cellData);
                         }
-                        setMedicineStatus('All medicines removed.', 'info');
                     }
                 });
-            }
-        }
 
-        function serializeDischargeMedicineTable() {
-            var tbody = document.querySelector('#discharge_medicine_tbody');
-            var hiddenField = document.querySelector('#discharge_medicine_json');
-            if (!tbody || !hiddenField) {
-                return;
+                hiddenField.value = JSON.stringify(medicines);
             }
 
-            var rows = tbody.querySelectorAll('tr');
-            var medicines = [];
+            function syncEditorValues() {
+                if (!window.CKEDITOR) {
+                    return;
+                }
 
-            rows.forEach(function(row) {
-                var cells = row.querySelectorAll('td');
-                // Skip empty state row or rows with insufficient cells
-                if (cells.length >= 8) {
-                    var cellData = {
-                        med_type: cells[0].textContent.trim(),
-                        med_name: cells[1].textContent.trim(),
-                        dosage: cells[2].textContent.trim(),
-                        dosage_when: cells[3].textContent.trim(),
-                        dosage_freq: cells[4].textContent.trim(),
-                        no_of_days: cells[5].textContent.trim(),
-                        qty: cells[6].textContent.trim(),
-                        remark: cells[7].textContent.trim()
-                    };
-
-                    // Only add non-empty medicine names
-                    if (cellData.med_name !== '' && cellData.med_name !== 'No medicine added') {
-                        medicines.push(cellData);
+                for (var key in CKEDITOR.instances) {
+                    if (Object.prototype.hasOwnProperty.call(CKEDITOR.instances, key)) {
+                        CKEDITOR.instances[key].updateElement();
                     }
                 }
-            });
-
-            hiddenField.value = JSON.stringify(medicines);
-        }
-
-        function syncEditorValues() {
-            if (!window.CKEDITOR) {
-                return;
             }
 
-            for (var key in CKEDITOR.instances) {
-                if (Object.prototype.hasOwnProperty.call(CKEDITOR.instances, key)) {
-                    CKEDITOR.instances[key].updateElement();
+            initComplaintEditor();
+            initComplaintTools();
+            initSurgeryProcedureAutocomplete();
+            initSurgeryTools(getDischargeForm());
+            initCourseAutocomplete();
+            initDiagnosisTools();
+            initCourseTools();
+            initMedicineTools();
+            initInstructionTools();
+            bindNarrativeTemplateTools();
+
+            function patchNoticeFromHtml(holder) {
+                var nextNotice = holder.querySelector('.alert[role="alert"]');
+                var currentNotice = document.querySelector('.alert[role="alert"]');
+
+                if (!nextNotice) {
+                    return;
+                }
+
+                if (currentNotice) {
+                    currentNotice.outerHTML = nextNotice.outerHTML;
+                    return;
+                }
+
+                var cardBody = document.querySelector('.discharge-main-card .card-body');
+                if (cardBody) {
+                    cardBody.insertAdjacentHTML('afterbegin', nextNotice.outerHTML);
                 }
             }
-        }
 
-        initComplaintEditor();
-        initComplaintTools();
-        initSurgeryProcedureAutocomplete();
-        initSurgeryTools(getDischargeForm());
-        initCourseAutocomplete();
-        initDiagnosisTools();
-        initCourseTools();
-        initMedicineTools();
-        initInstructionTools();
-        bindNarrativeTemplateTools();
-
-        function patchNoticeFromHtml(holder) {
-            var nextNotice = holder.querySelector('.alert[role="alert"]');
-            var currentNotice = document.querySelector('.alert[role="alert"]');
-
-            if (!nextNotice) {
-                return;
-            }
-
-            if (currentNotice) {
-                currentNotice.outerHTML = nextNotice.outerHTML;
-                return;
-            }
-
-            var cardBody = document.querySelector('.discharge-main-card .card-body');
-            if (cardBody) {
-                cardBody.insertAdjacentHTML('afterbegin', nextNotice.outerHTML);
-            }
-        }
-
-        function notifyFromHtml(holder) {
-            var nextNotice = holder.querySelector('.alert[role="alert"]');
-            if (!nextNotice) {
-                return;
-            }
-
-            var text = (nextNotice.textContent || '').trim();
-            if (text === '') {
-                return;
-            }
-
-            var level = 'info';
-            if (nextNotice.classList.contains('alert-success')) {
-                level = 'success';
-            } else if (nextNotice.classList.contains('alert-warning')) {
-                level = 'warning';
-            } else if (nextNotice.classList.contains('alert-danger')) {
-                level = 'error';
-            }
-
-            if (typeof window.notify === 'function') {
-                window.notify(level, 'Discharge Update', text);
-            }
-        }
-
-        function updateCsrfFromHtml(holder, form) {
-            var nextCsrf = holder.querySelector('input[name="csrf_test_name"], input[name^="csrf_"]');
-            var currentCsrf = form.querySelector('input[name="csrf_test_name"], input[name^="csrf_"]');
-            if (nextCsrf && currentCsrf) {
-                currentCsrf.name = nextCsrf.name;
-                currentCsrf.value = nextCsrf.value;
-            }
-        }
-
-        function syncClinicalLabSelection(form) {
-            var hidden = form.querySelector('#lab_investigation_list');
-            if (!hidden) {
-                return;
-            }
-
-            var checked = form.querySelectorAll('.clinical-lab-check:checked');
-            var values = [];
-            checked.forEach(function(el) {
-                if (el.value) {
-                    values.push(el.value);
+            function notifyFromHtml(holder) {
+                var nextNotice = holder.querySelector('.alert[role="alert"]');
+                if (!nextNotice) {
+                    return;
                 }
-            });
 
-            hidden.value = values.join(',');
-
-            var nonPathHidden = form.querySelector('#non_path_investigation_list');
-            if (!nonPathHidden) {
-                return;
-            }
-
-            var checkedNonPath = form.querySelectorAll('.clinical-nonpath-check:checked');
-            var nonPathValues = [];
-            checkedNonPath.forEach(function(el) {
-                if (el.value) {
-                    nonPathValues.push(el.value);
+                var text = (nextNotice.textContent || '').trim();
+                if (text === '') {
+                    return;
                 }
-            });
 
-            nonPathHidden.value = nonPathValues.join(',');
-        }
+                var level = 'info';
+                if (nextNotice.classList.contains('alert-success')) {
+                    level = 'success';
+                } else if (nextNotice.classList.contains('alert-warning')) {
+                    level = 'warning';
+                } else if (nextNotice.classList.contains('alert-danger')) {
+                    level = 'error';
+                }
 
-        function clearNabhFieldErrors(form) {
-            var status = form.querySelector('#drug_allergy_status');
-            var details = form.querySelector('#drug_allergy_details');
-            var statusErr = form.querySelector('#drug_allergy_status_error');
-            var detailsErr = form.querySelector('#drug_allergy_details_error');
-
-            if (status) {
-                status.classList.remove('is-invalid');
-            }
-            if (details) {
-                details.classList.remove('is-invalid');
-            }
-            if (statusErr) {
-                statusErr.textContent = '';
-                statusErr.style.display = 'none';
-            }
-            if (detailsErr) {
-                detailsErr.textContent = '';
-                detailsErr.style.display = 'none';
-            }
-        }
-
-        function markNabhFieldError(form, selector, message) {
-            var el = form.querySelector(selector);
-            if (el) {
-                el.classList.add('is-invalid');
+                if (typeof window.notify === 'function') {
+                    window.notify(level, 'Discharge Update', text);
+                }
             }
 
-            if (selector === '#drug_allergy_status') {
+            function updateCsrfFromHtml(holder, form) {
+                var nextCsrf = holder.querySelector('input[name="csrf_test_name"], input[name^="csrf_"]');
+                var currentCsrf = form.querySelector('input[name="csrf_test_name"], input[name^="csrf_"]');
+                if (nextCsrf && currentCsrf) {
+                    currentCsrf.name = nextCsrf.name;
+                    currentCsrf.value = nextCsrf.value;
+                }
+            }
+
+            function syncClinicalLabSelection(form) {
+                var hidden = form.querySelector('#lab_investigation_list');
+                if (!hidden) {
+                    return;
+                }
+
+                var checked = form.querySelectorAll('.clinical-lab-check:checked');
+                var values = [];
+                checked.forEach(function(el) {
+                    if (el.value) {
+                        values.push(el.value);
+                    }
+                });
+
+                hidden.value = values.join(',');
+
+                var nonPathHidden = form.querySelector('#non_path_investigation_list');
+                if (!nonPathHidden) {
+                    return;
+                }
+
+                var checkedNonPath = form.querySelectorAll('.clinical-nonpath-check:checked');
+                var nonPathValues = [];
+                checkedNonPath.forEach(function(el) {
+                    if (el.value) {
+                        nonPathValues.push(el.value);
+                    }
+                });
+
+                nonPathHidden.value = nonPathValues.join(',');
+            }
+
+            function clearNabhFieldErrors(form) {
+                var status = form.querySelector('#drug_allergy_status');
+                var details = form.querySelector('#drug_allergy_details');
                 var statusErr = form.querySelector('#drug_allergy_status_error');
-                if (statusErr) {
-                    statusErr.textContent = message || 'This field is required.';
-                    statusErr.style.display = 'block';
-                }
-            }
-            if (selector === '#drug_allergy_details') {
                 var detailsErr = form.querySelector('#drug_allergy_details_error');
+
+                if (status) {
+                    status.classList.remove('is-invalid');
+                }
+                if (details) {
+                    details.classList.remove('is-invalid');
+                }
+                if (statusErr) {
+                    statusErr.textContent = '';
+                    statusErr.style.display = 'none';
+                }
                 if (detailsErr) {
-                    detailsErr.textContent = message || 'This field is required.';
-                    detailsErr.style.display = 'block';
-                }
-            }
-        }
-
-        function syncCoMorbidityHidden(form) {
-            var hidden = form.querySelector('#co_morbidities');
-            if (!hidden) {
-                return;
-            }
-
-            var parts = [];
-            var checked = form.querySelectorAll('.co-morbidity-item:checked');
-            checked.forEach(function(item) {
-                var val = (item.value || '').trim();
-                if (val !== '') {
-                    parts.push(val);
-                }
-            });
-
-            var other = form.querySelector('#co_morbidities_other');
-            if (other) {
-                var otherValue = (other.value || '').trim();
-                if (otherValue !== '') {
-                    parts.push(otherValue);
+                    detailsErr.textContent = '';
+                    detailsErr.style.display = 'none';
                 }
             }
 
-            hidden.value = parts.join(', ');
-        }
+            function markNabhFieldError(form, selector, message) {
+                var el = form.querySelector(selector);
+                if (el) {
+                    el.classList.add('is-invalid');
+                }
 
-        function validateNabhHistorySection(form) {
-            clearNabhFieldErrors(form);
+                if (selector === '#drug_allergy_status') {
+                    var statusErr = form.querySelector('#drug_allergy_status_error');
+                    if (statusErr) {
+                        statusErr.textContent = message || 'This field is required.';
+                        statusErr.style.display = 'block';
+                    }
+                }
+                if (selector === '#drug_allergy_details') {
+                    var detailsErr = form.querySelector('#drug_allergy_details_error');
+                    if (detailsErr) {
+                        detailsErr.textContent = message || 'This field is required.';
+                        detailsErr.style.display = 'block';
+                    }
+                }
+            }
 
-            var statusEl = form.querySelector('#drug_allergy_status');
-            var detailsEl = form.querySelector('#drug_allergy_details');
-            if (!statusEl) {
+            function syncCoMorbidityHidden(form) {
+                var hidden = form.querySelector('#co_morbidities');
+                if (!hidden) {
+                    return;
+                }
+
+                var parts = [];
+                var checked = form.querySelectorAll('.co-morbidity-item:checked');
+                checked.forEach(function(item) {
+                    var val = (item.value || '').trim();
+                    if (val !== '') {
+                        parts.push(val);
+                    }
+                });
+
+                var other = form.querySelector('#co_morbidities_other');
+                if (other) {
+                    var otherValue = (other.value || '').trim();
+                    if (otherValue !== '') {
+                        parts.push(otherValue);
+                    }
+                }
+
+                hidden.value = parts.join(', ');
+            }
+
+            function validateNabhHistorySection(form) {
+                clearNabhFieldErrors(form);
+
+                var statusEl = form.querySelector('#drug_allergy_status');
+                var detailsEl = form.querySelector('#drug_allergy_details');
+                if (!statusEl) {
+                    return true;
+                }
+
+                var status = (statusEl.value || '').trim();
+                var details = detailsEl ? (detailsEl.value || '').trim() : '';
+                if (status === '') {
+                    statusEl.value = 'Allergies Not Known';
+                    status = 'Allergies Not Known';
+                }
+                if (status.toLowerCase() === 'known' && details === '') {
+                    markNabhFieldError(form, '#drug_allergy_details', 'Drug Allergy Details are required when Drug Allergy Status is Known.');
+                    return false;
+                }
+
                 return true;
             }
 
-            var status = (statusEl.value || '').trim();
-            var details = detailsEl ? (detailsEl.value || '').trim() : '';
-            if (status === '') {
-                statusEl.value = 'Allergies Not Known';
-                status = 'Allergies Not Known';
-            }
-            if (status.toLowerCase() === 'known' && details === '') {
-                markNabhFieldError(form, '#drug_allergy_details', 'Drug Allergy Details are required when Drug Allergy Status is Known.');
-                return false;
-            }
-
-            return true;
-        }
-
-        function initNabhHistorySection(form) {
-            if (!form) {
-                return;
-            }
-
-            syncCoMorbidityHidden(form);
-
-            var status = form.querySelector('#drug_allergy_status');
-            var details = form.querySelector('#drug_allergy_details');
-            if (status) {
-                status.addEventListener('change', function() {
-                    clearNabhFieldErrors(form);
-                });
-            }
-            if (details) {
-                details.addEventListener('input', function() {
-                    clearNabhFieldErrors(form);
-                });
-            }
-
-            var coItems = form.querySelectorAll('.co-morbidity-item');
-            coItems.forEach(function(item) {
-                item.addEventListener('change', function() {
-                    syncCoMorbidityHidden(form);
-                });
-            });
-
-            var other = form.querySelector('#co_morbidities_other');
-            if (other) {
-                other.addEventListener('input', function() {
-                    syncCoMorbidityHidden(form);
-                });
-            }
-
-            var copyBtn = form.querySelector('#btn_copy_hpi_to_complaints');
-            if (copyBtn && copyBtn.dataset.bound !== '1') {
-                copyBtn.dataset.bound = '1';
-                copyBtn.addEventListener('click', function() {
-                    var hpiEl = form.querySelector('textarea[name="hpi_note"]');
-                    var hpiText = hpiEl ? String(hpiEl.value || '').trim() : '';
-                    if (hpiText === '') {
-                        if (typeof window.notify === 'function') {
-                            window.notify('warning', 'Discharge Update', 'H&P note is empty.');
-                        }
-                        return;
-                    }
-
-                    var complaintEl = form.querySelector('#complaint_remark_editor');
-                    if (!complaintEl) {
-                        return;
-                    }
-
-                    var existing = '';
-                    if (window.CKEDITOR && CKEDITOR.instances && CKEDITOR.instances.complaint_remark_editor) {
-                        existing = String(CKEDITOR.instances.complaint_remark_editor.getData() || '').trim();
-                    } else {
-                        existing = String(complaintEl.value || '').trim();
-                    }
-
-                    var finalText = hpiText;
-                    if (existing !== '') {
-                        var append = window.confirm('Other Complaints already has text. Click OK to append H&P note, Cancel to replace.');
-                        finalText = append ? (existing + '\n\n' + hpiText) : hpiText;
-                    }
-
-                    complaintEl.value = finalText;
-                    if (window.CKEDITOR && CKEDITOR.instances && CKEDITOR.instances.complaint_remark_editor) {
-                        CKEDITOR.instances.complaint_remark_editor.setData(finalText);
-                    }
-
-                    if (typeof window.notify === 'function') {
-                        window.notify('success', 'Discharge Update', 'H&P note copied to Other Complaints.');
-                    }
-                });
-            }
-        }
-
-        function patchSectionFromHtml(holder, sectionId) {
-            if (!sectionId) {
-                return false;
-            }
-
-            var nextSection = holder.querySelector('#' + sectionId);
-            var currentSection = document.getElementById(sectionId);
-            if (!nextSection || !currentSection) {
-                return false;
-            }
-
-            currentSection.outerHTML = nextSection.outerHTML;
-            return true;
-        }
-
-        function patchComplaintSectionFromHtml(holder, form) {
-            patchSectionFromHtml(holder, 'section-complaints');
-            updateCsrfFromHtml(holder, form);
-
-            patchNoticeFromHtml(holder);
-        }
-
-        function patchFormAreaFromHtml(holder) {
-            var nextTitle = holder.querySelector('.discharge-page-title');
-            var currentTitle = document.querySelector('.discharge-page-title');
-            if (nextTitle && currentTitle) {
-                currentTitle.outerHTML = nextTitle.outerHTML;
-            }
-
-            var nextArea = holder.querySelector('.discharge-form-area');
-            var currentArea = document.querySelector('.discharge-form-area');
-            if (nextArea && currentArea) {
-                currentArea.outerHTML = nextArea.outerHTML;
-            }
-
-            patchNoticeFromHtml(holder);
-        }
-
-        function bindDischargeAjaxSubmit() {
-            var form = document.querySelector('form[action*="Ipd_discharge/ipd_select/"]');
-            if (!form || form.dataset.ajaxBound === '1') {
-                return;
-            }
-
-            form.dataset.ajaxBound = '1';
-            var lastSubmitControl = null;
-            initNabhHistorySection(form);
-
-            form.addEventListener('click', function(evt) {
-                var el = evt.target;
-                if (!el) {
+            function initNabhHistorySection(form) {
+                if (!form) {
                     return;
                 }
 
-                var submitControl = el.closest('button[type="submit"], input[type="submit"]');
-                if (submitControl) {
-                    lastSubmitControl = submitControl;
-                }
-            });
-
-            form.addEventListener('submit', function(e) {
-                e.preventDefault();
-                syncEditorValues();
-                // DISABLED: No longer needed since medicines are saved via AJAX on Add button
-                // serializeDischargeMedicineTable();
-                syncClinicalLabSelection(form);
                 syncCoMorbidityHidden(form);
 
-                if (!validateNabhHistorySection(form)) {
-                    return;
-                }
-
-                if (!window.jQuery) {
-                    form.submit();
-                    return;
-                }
-
-                var $form = window.jQuery(form);
-                var payloadArray = $form.serializeArray();
-                var submitter = e.submitter || lastSubmitControl;
-
-                if (submitter && submitter.name) {
-                    var exists = payloadArray.some(function(item) {
-                        return item.name === submitter.name;
+                var status = form.querySelector('#drug_allergy_status');
+                var details = form.querySelector('#drug_allergy_details');
+                if (status) {
+                    status.addEventListener('change', function() {
+                        clearNabhFieldErrors(form);
                     });
-                    if (!exists) {
-                        payloadArray.push({
-                            name: submitter.name,
-                            value: submitter.value || ''
-                        });
-                    }
                 }
-
-                var payload = window.jQuery.param(payloadArray);
-                var actionValue = submitter && submitter.name === 'action' ? String(submitter.value || '') : '';
-                var saveMode = submitter && submitter.dataset ? String(submitter.dataset.saveMode || '').toLowerCase() : '';
-                var statusTargetId = submitter && submitter.dataset ? String(submitter.dataset.statusId || '').trim() : '';
-                var isComplaintAction = actionValue === 'add_complaint' || actionValue === 'remove_complaint';
-                var isMedicineAction = actionValue === 'add_drug' || actionValue === 'remove_drug' || actionValue === 'apply_rx_group';
-                var targetSectionId = '';
-
-                if (saveMode === 'json') {
-                    payloadArray.push({
-                        name: 'ajax_mode',
-                        value: 'json'
+                if (details) {
+                    details.addEventListener('input', function() {
+                        clearNabhFieldErrors(form);
                     });
-                    payload = window.jQuery.param(payloadArray);
                 }
 
-                if (submitter && submitter.dataset && submitter.dataset.reloadSection) {
-                    targetSectionId = String(submitter.dataset.reloadSection);
+                var coItems = form.querySelectorAll('.co-morbidity-item');
+                coItems.forEach(function(item) {
+                    item.addEventListener('change', function() {
+                        syncCoMorbidityHidden(form);
+                    });
+                });
+
+                var other = form.querySelector('#co_morbidities_other');
+                if (other) {
+                    other.addEventListener('input', function() {
+                        syncCoMorbidityHidden(form);
+                    });
                 }
 
-                if (!targetSectionId && submitter && typeof submitter.closest === 'function') {
-                    var sectionCard = submitter.closest('.card[id]');
-                    if (sectionCard && sectionCard.id) {
-                        targetSectionId = sectionCard.id;
-                    }
-                }
-
-                if (isMedicineAction) {
-                    targetSectionId = 'section-medicine';
-                }
-
-                window.jQuery.ajax({
-                    url: form.getAttribute('action') || window.location.href,
-                    type: 'POST',
-                    data: payload,
-                    dataType: saveMode === 'json' ? 'json' : 'html',
-                    timeout: 120000
-                }).done(function(result) {
-                    if (saveMode === 'json') {
-                        updateFormCsrf(form, result || {});
-                        if (statusTargetId !== '') {
-                            var level = result && String(result.notice_type || '').toLowerCase() === 'warning' ? 'error' : 'success';
-                            if (!result || parseInt(result.update || '0', 10) !== 1) {
-                                level = 'error';
+                var copyBtn = form.querySelector('#btn_copy_hpi_to_complaints');
+                if (copyBtn && copyBtn.dataset.bound !== '1') {
+                    copyBtn.dataset.bound = '1';
+                    copyBtn.addEventListener('click', function() {
+                        var hpiEl = form.querySelector('textarea[name="hpi_note"]');
+                        var hpiText = hpiEl ? String(hpiEl.value || '').trim() : '';
+                        if (hpiText === '') {
+                            if (typeof window.notify === 'function') {
+                                window.notify('warning', 'Discharge Update', 'H&P note is empty.');
                             }
-                            setSectionStatus(statusTargetId, (result && result.error_text) ? String(result.error_text) : 'Save completed.', level);
+                            return;
                         }
+
+                        var complaintEl = form.querySelector('#complaint_remark_editor');
+                        if (!complaintEl) {
+                            return;
+                        }
+
+                        var existing = '';
+                        if (window.CKEDITOR && CKEDITOR.instances && CKEDITOR.instances.complaint_remark_editor) {
+                            existing = String(CKEDITOR.instances.complaint_remark_editor.getData() || '').trim();
+                        } else {
+                            existing = String(complaintEl.value || '').trim();
+                        }
+
+                        var finalText = hpiText;
+                        if (existing !== '') {
+                            var append = window.confirm('Other Complaints already has text. Click OK to append H&P note, Cancel to replace.');
+                            finalText = append ? (existing + '\n\n' + hpiText) : hpiText;
+                        }
+
+                        complaintEl.value = finalText;
+                        if (window.CKEDITOR && CKEDITOR.instances && CKEDITOR.instances.complaint_remark_editor) {
+                            CKEDITOR.instances.complaint_remark_editor.setData(finalText);
+                        }
+
+                        if (typeof window.notify === 'function') {
+                            window.notify('success', 'Discharge Update', 'H&P note copied to Other Complaints.');
+                        }
+                    });
+                }
+            }
+
+            function patchSectionFromHtml(holder, sectionId) {
+                if (!sectionId) {
+                    return false;
+                }
+
+                var nextSection = holder.querySelector('#' + sectionId);
+                var currentSection = document.getElementById(sectionId);
+                if (!nextSection || !currentSection) {
+                    return false;
+                }
+
+                currentSection.outerHTML = nextSection.outerHTML;
+                return true;
+            }
+
+            function patchComplaintSectionFromHtml(holder, form) {
+                patchSectionFromHtml(holder, 'section-complaints');
+                updateCsrfFromHtml(holder, form);
+
+                patchNoticeFromHtml(holder);
+            }
+
+            function patchFormAreaFromHtml(holder) {
+                var nextTitle = holder.querySelector('.discharge-page-title');
+                var currentTitle = document.querySelector('.discharge-page-title');
+                if (nextTitle && currentTitle) {
+                    currentTitle.outerHTML = nextTitle.outerHTML;
+                }
+
+                var nextArea = holder.querySelector('.discharge-form-area');
+                var currentArea = document.querySelector('.discharge-form-area');
+                if (nextArea && currentArea) {
+                    currentArea.outerHTML = nextArea.outerHTML;
+                }
+
+                patchNoticeFromHtml(holder);
+            }
+
+            function bindDischargeAjaxSubmit() {
+                var form = document.querySelector('form[action*="Ipd_discharge/ipd_select/"]');
+                if (!form || form.dataset.ajaxBound === '1') {
+                    return;
+                }
+
+                form.dataset.ajaxBound = '1';
+                var lastSubmitControl = null;
+                initNabhHistorySection(form);
+
+                form.addEventListener('click', function(evt) {
+                    var el = evt.target;
+                    if (!el) {
                         return;
                     }
 
-                    var html = String(result || '');
-                    var holder = document.createElement('div');
-                    holder.innerHTML = html;
-                    updateCsrfFromHtml(holder, form);
-                    patchNoticeFromHtml(holder);
-                    notifyFromHtml(holder);
+                    var submitControl = el.closest('button[type="submit"], input[type="submit"]');
+                    if (submitControl) {
+                        lastSubmitControl = submitControl;
+                    }
+                });
 
-                    if (isComplaintAction) {
-                        patchComplaintSectionFromHtml(holder, form);
+                form.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    syncEditorValues();
+                    // DISABLED: No longer needed since medicines are saved via AJAX on Add button
+                    // serializeDischargeMedicineTable();
+                    syncClinicalLabSelection(form);
+                    syncCoMorbidityHidden(form);
+
+                    if (!validateNabhHistorySection(form)) {
+                        return;
+                    }
+
+                    if (!window.jQuery) {
+                        form.submit();
+                        return;
+                    }
+
+                    var $form = window.jQuery(form);
+                    var payloadArray = $form.serializeArray();
+                    var submitter = e.submitter || lastSubmitControl;
+
+                    if (submitter && submitter.name) {
+                        var exists = payloadArray.some(function(item) {
+                            return item.name === submitter.name;
+                        });
+                        if (!exists) {
+                            payloadArray.push({
+                                name: submitter.name,
+                                value: submitter.value || ''
+                            });
+                        }
+                    }
+
+                    var payload = window.jQuery.param(payloadArray);
+                    var actionValue = submitter && submitter.name === 'action' ? String(submitter.value || '') : '';
+                    var saveMode = submitter && submitter.dataset ? String(submitter.dataset.saveMode || '').toLowerCase() : '';
+                    var statusTargetId = submitter && submitter.dataset ? String(submitter.dataset.statusId || '').trim() : '';
+                    var isComplaintAction = actionValue === 'add_complaint' || actionValue === 'remove_complaint';
+                    var isMedicineAction = actionValue === 'add_drug' || actionValue === 'remove_drug' || actionValue === 'apply_rx_group';
+                    var targetSectionId = '';
+
+                    if (saveMode === 'json') {
+                        payloadArray.push({
+                            name: 'ajax_mode',
+                            value: 'json'
+                        });
+                        payload = window.jQuery.param(payloadArray);
+                    }
+
+                    if (submitter && submitter.dataset && submitter.dataset.reloadSection) {
+                        targetSectionId = String(submitter.dataset.reloadSection);
+                    }
+
+                    if (!targetSectionId && submitter && typeof submitter.closest === 'function') {
+                        var sectionCard = submitter.closest('.card[id]');
+                        if (sectionCard && sectionCard.id) {
+                            targetSectionId = sectionCard.id;
+                        }
+                    }
+
+                    if (isMedicineAction) {
+                        targetSectionId = 'section-medicine';
+                    }
+
+                    window.jQuery.ajax({
+                        url: form.getAttribute('action') || window.location.href,
+                        type: 'POST',
+                        data: payload,
+                        dataType: saveMode === 'json' ? 'json' : 'html',
+                        timeout: 120000
+                    }).done(function(result) {
+                        if (saveMode === 'json') {
+                            updateFormCsrf(form, result || {});
+                            if (statusTargetId !== '') {
+                                var level = result && String(result.notice_type || '').toLowerCase() === 'warning' ? 'error' : 'success';
+                                if (!result || parseInt(result.update || '0', 10) !== 1) {
+                                    level = 'error';
+                                }
+                                setSectionStatus(statusTargetId, (result && result.error_text) ? String(result.error_text) : 'Save completed.', level);
+                            }
+                            return;
+                        }
+
+                        var html = String(result || '');
+                        var holder = document.createElement('div');
+                        holder.innerHTML = html;
+                        updateCsrfFromHtml(holder, form);
+                        patchNoticeFromHtml(holder);
+                        notifyFromHtml(holder);
+
+                        if (isComplaintAction) {
+                            patchComplaintSectionFromHtml(holder, form);
+                            initComplaintEditor();
+                            initComplaintTools();
+                            initSurgeryTools(document.querySelector('form[action*="Ipd_discharge/ipd_select/"]'));
+                            initDiagnosisTools();
+                            initCourseTools();
+                            initMedicineTools();
+                            initInstructionTools();
+                            bindDischargeAjaxSubmit();
+                            initNabhHistorySection(document.querySelector('form[action*="Ipd_discharge/ipd_select/"]'));
+                            syncNavOnScroll();
+                            return;
+                        }
+
+                        if (patchSectionFromHtml(holder, targetSectionId)) {
+                            if (targetSectionId === 'section-complaints') {
+                                initComplaintEditor();
+                                initComplaintTools();
+                                initNabhHistorySection(document.querySelector('form[action*="Ipd_discharge/ipd_select/"]'));
+                            } else if (targetSectionId === 'section-systemic') {
+                                initComplaintEditor();
+                                initNabhHistorySection(document.querySelector('form[action*="Ipd_discharge/ipd_select/"]'));
+                            } else if (targetSectionId === 'section-nursing-history') {
+                                initNabhHistorySection(document.querySelector('form[action*="Ipd_discharge/ipd_select/"]'));
+                            } else if (targetSectionId === 'section-surgery') {
+                                initSurgeryTools(document.querySelector('form[action*="Ipd_discharge/ipd_select/"]'));
+                            } else if (targetSectionId === 'section-diagnosis') {
+                                initDiagnosisTools();
+                            } else if (targetSectionId === 'section-course') {
+                                initCourseTools();
+                            } else if (targetSectionId === 'section-medicine') {
+                                initMedicineTools();
+                            } else if (targetSectionId === 'section-instructions') {
+                                initInstructionTools();
+                            }
+                            bindDischargeAjaxSubmit();
+                            syncNavOnScroll();
+                            return;
+                        }
+
+                        patchFormAreaFromHtml(holder);
                         initComplaintEditor();
                         initComplaintTools();
                         initSurgeryTools(document.querySelector('form[action*="Ipd_discharge/ipd_select/"]'));
@@ -5152,145 +5149,116 @@ $allergyStatusNoKnown = in_array($allergyStatusNormalized, ['no known drug aller
                         initMedicineTools();
                         initInstructionTools();
                         bindDischargeAjaxSubmit();
-                        initNabhHistorySection(document.querySelector('form[action*="Ipd_discharge/ipd_select/"]'));
                         syncNavOnScroll();
+                    }).fail(function() {
+                        alert('Unable to save right now. Please retry.');
+                    });
+                });
+            }
+
+            bindDischargeAjaxSubmit();
+
+            var navLinks = document.querySelectorAll('.discharge-nav-link');
+            var sectionIds = [
+                'section-complaints',
+                'section-physical',
+                'section-investigation',
+                'section-admission',
+                'section-surgery',
+                'section-diagnosis',
+                'section-summary-invest',
+                'section-course',
+                'section-condition',
+                'section-medicine',
+                'section-instructions'
+            ];
+
+            function setActiveNavBySection(sectionId) {
+                navLinks.forEach(function(link) {
+                    link.classList.toggle('active', link.getAttribute('data-target') === sectionId);
+                });
+            }
+
+            function getFormScrollContainer() {
+                var container = document.querySelector('.discharge-form-area');
+                if (!container) {
+                    return null;
+                }
+
+                var style = window.getComputedStyle(container);
+                var isScrollable = (style.overflowY === 'auto' || style.overflowY === 'scroll') &&
+                    container.scrollHeight > container.clientHeight;
+                return isScrollable ? container : null;
+            }
+
+            navLinks.forEach(function(link) {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    var sectionId = link.getAttribute('data-target');
+                    var section = document.getElementById(sectionId);
+                    if (!section) {
                         return;
                     }
 
-                    if (patchSectionFromHtml(holder, targetSectionId)) {
-                        if (targetSectionId === 'section-complaints') {
-                            initComplaintEditor();
-                            initComplaintTools();
-                            initNabhHistorySection(document.querySelector('form[action*="Ipd_discharge/ipd_select/"]'));
-                        } else if (targetSectionId === 'section-systemic') {
-                            initComplaintEditor();
-                            initNabhHistorySection(document.querySelector('form[action*="Ipd_discharge/ipd_select/"]'));
-                        } else if (targetSectionId === 'section-nursing-history') {
-                            initNabhHistorySection(document.querySelector('form[action*="Ipd_discharge/ipd_select/"]'));
-                        } else if (targetSectionId === 'section-surgery') {
-                            initSurgeryTools(document.querySelector('form[action*="Ipd_discharge/ipd_select/"]'));
-                        } else if (targetSectionId === 'section-diagnosis') {
-                            initDiagnosisTools();
-                        } else if (targetSectionId === 'section-course') {
-                            initCourseTools();
-                        } else if (targetSectionId === 'section-medicine') {
-                            initMedicineTools();
-                        } else if (targetSectionId === 'section-instructions') {
-                            initInstructionTools();
-                        }
-                        bindDischargeAjaxSubmit();
-                        syncNavOnScroll();
-                        return;
+                    var container = getFormScrollContainer();
+                    if (container) {
+                        var cRect = container.getBoundingClientRect();
+                        var sRect = section.getBoundingClientRect();
+                        var nextTop = container.scrollTop + (sRect.top - cRect.top) - 8;
+                        container.scrollTo({
+                            top: Math.max(nextTop, 0),
+                            behavior: 'smooth'
+                        });
+                    } else {
+                        section.scrollIntoView({
+                            behavior: 'smooth',
+                            block: 'start'
+                        });
                     }
-
-                    patchFormAreaFromHtml(holder);
-                    initComplaintEditor();
-                    initComplaintTools();
-                    initSurgeryTools(document.querySelector('form[action*="Ipd_discharge/ipd_select/"]'));
-                    initDiagnosisTools();
-                    initCourseTools();
-                    initMedicineTools();
-                    initInstructionTools();
-                    bindDischargeAjaxSubmit();
-                    syncNavOnScroll();
-                }).fail(function() {
-                    alert('Unable to save right now. Please retry.');
+                    setActiveNavBySection(sectionId);
                 });
             });
-        }
 
-        bindDischargeAjaxSubmit();
-
-        var navLinks = document.querySelectorAll('.discharge-nav-link');
-        var sectionIds = [
-            'section-complaints',
-            'section-physical',
-            'section-investigation',
-            'section-admission',
-            'section-surgery',
-            'section-diagnosis',
-            'section-summary-invest',
-            'section-course',
-            'section-condition',
-            'section-medicine',
-            'section-instructions'
-        ];
-
-        function setActiveNavBySection(sectionId) {
-            navLinks.forEach(function(link) {
-                link.classList.toggle('active', link.getAttribute('data-target') === sectionId);
-            });
-        }
-
-        function getFormScrollContainer() {
-            var container = document.querySelector('.discharge-form-area');
-            if (!container) {
-                return null;
-            }
-
-            var style = window.getComputedStyle(container);
-            var isScrollable = (style.overflowY === 'auto' || style.overflowY === 'scroll')
-                && container.scrollHeight > container.clientHeight;
-            return isScrollable ? container : null;
-        }
-
-        navLinks.forEach(function(link) {
-            link.addEventListener('click', function(e) {
-                e.preventDefault();
-                var sectionId = link.getAttribute('data-target');
-                var section = document.getElementById(sectionId);
-                if (!section) {
-                    return;
-                }
-
+            function syncNavOnScroll() {
                 var container = getFormScrollContainer();
+                var referenceTop = 120;
                 if (container) {
-                    var cRect = container.getBoundingClientRect();
-                    var sRect = section.getBoundingClientRect();
-                    var nextTop = container.scrollTop + (sRect.top - cRect.top) - 8;
-                    container.scrollTo({ top: Math.max(nextTop, 0), behavior: 'smooth' });
-                } else {
-                    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    referenceTop = container.getBoundingClientRect().top + 12;
                 }
-                setActiveNavBySection(sectionId);
-            });
-        });
 
-        function syncNavOnScroll() {
-            var container = getFormScrollContainer();
-            var referenceTop = 120;
-            if (container) {
-                referenceTop = container.getBoundingClientRect().top + 12;
+                var bestSection = sectionIds[0];
+                var bestDelta = Number.POSITIVE_INFINITY;
+
+                sectionIds.forEach(function(id) {
+                    var section = document.getElementById(id);
+                    if (!section) {
+                        return;
+                    }
+                    var rect = section.getBoundingClientRect();
+                    var delta = Math.abs(rect.top - referenceTop);
+                    if (delta < bestDelta) {
+                        bestDelta = delta;
+                        bestSection = id;
+                    }
+                });
+
+                setActiveNavBySection(bestSection);
             }
 
-            var bestSection = sectionIds[0];
-            var bestDelta = Number.POSITIVE_INFINITY;
-
-            sectionIds.forEach(function(id) {
-                var section = document.getElementById(id);
-                if (!section) {
-                    return;
-                }
-                var rect = section.getBoundingClientRect();
-                var delta = Math.abs(rect.top - referenceTop);
-                if (delta < bestDelta) {
-                    bestDelta = delta;
-                    bestSection = id;
-                }
+            window.addEventListener('scroll', syncNavOnScroll, {
+                passive: true
             });
+            document.addEventListener('scroll', function(evt) {
+                var target = evt.target;
+                if (target && target.classList && target.classList.contains('discharge-form-area')) {
+                    syncNavOnScroll();
+                }
+            }, {
+                passive: true,
+                capture: true
+            });
+            syncNavOnScroll();
 
-            setActiveNavBySection(bestSection);
-        }
-
-        window.addEventListener('scroll', syncNavOnScroll, { passive: true });
-        document.addEventListener('scroll', function(evt) {
-            var target = evt.target;
-            if (target && target.classList && target.classList.contains('discharge-form-area')) {
-                syncNavOnScroll();
-            }
-        }, { passive: true, capture: true });
-        syncNavOnScroll();
-
-    })();
+        })();
     </script>
 </section>

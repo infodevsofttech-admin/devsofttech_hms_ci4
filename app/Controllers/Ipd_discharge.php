@@ -1977,6 +1977,30 @@ class Ipd_discharge extends BaseController
         return '<p><b>' . esc($title) . '</b> :<br /> ' . implode('<br /> ', $lines) . '</p>';
     }
 
+    private function sanitizeComplaintNarrativeRemark(string $remark): string
+    {
+        $remark = trim($remark);
+        if ($remark === '') {
+            return '';
+        }
+
+        $patterns = [
+            '/^\s*Drug\s*Allergy\s*Status\s*:\s*.+$/im',
+            '/^\s*Drug\s*Allergy\s*Details\s*:\s*.+$/im',
+            '/^\s*ADR\s*History\s*:\s*.+$/im',
+            '/^\s*Current\s*Medications\s*:\s*.+$/im',
+            '/^\s*Co-Morbidities\s*:\s*.+$/im',
+        ];
+
+        foreach ($patterns as $pattern) {
+            $remark = (string) preg_replace($pattern, '', $remark);
+        }
+
+        $remark = (string) preg_replace('/(?:\r\n?|\n){3,}/', "\n\n", $remark);
+
+        return trim($remark);
+    }
+
     private function buildInlineExamSummary(array $rows): string
     {
         $parts = [];
@@ -2077,7 +2101,9 @@ class Ipd_discharge extends BaseController
 
         $complaints = $this->byIpdRows('ipd_discharge_complaint', ['comp_report', 'comp_remark'], 'id ASC', $ipdId);
         $complaintRemark = $this->firstRowByIpd('ipd_discharge_complaint_remark', $ipdId);
-        $complaintRemarkText = $this->normalizeRichText((string) ($complaintRemark['comp_remark'] ?? ''));
+        $complaintRemarkText = $this->sanitizeComplaintNarrativeRemark(
+            $this->normalizeRichText((string) ($complaintRemark['comp_remark'] ?? ''))
+        );
         $complaintBlock = $this->buildNarrativeSection('Presenting Complaints and Reason for Admission', $complaints, $complaintRemarkText);
         if ($complaintBlock !== '') {
             $sections[] = $complaintBlock;
@@ -2176,6 +2202,11 @@ class Ipd_discharge extends BaseController
         }
 
         $coMorbText = trim((string) ($opdHistory['co_morbidities'] ?? ''));
+
+        if ($allergySection !== '') {
+            $sections[] = $allergySection;
+        }
+
         if ($coMorbText !== '') {
             $sections[] = '<h4 class="discharge-section-heading">Co-Morbidities</h4><div>' . esc($coMorbText) . '</div>';
         }
@@ -2317,10 +2348,6 @@ class Ipd_discharge extends BaseController
 
         if ($painSection !== '') {
             $sections[] = $painSection;
-        }
-
-        if ($allergySection !== '') {
-            $sections[] = $allergySection;
         }
 
         $nursingTrendSection = $this->buildNursingTrendSection($ipdId);
