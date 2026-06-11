@@ -127,7 +127,7 @@ class Ipd_discharge extends BaseController
 
     private function defaultDischargeTemplateHtml(): string
     {
-        return '<h3 class="discharge-title">Discharge Summary</h3>'
+        return '{{DISCHARGE_STATUS}}'
             . '<table class="discharge-info-table" border="1" cellpadding="6">'
             . '<tr>'
             . '<td><b>Patient</b>: {{PATIENT_NAME}}</td>'
@@ -160,7 +160,7 @@ class Ipd_discharge extends BaseController
             . '<div>{{CO_MORBIDITIES}}</div>'
             . '<div>{{DISCHARGE_MEDICATIONS}}</div>'
             . '<div>{{DIETARY_ADVICE}}</div>'
-            . '<div>{{DISCHARGE_INSTRUCTIONS}}</div>'
+            . '<div>{{REVIEW_AFTER}}</div>'
             . '<div>{{SIGNATURE_BLOCK}}</div>';
     }
 
@@ -184,7 +184,7 @@ class Ipd_discharge extends BaseController
 
     private function nabhDischargeTemplateHtml(): string
     {
-        return '<h2 class="discharge-title">DISCHARGE SUMMARY</h2>'
+        return '{{DISCHARGE_STATUS}}'
             . '<table class="discharge-info-table" border="1" cellpadding="6">'
             . '<tr>'
             . '<td><b>Patient Name</b>: {{PATIENT_NAME}}</td>'
@@ -220,7 +220,7 @@ class Ipd_discharge extends BaseController
             . '<div class="discharge-section">{{CO_MORBIDITIES}}</div>'
             . '<div class="discharge-section">{{DISCHARGE_MEDICATIONS}}</div>'
             . '<div class="discharge-section">{{DIETARY_ADVICE}}</div>'
-            . '<div class="discharge-section">{{DISCHARGE_INSTRUCTIONS}}</div>'
+            . '<div class="discharge-section">{{REVIEW_AFTER}}</div>'
             . '<h4 class="discharge-section-heading">Counselling & Handover Confirmation</h4>'
             . '<table class="discharge-table" border="1" cellpadding="6">'
             . '<tr><td>Medication explained to patient/attendant</td><td></td><td>Remarks:</td></tr>'
@@ -523,11 +523,21 @@ class Ipd_discharge extends BaseController
             return $this->extractDischargeSectionByMarkers($full, $starts, array_merge($allMarkers, $extraEnds));
         };
 
-        // Main clinical discharge summary from HTML editor
-        $clinicalSummary = $section(['Discharge Summary']);
+        $ipd = $panelData['ipd_info'] ?? null;
+        $ipdId = (int) ($ipd->id ?? 0);
+
+        // Main clinical discharge summary: use explicit DB field first (instruction_remark).
+        // Fallback to section extraction for older cached content.
+        $instructionRow = $ipdId > 0 ? $this->firstRowByIpd('ipd_discharge_instructions', $ipdId) : [];
+        $clinicalSummaryRaw = $this->normalizeRichText((string) ($instructionRow['comp_remark'] ?? ''));
+        $clinicalSummary = $clinicalSummaryRaw !== ''
+            ? '<div class="discharge-summary-content">' . $this->renderRichText($clinicalSummaryRaw) . '</div>'
+            : $section(['Discharge Summary']);
         
         // Replace "Discharge Summary" header with discharge status
-        if ($dischargeStatus !== '' && $clinicalSummary !== '') {
+        if ($dischargeStatus !== ''
+            && strcasecmp(trim($dischargeStatus), 'Discharge Summary') !== 0
+            && $clinicalSummary !== '') {
             $clinicalSummary = preg_replace(
                 '/<h[1-6][^>]*>\s*Discharge\s+Summary\s*<\/h[1-6]>/i',
                 '<h2>' . esc($dischargeStatus) . '</h2>',
@@ -551,10 +561,21 @@ class Ipd_discharge extends BaseController
                 $clinicalSummary
             );
         }
+
+        if ($clinicalSummary !== '') {
+            $hasSummaryHeading = preg_match(
+                '/<h[1-6][^>]*>\s*Discharge\s+Summary\s*<\/h[1-6]>|<(?:b|strong)[^>]*>\s*Discharge\s+Summary\s*<\/(?:b|strong)>/i',
+                $clinicalSummary
+            ) === 1;
+            if (! $hasSummaryHeading) {
+                $clinicalSummary = '<h4 class="discharge-section-heading">DISCHARGE SUMMARY</h4>' . $clinicalSummary;
+            }
+        }
         
         $finalDiagnosis = $section(['Final Diagnosis']);
-        $surgery = $section(['Surgery']);
-        $procedure = $section(['Procedure']);
+        // Use explicit section labels to avoid matching free-text words like "elective surgery".
+        $surgery = $section(['<b>Surgery :', '>Surgery :', 'Surgery :']);
+        $procedure = $section(['<b>Procedure :', '>Procedure :', 'Procedure :']);
         $personalHistory = $section(['Personal History']);
         $presentingComplaints = $section(['Presenting Complaints and Reason for Admission']);
         $painMeasurement = $section(['Pain Measurement Scale']);
@@ -564,21 +585,66 @@ class Ipd_discharge extends BaseController
         $examOnDischarge = $section(['Examination on Discharge']);
         $dischargeMedications = $section(['Discharge Medications']);
         $dietaryAdvice = $section(['Dietary Advice']);
-        $dischargeInstructions = $section(['Discharge Advice/Instructions/Summary']);
         $drugAllergyAdr = $section(['Drug Allergy / ADR']);
         $coMorbidities = $section(['Co-Morbidities']);
         // Extract entire signature table - no end markers (it's the last section)
         $signatureBlock = $section(['Signature of Consultant'], []);
+        $reviewAfterRaw = trim((string) ($instructionRow['review_after'] ?? ''));
+        $reviewAfter = $reviewAfterRaw !== ''
+            ? '<div class="discharge-footer"><strong>Review After:</strong> ' . esc($reviewAfterRaw) . '</div>'
+            : '';
+        $dischargeStatusHeading = '<h1 class="discharge-title">' . esc($dischargeStatus !== '' ? $dischargeStatus : 'Discharge Summary') . '</h1>';
         
         // Extract individual instruction fields for template flexibility
         $otherAdvice = $section(['Other Advice:']);
         $followUpInstructions = $section(['Discharge Summary:']);
 
+        // Ignore heading-only extraction (no real follow-up narrative text).
+        $followUpHeadingOnly = trim(strip_tags((string) $followUpInstructions));
+        if (preg_match('/^Discharge\s+Summary\s*:?$/i', $followUpHeadingOnly) === 1) {
+            $followUpInstructions = '';
+        }
+
+        // Avoid duplicate output when templates contain both summary/advice placeholders
+        // and both resolve to the same narrative.
+        $normalizeText = static function (string $html): string {
+            $text = trim(strip_tags($html));
+            return (string) preg_replace('/\s+/u', ' ', $text);
+        };
+        if ($followUpInstructions !== ''
+            && $clinicalSummary !== ''
+            && $normalizeText((string) $followUpInstructions) !== ''
+            && strcasecmp($normalizeText((string) $followUpInstructions), $normalizeText((string) $clinicalSummary)) === 0) {
+            $followUpInstructions = '';
+        }
+
+        // Fallback for templates/data where clinical summary body is present under
+        // "Discharge Summary:" subsection instead of the main summary block.
+        $clinicalSummaryText = trim(strip_tags((string) $clinicalSummary));
+        $followUpText = trim(strip_tags((string) $followUpInstructions));
+        if (($clinicalSummaryText === '' || strcasecmp($clinicalSummaryText, 'Discharge Summary') === 0) && $followUpText !== '') {
+            $clinicalSummary = $followUpInstructions;
+        }
+
+        // Fallback to master section tables when cached HTML extraction is empty.
+        $surgeryText = trim(strip_tags((string) $surgery));
+        if ($surgeryText === '') {
+            $surgeryRows = $this->byIpdRows('ipd_discharge_surgery', ['surgery_name', 'surgery_date'], 'id ASC', $ipdId);
+            $surgery = $this->buildNamedDateSection('Surgery', $surgeryRows, 'surgery_name', 'surgery_date', 'Date of Surgery');
+        }
+
+        $procedureText = trim(strip_tags((string) $procedure));
+        if ($procedureText === '') {
+            $procedureRows = $this->byIpdRows('ipd_discharge_procedure', ['procedure_name', 'procedure_date'], 'id ASC', $ipdId);
+            $procedure = $this->buildNamedDateSection('Procedure', $procedureRows, 'procedure_name', 'procedure_date', 'Date of Procedure');
+        }
+
         $vars = [
+            'DISCHARGE_STATUS' => $dischargeStatusHeading,
             // Main discharge summary from HTML editor (instruction_remark field)
-            'CLINICAL_SUMMARY' => $clinicalSummary,
-            // Legacy alias for backward compatibility
             'DISCHARGE_SUMMARY' => $clinicalSummary,
+            // Legacy alias for backward compatibility
+            'CLINICAL_SUMMARY' => $clinicalSummary,
             
             // Clinical sections
             'FINAL_DIAGNOSIS' => $finalDiagnosis,
@@ -594,9 +660,13 @@ class Ipd_discharge extends BaseController
             // Discharge instructions and advice
             'DISCHARGE_MEDICATIONS' => $dischargeMedications,
             'DIETARY_ADVICE' => $dietaryAdvice,
-            'DISCHARGE_INSTRUCTIONS' => $dischargeInstructions,
+            'DISCHARGE_INSTRUCTIONS' => '',
+            'REVIEW_AFTER' => $reviewAfter,
             'OTHER_ADVICE' => $otherAdvice,
             'FOLLOW_UP_INSTRUCTIONS' => $followUpInstructions,
+            // Keep older placeholders mapped to follow-up section for backward compatibility.
+            'DISCHARGE_ADVICE' => $followUpInstructions,
+            'INSTRUCTION_REMARK' => $followUpInstructions,
             
             // Other sections
             'PAIN_MEASUREMENT_SCALE' => $painMeasurement,
@@ -615,7 +685,8 @@ class Ipd_discharge extends BaseController
             'discharge_exam_on_discharge' => $examOnDischarge,
             'Discharge_Medications' => $dischargeMedications,
             'diet_advice' => $dietaryAdvice,
-            'Discharge_Instructions' => $dischargeInstructions,
+            'Discharge_Instructions' => '',
+            'Review_After' => $reviewAfter,
             'Pain_Measurement_Scale' => $painMeasurement,
             'Drug_Allergy_ADR' => $drugAllergyAdr,
             'Co_Morbidities' => $coMorbidities,
@@ -704,6 +775,7 @@ class Ipd_discharge extends BaseController
         }
 
         $templateHtml = $this->normalizeLegacyDischargeTemplate($templateHtml);
+        $templateHtml = $this->normalizeDischargeTemplatePlaceholders($templateHtml);
 
         $replace = [];
         foreach ($vars as $key => $value) {
@@ -712,6 +784,50 @@ class Ipd_discharge extends BaseController
         }
 
         return strtr($templateHtml, $replace);
+    }
+
+    private function normalizeDischargeTemplatePlaceholders(string $templateHtml): string
+    {
+        $out = $templateHtml;
+
+        // Canonicalize duplicate aliases so templates use one preferred token.
+        $aliasToCanonical = [
+            'H_Name' => 'hospital_name',
+            'H_phone_No' => 'hospital_phone',
+            'H_Email' => 'hospital_email',
+            'ADMIT_DATE_ONLY' => 'ADMIT_DATE',
+            'DISCHARGE_DATE_ONLY' => 'DISCHARGE_DATE',
+            'ADMIT_TIME' => 'ADMISSION_TIME',
+            'CLINICAL_SUMMARY' => 'DISCHARGE_SUMMARY',
+            'DISCHARGE_INSTRUCTIONS' => 'REVIEW_AFTER',
+        ];
+        foreach ($aliasToCanonical as $alias => $canonical) {
+            $out = (string) preg_replace('/\{\{?\s*' . preg_quote($alias, '/') . '\s*\}?\}/i', '{{' . $canonical . '}}', $out);
+        }
+
+        // If summary placeholder is wrapped inside heading tags, convert to block container.
+        $out = (string) preg_replace(
+            '/<h[1-6][^>]*>\s*(\{\{?\s*(?:CLINICAL_SUMMARY|DISCHARGE_SUMMARY)\s*\}?\})\s*<\/h[1-6]>/i',
+            '<div class="discharge-summary-block">$1</div>',
+            $out
+        );
+
+        // Keep only one main summary placeholder; extra occurrences cause duplicate output.
+        $seenSummary = false;
+        $out = (string) preg_replace_callback(
+            '/\{\{?\s*(CLINICAL_SUMMARY|DISCHARGE_SUMMARY)\s*\}?\}/i',
+            static function (array $m) use (&$seenSummary): string {
+                if ($seenSummary) {
+                    return '';
+                }
+
+                $seenSummary = true;
+                return '{{DISCHARGE_SUMMARY}}';
+            },
+            $out
+        );
+
+        return $out;
     }
 
     private function applyDischargeTemplate(string $content, array $panelData, ?int $requestedTemplateId = null): array
@@ -746,7 +862,19 @@ class Ipd_discharge extends BaseController
             $templateHtml = '{{CONTENT}}';
         }
 
+        // Normalize template syntax early so downstream placeholder checks operate
+        // on a consistent token format (legacy PHP placeholders, casing, spacing).
+        $templateHtml = $this->normalizeLegacyDischargeTemplate($templateHtml);
+        $templateHtml = $this->normalizeDischargeTemplatePlaceholders($templateHtml);
+
         $tokenVars = $this->buildDischargeTemplateTokenVars($panelData, $content);
+
+        $templateHasMainSummaryToken = preg_match('/\{\{\s*DISCHARGE_SUMMARY\s*\}\}|\{\s*DISCHARGE_SUMMARY\s*\}/i', $templateHtml) === 1;
+        if ($templateHasMainSummaryToken) {
+            $tokenVars['DISCHARGE_ADVICE'] = '';
+            $tokenVars['INSTRUCTION_REMARK'] = '';
+        }
+
         if (! $this->templateHasKnownDischargeTokens($templateHtml, $tokenVars)) {
             $templateHtml .= "\n{{CONTENT}}";
         }
@@ -756,6 +884,11 @@ class Ipd_discharge extends BaseController
 
         if ($this->shouldUseContentOnlyTemplate($content, $templateHtml)) {
             $templateHtml = '{{CONTENT}}';
+        }
+
+        // If template is section-driven, ignore raw CONTENT token to avoid duplicate blocks.
+        if ($this->templateHasDischargeSectionPlaceholders($templateHtml)) {
+            $templateHtml = (string) preg_replace('/\{\{?\s*content\s*\}?\}/i', '', $templateHtml);
         }
 
         $content = $this->stripLegacyTopSummaryFromContent($content, $templateHtml, $patientName, $patientCode, $ipdCode);
@@ -781,6 +914,7 @@ class Ipd_discharge extends BaseController
         }
 
         $rendered = $this->applyDischargeTemplateTokens($templateHtml, $tokenVars);
+        $rendered = $this->dedupeRepeatedClinicalSummary($rendered, (string) ($tokenVars['DISCHARGE_SUMMARY'] ?? ''));
 
         return [
             'rendered_html' => $rendered,
@@ -789,6 +923,33 @@ class Ipd_discharge extends BaseController
             'selected_template_name' => (string) ($selectedTemplate['template_name'] ?? ''),
             'selected_template_settings' => $templateSettings,
         ];
+    }
+
+    private function dedupeRepeatedClinicalSummary(string $renderedHtml, string $clinicalSummaryHtml): string
+    {
+        $renderedHtml = (string) $renderedHtml;
+        $clinicalSummaryHtml = trim((string) $clinicalSummaryHtml);
+        if ($renderedHtml === '' || $clinicalSummaryHtml === '') {
+            return $renderedHtml;
+        }
+
+        $firstPos = strpos($renderedHtml, $clinicalSummaryHtml);
+        if ($firstPos === false) {
+            return $renderedHtml;
+        }
+
+        $offset = $firstPos + strlen($clinicalSummaryHtml);
+        while (true) {
+            $nextPos = strpos($renderedHtml, $clinicalSummaryHtml, $offset);
+            if ($nextPos === false) {
+                break;
+            }
+
+            $renderedHtml = substr_replace($renderedHtml, '', $nextPos, strlen($clinicalSummaryHtml));
+            $offset = $nextPos;
+        }
+
+        return $renderedHtml;
     }
 
     private function templateHasKnownDischargeTokens(string $templateHtml, array $tokenVars): bool
@@ -853,7 +1014,9 @@ class Ipd_discharge extends BaseController
         }
 
         $sectionTokens = [
+            'CLINICAL_SUMMARY',
             'DISCHARGE_SUMMARY',
+            'FOLLOW_UP_INSTRUCTIONS',
             'FINAL_DIAGNOSIS',
             'SURGERY',
             'PROCEDURE',
@@ -868,6 +1031,8 @@ class Ipd_discharge extends BaseController
             'CO_MORBIDITIES',
             'DISCHARGE_MEDICATIONS',
             'DIETARY_ADVICE',
+            'OTHER_ADVICE',
+            'REVIEW_AFTER',
             'DISCHARGE_INSTRUCTIONS',
             'SIGNATURE_BLOCK',
         ];
@@ -1073,19 +1238,25 @@ class Ipd_discharge extends BaseController
             return 'Discharge Summary';
         }
 
-        $ipdStatus = (int) ($ipd->ipd_status ?? 0);
+        $ipdStatus = (int) ($ipd->discarge_patient_status ?? ($ipd->discharge_status ?? ($ipd->ipd_status ?? 0)));
 
         // If status is 0 (Status Pending), show "Discharge Summary" only
         if ($ipdStatus === 0) {
             return 'Discharge Summary';
         }
 
-        // Check if ipd_discharge_status table exists
-        if (! $this->db->tableExists('ipd_discharge_status')) {
+        $statusTable = '';
+        if ($this->db->tableExists('ipd_discharg_status')) {
+            $statusTable = 'ipd_discharg_status';
+        } elseif ($this->db->tableExists('ipd_discharge_status')) {
+            $statusTable = 'ipd_discharge_status';
+        }
+
+        if ($statusTable === '') {
             return 'Discharge Summary';
         }
 
-        $row = $this->db->table('ipd_discharge_status')
+        $row = $this->db->table($statusTable)
             ->select('status_desc, status_details')
             ->where('id', $ipdStatus)
             ->get(1)
@@ -4902,6 +5073,172 @@ class Ipd_discharge extends BaseController
             );
     }
 
+    /**
+     * Placeholder preview page: shows each placeholder and resolved content for an IPD.
+     * Access via: /Ipd_discharge/placeholder_preview/{ipdId}?tpl={templateId}
+     */
+    public function placeholder_preview(int $ipdId = 0)
+    {
+        $permission = $this->requireAnyPermission([
+            'billing.access',
+            'billing.ipd.invoice',
+            'billing.ipd.current-admission',
+            'template.discharge',
+        ]);
+        if ($permission) {
+            return $permission;
+        }
+
+        if ($ipdId <= 0) {
+            $ipdId = (int) ($this->request->getGet('ipd_id') ?? 0);
+        }
+        $requestedTemplateId = (int) ($this->request->getGet('tpl') ?? 0);
+        $forceRegenerate = (int) ($this->request->getGet('refresh') ?? 0) === 1;
+
+        $placeholderInfo = [
+            'H_address_1' => 'Hospital Address Line 1',
+            'H_address_2' => 'Hospital Address Line 2',
+            'H_logo' => 'Hospital Logo File Name',
+            'H_logo_abs' => 'Hospital Logo Absolute Path',
+            'hospital_name' => 'Hospital Name',
+            'hospital_address' => 'Hospital Full Address',
+            'hospital_phone' => 'Hospital Phone',
+            'hospital_email' => 'Hospital Email',
+            'PATIENT_NAME' => 'Patient Name',
+            'UHID' => 'Patient UHID',
+            'IPD_CODE' => 'IPD Number/Code',
+            'AGE_GENDER' => 'Age / Gender',
+            'GUARDIAN' => 'Guardian Combined Text',
+            'GUARDIAN_RELATION' => 'Guardian Relation',
+            'GUARDIAN_NAME' => 'Guardian Name',
+            'PATIENT_ADDRESS' => 'Patient Address',
+            'PATIENT_PHONE' => 'Patient Phone',
+            'DEPARTMENT' => 'Department Name',
+            'ADMIT_DATE' => 'Admission Date',
+            'DISCHARGE_DATE' => 'Discharge Date',
+            'ADMISSION_TIME' => 'Admission Time',
+            'DISCHARGE_TIME' => 'Discharge Time',
+            'ISDELIVERY' => 'Delivery Flag',
+            'INSURANCE_COMPANY' => 'Insurance Company',
+            'DOCTOR_NAMES' => 'Consultant/Doctor Names',
+            'DOCTOR_NAME' => 'Doctor Name (alias)',
+            'CURRENT_DATE' => 'Current Date',
+            'PRINT_TIME' => 'Print Date/Time',
+            'CONTENT' => 'Full Auto-Generated Discharge Content',
+            'DISCHARGE_STATUS' => 'Document Heading from Discharge Status',
+            'PATIENT_INFO_TABLE' => 'Pre-built Patient Information Table',
+            'DISCHARGE_SUMMARY' => 'Main Discharge Summary Content',
+            'FINAL_DIAGNOSIS' => 'Final Diagnosis Section',
+            'SURGERY' => 'Surgery Section',
+            'PROCEDURE' => 'Procedure Section',
+            'PERSONAL_HISTORY' => 'Personal History Section',
+            'PRESENTING_COMPLAINTS' => 'Presenting Complaints Section',
+            'PAIN_MEASUREMENT_SCALE' => 'Pain Measurement Section',
+            'GENERAL_EXAM_ADMISSION' => 'General Examination on Admission',
+            'CLINICAL_INVESTIGATION_REPORTS' => 'Clinical Investigation Reports',
+            'COURSE_IN_HOSPITAL' => 'Course in Hospital Section',
+            'EXAMINATION_ON_DISCHARGE' => 'Examination on Discharge Section',
+            'DRUG_ALLERGY_ADR' => 'Drug Allergy/ADR Section',
+            'CO_MORBIDITIES' => 'Co-Morbidities Section',
+            'DISCHARGE_MEDICATIONS' => 'Discharge Medications Section',
+            'DIETARY_ADVICE' => 'Dietary Advice Section',
+            'OTHER_ADVICE' => 'Other Advice Section',
+            'REVIEW_AFTER' => 'Review After (days/text)',
+            'FOLLOW_UP_INSTRUCTIONS' => 'Follow-up Instructions Section',
+            'DISCHARGE_ADVICE' => 'Follow-up Advice (legacy alias)',
+            'INSTRUCTION_REMARK' => 'Instruction Remark (legacy alias)',
+            'SIGNATURE_BLOCK' => 'Signature Block',
+        ];
+
+        if ($ipdId <= 0) {
+            $urlBase = site_url('Ipd_discharge/placeholder_preview');
+            return $this->response
+                ->setContentType('text/html')
+                ->setBody(
+                    '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Discharge Placeholder Preview</title>' .
+                    '<style>body{font-family:Arial,sans-serif;margin:24px;background:#f8fafc;color:#111827;} .box{background:#fff;border:1px solid #d1d5db;border-radius:8px;padding:16px;max-width:920px;} input{padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;} button{padding:8px 12px;border:1px solid #2563eb;background:#2563eb;color:#fff;border-radius:6px;cursor:pointer;} .muted{color:#6b7280;font-size:13px;}</style>' .
+                    '</head><body><div class="box"><h2 style="margin-top:0;">Discharge Placeholder Preview</h2>' .
+                    '<form method="get" action="' . esc($urlBase) . '">' .
+                    '<label>IPD ID:</label> <input type="number" name="ipd_id" min="1" required>' .
+                    ' <label style="margin-left:8px;">Template ID:</label> <input type="number" name="tpl" min="0" placeholder="Optional">' .
+                    ' <button type="submit">Open Placeholder Table</button>' .
+                    '</form><p class="muted">Use this page to see which placeholder resolves to what content for a given IPD.</p>' .
+                    '</div></body></html>'
+                );
+        }
+
+        $panelData = $this->ipdBillingModel->getIpdPanelInfo($ipdId);
+        if (empty($panelData)) {
+            return $this->response->setStatusCode(404)->setBody('IPD not found');
+        }
+
+        $content = $this->getDischargeContent($ipdId);
+        if ($forceRegenerate || trim(strip_tags($content)) === '') {
+            $content = $this->buildAutoDischargeContent($ipdId, $panelData);
+            if (trim(strip_tags($content)) !== '') {
+                $this->saveDischargeContent($ipdId, $content);
+            }
+        }
+
+        $templatePack = $this->applyDischargeTemplate($content, $panelData, $requestedTemplateId > 0 ? $requestedTemplateId : null);
+        $tokenVars = $this->buildDischargeTemplateTokenVars($panelData, $content);
+        $selectedTemplateId = (int) ($templatePack['selected_template_id'] ?? 0);
+        $selectedTemplateName = (string) ($templatePack['selected_template_name'] ?? '');
+        $showLegacy = (int) ($this->request->getGet('show_legacy') ?? 0) === 1;
+        $legacyTokens = [
+            'FOLLOW_UP_INSTRUCTIONS',
+            'DISCHARGE_ADVICE',
+            'INSTRUCTION_REMARK',
+        ];
+        $legacyTokenSet = array_fill_keys($legacyTokens, true);
+
+        $rowsHtml = '';
+        foreach ($placeholderInfo as $token => $description) {
+            $value = (string) ($tokenVars[$token] ?? '');
+            $plain = trim(strip_tags($value));
+            $status = $plain === '' ? 'Empty' : 'Filled';
+            $statusColor = $plain === '' ? '#b45309' : '#166534';
+            $display = $value === '' ? '<span style="color:#9ca3af;">(empty)</span>' : '<pre style="margin:0;white-space:pre-wrap;word-break:break-word;font-family:Consolas,monospace;">' . htmlspecialchars($value, ENT_QUOTES, 'UTF-8') . '</pre>';
+            $isLegacyToken = isset($legacyTokenSet[$token]);
+            $rowClassAttr = $isLegacyToken ? ' class="legacy-row"' : '';
+            $rowStyleAttr = ($isLegacyToken && !$showLegacy) ? ' style="display:none;"' : '';
+
+            $rowsHtml .= '<tr' . $rowClassAttr . $rowStyleAttr . '>'
+                . '<td style="vertical-align:top;"><code>{{' . esc($token) . '}}</code></td>'
+                . '<td style="vertical-align:top;">' . esc($description) . '</td>'
+                . '<td style="vertical-align:top;"><span style="font-weight:600;color:' . $statusColor . ';">' . $status . '</span></td>'
+                . '<td style="vertical-align:top;">' . $display . '</td>'
+                . '</tr>';
+        }
+
+        $previewUrl = site_url('Ipd_discharge/preview_discharge_report/' . $ipdId) . ($selectedTemplateId > 0 ? ('?tpl=' . $selectedTemplateId) : '');
+        $pdfUrl = site_url('Ipd_discharge/show_discharge/' . $ipdId . '/1') . ($selectedTemplateId > 0 ? ('?tpl=' . $selectedTemplateId) : '');
+
+        return $this->response
+            ->setContentType('text/html')
+            ->setBody(
+                '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Discharge Placeholder Map - IPD ' . $ipdId . '</title>' .
+                '<style>body{font-family:Arial,sans-serif;margin:20px;background:#f8fafc;color:#111827;} .head{background:#fff;border:1px solid #d1d5db;border-radius:8px;padding:14px 16px;margin-bottom:12px;} table{width:100%;border-collapse:collapse;background:#fff;} th,td{border:1px solid #d1d5db;padding:8px 10px;} th{background:#f1f5f9;text-align:left;} .muted{color:#6b7280;font-size:12px;} .actions a{display:inline-block;margin-right:8px;color:#1d4ed8;text-decoration:none;} .actions a:hover{text-decoration:underline;} .toggle-wrap{margin-top:8px;font-size:13px;}</style>' .
+                '</head><body>' .
+                '<div class="head">' .
+                '<h2 style="margin:0 0 8px 0;">Discharge Placeholder Mapping</h2>' .
+                '<div><strong>IPD ID:</strong> ' . $ipdId . ' &nbsp; <strong>Template:</strong> ' . esc($selectedTemplateName) . ' (ID: ' . $selectedTemplateId . ')</div>' .
+                '<div class="actions" style="margin-top:8px;">' .
+                '<a href="' . esc(site_url('Ipd_discharge/placeholder_preview')) . '?ipd_id=' . $ipdId . '&tpl=' . $selectedTemplateId . '&refresh=1" target="_blank">Regenerate and Refresh</a>' .
+                '<a href="' . esc($previewUrl) . '" target="_blank">Open Discharge Preview</a>' .
+                '<a href="' . esc($pdfUrl) . '" target="_blank">Open PDF</a>' .
+                '</div>' .
+                '<div class="toggle-wrap"><label><input type="checkbox" id="toggle_legacy_placeholders"' . ($showLegacy ? ' checked' : '') . '> Show legacy placeholders</label> <span class="muted">(' . count($legacyTokens) . ' hidden by default)</span></div>' .
+                '<div class="muted" style="margin-top:6px;">This table shows each placeholder and resolved value from current discharge data.</div>' .
+                '</div>' .
+                '<table><thead><tr><th style="width:220px;">Placeholder</th><th style="width:280px;">Content Source</th><th style="width:90px;">Status</th><th>Resolved Content</th></tr></thead><tbody>'
+                . $rowsHtml .
+                '</tbody></table>' .
+                '<script>(function(){var toggle=document.getElementById("toggle_legacy_placeholders");if(!toggle){return;}var rows=document.querySelectorAll("tr.legacy-row");var apply=function(){for(var i=0;i<rows.length;i++){rows[i].style.display=toggle.checked?"table-row":"none";}};toggle.addEventListener("change",apply);apply();})();</script>' .
+                '</body></html>'
+            );
+    }
+
     public function ipd_select(int $ipdId, int $reCreate = 0)
     {
         $permission = $this->requireAnyPermission([
@@ -5904,6 +6241,20 @@ class Ipd_discharge extends BaseController
             }
 
             if ($savedAny) {
+                // Keep ipd_discharge.content in sync with latest form data so preview/PDF
+                // immediately reflects edits without requiring manual regen links.
+                try {
+                    $freshPanelData = $this->ipdBillingModel->getIpdPanelInfo($ipdId);
+                    if (! empty($freshPanelData)) {
+                        $freshContent = $this->buildAutoDischargeContent($ipdId, $freshPanelData);
+                        if (trim((string) $freshContent) !== '') {
+                            $this->saveDischargeContent($ipdId, (string) $freshContent);
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    // Fail-open: do not block UI save if regeneration fails.
+                }
+
                 $this->enqueueIpdDischargeSync($ipdId, $patientId, $action);
             }
 

@@ -36,13 +36,13 @@ $status = (int) ($edit['status'] ?? 1);
 
             <div class="alert alert-info py-2 small">
                 <strong>Available placeholders:</strong><br>
-                <strong>1. Hospital Information:</strong> <code>{{H_Name}}</code>, <code>{{H_address_1}}</code>, <code>{{H_address_2}}</code>, <code>{{H_phone_No}}</code>, <code>{{H_Email}}</code>, <code>{{H_logo}}</code>, <code>{{H_logo_abs}}</code>, <code>{{hospital_name}}</code>, <code>{{hospital_address}}</code>, <code>{{hospital_phone}}</code>, <code>{{hospital_email}}</code><br>
+                <strong>1. Hospital Information:</strong> <code>{{hospital_name}}</code>, <code>{{H_address_1}}</code>, <code>{{H_address_2}}</code>, <code>{{hospital_phone}}</code>, <code>{{hospital_email}}</code>, <code>{{H_logo}}</code>, <code>{{H_logo_abs}}</code>, <code>{{hospital_address}}</code><br>
                 <strong>2. Patient Information:</strong> <code>{{PATIENT_NAME}}</code>, <code>{{UHID}}</code>, <code>{{IPD_CODE}}</code>, <code>{{AGE_GENDER}}</code>, <code>{{GUARDIAN}}</code>, <code>{{GUARDIAN_RELATION}}</code>, <code>{{GUARDIAN_NAME}}</code>, <code>{{PATIENT_ADDRESS}}</code>, <code>{{PATIENT_PHONE}}</code> ✨<br>
-                <strong>3. IPD Information:</strong> <code>{{DEPARTMENT}}</code>, <code>{{ADMIT_DATE}}</code>, <code>{{DISCHARGE_DATE}}</code>, <code>{{ADMIT_DATE_ONLY}}</code>, <code>{{DISCHARGE_DATE_ONLY}}</code>, <code>{{ADMISSION_TIME}}</code>, <code>{{DISCHARGE_TIME}}</code>, <code>{{ADMIT_TIME}}</code>, <code>{{ISDELIVERY}}</code>, <code>{{INSURANCE_COMPANY}}</code> ✨, <code>{{DOCTOR_NAMES}}</code> ✨, <code>{{DOCTOR_NAME}}</code> ✨<br>
+                <strong>3. IPD Information:</strong> <code>{{DEPARTMENT}}</code>, <code>{{ADMIT_DATE}}</code>, <code>{{DISCHARGE_DATE}}</code>, <code>{{ADMISSION_TIME}}</code>, <code>{{DISCHARGE_TIME}}</code>, <code>{{ISDELIVERY}}</code>, <code>{{INSURANCE_COMPANY}}</code> ✨, <code>{{DOCTOR_NAMES}}</code> ✨, <code>{{DOCTOR_NAME}}</code> ✨<br>
                 <strong>4. IPD Discharge Content:</strong> <code>{{CONTENT}}</code> (all sections), <code>{{PATIENT_INFO_TABLE}}</code> (pre-built patient table)<br>
-                <strong>Section placeholders for custom layout/order:</strong> <code>{{DISCHARGE_SUMMARY}}</code>, <code>{{FINAL_DIAGNOSIS}}</code>, <code>{{SURGERY}}</code>, <code>{{PROCEDURE}}</code>, <code>{{PERSONAL_HISTORY}}</code>, <code>{{PRESENTING_COMPLAINTS}}</code>, <code>{{PAIN_MEASUREMENT_SCALE}}</code>, <code>{{GENERAL_EXAM_ADMISSION}}</code>, <code>{{CLINICAL_INVESTIGATION_REPORTS}}</code>, <code>{{COURSE_IN_HOSPITAL}}</code>, <code>{{EXAMINATION_ON_DISCHARGE}}</code>, <code>{{DRUG_ALLERGY_ADR}}</code>, <code>{{CO_MORBIDITIES}}</code>, <code>{{DISCHARGE_MEDICATIONS}}</code>, <code>{{DIETARY_ADVICE}}</code>, <code>{{DISCHARGE_INSTRUCTIONS}}</code>, <code>{{SIGNATURE_BLOCK}}</code><br>
-                <strong>5. Common/Meta:</strong> <code>{{CURRENT_DATE}}</code>, <code>{{PRINT_TIME}}</code><br>
-                <small class="text-muted">✨ = Newly added tokens | All tokens are case-insensitive | Empty values auto-hide</small>
+                <strong>Section placeholders for custom layout/order:</strong> <code>{{DISCHARGE_SUMMARY}}</code>, <code>{{FINAL_DIAGNOSIS}}</code>, <code>{{SURGERY}}</code>, <code>{{PROCEDURE}}</code>, <code>{{PERSONAL_HISTORY}}</code>, <code>{{PRESENTING_COMPLAINTS}}</code>, <code>{{PAIN_MEASUREMENT_SCALE}}</code>, <code>{{GENERAL_EXAM_ADMISSION}}</code>, <code>{{CLINICAL_INVESTIGATION_REPORTS}}</code>, <code>{{COURSE_IN_HOSPITAL}}</code>, <code>{{EXAMINATION_ON_DISCHARGE}}</code>, <code>{{DRUG_ALLERGY_ADR}}</code>, <code>{{CO_MORBIDITIES}}</code>, <code>{{DISCHARGE_MEDICATIONS}}</code>, <code>{{DIETARY_ADVICE}}</code>, <code>{{OTHER_ADVICE}}</code>, <code>{{REVIEW_AFTER}}</code>, <code>{{FOLLOW_UP_INSTRUCTIONS}}</code>, <code>{{SIGNATURE_BLOCK}}</code><br>
+                <strong>5. Common/Meta:</strong> <code>{{DISCHARGE_STATUS}}</code>, <code>{{CURRENT_DATE}}</code>, <code>{{PRINT_TIME}}</code><br>
+                <small class="text-muted">✨ = Newly added tokens | All tokens are case-insensitive | Empty values auto-hide | Legacy aliases auto-normalized to preferred placeholders</small>
             </div>
 
             <div class="alert alert-warning py-2 small">
@@ -64,10 +64,11 @@ $status = (int) ($edit['status'] ?? 1);
                         <div class="col-md-8 col-lg-9 d-flex flex-wrap gap-2">
                             <button type="button" class="btn btn-outline-primary btn-sm" id="btn_discharge_preview">Preview Discharge</button>
                             <button type="button" class="btn btn-outline-danger btn-sm" id="btn_discharge_pdf">Open PDF Print</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_discharge_placeholder_preview">Placeholder Data Preview</button>
                         </div>
                     </div>
                     <div class="small text-muted mt-2">
-                        Uses the live discharge routes: <code>/Ipd_discharge/preview_discharge_report/{ipdId}</code> and <code>/Ipd_discharge/show_discharge/{ipdId}/1</code>.
+                        Uses the live discharge routes: <code>/Ipd_discharge/preview_discharge_report/{ipdId}</code>, <code>/Ipd_discharge/show_discharge/{ipdId}/1</code>, and <code>/Ipd_discharge/placeholder_preview/{ipdId}</code>.
                     </div>
                 </div>
             </div>
@@ -224,6 +225,7 @@ $status = (int) ($edit['status'] ?? 1);
     var previewIpdInput = document.getElementById('discharge_preview_ipd_id');
     var previewBtn = document.getElementById('btn_discharge_preview');
     var pdfBtn = document.getElementById('btn_discharge_pdf');
+    var placeholderPreviewBtn = document.getElementById('btn_discharge_placeholder_preview');
     var editButtons = document.querySelectorAll('.discharge-template-edit');
     var deleteButtons = document.querySelectorAll('.discharge-template-delete');
 
@@ -671,6 +673,13 @@ $status = (int) ($edit['status'] ?? 1);
         pdfBtn.addEventListener('click', function () {
             var ipdId = parseInt((previewIpdInput && previewIpdInput.value) ? previewIpdInput.value : '0', 10);
             openDischargeUrl('<?= site_url('Ipd_discharge/show_discharge') ?>', ipdId, 1);
+        });
+    }
+
+    if (placeholderPreviewBtn) {
+        placeholderPreviewBtn.addEventListener('click', function () {
+            var ipdId = parseInt((previewIpdInput && previewIpdInput.value) ? previewIpdInput.value : '0', 10);
+            openDischargeUrl('<?= site_url('Ipd_discharge/placeholder_preview') ?>', ipdId);
         });
     }
 

@@ -370,6 +370,8 @@ $routes->get('Ipd_discharge/search_patient', 'Ipd_discharge::search_patient');
 $routes->get('Ipd_discharge/search_patient_ajax', 'Ipd_discharge::search_patient_ajax');
 $routes->get('Ipd_discharge/debug_ipd_fields/(:num)', 'Ipd_discharge::debug_ipd_fields/$1');
 $routes->get('Ipd_discharge/debug_discharge_html/(:num)', 'Ipd_discharge::debug_discharge_html/$1');
+$routes->get('Ipd_discharge/placeholder_preview', 'Ipd_discharge::placeholder_preview');
+$routes->get('Ipd_discharge/placeholder_preview/(:num)', 'Ipd_discharge::placeholder_preview/$1');
 $routes->match(['get', 'post'], 'Ipd_discharge/ipd_select/(:num)', 'Ipd_discharge::ipd_select/$1');
 $routes->match(['get', 'post'], 'Ipd_discharge/ipd_select/(:num)/(:num)', 'Ipd_discharge::ipd_select/$1/$2');
 $routes->get('Ipd_discharge/section_past_data', 'Ipd_discharge::section_past_data');
