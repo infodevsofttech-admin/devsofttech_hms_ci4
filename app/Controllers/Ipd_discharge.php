@@ -6168,6 +6168,32 @@ class Ipd_discharge extends BaseController
         $templateTokenVars = $this->buildDischargeTemplateTokenVars($panelData, $content);
         $templateTokenVars['TEMPLATE_NAME'] = esc($templateName);
 
+        // DEBUG MODE: Output HTML directly if requested via ?html=1
+        $htmlDebugMode = (int) ($this->request->getGet('html') ?? 0) === 1;
+        if ($htmlDebugMode) {
+            $pdfHtml = $this->buildDischargePdfHtml($panelData, $renderedHtml, $withHeader, $templateName);
+            
+            return $this->response
+                ->setContentType('text/html')
+                ->setBody(
+                    '<!DOCTYPE html><html><head><meta charset="utf-8">' .
+                    '<title>Discharge Summary HTML Debug - IPD ' . $ipdId . '</title>' .
+                    '<style>body{font-family:Arial,sans-serif;margin:20px;background:#f5f5f5;} ' .
+                    '.debug-info{background:#fff;padding:15px;border:2px solid #4CAF50;margin-bottom:20px;} ' .
+                    '.content-box{background:#fff;padding:20px;border:1px solid #ddd;}</style>' .
+                    '</head><body>' .
+                    '<div class="debug-info"><h2>✅ HTML Debug Mode Active</h2>' .
+                    '<p><strong>IPD ID:</strong> ' . $ipdId . '</p>' .
+                    '<p><strong>Template:</strong> ' . esc($templateName) . '</p>' .
+                    '<p><strong>Content Length:</strong> ' . strlen($content) . ' chars</p>' .
+                    '<p><strong>Rendered HTML Length:</strong> ' . strlen($renderedHtml) . ' chars</p>' .
+                    '<p><a href="?html=0">Generate PDF</a> | <a href="?refresh=1&html=1">Regenerate Content</a></p>' .
+                    '</div>' .
+                    '<div class="content-box">' . $pdfHtml . '</div>' .
+                    '</body></html>'
+                );
+        }
+
         $patient = $panelData['person_info'] ?? null;
         $ipd = $panelData['ipd_info'] ?? null;
         $patientName = trim((string) ($patient->p_fname ?? 'Patient'));
