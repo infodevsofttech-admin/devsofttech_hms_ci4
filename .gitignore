@@ -131,6 +131,9 @@ _modules/*
 # Visual Studio Code
 .vscode/
 
+# Local reference design bundle (do not commit)
+NiceAdmin-pro/
+
 /results/
 /phpunit*.xml
 
