@@ -1595,6 +1595,21 @@ class Ipd_discharge extends BaseController
             return '';
         }
 
+        // Check if content contains HTML tags (from HTML editor)
+        // Look for common HTML tags: p, div, span, strong, b, i, em, ul, ol, li, table, tr, td, br
+        if (preg_match('/<(?:p|div|span|strong|b|i|em|ul|ol|li|table|tr|td|th|thead|tbody|h[1-6])\b[^>]*>/i', $value)) {
+            // Content is HTML - preserve it but clean up whitespace
+            // Remove excessive newlines between tags and trim
+            $value = preg_replace('/>\s+</', '><', $value) ?? $value;
+            $value = preg_replace('/\r\n?/', "\n", $value) ?? $value;
+            
+            // Decode HTML entities that might have been double-encoded
+            $value = html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            
+            return trim($value);
+        }
+
+        // Content is plain text (legacy textarea) - convert to plain text
         $value = preg_replace('/<\s*br\s*\/?\s*>/i', "\n", $value) ?? $value;
         $value = preg_replace('/<\s*\/\s*p\s*>/i', "\n", $value) ?? $value;
         $value = preg_replace('/<\s*p\b[^>]*>/i', '', $value) ?? $value;
@@ -1603,6 +1618,28 @@ class Ipd_discharge extends BaseController
         $value = preg_replace('/\n{3,}/', "\n\n", $value) ?? $value;
 
         return trim($value);
+    }
+
+    /**
+     * Render rich text content for HTML output.
+     * Detects if content is HTML (from HTML editor) or plain text (from textarea).
+     * HTML content is preserved, plain text is escaped and nl2br applied.
+     */
+    private function renderRichText(string $text): string
+    {
+        $text = trim($text);
+        if ($text === '') {
+            return '';
+        }
+
+        // Check if content contains HTML tags (from HTML editor)
+        if (preg_match('/<(?:p|div|span|strong|b|i|em|ul|ol|li|table|tr|td|th|thead|tbody|h[1-6])\b[^>]*>/i', $text)) {
+            // Content is HTML - return as-is (already sanitized by normalizeRichText)
+            return $text;
+        }
+
+        // Content is plain text - escape and convert newlines to br
+        return nl2br(esc($text));
     }
 
     private function addListSection(array &$sections, string $title, array $rows): void
@@ -1750,7 +1787,7 @@ class Ipd_discharge extends BaseController
 
         $remark = trim($remark);
         if ($remark !== '') {
-            $lines[] = nl2br(esc($remark));
+            $lines[] = $this->renderRichText($remark);
         }
 
         if ($lines === []) {
@@ -1893,7 +1930,7 @@ class Ipd_discharge extends BaseController
                 continue;
             }
 
-            $sysHtml .= '<div class="discharge-item">' . nl2br(esc($value)) . '</div>';
+            $sysHtml .= '<div class="discharge-item">' . $this->renderRichText($value) . '</div>';
         }
         if ($sysHtml !== '') {
             $sections[] = '<h4 class="discharge-section-heading">Other / Systemic Examinations</h4>' . $sysHtml;
@@ -2055,7 +2092,7 @@ class Ipd_discharge extends BaseController
 
             $otherExamText = $this->normalizeRichText((string) ($otherExamParsed['text'] ?? ''));
             if ($otherExamText !== '') {
-                $html .= '<div><b>Other Examinations / Provisional Diagnosis:</b><br>' . nl2br(esc($otherExamText)) . '</div>';
+                $html .= '<div><b>Other Examinations / Provisional Diagnosis:</b><br>' . $this->renderRichText($otherExamText) . '</div>';
             }
 
             $sections[] = $html;
@@ -2073,7 +2110,7 @@ class Ipd_discharge extends BaseController
         $inhosRemark = $this->normalizeRichText((string) ($inhosRow['comp_remark'] ?? ''));
         if ($inhosRemark !== '') {
             $sections[] = '<h4 class="discharge-section-heading">Summary of key investigations during Hospitalization</h4><div>'
-                . nl2br(esc($inhosRemark))
+                . $this->renderRichText($inhosRemark)
                 . '</div>';
         }
 
