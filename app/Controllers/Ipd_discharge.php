@@ -1873,28 +1873,26 @@ class Ipd_discharge extends BaseController
         // It is available as {{PATIENT_INFO_TABLE}} token for templates to use if needed.
         // This matches CI3 behavior where template controlled the patient info display.
 
-        // Build Discharge Summary section with status header and free-text content
-        // Get discharge status text based on ipd_status from ipd_discharg_status table
-        $dischargeStatusHeader = $this->getDischargeStatusText($ipd);
+        // Build Discharge Summary section with status and free-text content
+        // IMPORTANT: Keep "Discharge Summary" heading for template section extraction to work!
+        $dischargeStatusText = $this->getDischargeStatusText($ipd);
         
         // Get discharge summary free-text content from ipd_discharge_instructions.comp_remark
         // (instructionRowForMeta was already loaded above at line ~1856)
         $dischargeSummaryText = $this->normalizeRichText((string) ($instructionRowForMeta['comp_remark'] ?? ''));
         
-        if ($dischargeStatusHeader !== '' || $dischargeSummaryText !== '') {
-            $summaryHtml = '';
+        if ($dischargeStatusText !== '' || $dischargeSummaryText !== '') {
+            $summaryHtml = '<h4 class="discharge-section-heading">Discharge Summary</h4>';
             
-            if ($dischargeStatusHeader !== '') {
-                $summaryHtml .= '<h4 class="discharge-section-heading">' . esc($dischargeStatusHeader) . '</h4>';
+            if ($dischargeStatusText !== '') {
+                $summaryHtml .= '<div class="discharge-status"><strong>' . esc($dischargeStatusText) . '</strong></div>';
             }
             
             if ($dischargeSummaryText !== '') {
                 $summaryHtml .= '<div class="discharge-summary-content">' . $this->renderRichText($dischargeSummaryText) . '</div>';
             }
             
-            if ($summaryHtml !== '') {
-                $sections[] = $summaryHtml;
-            }
+            $sections[] = $summaryHtml;
         }
 
         $complaints = $this->byIpdRows('ipd_discharge_complaint', ['comp_report', 'comp_remark'], 'id ASC', $ipdId);
