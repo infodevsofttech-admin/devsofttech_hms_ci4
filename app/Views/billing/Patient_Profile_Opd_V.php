@@ -62,7 +62,7 @@ if ($backUrl === '') {
                 <?php foreach ($opdGroups as $group) { ?>
                     <div class="border rounded p-3 mb-3">
                         <div class="row g-3 align-items-start">
-                            <div class="col-12 col-xl-4">
+                            <div class="col-12 col-xl-12">
                                 <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
                                     <div>
                                         <strong><?= esc($group['opd_code']) ?></strong>
@@ -118,7 +118,7 @@ if ($backUrl === '') {
                                 <?php } ?>
                             </div>
 
-                            <div class="col-12 col-xl-8">
+                            <div class="col-12 col-xl-12">
                                 <?php if (empty($group['files'])) { ?>
                                     <div class="text-muted mt-2">No scanned files for this OPD.</div>
                                 <?php } else { ?>
