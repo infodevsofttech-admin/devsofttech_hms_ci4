@@ -6,7 +6,8 @@ $ipdItems = $ipd_invoice_items ?? [];
 $showItems = $showinvoice ?? [];
 $medicalItems = $inv_med_list ?? [];
 $payments = $ipd_payment ?? [];
-$billTotals = is_array($bill_totals ?? null) ? $bill_totals : [];
+$rawBillTotals = $bill_totals ?? [];
+$billTotals = is_array($rawBillTotals) ? $rawBillTotals : [];
 $hasGrossTotal = array_key_exists('gross', $billTotals);
 $hasNetTotal = array_key_exists('net', $billTotals);
 $hasPaidTotal = array_key_exists('paid', $billTotals);
@@ -89,6 +90,32 @@ if (! $hasPaidTotal && $paidAmount <= 0) {
 $balanceAmount = $hasBalanceTotal ? (float) ($billTotals['balance'] ?? 0) : (float) ($ipd->balance_amount ?? 0);
 if (! $hasBalanceTotal && $balanceAmount === 0.0 && $ipd) {
     $balanceAmount = (float) ($ipd->balance_amount ?? 0);
+}
+
+$printAdjustments = [];
+foreach ([1, 2, 3] as $slot) {
+    $amountField = $slot === 1 ? 'Discount' : 'Discount' . $slot;
+    $remarkField = $slot === 1 ? 'Discount_Remark' : 'Discount_Remark' . $slot;
+    $amount = (float) ($ipd->{$amountField} ?? 0);
+    if ($amount > 0) {
+        $printAdjustments[] = [
+            'label' => 'Deduction',
+            'remark' => (string) ($ipd->{$remarkField} ?? ''),
+            'amount' => $amount,
+        ];
+    }
+}
+foreach ([1, 2] as $slot) {
+    $amountField = 'chargeamount' . $slot;
+    $remarkField = 'charge' . $slot;
+    $amount = (float) ($ipd->{$amountField} ?? 0);
+    if ($amount > 0) {
+        $printAdjustments[] = [
+            'label' => 'Charge',
+            'remark' => (string) ($ipd->{$remarkField} ?? ''),
+            'amount' => $amount,
+        ];
+    }
 }
 
 $patientAddress = trim((string) (($person->add1 ?? '') . ' ' . ($person->add2 ?? '') . ' ' . ($person->city ?? '') . ' ' . ($person->state ?? '')));
@@ -297,6 +324,21 @@ $billHeadingText = $isDischargeFinal
                 <td class="right"><?= esc(number_format($grossAmount, 2)) ?></td>
                 <?php if ($mode3ShowAmountAfterDiscount) : ?><td class="right"></td><?php endif; ?>
             </tr>
+
+            <?php foreach ($printAdjustments as $adjustment) : ?>
+                <tr>
+                    <td></td>
+                    <td colspan="<?= $mode3ShowAmountAfterDiscount ? '3' : '2' ?>">
+                        <?php if ($adjustment['remark'] !== '') : ?>
+                            Remark :<br><?= esc($adjustment['remark']) ?>
+                        <?php endif; ?>
+                    </td>
+                    <td></td>
+                    <td class="right totalline"><?= esc($adjustment['label']) ?></td>
+                    <td class="right"><?= esc(number_format((float) $adjustment['amount'], 2)) ?></td>
+                    <?php if ($mode3ShowAmountAfterDiscount) : ?><td></td><?php endif; ?>
+                </tr>
+            <?php endforeach; ?>
 
             <tr class="totalline">
                 <td></td>

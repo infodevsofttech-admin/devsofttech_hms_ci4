@@ -193,7 +193,9 @@ $canManageIpdStatus = auth()->user()?->can('billing.ipd.status.manage') ?? false
                 });
             }
 
-            $(document).on('click', '#tab_discharge_content .js-update-discount', function() {
+            $(document)
+                .off('click', '#tab_discharge_content .js-update-discount')
+                .on('click.ipdDischargeProcess', '#tab_discharge_content .js-update-discount', function() {
                 var slot = Number($(this).data('slot') || 0);
                 if (slot < 1 || slot > 3) {
                     return;
@@ -208,7 +210,9 @@ $canManageIpdStatus = auth()->user()?->can('billing.ipd.status.manage') ?? false
                 });
             });
 
-            $(document).on('click', '#tab_discharge_content .js-update-charge', function() {
+            $(document)
+                .off('click', '#tab_discharge_content .js-update-charge')
+                .on('click.ipdDischargeProcess', '#tab_discharge_content .js-update-charge', function() {
                 var slot = Number($(this).data('slot') || 0);
                 if (slot < 1 || slot > 2) {
                     return;
@@ -223,7 +227,9 @@ $canManageIpdStatus = auth()->user()?->can('billing.ipd.status.manage') ?? false
                 });
             });
 
-            $(document).on('click', '#tab_discharge_content #btn-update-discharge-process', function() {
+            $(document)
+                .off('click', '#tab_discharge_content #btn-update-discharge-process')
+                .on('click.ipdDischargeProcess', '#tab_discharge_content #btn-update-discharge-process', function() {
                 var status = Number($('#discharge_status').val() || 0);
                 var disTime = String($('#discharge_time').val() || '').trim();
                 if (status === 0) {
@@ -248,7 +254,9 @@ $canManageIpdStatus = auth()->user()?->can('billing.ipd.status.manage') ?? false
                 });
             });
 
-            $(document).on('click', '#tab_discharge_content .js-toggle-ipd-status', function() {
+            $(document)
+                .off('click', '#tab_discharge_content .js-toggle-ipd-status')
+                .on('click.ipdDischargeProcess', '#tab_discharge_content .js-toggle-ipd-status', function() {
                 var currentStatus = Number($(this).data('current') || 0);
                 var newStatus = currentStatus === 0 ? 1 : 0;
                 var action = newStatus === 1 ? 'lock bills (set discharged)' : 'unlock bills (set active)';
