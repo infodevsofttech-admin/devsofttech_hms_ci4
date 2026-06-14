@@ -154,7 +154,7 @@ $billHeadingText = $isDischargeFinal
         .right { text-align: right; }
         .group { font-weight: 700; font-size: 10.2px; }
         .totalline { font-weight: 700; }
-        .footer-sign { margin-top: 14px; width: 100%; }
+        .footer-sign { margin-top: 48px; width: 100%; }
         .footer-sign td { border: none; width: 50%; font-weight: 700; font-size: 10.4px; }
     </style>
 </head>
