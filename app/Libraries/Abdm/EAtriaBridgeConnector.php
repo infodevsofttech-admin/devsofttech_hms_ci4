@@ -356,7 +356,8 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
 
         $normalizeHiType = static function (string $value): string {
             return match ($value) {
-                'OPConsultation', 'OPConsultRecord', 'Prescription', 'PrescriptionRecord' => 'PrescriptionRecord',
+                'OPConsultation', 'OPConsultRecord' => 'OPConsultRecord',
+                'Prescription', 'PrescriptionRecord' => 'PrescriptionRecord',
                 'DiagnosticReport', 'DiagnosticReportRecord', 'Lab_Report', 'lab_report' => 'DiagnosticReportRecord',
                 'DischargeSummary', 'DischargeSummaryRecord' => 'DischargeSummaryRecord',
                 'ImmunizationRecord' => 'ImmunizationRecord',
@@ -387,15 +388,15 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         $patientName = trim((string) ($data['patient_name'] ?? ''));
         $abhaAddress = trim((string) ($data['abha_address'] ?? ''));
         $abhaId = trim((string) ($data['abha_id'] ?? ''));
-        $careContextReference = trim((string) ($data['care_context_reference'] ?? ''));
+        $careContextReference = trim((string) ($data['care_context_reference'] ?? $data['careContextId'] ?? ''));
         $careContextDisplay = trim((string) ($data['care_context_display'] ?? $data['notes'] ?? ''));
         $queueId = trim((string) ($data['queue_id'] ?? ''));
 
         if ($patientName === '') {
             return ['ok' => 0, 'http_code' => 0, 'error_text' => 'patient_name is required'];
         }
-        if ($abhaAddress === '') {
-            return ['ok' => 0, 'http_code' => 0, 'error_text' => 'abha_address is required before pushing health record'];
+        if ($abhaAddress === '' && $abhaId === '') {
+            return ['ok' => 0, 'http_code' => 0, 'error_text' => 'Either abha_address or abha_id is required before pushing health record'];
         }
         if ($careContextReference === '') {
             return ['ok' => 0, 'http_code' => 0, 'error_text' => 'care_context_reference is required'];
@@ -418,9 +419,15 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             'fhir_bundle'  => $data['record_data'] ?? $data['bundle'] ?? (object) [],
             'care_context_reference' => $careContextReference,
             'care_context_display' => $careContextDisplay,
-            'abha_address' => $abhaAddress,
             'queue_id' => $queueId,
         ];
+
+        if ($abhaAddress !== '') {
+            $body['abha_address'] = $abhaAddress;
+        }
+        if ($abhaId !== '') {
+            $body['abha_id'] = $abhaId;
+        }
 
         // Also send ABDM-style careContexts wrapper so consent linkage remains explicit.
         $body['careContexts'] = [[

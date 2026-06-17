@@ -351,6 +351,25 @@ $routes->post('Storestock/store_Stock_result', 'Storestock::store_stock_result')
 $routes->match(['get', 'post'], 'Storestock/get_product_stock/(:num)', 'Storestock::get_product_stock/$1');
 $routes->get('Storestock/Report_2', 'Storestock::report_2');
 $routes->get('Storestock/main_store', 'Storestock::main_store');
+$routes->get('Storestock/Purchase', 'Storestock::Purchase');
+$routes->match(['get', 'post'], 'Storestock/PurchaseInvoice', 'Storestock::PurchaseInvoice');
+$routes->get('Storestock/PurchaseNew', 'Storestock::PurchaseNew');
+$routes->post('Storestock/CreatePurchase', 'Storestock::CreatePurchase');
+$routes->get('Storestock/PurchaseMasterEdit/(:num)', 'Storestock::PurchaseMasterEdit/$1');
+$routes->get('Storestock/PurchaseInvoiceEdit/(:num)', 'Storestock::PurchaseInvoiceEdit/$1');
+$routes->post('Storestock/UpdatePurchase', 'Storestock::UpdatePurchase');
+$routes->get('Storestock/UpdatePurchaseInvoiceStatus/(:num)/(:num)', 'Storestock::UpdatePurchaseInvoiceStatus/$1/$2');
+$routes->post('Storestock/purchase_invoice_delete/(:num)', 'Storestock::purchase_invoice_delete/$1');
+$routes->get('Storestock/print_purchase/(:num)', 'Storestock::print_purchase/$1');
+$routes->get('Storestock/Purchase_return', 'Storestock::Purchase_return');
+$routes->get('Storestock/PurchaseReturnNew', 'Storestock::PurchaseReturnNew');
+$routes->match(['get', 'post'], 'Storestock/PurchaseReturnInvoice', 'Storestock::PurchaseReturnInvoice');
+$routes->get('Storestock/PurchaseReturnInvoiceEdit/(:num)', 'Storestock::PurchaseReturnInvoiceEdit/$1');
+$routes->get('Storestock/PurchaseReturn_invoice_item_list/(:num)', 'Storestock::PurchaseReturn_invoice_item_list/$1');
+$routes->post('Storestock/create_purchase_return', 'Storestock::create_purchase_return');
+$routes->post('Storestock/add_remove_item', 'Storestock::add_remove_item');
+$routes->post('Storestock/remove_item_invoice/(:num)', 'Storestock::remove_item_invoice/$1');
+$routes->get('Storestock/print_purchase_return/(:num)', 'Storestock::print_purchase_return/$1');
 
 // Legacy compatibility: some IPD charge screens still refresh via old IpdNew URL.
 $routes->get('IpdNew/show_ipd_items/(:num)', 'Billing\\Ipd::panelTab/$1/ipd-charges');
@@ -604,6 +623,10 @@ $routes->post('AbdmGateway/consent_request', 'AbdmGateway::consentRequest', ['fi
 $routes->post('AbdmGateway/consent_callback', 'AbdmGateway::consentCallback');
 $routes->post('AbdmGateway/consent_revoked_callback', 'AbdmGateway::consentRevokedCallback');
 $routes->post('AbdmGateway/record_linked_callback', 'AbdmGateway::recordLinkedCallback');
+// ABDM M2 compatibility endpoints (Gateway -> HMS)
+$routes->post('records/discover', 'AbdmGateway::recordsDiscover');
+$routes->get('records/fetch/(:any)', 'AbdmGateway::recordsFetch/$1');
+$routes->post('records/fetch/(:any)', 'AbdmGateway::recordsFetch/$1');
 $routes->post('AbdmGateway/share_prescription_bundle', 'AbdmGateway::sharePrescriptionBundle', ['filter' => $abdmPermFilter]);
 // SNOMED Coding Panel
 $routes->get('AbdmCodingPanel', 'AbdmCodingPanel::index', ['filter' => $abdmPermFilter]);
@@ -778,7 +801,9 @@ $routes->get('Opd_prescription/debug_investigation_fields', 'Opd_prescription::d
 $routes->get('Opd_prescription/investigation_list/(:num)', 'Opd_prescription::investigation_list/$1');
 $routes->get('Opd_prescription/investigation_list/(:num)/(:num)', 'Opd_prescription::investigation_list/$1/$2');
 $routes->post('Opd_prescription/investigation_add', 'Opd_prescription::investigation_add');
+$routes->post('Opd_prescription/investigation_add_bulk', 'Opd_prescription::investigation_add_bulk');
 $routes->post('Opd_prescription/investigation_remove/(:num)', 'Opd_prescription::investigation_remove/$1');
+$routes->post('Opd_prescription/investigation_remove_bulk', 'Opd_prescription::investigation_remove_bulk');
 $routes->get('Opd_prescription/opd_invest_master', 'Opd_prescription::opd_invest_master', ['filter' => 'permission:doctor_work.medicine.manage,doctor_work.access']);
 $routes->get('Opd_prescription/opd_invest_master_specs', 'Opd_prescription::opd_invest_master_specs');
 $routes->get('Opd_prescription/opd_invest_master_data', 'Opd_prescription::opd_invest_master_data');

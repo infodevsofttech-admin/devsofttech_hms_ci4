@@ -116,8 +116,10 @@ class AbdmGateway extends BaseController
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'patient_id and abha_id are required']);
         }
 
-        if (! $this->db->tableExists('abdm_consent_records')) {
-            return $this->response->setJSON(['ok' => 0, 'error_text' => 'abdm_consent_records table not found']);
+        $hasAbdmConsentTable = $this->db->tableExists('abdm_consent_records');
+        $hasConsentAliasTable = $this->db->tableExists('consents');
+        if (! $hasAbdmConsentTable && ! $hasConsentAliasTable) {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'consent storage table not found']);
         }
 
         $consentHandle = 'CH-' . date('YmdHis') . '-' . strtoupper(bin2hex(random_bytes(4)));
@@ -132,18 +134,40 @@ class AbdmGateway extends BaseController
             'requested_at' => $requestedAt,
         ];
 
-        $this->db->table('abdm_consent_records')->insert([
-            'patient_id' => $patientId,
-            'abha_id' => $abhaId,
-            'consent_handle' => $consentHandle,
-            'consent_status' => 'requested',
-            'purpose_code' => $purposeCode,
-            'requested_at' => $requestedAt,
-            'expires_at' => $expiresAt !== '' ? $expiresAt : null,
-            'raw_payload_json' => (string) json_encode($rawPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            'created_at' => $requestedAt,
-            'updated_at' => $requestedAt,
-        ]);
+        if ($hasAbdmConsentTable) {
+            $this->db->table('abdm_consent_records')->insert([
+                'patient_id' => $patientId,
+                'abha_id' => $abhaId,
+                'consent_handle' => $consentHandle,
+                'consent_status' => 'requested',
+                'purpose_code' => $purposeCode,
+                'requested_at' => $requestedAt,
+                'expires_at' => $expiresAt !== '' ? $expiresAt : null,
+                'raw_payload_json' => (string) json_encode($rawPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'created_at' => $requestedAt,
+                'updated_at' => $requestedAt,
+            ]);
+        }
+
+        if ($hasConsentAliasTable) {
+            $consentFields = $this->db->getFieldNames('consents') ?? [];
+            $consentRow = [];
+            if (in_array('patient_id', $consentFields, true)) {
+                $consentRow['patient_id'] = $patientId;
+            }
+            if (in_array('token', $consentFields, true)) {
+                $consentRow['token'] = $consentHandle;
+            }
+            if (in_array('expiry', $consentFields, true)) {
+                $consentRow['expiry'] = $expiresAt !== '' ? $expiresAt : null;
+            }
+            if (in_array('scope', $consentFields, true)) {
+                $consentRow['scope'] = $purposeCode !== '' ? $purposeCode : 'TREATMENT';
+            }
+            if (! empty($consentRow)) {
+                $this->db->table('consents')->insert($consentRow);
+            }
+        }
 
         $queueId = null;
         $gatewayConsentId = '';
@@ -152,7 +176,7 @@ class AbdmGateway extends BaseController
             $queueId = $result['queue_id'] ?? null;
             $gatewayConsentId = trim((string) ($result['gateway_consent_id'] ?? $result['consent_id'] ?? ''));
 
-            if ($gatewayConsentId !== '') {
+            if ($gatewayConsentId !== '' && $hasAbdmConsentTable) {
                 $tableFields = $this->db->getFieldNames('abdm_consent_records') ?? [];
                 $updateData = [
                     'updated_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
@@ -196,8 +220,10 @@ class AbdmGateway extends BaseController
             return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'consent_handle is required']);
         }
 
-        if (! $this->db->tableExists('abdm_consent_records')) {
-            return $this->response->setJSON(['ok' => 0, 'error_text' => 'abdm_consent_records table not found']);
+        $hasAbdmConsentTable = $this->db->tableExists('abdm_consent_records');
+        $hasConsentAliasTable = $this->db->tableExists('consents');
+        if (! $hasAbdmConsentTable && ! $hasConsentAliasTable) {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'consent storage table not found']);
         }
 
         $handle = trim((string) $payload['consent_handle']);
@@ -206,11 +232,30 @@ class AbdmGateway extends BaseController
         $incomingConsentId = trim((string) ($payload['consent_id'] ?? $payload['gateway_consent_id'] ?? ''));
         $now = Time::now('Asia/Kolkata')->toDateTimeString();
 
-        $existing = $this->db->table('abdm_consent_records')
-            ->where('consent_handle', $handle)
-            ->orderBy('id', 'DESC')
-            ->get(1)
-            ->getRowArray();
+        $existing = [];
+        if ($hasAbdmConsentTable) {
+            $existing = $this->db->table('abdm_consent_records')
+                ->where('consent_handle', $handle)
+                ->orderBy('id', 'DESC')
+                ->get(1)
+                ->getRowArray();
+        }
+
+        if (empty($existing) && $hasConsentAliasTable) {
+            $consentAliasRow = $this->db->table('consents')
+                ->where('token', $handle)
+                ->get(1)
+                ->getRowArray();
+            if (! empty($consentAliasRow)) {
+                $existing = [
+                    'patient_id' => (int) ($consentAliasRow['patient_id'] ?? 0),
+                    'consent_status' => 'approved',
+                    'expires_at' => (string) ($consentAliasRow['expiry'] ?? ''),
+                    'raw_payload_json' => '',
+                    'granted_at' => null,
+                ];
+            }
+        }
 
         if (empty($existing)) {
             return $this->response->setStatusCode(404)->setJSON([
@@ -265,9 +310,25 @@ class AbdmGateway extends BaseController
             }
         }
 
-        $this->db->table('abdm_consent_records')
-            ->where('consent_handle', $handle)
-            ->update($update);
+        if ($hasAbdmConsentTable) {
+            $this->db->table('abdm_consent_records')
+                ->where('consent_handle', $handle)
+                ->update($update);
+        }
+
+        if ($hasConsentAliasTable) {
+            $consentFields = $this->db->getFieldNames('consents') ?? [];
+            $consentUpdate = [];
+            if (in_array('expiry', $consentFields, true)) {
+                $consentUpdate['expiry'] = $expiresAt !== '' ? $expiresAt : null;
+            }
+            if (in_array('scope', $consentFields, true) && $incomingStatus !== '') {
+                $consentUpdate['scope'] = strtoupper($incomingStatus);
+            }
+            if (! empty($consentUpdate)) {
+                $this->db->table('consents')->where('token', $handle)->update($consentUpdate);
+            }
+        }
 
         return $this->response->setJSON([
             'ok' => 1,
@@ -588,22 +649,31 @@ class AbdmGateway extends BaseController
         $sessionId = (int) $this->request->getPost('opd_session_id');
         $patientId = (int) $this->request->getPost('patient_id');
         $abhaId = trim((string) $this->request->getPost('abha_id'));
+        $abhaAddressPost = trim((string) $this->request->getPost('abha_address'));
         $consentHandle = trim((string) $this->request->getPost('consent_handle'));
 
-        if ($opdId <= 0 || $patientId <= 0 || $abhaId === '') {
-            return $this->response->setJSON(['ok' => 0, 'error_text' => 'opd_id, patient_id and abha_id are required']);
+        if ($abhaId === '' && $abhaAddressPost !== '') {
+            $abhaId = $abhaAddressPost;
+        }
+
+        if ($opdId <= 0 || $patientId <= 0) {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'opd_id and patient_id are required']);
         }
 
         if (! $this->db->tableExists('opd_fhir_documents')) {
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'opd_fhir_documents table not found']);
         }
 
-        $consent = $this->getActiveConsentRecord($patientId, $abhaId, $consentHandle);
-        if ($consent === null) {
-            return $this->response->setJSON([
-                'ok' => 0,
-                'error_text' => 'No active consent found. Share blocked due to expiry/not-approved consent.',
-            ]);
+        $hasAbha = $abhaId !== '' || $abhaAddressPost !== '';
+        $consent = null;
+        if ($hasAbha) {
+            $consent = $this->getActiveConsentRecord($patientId, $abhaId !== '' ? $abhaId : $abhaAddressPost, $consentHandle);
+            if ($consent === null) {
+                return $this->response->setJSON([
+                    'ok' => 0,
+                    'error_text' => 'No active consent found. Share blocked due to expiry/not-approved consent.',
+                ]);
+            }
         }
 
         $builder = $this->db->table('opd_fhir_documents')
@@ -624,6 +694,83 @@ class AbdmGateway extends BaseController
             $bundle = ['raw' => $bundleJson];
         }
 
+        // Resolve ABHA identifiers from request + patient profile.
+        $abhaAddress = str_contains($abhaId, '@') ? $abhaId : '';
+        $abhaNumber = '';
+        if ($abhaAddressPost !== '' && str_contains($abhaAddressPost, '@')) {
+            $abhaAddress = $abhaAddressPost;
+        }
+        if ($abhaAddress === '') {
+            $digits = preg_replace('/\D/', '', $abhaId);
+            if (strlen((string) $digits) === 14) {
+                $abhaNumber = (string) $digits;
+            }
+        }
+
+        $patientName = '';
+        if ($this->db->tableExists('patient_master')) {
+            $pmFields = $this->db->getFieldNames('patient_master') ?? [];
+            $pmSelect = ['id'];
+            foreach (['p_fname', 'p_lname', 'abha_address', 'abha_id', 'abha_no', 'abha'] as $f) {
+                if (in_array($f, $pmFields, true)) {
+                    $pmSelect[] = $f;
+                }
+            }
+
+            $patientRow = $this->db->table('patient_master')
+                ->select(implode(',', array_unique($pmSelect)))
+                ->where('id', $patientId)
+                ->get(1)
+                ->getRowArray() ?? [];
+
+            $patientName = trim(
+                trim((string) ($patientRow['p_fname'] ?? '')) . ' ' .
+                trim((string) ($patientRow['p_lname'] ?? ''))
+            );
+
+            if ($abhaAddress === '') {
+                foreach (['abha_address', 'abha', 'abha_id', 'abha_no'] as $field) {
+                    $value = trim((string) ($patientRow[$field] ?? ''));
+                    if ($value !== '' && str_contains($value, '@')) {
+                        $abhaAddress = $value;
+                        break;
+                    }
+                }
+            }
+
+            if ($abhaNumber === '') {
+                foreach (['abha_id', 'abha_no', 'abha'] as $field) {
+                    $value = trim((string) ($patientRow[$field] ?? ''));
+                    $digits = preg_replace('/\D/', '', $value);
+                    if (strlen((string) $digits) === 14) {
+                        $abhaNumber = (string) $digits;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if ($abhaAddress === '' && $abhaNumber === '') {
+            return $this->response->setJSON([
+                'ok' => 0,
+                'error_text' => 'ABHA address or ABHA number is required for record push.',
+            ]);
+        }
+
+        $bundleType = trim((string) ($bundleRow['bundle_type'] ?? 'OPConsultRecord'));
+        $hiType = match ($bundleType) {
+            'MedicationRequestBundle', 'Prescription', 'PrescriptionRecord' => 'PrescriptionRecord',
+            default => 'OPConsultRecord',
+        };
+        $sessionForRef = $sessionId > 0 ? $sessionId : (int) ($bundleRow['opd_session_id'] ?? 0);
+        $visitDateRaw = trim((string) ($bundleRow['created_at'] ?? ''));
+        $visitDate = $visitDateRaw !== '' ? date('Y-m-d', strtotime($visitDateRaw)) : date('Y-m-d');
+        $careContextRef = trim((string) ($this->request->getPost('careContextId') ?? $this->request->getPost('care_context_reference') ?? ''));
+        if ($careContextRef === '') {
+            $careContextRef = 'OPD-' . $opdId . '-S' . ($sessionForRef > 0 ? $sessionForRef : 0) . '-' . $visitDate;
+        }
+        $careContextDisplay = 'OPD Visit - ' . $visitDate;
+
         $payload = [
             'opd_id' => $opdId,
             'opd_session_id' => (int) ($bundleRow['opd_session_id'] ?? 0),
@@ -638,26 +785,98 @@ class AbdmGateway extends BaseController
         // Store FHIR payload in health_records before pushing
         $healthRecordId = $this->storeHealthRecord([
             'patient_id'     => $patientId,
-            'abha_id'        => $abhaId,
+            'abha_id'        => $hasAbha ? $abhaId : '',
             'hi_type'        => 'OPConsultRecord',
             'entity_type'    => 'opd',
             'entity_id'      => (string) $opdId,
             'fhir_bundle'    => $bundleJson,
+            'care_context_reference' => $careContextRef,
             'consent_handle' => (string) ($consent['consent_handle'] ?? ''),
         ]);
 
+        if (! $hasAbha) {
+            if ($healthRecordId > 0 && $this->db->tableExists('health_records')) {
+                $this->db->table('health_records')
+                    ->where('id', $healthRecordId)
+                    ->update([
+                        'push_status' => 'local_only',
+                        'updated_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
+                    ]);
+            }
+
+            $this->getAuditService()->log([
+                'action'      => 'store_local_record',
+                'entity_type' => 'opd',
+                'entity_id'   => (string) $opdId,
+                'patient_id'  => $patientId,
+                'request'     => ['opd_id' => $opdId, 'care_context_reference' => $careContextRef],
+                'response'    => ['health_record_id' => $healthRecordId],
+                'outcome'     => 'success',
+            ]);
+
+            return $this->response->setJSON([
+                'ok' => 1,
+                'status' => 'local_stored',
+                'queue_id' => null,
+                'bridge_record_id' => null,
+                'care_context_reference' => $careContextRef,
+                'message' => 'ABHA not available. Record stored locally for later discovery.',
+            ]);
+        }
+
         $queueId = null;
+        $bridgeRecordId = 0;
+        $status = 'queued';
         $connectorError = null;
         try {
-            $result  = $this->connector->sharePrescriptionBundle($payload, (string) ($bundleRow['id'] ?? ''));
-            $queueId = $result['queue_id'] ?? null;
+            $result = $this->connector->pushRecord([
+                'patient_id'             => (string) $patientId,
+                'patient_name'           => $patientName !== '' ? $patientName : ('PATIENT-' . $patientId),
+                'abha_id'                => $abhaNumber,
+                'abha_address'           => $abhaAddress,
+                'hi_type'                => $hiType,
+                'record_type'            => $hiType,
+                'visit_date'             => $visitDate,
+                'care_context_reference' => $careContextRef,
+                'care_context_display'   => $careContextDisplay,
+                'notes'                  => $careContextDisplay,
+                'queue_id'               => $careContextRef,
+                'record_data'            => $bundle,
+            ]);
+
+            $queueId = (string) ($result['queue_id'] ?? '');
+            $bridgeRecordId = (int) ($result['id'] ?? 0);
+
+            $httpCode = (int) ($result['http_code'] ?? 0);
+            $resultOk = (int) ($result['ok'] ?? 0) === 1;
+            $errorCode = strtoupper(trim((string) ($result['error_code'] ?? '')));
+            $isDuplicate = $httpCode === 409 || $errorCode === 'DUPLICATE_RECORD';
+
+            if ($isDuplicate) {
+                $bridgeRecordId = (int) ($result['existing_record_id'] ?? $bridgeRecordId);
+                $resultOk = true;
+                $status = 'duplicate';
+            }
+
+            if (! $resultOk) {
+                $connectorError = trim((string) (
+                    $result['message']
+                    ?? $result['error_text']
+                    ?? ($result['error_code'] ?? '')
+                ));
+                if ($connectorError === '') {
+                    $connectorError = 'Bridge push failed';
+                }
+                $status = 'failed';
+            }
         } catch (\Throwable $e) {
             $connectorError = $e->getMessage();
+            $status = 'failed';
         }
 
         // Update health_record with txn_id and create record_link
         if ($healthRecordId > 0) {
-            $this->updateHealthRecordTxn($healthRecordId, (string) ($queueId ?? ''), $connectorError);
+            $this->updateHealthRecordTxn($healthRecordId, (string) ($queueId ?? ''), $connectorError, $bridgeRecordId);
         }
 
         $this->getAuditService()->log([
@@ -673,11 +892,13 @@ class AbdmGateway extends BaseController
         ]);
 
         return $this->response->setJSON([
-            'ok' => 1,
+            'ok' => $connectorError === null ? 1 : 0,
             'queue_id' => $queueId,
+            'bridge_record_id' => $bridgeRecordId > 0 ? $bridgeRecordId : null,
             'consent_handle' => (string) ($consent['consent_handle'] ?? ''),
             'gateway_consent_id' => $this->resolveConsentExternalId($consent) !== '' ? $this->resolveConsentExternalId($consent) : null,
-            'status' => 'queued',
+            'status' => $status,
+            'error' => $connectorError,
         ]);
     }
 
@@ -692,16 +913,20 @@ class AbdmGateway extends BaseController
         $abhaId        = trim((string) $this->request->getPost('abha_id'));
         $consentHandle = trim((string) $this->request->getPost('consent_handle'));
 
-        if ($ipdId <= 0 || $patientId <= 0 || $abhaId === '') {
-            return $this->response->setJSON(['ok' => 0, 'error_text' => 'ipd_id, patient_id and abha_id are required']);
+        if ($ipdId <= 0 || $patientId <= 0) {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'ipd_id and patient_id are required']);
         }
 
-        $consent = $this->getActiveConsentRecord($patientId, $abhaId, $consentHandle);
-        if ($consent === null) {
-            return $this->response->setJSON([
-                'ok'         => 0,
-                'error_text' => 'No active consent found. Share blocked due to expiry/not-approved consent.',
-            ]);
+        $hasAbha = $abhaId !== '';
+        $consent = null;
+        if ($hasAbha) {
+            $consent = $this->getActiveConsentRecord($patientId, $abhaId, $consentHandle);
+            if ($consent === null) {
+                return $this->response->setJSON([
+                    'ok'         => 0,
+                    'error_text' => 'No active consent found. Share blocked due to expiry/not-approved consent.',
+                ]);
+            }
         }
 
         // ── Load IPD data ──────────────────────────────────────────────────────
@@ -810,8 +1035,38 @@ class AbdmGateway extends BaseController
             'entity_type'    => 'ipd',
             'entity_id'      => (string) $ipdId,
             'fhir_bundle'    => $bundleJson,
+            'care_context_reference' => $ccRef,
             'consent_handle' => (string) ($consent['consent_handle'] ?? ''),
         ]);
+
+        if (! $hasAbha) {
+            if ($healthRecordId > 0 && $this->db->tableExists('health_records')) {
+                $this->db->table('health_records')
+                    ->where('id', $healthRecordId)
+                    ->update([
+                        'push_status' => 'local_only',
+                        'updated_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
+                    ]);
+            }
+
+            $this->getAuditService()->log([
+                'action'      => 'store_local_record',
+                'entity_type' => 'ipd',
+                'entity_id'   => (string) $ipdId,
+                'patient_id'  => $patientId,
+                'request'     => ['ipd_id' => $ipdId, 'care_context_reference' => $ccRef],
+                'response'    => ['health_record_id' => $healthRecordId],
+                'outcome'     => 'success',
+            ]);
+
+            return $this->response->setJSON([
+                'ok' => 1,
+                'status' => 'local_stored',
+                'queue_id' => null,
+                'consent_handle' => null,
+                'message' => 'ABHA not available. Record stored locally for later discovery.',
+            ]);
+        }
 
         // ── Push via pushRecord() (POST /v3/records/push) ─────────────────────
         $queueId       = null;
@@ -874,8 +1129,8 @@ class AbdmGateway extends BaseController
         $abhaId        = trim((string) ($this->request->getPost('abha_id') ?? ''));
         $consentHandle = trim((string) ($this->request->getPost('consent_handle') ?? ''));
 
-        if ($labReqId <= 0 || $patientId <= 0 || $abhaId === '') {
-            return $this->response->setJSON(['ok' => 0, 'error' => 'lab_req_id, patient_id and abha_id are required']);
+        if ($labReqId <= 0 || $patientId <= 0) {
+            return $this->response->setJSON(['ok' => 0, 'error' => 'lab_req_id and patient_id are required']);
         }
 
         // ── Load lab request ──────────────────────────────────────────────────
@@ -889,7 +1144,17 @@ class AbdmGateway extends BaseController
             return $this->response->setJSON(['ok' => 0, 'error' => 'Lab request not found']);
         }
 
-        $consentRecord = $this->getActiveConsentRecord($patientId, $abhaId, $consentHandle);
+        $hasAbha = $abhaId !== '';
+        $consentRecord = null;
+        if ($hasAbha) {
+            $consentRecord = $this->getActiveConsentRecord($patientId, $abhaId, $consentHandle);
+            if ($consentRecord === null) {
+                return $this->response->setJSON([
+                    'ok' => 0,
+                    'error' => 'No active consent found. Share blocked due to expiry/not-approved consent.',
+                ]);
+            }
+        }
         $effectiveConsent = (string) ($consentRecord['consent_handle'] ?? $consentHandle);
 
         // ── Load patient ──────────────────────────────────────────────────────
@@ -1003,8 +1268,38 @@ class AbdmGateway extends BaseController
             'entity_type'    => 'lab',
             'entity_id'      => (string) $labReqId,
             'fhir_bundle'    => $bundleJson,
+            'care_context_reference' => $ccRef,
             'consent_handle' => $effectiveConsent,
         ]);
+
+        if (! $hasAbha) {
+            if ($healthRecordId > 0 && $this->db->tableExists('health_records')) {
+                $this->db->table('health_records')
+                    ->where('id', $healthRecordId)
+                    ->update([
+                        'push_status' => 'local_only',
+                        'updated_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
+                    ]);
+            }
+
+            $this->getAuditService()->log([
+                'action'      => 'store_local_record',
+                'entity_type' => 'lab',
+                'entity_id'   => (string) $labReqId,
+                'patient_id'  => $patientId,
+                'request'     => ['lab_req_id' => $labReqId, 'care_context_reference' => $ccRef],
+                'response'    => ['health_record_id' => $healthRecordId],
+                'outcome'     => 'success',
+            ]);
+
+            return $this->response->setJSON([
+                'ok' => 1,
+                'status' => 'local_stored',
+                'queue_id' => null,
+                'consent_handle' => null,
+                'message' => 'ABHA not available. Record stored locally for later discovery.',
+            ]);
+        }
 
         // ── Push via pushRecord() (POST /v3/records/push) ─────────────────────
         $queueId        = null;
@@ -1655,15 +1950,33 @@ class AbdmGateway extends BaseController
             return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'consent_handle is required']);
         }
 
-        if (! $this->db->tableExists('abdm_consent_records')) {
-            return $this->response->setJSON(['ok' => 0, 'error_text' => 'abdm_consent_records table not found']);
+        $hasAbdmConsentTable = $this->db->tableExists('abdm_consent_records');
+        $hasConsentAliasTable = $this->db->tableExists('consents');
+        if (! $hasAbdmConsentTable && ! $hasConsentAliasTable) {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'consent storage table not found']);
         }
 
-        $existing = $this->db->table('abdm_consent_records')
-            ->where('consent_handle', $consentHandle)
-            ->orderBy('id', 'DESC')
-            ->get(1)
-            ->getRowArray();
+        $existing = [];
+        if ($hasAbdmConsentTable) {
+            $existing = $this->db->table('abdm_consent_records')
+                ->where('consent_handle', $consentHandle)
+                ->orderBy('id', 'DESC')
+                ->get(1)
+                ->getRowArray();
+        }
+
+        if (empty($existing) && $hasConsentAliasTable) {
+            $consentAliasRow = $this->db->table('consents')
+                ->where('token', $consentHandle)
+                ->get(1)
+                ->getRowArray();
+            if (! empty($consentAliasRow)) {
+                $existing = [
+                    'patient_id' => (int) ($consentAliasRow['patient_id'] ?? 0),
+                    'consent_status' => 'approved',
+                ];
+            }
+        }
 
         if (empty($existing)) {
             return $this->response->setStatusCode(404)->setJSON(['ok' => 0, 'error_text' => 'consent_handle not found']);
@@ -1674,13 +1987,26 @@ class AbdmGateway extends BaseController
             return $this->response->setJSON(['ok' => 1, 'consent_handle' => $consentHandle, 'status' => 'revoked', 'duplicate' => 1]);
         }
 
-        $this->db->table('abdm_consent_records')
-            ->where('consent_handle', $consentHandle)
-            ->update([
-                'consent_status'  => 'revoked',
-                'raw_payload_json' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-                'updated_at'      => $now,
-            ]);
+        if ($hasAbdmConsentTable) {
+            $this->db->table('abdm_consent_records')
+                ->where('consent_handle', $consentHandle)
+                ->update([
+                    'consent_status'  => 'revoked',
+                    'raw_payload_json' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'updated_at'      => $now,
+                ]);
+        }
+
+        if ($hasConsentAliasTable) {
+            $consentFields = $this->db->getFieldNames('consents') ?? [];
+            $consentUpdate = [];
+            if (in_array('scope', $consentFields, true)) {
+                $consentUpdate['scope'] = 'REVOKED';
+            }
+            if (! empty($consentUpdate)) {
+                $this->db->table('consents')->where('token', $consentHandle)->update($consentUpdate);
+            }
+        }
 
         $this->getAuditService()->log([
             'action'      => 'consent_revoke',
@@ -1849,6 +2175,245 @@ class AbdmGateway extends BaseController
         $rows = $builder->get()->getResultArray();
 
         return $this->response->setJSON(['ok' => 1, 'records' => $rows, 'total' => count($rows)]);
+    }
+
+    // =========================================================================
+    // M2 Discovery endpoint for gateway callbacks.
+    // POST /records/discover
+    // =========================================================================
+
+    public function recordsDiscover()
+    {
+        $signatureFailure = $this->validateWebhookSignature();
+        if ($signatureFailure !== null) {
+            return $signatureFailure;
+        }
+
+        if (! $this->db->tableExists('health_records')) {
+            return $this->response->setJSON(['ok' => 1, 'careContexts' => [], 'count' => 0]);
+        }
+
+        $payload = $this->request->getJSON(true);
+        if (! is_array($payload)) {
+            $payload = [];
+        }
+
+        $abhaAddress = trim((string) (
+            $payload['abha_address']
+            ?? $payload['abhaAddress']
+            ?? $payload['patient']['abha_address']
+            ?? $payload['patient']['id']
+            ?? ''
+        ));
+        $mobile = preg_replace('/\D/', '', (string) (
+            $payload['mobile']
+            ?? $payload['phone']
+            ?? $payload['patient']['mobile']
+            ?? ''
+        ));
+        $patientIdentifier = trim((string) (
+            $payload['patient_id']
+            ?? $payload['patientId']
+            ?? $payload['uhid']
+            ?? $payload['UHID']
+            ?? $payload['patient']['patient_id']
+            ?? $payload['patient']['patientId']
+            ?? $payload['patient']['uhid']
+            ?? ''
+        ));
+        $birthYear = (int) (
+            $payload['birth_year']
+            ?? $payload['birthYear']
+            ?? $payload['year_of_birth']
+            ?? $payload['patient']['birth_year']
+            ?? $payload['patient']['birthYear']
+            ?? $payload['patient']['year_of_birth']
+            ?? 0
+        );
+        $hospitalId = trim((string) (
+            $payload['hospital_id']
+            ?? $payload['patient_id']
+            ?? $payload['patientRef']
+            ?? $payload['patient_ref']
+            ?? ''
+        ));
+
+        $patientIds = [];
+        if ($this->db->tableExists('patient_master')) {
+            $pmFields = $this->db->getFieldNames('patient_master') ?? [];
+            $abhaCols = array_values(array_filter(['abha_address', 'abha_id', 'abha_no', 'abha'], fn ($c) => in_array($c, $pmFields, true)));
+
+            if ($abhaAddress !== '' && ! empty($abhaCols)) {
+                $b = $this->db->table('patient_master')->select('id');
+                $b->groupStart();
+                foreach ($abhaCols as $col) {
+                    $b->orWhere($col, $abhaAddress);
+                }
+                $b->groupEnd();
+                $rows = $b->get()->getResultArray();
+                foreach ($rows as $r) {
+                    $patientIds[] = (int) ($r['id'] ?? 0);
+                }
+            }
+
+            if ($mobile !== '' && in_array('mphone1', $pmFields, true)) {
+                $rows = $this->db->table('patient_master')->select('id')->where('mphone1', $mobile)->get()->getResultArray();
+                foreach ($rows as $r) {
+                    $patientIds[] = (int) ($r['id'] ?? 0);
+                }
+            }
+
+            // PHR non-ABHA lookup: patient ID/UHID with optional birth year.
+            if ($patientIdentifier !== '') {
+                $idCols = array_values(array_filter(['p_code', 'uhid', 'uhid_no', 'patient_id', 'patient_code'], fn ($c) => in_array($c, $pmFields, true)));
+                $b = $this->db->table('patient_master')->select('id');
+                $b->groupStart();
+                foreach ($idCols as $col) {
+                    $b->orWhere($col, $patientIdentifier);
+                }
+                if (ctype_digit($patientIdentifier)) {
+                    $b->orWhere('id', (int) $patientIdentifier);
+                }
+                $b->groupEnd();
+
+                if ($birthYear >= 1900 && $birthYear <= (int) date('Y') && in_array('dob', $pmFields, true)) {
+                    $b->where('YEAR(dob)', $birthYear, false);
+                }
+
+                $rows = $b->get()->getResultArray();
+                foreach ($rows as $r) {
+                    $patientIds[] = (int) ($r['id'] ?? 0);
+                }
+            }
+
+            if ($hospitalId !== '' && in_array('p_code', $pmFields, true)) {
+                $rows = $this->db->table('patient_master')->select('id')->where('p_code', $hospitalId)->get()->getResultArray();
+                foreach ($rows as $r) {
+                    $patientIds[] = (int) ($r['id'] ?? 0);
+                }
+            }
+        }
+
+        $patientIds = array_values(array_unique(array_filter($patientIds, fn ($v) => $v > 0)));
+
+        $hrBuilder = $this->db->table('health_records')
+            ->select('id, patient_id, abha_id, hi_type, care_context_reference, created_at, updated_at')
+            ->orderBy('id', 'DESC')
+            ->limit(200);
+
+        if ($abhaAddress !== '') {
+            $hrBuilder->groupStart()
+                ->where('abha_id', $abhaAddress)
+                ->orWhere('abha_id', preg_replace('/\D/', '', $abhaAddress))
+            ->groupEnd();
+        } elseif (! empty($patientIds)) {
+            $hrBuilder->whereIn('patient_id', $patientIds);
+        } else {
+            return $this->response->setJSON(['ok' => 1, 'careContexts' => [], 'count' => 0]);
+        }
+
+        $rows = $hrBuilder->get()->getResultArray();
+        $careContexts = [];
+        foreach ($rows as $row) {
+            $careContextId = trim((string) ($row['care_context_reference'] ?? ''));
+            if ($careContextId === '') {
+                $careContextId = 'HR-' . (int) ($row['id'] ?? 0);
+            }
+            $careContexts[] = [
+                'careContextId' => $careContextId,
+                'display' => (string) (($row['hi_type'] ?? 'HealthDocumentRecord') . ' - ' . ($row['created_at'] ?? $row['updated_at'] ?? '')),
+                'record_type' => (string) ($row['hi_type'] ?? ''),
+                'patient_id' => (int) ($row['patient_id'] ?? 0),
+            ];
+        }
+
+        $this->getAuditService()->log([
+            'action' => 'discovery_records',
+            'entity_type' => 'health_record',
+            'request' => $payload,
+            'response' => ['count' => count($careContexts)],
+            'outcome' => 'success',
+        ]);
+
+        return $this->response->setJSON([
+            'ok' => 1,
+            'careContexts' => $careContexts,
+            'count' => count($careContexts),
+        ]);
+    }
+
+    // =========================================================================
+    // M2/M3 Fetch endpoint for care-context specific FHIR payload.
+    // GET /records/fetch/{careContextId}
+    // =========================================================================
+
+    public function recordsFetch(string $careContextId)
+    {
+        $signatureFailure = $this->validateWebhookSignature();
+        if ($signatureFailure !== null) {
+            return $signatureFailure;
+        }
+
+        if (! $this->db->tableExists('health_records')) {
+            return $this->response->setStatusCode(404)->setJSON(['ok' => 0, 'error_text' => 'health_records table not found']);
+        }
+
+        $careContextId = trim($careContextId);
+        if ($careContextId === '') {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'careContextId is required']);
+        }
+
+        $builder = $this->db->table('health_records')
+            ->select('id, patient_id, abha_id, hi_type, care_context_reference, record_data, fhir_bundle_enc, created_at, updated_at')
+            ->limit(1);
+
+        if (preg_match('/^HR\-(\d+)$/i', $careContextId, $m) === 1) {
+            $builder->where('id', (int) ($m[1] ?? 0));
+        } else {
+            $builder->where('care_context_reference', $careContextId);
+        }
+
+        $row = $builder->get()->getRowArray();
+        if (empty($row)) {
+            return $this->response->setStatusCode(404)->setJSON(['ok' => 0, 'error_text' => 'Record not found for careContextId']);
+        }
+
+        $payload = [];
+        $plainPayload = trim((string) ($row['record_data'] ?? ''));
+        if ($plainPayload !== '') {
+            $payload = json_decode($plainPayload, true) ?? [];
+        } else {
+            $encPayload = trim((string) ($row['fhir_bundle_enc'] ?? ''));
+            if ($encPayload !== '') {
+                try {
+                    $enc = new FhirEncryptionService();
+                    $decrypted = $enc->decrypt($encPayload);
+                    $payload = json_decode($decrypted, true) ?? [];
+                } catch (\Throwable $e) {
+                    return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => 'Unable to decode stored payload']);
+                }
+            }
+        }
+
+        $this->getAuditService()->log([
+            'action' => 'fetch_record',
+            'entity_type' => 'health_record',
+            'entity_id' => (string) ($row['id'] ?? ''),
+            'patient_id' => (int) ($row['patient_id'] ?? 0),
+            'abha_id' => (string) ($row['abha_id'] ?? ''),
+            'request' => ['careContextId' => $careContextId],
+            'response' => ['ok' => 1],
+            'outcome' => 'success',
+        ]);
+
+        return $this->response->setJSON([
+            'ok' => 1,
+            'careContextId' => $careContextId,
+            'record_type' => (string) ($row['hi_type'] ?? ''),
+            'patient_id' => (int) ($row['patient_id'] ?? 0),
+            'abha_address' => (string) ($row['abha_id'] ?? ''),
+            'fhir_payload' => $payload,
+        ]);
     }
 
     // =========================================================================
@@ -2284,6 +2849,9 @@ class AbdmGateway extends BaseController
     {
         $secret = $this->readRuntimeSetting('EKA_WEBHOOK_SECRET');
         if ($secret === '') {
+            $secret = $this->readRuntimeSetting('HMS_WEBHOOK_SECRET');
+        }
+        if ($secret === '') {
             return null;
         }
 
@@ -2388,8 +2956,8 @@ class AbdmGateway extends BaseController
      * Stores both a plain-text copy in record_data and an encrypted copy in fhir_bundle_enc.
      * Returns 0 when the table is absent or on any DB error (fail-open).
      *
-     * @param array{patient_id: int, abha_id: string, hi_type: string, entity_type: string,
-     *              entity_id: string, fhir_bundle: string, consent_handle?: string} $data
+    * @param array{patient_id: int, abha_id: string, hi_type: string, entity_type: string,
+    *              entity_id: string, fhir_bundle: string, care_context_reference?: string, consent_handle?: string} $data
      */
     private function storeHealthRecord(array $data): int
     {
@@ -2408,7 +2976,7 @@ class AbdmGateway extends BaseController
             $session = \Config\Services::session();
             $now     = Time::now('Asia/Kolkata')->toDateTimeString();
 
-            $this->db->table('health_records')->insert([
+            $insert = [
                 'patient_id'          => (int) ($data['patient_id'] ?? 0) > 0 ? (int) $data['patient_id'] : null,
                 'abha_id'             => trim((string) ($data['abha_id'] ?? '')) ?: null,
                 'hi_type'             => (string) ($data['hi_type'] ?? 'unknown'),
@@ -2423,7 +2991,14 @@ class AbdmGateway extends BaseController
                 'created_by_name'     => trim((string) ($session->get('full_name') ?? $session->get('name') ?? '')) ?: null,
                 'created_at'          => $now,
                 'updated_at'          => $now,
-            ]);
+            ];
+
+            $hrFields = $this->db->getFieldNames('health_records') ?? [];
+            if (in_array('care_context_reference', $hrFields, true)) {
+                $insert['care_context_reference'] = trim((string) ($data['care_context_reference'] ?? '')) ?: null;
+            }
+
+            $this->db->table('health_records')->insert($insert);
 
             return (int) $this->db->insertID();
         } catch (\Throwable) {
@@ -2977,7 +3552,8 @@ class AbdmGateway extends BaseController
     private function mapHiTypeToRecordType(string $hiType): string
     {
         return match (strtolower($hiType)) {
-            'opconsultrecord', 'prescriptionrecord', 'prescription' => 'PrescriptionRecord',
+            'opconsultrecord', 'opconsultation' => 'OPConsultRecord',
+            'prescriptionrecord', 'prescription' => 'PrescriptionRecord',
             'diagnosticreportrecord', 'lab_report', 'diagnosticreport' => 'DiagnosticReportRecord',
             'dischargesummaryrecord', 'discharge_summary', 'dischargesummary' => 'DischargeSummaryRecord',
             'wellnessrecord' => 'WellnessRecord',
@@ -2990,35 +3566,72 @@ class AbdmGateway extends BaseController
 
     private function getActiveConsentRecord(int $patientId, string $abhaId, string $consentHandle = ''): ?array
     {
-        if (! $this->db->tableExists('abdm_consent_records')) {
+        $hasAbdmConsentTable = $this->db->tableExists('abdm_consent_records');
+        $hasConsentAliasTable = $this->db->tableExists('consents');
+        if (! $hasAbdmConsentTable && ! $hasConsentAliasTable) {
             return null;
         }
 
         $now = Time::now('Asia/Kolkata')->toDateTimeString();
-        $consentFields = $this->db->getFieldNames('abdm_consent_records') ?? [];
+        if ($hasAbdmConsentTable) {
+            $consentFields = $this->db->getFieldNames('abdm_consent_records') ?? [];
 
-        $builder = $this->db->table('abdm_consent_records')
-            ->where('patient_id', $patientId)
-            ->where('abha_id', $abhaId)
-            ->whereIn('consent_status', ['approved', 'granted'])
-            ->groupStart()
-                ->where('expires_at IS NULL', null, false)
-                ->orWhere('expires_at >=', $now)
-            ->groupEnd();
+            $builder = $this->db->table('abdm_consent_records')
+                ->where('patient_id', $patientId)
+                ->where('abha_id', $abhaId)
+                ->whereIn('consent_status', ['approved', 'granted'])
+                ->groupStart()
+                    ->where('expires_at IS NULL', null, false)
+                    ->orWhere('expires_at >=', $now)
+                ->groupEnd();
 
-        if ($consentHandle !== '') {
-            $builder->groupStart()->where('consent_handle', $consentHandle);
-            if (in_array('consent_id', $consentFields, true)) {
-                $builder->orWhere('consent_id', $consentHandle);
+            if ($consentHandle !== '') {
+                $builder->groupStart()->where('consent_handle', $consentHandle);
+                if (in_array('consent_id', $consentFields, true)) {
+                    $builder->orWhere('consent_id', $consentHandle);
+                }
+                if (in_array('gateway_consent_id', $consentFields, true)) {
+                    $builder->orWhere('gateway_consent_id', $consentHandle);
+                }
+                $builder->groupEnd();
             }
-            if (in_array('gateway_consent_id', $consentFields, true)) {
-                $builder->orWhere('gateway_consent_id', $consentHandle);
+
+            $row = $builder->orderBy('id', 'DESC')->get(1)->getRowArray();
+            if (! empty($row)) {
+                return $row;
             }
-            $builder->groupEnd();
         }
 
-        $row = $builder->orderBy('id', 'DESC')->get(1)->getRowArray();
-        return ! empty($row) ? $row : null;
+        if ($hasConsentAliasTable) {
+            $consentFields = $this->db->getFieldNames('consents') ?? [];
+            $builder = $this->db->table('consents');
+            if (in_array('patient_id', $consentFields, true)) {
+                $builder->where('patient_id', $patientId);
+            }
+            if ($consentHandle !== '' && in_array('token', $consentFields, true)) {
+                $builder->where('token', $consentHandle);
+            }
+            if (in_array('expiry', $consentFields, true)) {
+                $builder->groupStart()
+                    ->where('expiry IS NULL', null, false)
+                    ->orWhere('expiry >=', $now)
+                ->groupEnd();
+            }
+
+            $row = $builder->orderBy(in_array('consent_id', $consentFields, true) ? 'consent_id' : 'patient_id', 'DESC')->get(1)->getRowArray();
+            if (! empty($row)) {
+                return [
+                    'patient_id' => (int) ($row['patient_id'] ?? $patientId),
+                    'abha_id' => $abhaId,
+                    'consent_handle' => (string) ($row['token'] ?? $consentHandle),
+                    'consent_status' => 'approved',
+                    'expires_at' => (string) ($row['expiry'] ?? ''),
+                    'purpose_code' => (string) ($row['scope'] ?? 'TREATMENT'),
+                ];
+            }
+        }
+
+        return null;
     }
 
     /**

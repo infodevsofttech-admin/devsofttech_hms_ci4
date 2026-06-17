@@ -55,9 +55,18 @@ class AbdmAuditService
     public function log(array $data): void
     {
         try {
-            if (! $this->db->tableExists('abdm_audit_logs')) {
+            $auditTable = null;
+            if ($this->tableExistsSafe('audit_logs')) {
+                $auditTable = 'audit_logs';
+            } elseif ($this->tableExistsSafe('abdm_audit_logs')) {
+                $auditTable = 'abdm_audit_logs';
+            }
+
+            if ($auditTable === null) {
                 return;
             }
+
+            $auditFields = $this->getFieldNamesSafe($auditTable);
 
             $httpRequest = \Config\Services::request();
             $session     = \Config\Services::session();
@@ -79,24 +88,101 @@ class AbdmAuditService
             $entityId = (string) ($data['entity_id'] ?? '');
             $patientId = (int) ($data['patient_id'] ?? 0);
 
-            $this->db->table('abdm_audit_logs')->insert([
-                'actor_user_id' => $actorUserId > 0 ? $actorUserId : null,
-                'actor_name'    => $actorName !== '' ? $actorName : null,
-                'action'        => (string) ($data['action'] ?? 'unknown'),
-                'entity_type'   => (string) ($data['entity_type'] ?? ''),
-                'entity_id'     => $entityId !== '' ? $entityId : null,
-                'abha_id'       => trim((string) ($data['abha_id'] ?? '')) ?: null,
-                'patient_id'    => $patientId > 0 ? $patientId : null,
-                'request_json'  => $requestJson,
-                'response_json' => $responseJson,
-                'ip_address'    => $httpRequest->getIPAddress(),
-                'user_agent'    => mb_substr((string) $httpRequest->getUserAgent(), 0, 255),
-                'outcome'       => (string) ($data['outcome'] ?? 'success'),
-                'error_message' => trim((string) ($data['error_message'] ?? '')) ?: null,
-                'created_at'    => Time::now('Asia/Kolkata')->toDateTimeString(),
-            ]);
+            $insert = [];
+
+            // Preferred generic schema: audit_logs(event_id, patient_id, action, timestamp, user_id)
+            if (in_array('patient_id', $auditFields, true)) {
+                $insert['patient_id'] = $patientId > 0 ? $patientId : null;
+            }
+            if (in_array('action', $auditFields, true)) {
+                $insert['action'] = (string) ($data['action'] ?? 'unknown');
+            }
+            if (in_array('timestamp', $auditFields, true)) {
+                $insert['timestamp'] = Time::now('Asia/Kolkata')->toDateTimeString();
+            }
+            if (in_array('user_id', $auditFields, true)) {
+                $insert['user_id'] = $actorUserId > 0 ? $actorUserId : null;
+            }
+
+            // Extended ABDM schema fields (abdm_audit_logs)
+            if (in_array('actor_user_id', $auditFields, true)) {
+                $insert['actor_user_id'] = $actorUserId > 0 ? $actorUserId : null;
+            }
+            if (in_array('actor_name', $auditFields, true)) {
+                $insert['actor_name'] = $actorName !== '' ? $actorName : null;
+            }
+            if (in_array('entity_type', $auditFields, true)) {
+                $insert['entity_type'] = (string) ($data['entity_type'] ?? '');
+            }
+            if (in_array('entity_id', $auditFields, true)) {
+                $insert['entity_id'] = $entityId !== '' ? $entityId : null;
+            }
+            if (in_array('abha_id', $auditFields, true)) {
+                $insert['abha_id'] = trim((string) ($data['abha_id'] ?? '')) ?: null;
+            }
+            if (in_array('request_json', $auditFields, true)) {
+                $insert['request_json'] = $requestJson;
+            }
+            if (in_array('response_json', $auditFields, true)) {
+                $insert['response_json'] = $responseJson;
+            }
+            if (in_array('ip_address', $auditFields, true)) {
+                $insert['ip_address'] = $httpRequest->getIPAddress();
+            }
+            if (in_array('user_agent', $auditFields, true)) {
+                $insert['user_agent'] = mb_substr((string) $httpRequest->getUserAgent(), 0, 255);
+            }
+            if (in_array('outcome', $auditFields, true)) {
+                $insert['outcome'] = (string) ($data['outcome'] ?? 'success');
+            }
+            if (in_array('error_message', $auditFields, true)) {
+                $insert['error_message'] = trim((string) ($data['error_message'] ?? '')) ?: null;
+            }
+            if (in_array('created_at', $auditFields, true)) {
+                $insert['created_at'] = Time::now('Asia/Kolkata')->toDateTimeString();
+            }
+
+            if (! empty($insert)) {
+                $this->db->table($auditTable)->insert($insert);
+            }
         } catch (\Throwable) {
             // Fail-open: audit failure must never break the main application flow
+        }
+    }
+
+    /**
+     * Lightweight table existence check that works without relying on
+     * ConnectionInterface helper methods.
+     */
+    private function tableExistsSafe(string $table): bool
+    {
+        try {
+            $result = $this->db->query('SHOW TABLES LIKE ' . $this->db->escape($table))->getRowArray();
+            return ! empty($result);
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * Returns DB column names using SHOW COLUMNS to stay adapter-safe.
+     *
+     * @return array<int, string>
+     */
+    private function getFieldNamesSafe(string $table): array
+    {
+        try {
+            $rows = $this->db->query('SHOW COLUMNS FROM `' . str_replace('`', '', $table) . '`')->getResultArray();
+            $fields = [];
+            foreach ($rows as $row) {
+                $field = (string) ($row['Field'] ?? '');
+                if ($field !== '') {
+                    $fields[] = $field;
+                }
+            }
+            return $fields;
+        } catch (\Throwable) {
+            return [];
         }
     }
 }
