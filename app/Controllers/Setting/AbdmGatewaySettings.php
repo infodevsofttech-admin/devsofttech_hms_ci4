@@ -45,7 +45,7 @@ class AbdmGatewaySettings extends BaseController
         }
 
         $gwUrl  = trim((string) $this->request->getPost('gateway_url'));
-        $token  = trim((string) $this->request->getPost('api_token'));
+        $token  = $this->sanitizeBearerToken((string) $this->request->getPost('api_token'));
         $hfrId  = trim((string) $this->request->getPost('hfr_id'));
         $hmsName = trim((string) $this->request->getPost('hms_name'));
 
@@ -118,7 +118,7 @@ class AbdmGatewaySettings extends BaseController
 
         // Use posted values first, then stored settings
         $gwUrl = trim((string) $this->request->getPost('gateway_url'));
-        $token = trim((string) $this->request->getPost('api_token'));
+        $token = $this->sanitizeBearerToken((string) $this->request->getPost('api_token'));
         $hfrId = trim((string) $this->request->getPost('hfr_id'));
 
         if ($gwUrl === '') {
@@ -411,5 +411,17 @@ class AbdmGatewaySettings extends BaseController
             return str_repeat('*', mb_strlen($key));
         }
         return mb_substr($key, 0, 4) . str_repeat('*', mb_strlen($key) - 8) . mb_substr($key, -4);
+    }
+
+    private function sanitizeBearerToken(string $token): string
+    {
+        $token = trim($token);
+        if ($token === '') {
+            return '';
+        }
+        if (stripos($token, 'Bearer ') === 0) {
+            $token = trim(substr($token, 7));
+        }
+        return trim($token, " \t\n\r\0\x0B\"'");
     }
 }

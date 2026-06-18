@@ -296,6 +296,12 @@ $paymentHistoryRows = $payment_history_rows ?? [];
                     <?php endif; ?>
                 </div>
             </div>
+            <?php
+                $appointmentDateRaw = (string) ($opd_master[0]->apointment_date ?? '');
+                $appointmentTimestamp = $appointmentDateRaw !== '' ? strtotime($appointmentDateRaw) : false;
+                $appointmentDateValue = $appointmentTimestamp !== false ? date('Y-m-d', $appointmentTimestamp) : '';
+                $appointmentDateDisplay = $appointmentTimestamp !== false ? date('d/m/Y', $appointmentTimestamp) : '';
+            ?>
             <div class="row g-3 mt-2">
                 <div class="col-md-3">
                     <label>Change Doctor</label>
@@ -306,8 +312,8 @@ $paymentHistoryRows = $payment_history_rows ?? [];
                     </select>
                 </div>
                 <div class="col-md-3">
-                    <label>Date <?= esc(MysqlDate_to_str($opd_master[0]->apointment_date ?? '')) ?></label>
-                    <input class="form-control datepicker" id="datepicker_opddate" name="datepicker_opddate" type="text" value="<?= esc(MysqlDate_to_str($opd_master[0]->apointment_date ?? '')) ?>" />
+                    <label>Date <?= esc($appointmentDateDisplay) ?></label>
+                    <input class="form-control" id="datepicker_opddate" name="datepicker_opddate" type="date" value="<?= esc($appointmentDateValue) ?>" />
                 </div>
                 <div class="col-md-3">
                     <label>OPD Fee <?= esc($opd_master[0]->opd_fee_gross_amount ?? '') ?> / <?= esc($opd_master[0]->opd_fee_amount ?? '') ?></label>

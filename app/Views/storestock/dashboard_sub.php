@@ -1,35 +1,4 @@
-<?= $this->include('storestock/_niceadmin_theme') ?>
-<div class="storestock-ui">
-<?php
-$stats = $stats ?? [];
-$lists = $lists ?? [];
-$stockValue = (float) ($stats['stock_value'] ?? 0);
-?>
-<section class="content">
-    <div class="module-shell-head">
-        <div class="module-shell-title">
-            <span class="main">Store Stock</span>
-            <span class="sub" id="subtitle">Dashboard</span>
-        </div>
-        <div class="module-nav-tabs">
-            <a class="tab active" href="javascript:load_form('<?= base_url('Storestock') ?>','Hospital Stock');">
-                <i class="fa fa-home"></i> Dashboard
-            </a>
-            <a class="tab" href="javascript:load_form('<?= base_url('Storestock/Indent_List') ?>','Store : Indent');">
-                <i class="fa fa-shopping-cart"></i> Indent
-            </a>
-            <a class="tab" href="javascript:load_form('<?= base_url('Storestock/Report_2') ?>','Day Report :Store');">
-                <i class="fa fa-line-chart"></i> Day Report
-            </a>
-            <a class="tab" href="javascript:load_form('<?= base_url('Storestock/store_stock') ?>','Store Stock : Store');">
-                <i class="fa fa-barcode"></i> Store Stock
-            </a>
-            <a class="tab" href="javascript:load_form('<?= base_url('Storestock/main_store') ?>','Store Main : Store');">
-                <i class="fa fa-desktop"></i> Store Main
-            </a>
-        </div>
-    </div>
-    <div class="module-hero">
+<div class="module-hero">
         <h4>Hospital Stock Control Center</h4>
         <p>Track indents, monitor stock movement, and jump to master controls from one screen.</p>
     </div>
@@ -160,6 +129,3 @@ $stockValue = (float) ($stats['stock_value'] ?? 0);
             </div>
         </div>
     </div>
-    
-</section>
-</div>

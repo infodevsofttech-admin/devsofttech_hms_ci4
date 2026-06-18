@@ -341,6 +341,7 @@ class Patient extends BaseController
 		$txnId  = trim((string) ($body['txnId'] ?? $body['txn_id'] ?? $this->request->getPost('txnId') ?? $this->request->getPost('txn_id') ?? ''));
 		$otp    = trim((string) ($body['otp'] ?? $this->request->getPost('otp') ?? ''));
 		$mobile = trim((string) ($body['mobile'] ?? $this->request->getPost('mobile') ?? ''));
+		$requestedPid = (int) ($body['p_id'] ?? $this->request->getPost('p_id') ?? 0);
 
 		if ($txnId === '' || $otp === '') {
 			return $this->response->setJSON(['ok' => 0, 'error_text' => 'txnId and otp are required']);
@@ -350,6 +351,10 @@ class Patient extends BaseController
 			$result = AbdmConnectorFactory::make()->abhaAadhaarVerifyOtp(['txnId' => $txnId, 'otp' => $otp, 'mobile' => $mobile]);
 		} catch (\Throwable $e) {
 			return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => $e->getMessage()]);
+		}
+
+		if (! empty($result['ok']) && (int) $result['ok'] === 1) {
+			$result = $this->enrichAbhaVerifyResult($result, $requestedPid);
 		}
 
 		return $this->response->setJSON($result);
@@ -388,6 +393,7 @@ class Patient extends BaseController
 		$body   = $isJson ? ($this->request->getJSON(true) ?? []) : [];
 		$txnId  = trim((string) ($body['txnId'] ?? $body['txn_id'] ?? $this->request->getPost('txnId') ?? $this->request->getPost('txn_id') ?? ''));
 		$otp    = trim((string) ($body['otp'] ?? $this->request->getPost('otp') ?? ''));
+		$requestedPid = (int) ($body['p_id'] ?? $this->request->getPost('p_id') ?? 0);
 
 		if ($txnId === '' || $otp === '') {
 			return $this->response->setJSON(['ok' => 0, 'error_text' => 'txnId and otp are required']);
@@ -397,6 +403,10 @@ class Patient extends BaseController
 			$result = AbdmConnectorFactory::make()->abhaMobileVerifyOtp(['txnId' => $txnId, 'otp' => $otp]);
 		} catch (\Throwable $e) {
 			return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => $e->getMessage()]);
+		}
+
+		if (! empty($result['ok']) && (int) $result['ok'] === 1) {
+			$result = $this->enrichAbhaVerifyResult($result, $requestedPid);
 		}
 
 		return $this->response->setJSON($result);
@@ -1330,6 +1340,286 @@ class Patient extends BaseController
 		}
 
 		return (int) $this->db->insertID();
+	}
+
+	/**
+	 * @param array<string, mixed> $result
+	 * @return array<string, mixed>
+	 */
+	private function enrichAbhaVerifyResult(array $result, int $requestedPid): array
+	{
+		$payload = [];
+		if (isset($result['data']) && is_array($result['data'])) {
+			$payload = $result['data'];
+		} elseif (is_array($result)) {
+			$payload = $result;
+		}
+
+		$profile = $this->pickGatewayAbhaProfile($payload);
+		$abhaNumberRaw = trim((string) ($profile['ABHANumber'] ?? $payload['ABHANumber'] ?? ''));
+		$abhaDigits = preg_replace('/\D/', '', $abhaNumberRaw);
+		$abhaAddress = trim((string) ($profile['preferredAbhaAddress'] ?? $payload['abha_address'] ?? ''));
+		$gatewayName = trim((string) ($profile['name'] ?? $payload['name'] ?? ''));
+		$gatewayMobile = trim((string) ($profile['mobile'] ?? $payload['mobile'] ?? $payload['mobileNumber'] ?? ''));
+		$gatewayDob = trim((string) ($profile['dob'] ?? $payload['dob'] ?? ''));
+		$gatewayGender = trim((string) ($profile['gender'] ?? $payload['gender'] ?? ''));
+		$gatewayPhoto = trim((string) ($profile['profilePhoto'] ?? $payload['profilePhoto'] ?? ''));
+
+		$patient = $this->findPatientForAbhaProfile($requestedPid, $abhaDigits, $gatewayMobile);
+		$patientId = (int) ($patient['id'] ?? 0);
+		$before = $patient !== null ? $this->buildPatientSnapshot($patient) : null;
+
+		$photoMeta = [
+			'saved' => false,
+			'path' => '',
+			'error' => '',
+		];
+
+		if ($patientId > 0 && $this->db->tableExists('patient_master')) {
+			$updates = [];
+
+			if ($abhaDigits !== '') {
+				$abhaField = $this->resolvePatientAbhaIdField();
+				if ($abhaField !== null) {
+					$updates[$abhaField] = $abhaDigits;
+				}
+			}
+
+			$pmFields = $this->db->getFieldNames('patient_master') ?? [];
+			if ($abhaAddress !== '' && in_array('abha_address', $pmFields, true)) {
+				$updates['abha_address'] = $abhaAddress;
+			}
+			if (in_array('abdm_linked_at', $pmFields, true) && ($abhaDigits !== '' || $abhaAddress !== '')) {
+				$updates['abdm_linked_at'] = date('Y-m-d H:i:s');
+			}
+
+			if ($updates !== []) {
+				$this->db->table('patient_master')->where('id', $patientId)->update($updates);
+			}
+
+			if ($gatewayPhoto !== '') {
+				$photoMeta = $this->saveGatewayProfilePhotoToPatient($patientId, $gatewayPhoto);
+			}
+		}
+
+		$afterPatient = null;
+		if ($patientId > 0 && $this->db->tableExists('patient_master')) {
+			$afterPatient = $this->db->table('patient_master')->where('id', $patientId)->get()->getRowArray();
+		}
+		$after = $afterPatient !== null ? $this->buildPatientSnapshot($afterPatient) : $before;
+
+		$result['gateway_user'] = [
+			'name' => $gatewayName,
+			'mobile' => $gatewayMobile,
+			'dob' => $gatewayDob,
+			'gender' => $gatewayGender,
+			'abha_number' => $abhaDigits,
+			'abha_address' => $abhaAddress,
+			'photo_base64' => $gatewayPhoto,
+		];
+
+		$result['hms_patient'] = [
+			'requested_patient_id' => $requestedPid > 0 ? $requestedPid : null,
+			'matched_patient_id' => $patientId > 0 ? $patientId : null,
+			'before' => $before,
+			'after' => $after,
+			'comparison' => [
+				'name_match_before' => $before !== null
+					? mb_strtolower(trim((string) ($before['name'] ?? ''))) === mb_strtolower($gatewayName)
+					: null,
+				'name_match_after' => $after !== null
+					? mb_strtolower(trim((string) ($after['name'] ?? ''))) === mb_strtolower($gatewayName)
+					: null,
+				'mobile_match_before' => $before !== null
+					? preg_replace('/\D/', '', (string) ($before['mobile'] ?? '')) === preg_replace('/\D/', '', $gatewayMobile)
+					: null,
+				'mobile_match_after' => $after !== null
+					? preg_replace('/\D/', '', (string) ($after['mobile'] ?? '')) === preg_replace('/\D/', '', $gatewayMobile)
+					: null,
+				'abha_match_before' => $before !== null
+					? preg_replace('/\D/', '', (string) ($before['abha_id'] ?? '')) === $abhaDigits
+					: null,
+				'abha_match_after' => $after !== null
+					? preg_replace('/\D/', '', (string) ($after['abha_id'] ?? '')) === $abhaDigits
+					: null,
+				'dob_match_before' => $before !== null
+					? trim((string) ($before['dob'] ?? '')) === trim($gatewayDob)
+					: null,
+				'dob_match_after' => $after !== null
+					? trim((string) ($after['dob'] ?? '')) === trim($gatewayDob)
+					: null,
+				'gender_match_before' => $before !== null
+					? $this->normalizeGenderForCompare((string) ($before['gender'] ?? '')) === $this->normalizeGenderForCompare($gatewayGender)
+					: null,
+				'gender_match_after' => $after !== null
+					? $this->normalizeGenderForCompare((string) ($after['gender'] ?? '')) === $this->normalizeGenderForCompare($gatewayGender)
+					: null,
+			],
+			'photo_update' => $photoMeta,
+		];
+
+		return $result;
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 * @return array<string, mixed>
+	 */
+	private function pickGatewayAbhaProfile(array $payload): array
+	{
+		if (isset($payload['gateway_patient']) && is_array($payload['gateway_patient'])) {
+			return $payload['gateway_patient'];
+		}
+		if (isset($payload['ABHAProfile']) && is_array($payload['ABHAProfile'])) {
+			return $payload['ABHAProfile'];
+		}
+		if (isset($payload['profile']) && is_array($payload['profile'])) {
+			return $payload['profile'];
+		}
+		if (isset($payload['accounts'][0]) && is_array($payload['accounts'][0])) {
+			return $payload['accounts'][0];
+		}
+
+		return [];
+	}
+
+	/**
+	 * @return array<string, mixed>|null
+	 */
+	private function findPatientForAbhaProfile(int $requestedPid, string $abhaDigits, string $mobile): ?array
+	{
+		if (! $this->db->tableExists('patient_master')) {
+			return null;
+		}
+
+		if ($requestedPid > 0) {
+			$row = $this->db->table('patient_master')->where('id', $requestedPid)->get()->getRowArray();
+			if ($row !== null) {
+				return $row;
+			}
+		}
+
+		$abhaField = $this->resolvePatientAbhaIdField();
+		if ($abhaDigits !== '' && $abhaField !== null) {
+			$row = $this->db->table('patient_master')->where($abhaField, $abhaDigits)->get()->getRowArray();
+			if ($row !== null) {
+				return $row;
+			}
+		}
+
+		$mobileDigits = preg_replace('/\D/', '', $mobile);
+		if ($mobileDigits !== '') {
+			$row = $this->db->table('patient_master')->where('mphone1', $mobileDigits)->get()->getRowArray();
+			if ($row !== null) {
+				return $row;
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * @param array<string, mixed> $row
+	 * @return array<string, mixed>
+	 */
+	private function buildPatientSnapshot(array $row): array
+	{
+		$abhaField = $this->resolvePatientAbhaIdField();
+		$abhaId = $abhaField !== null ? trim((string) ($row[$abhaField] ?? '')) : '';
+		$abhaAddress = trim((string) ($row['abha_address'] ?? ''));
+
+		return [
+			'id' => (int) ($row['id'] ?? 0),
+			'p_code' => trim((string) ($row['p_code'] ?? '')),
+			'name' => trim((string) ($row['p_fname'] ?? '')),
+			'mobile' => trim((string) ($row['mphone1'] ?? '')),
+			'dob' => trim((string) ($row['dob'] ?? '')),
+			'gender' => trim((string) ($row['gender'] ?? '')),
+			'abha_id' => $abhaId,
+			'abha_address' => $abhaAddress,
+			'profile_picture' => trim((string) ($row['profile_picture'] ?? '')),
+			'profile_file_id' => (int) ($row['profile_file_id'] ?? 0),
+		];
+	}
+
+	/**
+	 * @return array{saved:bool,path:string,error:string}
+	 */
+	private function saveGatewayProfilePhotoToPatient(int $pid, string $photoBase64): array
+	{
+		$raw = trim($photoBase64);
+		if ($pid <= 0 || $raw === '') {
+			return ['saved' => false, 'path' => '', 'error' => 'Missing patient id or photo.'];
+		}
+
+		$mime = 'image/jpeg';
+		$encoded = $raw;
+		if (str_starts_with($raw, 'data:image')) {
+			$parts = explode('base64,', $raw, 2);
+			if (count($parts) !== 2) {
+				return ['saved' => false, 'path' => '', 'error' => 'Invalid image data URI.'];
+			}
+			if (preg_match('/data:(image\/[a-zA-Z0-9.+-]+);/i', $parts[0], $m) === 1) {
+				$mime = strtolower((string) ($m[1] ?? 'image/jpeg'));
+			}
+			$encoded = $parts[1];
+		}
+
+		$binary = base64_decode($encoded, true);
+		if ($binary === false) {
+			return ['saved' => false, 'path' => '', 'error' => 'Unable to decode photo base64.'];
+		}
+
+		$ext = match ($mime) {
+			'image/png' => 'png',
+			'image/gif' => 'gif',
+			'image/webp' => 'webp',
+			default => 'jpg',
+		};
+
+		$uploadPath = rtrim(FCPATH, '\\/') . '/uploads/patient';
+		if (! is_dir($uploadPath) && ! mkdir($uploadPath, 0755, true) && ! is_dir($uploadPath)) {
+			return ['saved' => false, 'path' => '', 'error' => 'Unable to create upload directory.'];
+		}
+
+		$fileName = 'abha_profile_' . $pid . '_' . time() . '.' . $ext;
+		$absolutePath = $uploadPath . '/' . $fileName;
+		if (file_put_contents($absolutePath, $binary) === false) {
+			return ['saved' => false, 'path' => '', 'error' => 'Unable to write photo file.'];
+		}
+
+		$publicPath = '/uploads/patient/' . $fileName;
+		$insertId = $this->insertFileUploadRecordFromData($pid, 'profile', $publicPath, $mime, strlen($binary));
+
+		$updates = [];
+		if ($insertId > 0) {
+			$updates['profile_file_id'] = $insertId;
+		}
+		if ($this->db->fieldExists('profile_picture', 'patient_master')) {
+			$updates['profile_picture'] = $publicPath;
+		}
+
+		if ($updates !== []) {
+			$this->db->table('patient_master')->where('id', $pid)->update($updates);
+		}
+
+		return ['saved' => true, 'path' => $publicPath, 'error' => ''];
+	}
+
+	private function normalizeGenderForCompare(string $value): string
+	{
+		$v = strtoupper(trim($value));
+		if ($v === '1' || $v === 'M' || $v === 'MALE') {
+			return 'M';
+		}
+		if ($v === '2' || $v === 'F' || $v === 'FEMALE') {
+			return 'F';
+		}
+		if ($v === '3' || $v === 'O' || $v === 'OTHER') {
+			return 'O';
+		}
+
+		return $v;
 	}
 
     private function parseDate(?string $date): ?string

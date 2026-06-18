@@ -28,7 +28,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         $config = config('AbdmConnector');
 
         $this->baseUrl    = rtrim((string) ($config->eatriaBridgeUrl ?? 'https://abdm-bridge.e-atria.in/api'), '/');
-        $this->token      = (string) ($config->eatriaBridgeToken ?? '');
+        $this->token      = $this->sanitizeBearerToken((string) ($config->eatriaBridgeToken ?? ''));
         $this->hfrId      = '';
         $this->timeoutSec = (int) ($config->eatriaBridgeTimeoutSec ?? 30);
 
@@ -41,14 +41,19 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             if ($db->tableExists('hospital_setting')) {
                 $rows = $db->table('hospital_setting')
                     ->select('s_name, s_value')
-                    ->whereIn('s_name', ['EATRIA_BRIDGE_TOKEN', 'EATRIA_BRIDGE_URL', 'ABDM_HFR_ID'])
+                    ->whereIn('s_name', ['EATRIA_BRIDGE_TOKEN', 'ABDM_BRIDGE_TOKEN', 'EATRIA_BRIDGE_URL', 'ABDM_HFR_ID'])
                     ->get()
                     ->getResultArray();
 
                 $dbSettings = array_column($rows, 's_value', 's_name');
 
-                if (! empty($dbSettings['EATRIA_BRIDGE_TOKEN'])) {
-                    $this->token = trim($dbSettings['EATRIA_BRIDGE_TOKEN']);
+                $dbToken = (string) ($dbSettings['EATRIA_BRIDGE_TOKEN'] ?? '');
+                if ($dbToken === '') {
+                    // Backward compatibility: older setups may store the key under ABDM_BRIDGE_TOKEN.
+                    $dbToken = (string) ($dbSettings['ABDM_BRIDGE_TOKEN'] ?? '');
+                }
+                if ($dbToken !== '') {
+                    $this->token = $this->sanitizeBearerToken($dbToken);
                 }
                 if (! empty($dbSettings['EATRIA_BRIDGE_URL'])) {
                     $this->baseUrl = rtrim(trim($dbSettings['EATRIA_BRIDGE_URL']), '/');
@@ -65,6 +70,21 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
     public function getConnectorName(): string
     {
         return 'eatria_bridge';
+    }
+
+    private function sanitizeBearerToken(string $token): string
+    {
+        $token = trim($token);
+        if ($token === '') {
+            return '';
+        }
+
+        // Operators sometimes paste "Bearer <token>" into settings.
+        if (stripos($token, 'Bearer ') === 0) {
+            $token = trim(substr($token, 7));
+        }
+
+        return trim($token, " \t\n\r\0\x0B\"'");
     }
 
     // -------------------------------------------------------------------------
@@ -221,6 +241,9 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
     public function validateAbha(string $abhaId, array $fullPayload = []): array
     {
         $body = $fullPayload !== [] ? $fullPayload : ['abha_id' => $abhaId];
+        if ($this->hfrId !== '' && empty($body['hfr_id'])) {
+            $body['hfr_id'] = $this->hfrId;
+        }
         return $this->post('/v3/abha/validate', $body);
     }
 
@@ -234,6 +257,9 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         $body = [
             'aadhaar' => (string) ($payload['aadhaar'] ?? $payload['loginId'] ?? ''),
         ];
+        if ($this->hfrId !== '' && empty($body['hfr_id'])) {
+            $body['hfr_id'] = $this->hfrId;
+        }
         return $this->post('/v3/abha/aadhaar/generate-otp', $body);
     }
 
@@ -250,6 +276,9 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         if (preg_match('/^\d{10}$/', $mobile)) {
             $body['mobile'] = $mobile;
         }
+        if ($this->hfrId !== '' && empty($body['hfr_id'])) {
+            $body['hfr_id'] = $this->hfrId;
+        }
         return $this->post('/v3/abha/aadhaar/verify-otp', $body);
     }
 
@@ -260,6 +289,9 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         $body = [
             'mobile' => (string) ($payload['mobile'] ?? $payload['loginId'] ?? ''),
         ];
+        if ($this->hfrId !== '' && empty($body['hfr_id'])) {
+            $body['hfr_id'] = $this->hfrId;
+        }
         return $this->post('/v3/abha/mobile/generate-otp', $body);
     }
 
@@ -270,6 +302,9 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             'txnId' => (string) ($payload['txnId'] ?? $payload['txn_id'] ?? ''),
             'otp'   => (string) ($payload['otp'] ?? ''),
         ];
+        if ($this->hfrId !== '' && empty($body['hfr_id'])) {
+            $body['hfr_id'] = $this->hfrId;
+        }
         return $this->post('/v3/abha/mobile/verify-otp', $body);
     }
 

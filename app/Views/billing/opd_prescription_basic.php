@@ -1576,6 +1576,8 @@
     var legacyInvestigationProfileList = [];
     var legacyInvestigationShortTests = [];
     var investigationBatchActive = false;
+    var investigationListLoading = false;
+    var investigationListPending = false;
     var activeMedicineScope = 'all';
     var medicineSuggestRows = [];
     var medicineSearchCache = {};
@@ -6589,37 +6591,6 @@
         return (name || '').toString().trim().toLowerCase();
     }
 
-    function addInvestigationEntry(name, code, done) {
-        name = (name || '').trim();
-        code = (code || '').trim();
-        if (!name) {
-            if (typeof done === 'function') {
-                done(false);
-            }
-            return;
-        }
-
-        ensureSession(function(sid) {
-            apiPost('<?= base_url('Opd_prescription/investigation_add') ?>', {
-                opd_id: $('#opd_id').val(),
-                opd_session_id: sid,
-                investigation_code: code,
-                investigation_name: name
-            }, function(data) {
-                if (data.update == 1) {
-                    $('#opd_session_id').val(data.opd_session_id || sid);
-                    if (typeof done === 'function') {
-                        done(true);
-                    }
-                    return;
-                }
-                if (typeof done === 'function') {
-                    done(false);
-                }
-            });
-        });
-    }
-
     function batchAddInvestigations(tests) {
         tests = Array.isArray(tests) ? tests : [];
         if (!tests.length) {
@@ -6663,41 +6634,56 @@
         }
 
         investigationBatchActive = true;
-
-        var idx = 0;
-        var added = 0;
-        function next() {
-            if (idx >= queue.length) {
+        ensureSession(function(sid) {
+            apiPost('<?= base_url('Opd_prescription/investigation_add_bulk') ?>', {
+                opd_id: $('#opd_id').val(),
+                opd_session_id: sid,
+                tests: queue
+            }, function(data) {
                 investigationBatchActive = false;
-                loadInvestigationList();
-                $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text(added + ' test(s) added.');
-                markDirty('Investigation shortcuts applied');
-                return;
-            }
-            var row = queue[idx++] || {};
-            var key = normalizeInvestigationKey(row.name || '');
-            addInvestigationEntry((row.name || '').toString(), (row.code || '').toString(), function(ok) {
-                if (ok) {
-                    added++;
-                    if (key) {
-                        existing[key] = true;
+                if (data.update == 1) {
+                    $('#opd_session_id').val(data.opd_session_id || sid);
+                    loadInvestigationList();
+                    var addedCount = parseInt(data.added_count || '0', 10);
+                    var skippedCount = parseInt(data.skipped_count || '0', 10);
+                    var msg = addedCount + ' test(s) added.';
+                    if (skippedCount > 0) {
+                        msg += ' ' + skippedCount + ' duplicate/empty skipped.';
                     }
+                    $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text(msg);
+                    if (addedCount > 0) {
+                        markDirty('Investigation shortcuts applied');
+                    }
+                    return;
                 }
-                next();
+                $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text(data.error_text || 'Unable to add investigations.');
             });
-        }
-        next();
+        });
     }
 
     function loadInvestigationList() {
         var opdId = $('#opd_id').val();
         var sid = parseInt($('#opd_session_id').val() || '0', 10);
         if (sid <= 0) {
+            investigationListLoading = false;
+            investigationListPending = false;
             renderInvestigation([]);
             return;
         }
+
+        if (investigationListLoading) {
+            investigationListPending = true;
+            return;
+        }
+
+        investigationListLoading = true;
         apiGet('<?= base_url('Opd_prescription/investigation_list') ?>/' + opdId + '/' + sid, function(data) {
+            investigationListLoading = false;
             renderInvestigation(data.rows || []);
+            if (investigationListPending) {
+                investigationListPending = false;
+                loadInvestigationList();
+            }
         });
     }
 
@@ -6753,15 +6739,11 @@
             return;
         }
 
-        addInvestigationEntry(name, code, function(ok) {
-            if (ok) {
-                $('#investigation_name').val('');
-                if ($.fn && $.fn.select2 && $('#investigation_name_select2').length) {
-                    $('#investigation_name_select2').val(null).trigger('change');
-                }
-                loadInvestigationList();
-            }
-        });
+        batchAddInvestigationRows([{ name: name, code: code }]);
+        $('#investigation_name').val('');
+        if ($.fn && $.fn.select2 && $('#investigation_name_select2').length) {
+            $('#investigation_name_select2').val(null).trigger('change');
+        }
     });
 
     $('#btn_clear_investigation').on('click', function() {
@@ -6777,24 +6759,23 @@
             return;
         }
 
-        var index = 0;
-        function removeNext() {
-            if (index >= ids.length) {
+        apiPost('<?= base_url('Opd_prescription/investigation_remove_bulk') ?>', {
+            ids: ids
+        }, function(data) {
+            if (data.update == 1) {
                 loadInvestigationList();
                 $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text('All investigations removed.');
                 markDirty('Investigation list cleared');
                 return;
             }
-
-            var id = ids[index++];
-            apiPost('<?= base_url('Opd_prescription/investigation_remove') ?>/' + id, {}, function() {
-                removeNext();
-            });
-        }
-        removeNext();
+            $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text(data.error_text || 'Unable to remove investigations.');
+        });
     });
 
-    $(document).on('click', '.inv-quick-chip', function() {
+    $(document).off('click', '.inv-quick-chip');
+    $(document).off('click', '.inv-profile-chip');
+
+    $(document).off('click.invQuickChip', '.inv-quick-chip').on('click.invQuickChip', '.inv-quick-chip', function() {
         var test = ($(this).data('test') || '').toString().trim();
         var code = ($(this).data('code') || '').toString().trim();
         if (!test) {
@@ -6807,7 +6788,7 @@
         batchAddInvestigations([test]);
     });
 
-    $(document).on('click', '.inv-profile-chip', function() {
+    $(document).off('click.invProfileChip', '.inv-profile-chip').on('click.invProfileChip', '.inv-profile-chip', function() {
         var key = ($(this).data('profile') || '').toString().trim();
         if (legacyInvestigationProfiles[key] && legacyInvestigationProfiles[key].length) {
             batchAddInvestigationRows(legacyInvestigationProfiles[key]);
@@ -6947,7 +6928,7 @@
         loadMedicineDoseMasters();
     $('#advise_investigation_notes').val($('#investigation').val() || '');
 
-    $(document).on('click', '.btn-del-invest', function() {
+    $(document).off('click.investRemoveSingle', '.btn-del-invest').on('click.investRemoveSingle', '.btn-del-invest', function() {
         var id = $(this).data('id');
         apiPost('<?= base_url('Opd_prescription/investigation_remove') ?>/' + id, {}, function() {
             loadInvestigationList();

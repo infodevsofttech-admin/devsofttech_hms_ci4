@@ -7133,22 +7133,9 @@ class Opd_prescription extends BaseController
         $code = trim((string) $this->request->getPost('investigation_code'));
         $name = trim((string) $this->request->getPost('investigation_name'));
 
-        // Profile chips may send only investigation name; resolve code from master to avoid unique-key collisions.
-        if ($code === '' && $name !== '' && $this->db->tableExists('investigation')) {
-            $invFields = $this->db->getFieldNames('investigation');
-            $invCodeField = $this->resolveFirstField($invFields, ['Code', 'code']);
-            $invNameField = $this->resolveFirstField($invFields, ['Name', 'name']);
-            if ($invCodeField !== null && $invNameField !== null) {
-                $resolved = $this->db->table('investigation')
-                    ->select($invCodeField . ' as code')
-                    ->where($invNameField, $name)
-                    ->limit(1)
-                    ->get()
-                    ->getRowArray();
-                if (! empty($resolved['code'])) {
-                    $code = trim((string) $resolved['code']);
-                }
-            }
+        // Resolve profile shorthand names (CBC/LFT/KFT etc.) to canonical codes.
+        if (($code === '' || $code === '0') && $name !== '') {
+            $code = $this->resolveInvestigationCodeByText($name, $this->buildInvestigationLookupMaps());
         }
 
         if ($opdId <= 0 || ($code === '' && $name === '')) {
@@ -7229,6 +7216,303 @@ class Opd_prescription extends BaseController
         ]);
     }
 
+    public function investigation_add_bulk()
+    {
+        $startedAt = microtime(true);
+        $respond = function (array $payload, int $statusCode = 200) use ($startedAt) {
+            $payload['elapsed_ms'] = (int) round((microtime(true) - $startedAt) * 1000);
+            return $this->response->setStatusCode($statusCode)->setJSON($payload);
+        };
+
+        if (! $this->request->isAJAX()) {
+            return $respond(['update' => 0, 'error_text' => 'Invalid request'], 400);
+        }
+
+        $opdId = (int) $this->request->getPost('opd_id');
+        $sessionId = (int) $this->request->getPost('opd_session_id');
+
+        $rawTests = $this->request->getPost('tests');
+        $tests = [];
+        if (is_string($rawTests) && $rawTests !== '') {
+            $decoded = json_decode($rawTests, true);
+            if (is_array($decoded)) {
+                $tests = $decoded;
+            }
+        } elseif (is_array($rawTests)) {
+            $tests = $rawTests;
+        }
+
+        if ($opdId <= 0 || empty($tests)) {
+            return $respond(['update' => 0, 'error_text' => 'Invalid bulk payload']);
+        }
+
+        $table = $this->findExistingTable(['opd_prescription_investigation']);
+        if ($table === null) {
+            return $respond(['update' => 0, 'error_text' => 'Investigation table not found']);
+        }
+
+        $sessionId = $this->ensurePrescriptionSession($opdId, $sessionId);
+        if ($sessionId <= 0) {
+            return $respond(['update' => 0, 'error_text' => 'Unable to create prescription session']);
+        }
+
+        $fields = $this->db->getFieldNames($table);
+        $hasOpdPreId = in_array('opd_pre_id', $fields, true);
+        $hasOpdId = in_array('opd_id', $fields, true);
+        $hasCode = in_array('investigation_code', $fields, true);
+        $hasName = in_array('investigation_name', $fields, true);
+
+        $existingRowsBuilder = $this->db->table($table);
+        if ($hasOpdPreId) {
+            $existingRowsBuilder->where('opd_pre_id', $sessionId);
+        } elseif ($hasOpdId) {
+            $existingRowsBuilder->where('opd_id', $opdId);
+        } else {
+            return $respond(['update' => 0, 'error_text' => 'Invalid investigation table structure']);
+        }
+
+        $existingRows = $existingRowsBuilder->get()->getResultArray();
+        $existingByCode = [];
+        $existingByName = [];
+        foreach ($existingRows as $row) {
+            $exCode = trim((string) ($row['investigation_code'] ?? ''));
+            $exName = trim((string) ($row['investigation_name'] ?? ''));
+            if ($exCode !== '' && $exCode !== '0') {
+                $existingByCode[strtolower($exCode)] = true;
+            }
+            if ($exName !== '') {
+                $existingByName[strtolower($exName)] = true;
+            }
+        }
+
+        $invLookup = $this->buildInvestigationLookupMaps();
+
+        $seenPayload = [];
+        $insertRows = [];
+        $added = 0;
+        $skipped = 0;
+
+        foreach ($tests as $test) {
+            $name = trim((string) (($test['name'] ?? $test['investigation_name'] ?? '')));
+            $code = trim((string) (($test['code'] ?? $test['investigation_code'] ?? '')));
+
+            if ($name === '' && $code === '') {
+                $skipped++;
+                continue;
+            }
+
+            if (($code === '' || $code === '0') && $name !== '') {
+                $code = $this->resolveInvestigationCodeByText($name, $invLookup);
+            }
+
+            $payloadKey = strtolower($code . '|' . $name);
+            if (isset($seenPayload[$payloadKey])) {
+                $skipped++;
+                continue;
+            }
+            $seenPayload[$payloadKey] = true;
+
+            $duplicateByCode = ($code !== '' && isset($existingByCode[strtolower($code)]));
+            $duplicateByName = ($name !== '' && isset($existingByName[strtolower($name)]));
+            if ($duplicateByCode || $duplicateByName) {
+                $skipped++;
+                continue;
+            }
+
+            $row = [];
+            if ($hasOpdId) {
+                $row['opd_id'] = $opdId;
+            }
+            if ($hasOpdPreId) {
+                $row['opd_pre_id'] = $sessionId;
+            }
+            if ($hasCode) {
+                $row['investigation_code'] = ($code === '' || $code === '0') ? '' : $code;
+            }
+            if ($hasName) {
+                $row['investigation_name'] = $name;
+            }
+            $insertRows[] = $row;
+
+            if ($code !== '' && $code !== '0') {
+                $existingByCode[strtolower($code)] = true;
+            }
+            if ($name !== '') {
+                $existingByName[strtolower($name)] = true;
+            }
+        }
+
+        foreach ($insertRows as $row) {
+            try {
+                $this->db->table($table)->insert($row);
+                $added++;
+                $insertId = (int) $this->db->insertID();
+                $this->auditClinicalUpdate('opd_prescription_investigation', 'added', $insertId, null, $row);
+            } catch (\Throwable $e) {
+                $msg = strtolower($e->getMessage());
+                if (strpos($msg, 'duplicate entry') !== false) {
+                    $skipped++;
+                    continue;
+                }
+                throw $e;
+            }
+        }
+
+        $result = [
+            'update' => 1,
+            'opd_session_id' => $sessionId,
+            'added_count' => $added,
+            'skipped_count' => $skipped,
+            'total_count' => count($tests),
+            'error_text' => $added > 0 ? 'Investigations added' : 'No new investigations added',
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ];
+
+        log_message(
+            'info',
+            'investigation_add_bulk opd_id={opd_id} session_id={session_id} total={total} added={added} skipped={skipped} elapsed_ms={elapsed_ms}',
+            [
+                'opd_id' => $opdId,
+                'session_id' => $sessionId,
+                'total' => count($tests),
+                'added' => $added,
+                'skipped' => $skipped,
+                'elapsed_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+            ]
+        );
+
+        return $respond($result);
+    }
+
+    private function buildInvestigationLookupMaps(): array
+    {
+        $out = [
+            'by_name' => [],
+            'by_short' => [],
+            'by_alias' => [],
+        ];
+
+        if (! $this->db->tableExists('investigation')) {
+            return $out;
+        }
+
+        $invFields = $this->db->getFieldNames('investigation');
+        $invCodeField = $this->resolveFirstField($invFields, ['Code', 'code']);
+        $invNameField = $this->resolveFirstField($invFields, ['Name', 'name']);
+        $invShortField = $this->resolveFirstField($invFields, ['short_name', 'shortName', 'short']);
+
+        if ($invCodeField === null || $invNameField === null) {
+            return $out;
+        }
+
+        $select = $invCodeField . ' as code, ' . $invNameField . ' as name';
+        if ($invShortField !== null) {
+            $select .= ', ' . $invShortField . ' as short_name';
+        }
+
+        $rows = $this->db->table('investigation')->select($select)->get()->getResultArray();
+        foreach ($rows as $row) {
+            $code = trim((string) ($row['code'] ?? ''));
+            if ($code === '' || $code === '0') {
+                continue;
+            }
+
+            $name = trim((string) ($row['name'] ?? ''));
+            $short = trim((string) ($row['short_name'] ?? ''));
+
+            $nameKey = $this->normalizeInvestigationLookupKey($name);
+            if ($nameKey !== '' && ! isset($out['by_name'][$nameKey])) {
+                $out['by_name'][$nameKey] = $code;
+            }
+
+            $shortKey = $this->normalizeInvestigationLookupKey($short);
+            if ($shortKey !== '' && ! isset($out['by_short'][$shortKey])) {
+                $out['by_short'][$shortKey] = $code;
+            }
+
+            if (preg_match('/\(([A-Za-z0-9\-\s\.]{2,20})\)/', $name, $m) === 1) {
+                $aliasKey = $this->normalizeInvestigationLookupKey((string) ($m[1] ?? ''));
+                if ($aliasKey !== '' && ! isset($out['by_alias'][$aliasKey])) {
+                    $out['by_alias'][$aliasKey] = $code;
+                }
+            }
+
+            $acronym = $this->buildInvestigationAcronym($name);
+            if ($acronym !== '' && ! isset($out['by_alias'][$acronym])) {
+                $out['by_alias'][$acronym] = $code;
+            }
+        }
+
+        return $out;
+    }
+
+    private function resolveInvestigationCodeByText(string $text, array $lookup): string
+    {
+        $key = $this->normalizeInvestigationLookupKey($text);
+        if ($key === '') {
+            return '';
+        }
+
+        if (isset($lookup['by_name'][$key])) {
+            return (string) $lookup['by_name'][$key];
+        }
+        if (isset($lookup['by_short'][$key])) {
+            return (string) $lookup['by_short'][$key];
+        }
+        if (isset($lookup['by_alias'][$key])) {
+            return (string) $lookup['by_alias'][$key];
+        }
+
+        // Common profile aliases seen in legacy shortcuts.
+        $aliasFallback = [
+            'kft' => 'rft',
+        ];
+        $fallback = $aliasFallback[$key] ?? '';
+        if ($fallback !== '' && isset($lookup['by_alias'][$fallback])) {
+            return (string) $lookup['by_alias'][$fallback];
+        }
+        if ($fallback !== '' && isset($lookup['by_short'][$fallback])) {
+            return (string) $lookup['by_short'][$fallback];
+        }
+
+        return '';
+    }
+
+    private function normalizeInvestigationLookupKey(string $value): string
+    {
+        $value = trim(strtolower($value));
+        if ($value === '') {
+            return '';
+        }
+        return (string) (preg_replace('/[^a-z0-9]+/', '', $value) ?? '');
+    }
+
+    private function buildInvestigationAcronym(string $name): string
+    {
+        $plain = preg_replace('/\([^)]*\)/', ' ', $name) ?? $name;
+        $plain = trim((string) preg_replace('/\s+/', ' ', $plain));
+        if ($plain === '') {
+            return '';
+        }
+
+        $stopWords = [
+            'and', 'of', 'for', 'the', 'test', 'panel', 'routine', 'view', 'complete', 'count',
+        ];
+
+        $parts = preg_split('/\s+/', strtolower($plain)) ?: [];
+        $acronym = '';
+        foreach ($parts as $part) {
+            $part = trim((string) preg_replace('/[^a-z0-9]/', '', $part));
+            if ($part === '' || in_array($part, $stopWords, true)) {
+                continue;
+            }
+            $acronym .= substr($part, 0, 1);
+        }
+
+        return strlen($acronym) >= 2 ? $acronym : '';
+    }
+
     public function investigation_remove($id)
     {
         $table = $this->findExistingTable(['opd_prescription_investigation']);
@@ -7245,6 +7529,81 @@ class Opd_prescription extends BaseController
         $this->db->table($table)->where('id', (int) $id)->delete();
         $this->auditClinicalUpdate('opd_prescription_investigation', 'removed', (int) $id, $row, null);
         return $this->response->setJSON(['update' => 1, 'error_text' => 'Investigation removed']);
+    }
+
+    public function investigation_remove_bulk()
+    {
+        $startedAt = microtime(true);
+        $respond = function (array $payload, int $statusCode = 200) use ($startedAt) {
+            $payload['elapsed_ms'] = (int) round((microtime(true) - $startedAt) * 1000);
+            return $this->response->setStatusCode($statusCode)->setJSON($payload);
+        };
+
+        if (! $this->request->isAJAX()) {
+            return $respond(['update' => 0, 'error_text' => 'Invalid request'], 400);
+        }
+
+        $rawIds = $this->request->getPost('ids');
+        $ids = [];
+
+        if (is_array($rawIds)) {
+            $ids = $rawIds;
+        } elseif (is_string($rawIds) && trim($rawIds) !== '') {
+            $decoded = json_decode($rawIds, true);
+            if (is_array($decoded)) {
+                $ids = $decoded;
+            } else {
+                $ids = explode(',', $rawIds);
+            }
+        }
+
+        $ids = array_values(array_unique(array_filter(array_map(static function ($id) {
+            return (int) $id;
+        }, $ids), static function ($id) {
+            return $id > 0;
+        })));
+
+        if (empty($ids)) {
+            return $respond(['update' => 0, 'error_text' => 'No investigations selected']);
+        }
+
+        $table = $this->findExistingTable(['opd_prescription_investigation']);
+        if ($table === null) {
+            return $respond(['update' => 0, 'error_text' => 'Investigation table not found']);
+        }
+
+        $fields = $this->db->getFieldNames($table);
+        if (! in_array('id', $fields, true)) {
+            return $respond(['update' => 0, 'error_text' => 'Investigation id field missing']);
+        }
+
+        $rows = $this->db->table($table)->whereIn('id', $ids)->get()->getResultArray();
+        $this->db->table($table)->whereIn('id', $ids)->delete();
+
+        foreach ($rows as $row) {
+            $this->auditClinicalUpdate('opd_prescription_investigation', 'removed', (int) ($row['id'] ?? 0), $row, null);
+        }
+
+        $result = [
+            'update' => 1,
+            'removed_count' => count($rows),
+            'requested_count' => count($ids),
+            'error_text' => 'Investigations removed',
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ];
+
+        log_message(
+            'info',
+            'investigation_remove_bulk requested={requested} removed={removed} elapsed_ms={elapsed_ms}',
+            [
+                'requested' => count($ids),
+                'removed' => count($rows),
+                'elapsed_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+            ]
+        );
+
+        return $respond($result);
     }
 
     public function medicine_search()

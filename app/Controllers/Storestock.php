@@ -8,6 +8,7 @@ use Mpdf\Mpdf;
 class Storestock extends BaseController
 {
     protected $db;
+    protected array $procedureExistsCache = [];
 
     public function __construct()
     {
@@ -77,6 +78,96 @@ class Storestock extends BaseController
             return $this->db->query($sql, $bindings)->getResultArray();
         } catch (\Throwable $e) {
             return [];
+        }
+    }
+
+    private function normalizeUiDate(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return '';
+        }
+
+        $dt = \DateTime::createFromFormat('d/m/Y', $value);
+        if ($dt instanceof \DateTime) {
+            return $dt->format('Y-m-d');
+        }
+
+        $dt = \DateTime::createFromFormat('Y-m-d', $value);
+        return $dt instanceof \DateTime ? $dt->format('Y-m-d') : '';
+    }
+
+    private function purchaseReturnInvoiceNoColumn(): string
+    {
+        $fields = $this->db->getFieldNames('purchase_return_invoice') ?? [];
+        if (in_array('p_r_invoice_no', $fields, true)) {
+            return 'p_r_invoice_no';
+        }
+
+        return in_array('Invoice_no', $fields, true) ? 'Invoice_no' : 'id';
+    }
+
+    private function fetchPurchaseReturnItems(int $invId): array
+    {
+        if (
+            $invId <= 0
+            || ! $this->db->tableExists('purchase_return_invoice_item')
+            || ! $this->db->tableExists('purchase_invoice_item')
+        ) {
+            return [];
+        }
+
+        return $this->db->table('purchase_return_invoice_item r')
+            ->select('p.*, r.purchase_inv_id, r.qty AS r_qty, r.id AS r_id', false)
+            ->join('purchase_invoice_item p', 'r.purchase_item_id=p.id', 'inner')
+            ->where('r.purchase_inv_id', $invId)
+            ->orderBy('r.id', 'ASC')
+            ->get()
+            ->getResult();
+    }
+
+    private function buildPurchaseReturnItemList(int $invId): string
+    {
+        return view('storestock/purchase_return_invoice_item', [
+            'purchase_return_invoice_item' => $this->fetchPurchaseReturnItems($invId),
+        ]);
+    }
+
+    private function procedureExists(string $procedureName): bool
+    {
+        if (array_key_exists($procedureName, $this->procedureExistsCache)) {
+            return $this->procedureExistsCache[$procedureName];
+        }
+
+        try {
+            $row = $this->db->query(
+                'SELECT ROUTINE_NAME FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_TYPE = ? AND ROUTINE_NAME = ? LIMIT 1',
+                ['PROCEDURE', $procedureName]
+            )->getRowArray();
+
+            $this->procedureExistsCache[$procedureName] = ! empty($row['ROUTINE_NAME']);
+        } catch (\Throwable $e) {
+            $this->procedureExistsCache[$procedureName] = false;
+        }
+
+        return $this->procedureExistsCache[$procedureName];
+    }
+
+    private function runOptionalProcedure(string $procedureName, array $arguments = []): void
+    {
+        if (! $this->procedureExists($procedureName)) {
+            return;
+        }
+
+        $sql = 'CALL ' . $procedureName . '(' . implode(', ', array_fill(0, count($arguments), '?')) . ')';
+
+        try {
+            $this->db->query($sql, $arguments);
+        } catch (\Throwable $e) {
+            log_message('warning', 'Optional procedure failed: {procedure} - {message}', [
+                'procedure' => $procedureName,
+                'message' => $e->getMessage(),
+            ]);
         }
     }
 
@@ -618,7 +709,7 @@ class Storestock extends BaseController
         if ($insert_id > 0) {
             // Call stored procs
             $this->db->query("CALL p_stock_update_purchase_id_store({$inv_id})");
-            $this->db->query("CALL p_update_med_GST_store({$inv_id})");
+            $this->runOptionalProcedure('p_update_med_GST_store', [$inv_id]);
 
             $data['inv_stock_item'] = $this->db->query(
                 "SELECT i.*, IFNULL(DATEDIFF(expiry, CURDATE()), 1000) AS no_day,
@@ -717,7 +808,7 @@ class Storestock extends BaseController
         }
 
         // Call stored procedure to recalculate GST
-        $this->db->query("CALL p_update_med_GST_store({$inv_id})");
+        $this->runOptionalProcedure('p_update_med_GST_store', [$inv_id]);
 
         $data['invoice_stock_master'] = $this->db->query(
             "SELECT *, (discount_amount + item_discount_amount) AS inv_disc_total,
@@ -751,7 +842,7 @@ class Storestock extends BaseController
             return $err;
         }
 
-        $this->db->query("CALL p_update_med_GST_store({$inv_id})");
+        $this->runOptionalProcedure('p_update_med_GST_store', [$inv_id]);
 
         $data['inv_items'] = $this->db->query(
             "SELECT i.indent_id, i.id, i.item_Name, i.formulation,
@@ -947,5 +1038,571 @@ class Storestock extends BaseController
             return $err;
         }
         return view('storestock/main_store_dashboard');
+    }
+
+    // -------------------------------------------------------------------------
+    // Purchase
+    // -------------------------------------------------------------------------
+
+    public function Purchase()
+    {
+        if ($err = $this->ensureStoreAccess()) {
+            return $err;
+        }
+
+        $data['purchase_list'] = [];
+        if ($this->db->tableExists('purchase_invoice_stock')) {
+            $data['purchase_list'] = $this->db->table('purchase_invoice_stock p')
+                ->select("p.id, p.Invoice_no, p.date_of_invoice, DATE_FORMAT(p.date_of_invoice,'%d-%m-%Y') AS str_date_of_invoice, p.sid, IFNULL(s.name_supplier,'-') AS name_supplier, IFNULL(s.short_name,'-') AS short_name, IFNULL(s.gst_no,'-') AS gst_no, IFNULL(p.T_Net_Amount,0) AS tamount, IFNULL(p.inv_status,0) AS inv_status, IFNULL(p.ischallan,0) AS ischallan", false)
+                ->join('stock_supplier s', 'p.sid=s.sid', 'left')
+                ->orderBy('p.id', 'DESC')
+                ->limit(50)
+                ->get()
+                ->getResult();
+        }
+
+        return view('storestock/purchase', $data);
+    }
+
+    public function PurchaseInvoice()
+    {
+        if ($err = $this->ensureStoreAccess()) {
+            return $err;
+        }
+
+        $searchRaw = (string) ($this->request->getPost('txtsearch') ?? $this->request->getGet('txtsearch') ?? '');
+        $search = trim(preg_replace('/[^A-Za-z0-9_ \-]/', '', $searchRaw));
+
+        $data['purchase_list'] = [];
+        if ($this->db->tableExists('purchase_invoice_stock')) {
+            $builder = $this->db->table('purchase_invoice_stock p')
+                ->select("p.id, p.Invoice_no, p.date_of_invoice, DATE_FORMAT(p.date_of_invoice,'%d-%m-%Y') AS str_date_of_invoice, p.sid, IFNULL(s.name_supplier,'-') AS name_supplier, IFNULL(s.short_name,'-') AS short_name, IFNULL(s.gst_no,'-') AS gst_no, IFNULL(p.T_Net_Amount,0) AS tamount, IFNULL(p.inv_status,0) AS inv_status, IFNULL(p.ischallan,0) AS ischallan", false)
+                ->join('stock_supplier s', 'p.sid=s.sid', 'left');
+
+            if ($search !== '') {
+                $builder->groupStart();
+                $builder->like('p.Invoice_no', $search);
+                if (ctype_digit($search)) {
+                    $builder->orWhere('p.id', (int) $search);
+                }
+                $builder->groupEnd();
+            }
+
+            $data['purchase_list'] = $builder->orderBy('p.id', 'DESC')->limit(50)->get()->getResult();
+        }
+
+        return view('storestock/purchase_supp_list', $data);
+    }
+
+    public function PurchaseNew()
+    {
+        if ($err = $this->ensureStoreAccess()) {
+            return $err;
+        }
+
+        $data['supplier_data'] = $this->db->tableExists('stock_supplier')
+            ? $this->db->table('stock_supplier')->orderBy('name_supplier', 'ASC')->get()->getResult()
+            : [];
+
+        return view('storestock/purchase_new_invoice', $data);
+    }
+
+    public function CreatePurchase()
+    {
+        if ($err = $this->ensureStoreAccess()) {
+            return $err;
+        }
+
+        if (! $this->request->isAJAX() || ! $this->db->tableExists('purchase_invoice_stock')) {
+            return $this->response->setJSON([
+                'insertid' => 0,
+                'show_text' => 'Invalid request',
+            ]);
+        }
+
+        $sid = (int) ($this->request->getPost('input_supplier') ?? 0);
+        $invoiceNo = trim((string) ($this->request->getPost('input_invoicecode') ?? ''));
+        $invoiceDate = $this->normalizeUiDate((string) ($this->request->getPost('datepicker_invoice') ?? ''));
+        $billType = (int) ($this->request->getPost('cbo_billtype') ?? 0);
+
+        if ($sid <= 0 || $invoiceNo === '' || $invoiceDate === '') {
+            return $this->response->setJSON([
+                'insertid' => 0,
+                'show_text' => 'Supplier, invoice no and invoice date are required',
+            ]);
+        }
+
+        $fields = $this->db->getFieldNames('purchase_invoice_stock') ?? [];
+        $insert = [];
+        if (in_array('sid', $fields, true)) {
+            $insert['sid'] = $sid;
+        }
+        if (in_array('Invoice_no', $fields, true)) {
+            $insert['Invoice_no'] = $invoiceNo;
+        }
+        if (in_array('date_of_invoice', $fields, true)) {
+            $insert['date_of_invoice'] = $invoiceDate;
+        }
+        if (in_array('ischallan', $fields, true)) {
+            $insert['ischallan'] = $billType;
+        }
+        if (in_array('inv_status', $fields, true)) {
+            $insert['inv_status'] = 0;
+        }
+
+        $this->db->table('purchase_invoice_stock')->insert($insert);
+
+        return $this->response->setJSON([
+            'insertid' => (int) $this->db->insertID(),
+            'show_text' => 'Added Successfully',
+        ]);
+    }
+
+    public function PurchaseMasterEdit(int $invId)
+    {
+        if ($err = $this->ensureStoreAccess()) {
+            return $err;
+        }
+
+        $data['supplier_data'] = $this->db->tableExists('stock_supplier')
+            ? $this->db->table('stock_supplier')->orderBy('name_supplier', 'ASC')->get()->getResult()
+            : [];
+        $data['inv_master_data'] = $this->db->query(
+            'SELECT p.*, s.name_supplier FROM purchase_invoice_stock p JOIN stock_supplier s ON p.sid=s.sid WHERE p.id = ?',
+            [$invId]
+        )->getResult();
+        $data['purchase_item'] = $this->db->query(
+            'SELECT * FROM purchase_invoice_item_stock WHERE purchase_id = ?',
+            [$invId]
+        )->getResult();
+
+        if (empty($data['inv_master_data'])) {
+            return $this->response->setStatusCode(404)->setBody('<div class="alert alert-warning m-3">Purchase invoice not found.</div>');
+        }
+
+        return view('storestock/purchase_invoice_master_edit', $data);
+    }
+
+    public function PurchaseInvoiceEdit(int $invId)
+    {
+        return $this->PurchaseMasterEdit($invId);
+    }
+
+    public function UpdatePurchase()
+    {
+        if ($err = $this->ensureStoreAccess()) {
+            return $err;
+        }
+
+        if (! $this->request->isAJAX() || ! $this->db->tableExists('purchase_invoice_stock')) {
+            return $this->response->setJSON([
+                'insertid' => 0,
+                'show_text' => 'Invalid request',
+            ]);
+        }
+
+        $recId = (int) ($this->request->getPost('hid_purchaseid') ?? 0);
+        $sid = (int) ($this->request->getPost('input_supplier') ?? 0);
+        $invoiceNo = trim((string) ($this->request->getPost('input_invoicecode') ?? ''));
+        $invoiceDate = $this->normalizeUiDate((string) ($this->request->getPost('datepicker_invoice') ?? ''));
+        $billType = (int) ($this->request->getPost('cbo_billtype') ?? 0);
+
+        if ($recId <= 0 || $sid <= 0 || $invoiceNo === '' || $invoiceDate === '') {
+            return $this->response->setJSON([
+                'insertid' => 0,
+                'show_text' => 'Please fill supplier, invoice number and invoice date.',
+            ]);
+        }
+
+        $update = [];
+        $fields = $this->db->getFieldNames('purchase_invoice_stock') ?? [];
+        if (in_array('sid', $fields, true)) {
+            $update['sid'] = $sid;
+        }
+        if (in_array('Invoice_no', $fields, true)) {
+            $update['Invoice_no'] = $invoiceNo;
+        }
+        if (in_array('date_of_invoice', $fields, true)) {
+            $update['date_of_invoice'] = $invoiceDate;
+        }
+        if (in_array('ischallan', $fields, true)) {
+            $update['ischallan'] = $billType;
+        }
+
+        if ($update !== []) {
+            $this->db->table('purchase_invoice_stock')->where('id', $recId)->update($update);
+        }
+
+        return $this->response->setJSON([
+            'insertid' => 1,
+            'show_text' => 'Data Update',
+        ]);
+    }
+
+    public function UpdatePurchaseInvoiceStatus(int $purchaseInvId, int $invStatus)
+    {
+        if ($err = $this->ensureStoreAccess()) {
+            return $err;
+        }
+
+        if ($this->db->tableExists('purchase_invoice_stock')) {
+            $this->db->table('purchase_invoice_stock')->where('id', $purchaseInvId)->update([
+                'inv_status' => $invStatus,
+            ]);
+        }
+
+        return redirect()->to(site_url('Storestock/PurchaseMasterEdit/' . $purchaseInvId));
+    }
+
+    public function purchase_invoice_delete(int $invId)
+    {
+        if ($err = $this->ensureStoreAccess()) {
+            return $err;
+        }
+
+        if ($invId <= 0 || ! $this->db->tableExists('purchase_invoice_stock')) {
+            return $this->response->setJSON([
+                'is_delete' => 0,
+                'show_text' => 'Invalid invoice',
+            ]);
+        }
+
+        $invoice = $this->db->table('purchase_invoice_stock')->where('id', $invId)->get()->getRow();
+        if (! $invoice) {
+            return $this->response->setJSON([
+                'is_delete' => 0,
+                'show_text' => 'Invoice not found',
+            ]);
+        }
+
+        if ($this->db->tableExists('purchase_invoice_item_stock')) {
+            $count = $this->db->table('purchase_invoice_item_stock')->where('purchase_id', $invId)->countAllResults();
+            if ($count > 0) {
+                return $this->response->setJSON([
+                    'is_delete' => 0,
+                    'show_text' => 'Invoice has items, empty the item list first',
+                ]);
+            }
+        }
+
+        if ((float) ($invoice->T_Net_Amount ?? 0) > 0) {
+            return $this->response->setJSON([
+                'is_delete' => 0,
+                'show_text' => 'Cannot delete invoice with amount',
+            ]);
+        }
+
+        $this->db->table('purchase_invoice_stock')->where('id', $invId)->delete();
+
+        return $this->response->setJSON([
+            'is_delete' => 1,
+            'show_text' => 'Deleted Successfully',
+        ]);
+    }
+
+    public function print_purchase(int $invId)
+    {
+        if ($err = $this->ensureStoreAccess()) {
+            return $err;
+        }
+
+        $invoice = $this->db->query(
+            'SELECT p.id, p.Invoice_no, p.date_of_invoice, DATE_FORMAT(p.date_of_invoice,\'%d/%m/%Y\') AS str_date_of_invoice, p.sid, IFNULL(s.name_supplier,\'-\') AS name_supplier, IFNULL(s.short_name,\'-\') AS short_name, IFNULL(s.gst_no,\'-\') AS gst_no
+             FROM purchase_invoice_stock p JOIN stock_supplier s ON p.sid=s.sid WHERE p.id = ?',
+            [$invId]
+        )->getRow();
+
+        if (! $invoice) {
+            return $this->response->setStatusCode(404)->setBody('Purchase invoice not found');
+        }
+
+        $items = $this->db->query('SELECT * FROM purchase_invoice_item_stock WHERE purchase_id = ? ORDER BY id ASC', [$invId])->getResult();
+
+        return view('storestock/purchase_print', [
+            'purchase_invoice' => $invoice,
+            'purchase_invoice_item' => $items,
+        ]);
+    }
+
+    // -------------------------------------------------------------------------
+    // Purchase Return
+    // -------------------------------------------------------------------------
+
+    public function Purchase_return()
+    {
+        if ($err = $this->ensureStoreAccess()) {
+            return $err;
+        }
+
+        return view('storestock/purchase_return');
+    }
+
+    public function PurchaseReturnNew()
+    {
+        if ($err = $this->ensureStoreAccess()) {
+            return $err;
+        }
+
+        $supplierData = [];
+        if ($this->db->tableExists('med_supplier')) {
+            $supplierData = $this->db->query('SELECT * FROM med_supplier ORDER BY name_supplier')->getResult();
+        } elseif ($this->db->tableExists('stock_supplier')) {
+            $supplierData = $this->db->query('SELECT * FROM stock_supplier ORDER BY name_supplier')->getResult();
+        }
+
+        return view('storestock/purchase_return_new', [
+            'supplier_data' => $supplierData,
+        ]);
+    }
+
+    public function PurchaseReturnInvoice()
+    {
+        if ($err = $this->ensureStoreAccess()) {
+            return $err;
+        }
+
+        $rows = [];
+        if ($this->db->tableExists('purchase_return_invoice')) {
+            $searchRaw = (string) ($this->request->getPost('txtsearch') ?? $this->request->getGet('txtsearch') ?? '');
+            $search = preg_replace('/[^A-Za-z0-9_ \-]/', '', trim($searchRaw));
+            $invNoCol = $this->purchaseReturnInvoiceNoColumn();
+
+            $builder = $this->db->table('purchase_return_invoice p')
+                ->select("p.id, p.{$invNoCol} AS p_r_invoice_no, p.date_of_invoice, DATE_FORMAT(p.date_of_invoice,'%d-%m-%Y') AS str_date_of_invoice, p.sid, IFNULL(s.name_supplier,'-') AS name_supplier, IFNULL(s.short_name,'-') AS short_name", false)
+                ->join('med_supplier s', 'p.sid=s.sid', 'left');
+
+            if ($search !== '') {
+                $builder->groupStart();
+                $builder->like("p.{$invNoCol}", $search);
+                if (ctype_digit($search)) {
+                    $builder->orWhere('p.id', (int) $search);
+                }
+                $builder->groupEnd();
+            }
+
+            $rows = $builder->orderBy('p.id', 'DESC')->limit(50)->get()->getResult();
+        }
+
+        return view('storestock/purchase_return_supplier_list', [
+            'purchase_return_invoice' => $rows,
+        ]);
+    }
+
+    public function PurchaseReturnInvoiceEdit(int $invId)
+    {
+        if ($err = $this->ensureStoreAccess()) {
+            return $err;
+        }
+
+        if ($invId <= 0 || ! $this->db->tableExists('purchase_return_invoice')) {
+            return $this->response->setStatusCode(404)->setBody('<div class="alert alert-warning m-3">Purchase return invoice not found.</div>');
+        }
+
+        $invNoCol = $this->purchaseReturnInvoiceNoColumn();
+        $invoice = $this->db->table('purchase_return_invoice p')
+            ->select("p.id, p.{$invNoCol} AS Invoice_no, p.date_of_invoice, DATE_FORMAT(p.date_of_invoice,'%d/%m/%Y') AS str_date_of_invoice, p.sid, p.status AS inv_status, IFNULL(s.name_supplier,'-') AS name_supplier, IFNULL(s.short_name,'-') AS short_name, IFNULL(s.gst_no,'-') AS gst_no", false)
+            ->join('med_supplier s', 'p.sid=s.sid', 'left')
+            ->where('p.id', $invId)
+            ->get()
+            ->getRow();
+
+        if (! $invoice) {
+            return $this->response->setStatusCode(404)->setBody('<div class="alert alert-warning m-3">Purchase return invoice not found.</div>');
+        }
+
+        $items = $this->fetchPurchaseReturnItems($invId);
+
+        return view('storestock/purchase_return_invoice_edit', [
+            'purchase_return_invoice' => $invoice,
+            'purchase_return_invoice_item' => $items,
+            'content' => $this->buildPurchaseReturnItemList($invId),
+        ]);
+    }
+
+    public function PurchaseReturn_invoice_item_list(int $invId)
+    {
+        if ($err = $this->ensureStoreAccess()) {
+            return $err;
+        }
+
+        $invoice = null;
+        if ($invId > 0 && $this->db->tableExists('purchase_return_invoice')) {
+            $invoice = $this->db->table('purchase_return_invoice')->where('id', $invId)->get()->getRow();
+        }
+
+        return view('storestock/purchase_return_invoice_item', [
+            'purchase_return_invoice_item' => $this->fetchPurchaseReturnItems($invId),
+            'purchase_return_invoice' => $invoice ? [$invoice] : [],
+        ]);
+    }
+
+    public function create_purchase_return()
+    {
+        if ($err = $this->ensureStoreAccess()) {
+            return $err;
+        }
+
+        if (! $this->request->isAJAX() || ! $this->db->tableExists('purchase_return_invoice')) {
+            return $this->response->setJSON([
+                'insertid' => 0,
+                'show_text' => 'Invalid request',
+            ]);
+        }
+
+        $sid = (int) ($this->request->getPost('input_supplier') ?? 0);
+        $invoiceDate = $this->normalizeUiDate((string) ($this->request->getPost('datepicker_invoice') ?? ''));
+
+        if ($sid <= 0 || $invoiceDate === '') {
+            return $this->response->setJSON([
+                'insertid' => 0,
+                'show_text' => 'Supplier and date are required',
+            ]);
+        }
+
+        $fields = $this->db->getFieldNames('purchase_return_invoice') ?? [];
+        $insert = [];
+        if (in_array('sid', $fields, true)) {
+            $insert['sid'] = $sid;
+        }
+        if (in_array('date_of_invoice', $fields, true)) {
+            $insert['date_of_invoice'] = $invoiceDate;
+        }
+        if (in_array('status', $fields, true)) {
+            $insert['status'] = 0;
+        }
+
+        $this->db->table('purchase_return_invoice')->insert($insert);
+        $insertId = (int) $this->db->insertID();
+
+        if ($insertId > 0 && in_array('p_r_invoice_no', $fields, true)) {
+            $invoiceNo = 'PR' . date('ym') . str_pad((string) ($insertId % 1000), 3, '0', STR_PAD_LEFT);
+            $this->db->table('purchase_return_invoice')->where('id', $insertId)->update(['p_r_invoice_no' => $invoiceNo]);
+        }
+
+        return $this->response->setJSON([
+            'insertid' => $insertId,
+            'show_text' => $insertId > 0 ? 'Added Successfully' : 'Unable to create purchase return invoice',
+        ]);
+    }
+
+    public function add_remove_item()
+    {
+        if ($err = $this->ensureStoreAccess()) {
+            return $err;
+        }
+
+        $invId = (int) ($this->request->getPost('inv_id') ?? 0);
+        $itemId = (int) ($this->request->getPost('itemid') ?? 0);
+        $qty = (float) ($this->request->getPost('rqty') ?? 0);
+        $batchNo = trim((string) ($this->request->getPost('rbatch_no') ?? ''));
+        $expiry = trim((string) ($this->request->getPost('rexpiry_dt') ?? ''));
+
+        if ($invId <= 0 || $itemId <= 0 || $qty <= 0 || ! $this->db->tableExists('purchase_return_invoice_item') || ! $this->db->tableExists('purchase_invoice_item')) {
+            return $this->response->setJSON(['update' => 0, 'msg_text' => 'Invalid return input', 'content' => '']);
+        }
+
+        $sourceItem = $this->db->table('purchase_invoice_item')->where('id', $itemId)->get()->getRow();
+        if (! $sourceItem) {
+            return $this->response->setJSON(['update' => 0, 'msg_text' => 'No item found', 'content' => '']);
+        }
+
+        $insert = [];
+        $fields = $this->db->getFieldNames('purchase_return_invoice_item') ?? [];
+        if (in_array('purchase_inv_id', $fields, true)) {
+            $insert['purchase_inv_id'] = $invId;
+        }
+        if (in_array('purchase_item_id', $fields, true)) {
+            $insert['purchase_item_id'] = $itemId;
+        }
+        if (in_array('item_code', $fields, true)) {
+            $insert['item_code'] = $sourceItem->item_code ?? 0;
+        }
+        if (in_array('Item_name', $fields, true)) {
+            $insert['Item_name'] = $sourceItem->Item_name ?? ($sourceItem->item_name ?? '');
+        }
+        if (in_array('batch_no_r', $fields, true)) {
+            $insert['batch_no_r'] = $batchNo;
+        }
+        if (in_array('expiry_date_r', $fields, true)) {
+            $insert['expiry_date_r'] = $expiry !== '' ? $expiry : null;
+        }
+        if (in_array('qty', $fields, true)) {
+            $insert['qty'] = $qty;
+        }
+
+        $this->db->table('purchase_return_invoice_item')->insert($insert);
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'msg_text' => 'Item Added',
+            'content' => $this->buildPurchaseReturnItemList($invId),
+        ]);
+    }
+
+    public function remove_item_invoice(int $itemId)
+    {
+        if ($err = $this->ensureStoreAccess()) {
+            return $err;
+        }
+
+        $row = null;
+        if ($itemId > 0 && $this->db->tableExists('purchase_return_invoice_item')) {
+            $row = $this->db->table('purchase_return_invoice_item')->where('id', $itemId)->get()->getRow();
+        }
+
+        if (! $row) {
+            return $this->response->setJSON(['update' => 0, 'msg_text' => 'No item found', 'content' => '']);
+        }
+
+        $invId = (int) ($row->purchase_inv_id ?? 0);
+        $this->db->table('purchase_return_invoice_item')->where('id', $itemId)->delete();
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'msg_text' => 'Item Removed',
+            'content' => $this->buildPurchaseReturnItemList($invId),
+        ]);
+    }
+
+    public function print_purchase_return(int $invId)
+    {
+        if ($err = $this->ensureStoreAccess()) {
+            return $err;
+        }
+
+        if ($invId <= 0 || ! $this->db->tableExists('purchase_return_invoice')) {
+            return $this->response->setStatusCode(404)->setBody('Purchase return invoice not found');
+        }
+
+        $invNoCol = $this->purchaseReturnInvoiceNoColumn();
+        $invoice = $this->db->table('purchase_return_invoice p')
+            ->select("p.id, p.{$invNoCol} AS Invoice_no, p.date_of_invoice, DATE_FORMAT(p.date_of_invoice,'%d/%m/%Y') AS str_date_of_invoice, p.sid, IFNULL(s.name_supplier,'-') AS name_supplier, IFNULL(s.short_name,'-') AS short_name, IFNULL(s.gst_no,'-') AS gst_no", false)
+            ->join('med_supplier s', 'p.sid=s.sid', 'left')
+            ->where('p.id', $invId)
+            ->get()
+            ->getRow();
+
+        if (! $invoice) {
+            return $this->response->setStatusCode(404)->setBody('Purchase return invoice not found');
+        }
+
+        $items = $this->fetchPurchaseReturnItems($invId);
+        $html = view('storestock/purchase_return_invoice_item_print', [
+            'purchase_return_invoice' => [$invoice],
+            'purchase_return_invoice_item' => $items,
+        ]);
+
+        $mpdf = new Mpdf([
+            'mode' => 'utf-8',
+            'format' => 'A4',
+            'tempDir' => WRITEPATH . 'cache/mpdf',
+        ]);
+        $mpdf->showWatermarkText = false;
+        $mpdf->WriteHTML($html);
+
+        $filename = 'Return_Invoice-' . $invId . '-' . date('YmdHis') . '.pdf';
+        return $this->response
+            ->setHeader('Content-Type', 'application/pdf')
+            ->setBody($mpdf->Output($filename, 'S'));
     }
 }

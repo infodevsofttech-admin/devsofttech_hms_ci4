@@ -170,11 +170,37 @@
     }
     function clearMsg(id) { document.getElementById(id).innerHTML = ''; }
 
+    function parseXhrJson(xhr) {
+        if (!xhr) return {};
+        if (xhr.responseJSON && typeof xhr.responseJSON === 'object') {
+            return xhr.responseJSON;
+        }
+        var raw = xhr.responseText || '';
+        if (raw === '') return {};
+        try {
+            return JSON.parse(raw);
+        } catch (e) {
+            return {};
+        }
+    }
+
+    function pickErrorMessage(res, fallbackText) {
+        var payload = (res && (res.data || res)) || {};
+        var profile = payload.profile || payload.ABHAProfile || {};
+        return (
+            (res && (res.error_text || res.message || res.error)) ||
+            payload.message ||
+            profile.message ||
+            profile.code ||
+            fallbackText
+        );
+    }
+
     function postAbdm(url, data, cb) {
         var csrf = csrfPair();
         data[csrf.name] = csrf.value;
         $.post(url, data, function (res) { updateCsrf(res); cb(res || {}); }, 'json')
-         .fail(function (xhr) { cb(xhr && xhr.responseJSON ? xhr.responseJSON : {}); });
+         .fail(function (xhr) { cb(parseXhrJson(xhr)); });
     }
 
     function disableBtn(id) { $('#' + id).prop('disabled', true); }
@@ -256,7 +282,7 @@
        AADHAAR OTP FLOW
     ================================================================ */
 
-    $('#btn_aadhaar_send_otp').on('click', function () {
+    $('#btn_aadhaar_send_otp').off('click.abhaOtp').on('click.abhaOtp', function () {
         clearMsg('aadhaar_step1_msg');
         var aadhaar = $('#abha_aadhaar_input').val().trim();
         if (!/^\d{12}$/.test(aadhaar)) {
@@ -284,19 +310,19 @@
                 $('#aadhaar-step2').show();
                 setTimeout(function () { $('#abha_aadhaar_otp').trigger('focus'); }, 100);
             } else {
-                var errMsg = res.error_text || res.message || res.error || 'Failed to send OTP. Please try again.';
+                var errMsg = pickErrorMessage(res, 'Failed to send OTP. Please try again.');
                 showMsg('aadhaar_step1_msg', 'danger', '<i class="bi bi-x-circle me-1"></i>' + $('<div>').text(errMsg).html());
             }
         });
     });
 
-    $('#btn_aadhaar_back').on('click', function () {
+    $('#btn_aadhaar_back').off('click.abhaOtp').on('click.abhaOtp', function () {
         $('#aadhaar-step2').hide();
         $('#aadhaar-step1').show();
         clearMsg('aadhaar_step2_msg');
     });
 
-    $('#btn_aadhaar_resend').on('click', function () {
+    $('#btn_aadhaar_resend').off('click.abhaOtp').on('click.abhaOtp', function () {
         var aadhaar = $('#abha_aadhaar_input').val().trim();
         if (!/^\d{12}$/.test(aadhaar)) {
             showMsg('aadhaar_step2_msg', 'warning', 'Go back and re-enter the Aadhaar number.');
@@ -320,13 +346,13 @@
                 showMsg('aadhaar_step2_msg', 'success', '<i class="bi bi-check-circle me-1"></i>OTP resent. Enter the new OTP above.');
                 setTimeout(function () { $('#abha_aadhaar_otp').trigger('focus'); }, 100);
             } else {
-                var errMsg = res.error_text || res.message || res.error || 'Resend failed.';
+                var errMsg = pickErrorMessage(res, 'Resend failed.');
                 showMsg('aadhaar_step2_msg', 'danger', '<i class="bi bi-x-circle me-1"></i>' + $('<div>').text(errMsg).html());
             }
         });
     });
 
-    $('#btn_aadhaar_verify_otp').on('click', function () {
+    $('#btn_aadhaar_verify_otp').off('click.abhaOtp').on('click.abhaOtp', function () {
         clearMsg('aadhaar_step2_msg');
         var otp    = $('#abha_aadhaar_otp').val().trim();
         var mobile = $('#abha_aadhaar_mobile').val().trim();
@@ -345,7 +371,7 @@
         disableBtn('btn_aadhaar_verify_otp');
         $('#btn_aadhaar_verify_otp').html('<span class="spinner-border spinner-border-sm me-1"></span>Verifying…');
 
-        postAbdm('<?= base_url('billing/patient/abha_aadhaar_verify_otp') ?>', { txnId: _aadhaarTxnId, otp: otp, mobile: mobile }, function (res) {
+        postAbdm('<?= base_url('billing/patient/abha_aadhaar_verify_otp') ?>', { txnId: _aadhaarTxnId, otp: otp, mobile: mobile, p_id: _patientId }, function (res) {
             enableBtn('btn_aadhaar_verify_otp');
             $('#btn_aadhaar_verify_otp').html('<i class="bi bi-check-circle me-1"></i>Verify OTP &amp; Link ABHA');
 
@@ -360,14 +386,14 @@
                 $('#btn_aadhaar_verify_otp').prop('disabled', true).text('Linked ✓');
                 setTimeout(function () { bootstrap.Modal.getInstance(document.getElementById('abhaOtpModal')).hide(); }, 1800);
             } else {
-                var errMsg = res.error_text || res.message || res.error || 'OTP verification failed.';
+                var errMsg = pickErrorMessage(res, 'OTP verification failed.');
                 showMsg('aadhaar_step2_msg', 'danger', '<i class="bi bi-x-circle me-1"></i>' + $('<div>').text(errMsg).html());
             }
         });
     });
 
     /* Allow Enter key in OTP field */
-    $('#abha_aadhaar_otp').on('keydown', function (e) {
+    $('#abha_aadhaar_otp').off('keydown.abhaOtp').on('keydown.abhaOtp', function (e) {
         if (e.key === 'Enter') $('#btn_aadhaar_verify_otp').trigger('click');
     });
 
@@ -375,7 +401,7 @@
        MOBILE OTP FLOW
     ================================================================ */
 
-    $('#btn_mobile_send_otp').on('click', function () {
+    $('#btn_mobile_send_otp').off('click.abhaOtp').on('click.abhaOtp', function () {
         clearMsg('mobile_step1_msg');
         var mobile = $('#abha_mobile_input').val().trim();
         if (!/^\d{10}$/.test(mobile)) {
@@ -397,19 +423,19 @@
                 $('#mobile-step2').show();
                 setTimeout(function () { $('#abha_mobile_otp').trigger('focus'); }, 100);
             } else {
-                var errMsg = res.error_text || res.message || res.error || 'Failed to send OTP.';
+                var errMsg = pickErrorMessage(res, 'Failed to send OTP.');
                 showMsg('mobile_step1_msg', 'danger', '<i class="bi bi-x-circle me-1"></i>' + $('<div>').text(errMsg).html());
             }
         });
     });
 
-    $('#btn_mobile_back').on('click', function () {
+    $('#btn_mobile_back').off('click.abhaOtp').on('click.abhaOtp', function () {
         $('#mobile-step2').hide();
         $('#mobile-step1').show();
         clearMsg('mobile_step2_msg');
     });
 
-    $('#btn_mobile_verify_otp').on('click', function () {
+    $('#btn_mobile_verify_otp').off('click.abhaOtp').on('click.abhaOtp', function () {
         clearMsg('mobile_step2_msg');
         var otp = $('#abha_mobile_otp').val().trim();
         if (!/^\d{6}$/.test(otp)) {
@@ -423,7 +449,7 @@
         disableBtn('btn_mobile_verify_otp');
         $('#btn_mobile_verify_otp').html('<span class="spinner-border spinner-border-sm me-1"></span>Verifying…');
 
-        postAbdm('<?= base_url('billing/patient/abha_mobile_verify_otp') ?>', { txnId: _mobileTxnId, otp: otp }, function (res) {
+        postAbdm('<?= base_url('billing/patient/abha_mobile_verify_otp') ?>', { txnId: _mobileTxnId, otp: otp, p_id: _patientId }, function (res) {
             enableBtn('btn_mobile_verify_otp');
             $('#btn_mobile_verify_otp').html('<i class="bi bi-check-circle me-1"></i>Verify OTP &amp; Link ABHA');
 
@@ -438,13 +464,13 @@
                 $('#btn_mobile_verify_otp').prop('disabled', true).text('Linked ✓');
                 setTimeout(function () { bootstrap.Modal.getInstance(document.getElementById('abhaOtpModal')).hide(); }, 1800);
             } else {
-                var errMsg = res.error_text || res.message || res.error || 'OTP verification failed.';
+                var errMsg = pickErrorMessage(res, 'OTP verification failed.');
                 showMsg('mobile_step2_msg', 'danger', '<i class="bi bi-x-circle me-1"></i>' + $('<div>').text(errMsg).html());
             }
         });
     });
 
-    $('#abha_mobile_otp').on('keydown', function (e) {
+    $('#abha_mobile_otp').off('keydown.abhaOtp').on('keydown.abhaOtp', function (e) {
         if (e.key === 'Enter') $('#btn_mobile_verify_otp').trigger('click');
     });
 
