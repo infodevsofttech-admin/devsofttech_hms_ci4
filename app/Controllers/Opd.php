@@ -2171,6 +2171,7 @@ class Opd extends BaseController
             $tokenVars = $this->buildOpdPdfTokenVars($data);
             $html = $this->applyOpdPdfTemplateTokens($customHtml, $tokenVars);
             $html = $this->sanitizeOpdNamedHeaderFooterReferences($html);
+            $html = $this->applyOpdLongContentPaginationGuard($html);
 
             if ($debugHtml) {
                 return $this->response
@@ -2376,6 +2377,8 @@ class Opd extends BaseController
             $rawHeaderHtml = '';
             $rawFooterHtml = '';
         }
+
+        $html = $this->applyOpdLongContentPaginationGuard($html);
 
         if ($rawHeaderHtml !== '') {
             $renderedHeaderHtml = $this->applyOpdPdfTemplateTokens($rawHeaderHtml, $tokenVars);
@@ -3796,26 +3799,42 @@ class Opd extends BaseController
             'duration' => 'Duration',
             'date' => 'Date',
         ]);
+        $complaintTerms = [];
+        foreach ($complaintItems as $item) {
+            $term = trim((string) ($item['term'] ?? ''));
+            if ($term !== '') {
+                $complaintTerms[] = $term;
+            }
+        }
+        $tokens['complaint_list_compact'] = implode(', ', array_values(array_unique($complaintTerms)));
         $tokens['diagnosis_list'] = $renderClinicalList($diagnosisItems, [
             'duration' => 'Duration',
             'date' => 'Date',
         ]);
+        $diagnosisTerms = [];
+        foreach ($diagnosisItems as $item) {
+            $term = trim((string) ($item['term'] ?? ''));
+            if ($term !== '') {
+                $diagnosisTerms[] = $term;
+            }
+        }
+        $tokens['diagnosis_list_compact'] = implode(', ', array_values(array_unique($diagnosisTerms)));
         $tokens['provisional_diagnosis_list'] = $renderClinicalList($provisionalDiagnosisItems);
 
         $vitalCoreRaw = (string) ($tokens['vital_content_raw'] ?? '');
         $tokens['vital_content'] = $vitalCoreRaw;
         $tokens['vital_content_block'] = $formatBlock('Vitals', $vitalCoreRaw, false);
-        $complaintBlockValue = (string) ($tokens['complaint_list'] ?? '');
+        $complaintBlockValue = trim((string) ($tokens['complaint_list_compact'] ?? ''));
         if ($complaintBlockValue === '') {
-            $complaintBlockValue = nl2br($escape((string) ($tokens['Complaint_raw'] ?? '')));
+            $complaintBlockValue = trim((string) ($tokens['Complaint_raw'] ?? ''));
         }
-        $tokens['Complaint'] = $formatBlock('Complaint', $complaintBlockValue, true);
+        $tokens['Complaint'] = $formatBlock('Complaint', $escape($complaintBlockValue), false);
         $tokens['complaint'] = $tokens['Complaint'];
-        $diagnosisBlockValue = (string) ($tokens['diagnosis_list'] ?? '');
+        $diagnosisBlockValue = trim((string) ($tokens['diagnosis_list_compact'] ?? ''));
         if ($diagnosisBlockValue === '') {
-            $diagnosisBlockValue = nl2br($escape((string) ($tokens['diagnosis_raw'] ?? '')));
+            $diagnosisBlockValue = trim((string) ($tokens['diagnosis_raw'] ?? ''));
         }
-        $tokens['diagnosis'] = $formatBlock('Diagnosis', $diagnosisBlockValue, true);
+        $tokens['diagnosis'] = $formatBlock('Diagnosis', $escape($diagnosisBlockValue), false);
         $tokens['Diagnosis'] = $tokens['diagnosis'];
         $provisionalBlockValue = (string) ($tokens['provisional_diagnosis_list'] ?? '');
         if ($provisionalBlockValue === '') {
@@ -3823,7 +3842,19 @@ class Opd extends BaseController
         }
         $tokens['Provisional_diagnosis'] = $formatBlock('Provisional Diagnosis', $provisionalBlockValue, true);
         $tokens['provisional_diagnosis'] = $tokens['Provisional_diagnosis'];
-        $tokens['Finding_Examinations'] = $formatBlock('Finding / Examination', (string) ($tokens['Finding_Examinations_raw'] ?? ''));
+        $findingItems = $splitClinicalText((string) ($tokens['Finding_Examinations_raw'] ?? ''));
+        $findingTerms = [];
+        foreach ($findingItems as $item) {
+            $term = trim((string) ($item['term'] ?? ''));
+            if ($term !== '') {
+                $findingTerms[] = $term;
+            }
+        }
+        $findingCompact = implode(', ', array_values(array_unique($findingTerms)));
+        if ($findingCompact === '') {
+            $findingCompact = trim((string) ($tokens['Finding_Examinations_raw'] ?? ''));
+        }
+        $tokens['Finding_Examinations'] = $formatBlock('Finding / Examination', $escape($findingCompact), false);
         $tokens['finding_examinations'] = $tokens['Finding_Examinations'];
         $tokens['investigation'] = $formatBlock('Investigation Advised', (string) ($tokens['investigation_raw'] ?? ''));
         $tokens['Prescriber_Remarks'] = $formatBlock('Remarks', (string) ($tokens['Prescriber_Remarks_raw'] ?? ''));
@@ -4266,6 +4297,45 @@ class Opd extends BaseController
         }
 
         return $html;
+    }
+
+    private function applyOpdLongContentPaginationGuard(string $html): string
+    {
+        if ($html === '') {
+            return '';
+        }
+
+        $usesRxPlace = preg_match('/\.rxplace\b|class\s*=\s*["\'][^"\']*\brxplace\b/i', $html) === 1;
+        if (! $usesRxPlace) {
+            return $html;
+        }
+
+        $plainText = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $textLength = strlen((string) $plainText);
+        $lineBreakCount = substr_count(strtolower($html), '<br');
+        $rowCount = substr_count(strtolower($html), '<tr');
+        $looksLong = $textLength > 1800 || $lineBreakCount > 45 || $rowCount > 18;
+        if (! $looksLong) {
+            return $html;
+        }
+
+        $guardCss = '<style>'
+            . '.RxPlace, .rxplace {'
+            . 'position: static !important;'
+            . 'top: auto !important;'
+            . 'left: auto !important;'
+            . 'right: auto !important;'
+            . 'bottom: auto !important;'
+            . 'width: auto !important;'
+            . 'height: auto !important;'
+            . 'max-height: none !important;'
+            . 'overflow: visible !important;'
+            . '}'
+            . 'table{page-break-inside:auto;}'
+            . 'tr,td,th{page-break-inside:avoid;page-break-after:auto;}'
+            . '</style>';
+
+        return $guardCss . "\n" . $html;
     }
 
     /**
