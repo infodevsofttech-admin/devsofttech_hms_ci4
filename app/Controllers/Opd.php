@@ -3649,7 +3649,7 @@ class Opd extends BaseController
 
             // Heading: bold + uppercase, same font-size as surrounding content so
             // heading and value stay visually matched (no mismatch from hardcoded px).
-            $headingHtml = '<span style="font-weight:700;font-size:inherit;letter-spacing:0.04em;text-transform:uppercase;color:#1a1a1a;">' . $label . ' :</span>';
+            $headingHtml = '<strong style="font-weight:700;font-size:inherit;letter-spacing:0.04em;text-transform:uppercase;color:#1a1a1a;">' . $label . ' :</strong>';
 
             if ($lineBreakAfterLabel) {
                 // List-style sections (Complaint, Diagnosis …):
