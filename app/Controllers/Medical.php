@@ -1722,6 +1722,8 @@ class Medical extends BaseController
 
         $this->db->table('inv_med_item')->insert($insert);
 
+        $this->syncPurchaseItemSaleUnits((int) ($stock->stock_id ?? 0));
+
         $this->recalculateInvoiceTotals($invoiceId);
 
         return redirect()->to(base_url('Medical/invoice_edit/' . $invoiceId . '?msg=' . urlencode('Item added')));
@@ -1762,6 +1764,10 @@ class Medical extends BaseController
             ->where('id', $itemId)
             ->where('inv_med_id', $invoiceId)
             ->delete();
+
+        if ($itemRow) {
+            $this->syncPurchaseItemSaleUnits((int) ($itemRow['store_stock_id'] ?? 0));
+        }
 
         if ($itemRow) {
             $this->archiveDeletedInvoiceItem($itemRow);
@@ -1881,6 +1887,8 @@ class Medical extends BaseController
         }
 
         $this->db->table('inv_med_item')->where('id', $itemId)->update($update);
+
+        $this->syncPurchaseItemSaleUnits((int) ($item->store_stock_id ?? 0));
 
         $this->recalculateInvoiceTotals($invoiceId);
 
@@ -2038,9 +2046,67 @@ class Medical extends BaseController
             return $respond(0, 'Not Done');
         }
 
+        $this->syncPurchaseItemSaleUnits((int) ($source['store_stock_id'] ?? 0));
+
         $this->recalculateInvoiceTotals($invoiceId);
 
         return $respond($updatedId, $msgText);
+    }
+
+    private function syncPurchaseItemSaleUnits(int $purchaseItemId): void
+    {
+        if ($purchaseItemId <= 0 || ! $this->db->tableExists('purchase_invoice_item')) {
+            return;
+        }
+
+        // Try legacy procedure first; then verify and enforce if mismatch remains.
+        try {
+            $medicalModel = new MedicalModel();
+            $medicalModel->updatePurchaseStockById($purchaseItemId);
+        } catch (\Throwable $e) {
+            log_message('error', 'Stock sync via procedure failed: ' . $e->getMessage());
+        }
+
+        if (! $this->db->tableExists('inv_med_item')) {
+            return;
+        }
+
+        $purchaseFields = $this->db->getFieldNames('purchase_invoice_item') ?? [];
+        if (! in_array('total_sale_unit', $purchaseFields, true)) {
+            return;
+        }
+
+        $itemFields = $this->db->getFieldNames('inv_med_item') ?? [];
+        $sumSql = 'SUM(CASE WHEN IFNULL(sale_return,0)=1 OR IFNULL(amount,0)<0 THEN IFNULL(qty,0)*-1 ELSE IFNULL(qty,0) END) AS sold_qty';
+
+        if (! in_array('sale_return', $itemFields, true)) {
+            $sumSql = 'SUM(CASE WHEN IFNULL(amount,0)<0 THEN IFNULL(qty,0)*-1 ELSE IFNULL(qty,0) END) AS sold_qty';
+        }
+
+        $soldRow = $this->db->table('inv_med_item')
+            ->select($sumSql, false)
+            ->where('store_stock_id', $purchaseItemId)
+            ->get()
+            ->getRow();
+        $soldQty = max(0.0, (float) ($soldRow->sold_qty ?? 0));
+
+        $stockRow = $this->db->table('purchase_invoice_item')
+            ->select('id,total_sale_unit')
+            ->where('id', $purchaseItemId)
+            ->get()
+            ->getRow();
+        if (! $stockRow) {
+            return;
+        }
+
+        $currentSaleQty = (float) ($stockRow->total_sale_unit ?? 0);
+        if (abs($currentSaleQty - $soldQty) < 0.00001) {
+            return;
+        }
+
+        $this->db->table('purchase_invoice_item')
+            ->where('id', $purchaseItemId)
+            ->update(['total_sale_unit' => $soldQty]);
     }
 
     public function go_final()
@@ -5386,10 +5452,11 @@ class Medical extends BaseController
         // ── 1. Resolve gateway credentials ──────────────────────────────────
         $gwUrl   = '';
         $gwToken = '';
+        $gwHfrId = '';
         if ($this->db->tableExists('hospital_setting')) {
             $hsRows = $this->db->table('hospital_setting')
                 ->select('s_name, s_value')
-                ->whereIn('s_name', ['EATRIA_BRIDGE_URL', 'EATRIA_BRIDGE_TOKEN'])
+                ->whereIn('s_name', ['EATRIA_BRIDGE_URL', 'EATRIA_BRIDGE_TOKEN', 'ABDM_HFR_ID', 'H_HFR_ID'])
                 ->get()
                 ->getResultArray();
             foreach ($hsRows as $hsRow) {
@@ -5398,6 +5465,12 @@ class Medical extends BaseController
                 }
                 if ((string) ($hsRow['s_name'] ?? '') === 'EATRIA_BRIDGE_TOKEN') {
                     $gwToken = trim((string) ($hsRow['s_value'] ?? ''));
+                }
+                if ((string) ($hsRow['s_name'] ?? '') === 'ABDM_HFR_ID') {
+                    $gwHfrId = trim((string) ($hsRow['s_value'] ?? ''));
+                }
+                if ((string) ($hsRow['s_name'] ?? '') === 'H_HFR_ID' && $gwHfrId === '') {
+                    $gwHfrId = trim((string) ($hsRow['s_value'] ?? ''));
                 }
             }
         }
@@ -5420,9 +5493,9 @@ class Medical extends BaseController
         }
 
         // ── 2. Fetch master lists from gateway (all pages) ───────────────────
-        $gatewayCompanyItems     = $this->fetchAllGatewayDrugMasters($gwUrl, $gwToken, 'company');
-        $gatewayFormulationItems = $this->fetchAllGatewayDrugMasters($gwUrl, $gwToken, 'formulation');
-        $gatewayShortFormItems   = $this->fetchAllGatewayDrugMasters($gwUrl, $gwToken, 'short_formulation');
+        $gatewayCompanyItems     = $this->fetchAllGatewayDrugMasters($gwUrl, $gwToken, $gwHfrId, 'company');
+        $gatewayFormulationItems = $this->fetchAllGatewayDrugMasters($gwUrl, $gwToken, $gwHfrId, 'formulation');
+        $gatewayShortFormItems   = $this->fetchAllGatewayDrugMasters($gwUrl, $gwToken, $gwHfrId, 'short_formulation');
 
         if ($gatewayCompanyItems === null) {
             return $this->response->setJSON([
@@ -6527,15 +6600,18 @@ class Medical extends BaseController
      *
      * @return array<int,mixed>|null
      */
-    private function fetchAllGatewayDrugMasters(string $gwUrl, string $token, string $master): ?array
+    private function fetchAllGatewayDrugMasters(string $gwUrl, string $token, string $hfrId, string $master): ?array
     {
         $pageSize = 500;
         $offset   = 0;
         $all      = [];
 
         do {
-            $url = rtrim($gwUrl, '/') . '/v3/drugs/masters?master=' . urlencode($master)
-                 . '&limit=' . $pageSize . '&offset=' . $offset;
+              $url = rtrim($gwUrl, '/') . '/v3/drugs/masters?master=' . urlencode($master)
+                  . '&limit=' . $pageSize . '&offset=' . $offset;
+              if ($hfrId !== '') {
+                 $url .= '&hfr_id=' . urlencode($hfrId);
+              }
 
             $ch = curl_init();
             curl_setopt_array($ch, [
@@ -6587,7 +6663,29 @@ class Medical extends BaseController
      */
     private function callGatewayDrugMasters(string $gwUrl, string $token, string $master, int $limit): ?array
     {
+        $hfrId = '';
+        if ($this->db->tableExists('hospital_setting')) {
+            $rows = $this->db->table('hospital_setting')
+                ->select('s_name, s_value')
+                ->whereIn('s_name', ['ABDM_HFR_ID', 'H_HFR_ID'])
+                ->get()
+                ->getResultArray();
+            foreach ($rows as $row) {
+                $sName = (string) ($row['s_name'] ?? '');
+                $sValue = trim((string) ($row['s_value'] ?? ''));
+                if ($sName === 'ABDM_HFR_ID') {
+                    $hfrId = $sValue;
+                }
+                if ($sName === 'H_HFR_ID' && $hfrId === '') {
+                    $hfrId = $sValue;
+                }
+            }
+        }
+
         $url = rtrim($gwUrl, '/') . '/v3/drugs/masters?master=' . urlencode($master) . '&limit=' . (int) $limit;
+        if ($hfrId !== '') {
+            $url .= '&hfr_id=' . urlencode($hfrId);
+        }
 
         $ch = curl_init();
         curl_setopt_array($ch, [
@@ -7818,6 +7916,8 @@ class Medical extends BaseController
             'old_purchase_id' => $oldPurchaseId,
         ]);
 
+        $this->syncPurchaseItemSaleUnits($ssNo);
+
         $this->recomputePurchaseInvoiceTotals($oldPurchaseId);
         $this->recomputePurchaseInvoiceTotals($purchaseId);
 
@@ -7850,6 +7950,8 @@ class Medical extends BaseController
             'purchase_id' => $oldPurchaseId,
             'old_purchase_id' => 0,
         ]);
+
+        $this->syncPurchaseItemSaleUnits($ssNo);
 
         $this->recomputePurchaseInvoiceTotals($currentPurchaseId);
         $this->recomputePurchaseInvoiceTotals($oldPurchaseId);
@@ -8020,6 +8122,7 @@ class Medical extends BaseController
         }
 
         if ($isUpdateStock > 0) {
+            $this->syncPurchaseItemSaleUnits((int) $isUpdateStock);
             $this->recomputePurchaseInvoiceTotals($invId);
         }
 
@@ -8664,27 +8767,25 @@ class Medical extends BaseController
         }
 
         $fields = $this->db->getFieldNames('purchase_invoice_item') ?? [];
-        if (! in_array('total_return_unit', $fields, true)) {
-            return;
+        if (in_array('total_return_unit', $fields, true)) {
+            $row = $this->db->table('purchase_invoice_item')
+                ->select('id,total_return_unit')
+                ->where('id', $purchaseItemId)
+                ->get()
+                ->getRow();
+            if ($row) {
+                $nextQty = (float) ($row->total_return_unit ?? 0) + $qtyDelta;
+                if ($nextQty < 0) {
+                    $nextQty = 0;
+                }
+
+                $this->db->table('purchase_invoice_item')
+                    ->where('id', $purchaseItemId)
+                    ->update(['total_return_unit' => $nextQty]);
+            }
         }
 
-        $row = $this->db->table('purchase_invoice_item')
-            ->select('id,total_return_unit')
-            ->where('id', $purchaseItemId)
-            ->get()
-            ->getRow();
-        if (! $row) {
-            return;
-        }
-
-        $nextQty = (float) ($row->total_return_unit ?? 0) + $qtyDelta;
-        if ($nextQty < 0) {
-            $nextQty = 0;
-        }
-
-        $this->db->table('purchase_invoice_item')
-            ->where('id', $purchaseItemId)
-            ->update(['total_return_unit' => $nextQty]);
+        $this->syncPurchaseItemSaleUnits($purchaseItemId);
     }
 
     public function main_store_placeholder($slug = '')
