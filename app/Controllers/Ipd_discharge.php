@@ -695,6 +695,7 @@ class Ipd_discharge extends BaseController
             'PAIN_MEASUREMENT_SCALE' => $painMeasurement,
             'DRUG_ALLERGY_ADR' => $drugAllergyAdr,
             'CO_MORBIDITIES' => $coMorbidities,
+            'CLINICAL_HISTORY_RISK_PROFILE' => $this->buildClinicalHistoryRiskProfileSection($coMorbidities, $drugAllergyAdr, $personalHistory),
             'SIGNATURE_BLOCK' => '',
             // Legacy style aliases to ease migration from CI3-style template variables.
             'FinalDiagnosis' => $finalDiagnosis,
@@ -765,6 +766,103 @@ class Ipd_discharge extends BaseController
         }
 
         return trim(substr($html, $sliceStart, $sliceEnd - $sliceStart));
+    }
+
+    private function sectionHtmlToItems(string $html, array $labelHints = []): array
+    {
+        $value = trim($html);
+        if ($value === '') {
+            return [];
+        }
+
+        $value = (string) preg_replace('/<\s*br\s*\/?>/i', "\n", $value);
+        $value = (string) preg_replace('/<\s*\/\s*(?:p|div|li|tr|h[1-6])\s*>/i', "\n", $value);
+        $text = html_entity_decode(strip_tags($value), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = (string) preg_replace('/\r\n?|\t/u', "\n", $text);
+        $text = trim($text);
+
+        if ($text === '') {
+            return [];
+        }
+
+        $parts = preg_split('/[\n,;\|]+/u', $text) ?: [];
+        $items = [];
+        foreach ($parts as $part) {
+            $item = trim((string) $part, " \t\n\r\0\x0B:-");
+            if ($item === '') {
+                continue;
+            }
+
+            foreach ($labelHints as $labelHint) {
+                $pattern = '/^' . preg_quote((string) $labelHint, '/') . '\s*:?\s*/iu';
+                $item = (string) preg_replace($pattern, '', $item);
+            }
+
+            $item = trim($item, " \t\n\r\0\x0B:-");
+            if ($item === '') {
+                continue;
+            }
+
+            $key = $this->normalizeHistoryItemKey($item);
+            if ($key === '') {
+                continue;
+            }
+
+            $items[$key] = $item;
+        }
+
+        return array_values($items);
+    }
+
+    private function normalizeHistoryItemKey(string $item): string
+    {
+        $value = strtolower(trim($item));
+        if ($value === '') {
+            return '';
+        }
+
+        $value = (string) preg_replace('/[^a-z0-9]+/i', '', $value);
+
+        return $value;
+    }
+
+    private function buildClinicalHistoryRiskProfileSection(string $coMorbiditiesHtml, string $drugAllergyHtml, string $personalHistoryHtml): string
+    {
+        $coMorbidityItems = $this->sectionHtmlToItems($coMorbiditiesHtml, ['Co-Morbidities']);
+        $allergyItems = $this->sectionHtmlToItems($drugAllergyHtml, ['Drug Allergy / ADR', 'Drug Allergy', 'ADR History']);
+        $personalItems = $this->sectionHtmlToItems($personalHistoryHtml, ['Personal History']);
+
+        $occupiedKeys = [];
+        foreach (array_merge($coMorbidityItems, $allergyItems) as $item) {
+            $occupiedKeys[$this->normalizeHistoryItemKey($item)] = true;
+        }
+
+        $filteredPersonal = [];
+        foreach ($personalItems as $item) {
+            $key = $this->normalizeHistoryItemKey($item);
+            if ($key === '' || isset($occupiedKeys[$key])) {
+                continue;
+            }
+
+            $filteredPersonal[] = $item;
+        }
+
+        if (empty($coMorbidityItems) && empty($allergyItems) && empty($filteredPersonal)) {
+            return '';
+        }
+
+        $html = '<h4 class="discharge-section-heading">Clinical History and Risk Profile</h4>';
+        if (! empty($coMorbidityItems)) {
+            $html .= '<div><strong>Comorbidities:</strong> ' . esc(implode(', ', $coMorbidityItems)) . '</div>';
+        }
+        if (! empty($allergyItems)) {
+            $html .= '<div><strong>Drug Allergy and ADR History:</strong> ' . esc(implode(', ', $allergyItems)) . '</div>';
+        }
+        if (! empty($filteredPersonal)) {
+            $html .= '<div><strong>Lifestyle and Personal History:</strong> ' . esc(implode(', ', $filteredPersonal)) . '</div>';
+        }
+
+        return $html;
     }
 
     private function normalizeLegacyDischargeTemplate(string $html): string
@@ -891,6 +989,29 @@ class Ipd_discharge extends BaseController
         $templateHtml = $this->normalizeDischargeTemplatePlaceholders($templateHtml);
 
         $tokenVars = $this->buildDischargeTemplateTokenVars($panelData, $content);
+
+        $historyPanelHtml = trim((string) ($tokenVars['CLINICAL_HISTORY_RISK_PROFILE'] ?? ''));
+        if ($historyPanelHtml !== '') {
+            $historyTokens = ['PERSONAL_HISTORY', 'CO_MORBIDITIES', 'DRUG_ALLERGY_ADR'];
+            $firstToken = null;
+            $firstPos = null;
+            foreach ($historyTokens as $token) {
+                if (preg_match('/\{\{?\s*' . preg_quote($token, '/') . '\s*\}?\}/i', $templateHtml, $m, PREG_OFFSET_CAPTURE) === 1) {
+                    $pos = (int) ($m[0][1] ?? 0);
+                    if ($firstPos === null || $pos < $firstPos) {
+                        $firstPos = $pos;
+                        $firstToken = $token;
+                    }
+                }
+            }
+
+            if ($firstToken !== null) {
+                foreach ($historyTokens as $token) {
+                    $tokenVars[$token] = '';
+                }
+                $tokenVars[$firstToken] = $historyPanelHtml;
+            }
+        }
 
         $templateHasMainSummaryToken = preg_match('/\{\{\s*DISCHARGE_SUMMARY\s*\}\}|\{\s*DISCHARGE_SUMMARY\s*\}/i', $templateHtml) === 1;
         if ($templateHasMainSummaryToken) {
@@ -2186,11 +2307,6 @@ class Ipd_discharge extends BaseController
                 'is_alcohol' => 'Alcohol',
                 'is_drug_abuse' => 'Drug abuse',
                 'is_tobacoo' => 'Tobacco',
-                'is_hypertesion' => 'Hypertension',
-                'is_niddm' => 'Type 2 diabetes mellitus (DM)',
-                'is_hbsag' => 'HBsAg',
-                'is_hcv' => 'HCV',
-                'is_hiv_I_II' => 'HIV I & II',
                 'Others' => 'Others',
             ];
 
