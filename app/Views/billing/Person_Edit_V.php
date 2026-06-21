@@ -11,8 +11,17 @@
 <?php
     $user = auth()->user();
     $patientAbhaId = (string) ($data[0]->abha_id ?? $data[0]->abha_no ?? $data[0]->abha ?? $data[0]->abha_address ?? '');
+    $abhaAddress = trim((string) ($data[0]->abha_address ?? ''));
+    $abhaVerifiedStatus = trim((string) ($data[0]->abha_verified_status ?? ''));
+    $abhaVerificationType = trim((string) ($data[0]->abha_verification_type ?? ''));
+    $abhaKycVerified = (int) ($data[0]->abha_kyc_verified ?? 0) === 1;
+    $abhaMobileVerified = (int) ($data[0]->abha_mobile_verified ?? 0) === 1;
+    $abhaLinkedAt = trim((string) ($data[0]->abdm_linked_at ?? ''));
+    $abhaPhotoAvailable = trim((string) ($data[0]->abha_profile_photo_base64 ?? '')) !== '';
+    $abhaVerifiedLocked = $patientAbhaId !== '' && strtoupper($abhaVerifiedStatus) === 'VERIFIED';
     $canEditNameAnytime = is_object($user) && method_exists($user, 'can') ? $user->can('billing.patient.edit-name-anytime') : false;
     $isAdmin = is_object($user) && method_exists($user, 'inGroup') ? $user->inGroup('admin') : false;
+    $abhaLockNotice = $abhaVerifiedLocked ? 'ABHA verified: name, gender, ABHA ID, and date of birth are locked.' : '';
     
     // Allow edit if within 24 hours OR user has edit-name-anytime permission OR is admin
     if ($data[0]->p_edit == 1 || $canEditNameAnytime || $isAdmin) {
@@ -60,7 +69,7 @@
                             <div class="form-group">
                                 <label>Full Name</label>
                                 <input class="form-control input-sm" name="input_name" placeholder="Full Name"
-                                    value="<?=$data[0]->p_fname ?>" type="text" autocomplete="off" <?=$readonlyName?>>
+                                    value="<?=$data[0]->p_fname ?>" type="text" autocomplete="off" <?=($readonlyName !== '' || $abhaVerifiedLocked) ? 'readonly' : ''?>>
                             </div>
                         </div>
                         <div class="col-md-3">
@@ -69,14 +78,17 @@
                                 <div class="radio">
                                     <label>
                                         <input name="optionsRadios_gender" id="options_gender1" value="1"
-                                            <?=radio_checked("1",$data[0]->gender)?> type="radio">
+                                            <?=radio_checked("1",$data[0]->gender)?> type="radio" <?= $abhaVerifiedLocked ? 'disabled' : '' ?>>
                                         Male
                                     </label>
                                     <label>
                                         <input name="optionsRadios_gender" id="options_gender2" value="2"
-                                            <?=radio_checked("2",$data[0]->gender)?> type="radio">
+                                            <?=radio_checked("2",$data[0]->gender)?> type="radio" <?= $abhaVerifiedLocked ? 'disabled' : '' ?>>
                                         Female
                                     </label>
+                                    <?php if ($abhaVerifiedLocked) : ?>
+                                        <input type="hidden" name="optionsRadios_gender" value="<?= esc((string) ($data[0]->gender ?? '')) ?>">
+                                    <?php endif; ?>
                                 </div>
                             </div>
                         </div>
@@ -93,7 +105,7 @@
                                 <label>ABHA ID</label>
                                 <input class="form-control input-sm" name="input_abha_id" id="input_abha_id"
                                     value="<?= esc($patientAbhaId) ?>" placeholder="14-digit ABHA ID" type="text"
-                                    autocomplete="off" maxlength="14">
+                                    autocomplete="off" maxlength="14" <?= $abhaVerifiedLocked ? 'readonly' : '' ?>>
                             </div>
                         </div>
                         <div class="col-md-2">
@@ -102,6 +114,26 @@
                                 <input class="form-control input-sm" name="input_mphone1" placeholder="Phone Number"
                                     value="<?=$data[0]->mphone1 ?>" type="text" autocomplete="off"
                                     data-inputmask='"mask": "9999999999"' data-mask>
+                            </div>
+                        </div>
+                        <div class="col-md-12">
+                            <div class="alert alert-light border mt-2 mb-1">
+                                <div class="row">
+                                    <div class="col-md-3"><strong>ABHA Address:</strong> <?= $abhaAddress !== '' ? esc($abhaAddress) : '-' ?></div>
+                                    <div class="col-md-3"><strong>Status:</strong> <?= $abhaVerifiedStatus !== '' ? esc($abhaVerifiedStatus) : 'UNAVAILABLE' ?></div>
+                                    <div class="col-md-3"><strong>Type:</strong> <?= $abhaVerificationType !== '' ? esc($abhaVerificationType) : '-' ?></div>
+                                    <div class="col-md-3"><strong>Linked At:</strong> <?= $abhaLinkedAt !== '' ? esc($abhaLinkedAt) : '-' ?></div>
+                                </div>
+                                <div class="row" style="margin-top: 6px;">
+                                    <div class="col-md-3"><strong>KYC Verified:</strong> <?= $abhaKycVerified ? 'YES' : 'NO' ?></div>
+                                    <div class="col-md-3"><strong>Mobile Verified:</strong> <?= $abhaMobileVerified ? 'YES' : 'NO' ?></div>
+                                    <div class="col-md-6"><strong>ABHA Photo:</strong> <?= $abhaPhotoAvailable ? 'AVAILABLE (BASE64 STORED)' : 'NOT AVAILABLE' ?></div>
+                                </div>
+                                <?php if ($abhaLockNotice !== '') : ?>
+                                <div class="row" style="margin-top: 6px;">
+                                    <div class="col-md-12"><span class="badge bg-success-subtle text-success border border-success-subtle"><?= esc($abhaLockNotice) ?></span></div>
+                                </div>
+                                <?php endif; ?>
                             </div>
                         </div>
                     </div>
@@ -127,8 +159,11 @@
 						?>
                         <div class="col-md-3">
                             <div class="form-group">
-                                <label><input id="chk_age" name="chk_age" type="checkbox" <?=$checkbox_checked?>>
+                                <label><input id="chk_age" name="chk_age" type="checkbox" <?=$checkbox_checked?> <?= $abhaVerifiedLocked ? 'disabled' : '' ?>>
                                     Estimate Age</label>
+                                <?php if ($abhaVerifiedLocked && $checkbox_checked === 'checked') : ?>
+                                    <input type="hidden" name="chk_age" value="on">
+                                <?php endif; ?>
                             </div>
                         </div>
                         <div id="age_input_1" <?=$age_input_1?>>
@@ -140,14 +175,14 @@
                                             <td>Year :</td>
                                             <td><input class="form-control number input-sm" name="input_age_year"
                                                     id="input_age_year" placeholder="Year" type="text"
-                                                    autocomplete="off" style=" width:100px;" value="<?=$data[0]->age?>">
+                                                    autocomplete="off" style=" width:100px;" value="<?=$data[0]->age?>" <?= $abhaVerifiedLocked ? 'readonly' : '' ?>>
                                             </td>
                                             <td style=" width:50px;"></td>
                                             <td>Month : </td>
                                             <td><input class="form-control number input-sm" name="input_age_month"
                                                     id="input_age_month" placeholder="Month" type="text"
                                                     autocomplete="off" style=" width:100px;"
-                                                    value="<?=$data[0]->age_in_month?>"></td>
+                                                    value="<?=$data[0]->age_in_month?>" <?= $abhaVerifiedLocked ? 'readonly' : '' ?>></td>
                                         </tr>
                                     </table>
                                 </div>
@@ -157,7 +192,7 @@
                             <div class="col-md-4">
                                 <label> Date of Birth</label>
                                 <input class="form-control input-sm" name="datepicker_dob"
-                                    id="datepicker_dob" type="date" value="<?=$DateofBirth ?>" />
+                                    id="datepicker_dob" type="date" value="<?=$DateofBirth ?>" <?= $abhaVerifiedLocked ? 'readonly' : '' ?> />
                             </div>
                         </div>
                     </div>

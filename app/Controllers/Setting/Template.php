@@ -175,7 +175,7 @@ HTML;
         if ($this->db->tableExists('hospital_setting')) {
             $hsRows = $this->db->table('hospital_setting')
                 ->select('s_name, s_value')
-                ->whereIn('s_name', ['EATRIA_BRIDGE_URL', 'EATRIA_BRIDGE_TOKEN', 'ABDM_HFR_ID'])
+                ->whereIn('s_name', ['EATRIA_BRIDGE_URL', 'EATRIA_BRIDGE_TOKEN', 'ABDM_HFR_ID', 'H_HFR_ID'])
                 ->get()
                 ->getResultArray();
 
@@ -190,6 +190,9 @@ HTML;
                     $gwToken = $sValue;
                 }
                 if ($sName === 'ABDM_HFR_ID') {
+                    $hfrId = $sValue;
+                }
+                if ($sName === 'H_HFR_ID' && $hfrId === '') {
                     $hfrId = $sValue;
                 }
             }

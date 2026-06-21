@@ -529,6 +529,7 @@ class Ipd_discharge extends BaseController
         // Main clinical discharge summary: use explicit DB field first (instruction_remark).
         // Fallback to section extraction for older cached content.
         $instructionRow = $ipdId > 0 ? $this->firstRowByIpd('ipd_discharge_instructions', $ipdId) : [];
+        $instructionMeta = $this->parseInstructionMetaPayload((string) ($instructionRow['comp_report'] ?? ''));
         $clinicalSummaryRaw = $this->normalizeRichText((string) ($instructionRow['comp_remark'] ?? ''));
         $clinicalSummary = $clinicalSummaryRaw !== ''
             ? '<div class="discharge-summary-content">' . $this->renderRichText($clinicalSummaryRaw) . '</div>'
@@ -598,6 +599,28 @@ class Ipd_discharge extends BaseController
         // Extract individual instruction fields for template flexibility
         $otherAdvice = $section(['Other Advice:']);
         $followUpInstructions = $section(['Discharge Summary:']);
+
+        // Heading-only fragments are treated as empty and should fallback to DB-backed meta values.
+        $otherAdviceHeadingOnly = trim(strip_tags((string) $otherAdvice));
+        if (preg_match('/^Other\s+Advice\s*:?$/i', $otherAdviceHeadingOnly) === 1) {
+            $otherAdvice = '';
+        }
+
+        if ($otherAdvice === '') {
+            $otherAdviceRaw = trim((string) ($instructionMeta['other_text'] ?? ''));
+            if ($otherAdviceRaw === ''
+                && $this->tableHasColumns('ipd_discharge_drug_food_interaction', ['ipd_id'])
+                && $this->db->fieldExists('food_text', 'ipd_discharge_drug_food_interaction')) {
+                $legacyFoodRow = $this->firstRowByIpd('ipd_discharge_drug_food_interaction', $ipdId);
+                $otherAdviceRaw = trim((string) ($legacyFoodRow['food_text'] ?? ''));
+            }
+
+            if ($otherAdviceRaw !== '') {
+                $otherAdvice = '<div class="discharge-field"><strong>Other Advice:</strong> '
+                    . $this->renderStoredHtmlFragment($otherAdviceRaw)
+                    . '</div>';
+            }
+        }
 
         // Ignore heading-only extraction (no real follow-up narrative text).
         $followUpHeadingOnly = trim(strip_tags((string) $followUpInstructions));

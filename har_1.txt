@@ -1,0 +1,813 @@
+{
+  "log": {
+    "version": "1.2",
+    "creator": {
+      "name": "Firefox",
+      "version": "151.0.4"
+    },
+    "browser": {
+      "name": "Firefox",
+      "version": "151.0.4"
+    },
+    "pages": [
+      {
+        "id": "page_1",
+        "pageTimings": {
+          "onContentLoad": -20878,
+          "onLoad": -20871
+        },
+        "startedDateTime": "2026-06-18T19:06:16.922+05:30",
+        "title": "http://localhost:8080/"
+      }
+    ],
+    "entries": [
+      {
+        "startedDateTime": "2026-06-18T19:06:16.922+05:30",
+        "request": {
+          "bodySize": 0,
+          "method": "GET",
+          "url": "http://localhost:8080/billing/patient",
+          "httpVersion": "HTTP/1.1",
+          "headers": [
+            {
+              "name": "Host",
+              "value": "localhost:8080"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:151.0) Gecko/20100101 Firefox/151.0"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html, */*; q=0.01"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9"
+            },
+            {
+              "name": "Accept-Encoding",
+              "value": "gzip, deflate, br, zstd"
+            },
+            {
+              "name": "X-Requested-With",
+              "value": "XMLHttpRequest"
+            },
+            {
+              "name": "DNT",
+              "value": "1"
+            },
+            {
+              "name": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "name": "Referer",
+              "value": "http://localhost:8080/"
+            },
+            {
+              "name": "Cookie",
+              "value": "remember=dd1d2f566bb10ef05bb479aa%3A3cd366a8ca2a0aa6aaf2ae99d138c4f0cbdcf8f4; debug-bar-tab=ci-history; debug-bar-state=minimized; ci_session=bb58484b789171028415662d770d2a77"
+            },
+            {
+              "name": "Sec-Fetch-Dest",
+              "value": "empty"
+            },
+            {
+              "name": "Sec-Fetch-Mode",
+              "value": "cors"
+            },
+            {
+              "name": "Sec-Fetch-Site",
+              "value": "same-origin"
+            }
+          ],
+          "cookies": [
+            {
+              "name": "remember",
+              "value": "dd1d2f566bb10ef05bb479aa:3cd366a8ca2a0aa6aaf2ae99d138c4f0cbdcf8f4"
+            },
+            {
+              "name": "debug-bar-tab",
+              "value": "ci-history"
+            },
+            {
+              "name": "debug-bar-state",
+              "value": "minimized"
+            },
+            {
+              "name": "ci_session",
+              "value": "bb58484b789171028415662d770d2a77"
+            }
+          ],
+          "queryString": [],
+          "headersSize": 613
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "HTTP/1.1",
+          "headers": [
+            {
+              "name": "Host",
+              "value": "localhost:8080"
+            },
+            {
+              "name": "Date",
+              "value": "Thu, 18 Jun 2026 13:36:20 GMT"
+            },
+            {
+              "name": "Connection",
+              "value": "close"
+            },
+            {
+              "name": "X-Powered-By",
+              "value": "PHP/8.3.14"
+            },
+            {
+              "name": "Expires",
+              "value": "Thu, 19 Nov 1981 08:52:00 GMT"
+            },
+            {
+              "name": "Cache-Control",
+              "value": "no-store, no-cache, must-revalidate"
+            },
+            {
+              "name": "Pragma",
+              "value": "no-cache"
+            },
+            {
+              "name": "Content-Type",
+              "value": "text/html; charset=UTF-8"
+            },
+            {
+              "name": "Debugbar-Time",
+              "value": "1781789780.242202"
+            },
+            {
+              "name": "Debugbar-Link",
+              "value": "http://localhost:8080/?debugbar_time=1781789780.242202"
+            },
+            {
+              "name": "Set-Cookie",
+              "value": "ci_session=bb58484b789171028415662d770d2a77; expires=Thu, 18 Jun 2026 15:36:19 GMT; Max-Age=7199; path=/; HttpOnly; SameSite=Lax"
+            }
+          ],
+          "cookies": [
+            {
+              "name": "ci_session",
+              "value": "bb58484b789171028415662d770d2a77"
+            }
+          ],
+          "content": {
+            "mimeType": "text/html; charset=UTF-8",
+            "size": 97801,
+            "text": "<!-- Main content -->\r\n<style>\r\n    /* Hide browser autocomplete suggestions */\r\n    input:-webkit-autofill,\r\n    input:-webkit-autofill:hover,\r\n    input:-webkit-autofill:focus {\r\n        -webkit-box-shadow: 0 0 0 1000px white inset !important;\r\n        box-shadow: 0 0 0 1000px white inset !important;\r\n    }\r\n    \r\n    /* Hide autocomplete dropdown suggestions */\r\n    input:autofill {\r\n        background-color: white !important;\r\n    }\r\n\r\n    /* ABHA wizard progress track */\r\n    .abha-progress-wrap { display:flex; align-items:flex-start; margin-bottom:24px; }\r\n    .abha-progress-wrap .abha-node {\r\n        display:flex; flex-direction:column; align-items:center; flex:1; position:relative;\r\n    }\r\n    .abha-progress-wrap .abha-node:not(:last-child)::after {\r\n        content:''; position:absolute; top:16px; left:calc(50% + 20px);\r\n        right:calc(-50% + 20px); height:2px; background:#dee2e6; z-index:0;\r\n    }\r\n    .abha-progress-wrap .abha-node.done:not(:last-child)::after { background:#28a745; }\r\n    .abha-badge {\r\n        width:32px; height:32px; border-radius:50%;\r\n        display:flex; align-items:center; justify-content:center;\r\n        font-weight:700; font-size:13px; z-index:1;\r\n        background:#dee2e6; color:#6c757d; border:2px solid #dee2e6;\r\n        transition: all 0.25s;\r\n    }\r\n    .abha-node.active .abha-badge { background:#fff; color:#007bff; border-color:#007bff; }\r\n    .abha-node.done   .abha-badge { background:#28a745; color:#fff; border-color:#28a745; }\r\n    .abha-node-label {\r\n        font-size:0.72rem; text-align:center; margin-top:5px;\r\n        color:#aaa; max-width:80px; line-height:1.2;\r\n    }\r\n    .abha-node.active .abha-node-label { color:#007bff; font-weight:600; }\r\n    .abha-node.done   .abha-node-label { color:#28a745; }\r\n    .abha-panel { border-left:3px solid #007bff; padding-left:16px; }\r\n</style>\r\n<section class=\"content\">\r\n    <div class=\"row\">\r\n        <div class=\"col-md-12\">\r\n            <div class=\"card\">\r\n                <div class=\"card-body\">\r\n                    <h5 class=\"card-title\">Patient Management</h5>\r\n                    <ul class=\"nav nav-tabs\" id=\"patientTabs\" role=\"tablist\">\r\n                        <li class=\"nav-item\" role=\"presentation\">\r\n                            <button class=\"nav-link active\" id=\"search-tab\" data-bs-toggle=\"tab\"\r\n                                data-bs-target=\"#search\" type=\"button\" role=\"tab\" aria-controls=\"search\"\r\n                                aria-selected=\"true\">Search</button>\r\n                        </li>\r\n                        <li class=\"nav-item\" role=\"presentation\">\r\n                            <button class=\"nav-link\" id=\"nperson-tab\" data-bs-toggle=\"tab\"\r\n                                data-bs-target=\"#nperson\" type=\"button\" role=\"tab\" aria-controls=\"nperson\"\r\n                                aria-selected=\"false\">New Person</button>\r\n                        </li>\r\n                        <li class=\"nav-item\" role=\"presentation\">\r\n                            <button class=\"nav-link\" id=\"lastopd-tab\" data-bs-toggle=\"tab\"\r\n                                data-bs-target=\"#lastopd\" type=\"button\" role=\"tab\" aria-controls=\"lastopd\"\r\n                                aria-selected=\"false\" data-url=\"http://localhost:8080/billing/patient/search_opd\">Last OPDs</button>\r\n                        </li>\r\n                        <li class=\"nav-item\" role=\"presentation\">\r\n                            <button class=\"nav-link\" id=\"abha-tab\" data-bs-toggle=\"tab\"\r\n                                data-bs-target=\"#abha\" type=\"button\" role=\"tab\" aria-controls=\"abha\"\r\n                                aria-selected=\"false\">ABHA Create/Verify</button>\r\n                        </li>\r\n                        <li class=\"nav-item\" role=\"presentation\">\r\n                            <button class=\"nav-link\" id=\"abhareg-tab\" data-bs-toggle=\"tab\"\r\n                                data-bs-target=\"#abha-register\" type=\"button\" role=\"tab\"\r\n                                aria-selected=\"false\">\r\n                                <i class=\"bi bi-person-check-fill me-1\"></i>ABHA Register\r\n                            </button>\r\n                        </li>\r\n                    </ul>\r\n                    <div class=\"tab-content pt-2\" id=\"patientTabsContent\">\r\n                        <div class=\"tab-pane fade\" id=\"nperson\" role=\"tabpanel\" aria-labelledby=\"nperson-tab\">\r\n                            <div class=\"danger\" id=\"jsError\"></div>\r\n                            <div class=\"row\">\r\n                                <div class=\"col-md-8\">\r\n                                    <form action=\"http://localhost:8080/billing/patient/create\" method=\"post\" role=\"form\" class=\"form1 needs-validation\" novalidate>\r\n                                        <input type=\"hidden\" name=\"csrf_test_name\" value=\"2525ba2260b03d5d89d3c4a34bc68e76\">                                        <div class=\"row g-3\">\r\n                                            <div class=\"col-md-3\">\r\n                                                <div class=\"form-group\">\r\n                                                    <label class=\"form-label\">Aadhaar Number</label>\r\n                                                    <input class=\"form-control\" name=\"input_udai\" id=\"input_udai\"\r\n                                                        placeholder=\"Aadhaar Number\" type=\"text\" autocomplete=\"off\"\r\n                                                        data-inputmask='\"mask\": \"999999999999\"' data-mask\r\n                                                        onchange=\"onchange_aadhar()\">\r\n                                                </div>\r\n                                            </div>\r\n                                            <div class=\"col-md-3\">\r\n                                                <div class=\"form-group\">\r\n                                                    <label class=\"form-label\">ABHA ID</label>\r\n                                                    <input class=\"form-control\" name=\"input_abha_id\" id=\"input_abha_id\"\r\n                                                        placeholder=\"14-digit ABHA ID\" type=\"text\" autocomplete=\"off\"\r\n                                                        maxlength=\"14\" data-inputmask='\"mask\": \"99999999999999\"' data-mask>\r\n                                                </div>\r\n                                            </div>\r\n                                            <div class=\"col-md-3\">\r\n                                                <div class=\"form-group\">\r\n                                                    <label class=\"form-label\">Phone Number</label>\r\n                                                    <input class=\"form-control\" name=\"input_mphone1\" id=\"input_mphone1\"\r\n                                                        placeholder=\"Phone Number\" type=\"text\" autocomplete=\"off\" required\r\n                                                        data-inputmask='\"mask\": \"9999999999\"' data-mask\r\n                                                        onchange=\"onchange_feild_number()\">\r\n                                                    <div class=\"invalid-feedback\">Please enter phone number.</div>\r\n                                                </div>\r\n                                            </div>\r\n                                            <hr/>\r\n                                            <div class=\"col-md-2\">\r\n                                                <div class=\"form-group\">\r\n                                                    <label class=\"form-label\">Title</label>\r\n                                                    <select class=\"form-select\" name=\"cbo_title\" id=\"cbo_title\"\r\n                                                        onchange=\"onchange_title()\">\r\n                                                        <option value=\"Mr.\">Mr.</option>\r\n                                                        <option value=\"Mrs.\">Mrs.</option>\r\n                                                        <option value=\"Ms.\">Ms.</option>\r\n                                                        <option value=\"Master\" selected=\"selected\">Master</option>\r\n                                                        <option value=\"Baby\">Baby</option>\r\n                                                        <option value=\"Baby Girl\">Baby Girl</option>\r\n                                                        <option value=\"Baby Boy\">Baby Boy</option>\r\n                                                        <option value=\"Mohd.\">Mohd.</option>\r\n                                                    </select>\r\n                                                </div>\r\n                                            </div>\r\n                                            <div class=\"col-md-3\">\r\n                                                <div class=\"form-group\">\r\n                                                    <label class=\"form-label\">Full Name</label>\r\n                                                    <input class=\"form-control varchar\" name=\"input_name\" id=\"input_name\"\r\n                                                        placeholder=\"Full Name\" type=\"text\" autocomplete=\"off\" required>\r\n                                                    <div class=\"invalid-feedback\">Please enter full name.</div>\r\n                                                </div>\r\n                                            </div>\r\n                                            <div class=\"col-md-3\">\r\n                                                <div class=\"form-group\">\r\n                                                    <label class=\"form-label\">Gender</label>\r\n                                                    <div>\r\n                                                        <div class=\"form-check form-check-inline\">\r\n                                                            <input class=\"form-check-input\" name=\"optionsRadios_gender\" id=\"options_gender1\" value=\"1\"\r\n                                                                type=\"radio\" checked>\r\n                                                            <label class=\"form-check-label\" for=\"options_gender1\">Male</label>\r\n                                                        </div>\r\n                                                        <div class=\"form-check form-check-inline\">\r\n                                                            <input class=\"form-check-input\" name=\"optionsRadios_gender\" id=\"options_gender2\" value=\"2\"\r\n                                                                type=\"radio\">\r\n                                                            <label class=\"form-check-label\" for=\"options_gender2\">Female</label>\r\n                                                        </div>\r\n                                                    </div>\r\n                                                </div>\r\n                                            </div>\r\n                                            \r\n                                        </div>\r\n                                        <hr />\r\n                                        <div class=\"row g-3\">\r\n                                                                                        <div class=\"col-md-3\">\r\n                                                <div class=\"form-check form-switch\">\r\n                                                    <input class=\"form-check-input\" type=\"checkbox\" id=\"chk_age\" name=\"chk_age\" >\r\n                                                    <label class=\"form-check-label\" for=\"chk_age\">Estimate Age</label>\r\n                                                </div>\r\n                                            </div>\r\n\r\n                                            <div class=\"col-md-6\" id=\"age_input_1\" style=\"display: none;\">\r\n                                                <div class=\"form-group\">\r\n                                                    <label class=\"form-label\">Age (in Year - Month)</label>\r\n                                                    <div class=\"row g-2\">\r\n                                                        <div class=\"col-6\">\r\n                                                            <input class=\"form-control number\"\r\n                                                                name=\"input_age_year\" id=\"input_age_year\"\r\n                                                                placeholder=\"Year\" type=\"text\" autocomplete=\"off\">\r\n                                                        </div>\r\n                                                        <div class=\"col-6\">\r\n                                                            <input class=\"form-control number\"\r\n                                                                name=\"input_age_month\" id=\"input_age_month\"\r\n                                                                placeholder=\"Month\" type=\"text\" autocomplete=\"off\">\r\n                                                        </div>\r\n                                                    </div>\r\n                                                </div>\r\n                                            </div>\r\n\r\n                                            <div class=\"col-md-4\" id=\"age_input_2\" >\r\n                                                <label class=\"form-label\">Date of Birth</label>\r\n                                                <input class=\"form-control\" name=\"datepicker_dob\" id=\"datepicker_dob\"\r\n                                                    type=\"date\" />\r\n                                            </div>\r\n                                        </div>\r\n                                        <hr />\r\n\r\n                                        <div class=\"row g-3\">\r\n                                            <div class=\"col-md-3\">\r\n                                                <div class=\"form-group\">\r\n                                                    <label class=\"form-label\">Relation</label>\r\n                                                    <select class=\"form-select\" name=\"cbo_relation\" id=\"cbo_relation\">\r\n                                                        <option value=\"W/o\">W/o</option>\r\n                                                        <option value=\"S/o\">S/o</option>\r\n                                                        <option value=\"D/o\">D/o</option>\r\n                                                        <option value=\"C/o\">C/o</option>\r\n                                                        <option value=\"M/o\">M/o</option>\r\n                                                    </select>\r\n                                                </div>\r\n                                            </div>\r\n                                            <div class=\"col-md-3\">\r\n                                                <div class=\"form-group\">\r\n                                                    <label class=\"form-label\">Relative Name</label>\r\n                                                    <input class=\"form-control\" name=\"input_relative_name\"\r\n                                                        id=\"input_relative_name\" placeholder=\"Full Name\" type=\"text\"\r\n                                                        onchange=\"onchange_relative_name()\"\r\n                                                        autocomplete=\"off\" required>\r\n                                                    <div class=\"invalid-feedback\">Please enter relative name.</div>\r\n                                                </div>\r\n                                            </div>\r\n                                            <div class=\"col-md-3\">\r\n                                                <div class=\"form-group\">\r\n                                                    <label class=\"form-label\">Blood Group</label>\r\n\r\n                                                    <select class=\"form-select\" name=\"input_blood_group\" id=\"input_blood_group\">\r\n                                                        \t                                                            <option value=\"Not Define\" selected>Not Define</option>\r\n                                                        \t                                                            <option value=\"A+\" >A+</option>\r\n                                                        \t                                                            <option value=\"A-\" >A-</option>\r\n                                                        \t                                                            <option value=\"B+\" >B+</option>\r\n                                                        \t                                                            <option value=\"B-\" >B-</option>\r\n                                                        \t                                                            <option value=\"O+\" >O+</option>\r\n                                                        \t                                                            <option value=\"O-\" >O-</option>\r\n                                                        \t                                                            <option value=\"AB+\" >AB+</option>\r\n                                                        \t                                                            <option value=\"AB-\" >AB-</option>\r\n                                                                                                            </select>\r\n                                                </div>\r\n                                            </div>\r\n                                            <div class=\"col-md-6\">\r\n                                                <div class=\"form-group\">\r\n                                                    <label class=\"form-label\">Address</label>\r\n                                                    <input class=\"form-control\" name=\"input_address\"\r\n                                                        placeholder=\"Address\" type=\"text\" autocomplete=\"on\">\r\n                                                </div>\r\n                                            </div>\r\n                                            <div class=\"col-md-3\">\r\n                                                <div class=\"form-group\">\r\n                                                    <label class=\"form-label\">City</label>\r\n                                                    <input class=\"form-control\" name=\"input_city\" id=\"input_city\"\r\n                                                        placeholder=\"City\" type=\"text\" autocomplete=\"on\">\r\n                                                </div>\r\n                                            </div>\r\n                                            <div class=\"col-md-3\">\r\n                                                <div class=\"form-group\">\r\n                                                    <label class=\"form-label\">Pin/Zip Code</label>\r\n                                                    <input class=\"form-control\" name=\"input_zip\" id=\"input_zip\"\r\n                                                        placeholder=\"Pin/Zip Code\" type=\"text\" autocomplete=\"on\">\r\n                                                </div>\r\n                                            </div>\r\n\r\n                                            <div class=\"col-md-3\">\r\n                                                <div class=\"form-group\">\r\n                                                    <label class=\"form-label\">District</label>\r\n                                                    <input class=\"form-control\" name=\"input_district\"\r\n                                                        id=\"input_district\" placeholder=\"District\" type=\"text\"\r\n                                                        autocomplete=\"on\">\r\n                                                </div>\r\n                                            </div>\r\n                                            <div class=\"col-md-3\">\r\n                                                <div class=\"form-group\">\r\n                                                    <label class=\"form-label\">State</label>\r\n                                                    <input class=\"form-control\" name=\"input_state\"\r\n                                                        id=\"input_state\" placeholder=\"State\" type=\"text\" autocomplete=\"on\">\r\n                                                </div>\r\n                                            </div>\r\n                                        </div>\r\n                                        <hr />\r\n                                        <div class=\"row g-3\">\r\n                                            <div class=\"col-md-3\">\r\n                                                <button type=\"submit\" id=\"RegisterPatient\" class=\"btn btn-primary\">Register Patient</button>\r\n                                            </div>\r\n                                        </div>\r\n                                    </form>\r\n                                </div>\r\n                                <div class=\"col-md-4\" id=\"search_result_update\">\r\n\r\n                                </div>\r\n                            </div>\r\n                        </div>\r\n                        <div class=\"tab-pane fade show active\" id=\"search\" role=\"tabpanel\" aria-labelledby=\"search-tab\">\r\n                            <form action=\"http://localhost:8080/billing/patient/search\" method=\"post\" role=\"form\" class=\"form2 needs-validation\" novalidate>\r\n                                <input type=\"hidden\" name=\"csrf_test_name\" value=\"2525ba2260b03d5d89d3c4a34bc68e76\">                                <div class=\"input-group\">\r\n                                    <input class=\"form-control\" type=\"text\" id=\"txtsearch\" name=\"txtsearch\" placeholder=\"Search\">\r\n                                    <span class=\"input-group-btn\">\r\n                                        <button type=\"submit\" class=\"btn btn-info btn-flat\">Go!</button>\r\n                                    </span>\r\n                                </div>\r\n                            </form>\r\n                            <div id=\"search_loading\" class=\"alert alert-info mt-2\" style=\"display:none;\">\r\n                                <span class=\"spinner-border spinner-border-sm me-2\" role=\"status\" aria-hidden=\"true\"></span>\r\n                                <span id=\"search_loading_text\">Searching...</span>\r\n                            </div>\r\n                            <div class=\"searchresult\"></div>\r\n                        </div>\r\n                        <div class=\"tab-pane fade\" id=\"lastopd\" role=\"tabpanel\" aria-labelledby=\"lastopd-tab\">\r\n\r\n                        </div>\r\n                        <div class=\"tab-pane fade\" id=\"abha\" role=\"tabpanel\" aria-labelledby=\"abha-tab\">\r\n                            <div class=\"row\">\r\n                                <div class=\"col-md-12\">\r\n                                    <div class=\"card\">\r\n                                        <div class=\"card-body\">\r\n                                            <h6 class=\"card-title\">ABHA Number Create and Verify</h6>\r\n                                            <p class=\"text-muted\">Create and verify your unique health identification number</p>\r\n                                            \r\n                                            <ul class=\"nav nav-tabs\" id=\"abhaSubTabs\" role=\"tablist\">\r\n                                                <li class=\"nav-item\" role=\"presentation\">\r\n                                                    <button class=\"nav-link active\" id=\"abha-create-tab\" data-bs-toggle=\"tab\"\r\n                                                        data-bs-target=\"#abha-create\" type=\"button\" role=\"tab\" aria-controls=\"abha-create\"\r\n                                                        aria-selected=\"true\">Create ABHA</button>\r\n                                                </li>\r\n                                                <li class=\"nav-item\" role=\"presentation\">\r\n                                                    <button class=\"nav-link\" id=\"abha-verify-tab\" data-bs-toggle=\"tab\"\r\n                                                        data-bs-target=\"#abha-verify\" type=\"button\" role=\"tab\" aria-controls=\"abha-verify\"\r\n                                                        aria-selected=\"false\">Verify ABHA</button>\r\n                                                </li>\r\n                                            </ul>\r\n                                            \r\n                                            <div class=\"tab-content pt-3\" id=\"abhaSubTabsContent\">\r\n                                                <div class=\"tab-pane fade show active\" id=\"abha-create\" role=\"tabpanel\" aria-labelledby=\"abha-create-tab\">\r\n\r\n                                                    <!-- Step progress indicator -->\r\n                                                    <div class=\"abha-progress-wrap mt-3 mb-4\">\r\n                                                        <div class=\"abha-node active\" id=\"abha_node_1\">\r\n                                                            <div class=\"abha-badge\" id=\"abha_badge_1\">1</div>\r\n                                                            <div class=\"abha-node-label\">Aadhaar &amp; Consent</div>\r\n                                                        </div>\r\n                                                        <div class=\"abha-node\" id=\"abha_node_2\">\r\n                                                            <div class=\"abha-badge\" id=\"abha_badge_2\">2</div>\r\n                                                            <div class=\"abha-node-label\">OTP Verify</div>\r\n                                                        </div>\r\n                                                        <div class=\"abha-node\" id=\"abha_node_3\">\r\n                                                            <div class=\"abha-badge\" id=\"abha_badge_3\">3</div>\r\n                                                            <div class=\"abha-node-label\">Mobile Confirm</div>\r\n                                                        </div>\r\n                                                        <div class=\"abha-node\" id=\"abha_node_4\">\r\n                                                            <div class=\"abha-badge\" id=\"abha_badge_4\">4</div>\r\n                                                            <div class=\"abha-node-label\">ABHA Ready</div>\r\n                                                        </div>\r\n                                                    </div>\r\n\r\n                                                    <!-- Step 1: Aadhaar entry + consent -->\r\n                                                    <div id=\"abha_step_1\" class=\"abha-panel\">\r\n                                                        <p class=\"text-muted small mb-3\">Enter the patient's Aadhaar number. An OTP will be sent to the mobile linked with it.</p>\r\n                                                        <div class=\"row g-3 align-items-end\">\r\n                                                            <div class=\"col-md-4\">\r\n                                                                <label class=\"form-label\">Aadhaar Number <span class=\"text-danger\">*</span></label>\r\n                                                                <input type=\"text\" class=\"form-control\" id=\"abha_aadhaar_masked\"\r\n                                                                    placeholder=\"0000-0000-0000\" autocomplete=\"off\"\r\n                                                                    data-inputmask='\"mask\": \"9999-9999-9999\"' data-mask>\r\n                                                                <small class=\"text-muted\">Mobile must be linked with Aadhaar for OTP.</small>\r\n                                                            </div>\r\n                                                            <div class=\"col-md-3\">\r\n                                                                <label class=\"form-label\">Mobile for ABHA <span class=\"text-danger\">*</span></label>\r\n                                                                <input type=\"text\" class=\"form-control\" id=\"abha_reg_mobile\"\r\n                                                                    placeholder=\"10-digit mobile\" maxlength=\"10\"\r\n                                                                    inputmode=\"numeric\" autocomplete=\"tel\">\r\n                                                                <small class=\"text-muted\">Will be linked to the new ABHA.</small>\r\n                                                            </div>\r\n                                                            <div class=\"col-md-3\">\r\n                                                                <label class=\"form-label\">Authentication Via</label>\r\n                                                                <select class=\"form-select\" id=\"abha_auth_type\">\r\n                                                                    <option value=\"aadhaar_otp\">OTP</option>\r\n                                                                    <option value=\"biometric\">Biometric</option>\r\n                                                                </select>\r\n                                                            </div>\r\n                                                        </div>\r\n                                                        <div class=\"mt-3\">\r\n                                                            <div class=\"form-check\">\r\n                                                                <input class=\"form-check-input\" type=\"checkbox\" id=\"abha_consent_chk\">\r\n                                                                <label class=\"form-check-label\" for=\"abha_consent_chk\">\r\n                                                                    I confirm the patient has given consent to share their Aadhaar details with NHA/ABDM for ABHA number creation.\r\n                                                                    <a href=\"#\" data-bs-toggle=\"collapse\" data-bs-target=\"#abha_full_consent\" class=\"ms-1 small\">(read full consent)</a>\r\n                                                                </label>\r\n                                                            </div>\r\n                                                            <div class=\"collapse mt-2\" id=\"abha_full_consent\">\r\n                                                                <div class=\"card card-body bg-light py-2 small text-muted\" style=\"max-height:100px;overflow-y:auto;\">\r\n                                                                    I hereby declare that I am voluntarily sharing my Aadhaar number and demographic information issued by UIDAI with the National Health Authority (NHA) for the sole purpose of creating an ABHA number. I understand this number may be used for healthcare service purposes as notified by ABDM. My personal identifiable information (Name, Address, Age, DOB, Gender, Photo) may be made available to entities in the National Digital Health Ecosystem. I consent to use and disclosure of my health information to NDHE entities as permitted by law.\r\n                                                                </div>\r\n                                                            </div>\r\n                                                        </div>\r\n                                                        <div id=\"abha_step1_alert\" class=\"mt-2\"></div>\r\n                                                        <div class=\"mt-3\">\r\n                                                            <button type=\"button\" class=\"btn btn-primary\" id=\"abha_get_otp_btn\">\r\n                                                                <span id=\"abha_get_otp_spinner\" class=\"spinner-border spinner-border-sm me-1 d-none\"></span>\r\n                                                                Send OTP\r\n                                                            </button>\r\n                                                        </div>\r\n                                                    </div>\r\n\r\n                                                    <!-- Step 2: OTP verification -->\r\n                                                    <div id=\"abha_step_2\" class=\"abha-panel\" style=\"display:none;\">\r\n                                                        <p class=\"text-muted small mb-3\">Enter the OTP sent to the mobile number linked with Aadhaar.</p>\r\n                                                        <div class=\"row g-3 align-items-end\">\r\n                                                            <div class=\"col-md-3\">\r\n                                                                <label class=\"form-label\">One-Time Password <span class=\"text-danger\">*</span></label>\r\n                                                                <input type=\"text\" class=\"form-control form-control-lg text-center letter-spacing-2\"\r\n                                                                    id=\"abha_otp_input\" placeholder=\"— — — — — —\"\r\n                                                                    maxlength=\"6\" autocomplete=\"one-time-code\" inputmode=\"numeric\">\r\n                                                            </div>\r\n                                                        </div>\r\n                                                        <div id=\"abha_step2_alert\" class=\"mt-2\"></div>\r\n                                                        <div class=\"mt-3 d-flex gap-2 flex-wrap\">\r\n                                                            <button type=\"button\" class=\"btn btn-success\" id=\"abha_verify_otp_btn\">\r\n                                                                <span id=\"abha_verify_otp_spinner\" class=\"spinner-border spinner-border-sm me-1 d-none\"></span>\r\n                                                                Confirm OTP\r\n                                                            </button>\r\n                                                            <button type=\"button\" class=\"btn btn-outline-secondary\" id=\"abha_resend_otp_btn\">Resend OTP</button>\r\n                                                            <button type=\"button\" class=\"btn btn-link text-secondary px-0\" id=\"abha_back_step1_btn\">&larr; Back</button>\r\n                                                        </div>\r\n                                                    </div>\r\n\r\n                                                    <!-- Step 3: (unused — Aadhaar verify-otp returns ABHA directly) -->\r\n                                                    <div id=\"abha_step_3\" style=\"display:none;\"></div>\r\n\r\n                                                    <!-- Step 4: ABHA Ready -->\r\n                                                    <div id=\"abha_step_4\" class=\"abha-panel\" style=\"display:none;\">\r\n                                                        <div id=\"abha_created_result\"></div>\r\n                                                        <div id=\"abha_step4_alert\" class=\"mt-2\"></div>\r\n                                                    </div>\r\n\r\n                                                </div>\r\n                                                \r\n                                                <div class=\"tab-pane fade\" id=\"abha-verify\" role=\"tabpanel\" aria-labelledby=\"abha-verify-tab\">\r\n                                                    <p class=\"text-muted small mb-3\">Enter the patient's mobile number registered with ABDM to retrieve their ABHA profile.</p>\r\n                                                    <!-- Phase 1: Mobile input -->\r\n                                                    <div id=\"link_step_1\">\r\n                                                        <div class=\"row g-3 align-items-end\">\r\n                                                            <div class=\"col-md-3\">\r\n                                                                <label class=\"form-label\">Mobile Number <span class=\"text-danger\">*</span></label>\r\n                                                                <input type=\"text\" class=\"form-control\" id=\"abha_link_mobile\"\r\n                                                                    placeholder=\"10-digit mobile\" maxlength=\"10\" inputmode=\"numeric\" autocomplete=\"off\">\r\n                                                            </div>\r\n                                                        </div>\r\n                                                        <div id=\"link_step1_alert\" class=\"mt-2\"></div>\r\n                                                        <div class=\"mt-3\">\r\n                                                            <button type=\"button\" class=\"btn btn-primary\" id=\"abha_link_send_otp_btn\">\r\n                                                                <span id=\"abha_link_send_spinner\" class=\"spinner-border spinner-border-sm me-1 d-none\"></span>\r\n                                                                Send OTP\r\n                                                            </button>\r\n                                                        </div>\r\n                                                    </div>\r\n                                                    <!-- Phase 2: OTP verify -->\r\n                                                    <div id=\"link_step_2\" style=\"display:none;\" class=\"mt-3\">\r\n                                                        <div class=\"row g-3 align-items-end\">\r\n                                                            <div class=\"col-md-3\">\r\n                                                                <label class=\"form-label\">Enter OTP <span class=\"text-danger\">*</span></label>\r\n                                                                <input type=\"text\" class=\"form-control form-control-lg text-center fw-bold\"\r\n                                                                    id=\"abha_link_otp_input\" maxlength=\"6\" placeholder=\"6-digit OTP\"\r\n                                                                    inputmode=\"numeric\" autocomplete=\"one-time-code\">\r\n                                                            </div>\r\n                                                        </div>\r\n                                                        <div id=\"link_step2_alert\" class=\"mt-2\"></div>\r\n                                                        <div class=\"mt-3 d-flex gap-2\">\r\n                                                            <button type=\"button\" class=\"btn btn-success\" id=\"abha_link_verify_otp_btn\">\r\n                                                                <span id=\"abha_link_verify_spinner\" class=\"spinner-border spinner-border-sm me-1 d-none\"></span>\r\n                                                                Verify OTP\r\n                                                            </button>\r\n                                                            <button type=\"button\" class=\"btn btn-outline-secondary\" id=\"abha_link_resend_btn\">Resend OTP</button>\r\n                                                        </div>\r\n                                                    </div>\r\n                                                    <!-- Result -->\r\n                                                    <div id=\"link_result\" class=\"mt-3\"></div>\r\n                                                    <!-- Bridge test (keep) -->\r\n                                                    <div class=\"mt-4 border-top pt-3\">\r\n                                                        <button type=\"button\" class=\"btn btn-outline-secondary btn-sm\" id=\"abha_bridge_test_btn\">\r\n                                                            <span id=\"abha_bridge_test_spinner\" class=\"spinner-border spinner-border-sm me-1 d-none\"></span>\r\n                                                            Test Middle Server\r\n                                                        </button>\r\n                                                        <div id=\"abha_bridge_test_result\" class=\"mt-2\"></div>\r\n                                                    </div>\r\n                                                </div>\r\n                                            </div>\r\n                                        </div>\r\n                                    </div>\r\n                                </div>\r\n                            </div>\r\n                        </div>\r\n                    </div>\r\n                </div>\r\n\r\n                <!-- ============================================================ -->\r\n                <!-- ABHA REGISTER TAB PANE                                       -->\r\n                <!-- ============================================================ -->\r\n                <div class=\"tab-pane fade\" id=\"abha-register\" role=\"tabpanel\" aria-labelledby=\"abhareg-tab\">\r\n                  <div class=\"row\">\r\n                    <div class=\"col-12\">\r\n                      <h6 class=\"fw-bold mb-3\"><i class=\"bi bi-person-check-fill me-2 text-primary\"></i>ABHA-Based Patient Registration</h6>\r\n\r\n                      <!-- Method selector cards -->\r\n                      <div id=\"abhareg_methods\" class=\"row g-2 mb-3\">\r\n                        <div class=\"col-6 col-md-3\">\r\n                          <div class=\"card border abhareg-method-card text-center py-3\" data-method=\"number\" role=\"button\" tabindex=\"0\" onclick=\"abhaRegSelectMethod('number')\" style=\"cursor:pointer\">\r\n                            <div class=\"fs-2 mb-1\">🆔</div>\r\n                            <div class=\"fw-semibold small\">By ABHA Number</div>\r\n                            <div class=\"text-muted\" style=\"font-size:11px\">14-digit or @abdm address</div>\r\n                          </div>\r\n                        </div>\r\n                        <div class=\"col-6 col-md-3\">\r\n                          <div class=\"card border abhareg-method-card text-center py-3\" data-method=\"qr\" role=\"button\" tabindex=\"0\" onclick=\"abhaRegSelectMethod('qr')\" style=\"cursor:pointer\">\r\n                            <div class=\"fs-2 mb-1\">📷</div>\r\n                            <div class=\"fw-semibold small\">Scan ABHA QR</div>\r\n                            <div class=\"text-muted\" style=\"font-size:11px\">Camera scan patient's QR</div>\r\n                          </div>\r\n                        </div>\r\n                        <div class=\"col-6 col-md-3\">\r\n                          <div class=\"card border abhareg-method-card text-center py-3\" data-method=\"facility\" role=\"button\" tabindex=\"0\" onclick=\"abhaRegSelectMethod('facility')\" style=\"cursor:pointer\">\r\n                            <div class=\"fs-2 mb-1\">🏥</div>\r\n                            <div class=\"fw-semibold small\">Scan Facility QR</div>\r\n                            <div class=\"text-muted\" style=\"font-size:11px\">Patient scans hospital QR</div>\r\n                          </div>\r\n                        </div>\r\n                        <div class=\"col-6 col-md-3\">\r\n                          <div class=\"card border abhareg-method-card text-center py-3\" data-method=\"mobile\" role=\"button\" tabindex=\"0\" onclick=\"abhaRegSelectMethod('mobile')\" style=\"cursor:pointer\">\r\n                            <div class=\"fs-2 mb-1\">📱</div>\r\n                            <div class=\"fw-semibold small\">By Mobile OTP</div>\r\n                            <div class=\"text-muted\" style=\"font-size:11px\">OTP to ABHA-linked mobile</div>\r\n                          </div>\r\n                        </div>\r\n                      </div>\r\n\r\n                      <!-- Active method banner -->\r\n                      <div id=\"abhareg_active_banner\" class=\"alert alert-primary d-flex align-items-center py-2 d-none mb-3\">\r\n                        <span id=\"abhareg_banner_icon\" class=\"me-2 fs-5\"></span>\r\n                        <div>\r\n                          <strong id=\"abhareg_banner_title\"></strong>\r\n                          <span id=\"abhareg_banner_sub\" class=\"ms-2 small text-primary-emphasis\"></span>\r\n                        </div>\r\n                        <button type=\"button\" class=\"btn btn-sm btn-outline-secondary ms-auto\" onclick=\"abhaRegReset()\">↩ Change Method</button>\r\n                      </div>\r\n\r\n                      <!-- Panel: Method 1 - By ABHA Number (also populated after QR scan) -->\r\n                      <div id=\"abhareg_panel_number\" class=\"abhareg-panel d-none\">\r\n                        <div id=\"abhareg_num_stepA\">\r\n                          <p class=\"text-muted small mb-2\">Enter patient's 14-digit ABHA number or ABHA address (e.g., john@abdm).</p>\r\n                          <div class=\"row g-2 align-items-end\">\r\n                            <div class=\"col-md-5\">\r\n                              <label class=\"form-label\">ABHA Number / Address <span class=\"text-danger\">*</span></label>\r\n                              <div class=\"input-group\">\r\n                                <input type=\"text\" id=\"abhareg_abha_input\" class=\"form-control\" placeholder=\"14-digit number or user@abdm\" autocomplete=\"off\">\r\n                                <button type=\"button\" id=\"abhareg_validate_btn\" class=\"btn btn-outline-secondary\">\r\n                                  <span id=\"abhareg_validate_spinner\" class=\"spinner-border spinner-border-sm me-1 d-none\"></span>Validate\r\n                                </button>\r\n                              </div>\r\n                              <div id=\"abhareg_abha_status\" class=\"mt-1\"></div>\r\n                            </div>\r\n                          </div>\r\n                          <div id=\"abhareg_num_stepA_alert\" class=\"mt-2\"></div>\r\n                          <div class=\"mt-3\">\r\n                            <button type=\"button\" id=\"abhareg_goto_stepB\" class=\"btn btn-primary d-none\">\r\n                              Continue — Enter Mobile <i class=\"bi bi-arrow-right ms-1\"></i>\r\n                            </button>\r\n                          </div>\r\n                        </div>\r\n                        <div id=\"abhareg_num_stepB\" class=\"d-none mt-3\">\r\n                          <p class=\"text-muted small mb-2\">Enter the mobile number registered with this ABHA. OTP will be sent to it.</p>\r\n                          <div class=\"row g-2 align-items-end\">\r\n                            <div class=\"col-md-4\">\r\n                              <label class=\"form-label\">Mobile Number <span class=\"text-danger\">*</span></label>\r\n                              <input type=\"text\" id=\"abhareg_num_mobile\" class=\"form-control\" placeholder=\"10-digit mobile\" maxlength=\"10\" inputmode=\"numeric\" autocomplete=\"off\">\r\n                            </div>\r\n                          </div>\r\n                          <div id=\"abhareg_num_stepB_alert\" class=\"mt-2\"></div>\r\n                          <div class=\"mt-3 d-flex gap-2\">\r\n                            <button type=\"button\" id=\"abhareg_num_send_otp_btn\" class=\"btn btn-primary\">\r\n                              <span id=\"abhareg_num_send_spinner\" class=\"spinner-border spinner-border-sm me-1 d-none\"></span>Send OTP\r\n                            </button>\r\n                            <button type=\"button\" id=\"abhareg_back_to_stepA\" class=\"btn btn-link text-secondary\">← Back</button>\r\n                          </div>\r\n                        </div>\r\n                        <div id=\"abhareg_num_stepC\" class=\"d-none mt-3\">\r\n                          <p class=\"text-muted small mb-2\">Enter the 6-digit OTP received on the patient's mobile.</p>\r\n                          <div class=\"row g-2\">\r\n                            <div class=\"col-md-3\">\r\n                              <label class=\"form-label\">One-Time Password <span class=\"text-danger\">*</span></label>\r\n                              <input type=\"text\" id=\"abhareg_num_otp_input\" class=\"form-control form-control-lg text-center fw-bold\" maxlength=\"6\" inputmode=\"numeric\" autocomplete=\"one-time-code\" placeholder=\"— — — — — —\">\r\n                            </div>\r\n                          </div>\r\n                          <div id=\"abhareg_num_stepC_alert\" class=\"mt-2\"></div>\r\n                          <div class=\"mt-3 d-flex gap-2 flex-wrap\">\r\n                            <button type=\"button\" id=\"abhareg_num_verify_otp_btn\" class=\"btn btn-success\">\r\n                              <span id=\"abhareg_num_verify_spinner\" class=\"spinner-border spinner-border-sm me-1 d-none\"></span>Verify OTP\r\n                            </button>\r\n                            <button type=\"button\" id=\"abhareg_num_resend_btn\" class=\"btn btn-outline-secondary\">Resend OTP</button>\r\n                            <button type=\"button\" id=\"abhareg_back_to_stepB\" class=\"btn btn-link text-secondary\">← Back</button>\r\n                          </div>\r\n                        </div>\r\n                      </div>\r\n\r\n                      <!-- Panel: Method 2 - Scan QR -->\r\n                      <div id=\"abhareg_panel_qr\" class=\"abhareg-panel d-none\">\r\n                        <p class=\"text-muted small mb-2\">Point camera at patient's ABHA QR code (from PHR app or printed card).</p>\r\n                        <div id=\"abhareg_qr_reader\" style=\"width:300px;max-width:100%;\"></div>\r\n                        <div id=\"abhareg_qr_result\" class=\"mt-2\"></div>\r\n                        <div class=\"mt-2\">\r\n                          <button type=\"button\" id=\"abhareg_qr_stop_btn\" class=\"btn btn-outline-secondary btn-sm d-none\">\r\n                            <i class=\"bi bi-camera-video-off me-1\"></i>Stop Camera\r\n                          </button>\r\n                        </div>\r\n                      </div>\r\n\r\n                      <!-- Panel: Method 3 - Facility QR (informational) -->\r\n                      <div id=\"abhareg_panel_facility\" class=\"abhareg-panel d-none\">\r\n                        <div class=\"alert alert-info\">\r\n                          <h6 class=\"fw-bold\"><i class=\"bi bi-qr-code me-2\"></i>Scan &amp; Share — Health Facility QR</h6>\r\n                          <p class=\"mb-2\">In this method, the <strong>patient</strong> scans the hospital's facility QR code using their ABHA / PHR app.</p>\r\n                          <ol class=\"mb-2\">\r\n                            <li>Patient opens their <strong>ABHA app</strong> (or PHR app)</li>\r\n                            <li>Selects \"Scan Facility QR\"</li>\r\n                            <li>Scans the hospital's QR code displayed at the OPD counter</li>\r\n                            <li>Grants consent — profile is sent to the HMS automatically</li>\r\n                          </ol>\r\n                          <p class=\"mb-0 text-muted small\">The hospital's facility QR code is provided by NHA/ABDM based on your Health Facility Registry (HFR) ID.</p>\r\n                        </div>\r\n                        <div class=\"text-center mt-3\">\r\n                          <a href=\"https://abha.abdm.gov.in/abha/v3/\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"btn btn-outline-primary btn-sm\">\r\n                            <i class=\"bi bi-box-arrow-up-right me-1\"></i>Open ABHA Portal\r\n                          </a>\r\n                        </div>\r\n                      </div>\r\n\r\n                      <!-- Panel: Method 4 - Mobile OTP only -->\r\n                      <div id=\"abhareg_panel_mobile\" class=\"abhareg-panel d-none\">\r\n                        <div id=\"abhareg_mob_step1\">\r\n                          <p class=\"text-muted small mb-2\">Enter the patient's mobile number linked to ABDM/ABHA. OTP will be sent for verification.</p>\r\n                          <div class=\"row g-2 align-items-end\">\r\n                            <div class=\"col-md-4\">\r\n                              <label class=\"form-label\">Mobile Number <span class=\"text-danger\">*</span></label>\r\n                              <input type=\"text\" id=\"abhareg_mob_mobile\" class=\"form-control\" placeholder=\"10-digit mobile\" maxlength=\"10\" inputmode=\"numeric\" autocomplete=\"off\">\r\n                            </div>\r\n                          </div>\r\n                          <div id=\"abhareg_mob_step1_alert\" class=\"mt-2\"></div>\r\n                          <div class=\"mt-3\">\r\n                            <button type=\"button\" id=\"abhareg_mob_send_btn\" class=\"btn btn-primary\">\r\n                              <span id=\"abhareg_mob_send_spinner\" class=\"spinner-border spinner-border-sm me-1 d-none\"></span>Send OTP\r\n                            </button>\r\n                          </div>\r\n                        </div>\r\n                        <div id=\"abhareg_mob_step2\" class=\"d-none mt-3\">\r\n                          <p class=\"text-muted small mb-2\">Enter the 6-digit OTP sent to the patient's mobile.</p>\r\n                          <div class=\"row g-2\">\r\n                            <div class=\"col-md-3\">\r\n                              <label class=\"form-label\">One-Time Password <span class=\"text-danger\">*</span></label>\r\n                              <input type=\"text\" id=\"abhareg_mob_otp_input\" class=\"form-control form-control-lg text-center fw-bold\" maxlength=\"6\" inputmode=\"numeric\" autocomplete=\"one-time-code\" placeholder=\"— — — — — —\">\r\n                            </div>\r\n                          </div>\r\n                          <div id=\"abhareg_mob_step2_alert\" class=\"mt-2\"></div>\r\n                          <div class=\"mt-3 d-flex gap-2 flex-wrap\">\r\n                            <button type=\"button\" id=\"abhareg_mob_verify_btn\" class=\"btn btn-success\">\r\n                              <span id=\"abhareg_mob_verify_spinner\" class=\"spinner-border spinner-border-sm me-1 d-none\"></span>Verify OTP\r\n                            </button>\r\n                            <button type=\"button\" id=\"abhareg_mob_resend_btn\" class=\"btn btn-outline-secondary\">Resend OTP</button>\r\n                            <button type=\"button\" id=\"abhareg_mob_back_btn\" class=\"btn btn-link text-secondary\">← Back</button>\r\n                          </div>\r\n                        </div>\r\n                      </div>\r\n\r\n                      <!-- Common result card (all methods) -->\r\n                      <div id=\"abhareg_result\" class=\"d-none mt-3\">\r\n                        <div class=\"card border-success shadow-sm\">\r\n                          <div class=\"card-header bg-success text-white d-flex align-items-center gap-2 py-2\">\r\n                            <i class=\"bi bi-check-circle-fill\"></i>\r\n                            <span id=\"abhareg_result_status_badge\" class=\"fw-semibold\"></span>\r\n                          </div>\r\n                          <div class=\"card-body\">\r\n                            <div class=\"d-flex align-items-start gap-3\">\r\n                              <img id=\"abhareg_result_photo\" src=\"\" alt=\"\" class=\"rounded-circle d-none\" style=\"width:64px;height:64px;object-fit:cover;border:3px solid #198754;flex-shrink:0\">\r\n                              <div id=\"abhareg_result_photo_ph\" class=\"rounded-circle d-flex align-items-center justify-content-center bg-success-subtle\" style=\"width:64px;height:64px;font-size:30px;flex-shrink:0\">👤</div>\r\n                              <div class=\"flex-grow-1\">\r\n                                <div class=\"fw-bold fs-5 mb-1\" id=\"abhareg_result_name\">—</div>\r\n                                <div class=\"font-monospace fw-semibold text-primary mb-1\" id=\"abhareg_result_abha\"></div>\r\n                                <div class=\"text-muted small mb-1\" id=\"abhareg_result_details\"></div>\r\n                                <div id=\"abhareg_result_hms\"></div>\r\n                              </div>\r\n                            </div>\r\n                            <div class=\"mt-3 d-flex gap-2 flex-wrap\">\r\n                              <a id=\"abhareg_result_profile_btn\" href=\"#\" class=\"btn btn-success btn-sm d-none\">\r\n                                <i class=\"bi bi-person-lines-fill me-1\"></i>View Patient Profile\r\n                              </a>\r\n                              <a id=\"abhareg_result_card_btn\" href=\"#\" target=\"_blank\" class=\"btn btn-outline-primary btn-sm d-none\">\r\n                                <i class=\"bi bi-card-image me-1\"></i>Print ABHA Card\r\n                              </a>\r\n                              <button type=\"button\" class=\"btn btn-outline-secondary btn-sm\" onclick=\"abhaRegReset()\">\r\n                                <i class=\"bi bi-arrow-repeat me-1\"></i>Register Another\r\n                              </button>\r\n                            </div>\r\n                          </div>\r\n                        </div>\r\n                      </div>\r\n\r\n                    </div>\r\n                  </div>\r\n                </div>\r\n                <!-- /.ABHA REGISTER TAB PANE -->\r\n\r\n            </div>\r\n        </div>\r\n    </div>\r\n</section>\r\n<!-- /.content -->\r\n\r\n<script>\r\n    $(document).ready(function() {\r\n        $('form.form1').on('submit', function(form) {\r\n            $(\"#RegisterPatient\").prop(\"disabled\", true);\r\n            form.preventDefault();\r\n\r\n            $.post('http://localhost:8080/billing/patient/create', $('form.form1').serialize(), function(data) {\r\n                if (data.insertid == 0) {\r\n                    notify('error', 'Please Attention', data.error_text);\r\n                    $(\"#RegisterPatient\").prop(\"disabled\", false);\r\n                } else {\r\n                    load_form('http://localhost:8080/billing/patient/person_record/' + data.insertid, 'Patient Record');\r\n                }\r\n            }, 'json');\r\n        });\r\n\r\n        $('form.form2').on('submit', function(form) {\r\n            form.preventDefault();\r\n            var searchBtn = $('form.form2 button[type=\"submit\"]');\r\n            var loadingDiv = $('#search_loading');\r\n            \r\n            // Show loading indicator and disable button\r\n            loadingDiv.show();\r\n            searchBtn.prop('disabled', true);\r\n            searchBtn.text('Searching...');\r\n            \r\n            $.post('http://localhost:8080/billing/patient/search', $('form.form2').serialize(), function(data) {\r\n                $('div.searchresult').html(data);\r\n                \r\n                // Hide loading indicator and re-enable button\r\n                loadingDiv.hide();\r\n                searchBtn.prop('disabled', false);\r\n                searchBtn.text('Go!');\r\n            });\r\n        });\r\n\r\n        /* ===================== ABHA CREATION WIZARD ===================== */\r\n        (function () {\r\n            var txnId  = null;   // transaction id from ABDM API\r\n            var mobile = '';     // mobile to register with the new ABHA\r\n            var csrfToken = function() { return $('input[name=\"csrf_test_name\"]').first().val(); };\r\n\r\n            function abhaStep(step) {\r\n                $('#abha_step_1,#abha_step_2,#abha_step_3,#abha_step_4').hide();\r\n                $('#abha_step_' + step).show();\r\n                // update progress nodes\r\n                for (var i = 1; i <= 4; i++) {\r\n                    var $n = $('#abha_node_' + i);\r\n                    var $b = $('#abha_badge_' + i);\r\n                    $n.removeClass('active done');\r\n                    if (i < step) {\r\n                        $n.addClass('done');\r\n                        $b.html('<i class=\"fas fa-check fa-xs\"></i>');\r\n                    } else if (i === step) {\r\n                        $n.addClass('active');\r\n                        $b.text(i);\r\n                    } else {\r\n                        $b.text(i);\r\n                    }\r\n                }\r\n            }\r\n\r\n            function showAlert(containerId, type, msg) {\r\n                $('#' + containerId).html('<div class=\"alert alert-' + type + ' py-2 mt-2\">' + msg + '</div>');\r\n            }\r\n\r\n            // Apply inputmask to Aadhaar field\r\n            $('#abha_aadhaar_masked').inputmask('9999-9999-9999');\r\n\r\n            // Step 1 → Get OTP\r\n            $('#abha_get_otp_btn').on('click', function() {\r\n                var aadhaar = $('#abha_aadhaar_masked').val().replace(/\\D/g, '');\r\n                if (aadhaar.length !== 12) {\r\n                    showAlert('abha_step1_alert', 'danger', 'Please enter a valid 12-digit Aadhaar number.');\r\n                    return;\r\n                }\r\n                var mobileVal = $('#abha_reg_mobile').val().trim();\r\n                if (!/^\\d{10}$/.test(mobileVal)) {\r\n                    showAlert('abha_step1_alert', 'danger', 'Please enter a valid 10-digit mobile number for ABHA.');\r\n                    return;\r\n                }\r\n                if (!$('#abha_consent_chk').is(':checked')) {\r\n                    showAlert('abha_step1_alert', 'warning', 'You must agree to the Terms and Conditions to proceed.');\r\n                    return;\r\n                }\r\n                mobile = mobileVal;\r\n                $('#abha_step1_alert').html('');\r\n                $('#abha_get_otp_spinner').removeClass('d-none');\r\n                $('#abha_get_otp_btn').prop('disabled', true);\r\n\r\n                $.post('http://localhost:8080/abha/create/initiate', {\r\n                    aadhaar: aadhaar,\r\n                    auth_type: $('#abha_auth_type').val(),\r\n                    'csrf_test_name': csrfToken()\r\n                }, function(resp) {\r\n                    $('#abha_get_otp_spinner').addClass('d-none');\r\n                    $('#abha_get_otp_btn').prop('disabled', false);\r\n                    if (resp && resp.ok == 1) {\r\n                        txnId = resp.txn_id || null;\r\n                        abhaStep(2);\r\n                    } else {\r\n                        showAlert('abha_step1_alert', 'danger', (resp && resp.error_text) ? resp.error_text : 'Failed to send OTP. Please try again.');\r\n                    }\r\n                }, 'json').fail(function() {\r\n                    $('#abha_get_otp_spinner').addClass('d-none');\r\n                    $('#abha_get_otp_btn').prop('disabled', false);\r\n                    showAlert('abha_step1_alert', 'danger', 'Server error. Please try again.');\r\n                });\r\n            });\r\n\r\n            // Back to step 1\r\n            $('#abha_back_step1_btn').on('click', function() { abhaStep(1); });\r\n\r\n            // Resend OTP\r\n            $('#abha_resend_otp_btn').on('click', function() {\r\n                $('#abha_get_otp_btn').trigger('click');\r\n            });\r\n\r\n            // Step 2 → Verify OTP\r\n            $('#abha_verify_otp_btn').on('click', function() {\r\n                var otp = $('#abha_otp_input').val().trim();\r\n                if (!/^\\d{6}$/.test(otp)) {\r\n                    showAlert('abha_step2_alert', 'danger', 'Please enter the 6-digit OTP.');\r\n                    return;\r\n                }\r\n                $('#abha_step2_alert').html('');\r\n                $('#abha_verify_otp_spinner').removeClass('d-none');\r\n                $('#abha_verify_otp_btn').prop('disabled', true);\r\n\r\n                $.post('http://localhost:8080/abha/create/verify_otp', {\r\n                    otp: otp,\r\n                    txn_id: txnId,\r\n                    mobile: mobile,\r\n                    'csrf_test_name': csrfToken()\r\n                }, function(resp) {\r\n                    $('#abha_verify_otp_spinner').addClass('d-none');\r\n                    $('#abha_verify_otp_btn').prop('disabled', false);\r\n                    if (resp && resp.ok == 1) {\r\n                        txnId = resp.txn_id || txnId;\r\n                        var abhaNum  = resp.abha_number || '';\r\n                        var abhaDisp = abhaNum.replace(/(\\d{2})(\\d{4})(\\d{4})(\\d{4})/, '$1-$2-$3-$4');\r\n                        var abhaRaw  = abhaNum.replace(/\\D/g, '');\r\n                        var patMsg   = '';\r\n                        if (resp.patient_id > 0) {\r\n                            patMsg = resp.is_new_patient\r\n                                ? '<span class=\"badge bg-success ms-1\">New Patient Registered</span>'\r\n                                : '<span class=\"badge bg-info ms-1\">Patient Found</span>';\r\n                            patMsg += ' <small class=\"text-muted\">HMS ID: <strong>' + (resp.p_code || '') + '</strong></small>';\r\n                        }\r\n                        var cardBtn = abhaRaw.length === 14\r\n                            ? ' <a href=\"http://localhost:8080/abha/card/' + abhaRaw + '\" target=\"_blank\" class=\"btn btn-sm btn-outline-primary mt-1\"><i class=\"bi bi-card-image me-1\"></i>View/Print ABHA Card</a>'\r\n                            : '';\r\n                        $('#abha_created_result').html(\r\n                            '<div class=\"alert alert-success\">' +\r\n                            '<i class=\"bi bi-check-circle-fill me-2\"></i>' +\r\n                            '<strong>ABHA Number Created!</strong><br>' +\r\n                            (abhaDisp ? 'ABHA: <strong>' + abhaDisp + '</strong><br>' : '') +\r\n                            (resp.name ? 'Name: ' + resp.name + '<br>' : '') +\r\n                            patMsg +\r\n                            cardBtn +\r\n                            '</div>'\r\n                        );\r\n                        abhaStep(4);\r\n                    } else {\r\n                        showAlert('abha_step2_alert', 'danger', (resp && resp.error_text) ? resp.error_text : 'Invalid OTP. Please try again.');\r\n                    }\r\n                }, 'json').fail(function() {\r\n                    $('#abha_verify_otp_spinner').addClass('d-none');\r\n                    $('#abha_verify_otp_btn').prop('disabled', false);\r\n                    showAlert('abha_step2_alert', 'danger', 'Server error. Please try again.');\r\n                });\r\n            });\r\n\r\n        })();\r\n        /* =============================================================== */\r\n\r\n        /* ===== LINK ABHA (Verify tab) — Mobile OTP flow ===== */\r\n        (function() {\r\n            var linkTxnId = null;\r\n\r\n            function linkAlert(id, type, msg) {\r\n                $('#' + id).html(msg ? '<div class=\"alert alert-' + type + ' py-2 mt-2\">' + msg + '</div>' : '');\r\n            }\r\n\r\n            $('#abha_link_send_otp_btn').on('click', function() {\r\n                var mobile = $('#abha_link_mobile').val().trim();\r\n                if (!/^\\d{10}$/.test(mobile)) {\r\n                    linkAlert('link_step1_alert', 'danger', 'Please enter a valid 10-digit mobile number.');\r\n                    return;\r\n                }\r\n                linkAlert('link_step1_alert', '', '');\r\n                $('#abha_link_send_spinner').removeClass('d-none');\r\n                $('#abha_link_send_otp_btn').prop('disabled', true);\r\n\r\n                $.post('http://localhost:8080/abha/create/communication', {\r\n                    mobile: mobile,\r\n                    'csrf_test_name': csrfToken()\r\n                }, function(resp) {\r\n                    $('#abha_link_send_spinner').addClass('d-none');\r\n                    $('#abha_link_send_otp_btn').prop('disabled', false);\r\n                    if (resp && resp.ok == 1) {\r\n                        linkTxnId = resp.txn_id || null;\r\n                        $('#link_step_2').show();\r\n                        linkAlert('link_step1_alert', 'success', 'OTP sent to mobile ending ' + mobile.slice(-4) + '.');\r\n                    } else {\r\n                        linkAlert('link_step1_alert', 'danger', (resp && resp.error_text) ? resp.error_text : 'Failed to send OTP.');\r\n                    }\r\n                }, 'json').fail(function() {\r\n                    $('#abha_link_send_spinner').addClass('d-none');\r\n                    $('#abha_link_send_otp_btn').prop('disabled', false);\r\n                    linkAlert('link_step1_alert', 'danger', 'Server error. Please try again.');\r\n                });\r\n            });\r\n\r\n            $('#abha_link_resend_btn').on('click', function() {\r\n                $('#abha_link_otp_input').val('');\r\n                $('#link_step_2').hide();\r\n                linkAlert('link_step2_alert', '', '');\r\n                $('#abha_link_send_otp_btn').trigger('click');\r\n            });\r\n\r\n            $('#abha_link_verify_otp_btn').on('click', function() {\r\n                var otp = $('#abha_link_otp_input').val().trim();\r\n                if (!/^\\d{6}$/.test(otp)) {\r\n                    linkAlert('link_step2_alert', 'danger', 'Please enter the 6-digit OTP.');\r\n                    return;\r\n                }\r\n                linkAlert('link_step2_alert', '', '');\r\n                $('#abha_link_verify_spinner').removeClass('d-none');\r\n                $('#abha_link_verify_otp_btn').prop('disabled', true);\r\n\r\n                $.post('http://localhost:8080/abha/create/verify_comm_otp', {\r\n                    otp: otp,\r\n                    txn_id: linkTxnId,\r\n                    'csrf_test_name': csrfToken()\r\n                }, function(resp) {\r\n                    $('#abha_link_verify_spinner').addClass('d-none');\r\n                    $('#abha_link_verify_otp_btn').prop('disabled', false);\r\n                    if (resp && resp.ok == 1) {\r\n                        var abhaNum  = resp.abha_number || '';\r\n                        var abhaDisp = abhaNum.replace(/(\\d{2})(\\d{4})(\\d{4})(\\d{4})/, '$1-$2-$3-$4');\r\n                        var abhaRaw  = abhaNum.replace(/\\D/g, '');\r\n                        var patMsg   = '';\r\n                        if (resp.patient_id > 0) {\r\n                            patMsg = resp.is_new_patient\r\n                                ? '<span class=\"badge bg-success ms-1\">New Patient Registered</span>'\r\n                                : '<span class=\"badge bg-info ms-1\">Patient Found</span>';\r\n                            patMsg += ' <small class=\"text-muted\">HMS ID: <strong>' + (resp.p_code || '') + '</strong></small>';\r\n                        }\r\n                        var cardBtn = abhaRaw.length === 14\r\n                            ? '<br><a href=\"http://localhost:8080/abha/card/' + abhaRaw + '\" target=\"_blank\" class=\"btn btn-sm btn-outline-primary mt-2\"><i class=\"bi bi-card-image me-1\"></i>View/Print ABHA Card</a>'\r\n                            : '';\r\n                        $('#link_result').html(\r\n                            '<div class=\"alert alert-success\">' +\r\n                            '<i class=\"bi bi-check-circle-fill me-2\"></i>' +\r\n                            '<strong>ABHA Found!</strong><br>' +\r\n                            (abhaDisp ? 'ABHA: <strong>' + abhaDisp + '</strong><br>' : '') +\r\n                            (resp.name   ? 'Name: '   + resp.name   + '<br>' : '') +\r\n                            (resp.gender ? 'Gender: ' + resp.gender + '<br>' : '') +\r\n                            (resp.dob    ? 'DOB: '    + resp.dob    + '<br>' : '') +\r\n                            patMsg + cardBtn +\r\n                            '</div>'\r\n                        );\r\n                    } else {\r\n                        linkAlert('link_step2_alert', 'danger', (resp && resp.error_text) ? resp.error_text : 'OTP verification failed.');\r\n                    }\r\n                }, 'json').fail(function() {\r\n                    $('#abha_link_verify_spinner').addClass('d-none');\r\n                    $('#abha_link_verify_otp_btn').prop('disabled', false);\r\n                    linkAlert('link_step2_alert', 'danger', 'Server error. Please try again.');\r\n                });\r\n            });\r\n        })();\r\n        /* =============================================================== */\r\n\r\n        $('#abha_bridge_test_btn').on('click', function() {\r\n            var abhaId = '12345678901234';\r\n\r\n            $('#abha_bridge_test_result').html('');\r\n            $('#abha_bridge_test_spinner').removeClass('d-none');\r\n            $('#abha_bridge_test_btn').prop('disabled', true);\r\n\r\n            $.post('http://localhost:8080/AbdmGateway/bridge_test_event', {\r\n                abha_id: abhaId,\r\n                'csrf_test_name': $('input[name=\"csrf_test_name\"]').first().val()\r\n            }, function(resp) {\r\n                $('#abha_bridge_test_spinner').addClass('d-none');\r\n                $('#abha_bridge_test_btn').prop('disabled', false);\r\n\r\n                if (resp && resp.ok == 1) {\r\n                    var html = '<div class=\"alert alert-success py-2\">'\r\n                        + '<strong>' + (resp.message || 'Bridge test success') + '</strong><br>'\r\n                        + 'Connector: <code>' + (resp.connector || '-') + '</code><br>'\r\n                        + 'Bridge URL: <code>' + (resp.bridge_url || '-') + '</code><br>'\r\n                        + 'Queue ID: <code>' + (resp.queue_id || '-') + '</code>'\r\n                        + '</div>';\r\n                    $('#abha_bridge_test_result').html(html);\r\n                } else {\r\n                    $('#abha_bridge_test_result').html('<div class=\"alert alert-danger py-2\">' + ((resp && resp.error_text) ? resp.error_text : 'Bridge test failed') + '</div>');\r\n                }\r\n            }, 'json').fail(function(xhr) {\r\n                $('#abha_bridge_test_spinner').addClass('d-none');\r\n                $('#abha_bridge_test_btn').prop('disabled', false);\r\n                var msg = 'Bridge test failed due to server error.';\r\n                if (xhr && xhr.responseJSON && xhr.responseJSON.error_text) {\r\n                    msg = xhr.responseJSON.error_text;\r\n                }\r\n                $('#abha_bridge_test_result').html('<div class=\"alert alert-danger py-2\">' + msg + '</div>');\r\n            });\r\n        });\r\n\r\n        /* ===================== ABHA REGISTRATION WIZARD ===================== */\r\n        (function() {\r\n            var regTxnId     = null;\r\n            var html5QrCode  = null;\r\n            var csrf         = function() { return $('input[name=\"csrf_test_name\"]').first().val(); };\r\n\r\n            var methodMeta = {\r\n                number:   { icon: '🆔', title: 'By ABHA Number/Address', sub: 'Validate then OTP verify' },\r\n                qr:       { icon: '📷', title: 'Scan Patient ABHA QR',   sub: 'Camera → ABHA extracted → OTP verify' },\r\n                facility: { icon: '🏥', title: 'Scan Facility QR',       sub: 'Patient scans via ABHA app' },\r\n                mobile:   { icon: '📱', title: 'By Mobile OTP',          sub: 'OTP to ABHA-linked mobile' }\r\n            };\r\n\r\n            window.abhaRegSelectMethod = function(method) {\r\n                regTxnId = null;\r\n                $('.abhareg-method-card').removeClass('border-primary bg-primary-subtle shadow-sm');\r\n                $('[data-method=\"' + method + '\"]').addClass('border-primary bg-primary-subtle shadow-sm');\r\n                var m = methodMeta[method];\r\n                $('#abhareg_banner_icon').text(m.icon);\r\n                $('#abhareg_banner_title').text(m.title);\r\n                $('#abhareg_banner_sub').text(m.sub);\r\n                $('#abhareg_active_banner').removeClass('d-none');\r\n                $('.abhareg-panel').addClass('d-none');\r\n                $('#abhareg_panel_' + method).removeClass('d-none');\r\n                $('#abhareg_result').addClass('d-none');\r\n                if (method === 'qr') { initQrScanner(); }\r\n                else { stopQrScanner(); }\r\n            };\r\n\r\n            window.abhaRegReset = function() {\r\n                regTxnId = null;\r\n                stopQrScanner();\r\n                $('.abhareg-method-card').removeClass('border-primary bg-primary-subtle shadow-sm');\r\n                $('#abhareg_active_banner').addClass('d-none');\r\n                $('.abhareg-panel').addClass('d-none');\r\n                $('#abhareg_result').addClass('d-none');\r\n                $('#abhareg_abha_input').val('');\r\n                $('#abhareg_abha_status,#abhareg_num_stepA_alert,#abhareg_num_stepB_alert,#abhareg_num_stepC_alert').html('');\r\n                $('#abhareg_num_mobile,#abhareg_num_otp_input').val('');\r\n                $('#abhareg_num_stepB,#abhareg_num_stepC').addClass('d-none');\r\n                $('#abhareg_num_stepA').removeClass('d-none');\r\n                $('#abhareg_goto_stepB').addClass('d-none');\r\n                $('#abhareg_mob_mobile,#abhareg_mob_otp_input').val('');\r\n                $('#abhareg_mob_step2').addClass('d-none');\r\n                $('#abhareg_mob_step1_alert,#abhareg_mob_step2_alert').html('');\r\n            };\r\n\r\n            function regAlert(id, type, msg) {\r\n                $('#' + id).html(msg ? '<div class=\"alert alert-' + type + ' py-2\">' + msg + '</div>' : '');\r\n            }\r\n\r\n            function showRegResult(resp) {\r\n                var abhaNum  = resp.abha_number || '';\r\n                var abhaDisp = abhaNum.replace(/(\\d{2})(\\d{4})(\\d{4})(\\d{4})/, '$1-$2-$3-$4');\r\n                var abhaRaw  = abhaNum.replace(/\\D/g, '');\r\n                var isNew    = resp.is_new_patient;\r\n                var patId    = resp.patient_id || 0;\r\n                var pCode    = resp.p_code || '';\r\n                var badge    = isNew\r\n                    ? '<span class=\"badge bg-success me-2\">New Patient Registered</span>'\r\n                    : '<span class=\"badge bg-info text-dark me-2\">Returning Patient Found</span>';\r\n                $('#abhareg_result_status_badge').html(badge + 'Identity Verified via ABHA');\r\n                $('#abhareg_result_name').text(resp.name || '—');\r\n                $('#abhareg_result_abha').text(abhaDisp || '');\r\n                var details = [];\r\n                if (resp.gender) details.push(resp.gender==='M'||resp.gender==='1'?'Male':(resp.gender==='F'||resp.gender==='2'?'Female':resp.gender));\r\n                if (resp.dob)    details.push('DOB: ' + resp.dob);\r\n                if (resp.mobile) details.push('Mobile: ' + String(resp.mobile).replace(/(\\d{6})(\\d{4})/, '******$2'));\r\n                $('#abhareg_result_details').text(details.join(' | '));\r\n                $('#abhareg_result_hms').html(pCode ? '<small class=\"text-muted\">HMS ID: <strong>' + pCode + '</strong></small>' : '');\r\n                if (resp.photo) {\r\n                    var src = String(resp.photo).startsWith('data:') ? resp.photo : 'data:image/jpeg;base64,' + resp.photo;\r\n                    $('#abhareg_result_photo').attr('src', src).removeClass('d-none');\r\n                    $('#abhareg_result_photo_ph').addClass('d-none');\r\n                } else {\r\n                    $('#abhareg_result_photo').addClass('d-none');\r\n                    $('#abhareg_result_photo_ph').removeClass('d-none');\r\n                }\r\n                if (patId > 0) {\r\n                    $('#abhareg_result_profile_btn').attr('href', 'http://localhost:8080/billing/patient/person_record/' + patId).removeClass('d-none');\r\n                }\r\n                if (abhaRaw.length === 14) {\r\n                    $('#abhareg_result_card_btn').attr('href', 'http://localhost:8080/abha/card/' + abhaRaw).removeClass('d-none');\r\n                }\r\n                $('#abhareg_result').removeClass('d-none');\r\n                $('html,body').animate({ scrollTop: $('#abhareg_result').offset().top - 80 }, 400);\r\n            }\r\n\r\n            // --- Method 1: Validate ABHA ---\r\n            $('#abhareg_validate_btn').on('click', function() {\r\n                var abha = $('#abhareg_abha_input').val().trim();\r\n                if (!abha) { regAlert('abhareg_num_stepA_alert', 'warning', 'Please enter ABHA number or address.'); return; }\r\n                regAlert('abhareg_num_stepA_alert', '', '');\r\n                $('#abhareg_abha_status').html('');\r\n                $('#abhareg_goto_stepB').addClass('d-none');\r\n                $('#abhareg_validate_spinner').removeClass('d-none');\r\n                $('#abhareg_validate_btn').prop('disabled', true);\r\n                $.post('http://localhost:8080/abha/register/validate', {\r\n                    abha_id: abha,\r\n                    'csrf_test_name': csrf()\r\n                }, function(resp) {\r\n                    $('#abhareg_validate_spinner').addClass('d-none');\r\n                    $('#abhareg_validate_btn').prop('disabled', false);\r\n                    if (resp && resp.ok == 1 && resp.status === 'VALID') {\r\n                        $('#abhareg_abha_status').html('<span class=\"badge bg-success\"><i class=\"bi bi-check-circle me-1\"></i>VALID</span>');\r\n                        $('#abhareg_goto_stepB').removeClass('d-none');\r\n                    } else {\r\n                        var msg = (resp && resp.error_text) ? resp.error_text : (resp && resp.status ? 'Status: ' + resp.status : 'ABHA not found or invalid.');\r\n                        regAlert('abhareg_num_stepA_alert', 'danger', msg);\r\n                        $('#abhareg_abha_status').html('<span class=\"badge bg-danger\">INVALID</span>');\r\n                    }\r\n                }, 'json').fail(function() {\r\n                    $('#abhareg_validate_spinner').addClass('d-none');\r\n                    $('#abhareg_validate_btn').prop('disabled', false);\r\n                    regAlert('abhareg_num_stepA_alert', 'danger', 'Server error during validation.');\r\n                });\r\n            });\r\n\r\n            $('#abhareg_goto_stepB').on('click', function() {\r\n                $('#abhareg_num_stepA').addClass('d-none');\r\n                $('#abhareg_num_stepB').removeClass('d-none');\r\n                $('#abhareg_num_mobile').focus();\r\n            });\r\n            $('#abhareg_back_to_stepA').on('click', function() {\r\n                $('#abhareg_num_stepB').addClass('d-none');\r\n                $('#abhareg_num_stepA').removeClass('d-none');\r\n            });\r\n            $('#abhareg_back_to_stepB').on('click', function() {\r\n                $('#abhareg_num_stepC').addClass('d-none');\r\n                $('#abhareg_num_stepB').removeClass('d-none');\r\n            });\r\n\r\n            // --- Shared OTP functions ---\r\n            function sendOtpToMobile(mobile, alertId, spinId, btnId, onSuccess) {\r\n                if (!/^\\d{10}$/.test(mobile)) { regAlert(alertId, 'warning', 'Please enter a valid 10-digit mobile number.'); return; }\r\n                regAlert(alertId, '', '');\r\n                $('#' + spinId).removeClass('d-none');\r\n                $('#' + btnId).prop('disabled', true);\r\n                $.post('http://localhost:8080/abha/create/communication', {\r\n                    mobile: mobile, 'csrf_test_name': csrf()\r\n                }, function(resp) {\r\n                    $('#' + spinId).addClass('d-none');\r\n                    $('#' + btnId).prop('disabled', false);\r\n                    if (resp && resp.ok == 1) {\r\n                        regTxnId = resp.txn_id || null;\r\n                        onSuccess(mobile);\r\n                    } else {\r\n                        regAlert(alertId, 'danger', (resp && resp.error_text) ? resp.error_text : 'Failed to send OTP.');\r\n                    }\r\n                }, 'json').fail(function() {\r\n                    $('#' + spinId).addClass('d-none');\r\n                    $('#' + btnId).prop('disabled', false);\r\n                    regAlert(alertId, 'danger', 'Server error. Please try again.');\r\n                });\r\n            }\r\n\r\n            function verifyOtpFromMobile(otp, alertId, spinId, btnId) {\r\n                if (!/^\\d{6}$/.test(otp)) { regAlert(alertId, 'warning', 'Please enter the 6-digit OTP.'); return; }\r\n                regAlert(alertId, '', '');\r\n                $('#' + spinId).removeClass('d-none');\r\n                $('#' + btnId).prop('disabled', true);\r\n                $.post('http://localhost:8080/abha/create/verify_comm_otp', {\r\n                    otp: otp, txn_id: regTxnId, 'csrf_test_name': csrf()\r\n                }, function(resp) {\r\n                    $('#' + spinId).addClass('d-none');\r\n                    $('#' + btnId).prop('disabled', false);\r\n                    if (resp && resp.ok == 1) {\r\n                        showRegResult(resp);\r\n                    } else {\r\n                        regAlert(alertId, 'danger', (resp && resp.error_text) ? resp.error_text : 'OTP verification failed.');\r\n                    }\r\n                }, 'json').fail(function() {\r\n                    $('#' + spinId).addClass('d-none');\r\n                    $('#' + btnId).prop('disabled', false);\r\n                    regAlert(alertId, 'danger', 'Server error. Please try again.');\r\n                });\r\n            }\r\n\r\n            // Method 1 Send/Verify\r\n            $('#abhareg_num_send_otp_btn').on('click', function() {\r\n                sendOtpToMobile($('#abhareg_num_mobile').val().trim(), 'abhareg_num_stepB_alert', 'abhareg_num_send_spinner', 'abhareg_num_send_otp_btn', function() {\r\n                    $('#abhareg_num_stepB').addClass('d-none');\r\n                    $('#abhareg_num_stepC').removeClass('d-none');\r\n                    $('#abhareg_num_otp_input').focus();\r\n                });\r\n            });\r\n            $('#abhareg_num_verify_otp_btn').on('click', function() {\r\n                verifyOtpFromMobile($('#abhareg_num_otp_input').val().trim(), 'abhareg_num_stepC_alert', 'abhareg_num_verify_spinner', 'abhareg_num_verify_otp_btn');\r\n            });\r\n            $('#abhareg_num_resend_btn').on('click', function() {\r\n                $('#abhareg_num_stepC').addClass('d-none');\r\n                $('#abhareg_num_stepB').removeClass('d-none');\r\n                $('#abhareg_num_otp_input').val('');\r\n            });\r\n\r\n            // Method 4 Send/Verify\r\n            $('#abhareg_mob_send_btn').on('click', function() {\r\n                sendOtpToMobile($('#abhareg_mob_mobile').val().trim(), 'abhareg_mob_step1_alert', 'abhareg_mob_send_spinner', 'abhareg_mob_send_btn', function(mobile) {\r\n                    $('#abhareg_mob_step2').removeClass('d-none');\r\n                    regAlert('abhareg_mob_step1_alert', 'success', 'OTP sent to mobile ending ' + mobile.slice(-4) + '.');\r\n                    $('#abhareg_mob_otp_input').focus();\r\n                });\r\n            });\r\n            $('#abhareg_mob_verify_btn').on('click', function() {\r\n                verifyOtpFromMobile($('#abhareg_mob_otp_input').val().trim(), 'abhareg_mob_step2_alert', 'abhareg_mob_verify_spinner', 'abhareg_mob_verify_btn');\r\n            });\r\n            $('#abhareg_mob_resend_btn').on('click', function() {\r\n                $('#abhareg_mob_step2').addClass('d-none');\r\n                $('#abhareg_mob_otp_input').val('');\r\n                $('#abhareg_mob_send_btn').trigger('click');\r\n            });\r\n            $('#abhareg_mob_back_btn').on('click', function() {\r\n                $('#abhareg_mob_step2').addClass('d-none');\r\n                regAlert('abhareg_mob_step2_alert', '', '');\r\n            });\r\n\r\n            // --- Method 2: QR Scanner ---\r\n            function initQrScanner() {\r\n                if (html5QrCode) { return; }\r\n                var script = document.createElement('script');\r\n                script.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';\r\n                script.onload = function() {\r\n                    html5QrCode = new Html5Qrcode('abhareg_qr_reader');\r\n                    $('#abhareg_qr_stop_btn').removeClass('d-none');\r\n                    html5QrCode.start(\r\n                        { facingMode: 'environment' },\r\n                        { fps: 10, qrbox: { width: 250, height: 250 } },\r\n                        function(decodedText) {\r\n                            stopQrScanner();\r\n                            var abha = decodedText.trim();\r\n                            var numMatch = abha.match(/\\d{14}/);\r\n                            if (numMatch) { abha = numMatch[0]; }\r\n                            $('#abhareg_qr_result').html('<div class=\"alert alert-success py-2\"><i class=\"bi bi-qr-code me-2\"></i>QR scanned: <strong>' + abha + '</strong></div>');\r\n                            abhaRegSelectMethod('number');\r\n                            $('#abhareg_abha_input').val(abha);\r\n                            $('#abhareg_validate_btn').trigger('click');\r\n                        },\r\n                        function() {}\r\n                    ).catch(function(err) {\r\n                        $('#abhareg_qr_result').html('<div class=\"alert alert-warning py-2\">Camera error: ' + err + '. Please allow camera access.</div>');\r\n                    });\r\n                };\r\n                document.head.appendChild(script);\r\n            }\r\n\r\n            function stopQrScanner() {\r\n                if (html5QrCode) {\r\n                    html5QrCode.stop().catch(function(){}).then(function() { html5QrCode = null; });\r\n                    $('#abhareg_qr_stop_btn').addClass('d-none');\r\n                }\r\n            }\r\n\r\n            $('#abhareg_qr_stop_btn').on('click', function() { stopQrScanner(); });\r\n\r\n            // Enter key on OTP fields\r\n            $('#abhareg_num_otp_input').on('keypress', function(e) {\r\n                if (e.which === 13) { $('#abhareg_num_verify_otp_btn').trigger('click'); }\r\n            });\r\n            $('#abhareg_mob_otp_input').on('keypress', function(e) {\r\n                if (e.which === 13) { $('#abhareg_mob_verify_btn').trigger('click'); }\r\n            });\r\n        })();\r\n        /* ===== END ABHA REGISTRATION WIZARD ===== */\r\n\r\n        $('#input_abha_id').on('change blur', function() {\r\n            var abhaId = ($(this).val() || '').toString().trim();\r\n            if (abhaId !== '') {\r\n                refreshAdvancedSearchResult({\r\n                    input_abha_id: abhaId\r\n                });\r\n            } else {\r\n                $('#search_result_update').html('');\r\n            }\r\n\r\n            if (!/^\\d{14}$/.test(abhaId)) {\r\n                return;\r\n            }\r\n\r\n            $.post('http://localhost:8080/patient/abha_fetch_profile', {\r\n                abha_id: abhaId,\r\n                'csrf_test_name': $('input[name=\"csrf_test_name\"]').val()\r\n            }, function(resp) {\r\n                if (!resp || resp.ok != 1 || !resp.profile) {\r\n                    return;\r\n                }\r\n\r\n                var p = resp.profile || {};\r\n                if (p.name && !$('#input_name').val()) {\r\n                    $('#input_name').val(p.name);\r\n                }\r\n                if (p.mobile && !$('#input_mphone1').val()) {\r\n                    $('#input_mphone1').val(p.mobile);\r\n                }\r\n                if (p.city && !$('#input_city').val()) {\r\n                    $('#input_city').val(p.city);\r\n                }\r\n                if (p.state && !$('#input_state').val()) {\r\n                    $('#input_state').val(p.state);\r\n                }\r\n                if (p.dob && !$('#datepicker_dob').val()) {\r\n                    $('#datepicker_dob').val(p.dob);\r\n                    if ($('#chk_age').is(':checked')) {\r\n                        $('#chk_age').prop('checked', false).trigger('click');\r\n                    }\r\n                }\r\n\r\n                if (p.gender) {\r\n                    var g = (p.gender + '').toLowerCase();\r\n                    if (g === '1' || g === 'male' || g === 'm') {\r\n                        $('#options_gender1').prop('checked', true);\r\n                    } else if (g === '2' || g === 'female' || g === 'f') {\r\n                        $('#options_gender2').prop('checked', true);\r\n                    }\r\n                }\r\n            }, 'json');\r\n        });\r\n\r\n        $(\"#input_city\").autocomplete({\r\n            source: \"http://localhost:8080/billing/patient/city\",\r\n            minLength: 3,\r\n            autofocus: true,\r\n            select: function(event, ui) {\r\n                $(\"#input_district\").val(ui.item.l_district);\r\n                $(\"#input_state\").val(ui.item.l_state);\r\n            }\r\n        });\r\n\r\n        $(\"#chk_age\").on(\"click\", function() {\r\n            if (this.checked) {\r\n                $('#age_input_1').show();\r\n                $('#age_input_2').hide();\r\n            } else {\r\n                $('#age_input_1').hide();\r\n                $('#age_input_2').show();\r\n            }\r\n        });\r\n\r\n\r\n        function split(val) {\r\n            return val.split(/ \\s*/);\r\n        }\r\n\r\n        function extractLast(term) {\r\n            return split(term).pop();\r\n        }\r\n\r\n        $('[data-bs-toggle=\"tab\"]').click(function(e) {\r\n            e.preventDefault();\r\n            var loadurl = $(this).data('url') || $(this).attr('href');\r\n            if (loadurl && loadurl !== '#') {\r\n                var targ = $(this).attr('data-bs-target');\r\n                $.get(loadurl, function(data) {\r\n                    $(targ).html(data);\r\n                });\r\n            }\r\n\r\n            var tabTrigger = new bootstrap.Tab(this);\r\n            tabTrigger.show();\r\n        });\r\n\r\n        $(\"#input_name\")\r\n            .on(\"focus\", function() {\r\n                // Suppress browser autocomplete suggestions\r\n                $(this).removeAttr('readonly').off('mousedown.autocomplete');\r\n            })\r\n            // don't navigate away from the field on tab when selecting an item\r\n            .on(\"keydown\", function(event) {\r\n                if (event.keyCode === $.ui.keyCode.TAB &&\r\n                    $(this).autocomplete(\"instance\").menu.active) {\r\n                    event.preventDefault();\r\n                }\r\n            })\r\n            .autocomplete({\r\n                source: function(request, response) {\r\n                    $.getJSON(\"http://localhost:8080/billing/patient/get_name\", {\r\n                        term: extractLast(request.term)\r\n                    }, response);\r\n                },\r\n                search: function() {\r\n                    // custom minLength\r\n                    var term = extractLast(this.value);\r\n                    if (term.length < 2) {\r\n                        return false;\r\n                    }\r\n                },\r\n                focus: function() {\r\n                    // prevent value inserted on focus\r\n                    return false;\r\n                },\r\n                select: function(event, ui) {\r\n                    var terms = split(this.value);\r\n                    // remove the current input\r\n                    terms.pop();\r\n                    // add the selected item\r\n                    terms.push(ui.item.value);\r\n                    // add placeholder to get the comma-and-space at the end\r\n                    terms.push(\"\");\r\n                    this.value = terms.join(\" \");\r\n                    return false;\r\n                }\r\n            });\r\n\r\n        $(\"#input_relative_name\")\r\n            // don't navigate away from the field on tab when selecting an item\r\n            .on(\"keydown\", function(event) {\r\n                if (event.keyCode === $.ui.keyCode.TAB &&\r\n                    $(this).autocomplete(\"instance\").menu.active) {\r\n                    event.preventDefault();\r\n                }\r\n            })\r\n            .autocomplete({\r\n                source: function(request, response) {\r\n                    $.getJSON(\"http://localhost:8080/billing/patient/get_name\", {\r\n                        term: extractLast(request.term)\r\n                    }, response);\r\n                },\r\n                search: function() {\r\n                    // custom minLength\r\n                    var term = extractLast(this.value);\r\n                    if (term.length < 2) {\r\n                        return false;\r\n                    }\r\n                },\r\n                focus: function() {\r\n                    // prevent value inserted on focus\r\n                    return false;\r\n                },\r\n                select: function(event, ui) {\r\n                    var terms = split(this.value);\r\n                    // remove the current input\r\n                    terms.pop();\r\n                    // add the selected item\r\n                    terms.push(ui.item.value);\r\n                    // add placeholder to get the comma-and-space at the end\r\n                    terms.push(\"\");\r\n                    this.value = terms.join(\" \");\r\n                    return false;\r\n                }\r\n            });\r\n\r\n        $('[data-bs-toggle=\"gpill\"]').click(function(e) {\r\n            e.preventDefault();\r\n            var loadurl = $(this).data('url') || $(this).attr('href');\r\n            if (loadurl && loadurl !== '#') {\r\n                var targ = $(this).attr('data-bs-target');\r\n                $.get(loadurl, function(data) {\r\n                    $(targ).html(data);\r\n                });\r\n            }\r\n\r\n            var tabTrigger = new bootstrap.Tab(this);\r\n            tabTrigger.show();\r\n        });\r\n\r\n    });\r\n\r\n    function getCsrfData() {\r\n        var csrfName = 'csrf_test_name';\r\n        var csrfValue = $('input[name=\"csrf_test_name\"]').first().val() || '2525ba2260b03d5d89d3c4a34bc68e76';\r\n\r\n        return {\r\n            name: csrfName,\r\n            value: csrfValue\r\n        };\r\n    }\r\n\r\n    function refreshAdvancedSearchResult(payload) {\r\n        var csrf = getCsrfData();\r\n        var postData = $.extend({}, payload || {});\r\n        postData[csrf.name] = csrf.value;\r\n\r\n        $.post('http://localhost:8080/billing/patient/search_adv', postData, function(data) {\r\n            $('#search_result_update').html(data);\r\n        });\r\n    }\r\n\r\n    function onchange_feild_number(control_button) {\r\n        var input_mphone1 = $('#input_mphone1').val();\r\n        refreshAdvancedSearchResult({\r\n            \"input_mphone1\": input_mphone1\r\n        });\r\n    }\r\n\r\n    function onchange_aadhar(control_button) {\r\n        var input_udai = $('#input_udai').val();\r\n        refreshAdvancedSearchResult({\r\n            \"input_udai\": input_udai\r\n        });\r\n    }\r\n\r\n    function onchange_relative_name(control_button) {\r\n        var input_relative_name = $('#input_relative_name').val();\r\n        var input_name = $('#input_name').val();\r\n        refreshAdvancedSearchResult({\r\n            \"input_relative_name\": input_relative_name,\r\n            \"input_name\": input_name\r\n        });\r\n\r\n    }\r\n\r\n    function onchange_title() {\r\n        var d = $('#cbo_title').val();\r\n\r\n        if (d == \"Mr.\" || d == \"Master\" || d == \"Baby Boy\" || d == \"Mohd.\") {\r\n            $(\"#options_gender1\").prop(\"checked\", true);\r\n        } else {\r\n            $(\"#options_gender2\").prop(\"checked\", true);\r\n        }\r\n    }\r\n</script>"
+          },
+          "redirectURL": "",
+          "headersSize": 520,
+          "bodySize": 98321
+        },
+        "cache": {},
+        "timings": {
+          "blocked": 2017,
+          "dns": 2,
+          "connect": 2018,
+          "ssl": 0,
+          "send": 0,
+          "wait": 1308,
+          "receive": 2
+        },
+        "time": 5347,
+        "_securityState": "insecure",
+        "serverIPAddress": "::1",
+        "connection": "8080",
+        "pageref": "page_1"
+      },
+      {
+        "startedDateTime": "2026-06-18T19:06:35.075+05:30",
+        "request": {
+          "bodySize": 70,
+          "method": "POST",
+          "url": "http://localhost:8080/abha/register/validate",
+          "httpVersion": "HTTP/1.1",
+          "headers": [
+            {
+              "name": "Host",
+              "value": "localhost:8080"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:151.0) Gecko/20100101 Firefox/151.0"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json, text/javascript, */*; q=0.01"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9"
+            },
+            {
+              "name": "Accept-Encoding",
+              "value": "gzip, deflate, br, zstd"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded; charset=UTF-8"
+            },
+            {
+              "name": "X-Requested-With",
+              "value": "XMLHttpRequest"
+            },
+            {
+              "name": "Content-Length",
+              "value": "70"
+            },
+            {
+              "name": "Origin",
+              "value": "http://localhost:8080"
+            },
+            {
+              "name": "DNT",
+              "value": "1"
+            },
+            {
+              "name": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "name": "Referer",
+              "value": "http://localhost:8080/"
+            },
+            {
+              "name": "Cookie",
+              "value": "remember=dd1d2f566bb10ef05bb479aa%3A3cd366a8ca2a0aa6aaf2ae99d138c4f0cbdcf8f4; debug-bar-tab=ci-history; debug-bar-state=minimized; ci_session=bb58484b789171028415662d770d2a77"
+            },
+            {
+              "name": "Sec-Fetch-Dest",
+              "value": "empty"
+            },
+            {
+              "name": "Sec-Fetch-Mode",
+              "value": "cors"
+            },
+            {
+              "name": "Sec-Fetch-Site",
+              "value": "same-origin"
+            },
+            {
+              "name": "Priority",
+              "value": "u=0"
+            }
+          ],
+          "cookies": [
+            {
+              "name": "remember",
+              "value": "dd1d2f566bb10ef05bb479aa:3cd366a8ca2a0aa6aaf2ae99d138c4f0cbdcf8f4"
+            },
+            {
+              "name": "debug-bar-tab",
+              "value": "ci-history"
+            },
+            {
+              "name": "debug-bar-state",
+              "value": "minimized"
+            },
+            {
+              "name": "ci_session",
+              "value": "bb58484b789171028415662d770d2a77"
+            }
+          ],
+          "queryString": [],
+          "headersSize": 775,
+          "postData": {
+            "mimeType": "application/x-www-form-urlencoded",
+            "params": [
+              {
+                "name": "abha_id",
+                "value": "91510165305101"
+              },
+              {
+                "name": "csrf_test_name",
+                "value": "2525ba2260b03d5d89d3c4a34bc68e76"
+              }
+            ],
+            "text": "abha_id=91510165305101&csrf_test_name=2525ba2260b03d5d89d3c4a34bc68e76"
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "HTTP/1.1",
+          "headers": [
+            {
+              "name": "Host",
+              "value": "localhost:8080"
+            },
+            {
+              "name": "Date",
+              "value": "Thu, 18 Jun 2026 13:36:39 GMT"
+            },
+            {
+              "name": "Connection",
+              "value": "close"
+            },
+            {
+              "name": "X-Powered-By",
+              "value": "PHP/8.3.14"
+            },
+            {
+              "name": "Expires",
+              "value": "Thu, 19 Nov 1981 08:52:00 GMT"
+            },
+            {
+              "name": "Cache-Control",
+              "value": "no-store, no-cache, must-revalidate"
+            },
+            {
+              "name": "Pragma",
+              "value": "no-cache"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json; charset=UTF-8"
+            },
+            {
+              "name": "Debugbar-Time",
+              "value": "1781789799.948775"
+            },
+            {
+              "name": "Debugbar-Link",
+              "value": "http://localhost:8080/?debugbar_time=1781789799.948775"
+            },
+            {
+              "name": "Set-Cookie",
+              "value": "ci_session=bb58484b789171028415662d770d2a77; expires=Thu, 18 Jun 2026 15:36:39 GMT; Max-Age=7200; path=/; HttpOnly; SameSite=Lax"
+            }
+          ],
+          "cookies": [
+            {
+              "name": "ci_session",
+              "value": "bb58484b789171028415662d770d2a77"
+            }
+          ],
+          "content": {
+            "mimeType": "application/json; charset=UTF-8",
+            "size": 38,
+            "text": "{\n    \"ok\": 1,\n    \"status\": \"VALID\"\n}"
+          },
+          "redirectURL": "",
+          "headersSize": 527,
+          "bodySize": 565
+        },
+        "cache": {},
+        "timings": {
+          "blocked": 2034,
+          "dns": 1,
+          "connect": 2034,
+          "ssl": 0,
+          "send": 0,
+          "wait": 2844,
+          "receive": 2
+        },
+        "time": 6915,
+        "_securityState": "insecure",
+        "serverIPAddress": "::1",
+        "connection": "8080",
+        "pageref": "page_1"
+      },
+      {
+        "startedDateTime": "2026-06-18T19:06:47.987+05:30",
+        "request": {
+          "bodySize": 65,
+          "method": "POST",
+          "url": "http://localhost:8080/abha/create/communication",
+          "httpVersion": "HTTP/1.1",
+          "headers": [
+            {
+              "name": "Host",
+              "value": "localhost:8080"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:151.0) Gecko/20100101 Firefox/151.0"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json, text/javascript, */*; q=0.01"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9"
+            },
+            {
+              "name": "Accept-Encoding",
+              "value": "gzip, deflate, br, zstd"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded; charset=UTF-8"
+            },
+            {
+              "name": "X-Requested-With",
+              "value": "XMLHttpRequest"
+            },
+            {
+              "name": "Content-Length",
+              "value": "65"
+            },
+            {
+              "name": "Origin",
+              "value": "http://localhost:8080"
+            },
+            {
+              "name": "DNT",
+              "value": "1"
+            },
+            {
+              "name": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "name": "Referer",
+              "value": "http://localhost:8080/"
+            },
+            {
+              "name": "Cookie",
+              "value": "remember=dd1d2f566bb10ef05bb479aa%3A3cd366a8ca2a0aa6aaf2ae99d138c4f0cbdcf8f4; debug-bar-tab=ci-history; debug-bar-state=minimized; ci_session=bb58484b789171028415662d770d2a77"
+            },
+            {
+              "name": "Sec-Fetch-Dest",
+              "value": "empty"
+            },
+            {
+              "name": "Sec-Fetch-Mode",
+              "value": "cors"
+            },
+            {
+              "name": "Sec-Fetch-Site",
+              "value": "same-origin"
+            },
+            {
+              "name": "Priority",
+              "value": "u=0"
+            }
+          ],
+          "cookies": [
+            {
+              "name": "remember",
+              "value": "dd1d2f566bb10ef05bb479aa:3cd366a8ca2a0aa6aaf2ae99d138c4f0cbdcf8f4"
+            },
+            {
+              "name": "debug-bar-tab",
+              "value": "ci-history"
+            },
+            {
+              "name": "debug-bar-state",
+              "value": "minimized"
+            },
+            {
+              "name": "ci_session",
+              "value": "bb58484b789171028415662d770d2a77"
+            }
+          ],
+          "queryString": [],
+          "headersSize": 778,
+          "postData": {
+            "mimeType": "application/x-www-form-urlencoded",
+            "params": [
+              {
+                "name": "mobile",
+                "value": "9720958717"
+              },
+              {
+                "name": "csrf_test_name",
+                "value": "2525ba2260b03d5d89d3c4a34bc68e76"
+              }
+            ],
+            "text": "mobile=9720958717&csrf_test_name=2525ba2260b03d5d89d3c4a34bc68e76"
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "HTTP/1.1",
+          "headers": [
+            {
+              "name": "Host",
+              "value": "localhost:8080"
+            },
+            {
+              "name": "Date",
+              "value": "Thu, 18 Jun 2026 13:36:53 GMT"
+            },
+            {
+              "name": "Connection",
+              "value": "close"
+            },
+            {
+              "name": "X-Powered-By",
+              "value": "PHP/8.3.14"
+            },
+            {
+              "name": "Expires",
+              "value": "Thu, 19 Nov 1981 08:52:00 GMT"
+            },
+            {
+              "name": "Cache-Control",
+              "value": "no-store, no-cache, must-revalidate"
+            },
+            {
+              "name": "Pragma",
+              "value": "no-cache"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json; charset=UTF-8"
+            },
+            {
+              "name": "Debugbar-Time",
+              "value": "1781789813.271600"
+            },
+            {
+              "name": "Debugbar-Link",
+              "value": "http://localhost:8080/?debugbar_time=1781789813.271600"
+            },
+            {
+              "name": "Set-Cookie",
+              "value": "ci_session=bb58484b789171028415662d770d2a77; expires=Thu, 18 Jun 2026 15:36:53 GMT; Max-Age=7200; path=/; HttpOnly; SameSite=Lax"
+            }
+          ],
+          "cookies": [
+            {
+              "name": "ci_session",
+              "value": "bb58484b789171028415662d770d2a77"
+            }
+          ],
+          "content": {
+            "mimeType": "application/json; charset=UTF-8",
+            "size": 69,
+            "text": "{\n    \"ok\": 1,\n    \"txn_id\": \"7fbe347f-74f0-4999-9661-2e8e0f3bb661\"\n}"
+          },
+          "redirectURL": "",
+          "headersSize": 527,
+          "bodySize": 596
+        },
+        "cache": {},
+        "timings": {
+          "blocked": 2051,
+          "dns": 1,
+          "connect": 2051,
+          "ssl": 0,
+          "send": 0,
+          "wait": 3237,
+          "receive": 1
+        },
+        "time": 7341,
+        "_securityState": "insecure",
+        "serverIPAddress": "::1",
+        "connection": "8080",
+        "pageref": "page_1"
+      },
+      {
+        "startedDateTime": "2026-06-18T19:07:17.738+05:30",
+        "request": {
+          "bodySize": 102,
+          "method": "POST",
+          "url": "http://localhost:8080/abha/create/verify_comm_otp",
+          "httpVersion": "HTTP/1.1",
+          "headers": [
+            {
+              "name": "Host",
+              "value": "localhost:8080"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:151.0) Gecko/20100101 Firefox/151.0"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json, text/javascript, */*; q=0.01"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9"
+            },
+            {
+              "name": "Accept-Encoding",
+              "value": "gzip, deflate, br, zstd"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded; charset=UTF-8"
+            },
+            {
+              "name": "X-Requested-With",
+              "value": "XMLHttpRequest"
+            },
+            {
+              "name": "Content-Length",
+              "value": "102"
+            },
+            {
+              "name": "Origin",
+              "value": "http://localhost:8080"
+            },
+            {
+              "name": "DNT",
+              "value": "1"
+            },
+            {
+              "name": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "name": "Referer",
+              "value": "http://localhost:8080/"
+            },
+            {
+              "name": "Cookie",
+              "value": "remember=dd1d2f566bb10ef05bb479aa%3A3cd366a8ca2a0aa6aaf2ae99d138c4f0cbdcf8f4; debug-bar-tab=ci-history; debug-bar-state=minimized; ci_session=bb58484b789171028415662d770d2a77"
+            },
+            {
+              "name": "Sec-Fetch-Dest",
+              "value": "empty"
+            },
+            {
+              "name": "Sec-Fetch-Mode",
+              "value": "cors"
+            },
+            {
+              "name": "Sec-Fetch-Site",
+              "value": "same-origin"
+            },
+            {
+              "name": "Priority",
+              "value": "u=0"
+            }
+          ],
+          "cookies": [
+            {
+              "name": "remember",
+              "value": "dd1d2f566bb10ef05bb479aa:3cd366a8ca2a0aa6aaf2ae99d138c4f0cbdcf8f4"
+            },
+            {
+              "name": "debug-bar-tab",
+              "value": "ci-history"
+            },
+            {
+              "name": "debug-bar-state",
+              "value": "minimized"
+            },
+            {
+              "name": "ci_session",
+              "value": "bb58484b789171028415662d770d2a77"
+            }
+          ],
+          "queryString": [],
+          "headersSize": 781,
+          "postData": {
+            "mimeType": "application/x-www-form-urlencoded",
+            "params": [
+              {
+                "name": "otp",
+                "value": "890561"
+              },
+              {
+                "name": "txn_id",
+                "value": "7fbe347f-74f0-4999-9661-2e8e0f3bb661"
+              },
+              {
+                "name": "csrf_test_name",
+                "value": "2525ba2260b03d5d89d3c4a34bc68e76"
+              }
+            ],
+            "text": "otp=890561&txn_id=7fbe347f-74f0-4999-9661-2e8e0f3bb661&csrf_test_name=2525ba2260b03d5d89d3c4a34bc68e76"
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "HTTP/1.1",
+          "headers": [
+            {
+              "name": "Host",
+              "value": "localhost:8080"
+            },
+            {
+              "name": "Date",
+              "value": "Thu, 18 Jun 2026 13:37:23 GMT"
+            },
+            {
+              "name": "Connection",
+              "value": "close"
+            },
+            {
+              "name": "X-Powered-By",
+              "value": "PHP/8.3.14"
+            },
+            {
+              "name": "Expires",
+              "value": "Thu, 19 Nov 1981 08:52:00 GMT"
+            },
+            {
+              "name": "Cache-Control",
+              "value": "no-store, no-cache, must-revalidate"
+            },
+            {
+              "name": "Pragma",
+              "value": "no-cache"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json; charset=UTF-8"
+            },
+            {
+              "name": "Debugbar-Time",
+              "value": "1781789843.465175"
+            },
+            {
+              "name": "Debugbar-Link",
+              "value": "http://localhost:8080/?debugbar_time=1781789843.465175"
+            },
+            {
+              "name": "Set-Cookie",
+              "value": "ci_session=bb58484b789171028415662d770d2a77; expires=Thu, 18 Jun 2026 15:37:23 GMT; Max-Age=7200; path=/; HttpOnly; SameSite=Lax"
+            }
+          ],
+          "cookies": [
+            {
+              "name": "ci_session",
+              "value": "bb58484b789171028415662d770d2a77"
+            }
+          ],
+          "content": {
+            "mimeType": "application/json; charset=UTF-8",
+            "size": 9502,
+            "text": "{\n    \"ok\": 1,\n    \"abha_number\": \"91-5101-6530-5101\",\n    \"name\": \"Devender Singh\",\n    \"photo\": \"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\",\n    \"gender\": \"M\",\n    \"dob\": \"28-03-1979\",\n    \"patient_id\": 7,\n    \"p_code\": \"P26061000007\",\n    \"is_new_patient\": false\n}"
+          },
+          "redirectURL": "",
+          "headersSize": 527,
+          "bodySize": 10029
+        },
+        "cache": {},
+        "timings": {
+          "blocked": 2022,
+          "dns": 2,
+          "connect": 2025,
+          "ssl": 0,
+          "send": 0,
+          "wait": 3707,
+          "receive": 3
+        },
+        "time": 7759,
+        "_securityState": "insecure",
+        "serverIPAddress": "::1",
+        "connection": "8080",
+        "pageref": "page_1"
+      },
+      {
+        "startedDateTime": "2026-06-18T19:07:23.490+05:30",
+        "request": {
+          "bodySize": 0,
+          "method": "GET",
+          "url": "data:image/jpeg;base64,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",
+          "httpVersion": "",
+          "headers": [],
+          "cookies": [],
+          "queryString": [],
+          "headersSize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "0K",
+          "httpVersion": "",
+          "headers": [],
+          "cookies": [],
+          "content": {
+            "mimeType": "image/jpeg",
+            "size": 9276,
+            "encoding": "base64",
+            "text": "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"
+          },
+          "redirectURL": "",
+          "headersSize": 24,
+          "bodySize": 0
+        },
+        "cache": {},
+        "timings": {
+          "blocked": 0,
+          "dns": 0,
+          "ssl": 0,
+          "connect": 0,
+          "send": 0,
+          "wait": 0,
+          "receive": 0
+        },
+        "time": 0,
+        "pageref": "page_1"
+      }
+    ]
+  }
+}

@@ -117,11 +117,13 @@ class Patient extends BaseController
 		];
 		$this->applyPatientAbhaFieldValues($data, $abhaId, $abhaAddress);
 
-		if ($chk_age === 'on') {
-			$data['age'] = $age_year;
-			$data['age_in_month'] = $age_month;
-		} else {
-			$data['dob'] = $this->parseDate($this->request->getPost('datepicker_dob'));
+		if (!$isAbhaVerifiedLocked) {
+			if ($chk_age === 'on') {
+				$data['age'] = $age_year;
+				$data['age_in_month'] = $age_month;
+			} else {
+				$data['dob'] = $this->parseDate($this->request->getPost('datepicker_dob'));
+			}
 		}
 
 		$patientModel = new PatientModel();
@@ -610,10 +612,14 @@ class Patient extends BaseController
 
 		$profile_file_path = '/assets/images/no_image.svg';
         $profile_picture_path = '';
+		$abha_profile_photo_base64 = '';
 
         if ($this->db->fieldExists('profile_picture', 'patient_master')) {
             $profile_picture_path = (string) ($data['data'][0]->profile_picture ?? '');
         }
+		if ($this->db->fieldExists('abha_profile_photo_base64', 'patient_master')) {
+			$abha_profile_photo_base64 = trim((string) ($data['data'][0]->abha_profile_photo_base64 ?? ''));
+		}
 
 		$sql = "SELECT * from  blood_group order by id";
 		$query = $this->db->query($sql);
@@ -643,6 +649,10 @@ class Patient extends BaseController
             } else {
                 $profile_file_path = $profile_picture_path;
             }
+		} elseif ($abha_profile_photo_base64 !== '') {
+			$profile_file_path = str_starts_with($abha_profile_photo_base64, 'data:image')
+				? $abha_profile_photo_base64
+				: 'data:image/jpeg;base64,' . $abha_profile_photo_base64;
         }
 
 		$data['profile_file_path'] = $profile_file_path;
@@ -663,11 +673,17 @@ class Patient extends BaseController
 		}
 
 		$chk_age = $this->request->getPost('chk_age');
+		$pid = (int) $this->request->getPost('p_id');
 		$abhaIdInput = trim((string) $this->request->getPost('input_abha_id'));
 		$abhaAddressInput = trim((string) $this->request->getPost('input_abha_address'));
 		[$abhaId, $abhaAddress, $abhaError] = $this->normalizeAbhaInputs($abhaIdInput, $abhaAddressInput);
 		$age_month = (string) $this->request->getPost('input_age_month');
 		$age_year = (string) $this->request->getPost('input_age_year');
+		$patientModel = new PatientModel();
+		$existingPatient = $pid > 0 ? $patientModel->find($pid) : null;
+		$isAbhaVerifiedLocked = is_array($existingPatient)
+			&& trim((string) ($existingPatient['abha_id'] ?? $existingPatient['abha_no'] ?? $existingPatient['abha'] ?? $existingPatient['abha_address'] ?? '')) !== ''
+			&& strtoupper(trim((string) ($existingPatient['abha_verified_status'] ?? ''))) === 'VERIFIED';
 
 		$rules = [
 			'input_name' => 'required|min_length[1]|max_length[30]',
@@ -717,6 +733,23 @@ class Patient extends BaseController
 			'estimate_dob' => $estimate_dob,
 			'blood_group' => $this->request->getPost('input_blood_group'),
 		];
+
+		if ($isAbhaVerifiedLocked) {
+			$data['p_fname'] = (string) ($existingPatient['p_fname'] ?? $data['p_fname']);
+			$data['gender'] = (string) ($existingPatient['gender'] ?? $data['gender']);
+			$data['dob'] = $existingPatient['dob'] ?? ($data['dob'] ?? null);
+			if (array_key_exists('age', $existingPatient)) {
+				$data['age'] = $existingPatient['age'];
+			}
+			if (array_key_exists('age_in_month', $existingPatient)) {
+				$data['age_in_month'] = $existingPatient['age_in_month'];
+			}
+			if (array_key_exists('estimate_dob', $existingPatient)) {
+				$data['estimate_dob'] = $existingPatient['estimate_dob'];
+			}
+			$abhaId = trim((string) ($existingPatient['abha_id'] ?? $existingPatient['abha_no'] ?? $existingPatient['abha'] ?? $existingPatient['abha_address'] ?? $abhaId));
+		}
+
 		$this->applyPatientAbhaFieldValues($data, $abhaId, $abhaAddress);
 
 		if ($chk_age === 'on') {
@@ -726,8 +759,6 @@ class Patient extends BaseController
 			$data['dob'] = $this->parseDate($this->request->getPost('datepicker_dob'));
 		}
 
-		$pid = (int) $this->request->getPost('p_id');
-		$patientModel = new PatientModel();
 		$patientModel->updatePatient($data, $pid);
 		$this->saveNamesToNameList([
 			(string) $this->request->getPost('input_name'),
@@ -1356,14 +1387,14 @@ class Patient extends BaseController
 		}
 
 		$profile = $this->pickGatewayAbhaProfile($payload);
-		$abhaNumberRaw = trim((string) ($profile['ABHANumber'] ?? $payload['ABHANumber'] ?? ''));
+		$abhaNumberRaw = trim((string) ($profile['ABHANumber'] ?? $profile['abha_id'] ?? $payload['ABHANumber'] ?? $payload['abha_id'] ?? ''));
 		$abhaDigits = preg_replace('/\D/', '', $abhaNumberRaw);
-		$abhaAddress = trim((string) ($profile['preferredAbhaAddress'] ?? $payload['abha_address'] ?? ''));
-		$gatewayName = trim((string) ($profile['name'] ?? $payload['name'] ?? ''));
+		$abhaAddress = trim((string) ($profile['preferredAbhaAddress'] ?? $profile['abha_address'] ?? $payload['abha_address'] ?? $payload['preferredAbhaAddress'] ?? ''));
+		$gatewayName = trim((string) ($profile['name'] ?? $profile['fullName'] ?? $profile['full_name'] ?? $payload['name'] ?? $payload['full_name'] ?? ''));
 		$gatewayMobile = trim((string) ($profile['mobile'] ?? $payload['mobile'] ?? $payload['mobileNumber'] ?? ''));
-		$gatewayDob = trim((string) ($profile['dob'] ?? $payload['dob'] ?? ''));
+		$gatewayDob = trim((string) ($profile['dob'] ?? $profile['date_of_birth'] ?? $payload['dob'] ?? $payload['date_of_birth'] ?? ''));
 		$gatewayGender = trim((string) ($profile['gender'] ?? $payload['gender'] ?? ''));
-		$gatewayPhoto = trim((string) ($profile['profilePhoto'] ?? $payload['profilePhoto'] ?? ''));
+		$gatewayPhoto = trim((string) ($profile['profilePhoto'] ?? $profile['profile_photo'] ?? $payload['profilePhoto'] ?? $payload['profile_photo'] ?? ''));
 
 		$patient = $this->findPatientForAbhaProfile($requestedPid, $abhaDigits, $gatewayMobile);
 		$patientId = (int) ($patient['id'] ?? 0);
@@ -1467,20 +1498,35 @@ class Patient extends BaseController
 	 */
 	private function pickGatewayAbhaProfile(array $payload): array
 	{
-		if (isset($payload['gateway_patient']) && is_array($payload['gateway_patient'])) {
-			return $payload['gateway_patient'];
-		}
-		if (isset($payload['ABHAProfile']) && is_array($payload['ABHAProfile'])) {
-			return $payload['ABHAProfile'];
-		}
-		if (isset($payload['profile']) && is_array($payload['profile'])) {
-			return $payload['profile'];
-		}
-		if (isset($payload['accounts'][0]) && is_array($payload['accounts'][0])) {
-			return $payload['accounts'][0];
+		$candidates = [
+			$payload['gateway_patient'] ?? null,
+			$payload['ABHAProfile'] ?? null,
+			$payload['accounts'][0] ?? null,
+			$payload['profile'] ?? null,
+			$payload,
+		];
+
+		foreach ($candidates as $candidate) {
+			if (is_array($candidate) && $this->looksLikeGatewayAbhaProfile($candidate)) {
+				return $candidate;
+			}
 		}
 
 		return [];
+	}
+
+	/**
+	 * @param array<string, mixed> $profile
+	 */
+	private function looksLikeGatewayAbhaProfile(array $profile): bool
+	{
+		foreach (['ABHANumber', 'abha_id', 'preferredAbhaAddress', 'abha_address', 'name', 'fullName', 'full_name', 'gender', 'dob', 'date_of_birth', 'profilePhoto', 'profile_photo'] as $key) {
+			if (array_key_exists($key, $profile) && trim((string) $profile[$key]) !== '') {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**

@@ -684,9 +684,9 @@
                               </div>
                             </div>
                             <div class="mt-3 d-flex gap-2 flex-wrap">
-                              <a id="abhareg_result_profile_btn" href="#" class="btn btn-success btn-sm d-none">
+                                                            <button type="button" id="abhareg_result_profile_btn" class="btn btn-success btn-sm d-none" data-url="">
                                 <i class="bi bi-person-lines-fill me-1"></i>View Patient Profile
-                              </a>
+                                                            </button>
                               <a id="abhareg_result_card_btn" href="#" target="_blank" class="btn btn-outline-primary btn-sm d-none">
                                 <i class="bi bi-card-image me-1"></i>Print ABHA Card
                               </a>
@@ -1099,7 +1099,7 @@
                     $('#abhareg_result_photo_ph').removeClass('d-none');
                 }
                 if (patId > 0) {
-                    $('#abhareg_result_profile_btn').attr('href', '<?= base_url('billing/patient/person_record') ?>/' + patId).removeClass('d-none');
+                    $('#abhareg_result_profile_btn').attr('data-url', '<?= base_url('billing/patient/person_record') ?>/' + patId).removeClass('d-none');
                 }
                 if (abhaRaw.length === 14) {
                     $('#abhareg_result_card_btn').attr('href', '<?= base_url('abha/card/') ?>' + abhaRaw).removeClass('d-none');
@@ -1280,6 +1280,14 @@
             });
             $('#abhareg_mob_otp_input').on('keypress', function(e) {
                 if (e.which === 13) { $('#abhareg_mob_verify_btn').trigger('click'); }
+            });
+
+            $('#abhareg_result_profile_btn').on('click', function() {
+                var url = ($(this).attr('data-url') || '').toString().trim();
+                if (url === '') {
+                    return;
+                }
+                load_form(url, 'Patient Profile');
             });
         })();
         /* ===== END ABHA REGISTRATION WIZARD ===== */

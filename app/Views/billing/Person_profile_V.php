@@ -15,6 +15,14 @@
         <?= csrf_field() ?>
         <?php
             $patientAbhaId = (string) ($data[0]->abha_id ?? $data[0]->abha_no ?? $data[0]->abha ?? $data[0]->abha_address ?? '');
+            $abhaAddress = trim((string) ($data[0]->abha_address ?? ''));
+            $abhaVerifiedStatus = trim((string) ($data[0]->abha_verified_status ?? ''));
+            $abhaVerificationType = trim((string) ($data[0]->abha_verification_type ?? ''));
+            $abhaKycVerified = (int) ($data[0]->abha_kyc_verified ?? 0) === 1;
+            $abhaMobileVerified = (int) ($data[0]->abha_mobile_verified ?? 0) === 1;
+            $abhaLinkedAt = trim((string) ($data[0]->abdm_linked_at ?? ''));
+            $abhaPhotoAvailable = trim((string) ($data[0]->abha_profile_photo_base64 ?? '')) !== '';
+            $isAbhaLinkedAndVerified = $patientAbhaId !== '' && strtoupper($abhaVerifiedStatus) === 'VERIFIED';
         ?>
         <?php
             $user = auth()->user();
@@ -77,11 +85,13 @@
                             <li class="nav-item" role="presentation">
                                 <button class="nav-link" data-bs-toggle="tab" data-bs-target="#profile-insurance" type="button" role="tab">Insurance</button>
                             </li>
+                            <?php if (!$isAbhaLinkedAndVerified) : ?>
                             <li class="nav-item" role="presentation">
                                 <button class="nav-link" data-bs-toggle="tab" data-bs-target="#profile-abha" type="button" role="tab">
                                     <i class="bi bi-person-check me-1"></i>ABHA Create/Verify
                                 </button>
                             </li>
+                            <?php endif; ?>
                             <?php if(count($opd_List)>0) { ?>
                             <li class="nav-item" role="presentation">
                                 <button class="nav-link" data-bs-toggle="tab" data-bs-target="#profile-opd" type="button" role="tab">OPD</button>
@@ -107,7 +117,13 @@
                                 </div>
                                 <div class="row">
                                     <div class="col-lg-3 col-md-4 label">Relation</div>
-                                    <div class="col-lg-9 col-md-8"><?=$data[0]->p_relative?> <?=ucwords($data[0]->p_rname)?></div>
+                                    <div class="col-lg-9 col-md-8">
+                                        <?php if (trim((string) ($data[0]->p_relative ?? '')) !== '' || trim((string) ($data[0]->p_rname ?? '')) !== '') : ?>
+                                            <?=$data[0]->p_relative?> <?=ucwords($data[0]->p_rname)?>
+                                        <?php else : ?>
+                                            <span class="badge bg-warning-subtle text-warning border border-warning-subtle">Relation not filled</span>
+                                        <?php endif; ?>
+                                    </div>
                                 </div>
                                 <div class="row">
                                     <div class="col-lg-3 col-md-4 label">Aadhar No.</div>
@@ -123,6 +139,7 @@
                                             <span class="text-muted small">Not linked</span>
                                         <?php endif; ?>
                                         </span>
+                                        <?php if (!$isAbhaLinkedAndVerified) : ?>
                                         <button type="button" class="btn btn-sm btn-outline-primary py-0" style="font-size:12px"
                                             onclick="openAbhaOtpModal(
                                                 <?= (int)$data[0]->id ?>,
@@ -131,6 +148,7 @@
                                             )">
                                             <i class="bi bi-person-check me-1"></i><?= $patientAbhaId !== '' ? 'Re-link ABHA' : 'Link ABHA via OTP' ?>
                                         </button>
+                                        <?php endif; ?>
                                         <?php if ($patientAbhaId !== '') :
                                             $abhaCardNum = preg_replace('/\D/', '', $patientAbhaId);
                                         ?>
@@ -144,6 +162,47 @@
                                         <?php endif; ?>
                                     </div>
                                 </div>
+                                <div class="row">
+                                    <div class="col-lg-3 col-md-4 label">ABHA Address</div>
+                                    <div class="col-lg-9 col-md-8">
+                                        <?php if ($abhaAddress !== '') : ?>
+                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle"><?= esc($abhaAddress) ?></span>
+                                        <?php else : ?>
+                                            <span class="text-muted small">Not available</span>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-lg-3 col-md-4 label">ABHA Verification</div>
+                                    <div class="col-lg-9 col-md-8 d-flex align-items-center gap-2 flex-wrap">
+                                        <?php if ($abhaVerifiedStatus !== '') : ?>
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle"><?= esc($abhaVerifiedStatus) ?></span>
+                                        <?php else : ?>
+                                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">UNAVAILABLE</span>
+                                        <?php endif; ?>
+
+                                        <?php if ($abhaVerificationType !== '') : ?>
+                                            <span class="badge bg-info-subtle text-info border border-info-subtle"><?= esc($abhaVerificationType) ?></span>
+                                        <?php endif; ?>
+
+                                        <span class="badge <?= $abhaKycVerified ? 'bg-success-subtle text-success border border-success-subtle' : 'bg-warning-subtle text-warning border border-warning-subtle' ?>">KYC <?= $abhaKycVerified ? 'YES' : 'NO' ?></span>
+                                        <span class="badge <?= $abhaMobileVerified ? 'bg-success-subtle text-success border border-success-subtle' : 'bg-warning-subtle text-warning border border-warning-subtle' ?>">MOBILE <?= $abhaMobileVerified ? 'YES' : 'NO' ?></span>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-lg-3 col-md-4 label">ABHA Linked At</div>
+                                    <div class="col-lg-9 col-md-8">
+                                        <?= $abhaLinkedAt !== '' ? esc($abhaLinkedAt) : '<span class="text-muted small">Not linked via OTP</span>' ?>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-lg-3 col-md-4 label">ABHA Photo</div>
+                                    <div class="col-lg-9 col-md-8">
+                                        <span class="badge <?= $abhaPhotoAvailable ? 'bg-success-subtle text-success border border-success-subtle' : 'bg-secondary-subtle text-secondary border border-secondary-subtle' ?>">
+                                            <?= $abhaPhotoAvailable ? 'AVAILABLE (BASE64 STORED)' : 'NOT AVAILABLE' ?>
+                                        </span>
+                                    </div>
+                                </div>
                                 <?php $hpPatientSyncId = trim((string) ($data[0]->healthplix_sync_id ?? '')); ?>
                                 <?php if ($hpPatientSyncId !== '') : ?>
                                 <div class="row">
@@ -155,7 +214,13 @@
                                 <?php endif; ?>
                                 <div class="row">
                                     <div class="col-lg-3 col-md-4 label">Phone</div>
-                                    <div class="col-lg-9 col-md-8"><?=$data[0]->mphone1?></div>
+                                    <div class="col-lg-9 col-md-8">
+                                        <?php if (trim((string) ($data[0]->mphone1 ?? '')) !== '') : ?>
+                                            <?=$data[0]->mphone1?>
+                                        <?php else : ?>
+                                            <span class="badge bg-warning-subtle text-warning border border-warning-subtle">Phone not filled</span>
+                                        <?php endif; ?>
+                                    </div>
                                 </div>
                                 <div class="row">
                                     <div class="col-lg-3 col-md-4 label">Email</div>
@@ -179,6 +244,7 @@
                                             <button type="button" id="btn_update_aadhar" class="btn btn-info">Update</button>
                                         </div>
                                     </div>
+                                    <?php if (!$isAbhaLinkedAndVerified) : ?>
                                     <div class="col-lg-6">
                                         <label class="form-label">ABHA ID</label>
                                         <div class="input-group input-group-sm">
@@ -193,6 +259,7 @@
                                         </div>
                                         <div class="form-text">Type to set manually, or use <i class="bi bi-person-check"></i> for OTP flow.</div>
                                     </div>
+                                    <?php endif; ?>
                                     <div class="col-lg-6">
                                         <button type="button" class="btn btn-warning btn-sm mt-4" onclick="load_form('<?= base_url('billing/patient/show_cards') ?>/<?=$data[0]->id?>/1');">Insurance Update</button>
                                     </div>
@@ -312,9 +379,11 @@
                             </div>
                             <?php } ?>
 
+                            <?php if (!$isAbhaLinkedAndVerified) : ?>
                             <div class="tab-pane fade pt-3" id="profile-abha" role="tabpanel">
                                 <?= view('partials/abha_create_panel', ['data' => $data, 'patientAbhaId' => $patientAbhaId]) ?>
                             </div>
+                            <?php endif; ?>
 
                         </div>
                     </div>

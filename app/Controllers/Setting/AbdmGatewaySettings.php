@@ -14,6 +14,9 @@ class AbdmGatewaySettings extends BaseController
 
         $token    = $this->readSettingValue('EATRIA_BRIDGE_TOKEN');
         $hfrId    = $this->readSettingValue('ABDM_HFR_ID');
+        if ($hfrId === '') {
+            $hfrId = $this->readSettingValue('H_HFR_ID');
+        }
         $hmsName  = $this->readSettingValue('ABDM_HMS_NAME');
         $gwUrl    = $this->readSettingValue('EATRIA_BRIDGE_URL') ?: 'https://abdm-bridge.e-atria.in/api';
         $bridgeHospitalId = $this->readSettingValue('ABDM_BRIDGE_HOSPITAL_ID');
@@ -129,6 +132,9 @@ class AbdmGatewaySettings extends BaseController
         }
         if ($hfrId === '') {
             $hfrId = $this->readSettingValue('ABDM_HFR_ID');
+            if ($hfrId === '') {
+                $hfrId = $this->readSettingValue('H_HFR_ID');
+            }
         }
 
         $gwUrl = rtrim($gwUrl, '/');
@@ -210,7 +216,7 @@ class AbdmGatewaySettings extends BaseController
             ]);
         }
 
-        $statusUrl = $gwUrl . '/v3/gateway/status';
+        $statusUrl = $gwUrl . '/v3/gateway/status' . ($hfrId !== '' ? '?hfr_id=' . urlencode($hfrId) : '');
         $ch2 = curl_init();
         curl_setopt_array($ch2, [
             CURLOPT_URL            => $statusUrl,

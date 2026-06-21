@@ -41,7 +41,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             if ($db->tableExists('hospital_setting')) {
                 $rows = $db->table('hospital_setting')
                     ->select('s_name, s_value')
-                    ->whereIn('s_name', ['EATRIA_BRIDGE_TOKEN', 'ABDM_BRIDGE_TOKEN', 'EATRIA_BRIDGE_URL', 'ABDM_HFR_ID'])
+                    ->whereIn('s_name', ['EATRIA_BRIDGE_TOKEN', 'ABDM_BRIDGE_TOKEN', 'EATRIA_BRIDGE_URL', 'ABDM_HFR_ID', 'H_HFR_ID'])
                     ->get()
                     ->getResultArray();
 
@@ -58,8 +58,12 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
                 if (! empty($dbSettings['EATRIA_BRIDGE_URL'])) {
                     $this->baseUrl = rtrim(trim($dbSettings['EATRIA_BRIDGE_URL']), '/');
                 }
-                if (! empty($dbSettings['ABDM_HFR_ID'])) {
-                    $this->hfrId = trim($dbSettings['ABDM_HFR_ID']);
+                $dbHfrId = trim((string) ($dbSettings['ABDM_HFR_ID'] ?? ''));
+                if ($dbHfrId === '') {
+                    $dbHfrId = trim((string) ($dbSettings['H_HFR_ID'] ?? ''));
+                }
+                if ($dbHfrId !== '') {
+                    $this->hfrId = $dbHfrId;
                 }
             }
         } catch (\Throwable $e) {
@@ -87,6 +91,22 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         return trim($token, " \t\n\r\0\x0B\"'");
     }
 
+    private function normalizeBridgeGender($value): string
+    {
+        $v = strtoupper(trim((string) $value));
+        if ($v === '1' || $v === 'M' || $v === 'MALE') {
+            return 'M';
+        }
+        if ($v === '2' || $v === 'F' || $v === 'FEMALE') {
+            return 'F';
+        }
+        if ($v === '3' || $v === 'O' || $v === 'OTHER' || $v === 'OTHERS') {
+            return 'O';
+        }
+
+        return '';
+    }
+
     // -------------------------------------------------------------------------
     // Internal HTTP helper
     // -------------------------------------------------------------------------
@@ -111,6 +131,10 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
      */
     private function get(string $path, array $query = []): array
     {
+        // e-Atria bridge expects hfr_id alongside Bearer auth for GET endpoints too.
+        if ($this->hfrId !== '' && empty($query['hfr_id'])) {
+            $query['hfr_id'] = $this->hfrId;
+        }
         return $this->httpCall('GET', $path, [], $query);
     }
 
@@ -476,9 +500,19 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         }
 
         foreach (['abha_id', 'doctor_name', 'department', 'notes', 'gender', 'year_of_birth'] as $optional) {
-            if (! empty($data[$optional])) {
-                $body[$optional] = (string) $data[$optional];
+            if (empty($data[$optional])) {
+                continue;
             }
+
+            if ($optional === 'gender') {
+                $gender = $this->normalizeBridgeGender($data[$optional]);
+                if ($gender !== '') {
+                    $body['gender'] = $gender;
+                }
+                continue;
+            }
+
+            $body[$optional] = (string) $data[$optional];
         }
 
         return $this->post('/v3/records/push', $body);
@@ -582,6 +616,15 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
 
     public function opdTokenCreate(array $payload): array
     {
+        if (array_key_exists('gender', $payload)) {
+            $gender = $this->normalizeBridgeGender($payload['gender']);
+            if ($gender !== '') {
+                $payload['gender'] = $gender;
+            } else {
+                unset($payload['gender']);
+            }
+        }
+
         return $this->post('/v3/opd/token', $payload);
     }
 
@@ -619,6 +662,15 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
 
     public function hipLinkToken(array $payload): array
     {
+        if (array_key_exists('gender', $payload)) {
+            $gender = $this->normalizeBridgeGender($payload['gender']);
+            if ($gender !== '') {
+                $payload['gender'] = $gender;
+            } else {
+                unset($payload['gender']);
+            }
+        }
+
         if ($this->hfrId !== '' && empty($payload['hfr_id'])) {
             $payload['hfr_id'] = $this->hfrId;
         }
