@@ -230,8 +230,6 @@ $historyFields = [
     'is_alcohol' => 'Alcohol',
     'is_tobacoo' => 'Tobacco',
     'is_drug_abuse' => 'Drug abuse',
-    'is_hypertesion' => 'Hypertension',
-    'is_niddm' => 'Type 2 diabetes mellitus (DM)',
     'is_hbsag' => 'HBsAg',
     'is_hcv' => 'HCV',
     'is_hiv_I_II' => 'HIV I & II',
@@ -551,6 +549,7 @@ $historyFields = [
                 <div class="col-md-3 discharge-left-col">
                     <div class="discharge-side-panel">
                         <ul class="nav flex-column nav-pills" id="discharge_section_nav" role="tablist" aria-orientation="vertical">
+                            <li class="nav-item"><a href="#section-history-risk" class="nav-link discharge-nav-link" data-target="section-history-risk">Clinical History and Risk Profile</a></li>
                             <li class="nav-item"><a href="#section-complaints" class="nav-link discharge-nav-link active" data-target="section-complaints">Presenting Complaints with Duration and Reason for Admission</a></li>
                             <li class="nav-item"><a href="#section-physical" class="nav-link discharge-nav-link" data-target="section-physical">Physical Examinations</a></li>
                             <li class="nav-item"><a href="#section-investigation" class="nav-link discharge-nav-link" data-target="section-investigation">Clinical Investigation Reports</a></li>
@@ -571,12 +570,13 @@ $historyFields = [
                     <form id="discharge_main_form" method="post" action="<?= site_url('Ipd_discharge/ipd_select/' . $ipdId) ?>" class="row g-3">
                         <?= csrf_field() ?>
 
-                        <div class="card border-primary" id="section-personal-history">
-                            <div class="card-header py-2"><strong>Personal History</strong></div>
+                        <div class="card border-primary" id="section-history-risk">
+                            <div class="card-header py-2"><strong>Clinical History and Risk Profile</strong></div>
                             <div class="card-body">
-                                <div class="row">
+                                <h6 class="mb-2">Lifestyle and Personal History</h6>
+                                <div class="row g-2 mb-3">
                                     <?php foreach ($historyFields as $field => $label): ?>
-                                        <div class="col-md-6">
+                                        <div class="col-md-4">
                                             <div class="form-check mb-1">
                                                 <input class="form-check-input" type="checkbox" id="<?= esc($field) ?>" name="<?= esc($field) ?>" value="1" <?= (int) ($patientHistory[$field] ?? 0) === 1 ? 'checked' : '' ?>>
                                                 <label class="form-check-label" for="<?= esc($field) ?>"><?= esc($label) ?></label>
@@ -584,8 +584,54 @@ $historyFields = [
                                         </div>
                                     <?php endforeach; ?>
                                 </div>
+
+                                <hr>
+
+                                <h6 class="mb-2">Drug Allergy and ADR History</h6>
+                                <div class="row g-2">
+                                    <div class="col-md-4">
+                                        <label class="form-label mb-1">Drug Allergy Status</label>
+                                        <select class="form-select form-select-sm" id="drug_allergy_status" name="drug_allergy_status">
+                                            <option value="Allergies Not Known" <?= ($allergyStatusUnknown || (!$allergyStatusKnown && !$allergyStatusNoKnown)) ? 'selected' : '' ?>>Allergies Not Known</option>
+                                            <option value="Known" <?= $allergyStatusKnown ? 'selected' : '' ?>>Known</option>
+                                            <option value="No Known Drug Allergy" <?= $allergyStatusNoKnown ? 'selected' : '' ?>>No Known Drug Allergy</option>
+                                        </select>
+                                        <div id="drug_allergy_status_error" class="invalid-feedback d-block" style="display:none;"></div>
+                                    </div>
+                                    <div class="col-md-8">
+                                        <label class="form-label mb-1">Drug Allergy Details <span class="small text-muted">(when status = Known)</span></label>
+                                        <input type="text" class="form-control form-control-sm" id="drug_allergy_details" name="drug_allergy_details" value="<?= esc($drugAllergyDetails) ?>" placeholder="e.g. Penicillin rash, NSAID gastritis">
+                                        <div id="drug_allergy_details_error" class="invalid-feedback d-block" style="display:none;"></div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label mb-1">ADR History</label>
+                                        <input type="text" class="form-control form-control-sm" name="adr_history" value="<?= esc($adrHistory) ?>" placeholder="Previous adverse drug reaction details">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label mb-1">Current Medications</label>
+                                        <input type="text" class="form-control form-control-sm" name="current_medications" value="<?= esc($currentMedications) ?>" placeholder="Current/ongoing medicines">
+                                    </div>
+                                </div>
+
+                                <hr>
+
+                                <h6 class="mb-2">Comorbidities</h6>
+                                <div class="d-flex flex-wrap gap-2 small">
+                                    <?php foreach ($coMorbidityOptions as $mKey => $mOpt): ?>
+                                        <label class="me-2">
+                                            <input type="checkbox" class="co-morbidity-item" value="<?= esc((string) ($mOpt['label'] ?? '')) ?>" <?= ! empty($coMorbiditySelected[$mKey]) ? 'checked' : '' ?>>
+                                            <?= esc((string) ($mOpt['label'] ?? '')) ?>
+                                        </label>
+                                    <?php endforeach; ?>
+                                </div>
+                                <div class="mt-2">
+                                    <label class="form-label small mb-1">Other Comorbidities</label>
+                                    <input type="text" class="form-control form-control-sm" id="co_morbidities_other" value="<?= esc($coMorbidityOtherText) ?>" placeholder="Add other comorbidities if any">
+                                </div>
+                                <input type="hidden" name="co_morbidities" id="co_morbidities" value="<?= esc($coMorbiditiesText) ?>">
+
                                 <div class="mt-3 d-flex justify-content-end">
-                                    <button type="submit" class="btn btn-outline-success btn-sm" name="action" value="save_main" data-reload-section="section-personal-history">Save Personal History</button>
+                                    <button type="submit" class="btn btn-outline-success btn-sm" name="action" value="save_main" data-reload-section="section-history-risk">Save Clinical History Panel</button>
                                 </div>
                             </div>
                         </div>
@@ -604,59 +650,7 @@ $historyFields = [
                                 </div>
                             </div>
                         </div>
-                        <!-- Drug  -->
 
-                        <div class="card border-primary" id="section-drug-allergy">
-                            <div class="card-header py-2"><strong>Drug Allergy / ADR History</strong></div>
-                            <div class="card-body">
-                                <div class="col-md-4">
-                                    <label class="form-label mb-1">Drug Allergy Status</label>
-                                    <select class="form-select form-select-sm" id="drug_allergy_status" name="drug_allergy_status">
-                                        <option value="Allergies Not Known" <?= ($allergyStatusUnknown || (!$allergyStatusKnown && !$allergyStatusNoKnown)) ? 'selected' : '' ?>>Allergies Not Known</option>
-                                        <option value="Known" <?= $allergyStatusKnown ? 'selected' : '' ?>>Known</option>
-                                        <option value="No Known Drug Allergy" <?= $allergyStatusNoKnown ? 'selected' : '' ?>>No Known Drug Allergy</option>
-                                    </select>
-                                    <div id="drug_allergy_status_error" class="invalid-feedback d-block" style="display:none;"></div>
-                                </div>
-                                <div class="col-md-8">
-                                    <label class="form-label mb-1">Drug Allergy Details <span class="small text-muted">(when status = Known)</span></label>
-                                    <input type="text" class="form-control form-control-sm" id="drug_allergy_details" name="drug_allergy_details" value="<?= esc($drugAllergyDetails) ?>" placeholder="e.g. Penicillin rash, NSAID gastritis">
-                                    <div id="drug_allergy_details_error" class="invalid-feedback d-block" style="display:none;"></div>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label mb-1">ADR History</label>
-                                    <input type="text" class="form-control form-control-sm" name="adr_history" value="<?= esc($adrHistory) ?>" placeholder="Previous adverse drug reaction details">
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label mb-1">Current Medications</label>
-                                    <input type="text" class="form-control form-control-sm" name="current_medications" value="<?= esc($currentMedications) ?>" placeholder="Current/ongoing medicines">
-                                </div>
-                            </div>
-                        </div>
-                        <div class="card border-primary mt-3" id="section-co-morbidities">
-                            <div class="card-header py-2"><strong>Co-morbidities</strong></div>
-                            <div class="card-body">
-                               <div class="d-flex flex-wrap gap-2 small">
-                                            <?php foreach ($coMorbidityOptions as $mKey => $mOpt): ?>
-                                                <label class="me-2">
-                                                    <input type="checkbox" class="co-morbidity-item" value="<?= esc((string) ($mOpt['label'] ?? '')) ?>" <?= ! empty($coMorbiditySelected[$mKey]) ? 'checked' : '' ?>>
-                                                    <?= esc((string) ($mOpt['label'] ?? '')) ?>
-                                                </label>
-                                            <?php endforeach; ?>
-                                        </div>
-                                        <div class="mt-2">
-                                            <label class="form-label small mb-1">Other Co-Morbidities</label>
-                                            <input type="text" class="form-control form-control-sm" id="co_morbidities_other" value="<?= esc($coMorbidityOtherText) ?>" placeholder="Add other co-morbidities if any">
-                                        </div>
-                                        <input type="hidden" name="co_morbidities" id="co_morbidities" value="<?= esc($coMorbiditiesText) ?>">
-                                        <div class="mt-3 d-flex justify-content-end">
-                                            <button type="submit" class="btn btn-outline-success btn-sm" name="action" value="save_main" data-reload-section="section-co-morbidities">Save Pain / Allergy / Co-morbidities</button>
-                                        </div>
-                            </div>
-                        </div>
-
-
-                        <!--- End Drug -->
 
                         <div class="card border-info mt-3" id="section-nursing-history">
                             <div class="card-header py-2 d-flex justify-content-between align-items-center">
@@ -5060,6 +5054,7 @@ $historyFields = [
 
             var navLinks = document.querySelectorAll('.discharge-nav-link');
             var sectionIds = [
+                'section-history-risk',
                 'section-complaints',
                 'section-physical',
                 'section-investigation',

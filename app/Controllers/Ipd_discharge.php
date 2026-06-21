@@ -816,12 +816,25 @@ class Ipd_discharge extends BaseController
 
     private function normalizeHistoryItemKey(string $item): string
     {
-        $value = strtolower(trim($item));
+        $value = trim($item);
         if ($value === '') {
             return '';
         }
 
-        $value = (string) preg_replace('/[^a-z0-9]+/i', '', $value);
+        if (function_exists('mb_strtolower')) {
+            $value = (string) mb_strtolower($value, 'UTF-8');
+        } else {
+            $value = strtolower($value);
+        }
+
+        // Keep letters/digits across languages so Hindi and other Unicode scripts
+        // participate in dedupe instead of being dropped as empty keys.
+        $value = (string) preg_replace('/[^\p{L}\p{N}]+/u', '', $value);
+
+        if ($value === '') {
+            // Stable fallback key for symbol-only or unusual content.
+            $value = md5(trim($item));
+        }
 
         return $value;
     }
