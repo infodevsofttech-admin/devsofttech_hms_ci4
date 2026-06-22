@@ -117,13 +117,11 @@ class Patient extends BaseController
 		];
 		$this->applyPatientAbhaFieldValues($data, $abhaId, $abhaAddress);
 
-		if (!$isAbhaVerifiedLocked) {
-			if ($chk_age === 'on') {
-				$data['age'] = $age_year;
-				$data['age_in_month'] = $age_month;
-			} else {
-				$data['dob'] = $this->parseDate($this->request->getPost('datepicker_dob'));
-			}
+		if ($chk_age === 'on') {
+			$data['age'] = $age_year;
+			$data['age_in_month'] = $age_month;
+		} else {
+			$data['dob'] = $this->parseDate($this->request->getPost('datepicker_dob'));
 		}
 
 		$patientModel = new PatientModel();
