@@ -497,26 +497,42 @@
 
             if (r.requires_confirmation) {
                 const matches = Array.isArray(r.matches) ? r.matches : [];
+                const confidenceBadge = conf => {
+                    const map = { definitive: ['success','Definitive'], high: ['primary','High'], medium: ['warning','Medium'], low: ['secondary','Low'] };
+                    const [cls, lbl] = map[conf] || ['secondary', 'Low'];
+                    return `<span class="badge bg-${cls} ms-1">${lbl}</span>`;
+                };
+                const genderLabel = g => g == 2 ? 'F' : g == 1 ? 'M' : '—';
                 const cards = matches.map(m => {
                     const reasons = Array.isArray(m.match_reasons) ? m.match_reasons.join(', ') : '';
-                    return `<div class="card mb-2 border-warning">
+                    const conf = m.match_confidence || 'low';
+                    const borderCls = conf === 'definitive' ? 'border-success' : conf === 'high' ? 'border-primary' : conf === 'medium' ? 'border-warning' : 'border-secondary';
+                    return `<div class="card mb-2 ${borderCls}">
                         <div class="card-body py-2 px-3 small">
-                            <div class="fw-bold">${esc(m.p_code || 'UHID N/A')} - ${esc(m.p_fname || 'Unnamed')}</div>
-                            <div class="text-muted">Phone: ${esc(m.mphone1 || '—')} | ABHA: ${esc(m.patient_abha || '—')} | Aadhaar: ${esc(m.patient_aadhaar || '—')}</div>
-                            <div class="text-warning">Matched by: ${esc(reasons || 'Data match')}</div>
-                            <button class="btn btn-sm btn-outline-primary mt-2" onclick="abdmQResolveExisting(${Number(t.id) || 0}, ${Number(m.id) || 0}, '${payloadEncoded}')">Use This Patient</button>
+                            <div class="fw-bold">${esc(m.p_code || 'UHID N/A')} - ${esc(m.p_fname || 'Unnamed')} ${confidenceBadge(conf)}</div>
+                            <div class="text-muted">DOB: ${esc(m.dob || '—')} | Gender: ${genderLabel(m.gender)} | Phone: ${esc(m.mphone1 || '—')}</div>
+                            <div class="text-muted">ABHA: ${esc(m.patient_abha || '—')} | Aadhaar: ${esc(m.patient_aadhaar || '—')}</div>
+                            <div class="text-muted fst-italic">Matched by: ${esc(reasons || 'Data match')}</div>
+                            <button class="btn btn-sm btn-outline-primary mt-2" onclick="abdmQResolveExisting(${Number(t.id) || 0}, ${Number(m.id) || 0}, '${payloadEncoded}')">Link to This Patient</button>
                         </div>
                     </div>`;
                 }).join('');
 
+                const createNewCard = `<div class="card mb-2 border-dashed border-2 border-secondary">
+                    <div class="card-body py-2 px-3 small">
+                        <div class="fw-bold text-secondary"><i class="bi bi-person-plus me-1"></i>None of the above — Register as New Patient</div>
+                        <div class="text-muted">This ABHA does not belong to any listed record. A new HMS patient will be created.</div>
+                        <button class="btn btn-sm btn-success mt-2" onclick="abdmQCreateNewPatient(${Number(t.id) || 0}, '${payloadEncoded}')">Create New Patient</button>
+                    </div>
+                </div>`;
+
                 body.innerHTML = `
                     <div class="alert alert-warning py-2 small mb-2">
-                        Similar patient records found. Confirm existing patient or create a new record.
+                        Possible matching records found in HMS. Select the correct patient to link, or register as new.
                     </div>
-                    ${cards}
-                    <button class="btn btn-sm btn-success w-100 mt-2" onclick="abdmQCreateNewPatient(${Number(t.id) || 0}, '${payloadEncoded}')">Create New Patient</button>
-                    <a href="${BASE}billing/patient" class="btn btn-sm btn-outline-secondary w-100 mt-2" target="_blank">Open Manual Patient Registration (/billing/patient)</a>
-                    <button class="btn btn-sm btn-outline-secondary w-100 mt-2" data-bs-dismiss="modal">Close</button>`;
+                    ${cards}${createNewCard}
+                    <a href="${BASE}billing/patient" class="btn btn-sm btn-outline-secondary w-100 mt-1" target="_blank">Open Manual Patient Registration</a>
+                    <button class="btn btn-sm btn-outline-secondary w-100 mt-1" data-bs-dismiss="modal">Close</button>`;
             } else {
                 abdmQCreateNewPatient(t.id, payloadEncoded, true);
             }

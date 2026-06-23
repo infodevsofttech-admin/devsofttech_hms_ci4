@@ -307,7 +307,7 @@ class AbdmOpdQueue extends BaseController
         $abhaField    = $this->resolveFirstExistingColumn($fields, ['abha_id', 'abha_no', 'abha', 'abha_address']);
         $aadhaarField = $this->resolveFirstExistingColumn($fields, ['udai', 'aadhar_no', 'aadhaar_no', 'aadhaar', 'adhar_no']);
 
-        $matches = $this->findPatientMatches($db, $abhaField, $aadhaarField, $abhaRaw, $abhaAddr, $aadhaarRaw, $phone);
+        $matches = $this->findPatientMatches($db, $abhaField, $aadhaarField, $abhaRaw, $abhaAddr, $aadhaarRaw, $phone, $name, $gender, $dob);
 
         if ($action === 'check') {
             return $this->response->setJSON([
@@ -494,9 +494,12 @@ class AbdmOpdQueue extends BaseController
         string $abhaRaw,
         string $abhaAddr,
         string $aadhaarRaw,
-        string $phone
+        string $phone,
+        string $name = '',
+        string $gender = '',
+        string $dob = ''
     ): array {
-        $select = 'id,p_code,p_fname,mphone1';
+        $select = 'id,p_code,p_fname,mphone1,dob,gender';
         if ($abhaField) {
             $select .= ',' . $abhaField . ' AS patient_abha';
         }
@@ -505,7 +508,7 @@ class AbdmOpdQueue extends BaseController
         }
 
         $bucket = [];
-        $append = static function (array $rows, string $reason) use (&$bucket): void {
+        $append = static function (array $rows, string $reason, int $score) use (&$bucket): void {
             foreach ($rows as $row) {
                 $id = (int) ($row['id'] ?? 0);
                 if ($id <= 0) {
@@ -513,35 +516,95 @@ class AbdmOpdQueue extends BaseController
                 }
                 if (! isset($bucket[$id])) {
                     $row['match_reasons'] = [];
+                    $row['match_score']   = 0;
                     $bucket[$id] = $row;
                 }
                 if (! in_array($reason, $bucket[$id]['match_reasons'], true)) {
                     $bucket[$id]['match_reasons'][] = $reason;
                 }
+                if ($score > ($bucket[$id]['match_score'] ?? 0)) {
+                    $bucket[$id]['match_score'] = $score;
+                }
             }
         };
 
+        // Definitive identifier matches (score 4)
         if ($abhaField && $abhaRaw !== '') {
             $rows = $db->table('patient_master')->select($select)->where($abhaField, $abhaRaw)->limit(10)->get()->getResultArray();
-            $append($rows, 'ABHA No');
+            $append($rows, 'ABHA No', 4);
         }
 
         if ($abhaField && $abhaAddr !== '' && $abhaAddr !== $abhaRaw) {
             $rows = $db->table('patient_master')->select($select)->where($abhaField, $abhaAddr)->limit(10)->get()->getResultArray();
-            $append($rows, 'ABHA Address');
+            $append($rows, 'ABHA Address', 4);
         }
 
         if ($aadhaarField && $aadhaarRaw !== '') {
             $rows = $db->table('patient_master')->select($select)->where($aadhaarField, $aadhaarRaw)->limit(10)->get()->getResultArray();
-            $append($rows, 'Aadhaar');
+            $append($rows, 'Aadhaar', 4);
         }
 
+        // Demographic matches — primary criteria
+        $nameUpper = strtoupper(trim($name));
+        $genderDb  = ($gender === 'F' || $gender === '2') ? 2 : ($gender !== '' ? 1 : null);
+        $dobValid  = preg_match('/^\d{4}-\d{2}-\d{2}$/', $dob) ? $dob : '';
+        $yearOnly  = $dobValid !== '' ? (int) substr($dobValid, 0, 4) : 0;
+
+        if ($nameUpper !== '' && $dobValid !== '') {
+            // Name + exact DOB [+ gender] — high confidence (score 3)
+            $q = $db->table('patient_master')->select($select)
+                ->where('UPPER(p_fname)', $nameUpper)
+                ->where('dob', $dobValid);
+            if ($genderDb !== null) {
+                $q->where('gender', $genderDb);
+                $rows = $q->limit(10)->get()->getResultArray();
+                $append($rows, 'Name + DOB + Gender', 3);
+            } else {
+                $rows = $q->limit(10)->get()->getResultArray();
+                $append($rows, 'Name + DOB', 3);
+            }
+        }
+
+        if ($nameUpper !== '' && $yearOnly > 0) {
+            // Name + year of birth [+ gender] — medium confidence (score 2)
+            $q = $db->table('patient_master')->select($select)
+                ->where('UPPER(p_fname)', $nameUpper)
+                ->where('YEAR(dob)', $yearOnly);
+            if ($genderDb !== null) {
+                $q->where('gender', $genderDb);
+                $rows = $q->limit(10)->get()->getResultArray();
+                $append($rows, 'Name + Year of Birth + Gender', 2);
+            } else {
+                $rows = $q->limit(10)->get()->getResultArray();
+                $append($rows, 'Name + Year of Birth', 2);
+            }
+        }
+
+        // Phone match — supplementary only (score 1), ambiguous for families
         if ($phone !== '') {
             $rows = $db->table('patient_master')->select($select)->where('mphone1', $phone)->limit(10)->get()->getResultArray();
-            $append($rows, 'Phone');
+            $append($rows, 'Phone', 1);
         }
 
-        return array_values($bucket);
+        // Assign human-readable confidence label and sort by score descending
+        $confidenceLabel = static function (int $score): string {
+            if ($score >= 4) { return 'definitive'; }
+            if ($score === 3) { return 'high'; }
+            if ($score === 2) { return 'medium'; }
+            return 'low';
+        };
+
+        $result = array_values($bucket);
+        usort($result, static function ($a, $b) {
+            return ($b['match_score'] ?? 0) <=> ($a['match_score'] ?? 0);
+        });
+
+        foreach ($result as &$row) {
+            $row['match_confidence'] = $confidenceLabel((int) ($row['match_score'] ?? 0));
+        }
+        unset($row);
+
+        return $result;
     }
 
     private function createPatientFromToken(

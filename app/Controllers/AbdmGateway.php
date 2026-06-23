@@ -2762,13 +2762,13 @@ class AbdmGateway extends BaseController
         $fields = $this->db->getFieldNames('patient_master') ?? [];
         $abhaField = $this->resolveFirstExistingColumn($fields, ['abha_id', 'abha_no', 'abha', 'abha_address']);
 
-        $select = 'id,p_code,p_fname,mphone1';
+        $select = 'id,p_code,p_fname,mphone1,dob,gender';
         if ($abhaField) {
             $select .= ',' . $abhaField . ' AS patient_abha';
         }
 
         $bucket = [];
-        $append = static function (array $rows, string $reason) use (&$bucket): void {
+        $append = static function (array $rows, string $reason, int $score) use (&$bucket): void {
             foreach ($rows as $row) {
                 $id = (int) ($row['id'] ?? 0);
                 if ($id <= 0) {
@@ -2776,26 +2776,88 @@ class AbdmGateway extends BaseController
                 }
                 if (! isset($bucket[$id])) {
                     $row['match_reasons'] = [];
+                    $row['match_score']   = 0;
                     $bucket[$id] = $row;
                 }
                 if (! in_array($reason, $bucket[$id]['match_reasons'], true)) {
                     $bucket[$id]['match_reasons'][] = $reason;
                 }
+                if ($score > ($bucket[$id]['match_score'] ?? 0)) {
+                    $bucket[$id]['match_score'] = $score;
+                }
             }
         };
 
+        // Definitive identifier matches (score 4)
         if ($abhaField && ($identity['abha_number'] !== '' || $identity['abha_address'] !== '')) {
             $abha = $identity['abha_number'] !== '' ? $identity['abha_number'] : $identity['abha_address'];
             $rows = $this->db->table('patient_master')->select($select)->where($abhaField, $abha)->limit(10)->get()->getResultArray();
-            $append($rows, 'ABHA');
+            $append($rows, 'ABHA', 4);
         }
 
-        if ($identity['phone'] !== '') {
+        // Demographic matches — primary criteria
+        $nameUpper = strtoupper(trim((string) ($identity['patient_name'] ?? '')));
+        $rawGender = strtoupper(trim((string) ($identity['gender'] ?? '')));
+        $genderDb  = ($rawGender === 'F' || $rawGender === '2') ? 2 : ($rawGender !== '' ? 1 : null);
+        $dob       = trim((string) ($identity['dob'] ?? ''));
+        $dobValid  = preg_match('/^\d{4}-\d{2}-\d{2}$/', $dob) ? $dob : '';
+        $yearOnly  = $dobValid !== '' ? (int) substr($dobValid, 0, 4) : 0;
+
+        if ($nameUpper !== '' && $dobValid !== '') {
+            // Name + exact DOB [+ gender] — high confidence (score 3)
+            $q = $this->db->table('patient_master')->select($select)
+                ->where('UPPER(p_fname)', $nameUpper)
+                ->where('dob', $dobValid);
+            if ($genderDb !== null) {
+                $q->where('gender', $genderDb);
+                $rows = $q->limit(10)->get()->getResultArray();
+                $append($rows, 'Name + DOB + Gender', 3);
+            } else {
+                $rows = $q->limit(10)->get()->getResultArray();
+                $append($rows, 'Name + DOB', 3);
+            }
+        }
+
+        if ($nameUpper !== '' && $yearOnly > 0) {
+            // Name + year of birth [+ gender] — medium confidence (score 2)
+            $q = $this->db->table('patient_master')->select($select)
+                ->where('UPPER(p_fname)', $nameUpper)
+                ->where('YEAR(dob)', $yearOnly);
+            if ($genderDb !== null) {
+                $q->where('gender', $genderDb);
+                $rows = $q->limit(10)->get()->getResultArray();
+                $append($rows, 'Name + Year of Birth + Gender', 2);
+            } else {
+                $rows = $q->limit(10)->get()->getResultArray();
+                $append($rows, 'Name + Year of Birth', 2);
+            }
+        }
+
+        // Phone match — supplementary only (score 1), ambiguous for families
+        if (($identity['phone'] ?? '') !== '') {
             $rows = $this->db->table('patient_master')->select($select)->where('mphone1', $identity['phone'])->limit(10)->get()->getResultArray();
-            $append($rows, 'Phone');
+            $append($rows, 'Phone', 1);
         }
 
-        return array_values($bucket);
+        // Assign confidence label and sort by score descending
+        $confidenceLabel = static function (int $score): string {
+            if ($score >= 4) { return 'definitive'; }
+            if ($score === 3) { return 'high'; }
+            if ($score === 2) { return 'medium'; }
+            return 'low';
+        };
+
+        $result = array_values($bucket);
+        usort($result, static function ($a, $b) {
+            return ($b['match_score'] ?? 0) <=> ($a['match_score'] ?? 0);
+        });
+
+        foreach ($result as &$row) {
+            $row['match_confidence'] = $confidenceLabel((int) ($row['match_score'] ?? 0));
+        }
+        unset($row);
+
+        return $result;
     }
 
     private function resolveFirstExistingColumn(array $fields, array $candidates): ?string
@@ -3702,6 +3764,7 @@ class AbdmGateway extends BaseController
         // Accept txnId (API native) or txn_id (HMS form shorthand)
         $txnId = trim((string) ($body['txnId'] ?? $body['txn_id'] ?? $this->request->getPost('txnId') ?? $this->request->getPost('txn_id') ?? ''));
         $otp   = trim((string) ($body['otp']   ?? $this->request->getPost('otp') ?? ''));
+        $requestedPid = (int) ($body['p_id'] ?? $this->request->getPost('p_id') ?? 0);
 
         if ($txnId === '' || $otp === '') {
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'txnId and otp are required']);
@@ -3713,7 +3776,11 @@ class AbdmGateway extends BaseController
             return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => $e->getMessage()]);
         }
 
-        return $this->response->setJSON($result);
+        if (! empty($result['ok']) && (int) $result['ok'] === 1) {
+            $result = $this->enrichGatewayOtpVerifyResult($result, $requestedPid);
+        }
+
+        return $this->response->setJSON($this->sanitizeGatewayOtpVerifyResponse($result));
     }
 
     /**
@@ -3759,6 +3826,7 @@ class AbdmGateway extends BaseController
         // Accept txnId (API native) or txn_id (HMS form shorthand)
         $txnId = trim((string) ($body['txnId'] ?? $body['txn_id'] ?? $this->request->getPost('txnId') ?? $this->request->getPost('txn_id') ?? ''));
         $otp   = trim((string) ($body['otp']   ?? $this->request->getPost('otp') ?? ''));
+        $requestedPid = (int) ($body['p_id'] ?? $this->request->getPost('p_id') ?? 0);
 
         if ($txnId === '' || $otp === '') {
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'txnId and otp are required']);
@@ -3770,7 +3838,449 @@ class AbdmGateway extends BaseController
             return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => $e->getMessage()]);
         }
 
-        return $this->response->setJSON($result);
+        if (! empty($result['ok']) && (int) $result['ok'] === 1) {
+            $result = $this->enrichGatewayOtpVerifyResult($result, $requestedPid);
+        }
+
+        return $this->response->setJSON($this->sanitizeGatewayOtpVerifyResponse($result));
+    }
+
+    /**
+     * @param array<string, mixed> $result
+     * @return array<string, mixed>
+     */
+    private function enrichGatewayOtpVerifyResult(array $result, int $requestedPid): array
+    {
+        $payload = [];
+        if (isset($result['data']) && is_array($result['data'])) {
+            $payload = $result['data'];
+        } elseif (is_array($result)) {
+            $payload = $result;
+        }
+
+        $profile = $this->pickGatewayOtpProfile($payload);
+        $gatewayPatientPayload = is_array($payload['gateway_patient'] ?? null) ? $payload['gateway_patient'] : [];
+
+        $abhaRaw = trim((string) (
+            $profile['ABHANumber']
+            ?? $profile['abha_number']
+            ?? $profile['abha_id']
+            ?? $payload['ABHANumber']
+            ?? $payload['abha_number']
+            ?? $payload['abha_id']
+            ?? ''
+        ));
+        $abhaDigits = preg_replace('/\D/', '', $abhaRaw);
+        $abhaAddress = trim((string) (
+            $profile['preferredAddress']
+            ?? $profile['preferredAbhaAddress']
+            ?? $profile['abha_address']
+            ?? $payload['preferredAddress']
+            ?? $payload['preferredAbhaAddress']
+            ?? $payload['abha_address']
+            ?? ''
+        ));
+        $gatewayMobile = preg_replace('/\D/', '', (string) (
+            $profile['mobile']
+            ?? $payload['mobile']
+            ?? $payload['mobileNumber']
+            ?? ($gatewayPatientPayload['mobile'] ?? '')
+        ));
+
+        $gatewayAddress = trim((string) (
+            ($profile['address'] ?? '')
+            ?: ($profile['address_line'] ?? '')
+            ?: ($payload['address'] ?? '')
+            ?: ($payload['address_line'] ?? '')
+            ?: ($payload['gateway_abha_profile']['address'] ?? '')
+            ?: ($gatewayPatientPayload['address_line'] ?? '')
+            ?: ''
+        ));
+        $gatewayCity = trim((string) (
+            ($profile['city'] ?? '')
+            ?: ($payload['city'] ?? '')
+            ?: ($payload['gateway_abha_profile']['city'] ?? '')
+            ?: ($gatewayPatientPayload['city'] ?? '')
+            ?: ''
+        ));
+        $gatewayDistrict = trim((string) (
+            ($profile['districtName'] ?? '')
+            ?: ($profile['district_name'] ?? '')
+            ?: ($payload['districtName'] ?? '')
+            ?: ($payload['district_name'] ?? '')
+            ?: ($payload['gateway_abha_profile']['district_name'] ?? '')
+            ?: ($gatewayPatientPayload['district'] ?? '')
+            ?: ''
+        ));
+        $gatewayState = trim((string) (
+            ($profile['stateName'] ?? '')
+            ?: ($profile['state_name'] ?? '')
+            ?: ($payload['stateName'] ?? '')
+            ?: ($payload['state_name'] ?? '')
+            ?: ($payload['gateway_abha_profile']['state_name'] ?? '')
+            ?: ($gatewayPatientPayload['state_name'] ?? '')
+            ?: ''
+        ));
+        $gatewayZip = trim((string) (
+            ($profile['pinCode'] ?? '')
+            ?: ($profile['pin_code'] ?? '')
+            ?: ($payload['pinCode'] ?? '')
+            ?: ($payload['pin_code'] ?? '')
+            ?: ($payload['pincode'] ?? '')
+            ?: ($payload['gateway_abha_profile']['pin_code'] ?? '')
+            ?: ($gatewayPatientPayload['pincode'] ?? '')
+            ?: ''
+        ));
+        $gatewayEmail = trim((string) (
+            ($profile['email'] ?? '')
+            ?: ($payload['email'] ?? '')
+            ?: ($payload['gateway_abha_profile']['email'] ?? '')
+            ?: ($gatewayPatientPayload['email'] ?? '')
+            ?: ''
+        ));
+
+        $verifiedStatus = trim((string) (
+            ($payload['gateway_abha_profile']['status'] ?? '')
+            ?: ($profile['verifiedStatus'] ?? '')
+            ?: ($profile['status'] ?? '')
+            ?: ($payload['verifiedStatus'] ?? '')
+            ?: ($payload['status'] ?? '')
+            ?: ''
+        ));
+        $verificationType = trim((string) (
+            ($payload['gateway_abha_profile']['abha_type'] ?? '')
+            ?: ($profile['verificationType'] ?? '')
+            ?: ($profile['abhaType'] ?? '')
+            ?: ($payload['verificationType'] ?? '')
+            ?: ($payload['abhaType'] ?? '')
+            ?: ''
+        ));
+        $kycVerified = $profile['kycVerified'] ?? $payload['kycVerified'] ?? null;
+        if ($kycVerified === null) {
+            $kycVerified = strtolower(trim((string) ($payload['gateway_abha_profile']['status'] ?? ''))) === 'verified' ? 1 : 0;
+        }
+        $mobileVerified = $profile['mobileVerified']
+            ?? $payload['mobileVerified']
+            ?? ($payload['gateway_abha_profile']['mobile_verified'] ?? null);
+
+        $patientId = $this->resolveGatewayOtpPatientId($requestedPid, $payload, $abhaDigits, $gatewayMobile);
+        if ($patientId <= 0 || ! $this->db->tableExists('patient_master')) {
+            return $result;
+        }
+
+        $fields = $this->db->getFieldNames('patient_master') ?? [];
+        $updates = [];
+
+        $abhaField = $this->resolveFirstExistingColumn($fields, ['abha_id', 'abha_no', 'abha']);
+        if ($abhaField !== null && $abhaDigits !== '') {
+            $updates[$abhaField] = $abhaDigits;
+        }
+        if ($abhaAddress !== '' && in_array('abha_address', $fields, true)) {
+            $updates['abha_address'] = $abhaAddress;
+        }
+
+        if ($gatewayMobile !== '' && in_array('mphone1', $fields, true)) {
+            $updates['mphone1'] = $gatewayMobile;
+        }
+        if ($gatewayAddress !== '' && in_array('add1', $fields, true)) {
+            $updates['add1'] = $gatewayAddress;
+        }
+        if ($gatewayCity !== '' && in_array('city', $fields, true)) {
+            $updates['city'] = $gatewayCity;
+        }
+        if ($gatewayDistrict !== '' && in_array('district', $fields, true)) {
+            $updates['district'] = $gatewayDistrict;
+        }
+        if ($gatewayState !== '' && in_array('state', $fields, true)) {
+            $updates['state'] = $gatewayState;
+        }
+        if ($gatewayZip !== '' && in_array('zip', $fields, true)) {
+            $updates['zip'] = $gatewayZip;
+        }
+        if ($gatewayEmail !== '' && in_array('email1', $fields, true)) {
+            $updates['email1'] = $gatewayEmail;
+        }
+
+        if ($verifiedStatus !== '' && in_array('abha_verified_status', $fields, true)) {
+            $updates['abha_verified_status'] = strtoupper($verifiedStatus);
+        }
+        if ($verificationType !== '' && in_array('abha_verification_type', $fields, true)) {
+            $updates['abha_verification_type'] = strtoupper($verificationType);
+        }
+        if ($kycVerified !== null && in_array('abha_kyc_verified', $fields, true)) {
+            $updates['abha_kyc_verified'] = $this->toDbBool($kycVerified);
+        }
+        if ($mobileVerified !== null && in_array('abha_mobile_verified', $fields, true)) {
+            $updates['abha_mobile_verified'] = $this->toDbBool($mobileVerified);
+        }
+
+        if (in_array('abdm_linked_at', $fields, true) && ($abhaDigits !== '' || $abhaAddress !== '')) {
+            $updates['abdm_linked_at'] = date('Y-m-d H:i:s');
+        }
+
+        if ($updates !== []) {
+            $this->db->table('patient_master')->where('id', $patientId)->update($updates);
+        }
+
+        $result['patient_id'] = $patientId;
+        if (isset($result['data']) && is_array($result['data'])) {
+            $result['data']['patient_id'] = $patientId;
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function resolveGatewayOtpPatientId(int $requestedPid, array $payload, string $abhaDigits, string $mobile): int
+    {
+        if (! $this->db->tableExists('patient_master')) {
+            return 0;
+        }
+
+        if ($requestedPid > 0) {
+            $row = $this->db->table('patient_master')->select('id')->where('id', $requestedPid)->get(1)->getRowArray();
+            if ($row !== null) {
+                return (int) ($row['id'] ?? 0);
+            }
+        }
+
+        $fields = $this->db->getFieldNames('patient_master') ?? [];
+        $abhaField = $this->resolveFirstExistingColumn($fields, ['abha_id', 'abha_no', 'abha']);
+        if ($abhaField !== null && $abhaDigits !== '') {
+            $row = $this->db->table('patient_master')->select('id')->where($abhaField, $abhaDigits)->get(1)->getRowArray();
+            if ($row !== null) {
+                return (int) ($row['id'] ?? 0);
+            }
+        }
+
+        if ($mobile !== '' && in_array('mphone1', $fields, true)) {
+            $row = $this->db->table('patient_master')->select('id')->where('mphone1', $mobile)->get(1)->getRowArray();
+            if ($row !== null) {
+                return (int) ($row['id'] ?? 0);
+            }
+        }
+
+        $fallbackIds = [
+            (int) ($payload['patient_id'] ?? 0),
+            (int) ($payload['gateway_patient']['id'] ?? 0),
+        ];
+        foreach ($fallbackIds as $pid) {
+            if ($pid <= 0) {
+                continue;
+            }
+            $row = $this->db->table('patient_master')->select('id')->where('id', $pid)->get(1)->getRowArray();
+            if ($row !== null) {
+                return (int) ($row['id'] ?? 0);
+            }
+        }
+
+        return 0;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    private function pickGatewayOtpProfile(array $payload): array
+    {
+        $candidates = [
+            $payload['ABHAProfile'] ?? null,
+            $payload['gateway_abha_profile'] ?? null,
+            $payload['profile'] ?? null,
+            $payload['accounts'][0] ?? null,
+            $payload['gateway_patient'] ?? null,
+            $payload,
+        ];
+
+        foreach ($candidates as $candidate) {
+            if (! is_array($candidate)) {
+                continue;
+            }
+
+            foreach (['ABHANumber', 'abha_number', 'abha_id', 'preferredAddress', 'preferredAbhaAddress', 'abha_address', 'fullName', 'full_name', 'firstName', 'dob', 'date_of_birth'] as $key) {
+                if (array_key_exists($key, $candidate) && trim((string) $candidate[$key]) !== '') {
+                    return $candidate;
+                }
+            }
+        }
+
+        return [];
+    }
+
+    private function toDbBool($value): int
+    {
+        if (is_bool($value)) {
+            return $value ? 1 : 0;
+        }
+
+        $v = strtolower(trim((string) $value));
+        if ($v === '1' || $v === 'true' || $v === 'yes' || $v === 'y') {
+            return 1;
+        }
+
+        return 0;
+    }
+
+    /**
+     * Return only safe/required fields for gateway ABHA OTP verification APIs.
+     *
+     * @param array<string, mixed> $result
+     * @return array<string, mixed>
+     */
+    private function sanitizeGatewayOtpVerifyResponse(array $result): array
+    {
+        $ok = ! empty($result['ok']) && (int) $result['ok'] === 1;
+        if (! $ok) {
+            return [
+                'ok' => 0,
+                'error_text' => (string) ($result['error_text'] ?? $result['message'] ?? $result['data']['message'] ?? 'OTP verification failed'),
+                'request_id' => (string) ($result['request_id'] ?? ''),
+            ];
+        }
+
+        $payload = [];
+        if (isset($result['data']) && is_array($result['data'])) {
+            $payload = $result['data'];
+        } elseif (is_array($result)) {
+            $payload = $result;
+        }
+
+        $profile = $this->pickGatewayOtpProfile($payload);
+        $gatewayPatientPayload = is_array($payload['gateway_patient'] ?? null) ? $payload['gateway_patient'] : [];
+
+        $txnId = (string) ($payload['txnId'] ?? $payload['txn_id'] ?? $result['txnId'] ?? $result['txn_id'] ?? '');
+        $abhaRaw = (string) ($payload['ABHANumber'] ?? $payload['abha_number'] ?? $payload['abha_id'] ?? $profile['ABHANumber'] ?? $profile['abha_number'] ?? $profile['abha_id'] ?? '');
+        $abhaDigits = preg_replace('/\D/', '', $abhaRaw);
+        $abhaAddress = (string) ($payload['preferredAbhaAddress'] ?? $payload['abha_address'] ?? $profile['preferredAbhaAddress'] ?? $profile['abha_address'] ?? $profile['preferredAddress'] ?? '');
+        $name = trim((string) (
+            $payload['name']
+            ?? $payload['full_name']
+            ?? $profile['name']
+            ?? $profile['fullName']
+            ?? $profile['full_name']
+            ?? trim(implode(' ', array_filter([
+                (string) ($profile['firstName'] ?? ''),
+                (string) ($profile['middleName'] ?? ''),
+                (string) ($profile['lastName'] ?? ''),
+            ])))
+        ));
+        $mobile = (string) ($payload['mobile'] ?? $payload['mobileNumber'] ?? $profile['mobile'] ?? ($gatewayPatientPayload['mobile'] ?? ''));
+        $gender = (string) ($payload['gender'] ?? $profile['gender'] ?? ($gatewayPatientPayload['gender'] ?? ''));
+        $dob = (string) ($payload['dob'] ?? $payload['date_of_birth'] ?? $profile['dob'] ?? $profile['date_of_birth'] ?? ($gatewayPatientPayload['date_of_birth'] ?? ''));
+        $address = (string) (
+            ($payload['address'] ?? '')
+            ?: ($payload['address_line'] ?? '')
+            ?: ($profile['address'] ?? '')
+            ?: ($profile['address_line'] ?? '')
+            ?: ($payload['gateway_abha_profile']['address'] ?? '')
+            ?: ($gatewayPatientPayload['address_line'] ?? '')
+            ?: ''
+        );
+        $pinCode = (string) (
+            ($payload['pinCode'] ?? '')
+            ?: ($payload['pin_code'] ?? '')
+            ?: ($payload['pincode'] ?? '')
+            ?: ($profile['pinCode'] ?? '')
+            ?: ($profile['pin_code'] ?? '')
+            ?: ($payload['gateway_abha_profile']['pin_code'] ?? '')
+            ?: ($gatewayPatientPayload['pincode'] ?? '')
+            ?: ''
+        );
+        $stateCode = (string) (
+            ($payload['stateCode'] ?? '')
+            ?: ($payload['state_code'] ?? '')
+            ?: ($profile['stateCode'] ?? '')
+            ?: ($profile['state_code'] ?? '')
+            ?: ($payload['gateway_abha_profile']['state_code'] ?? '')
+            ?: ($gatewayPatientPayload['state_code'] ?? '')
+            ?: ''
+        );
+        $stateName = (string) (
+            ($payload['stateName'] ?? '')
+            ?: ($payload['state_name'] ?? '')
+            ?: ($profile['stateName'] ?? '')
+            ?: ($profile['state_name'] ?? '')
+            ?: ($payload['gateway_abha_profile']['state_name'] ?? '')
+            ?: ($gatewayPatientPayload['state_name'] ?? '')
+            ?: ''
+        );
+        $districtCode = (string) (
+            ($payload['districtCode'] ?? '')
+            ?: ($payload['district_code'] ?? '')
+            ?: ($profile['districtCode'] ?? '')
+            ?: ($profile['district_code'] ?? '')
+            ?: ($payload['gateway_abha_profile']['district_code'] ?? '')
+            ?: ''
+        );
+        $districtName = (string) (
+            ($payload['districtName'] ?? '')
+            ?: ($payload['district_name'] ?? '')
+            ?: ($profile['districtName'] ?? '')
+            ?: ($profile['district_name'] ?? '')
+            ?: ($payload['gateway_abha_profile']['district_name'] ?? '')
+            ?: ($gatewayPatientPayload['district'] ?? '')
+            ?: ''
+        );
+
+        $matchedPatientId = (int) ($result['patient_id'] ?? $payload['patient_id'] ?? 0);
+
+        return [
+            'ok' => 1,
+            'request_id' => (string) ($result['request_id'] ?? ''),
+            'message' => (string) ($payload['message'] ?? $result['message'] ?? 'ABHA OTP verified successfully'),
+            'txn_id' => $txnId,
+            'abha_number' => $abhaDigits,
+            'abha_address' => $abhaAddress,
+            'name' => $name,
+            'mobile' => $mobile,
+            'gender' => $gender,
+            'dob' => $dob,
+            'address' => $address,
+            'pin_code' => $pinCode,
+            'state_code' => $stateCode,
+            'state_name' => $stateName,
+            'district_code' => $districtCode,
+            'district_name' => $districtName,
+            'patient_id' => $matchedPatientId > 0 ? $matchedPatientId : null,
+            'data' => [
+                'txnId' => $txnId,
+                'abha_number' => $abhaDigits,
+                'name' => $name,
+                'mobile' => $mobile,
+                'gender' => $gender,
+                'dob' => $dob,
+                'address' => $address,
+                'pin_code' => $pinCode,
+                'state_code' => $stateCode,
+                'state_name' => $stateName,
+                'district_code' => $districtCode,
+                'district_name' => $districtName,
+                'patient_id' => $matchedPatientId > 0 ? $matchedPatientId : null,
+                'profile' => [
+                    'ABHANumber' => $abhaDigits,
+                    'abha_number' => $abhaDigits,
+                    'abha_id' => $abhaDigits,
+                    'preferredAbhaAddress' => $abhaAddress,
+                    'preferredAddress' => $abhaAddress,
+                    'name' => $name,
+                    'full_name' => $name,
+                    'gender' => $gender,
+                    'dob' => $dob,
+                    'mobile' => $mobile,
+                    'address' => $address,
+                    'pinCode' => $pinCode,
+                    'stateCode' => $stateCode,
+                    'stateName' => $stateName,
+                    'districtCode' => $districtCode,
+                    'districtName' => $districtName,
+                    'firstName' => (string) ($profile['firstName'] ?? ''),
+                    'middleName' => (string) ($profile['middleName'] ?? ''),
+                    'lastName' => (string) ($profile['lastName'] ?? ''),
+                ],
+            ],
+        ];
     }
 
     // =========================================================================

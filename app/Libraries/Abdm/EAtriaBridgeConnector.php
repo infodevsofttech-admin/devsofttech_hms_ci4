@@ -107,6 +107,51 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         return '';
     }
 
+    /**
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    private function redactSensitiveForLog(array $payload): array
+    {
+        $walk = function ($value, string $key = '') use (&$walk) {
+            if (is_array($value)) {
+                $out = [];
+                foreach ($value as $k => $v) {
+                    $kk = (string) $k;
+                    $out[$k] = $walk($v, $kk);
+                }
+                return $out;
+            }
+
+            $lowerKey = strtolower($key);
+            if (in_array($lowerKey, ['token', 'refresh_token', 'refreshtoken', 'authorization', 'auth', 'otp'], true)) {
+                return '[REDACTED]';
+            }
+
+            if (in_array($lowerKey, ['photo', 'profilephoto', 'profile_photo'], true)) {
+                return '[REDACTED_IMAGE_BASE64]';
+            }
+
+            if (is_string($value)) {
+                $trimmed = trim($value);
+
+                // Redact JWT-like values by shape.
+                if (preg_match('/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/', $trimmed)) {
+                    return '[REDACTED_JWT]';
+                }
+
+                // Redact probable base64 blobs (e.g., profile photo) to keep logs small.
+                if (strlen($trimmed) > 400 && preg_match('/^[A-Za-z0-9+\/=\r\n]+$/', $trimmed)) {
+                    return '[REDACTED_LARGE_BASE64]';
+                }
+            }
+
+            return $value;
+        };
+
+        return $walk($payload);
+    }
+
     // -------------------------------------------------------------------------
     // Internal HTTP helper
     // -------------------------------------------------------------------------
@@ -176,16 +221,22 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
 
         // Log outgoing request (mask token)
         $maskedToken = $this->token !== '' ? (substr($this->token, 0, 6) . '***' . substr($this->token, -4)) : '(none)';
+        $safeRequestBody = $this->redactSensitiveForLog($body);
         log_message('debug', '[EAtriaBridge] --> ' . $method . ' ' . $url
             . ' | token=' . $maskedToken
-            . ' | body=' . json_encode($body));
+            . ' | body=' . json_encode($safeRequestBody));
 
         $raw      = curl_exec($ch);
         $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlErr  = curl_error($ch);
         curl_close($ch);
 
-        log_message('debug', '[EAtriaBridge] <-- HTTP ' . $httpCode . ' | raw=' . (string) $raw);
+        $safeRawForLog = (string) $raw;
+        $decodedRawForLog = json_decode((string) $raw, true);
+        if (is_array($decodedRawForLog)) {
+            $safeRawForLog = (string) json_encode($this->redactSensitiveForLog($decodedRawForLog), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
+        log_message('debug', '[EAtriaBridge] <-- HTTP ' . $httpCode . ' | raw=' . $safeRawForLog);
 
         if ($curlErr !== '') {
             log_message('error', '[EAtriaBridge] cURL error on ' . $url . ': ' . $curlErr);
@@ -236,8 +287,10 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
 
             $decodedResp = json_decode($rawResponse, true);
             $responseJson = is_array($decodedResp)
-                ? (string) json_encode($decodedResp, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+                ? (string) json_encode($this->redactSensitiveForLog($decodedResp), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
                 : (trim($rawResponse) !== '' ? $rawResponse : null);
+
+            $safeRequestBody = $this->redactSensitiveForLog($requestBody);
 
             $db->table('abdm_api_logs')->insert([
                 'channel'       => 'eatria_bridge',
@@ -246,7 +299,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
                 'http_method'   => strtoupper($method),
                 'entity_type'   => null,
                 'entity_id'     => null,
-                'request_json'  => (string) json_encode($requestBody, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'request_json'  => (string) json_encode($safeRequestBody, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                 'response_code' => $httpCode > 0 ? $httpCode : null,
                 'response_json' => $responseJson,
                 'status'        => $status,

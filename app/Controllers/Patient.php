@@ -21,6 +21,16 @@ class Patient extends BaseController
             ->findAll();
         
         $data['user'] = $user;
+
+        $data['india_states'] = [];
+        if ($this->db->tableExists('india_state')) {
+            $data['india_states'] = $this->db->table('india_state')
+                ->select('id, state_name')
+                ->orderBy('state_name', 'ASC')
+                ->get()
+                ->getResultArray();
+        }
+
         return view('billing/Patient_V', $data);
     }
 
@@ -357,7 +367,7 @@ class Patient extends BaseController
 			$result = $this->enrichAbhaVerifyResult($result, $requestedPid);
 		}
 
-		return $this->response->setJSON($result);
+		return $this->response->setJSON($this->sanitizeAbhaVerifyApiResponse($result));
 	}
 
 	public function abhaMobileGenerateOtp()
@@ -409,7 +419,7 @@ class Patient extends BaseController
 			$result = $this->enrichAbhaVerifyResult($result, $requestedPid);
 		}
 
-		return $this->response->setJSON($result);
+		return $this->response->setJSON($this->sanitizeAbhaVerifyApiResponse($result));
 	}
 
 
@@ -1237,6 +1247,28 @@ class Patient extends BaseController
 		return $this->response->setJSON($patientModel->getCitySuggestions($q));
 	}
 
+	public function district_list()
+	{
+		$q = trim((string) $this->request->getGet('term'));
+		if ($q === '' || strlen($q) < 2) {
+			return $this->response->setJSON([]);
+		}
+
+		if (! $this->db->tableExists('abdm_district_master')) {
+			return $this->response->setJSON([]);
+		}
+
+		$rows = $this->db->table('abdm_district_master')
+			->select('district_name AS value, district_name AS label, state_code')
+			->like('district_name', $q)
+			->orderBy('district_name', 'ASC')
+			->limit(15)
+			->get()
+			->getResultArray();
+
+		return $this->response->setJSON($rows);
+	}
+
 	public function get_name()
 	{
 		$q = strtolower((string) $this->request->getGet('term'));
@@ -1385,14 +1417,104 @@ class Patient extends BaseController
 		}
 
 		$profile = $this->pickGatewayAbhaProfile($payload);
+		$gatewayPatientPayload = is_array($payload['gateway_patient'] ?? null) ? $payload['gateway_patient'] : [];
 		$abhaNumberRaw = trim((string) ($profile['ABHANumber'] ?? $profile['abha_id'] ?? $payload['ABHANumber'] ?? $payload['abha_id'] ?? ''));
 		$abhaDigits = preg_replace('/\D/', '', $abhaNumberRaw);
-		$abhaAddress = trim((string) ($profile['preferredAbhaAddress'] ?? $profile['abha_address'] ?? $payload['abha_address'] ?? $payload['preferredAbhaAddress'] ?? ''));
+		$abhaAddress = trim((string) (
+			$profile['preferredAddress']
+			?? $profile['preferredAbhaAddress']
+			?? $profile['abha_address']
+			?? $payload['abha_address']
+			?? $payload['preferredAddress']
+			?? $payload['preferredAbhaAddress']
+			?? ''
+		));
 		$gatewayName = trim((string) ($profile['name'] ?? $profile['fullName'] ?? $profile['full_name'] ?? $payload['name'] ?? $payload['full_name'] ?? ''));
 		$gatewayMobile = trim((string) ($profile['mobile'] ?? $payload['mobile'] ?? $payload['mobileNumber'] ?? ''));
 		$gatewayDob = trim((string) ($profile['dob'] ?? $profile['date_of_birth'] ?? $payload['dob'] ?? $payload['date_of_birth'] ?? ''));
 		$gatewayGender = trim((string) ($profile['gender'] ?? $payload['gender'] ?? ''));
 		$gatewayPhoto = trim((string) ($profile['profilePhoto'] ?? $profile['profile_photo'] ?? $payload['profilePhoto'] ?? $payload['profile_photo'] ?? ''));
+		$gatewayEmail = trim((string) ($profile['email'] ?? $payload['email'] ?? ''));
+		$gatewayAddress = trim((string) (
+			$profile['address']
+			?? $profile['address_line']
+			?? $payload['address']
+			?? $payload['address_line']
+			?? ($gatewayPatientPayload['address_line'] ?? '')
+			?? ''
+		));
+		$gatewayZip = trim((string) (
+			$profile['pinCode']
+			?? $profile['pin_code']
+			?? $payload['pinCode']
+			?? $payload['pin_code']
+			?? $payload['pincode']
+			?? ($gatewayPatientPayload['pincode'] ?? '')
+			?? ''
+		));
+		$gatewayStateCode = trim((string) (
+			$profile['stateCode']
+			?? $profile['state_code']
+			?? $payload['stateCode']
+			?? $payload['state_code']
+			?? ($gatewayPatientPayload['state_code'] ?? '')
+			?? ''
+		));
+		$gatewayStateName = trim((string) (
+			$profile['stateName']
+			?? $profile['state_name']
+			?? $payload['stateName']
+			?? $payload['state_name']
+			?? ($gatewayPatientPayload['state_name'] ?? '')
+			?? ''
+		));
+		$gatewayDistrictCode = trim((string) (
+			$profile['districtCode']
+			?? $profile['district_code']
+			?? $payload['districtCode']
+			?? $payload['district_code']
+			?? ($payload['gateway_abha_profile']['district_code'] ?? '')
+			?? ''
+		));
+		$gatewayDistrictName = trim((string) (
+			$profile['districtName']
+			?? $profile['district_name']
+			?? $payload['districtName']
+			?? $payload['district_name']
+			?? ($payload['gateway_abha_profile']['district_name'] ?? '')
+			?? ($gatewayPatientPayload['district'] ?? '')
+			?? ''
+		));
+		$verifiedStatus = trim((string) (
+			($payload['gateway_abha_profile']['status'] ?? '')
+			?: ($profile['verifiedStatus'] ?? '')
+			?: ($profile['status'] ?? '')
+			?: ($profile['abhaStatus'] ?? '')
+			?: ($payload['verifiedStatus'] ?? '')
+			?: ($payload['status'] ?? '')
+			?: ''
+		));
+		$verificationType = trim((string) (
+			($payload['gateway_abha_profile']['abha_type'] ?? '')
+			?: ($profile['verificationType'] ?? '')
+			?: ($profile['abhaType'] ?? '')
+			?: ($payload['verificationType'] ?? '')
+			?: ($payload['abhaType'] ?? '')
+			?: ''
+		));
+		$kycVerified = $profile['kycVerified'] ?? $payload['kycVerified'] ?? null;
+		if ($kycVerified === null) {
+			$kycVerified = strtolower(trim((string) ($payload['gateway_abha_profile']['status'] ?? ''))) === 'verified' ? 1 : 0;
+		}
+		$mobileVerified = $profile['mobileVerified']
+			?? $payload['mobileVerified']
+			?? ($payload['gateway_abha_profile']['mobile_verified'] ?? null);
+		$gatewayCity = trim((string) ($profile['city'] ?? $payload['city'] ?? ($gatewayPatientPayload['city'] ?? '')));
+		if ($gatewayCity === '') {
+			$gatewayCity = $this->extractCityFromAddress($gatewayAddress, $gatewayDistrictName, $gatewayStateName);
+		}
+
+		$this->upsertAbdmLocationMasters($gatewayStateCode, $gatewayStateName, $gatewayDistrictCode, $gatewayDistrictName);
 
 		$patient = $this->findPatientForAbhaProfile($requestedPid, $abhaDigits, $gatewayMobile);
 		$patientId = (int) ($patient['id'] ?? 0);
@@ -1415,6 +1537,39 @@ class Patient extends BaseController
 			}
 
 			$pmFields = $this->db->getFieldNames('patient_master') ?? [];
+			if ($gatewayMobile !== '' && in_array('mphone1', $pmFields, true)) {
+				$updates['mphone1'] = preg_replace('/\D/', '', $gatewayMobile);
+			}
+			if ($gatewayAddress !== '' && in_array('add1', $pmFields, true)) {
+				$updates['add1'] = $gatewayAddress;
+			}
+			if ($gatewayCity !== '' && in_array('city', $pmFields, true)) {
+				$updates['city'] = $gatewayCity;
+			}
+			if ($gatewayDistrictName !== '' && in_array('district', $pmFields, true)) {
+				$updates['district'] = $gatewayDistrictName;
+			}
+			if ($gatewayStateName !== '' && in_array('state', $pmFields, true)) {
+				$updates['state'] = $gatewayStateName;
+			}
+			if ($gatewayZip !== '' && in_array('zip', $pmFields, true)) {
+				$updates['zip'] = $gatewayZip;
+			}
+			if ($gatewayEmail !== '' && in_array('email1', $pmFields, true)) {
+				$updates['email1'] = $gatewayEmail;
+			}
+			if ($verifiedStatus !== '' && in_array('abha_verified_status', $pmFields, true)) {
+				$updates['abha_verified_status'] = $verifiedStatus;
+			}
+			if ($verificationType !== '' && in_array('abha_verification_type', $pmFields, true)) {
+				$updates['abha_verification_type'] = $verificationType;
+			}
+			if ($kycVerified !== null && in_array('abha_kyc_verified', $pmFields, true)) {
+				$updates['abha_kyc_verified'] = (int) ((string) $kycVerified === '1' || (string) $kycVerified === 'true' || (string) $kycVerified === 'yes');
+			}
+			if ($mobileVerified !== null && in_array('abha_mobile_verified', $pmFields, true)) {
+				$updates['abha_mobile_verified'] = (int) ((string) $mobileVerified === '1' || (string) $mobileVerified === 'true' || (string) $mobileVerified === 'yes');
+			}
 			if ($abhaAddress !== '' && in_array('abha_address', $pmFields, true)) {
 				$updates['abha_address'] = $abhaAddress;
 			}
@@ -1442,6 +1597,13 @@ class Patient extends BaseController
 			'mobile' => $gatewayMobile,
 			'dob' => $gatewayDob,
 			'gender' => $gatewayGender,
+			'address' => $gatewayAddress,
+			'city' => $gatewayCity,
+			'zip' => $gatewayZip,
+			'state_code' => $gatewayStateCode,
+			'state_name' => $gatewayStateName,
+			'district_code' => $gatewayDistrictCode,
+			'district_name' => $gatewayDistrictName,
 			'abha_number' => $abhaDigits,
 			'abha_address' => $abhaAddress,
 			'photo_base64' => $gatewayPhoto,
@@ -1491,16 +1653,199 @@ class Patient extends BaseController
 	}
 
 	/**
+	 * Return only safe/required fields for ABHA OTP verification APIs.
+	 * Prevents leaking connector tokens, full bridge profile dumps, and base64 photo blobs.
+	 *
+	 * @param array<string, mixed> $result
+	 * @return array<string, mixed>
+	 */
+	private function sanitizeAbhaVerifyApiResponse(array $result): array
+	{
+		$ok = ! empty($result['ok']) && (int) $result['ok'] === 1;
+		if (! $ok) {
+			return [
+				'ok' => 0,
+				'error_text' => (string) ($result['error_text'] ?? $result['message'] ?? $result['data']['message'] ?? 'OTP verification failed'),
+				'request_id' => (string) ($result['request_id'] ?? ''),
+			];
+		}
+
+		$payload = [];
+		if (isset($result['data']) && is_array($result['data'])) {
+			$payload = $result['data'];
+		} elseif (is_array($result)) {
+			$payload = $result;
+		}
+
+		$profile = $this->pickGatewayAbhaProfile($payload);
+
+		$txnId = (string) ($payload['txnId'] ?? $payload['txn_id'] ?? $result['txnId'] ?? $result['txn_id'] ?? '');
+		$abhaRaw = (string) ($payload['ABHANumber'] ?? $payload['abha_number'] ?? $payload['abha_id'] ?? $profile['ABHANumber'] ?? $profile['abha_number'] ?? $profile['abha_id'] ?? '');
+		$abhaDigits = preg_replace('/\D/', '', $abhaRaw);
+		$abhaAddress = (string) ($payload['preferredAbhaAddress'] ?? $payload['abha_address'] ?? $profile['preferredAbhaAddress'] ?? $profile['abha_address'] ?? $profile['preferredAddress'] ?? '');
+		$name = trim((string) (
+			$payload['name']
+			?? $payload['full_name']
+			?? $profile['name']
+			?? $profile['fullName']
+			?? $profile['full_name']
+			?? trim(implode(' ', array_filter([
+				(string) ($profile['firstName'] ?? ''),
+				(string) ($profile['middleName'] ?? ''),
+				(string) ($profile['lastName'] ?? ''),
+			])))
+		));
+		$mobile = (string) ($payload['mobile'] ?? $payload['mobileNumber'] ?? $profile['mobile'] ?? '');
+		$gender = (string) ($payload['gender'] ?? $profile['gender'] ?? '');
+		$dob = (string) ($payload['dob'] ?? $payload['date_of_birth'] ?? $profile['dob'] ?? $profile['date_of_birth'] ?? '');
+		$address = (string) ($payload['address'] ?? $payload['address_line'] ?? $profile['address'] ?? $profile['address_line'] ?? '');
+		$pinCode = (string) ($payload['pinCode'] ?? $payload['pin_code'] ?? $payload['pincode'] ?? $profile['pinCode'] ?? $profile['pin_code'] ?? '');
+		$stateCode = (string) ($payload['stateCode'] ?? $payload['state_code'] ?? $profile['stateCode'] ?? $profile['state_code'] ?? '');
+		$stateName = (string) ($payload['stateName'] ?? $payload['state_name'] ?? $profile['stateName'] ?? $profile['state_name'] ?? '');
+		$districtCode = (string) ($payload['districtCode'] ?? $payload['district_code'] ?? $profile['districtCode'] ?? $profile['district_code'] ?? '');
+		$districtName = (string) ($payload['districtName'] ?? $payload['district_name'] ?? $profile['districtName'] ?? $profile['district_name'] ?? '');
+
+		$matchedPatientId = (int) ($result['hms_patient']['matched_patient_id'] ?? 0);
+		$patientId = (int) ($result['patient_id'] ?? $payload['patient_id'] ?? $matchedPatientId);
+		$pCode = (string) ($result['p_code'] ?? $payload['p_code'] ?? '');
+		$isNew = $result['is_new_patient'] ?? $payload['is_new_patient'] ?? null;
+
+		$safeProfile = [
+			'ABHANumber' => $abhaDigits,
+			'abha_number' => $abhaDigits,
+			'abha_id' => $abhaDigits,
+			'preferredAbhaAddress' => $abhaAddress,
+			'preferredAddress' => $abhaAddress,
+			'name' => $name,
+			'full_name' => $name,
+			'gender' => $gender,
+			'dob' => $dob,
+			'mobile' => $mobile,
+			'address' => $address,
+			'pinCode' => $pinCode,
+			'stateCode' => $stateCode,
+			'stateName' => $stateName,
+			'districtCode' => $districtCode,
+			'districtName' => $districtName,
+			'firstName' => (string) ($profile['firstName'] ?? ''),
+			'middleName' => (string) ($profile['middleName'] ?? ''),
+			'lastName' => (string) ($profile['lastName'] ?? ''),
+		];
+
+		return [
+			'ok' => 1,
+			'request_id' => (string) ($result['request_id'] ?? ''),
+			'message' => (string) ($payload['message'] ?? $result['message'] ?? 'ABHA OTP verified successfully'),
+			'txn_id' => $txnId,
+			'abha_number' => $abhaDigits,
+			'abha_address' => $abhaAddress,
+			'name' => $name,
+			'mobile' => $mobile,
+			'gender' => $gender,
+			'dob' => $dob,
+			'address' => $address,
+			'pin_code' => $pinCode,
+			'state_code' => $stateCode,
+			'state_name' => $stateName,
+			'district_code' => $districtCode,
+			'district_name' => $districtName,
+			'patient_id' => $patientId > 0 ? $patientId : null,
+			'p_code' => $pCode !== '' ? $pCode : null,
+			'is_new_patient' => $isNew,
+			'data' => [
+				'txnId' => $txnId,
+				'abha_number' => $abhaDigits,
+				'name' => $name,
+				'mobile' => $mobile,
+				'gender' => $gender,
+				'dob' => $dob,
+				'address' => $address,
+				'pin_code' => $pinCode,
+				'state_code' => $stateCode,
+				'state_name' => $stateName,
+				'district_code' => $districtCode,
+				'district_name' => $districtName,
+				'profile' => $safeProfile,
+			],
+		];
+	}
+
+	private function extractCityFromAddress(string $address, string $districtName = '', string $stateName = ''): string
+	{
+		$address = trim($address);
+		if ($address === '') {
+			return '';
+		}
+
+		$districtNorm = mb_strtoupper(trim($districtName));
+		$stateNorm = mb_strtoupper(trim($stateName));
+		$parts = array_values(array_filter(array_map('trim', explode(',', $address)), static fn (string $v): bool => $v !== ''));
+		if ($parts === []) {
+			return '';
+		}
+
+		for ($i = count($parts) - 1; $i >= 0; $i--) {
+			$candidate = trim((string) ($parts[$i] ?? ''));
+			if ($candidate === '' || preg_match('/\d/', $candidate) === 1) {
+				continue;
+			}
+
+			$norm = mb_strtoupper($candidate);
+			if (($districtNorm !== '' && $norm === $districtNorm) || ($stateNorm !== '' && $norm === $stateNorm)) {
+				continue;
+			}
+
+			return $candidate;
+		}
+
+		return '';
+	}
+
+	private function upsertAbdmLocationMasters(string $stateCode, string $stateName, string $districtCode, string $districtName): void
+	{
+		// State data lives in india_state (read-only reference — no writes needed from ABHA flow).
+
+		if ($districtCode !== '' && $districtName !== '' && $this->db->tableExists('abdm_district_master')) {
+			$districtBuilder = $this->db->table('abdm_district_master')
+				->select('id')
+				->where('district_code', $districtCode);
+			if ($stateCode !== '') {
+				$districtBuilder->where('state_code', $stateCode);
+			}
+			$districtRow = $districtBuilder->limit(1)->get()->getRowArray();
+
+			if ($districtRow === null) {
+				$this->db->table('abdm_district_master')->insert([
+					'district_code' => $districtCode,
+					'district_name' => $districtName,
+					'state_code' => $stateCode,
+					'created_at' => date('Y-m-d H:i:s'),
+					'updated_at' => date('Y-m-d H:i:s'),
+				]);
+			} else {
+				$this->db->table('abdm_district_master')
+					->where('id', (int) ($districtRow['id'] ?? 0))
+					->update([
+						'district_name' => $districtName,
+						'state_code' => $stateCode,
+						'updated_at' => date('Y-m-d H:i:s'),
+					]);
+			}
+		}
+	}
+
+	/**
 	 * @param array<string, mixed> $payload
 	 * @return array<string, mixed>
 	 */
 	private function pickGatewayAbhaProfile(array $payload): array
 	{
 		$candidates = [
-			$payload['gateway_patient'] ?? null,
 			$payload['ABHAProfile'] ?? null,
-			$payload['accounts'][0] ?? null,
+			$payload['gateway_abha_profile'] ?? null,
 			$payload['profile'] ?? null,
+			$payload['accounts'][0] ?? null,
+			$payload['gateway_patient'] ?? null,
 			$payload,
 		];
 

@@ -86,16 +86,29 @@ class Abha extends BaseController
         $profile = $this->pickGatewayAbhaProfile($payload);
 
         $abhaNum          = (string) ($profile['ABHANumber'] ?? $profile['abha_id'] ?? $payload['ABHANumber'] ?? $payload['abha_id'] ?? '');
-        $abhaAddress      = (string) ($profile['preferredAbhaAddress'] ?? $profile['abha_address'] ?? $payload['preferredAbhaAddress'] ?? $payload['abha_address'] ?? '');
+        $abhaAddress      = (string) (
+            ($profile['preferredAddress'] ?? '')
+            ?: ($profile['preferredAbhaAddress'] ?? '')
+            ?: ($profile['abha_address'] ?? '')
+            ?: ($payload['preferredAddress'] ?? '')
+            ?: ($payload['preferredAbhaAddress'] ?? '')
+            ?: ($payload['abha_address'] ?? '')
+            ?: ''
+        );
         $name             = (string) ($profile['name'] ?? $profile['fullName'] ?? $profile['full_name'] ?? $payload['name'] ?? $payload['full_name'] ?? '');
         $photo            = (string) ($profile['profilePhoto'] ?? $profile['profile_photo'] ?? $payload['profilePhoto'] ?? $payload['profile_photo'] ?? '');
         $mobile           = (string) ($profile['mobile'] ?? $payload['mobile'] ?? $payload['mobileNumber'] ?? '');
         $profileGender    = (string) ($profile['gender'] ?? $payload['gender'] ?? '');
         $profileDob       = (string) ($profile['dob'] ?? $profile['date_of_birth'] ?? $payload['dob'] ?? $payload['date_of_birth'] ?? '');
-        $verifiedStatus   = (string) ($profile['verifiedStatus'] ?? $payload['verifiedStatus'] ?? '');
-        $verificationType = (string) ($profile['verificationType'] ?? $payload['verificationType'] ?? '');
+        $verifiedStatus   = (string) (($payload['gateway_abha_profile']['status'] ?? '') ?: ($profile['verifiedStatus'] ?? '') ?: ($profile['status'] ?? '') ?: ($payload['verifiedStatus'] ?? '') ?: ($payload['status'] ?? ''));
+        $verificationType = (string) (($payload['gateway_abha_profile']['abha_type'] ?? '') ?: ($profile['verificationType'] ?? '') ?: ($profile['abhaType'] ?? '') ?: ($payload['verificationType'] ?? '') ?: ($payload['abhaType'] ?? ''));
         $kycVerified      = $profile['kycVerified'] ?? $payload['kycVerified'] ?? null;
         $mobileVerified   = $profile['mobileVerified'] ?? $payload['mobileVerified'] ?? null;
+        $address          = (string) (($profile['address'] ?? '') ?: ($profile['address_line'] ?? '') ?: ($payload['address'] ?? '') ?: ($payload['address_line'] ?? '') ?: ($payload['gateway_abha_profile']['address'] ?? '') ?: ($payload['gateway_patient']['address_line'] ?? ''));
+        $zip              = (string) (($profile['pinCode'] ?? '') ?: ($profile['pin_code'] ?? '') ?: ($payload['pinCode'] ?? '') ?: ($payload['pin_code'] ?? '') ?: ($payload['gateway_abha_profile']['pin_code'] ?? '') ?: ($payload['gateway_patient']['pincode'] ?? ''));
+        $stateName        = (string) (($profile['stateName'] ?? '') ?: ($profile['state_name'] ?? '') ?: ($payload['stateName'] ?? '') ?: ($payload['state_name'] ?? '') ?: ($payload['gateway_abha_profile']['state_name'] ?? '') ?: ($payload['gateway_patient']['state_name'] ?? ''));
+        $districtName     = (string) (($profile['districtName'] ?? '') ?: ($profile['district_name'] ?? '') ?: ($payload['districtName'] ?? '') ?: ($payload['district_name'] ?? '') ?: ($payload['gateway_abha_profile']['district_name'] ?? '') ?: ($payload['gateway_patient']['district'] ?? ''));
+        $email            = (string) (($profile['email'] ?? '') ?: ($payload['email'] ?? '') ?: ($payload['gateway_abha_profile']['email'] ?? '') ?: ($payload['gateway_patient']['email'] ?? ''));
 
         $patientInfo = $this->autoCreateOrFindPatient(
             $abhaNum,
@@ -110,6 +123,11 @@ class Abha extends BaseController
                 'verification_type' => $verificationType,
                 'kyc_verified' => $kycVerified,
                 'mobile_verified' => $mobileVerified,
+                'address' => $address,
+                'district' => $districtName,
+                'state' => $stateName,
+                'zip' => $zip,
+                'email' => $email,
             ]
         );
 
@@ -198,16 +216,29 @@ class Abha extends BaseController
         $profile = $this->pickGatewayAbhaProfile($payload);
 
         $abhaNum          = (string) ($profile['ABHANumber'] ?? $profile['abha_id'] ?? $payload['ABHANumber'] ?? $payload['abha_id'] ?? '');
-        $abhaAddress      = (string) ($profile['preferredAbhaAddress'] ?? $profile['abha_address'] ?? $payload['preferredAbhaAddress'] ?? $payload['abha_address'] ?? '');
+        $abhaAddress      = (string) (
+            ($profile['preferredAddress'] ?? '')
+            ?: ($profile['preferredAbhaAddress'] ?? '')
+            ?: ($profile['abha_address'] ?? '')
+            ?: ($payload['preferredAddress'] ?? '')
+            ?: ($payload['preferredAbhaAddress'] ?? '')
+            ?: ($payload['abha_address'] ?? '')
+            ?: ''
+        );
         $name             = (string) ($profile['name'] ?? $profile['fullName'] ?? $profile['full_name'] ?? $payload['name'] ?? $payload['full_name'] ?? '');
         $photo            = (string) ($profile['profilePhoto'] ?? $profile['profile_photo'] ?? $payload['profilePhoto'] ?? $payload['profile_photo'] ?? '');
         $gender           = (string) ($profile['gender'] ?? $payload['gender'] ?? '');
         $dob              = (string) ($profile['dob'] ?? $profile['date_of_birth'] ?? $payload['dob'] ?? $payload['date_of_birth'] ?? '');
         $mobile           = (string) ($profile['mobile'] ?? $payload['mobile'] ?? $payload['mobileNumber'] ?? '');
-        $verifiedStatus   = (string) ($profile['verifiedStatus'] ?? $payload['verifiedStatus'] ?? '');
-        $verificationType = (string) ($profile['verificationType'] ?? $payload['verificationType'] ?? '');
+        $verifiedStatus   = (string) (($payload['gateway_abha_profile']['status'] ?? '') ?: ($profile['verifiedStatus'] ?? '') ?: ($profile['status'] ?? '') ?: ($payload['verifiedStatus'] ?? '') ?: ($payload['status'] ?? ''));
+        $verificationType = (string) (($payload['gateway_abha_profile']['abha_type'] ?? '') ?: ($profile['verificationType'] ?? '') ?: ($profile['abhaType'] ?? '') ?: ($payload['verificationType'] ?? '') ?: ($payload['abhaType'] ?? ''));
         $kycVerified      = $profile['kycVerified'] ?? $payload['kycVerified'] ?? null;
         $mobileVerified   = $profile['mobileVerified'] ?? $payload['mobileVerified'] ?? null;
+        $address          = (string) (($profile['address'] ?? '') ?: ($profile['address_line'] ?? '') ?: ($payload['address'] ?? '') ?: ($payload['address_line'] ?? '') ?: ($payload['gateway_abha_profile']['address'] ?? '') ?: ($payload['gateway_patient']['address_line'] ?? ''));
+        $zip              = (string) (($profile['pinCode'] ?? '') ?: ($profile['pin_code'] ?? '') ?: ($payload['pinCode'] ?? '') ?: ($payload['pin_code'] ?? '') ?: ($payload['gateway_abha_profile']['pin_code'] ?? '') ?: ($payload['gateway_patient']['pincode'] ?? ''));
+        $stateName        = (string) (($profile['stateName'] ?? '') ?: ($profile['state_name'] ?? '') ?: ($payload['stateName'] ?? '') ?: ($payload['state_name'] ?? '') ?: ($payload['gateway_abha_profile']['state_name'] ?? '') ?: ($payload['gateway_patient']['state_name'] ?? ''));
+        $districtName     = (string) (($profile['districtName'] ?? '') ?: ($profile['district_name'] ?? '') ?: ($payload['districtName'] ?? '') ?: ($payload['district_name'] ?? '') ?: ($payload['gateway_abha_profile']['district_name'] ?? '') ?: ($payload['gateway_patient']['district'] ?? ''));
+        $email            = (string) (($profile['email'] ?? '') ?: ($payload['email'] ?? '') ?: ($payload['gateway_abha_profile']['email'] ?? '') ?: ($payload['gateway_patient']['email'] ?? ''));
 
         $patientInfo = $this->autoCreateOrFindPatient(
             $abhaNum,
@@ -222,6 +253,11 @@ class Abha extends BaseController
                 'verification_type' => $verificationType,
                 'kyc_verified' => $kycVerified,
                 'mobile_verified' => $mobileVerified,
+                'address' => $address,
+                'district' => $districtName,
+                'state' => $stateName,
+                'zip' => $zip,
+                'email' => $email,
             ]
         );
 
@@ -498,6 +534,31 @@ class Abha extends BaseController
             $target['abha_mobile_verified'] = $this->toDbBool($abhaMeta['mobile_verified']);
         }
 
+        $address = trim((string) ($abhaMeta['address'] ?? ''));
+        if ($address !== '' && in_array('add1', $fields, true)) {
+            $target['add1'] = $address;
+        }
+
+        $district = trim((string) ($abhaMeta['district'] ?? ''));
+        if ($district !== '' && in_array('district', $fields, true)) {
+            $target['district'] = strtoupper($district);
+        }
+
+        $state = trim((string) ($abhaMeta['state'] ?? ''));
+        if ($state !== '' && in_array('state', $fields, true)) {
+            $target['state'] = strtoupper($state);
+        }
+
+        $zip = trim((string) ($abhaMeta['zip'] ?? ''));
+        if ($zip !== '' && in_array('zip', $fields, true)) {
+            $target['zip'] = $zip;
+        }
+
+        $email = trim((string) ($abhaMeta['email'] ?? ''));
+        if ($email !== '' && in_array('email1', $fields, true)) {
+            $target['email1'] = $email;
+        }
+
         $profilePhoto = trim((string) ($abhaMeta['profile_photo'] ?? ''));
         if ($profilePhoto !== '' && in_array('abha_profile_photo_base64', $fields, true)) {
             $target['abha_profile_photo_base64'] = $profilePhoto;
@@ -609,10 +670,11 @@ class Abha extends BaseController
     private function pickGatewayAbhaProfile(array $payload): array
     {
         $candidates = [
-            $payload['gateway_patient'] ?? null,
             $payload['ABHAProfile'] ?? null,
-            $payload['accounts'][0] ?? null,
+            $payload['gateway_abha_profile'] ?? null,
             $payload['profile'] ?? null,
+            $payload['accounts'][0] ?? null,
+            $payload['gateway_patient'] ?? null,
             $payload,
         ];
 
@@ -630,7 +692,7 @@ class Abha extends BaseController
      */
     private function looksLikeGatewayAbhaProfile(array $profile): bool
     {
-        foreach (['ABHANumber', 'abha_id', 'preferredAbhaAddress', 'abha_address', 'name', 'fullName', 'full_name', 'gender', 'dob', 'date_of_birth', 'profilePhoto', 'profile_photo'] as $key) {
+        foreach (['ABHANumber', 'abha_id', 'preferredAddress', 'preferredAbhaAddress', 'abha_address', 'name', 'fullName', 'full_name', 'gender', 'dob', 'date_of_birth', 'profilePhoto', 'profile_photo'] as $key) {
             if (array_key_exists($key, $profile) && trim((string) $profile[$key]) !== '') {
                 return true;
             }

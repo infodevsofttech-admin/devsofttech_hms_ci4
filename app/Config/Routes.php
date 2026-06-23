@@ -499,6 +499,7 @@ $routes->group('billing', function($routes) {
     $routes->post('patient/save_profile_image/(:num)', 'Patient::save_profile_image/$1');
     $routes->match(['get', 'post'], 'patient/patient_file_upload/(:num)', 'Patient::patient_file_upload/$1');
     $routes->get('patient/city', 'Patient::city');
+    $routes->get('patient/district_list', 'Patient::district_list');
     $routes->get('patient/get_name', 'Patient::get_name');
     $routes->post('patient/update', 'Patient::update');
     $routes->post('patient/update_aadhar', 'Patient::update_aadhar');

@@ -611,16 +611,35 @@
         cardHtml += '<div class="small mb-2"><strong>Phone:</strong> ' + ((identity.phone || '-') + '') + '</div>';
 
         if (matches.length > 0) {
-            cardHtml += '<div class="small fw-semibold mb-1">Matching HMS Patients</div>';
+            cardHtml += '<div class="small fw-semibold mb-1">Possible Matching HMS Patients</div>';
             matches.forEach(function (m) {
+                var conf = m.match_confidence || 'low';
+                var confLabels = { definitive: 'Definitive', high: 'High', medium: 'Medium', low: 'Low' };
+                var confBadgeClass = { definitive: 'bg-success', high: 'bg-primary', medium: 'bg-warning text-dark', low: 'bg-secondary' };
+                var confBadge = '<span class="badge ' + (confBadgeClass[conf] || 'bg-secondary') + ' ms-1 small">' + (confLabels[conf] || 'Low') + '</span>';
+                var reasons = Array.isArray(m.match_reasons) ? m.match_reasons.join(', ') : '';
+                var genderLabel = m.gender == 2 ? 'F' : m.gender == 1 ? 'M' : '—';
+                var borderClass = conf === 'definitive' ? 'border-success' : conf === 'high' ? 'border-primary' : conf === 'medium' ? 'border-warning' : 'border-secondary';
                 var mLabel = ((m.p_code || 'UHID') + ' - ' + (m.p_fname || 'Unnamed'));
-                cardHtml += '<div class="d-flex justify-content-between align-items-center border rounded p-1 mb-1 bg-white">';
-                cardHtml += '<div class="small">' + mLabel + '</div>';
-                cardHtml += '<button type="button" class="btn btn-sm btn-outline-primary" data-scan-use-existing="1" data-patient-id="' + (m.id || 0) + '">Use</button>';
+                cardHtml += '<div class="border rounded p-1 mb-1 bg-white ' + borderClass + '">';
+                cardHtml += '<div class="d-flex justify-content-between align-items-start">';
+                cardHtml += '<div class="small"><span class="fw-semibold">' + mLabel + '</span>' + confBadge + '</div>';
+                cardHtml += '<button type="button" class="btn btn-sm btn-outline-primary ms-2" data-scan-use-existing="1" data-patient-id="' + (m.id || 0) + '">Link</button>';
+                cardHtml += '</div>';
+                cardHtml += '<div class="small text-muted">DOB: ' + (m.dob || '—') + ' | Gender: ' + genderLabel + ' | Phone: ' + (m.mphone1 || '—') + '</div>';
+                cardHtml += '<div class="small text-muted fst-italic">Matched by: ' + reasons + '</div>';
                 cardHtml += '</div>';
             });
+            // Add "Create New Patient" as a selectable card option at the end of the list
+            cardHtml += '<div class="border rounded border-2 border-secondary p-1 mb-1 bg-white">';
+            cardHtml += '<div class="d-flex justify-content-between align-items-start">';
+            cardHtml += '<div class="small"><span class="fw-semibold text-secondary">None of the above — Register as New Patient</span></div>';
+            cardHtml += '<button type="button" class="btn btn-sm btn-success ms-2" data-scan-create-new="1">Create New</button>';
+            cardHtml += '</div>';
+            cardHtml += '<div class="small text-muted">This ABHA does not belong to any listed record.</div>';
+            cardHtml += '</div>';
         } else {
-            cardHtml += '<div class="small text-muted mb-2">No existing patient matched from ABHA/phone.</div>';
+            cardHtml += '<div class="small text-muted mb-2">No existing patient matched from HMS demographics or ABHA.</div>';
         }
 
         cardHtml += '<div class="d-flex gap-2 mt-2">';
@@ -655,6 +674,28 @@
                     }
                     clearScanResolvePane();
                     setSandboxStatus('Patient linked: ' + (resp.p_code || resp.patient_id || '-') + '. You can open profile now.', 'success');
+                });
+            });
+        });
+
+        scanResolvePane.querySelectorAll('[data-scan-create-new="1"]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                setSandboxStatus('Creating new patient from scan result...', 'muted');
+                post('<?= base_url('AbdmGateway/scan_share_link_patient') ?>/' + queueId, {
+                    action: 'create_new',
+                    abha_number: (identity.abha_number || ''),
+                    abha_address: (identity.abha_address || ''),
+                    patient_name: (identity.patient_name || ''),
+                    phone: (identity.phone || ''),
+                    gender: (identity.gender || ''),
+                    dob: (identity.dob || '')
+                }, function (resp) {
+                    if (!resp || parseInt(resp.ok || 0, 10) !== 1) {
+                        setSandboxStatus((resp && resp.error_text) ? resp.error_text : 'Unable to create patient.', 'danger');
+                        return;
+                    }
+                    clearScanResolvePane();
+                    setSandboxStatus('New patient created: ' + (resp.p_code || resp.patient_id || '-') + '.', 'success');
                 });
             });
         });

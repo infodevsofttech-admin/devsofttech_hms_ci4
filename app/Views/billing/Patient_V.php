@@ -261,15 +261,20 @@
                                                 <div class="form-group">
                                                     <label class="form-label">District</label>
                                                     <input class="form-control" name="input_district"
-                                                        id="input_district" placeholder="District" type="text"
-                                                        autocomplete="on">
+                                                        id="input_district" placeholder="Type to search or add new…" type="text"
+                                                        autocomplete="off">
+                                                    <div class="form-text text-muted small">Type to search; unlisted districts can be entered freely.</div>
                                                 </div>
                                             </div>
                                             <div class="col-md-3">
                                                 <div class="form-group">
                                                     <label class="form-label">State</label>
-                                                    <input class="form-control" name="input_state"
-                                                        id="input_state" placeholder="State" type="text" autocomplete="on">
+                                                    <select class="form-select" name="input_state" id="input_state">
+                                                        <option value="">— Select State —</option>
+                                                        <?php foreach (($india_states ?? []) as $st): ?>
+                                                        <option value="<?= esc($st['state_name']) ?>"><?= esc($st['state_name']) ?></option>
+                                                        <?php endforeach; ?>
+                                                    </select>
                                                 </div>
                                             </div>
                                         </div>
@@ -1325,7 +1330,16 @@
                     $('#input_city').val(p.city);
                 }
                 if (p.state && !$('#input_state').val()) {
-                    $('#input_state').val(p.state);
+                    // Try to match existing option (case-insensitive); fall back to first partial match
+                    var stateTarget = (p.state || '').trim().toUpperCase();
+                    var $sel = $('#input_state');
+                    var bestVal = '';
+                    $sel.find('option').each(function() {
+                        if ($(this).val().toUpperCase() === stateTarget) { bestVal = $(this).val(); return false; }
+                    });
+                    if (bestVal) {
+                        $sel.val(bestVal);
+                    }
                 }
                 if (p.dob && !$('#datepicker_dob').val()) {
                     $('#datepicker_dob').val(p.dob);
@@ -1351,7 +1365,28 @@
             autofocus: true,
             select: function(event, ui) {
                 $("#input_district").val(ui.item.l_district);
-                $("#input_state").val(ui.item.l_state);
+                var stateVal = (ui.item.l_state || '').trim().toUpperCase();
+                var $stateSelect = $("#input_state");
+                var matched = false;
+                $stateSelect.find('option').each(function() {
+                    if ($(this).val().toUpperCase() === stateVal) {
+                        $stateSelect.val($(this).val());
+                        matched = true;
+                        return false;
+                    }
+                });
+                if (!matched && stateVal !== '') {
+                    $stateSelect.append($('<option>').val(ui.item.l_state).text(ui.item.l_state).prop('selected', true));
+                }
+            }
+        });
+
+        $("#input_district").autocomplete({
+            source: "<?= base_url('billing/patient/district_list') ?>",
+            minLength: 2,
+            select: function(event, ui) {
+                $("#input_district").val(ui.item.value);
+                return false;
             }
         });
 
