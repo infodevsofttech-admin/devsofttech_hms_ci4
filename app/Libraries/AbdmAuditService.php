@@ -90,18 +90,41 @@ class AbdmAuditService
 
             $insert = [];
 
-            // Preferred generic schema: audit_logs(event_id, patient_id, action, timestamp, user_id)
+            // Preferred generic schema: audit_logs(patient_id, abha_id, action, timestamp, details)
             if (in_array('patient_id', $auditFields, true)) {
-                $insert['patient_id'] = $patientId > 0 ? $patientId : null;
+                $insert['patient_id'] = $patientId > 0 ? $patientId : 0;
             }
             if (in_array('action', $auditFields, true)) {
-                $insert['action'] = (string) ($data['action'] ?? 'unknown');
+                $insert['action'] = $this->mapAuditAction((string) ($data['action'] ?? ''));
             }
             if (in_array('timestamp', $auditFields, true)) {
                 $insert['timestamp'] = Time::now('Asia/Kolkata')->toDateTimeString();
             }
             if (in_array('user_id', $auditFields, true)) {
                 $insert['user_id'] = $actorUserId > 0 ? $actorUserId : null;
+            }
+            if (in_array('abha_id', $auditFields, true)) {
+                $insert['abha_id'] = trim((string) ($data['abha_id'] ?? '')) !== ''
+                    ? trim((string) ($data['abha_id'] ?? ''))
+                    : 'UNKNOWN';
+            }
+            if (in_array('consent_id', $auditFields, true)) {
+                $insert['consent_id'] = trim((string) ($data['consent_id'] ?? '')) ?: null;
+            }
+            if (in_array('transaction_id', $auditFields, true)) {
+                $insert['transaction_id'] = trim((string) ($data['transaction_id'] ?? '')) ?: null;
+            }
+            if (in_array('details', $auditFields, true)) {
+                $detailPayload = [
+                    'raw_action' => (string) ($data['action'] ?? ''),
+                    'entity_type' => (string) ($data['entity_type'] ?? ''),
+                    'entity_id' => (string) ($data['entity_id'] ?? ''),
+                    'outcome' => (string) ($data['outcome'] ?? 'success'),
+                    'error_message' => trim((string) ($data['error_message'] ?? '')),
+                    'request' => $data['request'] ?? null,
+                    'response' => $data['response'] ?? null,
+                ];
+                $insert['details'] = (string) json_encode($detailPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             }
 
             // Extended ABDM schema fields (abdm_audit_logs)
@@ -184,5 +207,19 @@ class AbdmAuditService
         } catch (\Throwable) {
             return [];
         }
+    }
+
+    private function mapAuditAction(string $action): string
+    {
+        $action = strtolower(trim($action));
+
+        if (str_contains($action, 'discover')) {
+            return 'DISCOVERY';
+        }
+        if (str_contains($action, 'fetch')) {
+            return 'FETCH';
+        }
+
+        return 'SHARE';
     }
 }

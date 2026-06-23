@@ -624,6 +624,12 @@ $routes->post('AbdmGateway/consent_request', 'AbdmGateway::consentRequest', ['fi
 $routes->post('AbdmGateway/consent_callback', 'AbdmGateway::consentCallback');
 $routes->post('AbdmGateway/consent_revoked_callback', 'AbdmGateway::consentRevokedCallback');
 $routes->post('AbdmGateway/record_linked_callback', 'AbdmGateway::recordLinkedCallback');
+// HMS M2 adapter endpoints (Gateway -> HMS) - keep lowercase v1 path
+$routes->get('api/v1/abdm/gateway/health', 'AbdmGateway::m2GatewayHealth');
+$routes->post('api/v1/abdm/gateway/discovery/care-contexts', 'AbdmGateway::m2DiscoveryCareContexts');
+$routes->post('api/v1/abdm/gateway/health-information/fetch', 'AbdmGateway::m2HealthInformationFetch');
+$routes->post('api/v1/abdm/gateway/consent/upsert', 'AbdmGateway::m2ConsentUpsert');
+$routes->post('api/v1/abdm/gateway/link/status', 'AbdmGateway::m2LinkStatus');
 // ABDM M2 compatibility endpoints (Gateway -> HMS)
 $routes->post('records/discover', 'AbdmGateway::recordsDiscover');
 $routes->get('records/fetch/(:any)', 'AbdmGateway::recordsFetch/$1');

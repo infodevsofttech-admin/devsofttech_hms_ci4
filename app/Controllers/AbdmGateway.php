@@ -101,6 +101,327 @@ class AbdmGateway extends BaseController
         }
     }
 
+    // =========================================================================
+    // HMS M2 Adapter Endpoints (Gateway -> HMS)
+    // =========================================================================
+
+    /**
+     * GET /api/v1/abdm/gateway/health
+     */
+    public function m2GatewayHealth()
+    {
+        $authFailure = $this->validateGatewayToHmsAuth();
+        if ($authFailure !== null) {
+            return $authFailure;
+        }
+
+        return $this->response->setJSON([
+            'ok' => 1,
+            'service' => 'hms-abdm-adapter',
+            'time' => gmdate('Y-m-d\TH:i:s\Z'),
+        ]);
+    }
+
+    /**
+     * POST /api/v1/abdm/gateway/discovery/care-contexts
+     */
+    public function m2DiscoveryCareContexts()
+    {
+        $authFailure = $this->validateGatewayToHmsAuth();
+        if ($authFailure !== null) {
+            return $authFailure;
+        }
+
+        $payload = $this->request->getJSON(true);
+        if (! is_array($payload)) {
+            $payload = [];
+        }
+
+        $requestId = trim((string) ($payload['request_id'] ?? $this->request->getHeaderLine('X-Request-Id')));
+        $abhaId = trim((string) ($payload['abha_id'] ?? ''));
+        $abhaAddress = trim((string) ($payload['abha_address'] ?? ''));
+
+        if ($abhaId === '' && $abhaAddress === '') {
+            return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
+                'error' => 'MISSING_FIELD',
+                'message' => 'abha_id or abha_address is required',
+                'request_id' => $requestId,
+            ]);
+        }
+
+        if (! $this->db->tableExists('patient_records')) {
+            return $this->response->setJSON(['ok' => 1, 'patient' => null, 'care_contexts' => []]);
+        }
+
+        $abhaLookup = $abhaAddress !== '' ? $abhaAddress : $abhaId;
+        $rows = $this->db->table('patient_records')
+            ->select('patient_id, abha_id, record_type, created_at, consent_id')
+            ->where('abha_id', $abhaLookup)
+            ->where('status', 'ACTIVE')
+            ->orderBy('record_id', 'DESC')
+            ->limit(200)
+            ->get()
+            ->getResultArray();
+
+        if (empty($rows)) {
+            return $this->response->setJSON(['ok' => 1, 'patient' => null, 'care_contexts' => []]);
+        }
+
+        $contexts = [];
+        foreach ($rows as $row) {
+            $patientId = (int) ($row['patient_id'] ?? 0);
+            $createdAt = trim((string) ($row['created_at'] ?? ''));
+            $datePart = $createdAt !== '' ? date('Y-m-d', strtotime($createdAt)) : date('Y-m-d');
+            $recordType = strtoupper(trim((string) ($row['record_type'] ?? 'OTHER')));
+
+            $ccRef = $recordType . '-' . $patientId . '-' . str_replace('-', '', $datePart);
+            $hiType = $this->mapPatientRecordTypeToHiType($recordType);
+
+            $contexts[$ccRef] = [
+                'referenceNumber' => $ccRef,
+                'display' => $recordType . ' - ' . $datePart,
+                'hiType' => $hiType,
+            ];
+        }
+
+        $patientDisplay = trim((string) ($payload['patient']['name'] ?? ''));
+        if ($patientDisplay === '') {
+            $patientDisplay = 'ABHA Patient';
+        }
+
+        $contextsOut = array_values($contexts);
+        $hiTypeSummary = ! empty($contextsOut)
+            ? (string) ($contextsOut[0]['hiType'] ?? 'HealthDocumentRecord')
+            : 'HealthDocumentRecord';
+
+        $this->getAuditService()->log([
+            'action' => 'discovery_records',
+            'entity_type' => 'patient_records',
+            'abha_id' => $abhaLookup,
+            'patient_id' => (int) ($rows[0]['patient_id'] ?? 0),
+            'request' => $payload,
+            'response' => ['count' => count($contextsOut)],
+            'outcome' => 'success',
+            'transaction_id' => (string) ($payload['transaction_id'] ?? ''),
+        ]);
+
+        return $this->response->setJSON([
+            'ok' => 1,
+            'patient' => [
+                'referenceNumber' => $abhaLookup,
+                'display' => $patientDisplay,
+                'count' => count($contextsOut),
+                'hiType' => $hiTypeSummary,
+            ],
+            'care_contexts' => $contextsOut,
+        ]);
+    }
+
+    /**
+     * POST /api/v1/abdm/gateway/health-information/fetch
+     */
+    public function m2HealthInformationFetch()
+    {
+        $authFailure = $this->validateGatewayToHmsAuth();
+        if ($authFailure !== null) {
+            return $authFailure;
+        }
+
+        $payload = $this->request->getJSON(true);
+        if (! is_array($payload)) {
+            $payload = [];
+        }
+
+        $requestId = trim((string) ($payload['request_id'] ?? $this->request->getHeaderLine('X-Request-Id')));
+        $abhaId = trim((string) ($payload['abha_id'] ?? ''));
+        $abhaAddress = trim((string) ($payload['abha_address'] ?? ''));
+        $abhaLookup = $abhaAddress !== '' ? $abhaAddress : $abhaId;
+
+        if ($abhaLookup === '') {
+            return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
+                'error' => 'MISSING_FIELD',
+                'message' => 'abha_id or abha_address is required',
+                'request_id' => $requestId,
+            ]);
+        }
+
+        if (! $this->db->tableExists('patient_records')) {
+            return $this->response->setJSON(['ok' => 1, 'entries' => []]);
+        }
+
+        $requestedRefs = [];
+        $incomingRefs = $payload['care_context_references'] ?? [];
+        if (is_array($incomingRefs)) {
+            foreach ($incomingRefs as $ref) {
+                $v = trim((string) $ref);
+                if ($v !== '') {
+                    $requestedRefs[] = $v;
+                }
+            }
+        }
+
+        $rows = $this->db->table('patient_records')
+            ->select('record_id, patient_id, abha_id, consent_id, record_type, fhir_resource, created_at')
+            ->where('abha_id', $abhaLookup)
+            ->where('status', 'ACTIVE')
+            ->orderBy('record_id', 'DESC')
+            ->limit(300)
+            ->get()
+            ->getResultArray();
+
+        $entries = [];
+        foreach ($rows as $row) {
+            $patientId = (int) ($row['patient_id'] ?? 0);
+            $recordType = strtoupper(trim((string) ($row['record_type'] ?? 'OTHER')));
+            $createdAt = trim((string) ($row['created_at'] ?? ''));
+            $datePart = $createdAt !== '' ? date('Y-m-d', strtotime($createdAt)) : date('Y-m-d');
+            $ccRef = $recordType . '-' . $patientId . '-' . str_replace('-', '', $datePart);
+
+            if (! empty($requestedRefs) && ! in_array($ccRef, $requestedRefs, true)) {
+                continue;
+            }
+
+            $fhir = json_decode((string) ($row['fhir_resource'] ?? ''), true);
+            if (! is_array($fhir)) {
+                continue;
+            }
+
+            $entries[] = [
+                'careContextReference' => $ccRef,
+                'media' => 'application/fhir+json',
+                'fhir' => $fhir,
+            ];
+        }
+
+        $this->getAuditService()->log([
+            'action' => 'fetch_record',
+            'entity_type' => 'patient_records',
+            'abha_id' => $abhaLookup,
+            'request' => $payload,
+            'response' => ['count' => count($entries)],
+            'outcome' => 'success',
+            'consent_id' => (string) ($payload['consent_id'] ?? ''),
+            'transaction_id' => (string) ($payload['transaction_id'] ?? ''),
+        ]);
+
+        return $this->response->setJSON([
+            'ok' => 1,
+            'entries' => $entries,
+        ]);
+    }
+
+    /**
+     * POST /api/v1/abdm/gateway/consent/upsert
+     */
+    public function m2ConsentUpsert()
+    {
+        $authFailure = $this->validateGatewayToHmsAuth();
+        if ($authFailure !== null) {
+            return $authFailure;
+        }
+
+        $payload = $this->request->getJSON(true);
+        if (! is_array($payload)) {
+            $payload = [];
+        }
+
+        $requestId = trim((string) ($payload['request_id'] ?? $this->request->getHeaderLine('X-Request-Id')));
+        $patientId = (int) ($payload['patient_id'] ?? 0);
+        $abhaId = trim((string) ($payload['abha_id'] ?? $payload['abha_address'] ?? ''));
+        $consentId = trim((string) ($payload['consent_id'] ?? ''));
+        $status = strtoupper(trim((string) ($payload['status'] ?? '')));
+        $purpose = trim((string) ($payload['purpose'] ?? ''));
+        $expiresAt = trim((string) ($payload['date_range']['to'] ?? ''));
+
+        if ($abhaId === '' || $consentId === '' || $status === '') {
+            return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
+                'error' => 'MISSING_FIELD',
+                'message' => 'abha_id, consent_id and status are required',
+                'request_id' => $requestId,
+            ]);
+        }
+
+        if ($this->db->tableExists('consent_logs')) {
+            $this->db->table('consent_logs')->insert([
+                'patient_id' => $patientId > 0 ? $patientId : 0,
+                'abha_id' => $abhaId,
+                'consent_id' => $consentId,
+                'purpose' => $purpose !== '' ? $purpose : null,
+                'status' => in_array($status, ['GRANTED', 'REVOKED', 'EXPIRED'], true) ? $status : 'EXPIRED',
+                'created_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
+                'expires_at' => $expiresAt !== '' ? $expiresAt : null,
+            ]);
+        }
+
+        return $this->response->setJSON(['ok' => 1]);
+    }
+
+    /**
+     * POST /api/v1/abdm/gateway/link/status
+     */
+    public function m2LinkStatus()
+    {
+        $authFailure = $this->validateGatewayToHmsAuth();
+        if ($authFailure !== null) {
+            return $authFailure;
+        }
+
+        $payload = $this->request->getJSON(true);
+        if (! is_array($payload)) {
+            $payload = [];
+        }
+
+        $requestId = trim((string) ($payload['request_id'] ?? $this->request->getHeaderLine('X-Request-Id')));
+        $abhaId = trim((string) ($payload['abha_id'] ?? $payload['abha_address'] ?? ''));
+        $status = strtolower(trim((string) ($payload['status'] ?? '')));
+        $careContextRef = trim((string) ($payload['care_context_reference'] ?? ''));
+        $linkedAt = trim((string) ($payload['linked_at'] ?? ''));
+
+        if ($abhaId === '' || $careContextRef === '') {
+            return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
+                'error' => 'MISSING_FIELD',
+                'message' => 'abha_id and care_context_reference are required',
+                'request_id' => $requestId,
+            ]);
+        }
+
+        if ($this->db->tableExists('record_links')) {
+            $existing = $this->db->table('record_links')
+                ->where('care_context_reference', $careContextRef)
+                ->where('abha_id', $abhaId)
+                ->orderBy('id', 'DESC')
+                ->get(1)
+                ->getRowArray();
+
+            $linkStatus = $status === 'linked' ? 'linked' : 'failed';
+            $now = Time::now('Asia/Kolkata')->toDateTimeString();
+            if (! empty($existing)) {
+                $this->db->table('record_links')->where('id', (int) $existing['id'])->update([
+                    'link_status' => $linkStatus,
+                    'linked_at' => $linkedAt !== '' ? $linkedAt : $now,
+                    'updated_at' => $now,
+                    'response_json' => (string) json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                ]);
+            } else {
+                $this->db->table('record_links')->insert([
+                    'abha_id' => $abhaId,
+                    'care_context_reference' => $careContextRef,
+                    'link_status' => $linkStatus,
+                    'linked_at' => $linkedAt !== '' ? $linkedAt : $now,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                    'response_json' => (string) json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                ]);
+            }
+        }
+
+        return $this->response->setJSON(['ok' => 1]);
+    }
+
     public function consentRequest()
     {
         if (! $this->request->isAJAX()) {
@@ -329,6 +650,17 @@ class AbdmGateway extends BaseController
                 $this->db->table('consents')->where('token', $handle)->update($consentUpdate);
             }
         }
+
+        $this->syncM2ConsentLog(
+            (int) ($existing['patient_id'] ?? 0),
+            trim((string) ($existing['abha_id'] ?? '')) !== ''
+                ? trim((string) ($existing['abha_id'] ?? ''))
+                : trim((string) ($payload['abha_id'] ?? $payload['abha_address'] ?? '')),
+            $incomingConsentId !== '' ? $incomingConsentId : $handle,
+            (string) ($existing['purpose_code'] ?? ''),
+            $incomingStatus,
+            $expiresAt !== '' ? $expiresAt : ((string) ($existing['expires_at'] ?? ''))
+        );
 
         return $this->response->setJSON([
             'ok' => 1,
@@ -2018,6 +2350,15 @@ class AbdmGateway extends BaseController
             'outcome'     => 'success',
         ]);
 
+        $this->syncM2ConsentLog(
+            (int) ($existing['patient_id'] ?? 0),
+            $abhaId,
+            $consentHandle,
+            (string) ($existing['purpose_code'] ?? ''),
+            'revoked',
+            $revokedAt
+        );
+
         return $this->response->setJSON(['ok' => 1, 'consent_handle' => $consentHandle, 'status' => 'revoked']);
     }
 
@@ -2948,6 +3289,136 @@ class AbdmGateway extends BaseController
         return null;
     }
 
+    private function validateGatewayToHmsAuth()
+    {
+        $token = $this->resolveGatewayToHmsToken();
+        $authHeader = trim((string) $this->request->getHeaderLine('Authorization'));
+        $incomingBearer = '';
+        if (preg_match('/^Bearer\s+(.+)$/i', $authHeader, $m) === 1) {
+            $incomingBearer = trim((string) ($m[1] ?? ''));
+        }
+
+        if ($token === '' || $incomingBearer === '' || ! hash_equals($token, $incomingBearer)) {
+            return $this->response->setStatusCode(401)->setJSON([
+                'ok' => 0,
+                'error' => 'UNAUTHORIZED',
+                'message' => 'Invalid Authorization bearer token',
+                'request_id' => trim((string) $this->request->getHeaderLine('X-Request-Id')),
+            ]);
+        }
+
+        $signatureFailure = $this->validateGatewayToHmsSignature();
+        if ($signatureFailure !== null) {
+            return $signatureFailure;
+        }
+
+        $timestampFailure = $this->validateGatewayToHmsTimestamp();
+        if ($timestampFailure !== null) {
+            return $timestampFailure;
+        }
+
+        return null;
+    }
+
+    private function validateGatewayToHmsSignature()
+    {
+        $secret = trim((string) ($this->readRuntimeSetting('GATEWAY_TO_HMS_HMAC_SECRET') ?: $this->readRuntimeSetting('EKA_WEBHOOK_SECRET')));
+        if ($secret === '') {
+            return null;
+        }
+
+        $signature = trim((string) ($this->request->getHeaderLine('X-Eka-Signature') ?: ''));
+        if ($signature === '') {
+            return $this->response->setStatusCode(401)->setJSON([
+                'ok' => 0,
+                'error' => 'UNAUTHORIZED',
+                'message' => 'Missing X-Eka-Signature header',
+                'request_id' => trim((string) $this->request->getHeaderLine('X-Request-Id')),
+            ]);
+        }
+
+        $signature = strtolower($signature);
+        if (str_starts_with($signature, 'sha256=')) {
+            $signature = substr($signature, 7);
+        }
+
+        $rawBody = (string) $this->request->getBody();
+        $expected = hash_hmac('sha256', $rawBody, $secret);
+        if (! hash_equals($expected, $signature)) {
+            return $this->response->setStatusCode(401)->setJSON([
+                'ok' => 0,
+                'error' => 'UNAUTHORIZED',
+                'message' => 'Invalid request signature',
+                'request_id' => trim((string) $this->request->getHeaderLine('X-Request-Id')),
+            ]);
+        }
+
+        return null;
+    }
+
+    private function validateGatewayToHmsTimestamp()
+    {
+        $timestamp = trim((string) $this->request->getHeaderLine('X-Timestamp'));
+        if ($timestamp === '') {
+            return null;
+        }
+
+        try {
+            $ts = new \DateTimeImmutable($timestamp);
+            $now = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
+            $diff = abs($now->getTimestamp() - $ts->setTimezone(new \DateTimeZone('UTC'))->getTimestamp());
+            if ($diff > 300) {
+                return $this->response->setStatusCode(401)->setJSON([
+                    'ok' => 0,
+                    'error' => 'UNAUTHORIZED',
+                    'message' => 'Request timestamp outside allowed skew',
+                    'request_id' => trim((string) $this->request->getHeaderLine('X-Request-Id')),
+                ]);
+            }
+        } catch (\Throwable) {
+            return $this->response->setStatusCode(401)->setJSON([
+                'ok' => 0,
+                'error' => 'UNAUTHORIZED',
+                'message' => 'Invalid X-Timestamp value',
+                'request_id' => trim((string) $this->request->getHeaderLine('X-Request-Id')),
+            ]);
+        }
+
+        return null;
+    }
+
+    private function resolveGatewayToHmsToken(): string
+    {
+        $candidates = [
+            'GATEWAY_TO_HMS_TOKEN',
+            'ABDM_GATEWAY_TO_HMS_TOKEN',
+            'EKA_GATEWAY_TOKEN',
+            'EATRIA_BRIDGE_TOKEN',
+            'ABDM_BRIDGE_TOKEN',
+        ];
+
+        foreach ($candidates as $name) {
+            $value = trim((string) $this->readRuntimeSetting($name));
+            if ($value !== '') {
+                return preg_replace('/^Bearer\s+/i', '', $value);
+            }
+        }
+
+        return '';
+    }
+
+    private function mapPatientRecordTypeToHiType(string $recordType): string
+    {
+        return match (strtoupper(trim($recordType))) {
+            'OPD' => 'OPConsultRecord',
+            'IPD' => 'HealthDocumentRecord',
+            'LAB' => 'DiagnosticReportRecord',
+            'DISCHARGE' => 'DischargeSummaryRecord',
+            'MLC' => 'HealthDocumentRecord',
+            default => 'HealthDocumentRecord',
+        };
+    }
+
     private function readRuntimeSetting(string $name): string
     {
         $envValue = getenv($name);
@@ -3061,10 +3532,140 @@ class AbdmGateway extends BaseController
             }
 
             $this->db->table('health_records')->insert($insert);
+            $insertId = (int) $this->db->insertID();
 
-            return (int) $this->db->insertID();
+            $this->mirrorHealthRecordToPatientRecords($data);
+
+            return $insertId;
         } catch (\Throwable) {
             return 0;
+        }
+    }
+
+    /**
+     * Mirror an HMS health record into patient_records for M2 source-of-truth APIs.
+     * Fail-open by design.
+     *
+     * @param array<string, mixed> $data
+     */
+    private function mirrorHealthRecordToPatientRecords(array $data): void
+    {
+        try {
+            if (! $this->db->tableExists('patient_records')) {
+                return;
+            }
+
+            $patientId = (int) ($data['patient_id'] ?? 0);
+            $abhaId = trim((string) ($data['abha_id'] ?? ''));
+            $fhirBundle = trim((string) ($data['fhir_bundle'] ?? ''));
+
+            if ($patientId <= 0 || $abhaId === '' || $fhirBundle === '') {
+                return;
+            }
+
+            $decoded = json_decode($fhirBundle, true);
+            if (! is_array($decoded)) {
+                return;
+            }
+
+            $recordType = $this->resolvePatientRecordType(
+                (string) ($data['hi_type'] ?? ''),
+                (string) ($data['entity_type'] ?? '')
+            );
+
+            $expiryDate = $this->resolvePatientRecordExpiryDate(
+                $recordType,
+                (string) ($data['entity_type'] ?? ''),
+                (string) ($data['entity_id'] ?? '')
+            );
+
+            $this->db->table('patient_records')->insert([
+                'patient_id'    => $patientId,
+                'abha_id'       => $abhaId,
+                'consent_id'    => trim((string) ($data['consent_handle'] ?? '')) ?: null,
+                'record_type'   => $recordType,
+                'fhir_resource' => json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'created_at'    => Time::now('Asia/Kolkata')->toDateTimeString(),
+                'updated_at'    => Time::now('Asia/Kolkata')->toDateTimeString(),
+                'expiry_date'   => $expiryDate,
+                'status'        => 'ACTIVE',
+            ]);
+        } catch (\Throwable) {
+            // Fail-open
+        }
+    }
+
+    private function resolvePatientRecordType(string $hiType, string $entityType = ''): string
+    {
+        $v = strtolower(trim($hiType));
+        if (str_contains($v, 'opconsult') || str_contains($v, 'prescription')) {
+            return 'OPD';
+        }
+        if (str_contains($v, 'diagnosticreport') || $entityType === 'lab') {
+            return 'LAB';
+        }
+        if (str_contains($v, 'discharge')) {
+            return 'DISCHARGE';
+        }
+        if ($entityType === 'ipd') {
+            return 'IPD';
+        }
+
+        return 'OTHER';
+    }
+
+    private function resolvePatientRecordExpiryDate(string $recordType, string $entityType = '', string $entityId = ''): ?string
+    {
+        if ($recordType === 'MLC') {
+            return null;
+        }
+
+        // OPD and LAB default to 3 years, IPD/DISCHARGE to 7 years.
+        $years = in_array($recordType, ['IPD', 'DISCHARGE'], true) ? 7 : 3;
+        if ($recordType === 'LAB' && strtolower(trim($entityType)) === 'ipd') {
+            $years = 7;
+        }
+
+        return date('Y-m-d', strtotime('+' . $years . ' years'));
+    }
+
+    private function syncM2ConsentLog(
+        int $patientId,
+        string $abhaId,
+        string $consentId,
+        string $purpose,
+        string $status,
+        string $expiresAt = ''
+    ): void {
+        try {
+            if (! $this->db->tableExists('consent_logs')) {
+                return;
+            }
+
+            $mapped = match (strtolower(trim($status))) {
+                'approved', 'granted' => 'GRANTED',
+                'revoked' => 'REVOKED',
+                'expired' => 'EXPIRED',
+                default => '',
+            };
+
+            if ($mapped === '' || $patientId <= 0 || trim($abhaId) === '' || trim($consentId) === '') {
+                return;
+            }
+
+            $insert = [
+                'patient_id' => $patientId,
+                'abha_id' => trim($abhaId),
+                'consent_id' => trim($consentId),
+                'purpose' => trim($purpose) !== '' ? trim($purpose) : null,
+                'status' => $mapped,
+                'created_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
+                'expires_at' => trim($expiresAt) !== '' ? trim($expiresAt) : null,
+            ];
+
+            $this->db->table('consent_logs')->insert($insert);
+        } catch (\Throwable) {
+            // Fail-open
         }
     }
 

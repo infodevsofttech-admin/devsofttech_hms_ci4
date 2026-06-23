@@ -33,41 +33,62 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         $this->timeoutSec = (int) ($config->eatriaBridgeTimeoutSec ?? 30);
 
         // DB (Admin Panel → ABDM Gateway Config) is the authoritative source for
-        // the token, URL, and HFR ID. Always read from DB so that saving a new key
-        // in HMS settings takes effect immediately without a server restart or
-        // .env change. Fall back to config/env only if DB is unavailable.
+        // the token, URL, and HFR ID. Initial load here; per-request refresh happens in httpCall().
+        $this->refreshRuntimeSettingsFromDb();
+    }
+
+    private function refreshRuntimeSettingsFromDb(): void
+    {
         try {
             $db = \Config\Database::connect();
-            if ($db->tableExists('hospital_setting')) {
-                $rows = $db->table('hospital_setting')
-                    ->select('s_name, s_value')
-                    ->whereIn('s_name', ['EATRIA_BRIDGE_TOKEN', 'ABDM_BRIDGE_TOKEN', 'EATRIA_BRIDGE_URL', 'ABDM_HFR_ID', 'H_HFR_ID'])
-                    ->get()
-                    ->getResultArray();
+            if (! $db->tableExists('hospital_setting')) {
+                return;
+            }
 
-                $dbSettings = array_column($rows, 's_value', 's_name');
+            $rows = $db->table('hospital_setting')
+                ->select('s_name, s_value')
+                ->whereIn('s_name', [
+                    'EATRIA_BRIDGE_TOKEN',
+                    'ABDM_BRIDGE_TOKEN',
+                    'ABDM_GATEWAY_TOKEN',
+                    'EATRIA_BRIDGE_API_KEY',
+                    'EATRIA_BRIDGE_URL',
+                    'ABDM_HFR_ID',
+                    'H_HFR_ID',
+                    'ABDM_HOSPITAL_HFR_ID',
+                ])
+                ->get()
+                ->getResultArray();
 
-                $dbToken = (string) ($dbSettings['EATRIA_BRIDGE_TOKEN'] ?? '');
-                if ($dbToken === '') {
-                    // Backward compatibility: older setups may store the key under ABDM_BRIDGE_TOKEN.
-                    $dbToken = (string) ($dbSettings['ABDM_BRIDGE_TOKEN'] ?? '');
-                }
-                if ($dbToken !== '') {
-                    $this->token = $this->sanitizeBearerToken($dbToken);
-                }
-                if (! empty($dbSettings['EATRIA_BRIDGE_URL'])) {
-                    $this->baseUrl = rtrim(trim($dbSettings['EATRIA_BRIDGE_URL']), '/');
-                }
-                $dbHfrId = trim((string) ($dbSettings['ABDM_HFR_ID'] ?? ''));
-                if ($dbHfrId === '') {
-                    $dbHfrId = trim((string) ($dbSettings['H_HFR_ID'] ?? ''));
-                }
-                if ($dbHfrId !== '') {
-                    $this->hfrId = $dbHfrId;
-                }
+            $dbSettings = array_column($rows, 's_value', 's_name');
+
+            $dbToken = trim((string) (
+                $dbSettings['EATRIA_BRIDGE_TOKEN']
+                ?? $dbSettings['ABDM_BRIDGE_TOKEN']
+                ?? $dbSettings['ABDM_GATEWAY_TOKEN']
+                ?? $dbSettings['EATRIA_BRIDGE_API_KEY']
+                ?? ''
+            ));
+            if ($dbToken !== '') {
+                $this->token = $this->sanitizeBearerToken($dbToken);
+            }
+
+            $dbUrl = trim((string) ($dbSettings['EATRIA_BRIDGE_URL'] ?? ''));
+            if ($dbUrl !== '') {
+                $this->baseUrl = rtrim($dbUrl, '/');
+            }
+
+            $dbHfrId = trim((string) (
+                $dbSettings['ABDM_HFR_ID']
+                ?? $dbSettings['H_HFR_ID']
+                ?? $dbSettings['ABDM_HOSPITAL_HFR_ID']
+                ?? ''
+            ));
+            if ($dbHfrId !== '') {
+                $this->hfrId = $dbHfrId;
             }
         } catch (\Throwable $e) {
-            // DB unavailable — continue with config/env values
+            log_message('warning', '[EAtriaBridge] refreshRuntimeSettingsFromDb failed: ' . $e->getMessage());
         }
     }
 
@@ -190,6 +211,10 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
      */
     private function httpCall(string $method, string $path, array $body = [], array $query = []): array
     {
+        // Credentials can be rotated from settings without restarting PHP workers.
+        // Refresh before each call to avoid stale token/HFR causing 401/403.
+        $this->refreshRuntimeSettingsFromDb();
+
         $url = $this->baseUrl . $path;
         if ($query !== []) {
             $url .= '?' . http_build_query($query);
@@ -201,6 +226,10 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         ];
         if ($this->token !== '') {
             $headers[] = 'Authorization: Bearer ' . $this->token;
+        }
+
+        if ($this->token === '') {
+            log_message('warning', '[EAtriaBridge] Authorization token missing for request: ' . $method . ' ' . $url);
         }
 
         $ch = curl_init();
@@ -252,6 +281,10 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
 
         $ok = ($httpCode >= 200 && $httpCode < 300) ? (int) ($decoded['ok'] ?? 1) : 0;
         $this->dbLog($method, $path, $url, $body, $httpCode, (string) $raw, $ok === 1 ? 'success' : 'error', $ok === 0 ? (string) ($decoded['message'] ?? $decoded['error_text'] ?? '') : '');
+        if (($httpCode === 401 || $httpCode === 403) && ! isset($decoded['auth_hint'])) {
+            $decoded['auth_hint'] = 'Verify EATRIA_BRIDGE_TOKEN and ABDM_HFR_ID in hospital_setting. Current HFR=' . ($this->hfrId !== '' ? $this->hfrId : '(empty)');
+        }
+
         return array_merge($decoded, ['ok' => $ok, 'http_code' => $httpCode]);
     }
 

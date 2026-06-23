@@ -5349,26 +5349,47 @@ class Opd_prescription extends BaseController
         try {
             $gatewayUrl = base_url('AbdmGateway/share_prescription_bundle');
             $cookieHeader = (string) $this->request->getHeaderLine('Cookie');
+            $handoffTimeoutSec = $this->resolveFhirGatewayHandoffTimeoutSec();
 
             $client = service('curlrequest', [
-                'timeout' => 60,
+                'timeout' => $handoffTimeoutSec,
+                'connect_timeout' => 10,
                 'http_errors' => false,
             ]);
 
-            $response = $client->post($gatewayUrl, [
-                'headers' => array_filter([
-                    'X-Requested-With' => 'XMLHttpRequest',
-                    'Cookie' => $cookieHeader !== '' ? $cookieHeader : null,
-                ]),
-                'form_params' => [
-                    'opd_id' => $opdId,
-                    'opd_session_id' => $sessionId,
-                    'patient_id' => $patientId,
-                    'abha_id' => $abhaId,
-                    'consent_handle' => (string) ($this->request->getPost('consent_handle') ?? ''),
-                    csrf_token() => csrf_hash(),
-                ],
-            ]);
+            $response = null;
+            $attemptError = null;
+            for ($attempt = 1; $attempt <= 2; $attempt++) {
+                try {
+                    $response = $client->post($gatewayUrl, [
+                        'headers' => array_filter([
+                            'X-Requested-With' => 'XMLHttpRequest',
+                            'Cookie' => $cookieHeader !== '' ? $cookieHeader : null,
+                        ]),
+                        'form_params' => [
+                            'opd_id' => $opdId,
+                            'opd_session_id' => $sessionId,
+                            'patient_id' => $patientId,
+                            'abha_id' => $abhaId,
+                            'consent_handle' => (string) ($this->request->getPost('consent_handle') ?? ''),
+                            csrf_token() => csrf_hash(),
+                        ],
+                    ]);
+                    $attemptError = null;
+                    break;
+                } catch (\Throwable $attemptException) {
+                    $attemptError = $attemptException;
+                    if ($attempt < 2 && $this->isTransientFhirGatewayHandoffError($attemptException)) {
+                        log_message('warning', '[fhir_bundle_submit] transient handoff error on attempt ' . $attempt . ' for OPD#' . $opdId . ': ' . $attemptException->getMessage());
+                        continue;
+                    }
+                    throw $attemptException;
+                }
+            }
+
+            if ($response === null && $attemptError !== null) {
+                throw $attemptError;
+            }
 
             $httpCode = (int) $response->getStatusCode();
             $result = json_decode((string) $response->getBody(), true);
@@ -5394,13 +5415,71 @@ class Opd_prescription extends BaseController
             ]);
         } catch (\Throwable $e) {
             log_message('error', '[fhir_bundle_submit] OPD#' . $opdId . ': ' . $e->getMessage());
+            $isTimeout = $this->isTransientFhirGatewayHandoffError($e);
+            $friendly = $isTimeout
+                ? 'Gateway handoff timed out. Bridge is slow/unreachable right now. Please retry submit in a minute.'
+                : 'Gateway handoff failed: ' . $e->getMessage();
             return $this->response->setJSON([
                 'ok'       => 0,
-                'message'  => 'Gateway handoff failed: ' . $e->getMessage(),
+                'message'  => $friendly,
+                'retryable' => $isTimeout ? 1 : 0,
                 'csrfName' => csrf_token(),
                 'csrfHash' => csrf_hash(),
             ]);
         }
+    }
+
+    private function resolveFhirGatewayHandoffTimeoutSec(): int
+    {
+        $timeout = 120;
+
+        if ($this->db->tableExists('hospital_setting')) {
+            $row = $this->db->table('hospital_setting')
+                ->select('s_value')
+                ->whereIn('s_name', ['ABDM_FHIR_SUBMIT_TIMEOUT_SECONDS', 'ABDM_GATEWAY_TIMEOUT_SECONDS'])
+                ->where('s_value !=', '')
+                ->orderBy('s_name', 'ASC')
+                ->get(1)
+                ->getRowArray();
+
+            if (! empty($row['s_value'])) {
+                $timeout = (int) $row['s_value'];
+            }
+        }
+
+        if ($timeout < 30) {
+            $timeout = 30;
+        }
+        if ($timeout > 240) {
+            $timeout = 240;
+        }
+
+        return $timeout;
+    }
+
+    private function isTransientFhirGatewayHandoffError(\Throwable $e): bool
+    {
+        $msg = strtolower(trim($e->getMessage()));
+        if ($msg === '') {
+            return false;
+        }
+
+        $needles = [
+            'timed out',
+            'operation timed out',
+            'curl error 28',
+            'failed to connect',
+            'connection reset',
+            'empty reply from server',
+        ];
+
+        foreach ($needles as $needle) {
+            if (str_contains($msg, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function fhir_complaint_recode()
