@@ -5416,6 +5416,29 @@ class Opd_prescription extends BaseController
         } catch (\Throwable $e) {
             log_message('error', '[fhir_bundle_submit] OPD#' . $opdId . ': ' . $e->getMessage());
             $isTimeout = $this->isTransientFhirGatewayHandoffError($e);
+
+            if ($isTimeout) {
+                $recentState = $this->resolveRecentFhirGatewaySubmissionState($opdId, $sessionId);
+                if ($recentState !== null) {
+                    $queueId = (string) ($recentState['queue_id'] ?? '');
+                    $bridgeId = (int) ($recentState['bridge_id'] ?? 0);
+                    $status = (string) ($recentState['status'] ?? 'queued');
+                    $queueText = $queueId !== '' ? (' Queue: ' . $queueId . '.') : '';
+
+                    return $this->response->setJSON([
+                        'ok' => 1,
+                        'queue_id' => $queueId !== '' ? $queueId : null,
+                        'bridge_id' => $bridgeId > 0 ? $bridgeId : null,
+                        'status' => $status,
+                        'retryable' => 1,
+                        'timed_out' => 1,
+                        'message' => 'Gateway handoff timed out, but the record appears queued already.' . $queueText . ' Recheck Link Status in M2 ABDM Gateway.',
+                        'csrfName' => csrf_token(),
+                        'csrfHash' => csrf_hash(),
+                    ]);
+                }
+            }
+
             $friendly = $isTimeout
                 ? 'Gateway handoff timed out. Bridge is slow/unreachable right now. Please retry submit in a minute.'
                 : 'Gateway handoff failed: ' . $e->getMessage();
@@ -5480,6 +5503,78 @@ class Opd_prescription extends BaseController
         }
 
         return false;
+    }
+
+    private function resolveRecentFhirGatewaySubmissionState(int $opdId, int $sessionId): ?array
+    {
+        if ($opdId <= 0 || ! $this->db->tableExists('health_records')) {
+            return null;
+        }
+
+        $fields = $this->db->getFieldNames('health_records') ?? [];
+        if (empty($fields)) {
+            return null;
+        }
+
+        $select = [];
+        foreach (['id', 'abdm_txn_id', 'bridge_record_id', 'push_status', 'care_context_reference', 'updated_at', 'created_at'] as $field) {
+            if (in_array($field, $fields, true)) {
+                $select[] = $field;
+            }
+        }
+        if (empty($select)) {
+            return null;
+        }
+
+        $findCandidate = function (?string $careContextLike) use ($fields, $select, $opdId): ?array {
+            $builder = $this->db->table('health_records')->select(implode(',', $select));
+
+            if (in_array('entity_type', $fields, true) && in_array('entity_id', $fields, true)) {
+                $builder->where('entity_type', 'opd')->where('entity_id', (string) $opdId);
+            }
+
+            if ($careContextLike !== null && in_array('care_context_reference', $fields, true)) {
+                $builder->like('care_context_reference', $careContextLike, 'after');
+            }
+
+            if (in_array('id', $fields, true)) {
+                $builder->orderBy('id', 'DESC');
+            } elseif (in_array('updated_at', $fields, true)) {
+                $builder->orderBy('updated_at', 'DESC');
+            }
+
+            $row = $builder->get(1)->getRowArray();
+            if (empty($row)) {
+                return null;
+            }
+
+            $status = strtolower(trim((string) ($row['push_status'] ?? '')));
+            $queueId = trim((string) ($row['abdm_txn_id'] ?? ''));
+            $bridgeId = (int) ($row['bridge_record_id'] ?? 0);
+            $isUsable = in_array($status, ['queued', 'pushed', 'linked', 'in_progress'], true)
+                || $queueId !== ''
+                || $bridgeId > 0;
+
+            if (! $isUsable) {
+                return null;
+            }
+
+            return [
+                'status' => $status !== '' ? $status : 'queued',
+                'queue_id' => $queueId,
+                'bridge_id' => $bridgeId,
+            ];
+        };
+
+        if ($sessionId > 0 && in_array('care_context_reference', $fields, true)) {
+            $careContextPrefix = 'OPD-' . $opdId . '-S' . $sessionId . '-';
+            $candidate = $findCandidate($careContextPrefix);
+            if ($candidate !== null) {
+                return $candidate;
+            }
+        }
+
+        return $findCandidate(null);
     }
 
     public function fhir_complaint_recode()
