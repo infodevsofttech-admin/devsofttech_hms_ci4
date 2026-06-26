@@ -3364,9 +3364,9 @@ class AbdmGateway extends BaseController
             return $signatureFailure;
         }
 
-        $timestampFailure = $this->validateGatewayToHmsTimestamp();
-        if ($timestampFailure !== null) {
-            return $timestampFailure;
+        $metaFailure = $this->validateGatewayToHmsRequestMeta();
+        if ($metaFailure !== null) {
+            return $metaFailure;
         }
 
         return null;
@@ -3376,7 +3376,12 @@ class AbdmGateway extends BaseController
     {
         $secret = trim((string) ($this->readRuntimeSetting('GATEWAY_TO_HMS_HMAC_SECRET') ?: $this->readRuntimeSetting('EKA_WEBHOOK_SECRET')));
         if ($secret === '') {
-            return null;
+            return $this->response->setStatusCode(500)->setJSON([
+                'ok' => 0,
+                'error' => 'SERVER_MISCONFIGURED',
+                'message' => 'Missing gateway webhook HMAC secret',
+                'request_id' => trim((string) $this->request->getHeaderLine('X-Request-Id')),
+            ]);
         }
 
         $signature = trim((string) ($this->request->getHeaderLine('X-Eka-Signature') ?: ''));
@@ -3408,11 +3413,26 @@ class AbdmGateway extends BaseController
         return null;
     }
 
-    private function validateGatewayToHmsTimestamp()
+    private function validateGatewayToHmsRequestMeta()
     {
+        $requestId = trim((string) $this->request->getHeaderLine('X-Request-Id'));
+        if ($requestId === '') {
+            return $this->response->setStatusCode(401)->setJSON([
+                'ok' => 0,
+                'error' => 'UNAUTHORIZED',
+                'message' => 'Missing X-Request-Id header',
+                'request_id' => '',
+            ]);
+        }
+
         $timestamp = trim((string) $this->request->getHeaderLine('X-Timestamp'));
         if ($timestamp === '') {
-            return null;
+            return $this->response->setStatusCode(401)->setJSON([
+                'ok' => 0,
+                'error' => 'UNAUTHORIZED',
+                'message' => 'Missing X-Timestamp header',
+                'request_id' => $requestId,
+            ]);
         }
 
         try {
@@ -3424,7 +3444,7 @@ class AbdmGateway extends BaseController
                     'ok' => 0,
                     'error' => 'UNAUTHORIZED',
                     'message' => 'Request timestamp outside allowed skew',
-                    'request_id' => trim((string) $this->request->getHeaderLine('X-Request-Id')),
+                    'request_id' => $requestId,
                 ]);
             }
         } catch (\Throwable) {
@@ -3432,8 +3452,25 @@ class AbdmGateway extends BaseController
                 'ok' => 0,
                 'error' => 'UNAUTHORIZED',
                 'message' => 'Invalid X-Timestamp value',
-                'request_id' => trim((string) $this->request->getHeaderLine('X-Request-Id')),
+                'request_id' => $requestId,
             ]);
+        }
+
+        $cache = \Config\Services::cache();
+        $cacheKey = 'abdm_gateway_reqid_' . sha1($requestId);
+        try {
+            $existing = $cache->get($cacheKey);
+            if ($existing !== null) {
+                return $this->response->setStatusCode(409)->setJSON([
+                    'ok' => 0,
+                    'error' => 'REPLAY_REQUEST',
+                    'message' => 'Duplicate X-Request-Id detected',
+                    'request_id' => $requestId,
+                ]);
+            }
+            $cache->save($cacheKey, 1, 600);
+        } catch (\Throwable $e) {
+            log_message('warning', '[AbdmGateway] replay-guard cache failed: ' . $e->getMessage());
         }
 
         return null;
@@ -3482,11 +3519,18 @@ class AbdmGateway extends BaseController
         }
 
         if ($this->db->tableExists('hospital_setting')) {
-            $row = $this->db->table('hospital_setting')
+            $fields = $this->db->getFieldNames('hospital_setting') ?? [];
+            $orderCol = in_array('id', $fields, true)
+                ? 'id'
+                : (in_array('s_id', $fields, true) ? 's_id' : null);
+
+            $builder = $this->db->table('hospital_setting')
                 ->select('s_value')
-                ->where('s_name', $name)
-                ->get(1)
-                ->getRowArray();
+                ->where('s_name', $name);
+            if ($orderCol !== null) {
+                $builder->orderBy($orderCol, 'DESC');
+            }
+            $row = $builder->get(1)->getRowArray();
             $value = trim((string) ($row['s_value'] ?? ''));
             if ($value !== '') {
                 return $value;
