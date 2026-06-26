@@ -56,7 +56,7 @@
             <div class="table-responsive">
                 <table class="table table-sm table-striped mb-0" id="taskTable">
                     <thead class="table-light">
-                        <tr>
+                        <tr data-push-status="<?= esc((string) ($r['push_status'] ?? '')) ?>">
                             <th>ID</th>
                             <th>Task</th>
                             <th>Patient</th>
@@ -318,7 +318,7 @@
                             </td>
                             <td>
                                 <button type="button" class="btn btn-sm btn-outline-primary btn-opd-consult-fhir" data-opd-id="<?= (int) ($r['opd_id'] ?? 0) ?>">Preview FHIR</button>
-                                <?php if (in_array((string) ($r['push_status'] ?? ''), ['failed', 'local_only'], true)): ?>
+                                <?php if ((string) ($r['push_status'] ?? '') === 'failed'): ?>
                                     <button
                                         type="button"
                                         class="btn btn-sm btn-outline-warning btn-opd-consult-submit-gateway ms-1"
@@ -2030,6 +2030,7 @@
         _fhirSubmitMode = options.submitMode || 'opd';
         _fhirSubmitTaskRow = options.taskRow || null;
         _fhirSubmitAbha = (options.abhaId || '').trim();
+        var rowPushStatus = (options.pushStatus || '').toString().trim().toLowerCase();
 
         _fhirOpdId = 0; _fhirSessionId = 0;
         if (fhirModalTitle)   fhirModalTitle.textContent = title || 'FHIR Preview';
@@ -2044,6 +2045,7 @@
         if (fhirModalHttpBadge) { fhirModalHttpBadge.className = 'badge bg-warning text-dark'; fhirModalHttpBadge.textContent = 'HTTP ...'; }
 
         if (btnSubmitFhirToAbdm) {
+            btnSubmitFhirToAbdm.disabled = false;
             if (_fhirSubmitMode === 'task') {
                 btnSubmitFhirToAbdm.className = 'btn btn-sm btn-outline-warning';
                 btnSubmitFhirToAbdm.innerHTML = '<i class="bi bi-check2-square"></i> Verify & Submit to Gateway';
@@ -2056,6 +2058,12 @@
                 btnSubmitFhirToAbdm.className = defaultSubmitBtnClass;
                 btnSubmitFhirToAbdm.innerHTML = defaultSubmitBtnHtml;
                 btnSubmitFhirToAbdm.title = defaultSubmitBtnTitle;
+                if (['linked', 'queued', 'local_discovery_ready'].indexOf(rowPushStatus) !== -1) {
+                    btnSubmitFhirToAbdm.disabled = true;
+                    btnSubmitFhirToAbdm.className = 'btn btn-sm btn-outline-secondary';
+                    btnSubmitFhirToAbdm.innerHTML = '<i class="bi bi-check2-circle"></i> Already Submitted';
+                    btnSubmitFhirToAbdm.title = 'Record is already queued/linked/discovery-ready. Use retry only on failed rows.';
+                }
             }
         }
 
@@ -2300,8 +2308,10 @@
     document.querySelectorAll('.btn-opd-consult-fhir').forEach(function (btn) {
         btn.addEventListener('click', function () {
             var opdId = parseInt(btn.getAttribute('data-opd-id') || '0', 10);
+            var tr = btn.closest('tr');
+            var pushStatus = tr ? (tr.getAttribute('data-push-status') || '') : '';
             if (opdId <= 0) return;
-            openFhirModal('<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId, 'FHIR Preview — OPD #' + opdId);
+            openFhirModal('<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId, 'FHIR Preview — OPD #' + opdId, { pushStatus: pushStatus });
         });
     });
 

@@ -1164,17 +1164,55 @@ class AbdmGateway extends BaseController
             'bundle' => $bundle,
         ];
 
-        // Store FHIR payload in health_records before pushing
-        $healthRecordId = $this->storeHealthRecord([
-            'patient_id'     => $patientId,
-            'abha_id'        => $hasAbha ? $abhaId : '',
-            'hi_type'        => 'OPConsultRecord',
-            'entity_type'    => 'opd',
-            'entity_id'      => (string) $opdId,
-            'fhir_bundle'    => $bundleJson,
-            'care_context_reference' => $careContextRef,
-            'consent_handle' => $consentHandleResolved,
-        ]);
+        // Reuse the latest matching OPD health record to avoid duplicate rows on repeat submit.
+        $healthRecordId = 0;
+        if ($this->db->tableExists('health_records')) {
+            $hrFields = $this->db->getFieldNames('health_records') ?? [];
+            $hrSelectFields = array_values(array_unique(array_filter([
+                'id',
+                'push_status',
+                'care_context_reference',
+                in_array('record_data', $hrFields, true) ? 'record_data' : null,
+                in_array('updated_at', $hrFields, true) ? 'updated_at' : null,
+                in_array('created_at', $hrFields, true) ? 'created_at' : null,
+            ])));
+
+            $hrBuilder = $this->db->table('health_records')
+                ->select(implode(',', $hrSelectFields))
+                ->where('entity_type', 'opd')
+                ->where('entity_id', (string) $opdId);
+            if (in_array('care_context_reference', $hrFields, true)) {
+                $hrBuilder->where('care_context_reference', $careContextRef);
+            }
+
+            $existingHr = $hrBuilder
+                ->orderBy('id', 'DESC')
+                ->get(1)
+                ->getRowArray();
+
+            if (! empty($existingHr)) {
+                $existingPush = strtolower(trim((string) ($existingHr['push_status'] ?? '')));
+                $existingRecordData = (string) ($existingHr['record_data'] ?? '');
+                $isSameBundle = $existingRecordData !== '' ? hash('sha256', $existingRecordData) === hash('sha256', $bundleJson) : false;
+                if ($isSameBundle || in_array($existingPush, ['queued', 'linked', 'local_discovery_ready', 'local_only'], true)) {
+                    $healthRecordId = (int) ($existingHr['id'] ?? 0);
+                }
+            }
+        }
+
+        if ($healthRecordId <= 0) {
+            // Store FHIR payload in health_records before pushing
+            $healthRecordId = $this->storeHealthRecord([
+                'patient_id'     => $patientId,
+                'abha_id'        => $hasAbha ? $abhaId : '',
+                'hi_type'        => 'OPConsultRecord',
+                'entity_type'    => 'opd',
+                'entity_id'      => (string) $opdId,
+                'fhir_bundle'    => $bundleJson,
+                'care_context_reference' => $careContextRef,
+                'consent_handle' => $consentHandleResolved,
+            ]);
+        }
 
         if (! $hasAbha) {
             if ($healthRecordId > 0 && $this->db->tableExists('health_records')) {
