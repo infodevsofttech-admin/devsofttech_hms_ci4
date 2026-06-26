@@ -686,6 +686,10 @@ $routes->post('AbdmTaskBoard/mark_status', 'AbdmTaskBoard::markStatus', ['filter
 $routes->get('AbdmBridgeLog', 'AbdmBridgeLog::index', ['filter' => 'permission:abdm.access,abdm.taskboard.access,abdm.gateway.use,abdm.bridge_log.view']);
 $routes->get('AbdmBridgeLog/list', 'AbdmBridgeLog::list', ['filter' => 'permission:abdm.access,abdm.taskboard.access,abdm.gateway.use,abdm.bridge_log.view']);
 $routes->get('AbdmBridgeLog/detail/(:num)', 'AbdmBridgeLog::detail/$1', ['filter' => 'permission:abdm.access,abdm.taskboard.access,abdm.gateway.use,abdm.bridge_log.view']);
+$routes->get('AbdmSync/summary', 'AbdmSync::summary', ['filter' => $abdmPermFilter]);
+$routes->post('AbdmSync/replay_dead/(:num)', 'AbdmSync::replayDead/$1', ['filter' => $abdmPermFilter]);
+$routes->post('AbdmSync/enqueue_patient', 'AbdmSync::enqueuePatient', ['filter' => $abdmPermFilter]);
+$routes->post('AbdmSync/enqueue_record', 'AbdmSync::enqueueRecord', ['filter' => $abdmPermFilter]);
 // OPD Queue (ABDM Scan & Share + Walk-in tokens)
 $routes->get('AbdmOpdQueue', 'AbdmOpdQueue::index', ['filter' => $abdmPermFilter]);
 $routes->get('AbdmOpdQueue/list', 'AbdmOpdQueue::list', ['filter' => $abdmPermFilter]);

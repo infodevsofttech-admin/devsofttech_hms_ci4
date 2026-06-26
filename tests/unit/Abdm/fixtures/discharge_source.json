@@ -1,0 +1,26 @@
+{
+  "record_id": 5002,
+  "session_id": 2,
+  "visit_date": "2026-06-20",
+  "completed_at": "2026-06-20T15:00:00+05:30",
+  "patient": {
+    "id": 21,
+    "name": "Kusum Devi",
+    "gender": "female",
+    "dob": "1982-10-02"
+  },
+  "encounter": {
+    "id": "IPD998",
+    "start": "2026-06-18T10:00:00+05:30",
+    "end": "2026-06-20T14:00:00+05:30"
+  },
+  "conditions": [
+    {"text": "Acute febrile illness"}
+  ],
+  "procedures": [
+    {"text": "Ultrasound abdomen"}
+  ],
+  "medications": [
+    {"name": "Paracetamol 650", "dosage": "1-1-1"}
+  ]
+}

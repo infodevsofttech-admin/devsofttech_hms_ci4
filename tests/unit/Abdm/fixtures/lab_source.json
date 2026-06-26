@@ -1,0 +1,22 @@
+{
+  "record_id": 4001,
+  "session_id": 9,
+  "visit_date": "2026-06-26",
+  "completed_at": "2026-06-26T18:10:00+05:30",
+  "patient": {
+    "id": 12,
+    "name": "Devender Singh",
+    "gender": "male",
+    "dob": "1979-03-28"
+  },
+  "encounter": {
+    "id": "L4001",
+    "start": "2026-06-26T16:00:00+05:30"
+  },
+  "panel_name": "Biochemistry",
+  "panel_code": "GLUCOSE",
+  "observations": [
+    {"name": "Glucose", "code": "GLUCOSE", "value": 102, "unit": "mg/dL", "interpretation": "NORMAL"},
+    {"name": "Creatinine", "code": "CREATININE", "value": 1.1, "unit": "mg/dL", "interpretation": "NORMAL"}
+  ]
+}

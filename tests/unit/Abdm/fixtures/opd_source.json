@@ -1,0 +1,36 @@
+{
+  "record_id": 101,
+  "session_id": 1,
+  "visit_date": "2026-06-27",
+  "completed_at": "2026-06-27T10:00:00+05:30",
+  "patient": {
+    "id": 12,
+    "name": "Devender Singh",
+    "gender": "male",
+    "dob": "1979-03-28",
+    "abha_id": "1234-5678-9012",
+    "abha_address": "devender@abdm"
+  },
+  "encounter": {
+    "id": "E101",
+    "start": "2026-06-27T09:30:00+05:30",
+    "end": "2026-06-27T10:00:00+05:30"
+  },
+  "doctor": {
+    "id": "D9",
+    "name": "Dr. R K Sundriyal"
+  },
+  "organization": {
+    "id": "H1",
+    "name": "Chamunda Hospital"
+  },
+  "diagnoses": [
+    {"text": "Acute upper respiratory infection"}
+  ],
+  "medications": [
+    {"name": "Eltroxin 50", "dosage": "1-0-0 for 5 days"}
+  ],
+  "vitals": [
+    {"display": "Heart Rate", "code": "8867-4", "value": 82, "unit": "beats/min"}
+  ]
+}

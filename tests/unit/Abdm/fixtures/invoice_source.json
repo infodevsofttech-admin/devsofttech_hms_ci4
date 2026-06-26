@@ -1,0 +1,27 @@
+{
+  "record_id": 9001,
+  "session_id": 1,
+  "visit_date": "2026-06-21",
+  "completed_at": "2026-06-21T12:00:00+05:30",
+  "patient": {
+    "id": 12,
+    "name": "Devender Singh",
+    "gender": "male",
+    "dob": "1979-03-28"
+  },
+  "invoice_no": "INV-2026-9001",
+  "currency": "INR",
+  "line_items": [
+    {"name": "Consultation", "qty": 1, "rate": 500, "amount": 500},
+    {"name": "Medicine", "qty": 2, "rate": 150, "amount": 300}
+  ],
+  "total_amount": 800,
+  "organization": {
+    "id": "H1",
+    "name": "Chamunda Hospital"
+  },
+  "doctor": {
+    "id": "D9",
+    "name": "Dr. R K Sundriyal"
+  }
+}
