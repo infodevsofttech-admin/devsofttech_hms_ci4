@@ -22,6 +22,11 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
     private string $token;
     private string $hfrId;
     private int    $timeoutSec;
+    /** @var array<int, string> */
+    private array $tokenCandidates = [];
+    /** @var array<string, string> */
+    private array $tokenSourceByValue = [];
+    private string $tokenSource = 'config';
 
     public function __construct()
     {
@@ -29,6 +34,11 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
 
         $this->baseUrl    = rtrim((string) ($config->eatriaBridgeUrl ?? 'https://abdm-bridge.e-atria.in/api'), '/');
         $this->token      = $this->sanitizeBearerToken((string) ($config->eatriaBridgeToken ?? ''));
+        if ($this->token !== '') {
+            $this->tokenCandidates = [$this->token];
+            $this->tokenSourceByValue[$this->token] = 'config.eatriaBridgeToken';
+            $this->tokenSource = 'config.eatriaBridgeToken';
+        }
         $this->hfrId      = '';
         $this->timeoutSec = (int) ($config->eatriaBridgeTimeoutSec ?? 30);
 
@@ -49,6 +59,9 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
                 ->select('s_name, s_value')
                 ->whereIn('s_name', [
                     'EATRIA_BRIDGE_TOKEN',
+                    'EKA_GATEWAY_TOKEN',
+                    'GATEWAY_TO_HMS_TOKEN',
+                    'ABDM_GATEWAY_TO_HMS_TOKEN',
                     'ABDM_BRIDGE_TOKEN',
                     'ABDM_GATEWAY_TOKEN',
                     'EATRIA_BRIDGE_API_KEY',
@@ -62,15 +75,34 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
 
             $dbSettings = array_column($rows, 's_value', 's_name');
 
-            $dbToken = trim((string) (
-                $dbSettings['EATRIA_BRIDGE_TOKEN']
-                ?? $dbSettings['ABDM_BRIDGE_TOKEN']
-                ?? $dbSettings['ABDM_GATEWAY_TOKEN']
-                ?? $dbSettings['EATRIA_BRIDGE_API_KEY']
-                ?? ''
-            ));
-            if ($dbToken !== '') {
-                $this->token = $this->sanitizeBearerToken($dbToken);
+            $tokenCandidates = [];
+            $tokenSourceByValue = [];
+            foreach ([
+                'EATRIA_BRIDGE_TOKEN',
+                'EKA_GATEWAY_TOKEN',
+                'GATEWAY_TO_HMS_TOKEN',
+                'ABDM_GATEWAY_TO_HMS_TOKEN',
+                'ABDM_BRIDGE_TOKEN',
+                'ABDM_GATEWAY_TOKEN',
+                'EATRIA_BRIDGE_API_KEY',
+            ] as $tokenKey) {
+                $rawToken = trim((string) ($dbSettings[$tokenKey] ?? ''));
+                if ($rawToken === '') {
+                    continue;
+                }
+                $sanitized = $this->sanitizeBearerToken($rawToken);
+                if ($sanitized === '' || in_array($sanitized, $tokenCandidates, true)) {
+                    continue;
+                }
+                $tokenCandidates[] = $sanitized;
+                $tokenSourceByValue[$sanitized] = 'hospital_setting.' . $tokenKey;
+            }
+
+            if (! empty($tokenCandidates)) {
+                $this->tokenCandidates = $tokenCandidates;
+                $this->tokenSourceByValue = $tokenSourceByValue;
+                $this->token = $tokenCandidates[0];
+                $this->tokenSource = $tokenSourceByValue[$this->token] ?? 'hospital_setting';
             }
 
             $dbUrl = trim((string) ($dbSettings['EATRIA_BRIDGE_URL'] ?? ''));
@@ -220,45 +252,84 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             $url .= '?' . http_build_query($query);
         }
 
-        $headers = [
-            'Content-Type: application/json',
-            'Accept: application/json',
-        ];
-        if ($this->token !== '') {
-            $headers[] = 'Authorization: Bearer ' . $this->token;
-        }
+        $safeRequestBody = $this->redactSensitiveForLog($body);
+
+        $callWithToken = function (string $tokenValue) use ($method, $url, $body, $safeRequestBody): array {
+            $headers = [
+                'Content-Type: application/json',
+                'Accept: application/json',
+            ];
+            if ($tokenValue !== '') {
+                $headers[] = 'Authorization: Bearer ' . $tokenValue;
+            }
+
+            $maskedToken = $tokenValue !== '' ? (substr($tokenValue, 0, 6) . '***' . substr($tokenValue, -4)) : '(none)';
+            $tokenSource = $this->tokenSourceByValue[$tokenValue] ?? $this->tokenSource;
+            log_message('debug', '[EAtriaBridge] --> ' . $method . ' ' . $url
+                . ' | token=' . $maskedToken
+                . ' | token_source=' . $tokenSource
+                . ' | body=' . json_encode($safeRequestBody));
+
+            $ch = curl_init();
+            $curlOptions = [
+                CURLOPT_URL            => $url,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT        => $this->timeoutSec,
+                CURLOPT_HTTPHEADER     => $headers,
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_CUSTOMREQUEST  => $method,
+            ];
+
+            if ($method !== 'GET' && $body !== []) {
+                $curlOptions[CURLOPT_POSTFIELDS] = json_encode($body);
+            }
+
+            curl_setopt_array($ch, $curlOptions);
+            $raw = curl_exec($ch);
+            $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlErr = curl_error($ch);
+            curl_close($ch);
+
+            return [
+                'raw' => (string) $raw,
+                'http_code' => $httpCode,
+                'curl_error' => $curlErr,
+                'token' => $tokenValue,
+            ];
+        };
 
         if ($this->token === '') {
             log_message('warning', '[EAtriaBridge] Authorization token missing for request: ' . $method . ' ' . $url);
         }
 
-        $ch = curl_init();
-        $curlOptions = [
-            CURLOPT_URL            => $url,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => $this->timeoutSec,
-            CURLOPT_HTTPHEADER     => $headers,
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_CUSTOMREQUEST  => $method,
-        ];
+        $attempt = $callWithToken($this->token);
+        $raw = (string) ($attempt['raw'] ?? '');
+        $httpCode = (int) ($attempt['http_code'] ?? 0);
+        $curlErr = (string) ($attempt['curl_error'] ?? '');
 
-        if ($method !== 'GET' && $body !== []) {
-            $curlOptions[CURLOPT_POSTFIELDS] = json_encode($body);
+        // Retry with alternate token candidates when gateway reports auth failure.
+        if ($curlErr === '' && in_array($httpCode, [401, 403], true) && count($this->tokenCandidates) > 1) {
+            foreach ($this->tokenCandidates as $candidateToken) {
+                if ($candidateToken === (string) ($attempt['token'] ?? '')) {
+                    continue;
+                }
+
+                log_message('warning', '[EAtriaBridge] auth failed with token source=' . ($this->tokenSourceByValue[(string) ($attempt['token'] ?? '')] ?? $this->tokenSource) . '; retrying with alternate token source=' . ($this->tokenSourceByValue[$candidateToken] ?? 'unknown'));
+                $retryAttempt = $callWithToken($candidateToken);
+                $retryHttpCode = (int) ($retryAttempt['http_code'] ?? 0);
+                $retryCurlErr = (string) ($retryAttempt['curl_error'] ?? '');
+
+                if ($retryCurlErr === '' && ! in_array($retryHttpCode, [401, 403], true)) {
+                    $this->token = $candidateToken;
+                    $this->tokenSource = $this->tokenSourceByValue[$candidateToken] ?? $this->tokenSource;
+                    $attempt = $retryAttempt;
+                    $raw = (string) ($retryAttempt['raw'] ?? '');
+                    $httpCode = $retryHttpCode;
+                    $curlErr = $retryCurlErr;
+                    break;
+                }
+            }
         }
-
-        curl_setopt_array($ch, $curlOptions);
-
-        // Log outgoing request (mask token)
-        $maskedToken = $this->token !== '' ? (substr($this->token, 0, 6) . '***' . substr($this->token, -4)) : '(none)';
-        $safeRequestBody = $this->redactSensitiveForLog($body);
-        log_message('debug', '[EAtriaBridge] --> ' . $method . ' ' . $url
-            . ' | token=' . $maskedToken
-            . ' | body=' . json_encode($safeRequestBody));
-
-        $raw      = curl_exec($ch);
-        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlErr  = curl_error($ch);
-        curl_close($ch);
 
         $safeRawForLog = (string) $raw;
         $decodedRawForLog = json_decode((string) $raw, true);
@@ -282,7 +353,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         $ok = ($httpCode >= 200 && $httpCode < 300) ? (int) ($decoded['ok'] ?? 1) : 0;
         $this->dbLog($method, $path, $url, $body, $httpCode, (string) $raw, $ok === 1 ? 'success' : 'error', $ok === 0 ? (string) ($decoded['message'] ?? $decoded['error_text'] ?? '') : '');
         if (($httpCode === 401 || $httpCode === 403) && ! isset($decoded['auth_hint'])) {
-            $decoded['auth_hint'] = 'Verify EATRIA_BRIDGE_TOKEN and ABDM_HFR_ID in hospital_setting. Current HFR=' . ($this->hfrId !== '' ? $this->hfrId : '(empty)');
+            $decoded['auth_hint'] = 'Verify gateway token in hospital_setting (EATRIA_BRIDGE_TOKEN / EKA_GATEWAY_TOKEN) and ABDM_HFR_ID. Current token source=' . $this->tokenSource . ', HFR=' . ($this->hfrId !== '' ? $this->hfrId : '(empty)');
         }
 
         return array_merge($decoded, ['ok' => $ok, 'http_code' => $httpCode]);
