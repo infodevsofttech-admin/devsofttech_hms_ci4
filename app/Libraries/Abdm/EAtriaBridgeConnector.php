@@ -21,6 +21,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
     private string $baseUrl;
     private string $token;
     private string $hfrId;
+    private string $bridgeHospitalId;
     private int    $timeoutSec;
     /** @var array<int, string> */
     private array $tokenCandidates = [];
@@ -40,6 +41,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             $this->tokenSource = 'config.eatriaBridgeToken';
         }
         $this->hfrId      = '';
+        $this->bridgeHospitalId = '';
         $this->timeoutSec = (int) ($config->eatriaBridgeTimeoutSec ?? 30);
 
         // DB (Admin Panel → ABDM Gateway Config) is the authoritative source for
@@ -69,6 +71,8 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
                     'ABDM_HFR_ID',
                     'H_HFR_ID',
                     'ABDM_HOSPITAL_HFR_ID',
+                    'ABDM_BRIDGE_HOSPITAL_ID',
+                    'EATRIA_BRIDGE_HOSPITAL_ID',
                 ])
                 ->get()
                 ->getResultArray();
@@ -118,6 +122,15 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             ));
             if ($dbHfrId !== '') {
                 $this->hfrId = $dbHfrId;
+            }
+
+            $dbBridgeHospitalId = trim((string) (
+                $dbSettings['ABDM_BRIDGE_HOSPITAL_ID']
+                ?? $dbSettings['EATRIA_BRIDGE_HOSPITAL_ID']
+                ?? ''
+            ));
+            if ($dbBridgeHospitalId !== '') {
+                $this->bridgeHospitalId = $dbBridgeHospitalId;
             }
         } catch (\Throwable $e) {
             log_message('warning', '[EAtriaBridge] refreshRuntimeSettingsFromDb failed: ' . $e->getMessage());
@@ -261,6 +274,9 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             ];
             if ($tokenValue !== '') {
                 $headers[] = 'Authorization: Bearer ' . $tokenValue;
+            }
+            if ($this->bridgeHospitalId !== '') {
+                $headers[] = 'X-Hospital-Id: ' . $this->bridgeHospitalId;
             }
 
             $maskedToken = $tokenValue !== '' ? (substr($tokenValue, 0, 6) . '***' . substr($tokenValue, -4)) : '(none)';
@@ -637,6 +653,11 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             'care_context_display' => $careContextDisplay,
             'queue_id' => $queueId,
         ];
+
+        if ($this->bridgeHospitalId !== '') {
+            $body['hospital_id'] = $this->bridgeHospitalId;
+            $body['bridge_hospital_id'] = $this->bridgeHospitalId;
+        }
 
         if ($abhaAddress !== '') {
             $body['abha_address'] = $abhaAddress;
