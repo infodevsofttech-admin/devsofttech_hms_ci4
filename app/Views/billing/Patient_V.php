@@ -716,6 +716,10 @@
 
 <script>
     $(document).ready(function() {
+        var csrfToken = function() {
+            return $('input[name="<?= csrf_token() ?>"]').first().val() || '<?= csrf_hash() ?>';
+        };
+
         $('form.form1').on('submit', function(form) {
             $("#RegisterPatient").prop("disabled", true);
             form.preventDefault();
@@ -754,7 +758,6 @@
         (function () {
             var txnId  = null;   // transaction id from ABDM API
             var mobile = '';     // mobile to register with the new ABHA
-            var csrfToken = function() { return $('input[name="<?= csrf_token() ?>"]').first().val(); };
 
             function abhaStep(step) {
                 $('#abha_step_1,#abha_step_2,#abha_step_3,#abha_step_4').hide();
