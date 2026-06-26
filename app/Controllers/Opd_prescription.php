@@ -5203,7 +5203,7 @@ class Opd_prescription extends BaseController
             . '  btn.disabled=true;btn.innerHTML=\'<span class="spinner-border spinner-border-sm me-1"></span>Submitting\u2026\';'
             . '  const body=new URLSearchParams({opd_id:CTX.opdId,opd_session_id:CTX.sessionId});'
             . '  body.append(CSRF_NAME,CSRF_HASH);'
-            . '  const submitTimeoutMs=45000;'
+            . '  const submitTimeoutMs=150000;'
             . '  const submitController=new AbortController();'
             . '  const submitTimer=setTimeout(()=>submitController.abort(),submitTimeoutMs);'
             . '  fetch(SUBMIT_URL,{method:"POST",headers:{"X-Requested-With":"XMLHttpRequest","Content-Type":"application/x-www-form-urlencoded"},body:body.toString(),signal:submitController.signal})'
@@ -5364,6 +5364,20 @@ class Opd_prescription extends BaseController
             $gatewayUrl = base_url('AbdmGateway/share_prescription_bundle');
             $cookieHeader = (string) $this->request->getHeaderLine('Cookie');
             $handoffTimeoutSec = $this->resolveFhirGatewayHandoffTimeoutSec();
+
+            // Avoid self-call deadlock: this request forwards the same session cookie
+            // to an internal endpoint protected by permission filter.
+            // Releasing session lock allows the internal request to proceed.
+            try {
+                $session = session();
+                if (is_object($session) && method_exists($session, 'close')) {
+                    $session->close();
+                } elseif (function_exists('session_write_close') && session_status() === PHP_SESSION_ACTIVE) {
+                    session_write_close();
+                }
+            } catch (\Throwable $sessionCloseError) {
+                log_message('warning', '[fhir_bundle_submit] could not close session lock before handoff for OPD#' . $opdId . ': ' . $sessionCloseError->getMessage());
+            }
 
             $client = service('curlrequest', [
                 'timeout' => $handoffTimeoutSec,

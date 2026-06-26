@@ -2179,7 +2179,7 @@
         btn.textContent = 'Submitting…';
         var body = new URLSearchParams({ opd_id: _fhirOpdId, opd_session_id: _fhirSessionId });
         body.append(csrfName, csrfHash);
-        var submitTimeoutMs = 45000;
+        var submitTimeoutMs = 150000;
         var submitController = new AbortController();
         var submitTimer = window.setTimeout(function () { submitController.abort(); }, submitTimeoutMs);
         fetch('<?= base_url('Opd_prescription/fhir_bundle_submit') ?>', {
