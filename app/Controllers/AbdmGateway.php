@@ -1001,6 +1001,7 @@ class AbdmGateway extends BaseController
                 'request_json' => (string) json_encode([
                     'opd_id' => $opdId,
                     'patient_id' => $patientId,
+                    'push_to_gateway' => $pushToGateway ? 1 : 0,
                 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                 'response_code' => 200,
                 'response_json' => (string) json_encode($responsePayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
@@ -1042,8 +1043,12 @@ class AbdmGateway extends BaseController
 
                 $logBridge(
                     $consentLogStatus,
-                    ['ok' => 1, 'warning' => $consentWarning],
-                    $consentWarning,
+                    [
+                        'ok' => 1,
+                        'note' => $consentWarning,
+                        'push_to_gateway' => $pushToGateway ? 1 : 0,
+                    ],
+                    $pushToGateway ? $consentWarning : '',
                     $consentEventType
                 );
             }
@@ -1252,15 +1257,18 @@ class AbdmGateway extends BaseController
                 'gateway_consent_id' => $consentExternalId !== '' ? $consentExternalId : null,
                 'status' => 'local_discovery_ready',
                 'care_context_reference' => $careContextRef,
+                'mode' => 'm2_hms_source',
+                'push_to_gateway' => 0,
                 'message' => 'M2 mode active: care context registered in HMS. Gateway will discover and fetch consent-scoped FHIR from HMS callbacks.',
-                'warning' => $consentWarning !== '' ? $consentWarning : null,
+                'info' => $consentWarning !== '' ? $consentWarning : null,
+                'warning' => null,
                 'error' => null,
             ];
 
             $logBridge(
                 'success',
                 $responsePayload,
-                $consentWarning !== '' ? $consentWarning : '',
+                '',
                 'abdm.opd.prescription.share.result'
             );
 
