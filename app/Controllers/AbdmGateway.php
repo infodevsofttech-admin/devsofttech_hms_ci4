@@ -983,28 +983,59 @@ class AbdmGateway extends BaseController
         $abhaId = trim((string) $this->request->getPost('abha_id'));
         $abhaAddressPost = trim((string) $this->request->getPost('abha_address'));
         $consentHandle = trim((string) $this->request->getPost('consent_handle'));
+        $now = Time::now('Asia/Kolkata')->toDateTimeString();
+
+        $logBridge = function (string $status, array $responsePayload, string $errorMessage = '', string $eventType = 'abdm.opd.prescription.share') use ($opdId, $patientId, $now): void {
+            if (! $this->db->tableExists('abdm_api_logs')) {
+                return;
+            }
+
+            $this->db->table('abdm_api_logs')->insert([
+                'channel' => 'bridge',
+                'event_type' => $eventType,
+                'endpoint' => '/AbdmGateway/share_prescription_bundle',
+                'http_method' => 'POST',
+                'entity_type' => 'opd',
+                'entity_id' => (string) $opdId,
+                'request_json' => (string) json_encode([
+                    'opd_id' => $opdId,
+                    'patient_id' => $patientId,
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'response_code' => 200,
+                'response_json' => (string) json_encode($responsePayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'status' => $status,
+                'error_message' => $errorMessage !== '' ? mb_substr($errorMessage, 0, 1000) : null,
+                'created_at' => $now,
+            ]);
+        };
 
         if ($abhaId === '' && $abhaAddressPost !== '') {
             $abhaId = $abhaAddressPost;
         }
 
         if ($opdId <= 0 || $patientId <= 0) {
+            $logBridge('error', ['ok' => 0, 'error_text' => 'opd_id and patient_id are required'], 'opd_id and patient_id are required', 'abdm.opd.prescription.share.validation');
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'opd_id and patient_id are required']);
         }
 
         if (! $this->db->tableExists('opd_fhir_documents')) {
+            $logBridge('error', ['ok' => 0, 'error_text' => 'opd_fhir_documents table not found'], 'opd_fhir_documents table not found', 'abdm.opd.prescription.share.validation');
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'opd_fhir_documents table not found']);
         }
 
         $hasAbha = $abhaId !== '' || $abhaAddressPost !== '';
         $consent = null;
+        $consentWarning = '';
         if ($hasAbha) {
             $consent = $this->getActiveConsentRecord($patientId, $abhaId !== '' ? $abhaId : $abhaAddressPost, $consentHandle);
             if ($consent === null) {
-                return $this->response->setJSON([
-                    'ok' => 0,
-                    'error_text' => 'No active consent found. Share blocked due to expiry/not-approved consent.',
-                ]);
+                $consentWarning = 'No active consent found. Proceeding with care-context push only.';
+                $logBridge(
+                    'warning',
+                    ['ok' => 1, 'warning' => $consentWarning],
+                    $consentWarning,
+                    'abdm.opd.prescription.share.consent_missing'
+                );
             }
         }
 
@@ -1017,6 +1048,7 @@ class AbdmGateway extends BaseController
         $bundleRow = $builder->orderBy('id', 'DESC')->get(1)->getRowArray();
 
         if (empty($bundleRow)) {
+            $logBridge('error', ['ok' => 0, 'error_text' => 'No FHIR bundle found for selected OPD/session'], 'No FHIR bundle found for selected OPD/session', 'abdm.opd.prescription.share.validation');
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'No FHIR bundle found for selected OPD/session']);
         }
 
@@ -1083,6 +1115,7 @@ class AbdmGateway extends BaseController
         }
 
         if ($abhaAddress === '' && $abhaNumber === '') {
+            $logBridge('error', ['ok' => 0, 'error_text' => 'ABHA address or ABHA number is required for record push.'], 'ABHA address or ABHA number is required for record push.', 'abdm.opd.prescription.share.validation');
             return $this->response->setJSON([
                 'ok' => 0,
                 'error_text' => 'ABHA address or ABHA number is required for record push.',
@@ -1223,15 +1256,32 @@ class AbdmGateway extends BaseController
             'error_message' => (string) ($connectorError ?? ''),
         ]);
 
-        return $this->response->setJSON([
+        $message = $connectorError === null
+            ? ($consentWarning !== ''
+                ? 'Record pushed to gateway without active consent. Recheck link status in M2 ABDM Gateway.'
+                : 'Record pushed to gateway successfully.')
+            : ($connectorError !== '' ? $connectorError : 'Bridge push failed');
+
+        $responsePayload = [
             'ok' => $connectorError === null ? 1 : 0,
             'queue_id' => $queueId,
             'bridge_record_id' => $bridgeRecordId > 0 ? $bridgeRecordId : null,
             'consent_handle' => (string) ($consent['consent_handle'] ?? ''),
             'gateway_consent_id' => $this->resolveConsentExternalId($consent) !== '' ? $this->resolveConsentExternalId($consent) : null,
             'status' => $status,
+            'message' => $message,
+            'warning' => $consentWarning !== '' ? $consentWarning : null,
             'error' => $connectorError,
-        ]);
+        ];
+
+        $logBridge(
+            $connectorError === null ? 'success' : 'error',
+            $responsePayload,
+            $connectorError !== null ? (string) $connectorError : ($consentWarning !== '' ? $consentWarning : ''),
+            'abdm.opd.prescription.share.result'
+        );
+
+        return $this->response->setJSON($responsePayload);
     }
 
     public function shareIpdDischargeBundle()
