@@ -170,7 +170,11 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             $token = trim(substr($token, 7));
         }
 
-        return trim($token, " \t\n\r\0\x0B\"'");
+        $token = trim($token, " \t\n\r\0\x0B\"'");
+        // Operators may paste tokens with hidden whitespace/newlines.
+        $token = (string) preg_replace('/\s+/u', '', $token);
+
+        return $token;
     }
 
     private function normalizeBridgeGender($value): string
@@ -339,6 +343,21 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             ];
         }
 
+        if ($this->tokenSource !== 'hospital_setting.EATRIA_BRIDGE_TOKEN') {
+            log_message('error', '[EAtriaBridge] Rejecting non-hospital-setting token source=' . $this->tokenSource . ' for request: ' . $method . ' ' . $url);
+            return [
+                'ok' => 0,
+                'http_code' => 0,
+                'error_text' => 'Gateway auth token must come from hospital_setting.EATRIA_BRIDGE_TOKEN',
+                'auth_debug' => [
+                    'token_source' => $this->tokenSource,
+                    'token_sha12' => substr(hash('sha256', $this->token), 0, 12),
+                    'hfr_id' => $this->hfrId,
+                    'base_url' => $this->baseUrl,
+                ],
+            ];
+        }
+
         $attempt = $callWithToken($this->token);
         $raw = (string) ($attempt['raw'] ?? '');
         $httpCode = (int) ($attempt['http_code'] ?? 0);
@@ -375,23 +394,35 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         }
         log_message('debug', '[EAtriaBridge] <-- HTTP ' . $httpCode . ' | raw=' . $safeRawForLog);
 
+        $authDebug = [
+            'token_source' => $this->tokenSource,
+            'token_sha12' => $this->token !== '' ? substr(hash('sha256', $this->token), 0, 12) : '',
+            'hfr_id' => $this->hfrId,
+            'base_url' => $this->baseUrl,
+        ];
+
         if ($curlErr !== '') {
             log_message('error', '[EAtriaBridge] cURL error on ' . $url . ': ' . $curlErr);
-            $this->dbLog($method, $path, $url, $body, 0, '', 'error', 'cURL error: ' . $curlErr);
-            return ['ok' => 0, 'error_text' => 'cURL error: ' . $curlErr, 'http_code' => 0];
+            $this->dbLog($method, $path, $url, $body, 0, '', 'error', 'cURL error: ' . $curlErr . ' | auth=' . json_encode($authDebug));
+            return ['ok' => 0, 'error_text' => 'cURL error: ' . $curlErr, 'http_code' => 0, 'auth_debug' => $authDebug];
         }
 
         $decoded = json_decode((string) $raw, true);
         if (!is_array($decoded)) {
-            $this->dbLog($method, $path, $url, $body, $httpCode, (string) $raw, 'error', 'Non-JSON response');
-            return ['ok' => 0, 'error_text' => 'Non-JSON response', 'http_code' => $httpCode, 'raw' => (string) $raw];
+            $this->dbLog($method, $path, $url, $body, $httpCode, (string) $raw, 'error', 'Non-JSON response | auth=' . json_encode($authDebug));
+            return ['ok' => 0, 'error_text' => 'Non-JSON response', 'http_code' => $httpCode, 'raw' => (string) $raw, 'auth_debug' => $authDebug];
         }
 
         $ok = ($httpCode >= 200 && $httpCode < 300) ? (int) ($decoded['ok'] ?? 1) : 0;
-        $this->dbLog($method, $path, $url, $body, $httpCode, (string) $raw, $ok === 1 ? 'success' : 'error', $ok === 0 ? (string) ($decoded['message'] ?? $decoded['error_text'] ?? '') : '');
-        if (($httpCode === 401 || $httpCode === 403) && ! isset($decoded['auth_hint'])) {
-            $decoded['auth_hint'] = 'Verify gateway token in hospital_setting (EATRIA_BRIDGE_TOKEN / EKA_GATEWAY_TOKEN) and ABDM_HFR_ID. Current token source=' . $this->tokenSource . ', HFR=' . ($this->hfrId !== '' ? $this->hfrId : '(empty)');
+        $logErr = $ok === 0 ? (string) ($decoded['message'] ?? $decoded['error_text'] ?? '') : '';
+        if ($ok === 0) {
+            $logErr .= ($logErr !== '' ? ' | ' : '') . 'auth=' . json_encode($authDebug);
         }
+        $this->dbLog($method, $path, $url, $body, $httpCode, (string) $raw, $ok === 1 ? 'success' : 'error', $logErr);
+        if (($httpCode === 401 || $httpCode === 403) && ! isset($decoded['auth_hint'])) {
+            $decoded['auth_hint'] = 'Verify hospital_setting.EATRIA_BRIDGE_TOKEN mapped to HFR IN0510000870. Current token source=' . $this->tokenSource . ', HFR=' . ($this->hfrId !== '' ? $this->hfrId : '(empty)');
+        }
+        $decoded['auth_debug'] = $authDebug;
 
         return array_merge($decoded, ['ok' => $ok, 'http_code' => $httpCode]);
     }
