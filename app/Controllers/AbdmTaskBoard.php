@@ -496,6 +496,174 @@ class AbdmTaskBoard extends BaseController
             ->get()
             ->getResultArray();
 
-        return array_values(array_filter($rows, static fn ($r) => preg_match('/^\d{14}$/', trim((string) ($r['abha_id'] ?? ''))) === 1));
+        $rows = array_values(array_filter($rows, static fn ($r) => preg_match('/^\d{14}$/', trim((string) ($r['abha_id'] ?? ''))) === 1));
+        if (empty($rows)) {
+            return [];
+        }
+
+        $opdIds = array_values(array_unique(array_map(static fn ($r) => (int) ($r['opd_id'] ?? 0), $rows)));
+
+        $latestDocByOpd = [];
+        if (! empty($opdIds) && $this->db->tableExists('opd_fhir_documents')) {
+            $docRows = $this->db->table('opd_fhir_documents')
+                ->select('id, opd_id, opd_session_id, generated_at, created_at')
+                ->whereIn('opd_id', $opdIds)
+                ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle'])
+                ->orderBy('id', 'DESC')
+                ->get()
+                ->getResultArray();
+
+            foreach ($docRows as $doc) {
+                $k = (int) ($doc['opd_id'] ?? 0);
+                if ($k <= 0 || isset($latestDocByOpd[$k])) {
+                    continue;
+                }
+                $latestDocByOpd[$k] = $doc;
+            }
+        }
+
+        $latestHrByOpd = [];
+        if (! empty($opdIds) && $this->db->tableExists('health_records')) {
+            $hrFields = $this->db->getFieldNames('health_records') ?? [];
+            $hrSelect = ['id', 'entity_id', 'push_status', 'abdm_txn_id', 'care_context_reference', 'push_at', 'linked_at', 'updated_at'];
+            if (in_array('bridge_record_id', $hrFields, true)) {
+                $hrSelect[] = 'bridge_record_id';
+            }
+
+            $opdIdStrings = array_map(static fn ($v) => (string) $v, $opdIds);
+            $hrRows = $this->db->table('health_records')
+                ->select(implode(',', $hrSelect))
+                ->where('entity_type', 'opd')
+                ->whereIn('entity_id', $opdIdStrings)
+                ->orderBy('id', 'DESC')
+                ->get()
+                ->getResultArray();
+
+            foreach ($hrRows as $hr) {
+                $k = (int) ($hr['entity_id'] ?? 0);
+                if ($k <= 0 || isset($latestHrByOpd[$k])) {
+                    continue;
+                }
+                $latestHrByOpd[$k] = $hr;
+            }
+        }
+
+        $recordLinksByContext = [];
+        if ($this->db->tableExists('record_links')) {
+            $contexts = [];
+            foreach ($latestHrByOpd as $hr) {
+                $cc = trim((string) ($hr['care_context_reference'] ?? ''));
+                if ($cc !== '') {
+                    $contexts[] = $cc;
+                }
+            }
+            $contexts = array_values(array_unique($contexts));
+
+            if (! empty($contexts)) {
+                $rlRows = $this->db->table('record_links')
+                    ->select('id, care_context_reference, link_status, linked_at, updated_at')
+                    ->whereIn('care_context_reference', $contexts)
+                    ->orderBy('id', 'DESC')
+                    ->get()
+                    ->getResultArray();
+
+                foreach ($rlRows as $rl) {
+                    $cc = trim((string) ($rl['care_context_reference'] ?? ''));
+                    if ($cc === '' || isset($recordLinksByContext[$cc])) {
+                        continue;
+                    }
+                    $recordLinksByContext[$cc] = $rl;
+                }
+            }
+        }
+
+        $out = [];
+        foreach ($rows as $row) {
+            $opdId = (int) ($row['opd_id'] ?? 0);
+            if ($opdId <= 0) {
+                continue;
+            }
+
+            $doc = $latestDocByOpd[$opdId] ?? null;
+            $hr = $latestHrByOpd[$opdId] ?? null;
+            $sessionId = (int) ($doc['opd_session_id'] ?? 0);
+
+            $consultDate = (string) ($row['apointment_date'] ?? '');
+            $visitDate = $consultDate !== '' ? date('Y-m-d', strtotime($consultDate)) : date('Y-m-d');
+            $derivedCareContext = 'OPD-' . $opdId . '-S' . ($sessionId > 0 ? $sessionId : 0) . '-' . $visitDate;
+
+            $careContextRef = trim((string) ($hr['care_context_reference'] ?? ''));
+            if ($careContextRef === '') {
+                $careContextRef = $derivedCareContext;
+            }
+
+            $rl = $recordLinksByContext[$careContextRef] ?? null;
+            $pushStatus = strtolower(trim((string) ($hr['push_status'] ?? '')));
+            $linkStatus = strtolower(trim((string) ($rl['link_status'] ?? '')));
+
+            $statusLabel = 'Not Registered';
+            $statusTone = 'secondary';
+            $statusNote = 'FHIR not registered in health_records yet.';
+
+            if ($doc !== null) {
+                $statusLabel = 'FHIR Generated';
+                $statusTone = 'info';
+                $statusNote = 'FHIR bundle generated; awaiting registration.';
+            }
+
+            if ($pushStatus !== '') {
+                if ($pushStatus === 'local_discovery_ready') {
+                    $statusLabel = 'Discovery Ready';
+                    $statusTone = 'primary';
+                    $statusNote = 'Registered in HMS for M2 discovery/fetch callbacks.';
+                } elseif ($pushStatus === 'local_only') {
+                    $statusLabel = 'Local Only';
+                    $statusTone = 'secondary';
+                    $statusNote = 'Stored locally only (ABHA/consent not ready).';
+                } elseif ($pushStatus === 'queued') {
+                    $statusLabel = 'Gateway Queued';
+                    $statusTone = 'warning';
+                    $statusNote = 'Submitted to gateway and waiting for link workflow.';
+                } elseif ($pushStatus === 'linked') {
+                    $statusLabel = 'Linked';
+                    $statusTone = 'success';
+                    $statusNote = 'Care context linked successfully.';
+                } elseif ($pushStatus === 'failed') {
+                    $statusLabel = 'Failed';
+                    $statusTone = 'danger';
+                    $statusNote = 'Last registration/share attempt failed.';
+                }
+            }
+
+            if ($linkStatus === 'linked') {
+                $statusLabel = 'Linked';
+                $statusTone = 'success';
+                $statusNote = 'Care context link confirmed by callback.';
+            } elseif ($linkStatus === 'pending_discovery' && $statusLabel === 'Discovery Ready') {
+                $statusNote = 'Waiting for ABDM discovery and consent fetch callbacks.';
+            } elseif ($linkStatus === 'failed') {
+                $statusLabel = 'Link Failed';
+                $statusTone = 'danger';
+                $statusNote = 'Link callback reported failure.';
+            }
+
+            $queueId = trim((string) ($hr['abdm_txn_id'] ?? ''));
+            $bridgeRecordId = (int) ($hr['bridge_record_id'] ?? 0);
+
+            $out[] = array_merge($row, [
+                'opd_session_id' => $sessionId,
+                'care_context_reference' => $careContextRef,
+                'record_status_label' => $statusLabel,
+                'record_status_tone' => $statusTone,
+                'record_status_note' => $statusNote,
+                'push_status' => $pushStatus,
+                'link_status' => $linkStatus,
+                'queue_id' => $queueId,
+                'bridge_record_id' => $bridgeRecordId > 0 ? $bridgeRecordId : null,
+                'has_fhir' => $doc !== null ? 1 : 0,
+            ]);
+        }
+
+        return $out;
     }
 }

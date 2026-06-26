@@ -266,24 +266,63 @@
             <div class="table-responsive">
                 <table class="table table-sm mb-0">
                     <thead class="table-light">
-                        <tr><th>OPD ID</th><th>Patient</th><th>ABHA</th><th>Consult Date</th><th>Doctor</th><th>Action</th></tr>
+                        <tr><th>OPD ID</th><th>Patient</th><th>ABHA</th><th>Consult Date</th><th>Doctor</th><th>Record Status</th><th>Details</th><th>Action</th></tr>
                     </thead>
                     <tbody>
                     <?php if (! empty($opd_consult_rows ?? [])): ?>
                         <?php foreach (($opd_consult_rows ?? []) as $r): ?>
+                        <?php
+                            $statusTone = trim((string) ($r['record_status_tone'] ?? 'secondary'));
+                            $allowedTones = ['secondary', 'primary', 'info', 'success', 'warning', 'danger', 'dark'];
+                            if (! in_array($statusTone, $allowedTones, true)) {
+                                $statusTone = 'secondary';
+                            }
+                            $statusLabel = trim((string) ($r['record_status_label'] ?? 'Not Registered'));
+                            $statusNote = trim((string) ($r['record_status_note'] ?? ''));
+                            $queueId = trim((string) ($r['queue_id'] ?? ''));
+                            $careContext = trim((string) ($r['care_context_reference'] ?? ''));
+                            $linkStatus = trim((string) ($r['link_status'] ?? ''));
+                            $bridgeRecordId = trim((string) ($r['bridge_record_id'] ?? ''));
+                            $hasFhir = (int) ($r['has_fhir'] ?? 0) === 1;
+                            $statusBadgeClass = 'badge bg-' . $statusTone;
+                            if ($statusTone === 'warning') {
+                                $statusBadgeClass .= ' text-dark';
+                            }
+                        ?>
                         <tr>
                             <td>#<?= (int) ($r['opd_id'] ?? 0) ?></td>
                             <td><?= esc((string) ($r['P_name'] ?? '')) ?></td>
                             <td><span class="text-primary small"><?= esc((string) ($r['abha_id'] ?? '')) ?></span></td>
                             <td><?= esc(substr((string) ($r['apointment_date'] ?? ''), 0, 16)) ?></td>
                             <td><?= esc((string) ($r['doc_name'] ?? '')) ?></td>
+                            <td><span class="<?= esc($statusBadgeClass) ?>"><?= esc($statusLabel) ?></span></td>
+                            <td class="small text-muted" style="min-width:260px;max-width:340px;">
+                                <?php if ($statusNote !== ''): ?>
+                                    <div><?= esc($statusNote) ?></div>
+                                <?php endif; ?>
+                                <?php if ($queueId !== ''): ?>
+                                    <div><strong>Queue:</strong> <?= esc($queueId) ?></div>
+                                <?php endif; ?>
+                                <?php if ($bridgeRecordId !== ''): ?>
+                                    <div><strong>Bridge:</strong> #<?= esc($bridgeRecordId) ?></div>
+                                <?php endif; ?>
+                                <?php if ($linkStatus !== ''): ?>
+                                    <div><strong>Link:</strong> <?= esc(strtoupper($linkStatus)) ?></div>
+                                <?php endif; ?>
+                                <?php if ($careContext !== ''): ?>
+                                    <div class="text-truncate" title="<?= esc($careContext) ?>"><strong>CC:</strong> <?= esc($careContext) ?></div>
+                                <?php endif; ?>
+                                <?php if (! $hasFhir): ?>
+                                    <div class="text-danger">FHIR bundle not generated yet.</div>
+                                <?php endif; ?>
+                            </td>
                             <td>
                                 <button type="button" class="btn btn-sm btn-outline-primary btn-opd-consult-fhir" data-opd-id="<?= (int) ($r['opd_id'] ?? 0) ?>">Preview FHIR</button>
                             </td>
                         </tr>
                         <?php endforeach; ?>
                     <?php else: ?>
-                        <tr><td colspan="6" class="text-muted px-2 py-2">No done OPD with ABHA found in last 30 days.</td></tr>
+                        <tr><td colspan="8" class="text-muted px-2 py-2">No done OPD with ABHA found in last 30 days.</td></tr>
                     <?php endif; ?>
                     </tbody>
                 </table>
