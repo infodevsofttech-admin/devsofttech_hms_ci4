@@ -986,7 +986,7 @@ class AbdmGateway extends BaseController
         $pushToGateway = (int) $this->request->getPost('push_to_gateway') === 1;
         $now = Time::now('Asia/Kolkata')->toDateTimeString();
 
-        $logBridge = function (string $status, array $responsePayload, string $errorMessage = '', string $eventType = 'abdm.opd.prescription.share') use ($opdId, $patientId, $now): void {
+        $logBridge = function (string $status, array $responsePayload, string $errorMessage = '', string $eventType = 'abdm.opd.prescription.share') use ($opdId, $patientId, $now, $pushToGateway): void {
             if (! $this->db->tableExists('abdm_api_logs')) {
                 return;
             }
