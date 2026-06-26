@@ -1127,6 +1127,8 @@ class AbdmGateway extends BaseController
             'MedicationRequestBundle', 'Prescription', 'PrescriptionRecord' => 'PrescriptionRecord',
             default => 'OPConsultRecord',
         };
+        $consentHandleResolved = is_array($consent) ? trim((string) ($consent['consent_handle'] ?? '')) : '';
+        $consentExternalId = is_array($consent) ? $this->resolveConsentExternalId($consent) : '';
         $sessionForRef = $sessionId > 0 ? $sessionId : (int) ($bundleRow['opd_session_id'] ?? 0);
         $visitDateRaw = trim((string) ($bundleRow['created_at'] ?? ''));
         $visitDate = $visitDateRaw !== '' ? date('Y-m-d', strtotime($visitDateRaw)) : date('Y-m-d');
@@ -1141,8 +1143,8 @@ class AbdmGateway extends BaseController
             'opd_session_id' => (int) ($bundleRow['opd_session_id'] ?? 0),
             'patient_id' => $patientId,
             'abha_id' => $abhaId,
-            'consent_handle' => (string) ($consent['consent_handle'] ?? ''),
-            'consent_id' => $this->resolveConsentExternalId($consent),
+            'consent_handle' => $consentHandleResolved,
+            'consent_id' => $consentExternalId,
             'bundle_type' => (string) ($bundleRow['bundle_type'] ?? 'MedicationRequestBundle'),
             'bundle' => $bundle,
         ];
@@ -1156,7 +1158,7 @@ class AbdmGateway extends BaseController
             'entity_id'      => (string) $opdId,
             'fhir_bundle'    => $bundleJson,
             'care_context_reference' => $careContextRef,
-            'consent_handle' => (string) ($consent['consent_handle'] ?? ''),
+            'consent_handle' => $consentHandleResolved,
         ]);
 
         if (! $hasAbha) {
@@ -1250,7 +1252,7 @@ class AbdmGateway extends BaseController
             'entity_id'   => (string) $opdId,
             'abha_id'     => $abhaId,
             'patient_id'  => $patientId,
-            'request'     => ['opd_id' => $opdId, 'hi_type' => 'OPConsultRecord', 'consent_handle' => (string) ($consent['consent_handle'] ?? '')],
+            'request'     => ['opd_id' => $opdId, 'hi_type' => 'OPConsultRecord', 'consent_handle' => $consentHandleResolved],
             'response'    => ['queue_id' => $queueId],
             'outcome'     => $connectorError === null ? 'success' : 'failure',
             'error_message' => (string) ($connectorError ?? ''),
@@ -1266,8 +1268,8 @@ class AbdmGateway extends BaseController
             'ok' => $connectorError === null ? 1 : 0,
             'queue_id' => $queueId,
             'bridge_record_id' => $bridgeRecordId > 0 ? $bridgeRecordId : null,
-            'consent_handle' => (string) ($consent['consent_handle'] ?? ''),
-            'gateway_consent_id' => $this->resolveConsentExternalId($consent) !== '' ? $this->resolveConsentExternalId($consent) : null,
+            'consent_handle' => $consentHandleResolved,
+            'gateway_consent_id' => $consentExternalId !== '' ? $consentExternalId : null,
             'status' => $status,
             'message' => $message,
             'warning' => $consentWarning !== '' ? $consentWarning : null,
