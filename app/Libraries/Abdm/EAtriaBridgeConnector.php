@@ -344,6 +344,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         }
 
         if ($this->tokenSource !== 'hospital_setting.EATRIA_BRIDGE_TOKEN') {
+            $tokenSha256 = hash('sha256', $this->token);
             log_message('error', '[EAtriaBridge] Rejecting non-hospital-setting token source=' . $this->tokenSource . ' for request: ' . $method . ' ' . $url);
             return [
                 'ok' => 0,
@@ -351,7 +352,8 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
                 'error_text' => 'Gateway auth token must come from hospital_setting.EATRIA_BRIDGE_TOKEN',
                 'auth_debug' => [
                     'token_source' => $this->tokenSource,
-                    'token_sha12' => substr(hash('sha256', $this->token), 0, 12),
+                    'token_sha12' => substr($tokenSha256, 0, 12),
+                    'token_sha256' => $tokenSha256,
                     'hfr_id' => $this->hfrId,
                     'base_url' => $this->baseUrl,
                 ],
@@ -394,9 +396,11 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         }
         log_message('debug', '[EAtriaBridge] <-- HTTP ' . $httpCode . ' | raw=' . $safeRawForLog);
 
+        $tokenSha256 = $this->token !== '' ? hash('sha256', $this->token) : '';
         $authDebug = [
             'token_source' => $this->tokenSource,
-            'token_sha12' => $this->token !== '' ? substr(hash('sha256', $this->token), 0, 12) : '',
+            'token_sha12' => $tokenSha256 !== '' ? substr($tokenSha256, 0, 12) : '',
+            'token_sha256' => $tokenSha256,
             'hfr_id' => $this->hfrId,
             'base_url' => $this->baseUrl,
         ];
