@@ -57,7 +57,16 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
                 return;
             }
 
-            $rows = $db->table('hospital_setting')
+            $settingFields = $db->getFieldNames('hospital_setting') ?? [];
+            $orderCol = null;
+            foreach (['id', 's_id'] as $candidateOrderCol) {
+                if (in_array($candidateOrderCol, $settingFields, true)) {
+                    $orderCol = $candidateOrderCol;
+                    break;
+                }
+            }
+
+            $rowsBuilder = $db->table('hospital_setting')
                 ->select('s_name, s_value')
                 ->whereIn('s_name', [
                     'EATRIA_BRIDGE_TOKEN',
@@ -73,11 +82,24 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
                     'ABDM_HOSPITAL_HFR_ID',
                     'ABDM_BRIDGE_HOSPITAL_ID',
                     'EATRIA_BRIDGE_HOSPITAL_ID',
-                ])
-                ->get()
-                ->getResultArray();
+                ]);
 
-            $dbSettings = array_column($rows, 's_value', 's_name');
+            // Ensure deterministic override when duplicate setting rows exist.
+            // Read newest-first and keep first occurrence per s_name.
+            if ($orderCol !== null) {
+                $rowsBuilder->orderBy($orderCol, 'DESC');
+            }
+
+            $rows = $rowsBuilder->get()->getResultArray();
+
+            $dbSettings = [];
+            foreach ($rows as $row) {
+                $key = trim((string) ($row['s_name'] ?? ''));
+                if ($key === '' || array_key_exists($key, $dbSettings)) {
+                    continue;
+                }
+                $dbSettings[$key] = (string) ($row['s_value'] ?? '');
+            }
 
             $tokenCandidates = [];
             $tokenSourceByValue = [];
