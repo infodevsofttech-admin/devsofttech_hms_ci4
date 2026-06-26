@@ -318,6 +318,14 @@
                             </td>
                             <td>
                                 <button type="button" class="btn btn-sm btn-outline-primary btn-opd-consult-fhir" data-opd-id="<?= (int) ($r['opd_id'] ?? 0) ?>">Preview FHIR</button>
+                                <?php if (in_array((string) ($r['push_status'] ?? ''), ['failed', 'local_only'], true)): ?>
+                                    <button
+                                        type="button"
+                                        class="btn btn-sm btn-outline-warning btn-opd-consult-submit-gateway ms-1"
+                                        data-opd-id="<?= (int) ($r['opd_id'] ?? 0) ?>"
+                                        data-abha-id="<?= esc((string) ($r['abha_id'] ?? '')) ?>"
+                                    >Submit to Gateway</button>
+                                <?php endif; ?>
                             </td>
                         </tr>
                         <?php endforeach; ?>
@@ -2040,6 +2048,10 @@
                 btnSubmitFhirToAbdm.className = 'btn btn-sm btn-outline-warning';
                 btnSubmitFhirToAbdm.innerHTML = '<i class="bi bi-check2-square"></i> Verify & Submit to Gateway';
                 btnSubmitFhirToAbdm.title = 'Submit directly to ABDM gateway after FHIR verification';
+            } else if (_fhirSubmitMode === 'opd_gateway') {
+                btnSubmitFhirToAbdm.className = 'btn btn-sm btn-outline-warning';
+                btnSubmitFhirToAbdm.innerHTML = '<i class="bi bi-cloud-upload"></i> Submit to Gateway';
+                btnSubmitFhirToAbdm.title = 'Force gateway push for this OPD consult';
             } else {
                 btnSubmitFhirToAbdm.className = defaultSubmitBtnClass;
                 btnSubmitFhirToAbdm.innerHTML = defaultSubmitBtnHtml;
@@ -2212,11 +2224,17 @@
         }
 
         if (_fhirOpdId <= 0) { alert('No FHIR bundle loaded.'); return; }
-        if (!confirm('Submit FHIR bundle for OPD #' + _fhirOpdId + ' to ABDM bridge?')) return;
+        var submitConfirm = _fhirSubmitMode === 'opd_gateway'
+            ? 'Submit OPD #' + _fhirOpdId + ' to ABDM gateway now?\nThis will force push_to_gateway=1.'
+            : 'Submit FHIR bundle for OPD #' + _fhirOpdId + ' to ABDM bridge?';
+        if (!confirm(submitConfirm)) return;
         var origHtml = btn.innerHTML;
         btn.disabled = true;
         btn.textContent = 'Submitting…';
         var body = new URLSearchParams({ opd_id: _fhirOpdId, opd_session_id: _fhirSessionId });
+        if (_fhirSubmitMode === 'opd_gateway') {
+            body.append('push_to_gateway', '1');
+        }
         body.append(csrfName, csrfHash);
         var submitTimeoutMs = 150000;
         var submitController = new AbortController();
@@ -2284,6 +2302,19 @@
             var opdId = parseInt(btn.getAttribute('data-opd-id') || '0', 10);
             if (opdId <= 0) return;
             openFhirModal('<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId, 'FHIR Preview — OPD #' + opdId);
+        });
+    });
+
+    document.querySelectorAll('.btn-opd-consult-submit-gateway').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var opdId = parseInt(btn.getAttribute('data-opd-id') || '0', 10);
+            var abhaId = (btn.getAttribute('data-abha-id') || '').trim();
+            if (opdId <= 0) return;
+            openFhirModal(
+                '<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId,
+                'Gateway Submit — OPD #' + opdId,
+                { submitMode: 'opd_gateway', abhaId: abhaId }
+            );
         });
     });
 
