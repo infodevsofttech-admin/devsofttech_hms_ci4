@@ -983,6 +983,7 @@ class AbdmGateway extends BaseController
         $abhaId = trim((string) $this->request->getPost('abha_id'));
         $abhaAddressPost = trim((string) $this->request->getPost('abha_address'));
         $consentHandle = trim((string) $this->request->getPost('consent_handle'));
+        $pushToGateway = (int) $this->request->getPost('push_to_gateway') === 1;
         $now = Time::now('Asia/Kolkata')->toDateTimeString();
 
         $logBridge = function (string $status, array $responsePayload, string $errorMessage = '', string $eventType = 'abdm.opd.prescription.share') use ($opdId, $patientId, $now): void {
@@ -1189,6 +1190,72 @@ class AbdmGateway extends BaseController
                 'care_context_reference' => $careContextRef,
                 'message' => 'ABHA not available. Record stored locally for later discovery.',
             ]);
+        }
+
+        // M2 contract mode: HMS remains source-of-truth and gateway reads via
+        // discovery + health-information/fetch callbacks. Do not proactively push
+        // to /records/push unless explicitly requested.
+        if (! $pushToGateway) {
+            if ($healthRecordId > 0 && $this->db->tableExists('health_records')) {
+                $this->db->table('health_records')
+                    ->where('id', $healthRecordId)
+                    ->update([
+                        'push_status' => 'local_discovery_ready',
+                        'updated_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
+                    ]);
+            }
+
+            if ($this->db->tableExists('record_links')) {
+                $existingLink = $this->db->table('record_links')
+                    ->where('care_context_reference', $careContextRef)
+                    ->where('abha_id', $abhaAddress !== '' ? $abhaAddress : $abhaNumber)
+                    ->orderBy('id', 'DESC')
+                    ->get(1)
+                    ->getRowArray();
+
+                $linkData = [
+                    'abha_id' => $abhaAddress !== '' ? $abhaAddress : $abhaNumber,
+                    'care_context_reference' => $careContextRef,
+                    'link_status' => 'pending_discovery',
+                    'linked_at' => null,
+                    'updated_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
+                    'response_json' => (string) json_encode([
+                        'mode' => 'm2_hms_source',
+                        'push_to_gateway' => 0,
+                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                ];
+
+                if (! empty($existingLink)) {
+                    $this->db->table('record_links')
+                        ->where('id', (int) $existingLink['id'])
+                        ->update($linkData);
+                } else {
+                    $linkData['created_at'] = Time::now('Asia/Kolkata')->toDateTimeString();
+                    $this->db->table('record_links')->insert($linkData);
+                }
+            }
+
+            $responsePayload = [
+                'ok' => 1,
+                'queue_id' => null,
+                'bridge_record_id' => null,
+                'consent_handle' => $consentHandleResolved,
+                'gateway_consent_id' => $consentExternalId !== '' ? $consentExternalId : null,
+                'status' => 'local_discovery_ready',
+                'care_context_reference' => $careContextRef,
+                'message' => 'M2 mode active: care context registered in HMS. Gateway will discover and fetch consent-scoped FHIR from HMS callbacks.',
+                'warning' => $consentWarning !== '' ? $consentWarning : null,
+                'error' => null,
+            ];
+
+            $logBridge(
+                'success',
+                $responsePayload,
+                $consentWarning !== '' ? $consentWarning : '',
+                'abdm.opd.prescription.share.result'
+            );
+
+            return $this->response->setJSON($responsePayload);
         }
 
         $queueId = null;
