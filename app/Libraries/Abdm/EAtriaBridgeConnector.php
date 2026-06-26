@@ -693,7 +693,74 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             $body[$optional] = (string) $data[$optional];
         }
 
-        return $this->post('/v3/records/push', $body);
+        $result = $this->post('/v3/records/push', $body);
+
+        $httpCode = (int) ($result['http_code'] ?? 0);
+        $authErrorText = strtolower(trim((string) ($result['message'] ?? $result['error_text'] ?? $result['error'] ?? '')));
+        $isAuthFailure = in_array($httpCode, [401, 403], true)
+            && ($authErrorText === ''
+                || str_contains($authErrorText, 'unauthorized')
+                || str_contains($authErrorText, 'invalid authorization token')
+                || str_contains($authErrorText, 'invalid token'));
+
+        // Some hospital keys are scoped to /v1/bridge dispatcher paths.
+        // Fallback to event dispatch when direct /v3/records/push returns auth failure.
+        if (! $isAuthFailure) {
+            return $result;
+        }
+
+        $dispatchPayload = [
+            'event_type' => 'abdm.fhir.share.requested',
+            'payload' => [
+                'hi_type' => $hiType,
+                'record_type' => $recordType,
+                'fhir_bundle' => $body['fhir_bundle'] ?? (object) [],
+                'bundle' => $body['fhir_bundle'] ?? (object) [],
+                'care_context_reference' => $careContextReference,
+                'care_context_display' => $careContextDisplay,
+                'queue_id' => $queueId,
+                'abha_id' => $abhaId,
+                'abha_address' => $abhaAddress,
+                'patient_id' => (string) ($data['patient_id'] ?? ''),
+                'patient_name' => $patientName,
+                'visit_date' => (string) ($data['visit_date'] ?? date('Y-m-d')),
+                'hfr_id' => $this->hfrId,
+                'hospital_id' => $this->bridgeHospitalId,
+            ],
+        ];
+
+        $dispatch = $this->post('/v1/bridge', $dispatchPayload);
+        $dispatchOk = (int) ($dispatch['ok'] ?? 0) === 1;
+        $dispatchNode = is_array($dispatch['dispatch'] ?? null) ? $dispatch['dispatch'] : [];
+        $dispatchHttp = (int) ($dispatchNode['http_code'] ?? $dispatch['http_code'] ?? 0);
+        $dispatchResponse = is_array($dispatchNode['response'] ?? null) ? $dispatchNode['response'] : [];
+        $dispatchErr = trim((string) (
+            $dispatchResponse['message']
+            ?? $dispatchResponse['error_text']
+            ?? $dispatchResponse['error']
+            ?? $dispatch['message']
+            ?? $dispatch['error_text']
+            ?? $dispatch['error']
+            ?? ''
+        ));
+
+        if (! $dispatchOk) {
+            return array_merge($result, [
+                'fallback' => 'v1_bridge_dispatch_failed',
+                'fallback_http_code' => $dispatchHttp,
+                'fallback_error' => $dispatchErr !== '' ? $dispatchErr : 'Bridge dispatcher failed',
+            ]);
+        }
+
+        return [
+            'ok' => (int) ($dispatchResponse['ok'] ?? 1),
+            'http_code' => $dispatchHttp > 0 ? $dispatchHttp : 200,
+            'id' => (int) ($dispatchResponse['id'] ?? $dispatchResponse['record_id'] ?? 0),
+            'queue_id' => (string) ($dispatchResponse['queue_id'] ?? $dispatchResponse['request_id'] ?? $dispatch['request_id'] ?? $queueId),
+            'message' => (string) ($dispatchResponse['message'] ?? 'Record dispatched via v1 bridge'),
+            'dispatch' => $dispatch,
+            'fallback' => 'v1_bridge_dispatch',
+        ];
     }
 
     // -------------------------------------------------------------------------
