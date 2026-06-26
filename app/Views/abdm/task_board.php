@@ -2179,12 +2179,32 @@
         btn.textContent = 'Submitting…';
         var body = new URLSearchParams({ opd_id: _fhirOpdId, opd_session_id: _fhirSessionId });
         body.append(csrfName, csrfHash);
+        var submitTimeoutMs = 45000;
+        var submitController = new AbortController();
+        var submitTimer = window.setTimeout(function () { submitController.abort(); }, submitTimeoutMs);
         fetch('<?= base_url('Opd_prescription/fhir_bundle_submit') ?>', {
             method: 'POST',
             headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: body.toString()
+            body: body.toString(),
+            signal: submitController.signal
         })
-        .then(function (r) { return r.json(); })
+        .then(function (r) {
+            window.clearTimeout(submitTimer);
+            return r.text().then(function (raw) {
+                var res = {};
+                try {
+                    res = raw ? JSON.parse(raw) : {};
+                } catch (e) {
+                    throw new Error('Invalid server response (HTTP ' + r.status + ')');
+                }
+                if (!r.ok && typeof res.ok === 'undefined') {
+                    res.ok = 0;
+                    res.http_code = r.status;
+                    res.message = res.message || ('HTTP ' + r.status);
+                }
+                return res;
+            });
+        })
         .then(function (res) {
             if (res.csrfName && res.csrfHash) { csrfName = res.csrfName; csrfHash = res.csrfHash; }
             if (res.ok == 1) {
@@ -2199,9 +2219,13 @@
             }
         })
         .catch(function (e) {
+            window.clearTimeout(submitTimer);
             btn.disabled = false;
             btn.innerHTML = origHtml;
-            alert('❌ Error: ' + e.message);
+            var msg = (e && e.name === 'AbortError')
+                ? 'Request timed out before server response. Please retry.'
+                : (e && e.message ? e.message : 'Request failed');
+            alert('❌ Error: ' + msg);
         });
     });
 
