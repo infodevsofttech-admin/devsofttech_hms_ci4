@@ -1027,15 +1027,24 @@ class AbdmGateway extends BaseController
         $hasAbha = $abhaId !== '' || $abhaAddressPost !== '';
         $consent = null;
         $consentWarning = '';
+        $consentEventType = 'abdm.opd.prescription.share.consent_missing';
+        $consentLogStatus = 'warning';
         if ($hasAbha) {
             $consent = $this->getActiveConsentRecord($patientId, $abhaId !== '' ? $abhaId : $abhaAddressPost, $consentHandle);
             if ($consent === null) {
-                $consentWarning = 'No active consent found. Proceeding with care-context push only.';
+                if ($pushToGateway) {
+                    $consentWarning = 'No active consent found. Proceeding with care-context push only.';
+                } else {
+                    $consentWarning = 'No active consent found now; this is expected in M2 local mode until ABDM consent callback arrives.';
+                    $consentEventType = 'abdm.opd.prescription.share.consent_pending';
+                    $consentLogStatus = 'success';
+                }
+
                 $logBridge(
-                    'warning',
+                    $consentLogStatus,
                     ['ok' => 1, 'warning' => $consentWarning],
                     $consentWarning,
-                    'abdm.opd.prescription.share.consent_missing'
+                    $consentEventType
                 );
             }
         }
