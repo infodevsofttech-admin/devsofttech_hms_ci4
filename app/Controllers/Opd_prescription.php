@@ -4651,6 +4651,7 @@ class Opd_prescription extends BaseController
         $opdId     = (int) $this->request->getPost('opd_id');
         $sessionId = (int) $this->request->getPost('opd_session_id');
         $pushToGateway = (int) $this->request->getPost('push_to_gateway') === 1;
+        $pushToGateway = (int) $this->request->getPost('push_to_gateway') === 1;
 
         return $this->response->setJSON($this->regenerateFhirBundleInternal($opdId, $sessionId));
     }
