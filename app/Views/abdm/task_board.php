@@ -56,7 +56,7 @@
             <div class="table-responsive">
                 <table class="table table-sm table-striped mb-0" id="taskTable">
                     <thead class="table-light">
-                        <tr data-push-status="<?= esc((string) ($r['push_status'] ?? '')) ?>">
+                        <tr>
                             <th>ID</th>
                             <th>Task</th>
                             <th>Patient</th>
@@ -284,12 +284,14 @@
                             $linkStatus = trim((string) ($r['link_status'] ?? ''));
                             $bridgeRecordId = trim((string) ($r['bridge_record_id'] ?? ''));
                             $hasFhir = (int) ($r['has_fhir'] ?? 0) === 1;
+                            $pushStatusRaw = strtolower(trim((string) ($r['push_status'] ?? '')));
+                            $canSubmitGateway = $hasFhir && ! in_array($pushStatusRaw, ['queued', 'linked'], true);
                             $statusBadgeClass = 'badge bg-' . $statusTone;
                             if ($statusTone === 'warning') {
                                 $statusBadgeClass .= ' text-dark';
                             }
                         ?>
-                        <tr>
+                        <tr data-push-status="<?= esc($pushStatusRaw) ?>">
                             <td>#<?= (int) ($r['opd_id'] ?? 0) ?></td>
                             <td><?= esc((string) ($r['P_name'] ?? '')) ?></td>
                             <td><span class="text-primary small"><?= esc((string) ($r['abha_id'] ?? '')) ?></span></td>
@@ -318,13 +320,13 @@
                             </td>
                             <td>
                                 <button type="button" class="btn btn-sm btn-outline-primary btn-opd-consult-fhir" data-opd-id="<?= (int) ($r['opd_id'] ?? 0) ?>">Preview FHIR</button>
-                                <?php if ((string) ($r['push_status'] ?? '') === 'failed'): ?>
+                                <?php if ($canSubmitGateway): ?>
                                     <button
                                         type="button"
                                         class="btn btn-sm btn-outline-warning btn-opd-consult-submit-gateway ms-1"
                                         data-opd-id="<?= (int) ($r['opd_id'] ?? 0) ?>"
                                         data-abha-id="<?= esc((string) ($r['abha_id'] ?? '')) ?>"
-                                    >Submit to Gateway</button>
+                                    >Submit to ABDM</button>
                                 <?php endif; ?>
                             </td>
                         </tr>
@@ -2058,11 +2060,11 @@
                 btnSubmitFhirToAbdm.className = defaultSubmitBtnClass;
                 btnSubmitFhirToAbdm.innerHTML = defaultSubmitBtnHtml;
                 btnSubmitFhirToAbdm.title = defaultSubmitBtnTitle;
-                if (['linked', 'queued', 'local_discovery_ready'].indexOf(rowPushStatus) !== -1) {
+                if (['linked', 'queued'].indexOf(rowPushStatus) !== -1) {
                     btnSubmitFhirToAbdm.disabled = true;
                     btnSubmitFhirToAbdm.className = 'btn btn-sm btn-outline-secondary';
                     btnSubmitFhirToAbdm.innerHTML = '<i class="bi bi-check2-circle"></i> Already Submitted';
-                    btnSubmitFhirToAbdm.title = 'Record is already queued/linked/discovery-ready. Use retry only on failed rows.';
+                    btnSubmitFhirToAbdm.title = 'Record is already queued or linked.';
                 }
             }
         }
