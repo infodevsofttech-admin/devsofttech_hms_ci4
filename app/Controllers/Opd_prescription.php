@@ -5386,40 +5386,21 @@ class Opd_prescription extends BaseController
                 'http_errors' => false,
             ]);
 
-            $response = null;
-            $attemptError = null;
-            for ($attempt = 1; $attempt <= 2; $attempt++) {
-                try {
-                    $response = $client->post($gatewayUrl, [
-                        'headers' => array_filter([
-                            'X-Requested-With' => 'XMLHttpRequest',
-                            'Cookie' => $cookieHeader !== '' ? $cookieHeader : null,
-                        ]),
-                        'form_params' => [
-                            'opd_id' => $opdId,
-                            'opd_session_id' => $sessionId,
-                            'patient_id' => $patientId,
-                            'abha_id' => $abhaId,
-                            'consent_handle' => (string) ($this->request->getPost('consent_handle') ?? ''),
-                            'push_to_gateway' => $pushToGateway ? 1 : 0,
-                            csrf_token() => csrf_hash(),
-                        ],
-                    ]);
-                    $attemptError = null;
-                    break;
-                } catch (\Throwable $attemptException) {
-                    $attemptError = $attemptException;
-                    if ($attempt < 2 && $this->isTransientFhirGatewayHandoffError($attemptException)) {
-                        log_message('warning', '[fhir_bundle_submit] transient handoff error on attempt ' . $attempt . ' for OPD#' . $opdId . ': ' . $attemptException->getMessage());
-                        continue;
-                    }
-                    throw $attemptException;
-                }
-            }
-
-            if ($response === null && $attemptError !== null) {
-                throw $attemptError;
-            }
+            $response = $client->post($gatewayUrl, [
+                'headers' => array_filter([
+                    'X-Requested-With' => 'XMLHttpRequest',
+                    'Cookie' => $cookieHeader !== '' ? $cookieHeader : null,
+                ]),
+                'form_params' => [
+                    'opd_id' => $opdId,
+                    'opd_session_id' => $sessionId,
+                    'patient_id' => $patientId,
+                    'abha_id' => $abhaId,
+                    'consent_handle' => (string) ($this->request->getPost('consent_handle') ?? ''),
+                    'push_to_gateway' => $pushToGateway ? 1 : 0,
+                    csrf_token() => csrf_hash(),
+                ],
+            ]);
 
             $httpCode = (int) $response->getStatusCode();
             $result = json_decode((string) $response->getBody(), true);
@@ -5449,6 +5430,9 @@ class Opd_prescription extends BaseController
 
             if ($isTimeout) {
                 $recentState = $this->resolveRecentFhirGatewaySubmissionState($opdId, $sessionId);
+                if ($recentState === null) {
+                    $recentState = $this->resolveRecentFhirGatewayShareResultFromLogs($opdId);
+                }
                 if ($recentState !== null) {
                     $queueId = (string) ($recentState['queue_id'] ?? '');
                     $bridgeId = (int) ($recentState['bridge_id'] ?? 0);
@@ -5606,6 +5590,71 @@ class Opd_prescription extends BaseController
         }
 
         return $findCandidate(null);
+    }
+
+    private function resolveRecentFhirGatewayShareResultFromLogs(int $opdId): ?array
+    {
+        if ($opdId <= 0 || ! $this->db->tableExists('abdm_api_logs')) {
+            return null;
+        }
+
+        $fields = $this->db->getFieldNames('abdm_api_logs') ?? [];
+        foreach (['response_json', 'event_type', 'entity_id', 'entity_type', 'status'] as $required) {
+            if (! in_array($required, $fields, true)) {
+                return null;
+            }
+        }
+
+        $builder = $this->db->table('abdm_api_logs')
+            ->select('response_json, status')
+            ->where('event_type', 'abdm.opd.prescription.share.result')
+            ->where('entity_type', 'opd')
+            ->where('entity_id', (string) $opdId)
+            ->orderBy('id', 'DESC');
+
+        if (in_array('created_at', $fields, true)) {
+            $cutoff = date('Y-m-d H:i:s', strtotime('-5 minutes'));
+            $builder->where('created_at >=', $cutoff);
+        }
+
+        $rows = $builder->get(8)->getResultArray();
+        if (empty($rows)) {
+            return null;
+        }
+
+        foreach ($rows as $row) {
+            $payload = json_decode((string) ($row['response_json'] ?? ''), true);
+            if (! is_array($payload)) {
+                continue;
+            }
+
+            $ok = (int) ($payload['ok'] ?? 0);
+            if ($ok !== 1) {
+                continue;
+            }
+
+            $status = strtolower(trim((string) ($payload['status'] ?? $row['status'] ?? 'queued')));
+            $queueId = trim((string) ($payload['queue_id'] ?? ''));
+            $bridgeId = (int) ($payload['bridge_record_id'] ?? $payload['bridge_id'] ?? 0);
+            $isPushMode = (int) ($payload['push_to_gateway'] ?? 0) === 1;
+
+            $isUsable = $isPushMode
+                || $queueId !== ''
+                || $bridgeId > 0
+                || in_array($status, ['queued', 'pushed', 'linked', 'in_progress'], true);
+
+            if (! $isUsable) {
+                continue;
+            }
+
+            return [
+                'status' => $status !== '' ? $status : 'queued',
+                'queue_id' => $queueId,
+                'bridge_id' => $bridgeId,
+            ];
+        }
+
+        return null;
     }
 
     public function fhir_complaint_recode()

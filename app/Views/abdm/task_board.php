@@ -2234,17 +2234,13 @@
         }
 
         if (_fhirOpdId <= 0) { alert('No FHIR bundle loaded.'); return; }
-        var submitConfirm = _fhirSubmitMode === 'opd_gateway'
-            ? 'Submit OPD #' + _fhirOpdId + ' to ABDM gateway now?\nThis will force push_to_gateway=1.'
-            : 'Submit FHIR bundle for OPD #' + _fhirOpdId + ' to ABDM bridge?';
+        var submitConfirm = 'Submit OPD #' + _fhirOpdId + ' to ABDM gateway now?\nThis will force push_to_gateway=1.';
         if (!confirm(submitConfirm)) return;
         var origHtml = btn.innerHTML;
         btn.disabled = true;
         btn.textContent = 'Submitting…';
         var body = new URLSearchParams({ opd_id: _fhirOpdId, opd_session_id: _fhirSessionId });
-        if (_fhirSubmitMode === 'opd_gateway') {
-            body.append('push_to_gateway', '1');
-        }
+        body.append('push_to_gateway', '1');
         body.append(csrfName, csrfHash);
         var submitTimeoutMs = 150000;
         var submitController = new AbortController();
