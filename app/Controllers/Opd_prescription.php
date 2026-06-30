@@ -5484,7 +5484,8 @@ class Opd_prescription extends BaseController
 
     private function resolveFhirGatewayHandoffTimeoutSec(): int
     {
-        $timeout = 120;
+        // Keep below PHP max_execution_time to avoid shutdown fatals that return HTML instead of JSON.
+        $timeout = 60;
 
         if ($this->db->tableExists('hospital_setting')) {
             $row = $this->db->table('hospital_setting')
@@ -5500,11 +5501,11 @@ class Opd_prescription extends BaseController
             }
         }
 
-        if ($timeout < 30) {
-            $timeout = 30;
+        if ($timeout < 15) {
+            $timeout = 15;
         }
-        if ($timeout > 240) {
-            $timeout = 240;
+        if ($timeout > 90) {
+            $timeout = 90;
         }
 
         return $timeout;
