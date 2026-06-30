@@ -983,11 +983,10 @@ class AbdmGateway extends BaseController
         $abhaId = trim((string) $this->request->getPost('abha_id'));
         $abhaAddressPost = trim((string) $this->request->getPost('abha_address'));
         $consentHandle = trim((string) $this->request->getPost('consent_handle'));
-        $pushToGatewayRequested = (int) $this->request->getPost('push_to_gateway') === 1;
-        $pushToGateway = $pushToGatewayRequested || $this->isGatewayPushForcedByDeployment();
+        $pushToGateway = (int) $this->request->getPost('push_to_gateway') === 1;
         $now = Time::now('Asia/Kolkata')->toDateTimeString();
 
-        $logBridge = function (string $status, array $responsePayload, string $errorMessage = '', string $eventType = 'abdm.opd.prescription.share') use ($opdId, $patientId, $now, $pushToGatewayRequested, $pushToGateway): void {
+        $logBridge = function (string $status, array $responsePayload, string $errorMessage = '', string $eventType = 'abdm.opd.prescription.share') use ($opdId, $patientId, $now, $pushToGateway): void {
             if (! $this->db->tableExists('abdm_api_logs')) {
                 return;
             }
@@ -1002,7 +1001,6 @@ class AbdmGateway extends BaseController
                 'request_json' => (string) json_encode([
                     'opd_id' => $opdId,
                     'patient_id' => $patientId,
-                    'push_to_gateway_requested' => $pushToGatewayRequested ? 1 : 0,
                     'push_to_gateway' => $pushToGateway ? 1 : 0,
                 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                 'response_code' => 200,
@@ -2966,58 +2964,11 @@ class AbdmGateway extends BaseController
 
         try {
             $result = $this->connector->linkAndShare($bridgeId);
-
-            if ($this->shouldRetryBridgeLinkAndShareForTokenHipMismatch($result)
-                && method_exists($this->connector, 'linkAndShareWithFreshToken')) {
-                /** @var callable $retryCallable */
-                $retryCallable = [$this->connector, 'linkAndShareWithFreshToken'];
-                $retry = $retryCallable($bridgeId);
-                if (is_array($retry)) {
-                    $retry['retry_mode'] = 'fresh_link_token';
-                    if ((int) ($retry['ok'] ?? 0) === 1) {
-                        return $this->response->setJSON($retry);
-                    }
-                    // Prefer clearer guidance if retry still fails.
-                    if (! isset($retry['message']) && isset($retry['error_text'])) {
-                        $retry['message'] = (string) $retry['error_text'];
-                    }
-                    $result = $retry;
-                }
-            }
         } catch (\Throwable $e) {
             // Backward compatibility with older connectors.
             $result = $this->connector->triggerShare($bridgeId);
         }
         return $this->response->setJSON($result);
-    }
-
-    /**
-     * @param array<string,mixed> $result
-     */
-    private function shouldRetryBridgeLinkAndShareForTokenHipMismatch(array $result): bool
-    {
-        $httpCode = (int) ($result['http_code'] ?? 0);
-        $msg = strtolower(trim((string) (
-            $result['message']
-            ?? $result['error_text']
-            ?? $result['error']
-            ?? ''
-        )));
-
-        if ($httpCode !== 409 || $msg === '') {
-            return false;
-        }
-
-        $isLinkTokenIssue = str_contains($msg, 'link token')
-            || str_contains($msg, 'link-token')
-            || str_contains($msg, 'link_and_share_link_token')
-            || str_contains($msg, 'stored token');
-
-        $isHipMismatch = str_contains($msg, 'hip id')
-            || str_contains($msg, 'hfr_id')
-            || str_contains($msg, 'belongs to hip');
-
-        return $isLinkTokenIssue && $isHipMismatch;
     }
 
     // =========================================================================
@@ -3709,24 +3660,6 @@ class AbdmGateway extends BaseController
         }
 
         return '';
-    }
-
-    private function isGatewayPushForcedByDeployment(): bool
-    {
-        foreach (['ABDM_FORCE_GATEWAY_PUSH', 'ABDM_HMS_BEHIND_NAT', 'ABDM_GATEWAY_HOSTED_DISCOVERY'] as $key) {
-            $raw = strtolower(trim((string) $this->readRuntimeSetting($key)));
-            if ($raw === '') {
-                continue;
-            }
-            if (in_array($raw, ['1', 'true', 'yes', 'on', 'y'], true)) {
-                return true;
-            }
-            if (in_array($raw, ['0', 'false', 'no', 'off', 'n'], true)) {
-                return false;
-            }
-        }
-
-        return false;
     }
 
     private function isStaleConsentTransition(string $currentStatus, string $incomingStatus): bool

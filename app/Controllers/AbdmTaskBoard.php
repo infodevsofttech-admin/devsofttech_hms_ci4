@@ -640,7 +640,7 @@ class AbdmTaskBoard extends BaseController
                 $statusTone = 'success';
                 $statusNote = 'Care context link confirmed by callback.';
             } elseif ($linkStatus === 'pending_discovery' && $statusLabel === 'Discovery Ready') {
-                $statusNote = 'Waiting for discovery/fetch workflow completion (callback or bridge sync).';
+                $statusNote = 'Waiting for ABDM discovery and consent fetch callbacks.';
             } elseif ($linkStatus === 'failed') {
                 $statusLabel = 'Link Failed';
                 $statusTone = 'danger';
