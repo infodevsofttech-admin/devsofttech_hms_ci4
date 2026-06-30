@@ -356,6 +356,9 @@ class FhirR4Builder
 
             $snomedCode = trim((string) ($medication['snomed_code'] ?? ''));
             $atcCode    = strtoupper(trim((string) ($medication['atc_code'] ?? '')));
+            if ($snomedCode === '' && $atcCode === '') {
+                $atcCode = $this->inferAtcCodeFromMedicationText($displayText, $drugName, $genericName);
+            }
             if ($snomedCode !== '') {
                 $medicationCodeableConcept['coding'] = [[
                     'system'  => 'http://snomed.info/sct',
@@ -370,7 +373,36 @@ class FhirR4Builder
                 ]];
             }
 
-            $dosageInstruction = ['text' => (string) ($medication['dosage'] ?? '')];
+            $dosageText = trim((string) ($medication['dosage'] ?? ''));
+            $dosageInstruction = [];
+            if ($dosageText !== '') {
+                $dosageInstruction['text'] = $dosageText;
+            }
+
+            $repeat = [];
+            $frequency = $this->resolveFrequencyPerDayFromText((string) ($medication['frequency_text'] ?? ''));
+            if ($frequency === null && $dosageText !== '') {
+                $frequency = $this->resolveFrequencyPerDayFromText($dosageText);
+            }
+            if ($frequency !== null) {
+                $repeat['frequency'] = $frequency;
+                $repeat['period'] = 1;
+                $repeat['periodUnit'] = 'd';
+            }
+
+            $durationDays = (int) ($medication['no_of_days'] ?? 0);
+            if ($durationDays <= 0 && $dosageText !== '') {
+                $durationDays = $this->extractDaysFromDosageText($dosageText);
+            }
+            if ($durationDays > 0) {
+                $repeat['duration'] = $durationDays;
+                $repeat['durationUnit'] = 'd';
+            }
+
+            if (! empty($repeat)) {
+                $dosageInstruction['timing'] = ['repeat' => $repeat];
+            }
+
             $routeText = trim((string) ($medication['route_text'] ?? ''));
             if ($routeText !== '') {
                 $routeEntry = ['text' => $routeText];
@@ -411,7 +443,7 @@ class FhirR4Builder
                 'medicationCodeableConcept' => $medicationCodeableConcept,
                 'subject'                   => ['reference' => $patientRef, 'display' => 'Patient'],
                 'encounter'                 => ['reference' => $encounterRef],
-                'authoredOn'                => $issuedAt,
+                'authoredOn'                => $this->normalizeIsoDateTime((string) ($medication['authored_on'] ?? ''), $issuedAt),
                 'dosageInstruction'         => [$dosageInstruction],
             ];
             if ($practitionerRef !== '') {
@@ -1462,6 +1494,19 @@ class FhirR4Builder
             'name'         => [$nameEntry],
         ];
 
+        $localPatientId = trim((string) ($patient['id'] ?? ''));
+        if ($localPatientId !== '') {
+            $resource['identifier'] = [[
+                'type'   => ['coding' => [[
+                    'system'  => 'http://terminology.hl7.org/CodeSystem/v2-0203',
+                    'code'    => 'MR',
+                    'display' => 'Medical record number',
+                ]]],
+                'system' => 'https://hms.local/patient-id',
+                'value'  => $localPatientId,
+            ]];
+        }
+
         $gender = $this->normalizeAdministrativeGender($patient['gender'] ?? null);
         if ($gender !== '') {
             $resource['gender'] = $gender;
@@ -1471,11 +1516,44 @@ class FhirR4Builder
             $resource['birthDate'] = (string) $patient['birthDate'];
         }
 
-        $abhaAddress = trim((string) ($patient['abhaAddress'] ?? ''));
-        if ($abhaAddress !== '') {
+        $abhaAddress = trim((string) ($patient['abhaAddress'] ?? ($patient['abha_address'] ?? '')));
+        $abhaIdRaw = trim((string) ($patient['abhaId'] ?? ($patient['abha_id'] ?? '')));
+        $abhaIdDigits = preg_replace('/\D/', '', $abhaIdRaw);
+        $abhaId = is_string($abhaIdDigits) && strlen($abhaIdDigits) === 14 ? $abhaIdDigits : '';
+
+        if ($abhaAddress !== '' || $abhaId !== '') {
             $resource['meta']       = ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Patient']];
             // NI = National unique individual identifier (ABHA number / address)
-            $resource['identifier'] = [[
+            if (! isset($resource['identifier']) || ! is_array($resource['identifier'])) {
+                $resource['identifier'] = [];
+            }
+
+            if ($abhaId !== '') {
+                $resource['identifier'][] = [
+                    'type'   => ['coding' => [[
+                        'system'  => 'http://terminology.hl7.org/CodeSystem/v2-0203',
+                        'code'    => 'NI',
+                        'display' => 'National unique individual identifier',
+                    ]]],
+                    'system' => 'https://healthid.ndhm.gov.in',
+                    'value'  => $abhaId,
+                ];
+            }
+
+            if ($abhaAddress !== '' && strcasecmp($abhaAddress, $abhaId) !== 0) {
+                $resource['identifier'][] = [
+                    'type'   => ['coding' => [[
+                        'system'  => 'http://terminology.hl7.org/CodeSystem/v2-0203',
+                        'code'    => 'NI',
+                        'display' => 'National unique individual identifier',
+                    ]]],
+                    'system' => 'https://healthid.ndhm.gov.in',
+                    'value'  => $abhaAddress,
+                ];
+            }
+
+            if (empty($resource['identifier'])) {
+                $resource['identifier'][] = [
                 'type'   => ['coding' => [[
                     'system'  => 'http://terminology.hl7.org/CodeSystem/v2-0203',
                     'code'    => 'NI',
@@ -1483,7 +1561,8 @@ class FhirR4Builder
                 ]]],
                 'system' => 'https://healthid.ndhm.gov.in',
                 'value'  => $abhaAddress,
-            ]];
+                ];
+            }
         }
 
         // Phone / mobile telecom
@@ -1570,6 +1649,96 @@ class FhirR4Builder
         ];
         $key = strtolower(trim($routeText));
         return $map[$key] ?? '';
+    }
+
+    /**
+     * Best-effort ATC inference from medicine text when master coding is missing.
+     */
+    private function inferAtcCodeFromMedicationText(string ...$texts): string
+    {
+        $haystack = strtolower(trim(implode(' ', $texts)));
+        if ($haystack === '') {
+            return '';
+        }
+
+        $map = [
+            // Common OPD examples and analgesics
+            'paracetamol' => 'N02BE01',
+            'acetaminophen' => 'N02BE01',
+            'aspirin' => 'B01AC06',
+            'acetylsalicylic' => 'B01AC06',
+            'disprin' => 'B01AC06',
+            // Acid suppression
+            'ranitidine' => 'A02BA02',
+            'aciloc' => 'A02BA02',
+            'pantoprazole' => 'A02BC02',
+            'omeprazole' => 'A02BC01',
+            // Frequent antibiotics
+            'azithromycin' => 'J01FA10',
+            'amoxicillin' => 'J01CA04',
+            'cefixime' => 'J01DD08',
+            // Antihistamines
+            'cetirizine' => 'R06AE07',
+            'levocetirizine' => 'R06AE09',
+        ];
+
+        foreach ($map as $needle => $code) {
+            if (str_contains($haystack, $needle)) {
+                return $code;
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Infer per-day dosage frequency from common OPD text labels.
+     */
+    private function resolveFrequencyPerDayFromText(string $text): ?int
+    {
+        $value = strtolower(trim($text));
+        if ($value === '') {
+            return null;
+        }
+
+        if (preg_match('/\b(qid|q\.i\.d|four\s*times?)\b/', $value) === 1) {
+            return 4;
+        }
+        if (preg_match('/\b(tds|tid|t\.d\.s|t\.i\.d|three\s*times?)\b/', $value) === 1) {
+            return 3;
+        }
+        if (preg_match('/\b(bd|bid|b\.d|b\.i\.d|two\s*times?|twice)\b/', $value) === 1) {
+            return 2;
+        }
+        if (preg_match('/\b(od|qd|o\.d|q\.d|once\s*daily|daily|once)\b/', $value) === 1) {
+            return 1;
+        }
+
+        if (preg_match('/\b([1-9])\s*(x|times?)\b/', $value, $m) === 1) {
+            return (int) ($m[1] ?? 0) ?: null;
+        }
+
+        if (preg_match('/\b([1-9])\s*\/\s*day\b/', $value, $m) === 1) {
+            return (int) ($m[1] ?? 0) ?: null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract course duration in days from dosage text (e.g. "for 5 days").
+     */
+    private function extractDaysFromDosageText(string $text): int
+    {
+        if (preg_match('/\bfor\s+(\d{1,3})\s*day(?:s)?\b/i', $text, $m) === 1) {
+            return max(0, (int) ($m[1] ?? 0));
+        }
+
+        if (preg_match('/\b(\d{1,3})\s*day(?:s)?\b/i', $text, $m) === 1) {
+            return max(0, (int) ($m[1] ?? 0));
+        }
+
+        return 0;
     }
 
     // =========================================================================
@@ -2087,6 +2256,10 @@ class FhirR4Builder
             $mc    = ['text' => $drugName];
             $snomedCode = is_array($med) ? trim((string) ($med['snomed_code'] ?? '')) : '';
             $atcCode    = is_array($med) ? strtoupper(trim((string) ($med['atc_code'] ?? ''))) : '';
+            if ($snomedCode === '' && $atcCode === '') {
+                $generic = is_array($med) ? trim((string) ($med['generic_name'] ?? '')) : '';
+                $atcCode = $this->inferAtcCodeFromMedicationText($drugName, $generic);
+            }
             if ($snomedCode !== '') {
                 $mc['coding'] = [['system' => 'http://snomed.info/sct', 'code' => $snomedCode, 'display' => $drugName]];
             } elseif ($atcCode !== '') {

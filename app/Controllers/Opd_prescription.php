@@ -3,6 +3,7 @@
 namespace App\Controllers;
 
 use App\Controllers\BaseController;
+use App\Libraries\Abdm\AbdmConnectorFactory;
 use App\Libraries\AbdmWorkTaskService;
 use App\Libraries\BridgeSyncService;
 use App\Libraries\CsnotkTerminologyService;
@@ -4723,8 +4724,7 @@ class Opd_prescription extends BaseController
 
         try {
             // Rebuild bundle using current builder
-            $abhaField   = $this->resolvePatientAbhaField();
-            $abhaAddress = $abhaField !== null ? trim((string) ($patientRow[$abhaField] ?? '')) : '';
+            $abhaIdentity = $this->resolvePatientAbhaIdentifiersForFhir($patientRow);
 
             $patFirstName = $this->sanitizePersonNamePart((string) ($patientRow['p_fname'] ?? ''));
             $patLastName  = $this->sanitizePersonNamePart((string) ($patientRow['p_lname'] ?? ''));
@@ -4744,7 +4744,8 @@ class Opd_prescription extends BaseController
                 'family_name' => $patLastName,
                 'gender'      => $this->normalizeGender((string) ($patientRow['gender'] ?? '')),
                 'birthDate'   => ! empty($patientRow['dob']) ? date('Y-m-d', strtotime((string) $patientRow['dob'])) : '',
-                'abhaAddress' => $abhaAddress,
+                'abhaAddress' => $abhaIdentity['address'],
+                'abhaId'      => $abhaIdentity['id'],
                 'phone'       => $patPhone,
             ];
 
@@ -4860,6 +4861,56 @@ class Opd_prescription extends BaseController
 
         // AJAX callers (modal preview) get JSON directly
         if ($this->request->isAJAX()) {
+            $entryList = is_array($bundle['entry'] ?? null) ? $bundle['entry'] : [];
+            $firstEntryResourceType = (string) ($entryList[0]['resource']['resourceType'] ?? '');
+            $compositionFirst = $firstEntryResourceType === 'Composition';
+            $patientHasIdentifier = false;
+            $structuredMedicationRequests = 0;
+            $totalMedicationRequests = 0;
+
+            foreach ($entryList as $entry) {
+                $resource = is_array($entry['resource'] ?? null) ? $entry['resource'] : [];
+                $rt = (string) ($resource['resourceType'] ?? '');
+
+                if ($rt === 'Patient') {
+                    $identifiers = is_array($resource['identifier'] ?? null) ? $resource['identifier'] : [];
+                    $patientHasIdentifier = ! empty($identifiers);
+                }
+
+                if ($rt === 'MedicationRequest') {
+                    $totalMedicationRequests++;
+                    $coding = (array) ($resource['medicationCodeableConcept']['coding'] ?? []);
+                    if (! empty($coding)) {
+                        $structuredMedicationRequests++;
+                    }
+                }
+            }
+
+            $identityDebug = [
+                'patient_id' => 0,
+                'local_identifier_system' => 'https://hms.local/patient-id',
+                'local_identifier_value' => '',
+                'abha_id' => '',
+                'abha_address' => '',
+                'has_abha_id' => false,
+                'has_abha_address' => false,
+            ];
+
+            if ($this->db->tableExists('opd_master')) {
+                $opdRow = $this->db->table('opd_master')->select('p_id')->where('opd_id', (int) $opdId)->get(1)->getRowArray() ?? [];
+                $patientId = (int) ($opdRow['p_id'] ?? 0);
+                if ($patientId > 0 && $this->db->tableExists('patient_master')) {
+                    $patientRow = $this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray() ?? [];
+                    $abhaIdentity = $this->resolvePatientAbhaIdentifiersForFhir($patientRow);
+                    $identityDebug['patient_id'] = $patientId;
+                    $identityDebug['local_identifier_value'] = (string) $patientId;
+                    $identityDebug['abha_id'] = (string) ($abhaIdentity['id'] ?? '');
+                    $identityDebug['abha_address'] = (string) ($abhaIdentity['address'] ?? '');
+                    $identityDebug['has_abha_id'] = trim((string) ($abhaIdentity['id'] ?? '')) !== '';
+                    $identityDebug['has_abha_address'] = trim((string) ($abhaIdentity['address'] ?? '')) !== '';
+                }
+            }
+
             // Fetch live complaint and diagnosis terms from current prescription row
             $liveComplaints = [];
             $liveDiagnoses  = [];
@@ -4904,6 +4955,13 @@ class Opd_prescription extends BaseController
                 'bundle_type'     => $bundleType,
                 'opd_id'          => (int) $opdId,
                 'opd_session_id'  => (int) $sessionId,
+                'bundle_checks'   => [
+                    'composition_first' => $compositionFirst,
+                    'patient_has_identifier' => $patientHasIdentifier,
+                    'medicationrequest_total' => $totalMedicationRequests,
+                    'medicationrequest_structured' => $structuredMedicationRequests,
+                ],
+                'identity_debug'  => $identityDebug,
                 'live_complaints' => $liveComplaints,
                 'live_diagnoses'  => $liveDiagnoses,
             ]);
@@ -5088,10 +5146,13 @@ class Opd_prescription extends BaseController
             . '<div class="check-item pending"><i class="bi bi-circle text-muted"></i><span>Bundle type is "document"</span></div>'
             . '<div class="check-item pending"><i class="bi bi-circle text-muted"></i><span>First entry is Composition</span></div>'
             . '<div class="check-item pending"><i class="bi bi-circle text-muted"></i><span>Patient resource present</span></div>'
+            . '<div class="check-item pending"><i class="bi bi-circle text-muted"></i><span>Patient has at least one identifier</span></div>'
             . '<div class="check-item pending"><i class="bi bi-circle text-muted"></i><span>At least one clinical resource</span></div>'
+            . '<div class="check-item pending"><i class="bi bi-circle text-muted"></i><span>MedicationRequest entries are coded (if present)</span></div>'
             . '<div class="check-item pending"><i class="bi bi-circle text-muted"></i><span>Visit date valid</span></div>'
             . '<div class="check-item pending" id="chkBridge"><i class="bi bi-circle text-muted"></i><span>Bridge connection reachable</span></div>'
             . '</div>'
+            . '<div id="strictIssues" class="small mt-2"></div>'
             . '<button class="btn btn-primary w-100 mt-3" id="btnVerify">'
             . '<i class="bi bi-shield-check me-1"></i> Verify Data'
             . '</button>'
@@ -5138,6 +5199,8 @@ class Opd_prescription extends BaseController
             . '  const btn=this;'
             . '  btn.disabled=true;btn.innerHTML=\'<span class="spinner-border spinner-border-sm me-1"></span>Verifying\u2026\';'
             . '  const checks=document.querySelectorAll("#checkList .check-item");'
+            . '  const strictIssuesEl=document.getElementById("strictIssues");'
+            . '  strictIssuesEl.innerHTML="";'
             . '  function setCheck(i,pass,msg){'
             . '    checks[i].className="check-item "+(pass?"pass":"fail");'
             . '    checks[i].innerHTML=(pass?\'<i class="bi bi-check-circle-fill text-success"></i>\':\'<i class="bi bi-x-circle-fill text-danger"></i>\')+\'<span>\'+msg+\'</span>\';'
@@ -5160,16 +5223,27 @@ class Opd_prescription extends BaseController
             . '  const hasPatient=(BUNDLE.entry||[]).some(e=>e.resource&&e.resource.resourceType==="Patient");'
             . '  setCheck(3,hasPatient,hasPatient?"Patient resource present":"Patient resource missing from bundle");'
 
-            // Check 5: Clinical resource
+            // Check 5: Patient identifier present
+            . '  const patientResource=(BUNDLE.entry||[]).map(e=>e&&e.resource?e.resource:null).find(r=>r&&r.resourceType==="Patient")||null;'
+            . '  const patientHasIdentifier=!!(patientResource&&Array.isArray(patientResource.identifier)&&patientResource.identifier.length>0);'
+            . '  setCheck(4,patientHasIdentifier,patientHasIdentifier?"Patient identifier present":"Patient identifier missing");'
+
+            // Check 6: Clinical resource
             . '  const clinTypes=["MedicationRequest","Condition","Observation","AllergyIntolerance","DiagnosticReport"];'
             . '  const clinCount=(BUNDLE.entry||[]).filter(e=>e.resource&&clinTypes.includes(e.resource.resourceType)).length;'
-            . '  setCheck(4,clinCount>0,"Clinical resources: "+clinCount+(clinCount>0?" present":" — bundle has no medications/conditions/observations"));'
+            . '  setCheck(5,clinCount>0,"Clinical resources: "+clinCount+(clinCount>0?" present":" — bundle has no medications/conditions/observations"));'
 
-            // Check 6: visit date
+            // Check 7: Structured MedicationRequest coding
+            . '  const medReqs=(BUNDLE.entry||[]).filter(e=>e.resource&&e.resource.resourceType==="MedicationRequest").map(e=>e.resource);'
+            . '  const medReqStructured=medReqs.filter(m=>Array.isArray(((m.medicationCodeableConcept||{}).coding||[]))&&((m.medicationCodeableConcept||{}).coding||[]).length>0).length;'
+            . '  const medStructuredOk=medReqs.length===0||medReqStructured>0;'
+            . '  setCheck(6,medStructuredOk,medReqs.length===0?"No MedicationRequest entries in bundle":"Structured MedicationRequest: "+medReqStructured+"/"+medReqs.length);'
+
+            // Check 8: visit date
             . '  const dateOk=CTX.visitDate&&/^\d{4}-\d{2}-\d{2}$/.test(CTX.visitDate);'
-            . '  setCheck(5,dateOk,dateOk?"Visit date: "+CTX.visitDate:"Visit date missing or invalid");'
+            . '  setCheck(7,dateOk,dateOk?"Visit date: "+CTX.visitDate:"Visit date missing or invalid");'
 
-            // Check 7: Bridge connectivity (AJAX)
+            // Check 9: Bridge connectivity (AJAX)
             . '  document.getElementById("chkBridge").className="check-item pending";'
             . '  document.getElementById("chkBridge").innerHTML=\'<span class="spinner-border spinner-border-sm"></span><span>Checking bridge\u2026</span>\';'
             . '  let bridgeOk=false;'
@@ -5178,11 +5252,11 @@ class Opd_prescription extends BaseController
             . '    const j=await r.json();'
             . '    bridgeOk=r.ok&&(j.ok===1||j.status==="ok");'
             . '    const info=bridgeOk?(j.authenticated_as?(" ("+j.authenticated_as+")"):""):" — "+( j.error_text||j.message||"unreachable");'
-            . '    setCheck(6,bridgeOk,bridgeOk?"Bridge connected"+info:"Bridge unreachable"+info);'
-            . '  }catch(e){setCheck(6,false,"Bridge check failed: "+e.message);}'
+            . '    setCheck(8,bridgeOk,bridgeOk?"Bridge connected"+info:"Bridge unreachable"+info);'
+            . '  }catch(e){setCheck(8,false,"Bridge check failed: "+e.message);}'
 
             // Evaluate overall result
-            . '  const allPass=hasAbha&&isDoc&&isComp&&hasPatient&&clinCount>0&&dateOk&&bridgeOk;'
+            . '  const allPass=hasAbha&&isDoc&&hasPatient&&patientHasIdentifier&&clinCount>0&&medStructuredOk&&dateOk&&bridgeOk;'
             . '  btn.disabled=false;'
             . '  if(allPass){'
             . '    btn.className="btn btn-outline-success w-100 mt-3";'
@@ -5193,6 +5267,10 @@ class Opd_prescription extends BaseController
             . '    btn.className="btn btn-warning w-100 mt-3";'
             . '    btn.innerHTML=\'<i class="bi bi-exclamation-triangle me-1"></i>Issues Found — Fix &amp; Re-verify\';'
             . '    document.getElementById("submitCard").style.display="none";'
+            . '    const issues=[];'
+            . '    if(!patientHasIdentifier) issues.push("Patient identifier missing");'
+            . '    if(!medStructuredOk) issues.push("MedicationRequest entries are not coded");'
+            . '    if(issues.length){strictIssuesEl.innerHTML=\'<div class="alert alert-warning py-2 mt-2 mb-0"><strong>Strict checks:</strong> \'+issues.join("; ")+\'</div>\';}'
             . '  }'
             . '});'
 
@@ -5224,7 +5302,11 @@ class Opd_prescription extends BaseController
             . '      el.innerHTML=\'<div class="alert alert-success mt-2 py-2">\u2705 \'+(res.message||"Submitted successfully.")+qPart+idPart+\'</div>\';'
             . '    }else{'
             . '      btn.disabled=false;btn.innerHTML=origHtml;'
-            . '      el.innerHTML=\'<div class="alert alert-danger mt-2 py-2">\u274c \'+(res.message||res.error_text||"Submission failed.")+(res.http_code?" (HTTP "+res.http_code+")":"")+\'</div>\';'
+            . '      let strictText="";'
+            . '      if(res.bundle_checks){'
+            . '        strictText="<div class=\"small mt-1\">Server strict checks failed. Please run Verify Data and fix highlighted items.</div>";'
+            . '      }'
+            . '      el.innerHTML=\'<div class="alert alert-danger mt-2 py-2">\u274c \'+(res.message||res.error_text||"Submission failed.")+(res.http_code?" (HTTP "+res.http_code+")":"")+strictText+\'</div>\';'
             . '    }'
             . '  }).catch(e=>{'
             . '    clearTimeout(submitTimer);'
@@ -5305,6 +5387,55 @@ class Opd_prescription extends BaseController
             ]);
         }
 
+        // Strict pre-submit validation to prevent avoidable ABDM rejections.
+        $entryList = is_array($bundle['entry'] ?? null) ? $bundle['entry'] : [];
+        $firstEntryResourceType = (string) ($entryList[0]['resource']['resourceType'] ?? '');
+        $compositionFirst = $firstEntryResourceType === 'Composition';
+        $patientHasIdentifier = false;
+        $totalMedicationRequests = 0;
+        $structuredMedicationRequests = 0;
+
+        foreach ($entryList as $entry) {
+            $resource = is_array($entry['resource'] ?? null) ? $entry['resource'] : [];
+            $rt = (string) ($resource['resourceType'] ?? '');
+
+            if ($rt === 'Patient') {
+                $identifiers = is_array($resource['identifier'] ?? null) ? $resource['identifier'] : [];
+                $patientHasIdentifier = ! empty($identifiers);
+            }
+
+            if ($rt === 'MedicationRequest') {
+                $totalMedicationRequests++;
+                $coding = (array) ($resource['medicationCodeableConcept']['coding'] ?? []);
+                if (! empty($coding)) {
+                    $structuredMedicationRequests++;
+                }
+            }
+        }
+
+        $strictErrors = [];
+        if (! $patientHasIdentifier) {
+            $strictErrors[] = 'FHIR validation failed: Patient.identifier is missing.';
+        }
+        if ($totalMedicationRequests > 0 && $structuredMedicationRequests === 0) {
+            $strictErrors[] = 'FHIR validation failed: MedicationRequest resources are present but none contain coded medicationCodeableConcept.';
+        }
+
+        if (! empty($strictErrors)) {
+            return $this->response->setJSON([
+                'ok' => 0,
+                'error_text' => implode(' ', $strictErrors),
+                'bundle_checks' => [
+                    'composition_first' => $compositionFirst,
+                    'patient_has_identifier' => $patientHasIdentifier,
+                    'medicationrequest_total' => $totalMedicationRequests,
+                    'medicationrequest_structured' => $structuredMedicationRequests,
+                ],
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
         // Gather patient / OPD context for the push payload
         $patientId   = 0;
         $patientName = '';
@@ -5365,6 +5496,31 @@ class Opd_prescription extends BaseController
             $gatewayUrl = base_url('AbdmGateway/share_prescription_bundle');
             $cookieHeader = (string) $this->request->getHeaderLine('Cookie');
             $handoffTimeoutSec = $this->resolveFhirGatewayHandoffTimeoutSec();
+
+            // In PHP built-in server mode, posting back into the same app can deadlock
+            // because only one request is processed at a time.
+            if ($this->isLocalSingleThreadHandoffRisk($gatewayUrl)) {
+                $directResult = $this->submitFhirBundleDirectBridgePush([
+                    'opd_id' => $opdId,
+                    'opd_session_id' => $sessionId,
+                    'patient_id' => $patientId,
+                    'patient_name' => $patientName,
+                    'abha_id' => $abhaId,
+                    'bundle' => $bundle,
+                    'bundle_row' => $bundleRow,
+                    'visit_date' => $visitDate,
+                ]);
+
+                $directResult['message'] = (string) ($directResult['message'] ?? ($directResult['ok'] ?? 0 ? 'Direct bridge push completed.' : 'Direct bridge push failed.'));
+                $directResult['local_direct_push'] = 1;
+                $directResult['csrfName'] = csrf_token();
+                $directResult['csrfHash'] = csrf_hash();
+
+                return $this->response->setJSON([
+                    ...$directResult,
+                    'message' => '[Local fallback] ' . $directResult['message'],
+                ]);
+            }
 
             // Avoid self-call deadlock: this request forwards the same session cookie
             // to an internal endpoint protected by permission filter.
@@ -5484,7 +5640,8 @@ class Opd_prescription extends BaseController
 
     private function resolveFhirGatewayHandoffTimeoutSec(): int
     {
-        $timeout = 120;
+        // Keep below PHP max_execution_time to avoid shutdown fatals that return HTML instead of JSON.
+        $timeout = 60;
 
         if ($this->db->tableExists('hospital_setting')) {
             $row = $this->db->table('hospital_setting')
@@ -5500,14 +5657,330 @@ class Opd_prescription extends BaseController
             }
         }
 
-        if ($timeout < 30) {
-            $timeout = 30;
+        if ($timeout < 15) {
+            $timeout = 15;
         }
-        if ($timeout > 240) {
-            $timeout = 240;
+        if ($timeout > 90) {
+            $timeout = 90;
         }
 
         return $timeout;
+    }
+
+    private function isLocalSingleThreadHandoffRisk(string $gatewayUrl): bool
+    {
+        if (PHP_SAPI !== 'cli-server') {
+            return false;
+        }
+
+        $targetHost = strtolower((string) (parse_url($gatewayUrl, PHP_URL_HOST) ?? ''));
+        $targetPort = (int) (parse_url($gatewayUrl, PHP_URL_PORT) ?? 0);
+        $requestHostHeader = strtolower(trim((string) $this->request->getHeaderLine('Host')));
+        $requestHost = $requestHostHeader;
+        $requestPort = 0;
+
+        if (str_contains($requestHostHeader, ':')) {
+            [$requestHost, $portPart] = explode(':', $requestHostHeader, 2);
+            $requestPort = (int) $portPart;
+        }
+
+        if ($requestPort <= 0) {
+            $requestPort = (int) ($this->request->getServer('SERVER_PORT') ?? 0);
+        }
+
+        if ($targetHost === '' || $requestHost === '') {
+            return false;
+        }
+
+        if ($targetPort <= 0) {
+            $targetPort = $requestPort;
+        }
+
+        return $targetHost === strtolower($requestHost) && $targetPort === $requestPort;
+    }
+
+    private function resolveLatestBridgeShareErrorForOpd(int $opdId): string
+    {
+        if ($opdId <= 0 || ! $this->db->tableExists('abdm_api_logs')) {
+            return '';
+        }
+
+        try {
+            $row = $this->db->table('abdm_api_logs')
+                ->select('error_message,response_json,status,created_at')
+                ->where('channel', 'bridge')
+                ->where('event_type', 'abdm.opd.prescription.share.result')
+                ->where('entity_type', 'opd')
+                ->where('entity_id', (string) $opdId)
+                ->orderBy('id', 'DESC')
+                ->get(1)
+                ->getRowArray();
+
+            if (empty($row)) {
+                return '';
+            }
+
+            $createdAtRaw = trim((string) ($row['created_at'] ?? ''));
+            if ($createdAtRaw !== '') {
+                $createdTs = strtotime($createdAtRaw);
+                if ($createdTs !== false && (time() - $createdTs) > (20 * 60)) {
+                    // Do not surface stale bridge errors in submit alerts.
+                    return '';
+                }
+            }
+
+            $error = trim((string) ($row['error_message'] ?? ''));
+            if ($error !== '') {
+                return $error;
+            }
+
+            $response = json_decode((string) ($row['response_json'] ?? ''), true);
+            if (is_array($response)) {
+                $message = trim((string) ($response['message'] ?? $response['error_text'] ?? $response['error'] ?? ''));
+                if ($message !== '') {
+                    return $message;
+                }
+            }
+        } catch (\Throwable) {
+            return '';
+        }
+
+        return '';
+    }
+
+    /**
+     * @param array<string,mixed> $context
+     * @return array<string,mixed>
+     */
+    private function submitFhirBundleDirectBridgePush(array $context): array
+    {
+        $opdId = (int) ($context['opd_id'] ?? 0);
+        $sessionId = (int) ($context['opd_session_id'] ?? 0);
+        $patientId = (int) ($context['patient_id'] ?? 0);
+        $patientName = trim((string) ($context['patient_name'] ?? ''));
+        $abhaRaw = trim((string) ($context['abha_id'] ?? ''));
+        $bundle = $context['bundle'] ?? [];
+        $bundleRow = is_array($context['bundle_row'] ?? null) ? $context['bundle_row'] : [];
+        $visitDate = trim((string) ($context['visit_date'] ?? date('Y-m-d')));
+
+        if ($opdId <= 0 || $patientId <= 0 || ! is_array($bundle)) {
+            return [
+                'ok' => 0,
+                'message' => 'Local fallback failed: invalid OPD/patient/bundle context.',
+                'http_code' => 0,
+            ];
+        }
+
+        $abhaAddress = $this->isValidAbhaAddress($abhaRaw) ? $abhaRaw : '';
+        $abhaDigits = preg_replace('/\D/', '', $abhaRaw);
+        $abhaNumber = (is_string($abhaDigits) && strlen($abhaDigits) === 14) ? $abhaDigits : '';
+
+        if ($abhaAddress === '' && $abhaNumber === '') {
+            return [
+                'ok' => 0,
+                'message' => 'ABHA address or ABHA number is required for bridge push.',
+                'http_code' => 0,
+            ];
+        }
+
+        $sessionForRef = $sessionId > 0 ? $sessionId : (int) ($bundleRow['opd_session_id'] ?? 0);
+        $careContextRef = 'OPD-' . $opdId . '-S' . ($sessionForRef > 0 ? $sessionForRef : 0) . '-' . $visitDate;
+        $careContextDisplay = 'OPD Visit - ' . $visitDate;
+        $bundleType = trim((string) ($bundleRow['bundle_type'] ?? 'OPConsultRecord'));
+        $hiType = match ($bundleType) {
+            'MedicationRequestBundle', 'Prescription', 'PrescriptionRecord' => 'PrescriptionRecord',
+            default => 'OPConsultRecord',
+        };
+
+        if ($patientName === '') {
+            $patientName = 'PATIENT-' . $patientId;
+        }
+
+        try {
+            $connector = AbdmConnectorFactory::make();
+            $result = $connector->pushRecord([
+                'patient_id' => (string) $patientId,
+                'patient_name' => $patientName,
+                'abha_id' => $abhaNumber,
+                'abha_address' => $abhaAddress,
+                'hi_type' => $hiType,
+                'record_type' => $hiType,
+                'visit_date' => $visitDate,
+                'care_context_reference' => $careContextRef,
+                'care_context_display' => $careContextDisplay,
+                'notes' => $careContextDisplay,
+                'queue_id' => $careContextRef,
+                'record_data' => $bundle,
+            ]);
+
+            $ok = (int) ($result['ok'] ?? 0) === 1 ? 1 : 0;
+            $queueId = (string) ($result['queue_id'] ?? '');
+            $bridgeId = (int) ($result['id'] ?? $result['bridge_record_id'] ?? 0);
+            $httpCode = (int) ($result['http_code'] ?? 200);
+            $message = trim((string) ($result['message'] ?? $result['error_text'] ?? $result['error'] ?? ''));
+            if ($message === '') {
+                $message = $ok === 1 ? 'Record pushed to bridge successfully.' : 'Bridge push failed.';
+            }
+
+            $this->persistDirectFallbackSubmissionState(
+                $opdId,
+                $patientId,
+                $abhaAddress !== '' ? $abhaAddress : $abhaNumber,
+                $careContextRef,
+                $queueId,
+                $bridgeId,
+                $ok === 1,
+                [
+                    'http_code' => $httpCode,
+                    'message' => $message,
+                    'raw' => $result,
+                ]
+            );
+
+            return [
+                'ok' => $ok,
+                'queue_id' => $queueId !== '' ? $queueId : null,
+                'bridge_id' => $bridgeId > 0 ? $bridgeId : null,
+                'http_code' => $httpCode,
+                'message' => $message,
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'ok' => 0,
+                'message' => 'Direct bridge push failed: ' . $e->getMessage(),
+                'http_code' => 0,
+            ];
+        }
+    }
+
+    /**
+     * @param array<string,mixed> $responsePayload
+     */
+    private function persistDirectFallbackSubmissionState(
+        int $opdId,
+        int $patientId,
+        string $abhaId,
+        string $careContextRef,
+        string $queueId,
+        int $bridgeId,
+        bool $ok,
+        array $responsePayload
+    ): void {
+        try {
+            $now = Time::now('Asia/Kolkata')->toDateTimeString();
+
+            if ($this->db->tableExists('health_records')) {
+                $fields = $this->db->getFieldNames('health_records') ?? [];
+                $builder = $this->db->table('health_records')->select('id');
+
+                if (in_array('entity_type', $fields, true) && in_array('entity_id', $fields, true)) {
+                    $builder->where('entity_type', 'opd')->where('entity_id', (string) $opdId);
+                }
+                if ($careContextRef !== '' && in_array('care_context_reference', $fields, true)) {
+                    $builder->where('care_context_reference', $careContextRef);
+                }
+
+                $hrRow = $builder->orderBy('id', 'DESC')->get(1)->getRowArray();
+                $hrId = (int) ($hrRow['id'] ?? 0);
+
+                if ($hrId > 0) {
+                    $update = [];
+                    if (in_array('push_status', $fields, true)) {
+                        $update['push_status'] = $ok ? 'queued' : 'failed';
+                    }
+                    if (in_array('abdm_txn_id', $fields, true) && $queueId !== '') {
+                        $update['abdm_txn_id'] = $queueId;
+                    }
+                    if (in_array('bridge_record_id', $fields, true) && $bridgeId > 0) {
+                        $update['bridge_record_id'] = $bridgeId;
+                    }
+                    if (in_array('care_context_reference', $fields, true) && $careContextRef !== '') {
+                        $update['care_context_reference'] = $careContextRef;
+                    }
+                    if (in_array('updated_at', $fields, true)) {
+                        $update['updated_at'] = $now;
+                    }
+
+                    if (! empty($update)) {
+                        $this->db->table('health_records')->where('id', $hrId)->update($update);
+                    }
+                }
+            }
+
+            if ($this->db->tableExists('record_links')) {
+                $fields = $this->db->getFieldNames('record_links') ?? [];
+                $existingBuilder = $this->db->table('record_links')->select('id');
+
+                if ($careContextRef !== '' && in_array('care_context_reference', $fields, true)) {
+                    $existingBuilder->where('care_context_reference', $careContextRef);
+                }
+                if ($abhaId !== '' && in_array('abha_id', $fields, true)) {
+                    $existingBuilder->where('abha_id', $abhaId);
+                }
+
+                $existing = $existingBuilder->orderBy('id', 'DESC')->get(1)->getRowArray();
+                $linkUpdate = [];
+
+                if (in_array('abha_id', $fields, true) && $abhaId !== '') {
+                    $linkUpdate['abha_id'] = $abhaId;
+                }
+                if (in_array('abdm_txn_id', $fields, true) && $queueId !== '') {
+                    $linkUpdate['abdm_txn_id'] = $queueId;
+                }
+                if (in_array('care_context_reference', $fields, true) && $careContextRef !== '') {
+                    $linkUpdate['care_context_reference'] = $careContextRef;
+                }
+                if (in_array('link_status', $fields, true)) {
+                    $linkUpdate['link_status'] = $ok ? 'pending' : 'failed';
+                }
+                if (in_array('response_json', $fields, true)) {
+                    $linkUpdate['response_json'] = (string) json_encode($responsePayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                }
+                if (in_array('updated_at', $fields, true)) {
+                    $linkUpdate['updated_at'] = $now;
+                }
+                if ($ok && in_array('linked_at', $fields, true)) {
+                    $linkUpdate['linked_at'] = null;
+                }
+
+                if (! empty($existing)) {
+                    if (! empty($linkUpdate)) {
+                        $this->db->table('record_links')->where('id', (int) ($existing['id'] ?? 0))->update($linkUpdate);
+                    }
+                } else {
+                    if (in_array('created_at', $fields, true)) {
+                        $linkUpdate['created_at'] = $now;
+                    }
+                    if (! empty($linkUpdate)) {
+                        $this->db->table('record_links')->insert($linkUpdate);
+                    }
+                }
+            }
+
+            if ($this->db->tableExists('abdm_api_logs')) {
+                $this->db->table('abdm_api_logs')->insert([
+                    'channel' => 'bridge',
+                    'event_type' => 'abdm.opd.prescription.share.result',
+                    'endpoint' => '/Opd_prescription/fhir_bundle_submit(local_fallback)',
+                    'http_method' => 'POST',
+                    'entity_type' => 'opd',
+                    'entity_id' => (string) $opdId,
+                    'request_json' => (string) json_encode([
+                        'opd_id' => $opdId,
+                        'patient_id' => $patientId,
+                        'care_context_reference' => $careContextRef,
+                        'mode' => 'local_direct_push',
+                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'response_code' => (int) ($responsePayload['http_code'] ?? 200),
+                    'response_json' => (string) json_encode($responsePayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'status' => $ok ? 'success' : 'error',
+                    'error_message' => $ok ? null : mb_substr((string) ($responsePayload['message'] ?? 'bridge push failed'), 0, 1000),
+                    'created_at' => $now,
+                ]);
+            }
+        } catch (\Throwable $e) {
+            log_message('warning', '[fhir_bundle_submit] local fallback state sync failed for OPD#' . $opdId . ': ' . $e->getMessage());
+        }
     }
 
     private function isTransientFhirGatewayHandoffError(\Throwable $e): bool
@@ -10209,6 +10682,81 @@ class Opd_prescription extends BaseController
     }
 
     /**
+     * Resolve best-available ABHA value for FHIR Patient.identifier.
+     *
+     * Preference order:
+     * 1) Valid ABHA Address from abha_address.
+     * 2) Valid ABHA Address stored in legacy ABHA columns.
+     * 3) 14-digit ABHA number from any ABHA column.
+     * 4) First non-empty ABHA-like value as last fallback.
+     *
+     * @param array<string,mixed> $patientRow
+     */
+    private function resolvePatientAbhaForFhir(array $patientRow): string
+    {
+        $resolved = $this->resolvePatientAbhaIdentifiersForFhir($patientRow);
+        if ($resolved['address'] !== '') {
+            return $resolved['address'];
+        }
+        if ($resolved['id'] !== '') {
+            return $resolved['id'];
+        }
+
+        return '';
+    }
+
+    /**
+     * Resolve ABHA identity values separately for FHIR identifiers.
+     *
+     * @param array<string,mixed> $patientRow
+     * @return array{id:string,address:string}
+     */
+    private function resolvePatientAbhaIdentifiersForFhir(array $patientRow): array
+    {
+        $fields = $this->db->tableExists('patient_master')
+            ? ($this->db->getFieldNames('patient_master') ?? [])
+            : [];
+
+        $address = '';
+        $abhaId = '';
+
+        if (in_array('abha_address', $fields, true)) {
+            $candidate = trim((string) ($patientRow['abha_address'] ?? ''));
+            if ($candidate !== '' && $this->isValidAbhaAddress($candidate)) {
+                $address = $candidate;
+            }
+        }
+
+        foreach (['abha_id', 'abha_no', 'abha', 'abha_number'] as $field) {
+            if (! in_array($field, $fields, true)) {
+                continue;
+            }
+            $value = trim((string) ($patientRow[$field] ?? ''));
+            if ($value === '') {
+                continue;
+            }
+
+            if ($address === '' && $this->isValidAbhaAddress($value)) {
+                $address = $value;
+            }
+
+            $digits = preg_replace('/\D/', '', $value);
+            if ($abhaId === '' && is_string($digits) && strlen($digits) === 14) {
+                $abhaId = $digits;
+            }
+        }
+
+        if ($abhaId === '' && in_array('abha_address', $fields, true)) {
+            $digits = preg_replace('/\D/', '', trim((string) ($patientRow['abha_address'] ?? '')));
+            if (is_string($digits) && strlen($digits) === 14) {
+                $abhaId = $digits;
+            }
+        }
+
+        return ['id' => $abhaId, 'address' => $address];
+    }
+
+    /**
      * @return array<string, int>
      */
     private function getPatientAddictionFlags(int $patientId): array
@@ -10849,8 +11397,7 @@ class Opd_prescription extends BaseController
             return false;
         }
 
-        $abhaField = $this->resolvePatientAbhaField();
-        $abhaAddress = $abhaField !== null ? trim((string) ($patientRow[$abhaField] ?? '')) : '';
+        $abhaIdentity = $this->resolvePatientAbhaIdentifiersForFhir($patientRow);
 
         $patFirstName = $this->sanitizePersonNamePart((string) ($patientRow['p_fname'] ?? ''));
         $patLastName  = $this->sanitizePersonNamePart((string) ($patientRow['p_lname'] ?? ''));
@@ -10871,7 +11418,8 @@ class Opd_prescription extends BaseController
             'family_name' => $patLastName,
             'gender'      => $this->normalizeGender((string) ($patientRow['gender'] ?? '')),
             'birthDate'   => ! empty($patientRow['dob']) ? date('Y-m-d', strtotime((string) $patientRow['dob'])) : '',
-            'abhaAddress' => $abhaAddress,
+            'abhaAddress' => $abhaIdentity['address'],
+            'abhaId'      => $abhaIdentity['id'],
             'phone'       => $patPhone,
         ];
 
@@ -11018,6 +11566,7 @@ class Opd_prescription extends BaseController
                 'dosage' => implode(' | ', $dosageParts),
                 'route_text' => trim((string) ($row['dosage_where'] ?? '')),
                 'frequency_text' => trim((string) ($row['dosage_freq'] ?? '')),
+                'no_of_days' => (int) ($row['no_of_days'] ?? 0),
                 'med_id' => $mid,
                 'generic_name' => $genericName,
                 'med_type' => $medType,
@@ -11377,9 +11926,8 @@ class Opd_prescription extends BaseController
     {
         $errors = [];
 
-        $abhaField = $this->resolvePatientAbhaField();
-        $abha = $abhaField !== null ? trim((string) ($patientRow[$abhaField] ?? '')) : '';
-        if ($abha === '') {
+        $abha = $this->resolvePatientAbhaIdentifiersForFhir($patientRow);
+        if (trim((string) ($abha['address'] ?? '')) === '') {
             $errors[] = 'ABDM requires ABHA Address before saving consult.';
         }
 

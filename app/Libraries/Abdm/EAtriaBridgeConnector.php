@@ -18,8 +18,6 @@ namespace App\Libraries\Abdm;
  */
 class EAtriaBridgeConnector implements AbdmConnectorInterface
 {
-    private const REQUIRED_HFR_ID = 'IN0510000870';
-
     private string $baseUrl;
     private string $token;
     private string $hfrId;
@@ -42,7 +40,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             $this->tokenSourceByValue[$this->token] = 'config.eatriaBridgeToken';
             $this->tokenSource = 'config.eatriaBridgeToken';
         }
-        $this->hfrId      = self::REQUIRED_HFR_ID;
+        $this->hfrId      = '';
         $this->bridgeHospitalId = '';
         $this->timeoutSec = (int) ($config->eatriaBridgeTimeoutSec ?? 30);
 
@@ -135,10 +133,11 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
                 ?? $dbSettings['ABDM_HOSPITAL_HFR_ID']
                 ?? ''
             ));
-            if ($dbHfrId !== '' && strcasecmp($dbHfrId, self::REQUIRED_HFR_ID) !== 0) {
-                log_message('warning', '[EAtriaBridge] Overriding configured HFR ID with mandated HFR ' . self::REQUIRED_HFR_ID . ' (found ' . $dbHfrId . ')');
+            if ($dbHfrId === '') {
+                log_message('warning', '[EAtriaBridge] ABDM_HFR_ID is empty in hospital_setting; bridge requests may fail with hfr_id errors.');
+            } else {
+                $this->hfrId = $dbHfrId;
             }
-            $this->hfrId = self::REQUIRED_HFR_ID;
 
             $dbBridgeHospitalId = trim((string) (
                 $dbSettings['ABDM_BRIDGE_HOSPITAL_ID']
@@ -424,7 +423,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         }
         $this->dbLog($method, $path, $url, $body, $httpCode, (string) $raw, $ok === 1 ? 'success' : 'error', $logErr);
         if (($httpCode === 401 || $httpCode === 403) && ! isset($decoded['auth_hint'])) {
-            $decoded['auth_hint'] = 'Verify hospital_setting.EATRIA_BRIDGE_TOKEN mapped to HFR IN0510000870. Current token source=' . $this->tokenSource . ', HFR=' . ($this->hfrId !== '' ? $this->hfrId : '(empty)');
+            $decoded['auth_hint'] = 'Verify hospital_setting.EATRIA_BRIDGE_TOKEN is mapped to the same HFR as hospital_setting.ABDM_HFR_ID. Current token source=' . $this->tokenSource . ', HFR=' . ($this->hfrId !== '' ? $this->hfrId : '(empty)');
         }
         $decoded['auth_debug'] = $authDebug;
 
@@ -825,6 +824,30 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             $body['hfr_id'] = $this->hfrId;
         }
         return $this->post('/v3/records/' . $bridgeId . '/link-and-share', $body);
+    }
+
+    /**
+     * Retry variant for stale link-token scenarios after HFR/HIP changes.
+     * Sends explicit regeneration hints; gateway may ignore unknown flags safely.
+     */
+    public function linkAndShareWithFreshToken(int $bridgeId): array
+    {
+        $body = [
+            'regenerate_link_token' => true,
+            'force_regenerate_link_token' => true,
+            'refresh_link_token' => true,
+        ];
+
+        if ($this->hfrId !== '') {
+            $body['hfr_id'] = $this->hfrId;
+        }
+
+        $result = $this->post('/v3/records/' . $bridgeId . '/link-and-share', $body);
+        if (is_array($result)) {
+            $result['retry_mode'] = 'fresh_link_token';
+        }
+
+        return $result;
     }
 
     public function workflowStatus(int $bridgeId): array
