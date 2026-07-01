@@ -16,6 +16,9 @@
         <?php
             $patientAbhaId = (string) ($data[0]->abha_id ?? $data[0]->abha_no ?? $data[0]->abha ?? $data[0]->abha_address ?? '');
             $abhaAddress = trim((string) ($data[0]->abha_address ?? ''));
+            if ($abhaAddress === '' && preg_match('/abha_address\s*:\s*([A-Za-z0-9._-]+@[A-Za-z0-9.-]+)/i', (string) ($data[0]->log ?? ''), $abhaLogMatch) === 1) {
+                $abhaAddress = trim((string) ($abhaLogMatch[1] ?? ''));
+            }
             $abhaVerifiedStatus = trim((string) ($data[0]->abha_verified_status ?? ''));
             $abhaVerificationType = trim((string) ($data[0]->abha_verification_type ?? ''));
             $abhaKycVerified = (int) ($data[0]->abha_kyc_verified ?? 0) === 1;

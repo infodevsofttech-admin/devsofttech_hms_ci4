@@ -624,6 +624,18 @@ $routes->post('AbdmGateway/consent_request', 'AbdmGateway::consentRequest', ['fi
 $routes->post('AbdmGateway/consent_callback', 'AbdmGateway::consentCallback');
 $routes->post('AbdmGateway/consent_revoked_callback', 'AbdmGateway::consentRevokedCallback');
 $routes->post('AbdmGateway/record_linked_callback', 'AbdmGateway::recordLinkedCallback');
+// ABDM M3 HIU (HMS -> Gateway)
+$routes->get('AbdmHiu', 'AbdmHiu::index', ['filter' => $abdmPermFilter]);
+$routes->get('AbdmHiu/patient_lookup', 'AbdmHiu::patientLookup', ['filter' => $abdmPermFilter]);
+$routes->get('AbdmHiu/timeline', 'AbdmHiu::timeline', ['filter' => $abdmPermFilter]);
+$routes->post('AbdmHiu/consent_request', 'AbdmHiu::consentRequest', ['filter' => $abdmPermFilter]);
+$routes->post('AbdmHiu/consent_request_status', 'AbdmHiu::consentRequestStatus', ['filter' => $abdmPermFilter]);
+$routes->post('AbdmHiu/consent_request_fetch', 'AbdmHiu::consentRequestFetch', ['filter' => $abdmPermFilter]);
+$routes->post('AbdmHiu/health_information_request', 'AbdmHiu::healthInformationRequest', ['filter' => $abdmPermFilter]);
+$routes->post('api/v3/hiu/consent/request', 'AbdmHiu::consentRequest', ['filter' => $abdmPermFilter]);
+$routes->post('api/v3/hiu/consent/request/status', 'AbdmHiu::consentRequestStatus', ['filter' => $abdmPermFilter]);
+$routes->post('api/v3/hiu/consent/request/fetch', 'AbdmHiu::consentRequestFetch', ['filter' => $abdmPermFilter]);
+$routes->post('api/v3/hiu/health-information/request', 'AbdmHiu::healthInformationRequest', ['filter' => $abdmPermFilter]);
 // HMS M2 adapter endpoints (Gateway -> HMS) - keep lowercase v1 path
 $routes->get('api/v1/abdm/gateway/health', 'AbdmGateway::m2GatewayHealth');
 $routes->post('api/v1/abdm/gateway/discovery/care-contexts', 'AbdmGateway::m2DiscoveryCareContexts');

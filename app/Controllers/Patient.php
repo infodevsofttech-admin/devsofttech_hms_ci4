@@ -2063,7 +2063,7 @@ class Patient extends BaseController
 			}
 		}
 
-		if (in_array('abha_address', $fields, true)) {
+		if (in_array('abha_address', $fields, true) && $abhaAddress !== '') {
 			$data['abha_address'] = $abhaAddress;
 		}
 	}
