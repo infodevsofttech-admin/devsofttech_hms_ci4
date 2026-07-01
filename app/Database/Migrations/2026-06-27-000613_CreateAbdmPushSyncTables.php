@@ -145,7 +145,7 @@ class CreateAbdmPushSyncTables extends Migration
             ],
             'care_context_reference' => [
                 'type' => 'VARCHAR',
-                'constraint' => 255,
+                'constraint' => 191,
                 'null' => false,
             ],
             'care_context_display' => [

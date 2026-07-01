@@ -105,14 +105,43 @@ class M3HiuGatewayClient
         $response['http_code'] = $httpCode;
         $response['error_text'] = $errorText;
         $response['retryable'] = $retryable;
+
+        $gatewayRequestId = trim((string) ($response['request_id'] ?? $response['requestId'] ?? ''));
+        if ($gatewayRequestId === '') {
+            $gatewayRequestId = trim((string) ($payload['requestId'] ?? $payload['request_id'] ?? ''));
+        }
+        $response['gateway_request_id'] = $gatewayRequestId;
+
+        $abdmConsentRequestId = $this->findFirstValueByKeys($response, [
+            'consentRequestId',
+            'consent_request_id',
+            'abdm_consent_request_id',
+        ]);
+        if ($abdmConsentRequestId === '') {
+            $abdmConsentRequestId = trim((string) ($payload['consentRequestId'] ?? ''));
+        }
+        if ($abdmConsentRequestId !== '') {
+            $response['abdm_consent_request_id'] = $abdmConsentRequestId;
+            $response['consent_request_id'] = $abdmConsentRequestId;
+        }
+
+        $abdmConsentId = $this->findFirstValueByKeys($response, [
+            'consentId',
+            'consent_id',
+        ]);
+        if ($abdmConsentId === '') {
+            $abdmConsentId = trim((string) ($payload['consentId'] ?? $payload['consent_id'] ?? ''));
+        }
+        if ($abdmConsentId !== '') {
+            $response['consent_id'] = $abdmConsentId;
+            $response['abdm_consent_artifact_id'] = $abdmConsentId;
+        }
+
         if (! isset($response['request_id'])) {
-            $response['request_id'] = (string) ($response['requestId'] ?? $payload['requestId'] ?? $payload['request_id'] ?? '');
+            $response['request_id'] = $gatewayRequestId;
         }
         if (! isset($response['transaction_id'])) {
             $response['transaction_id'] = (string) ($response['transactionId'] ?? $payload['transactionId'] ?? $payload['transaction_id'] ?? '');
-        }
-        if (! isset($response['consent_id'])) {
-            $response['consent_id'] = (string) ($response['consentId'] ?? $response['consentRequestId'] ?? $payload['consentId'] ?? $payload['consentRequestId'] ?? $payload['consent_id'] ?? '');
         }
 
         $this->writeApiLog($eventKey, $path, $payload, $response, $httpCode, $ok, $errorText, $hospitalId);
@@ -210,5 +239,33 @@ class M3HiuGatewayClient
             'error_message' => $errorText !== '' ? mb_substr($errorText, 0, 1000) : null,
             'created_at' => date('Y-m-d H:i:s'),
         ]);
+    }
+
+    private function findFirstValueByKeys(array $root, array $keys): string
+    {
+        $queue = [$root];
+        while (! empty($queue)) {
+            $node = array_shift($queue);
+            if (! is_array($node)) {
+                continue;
+            }
+
+            foreach ($keys as $key) {
+                if (isset($node[$key])) {
+                    $value = trim((string) $node[$key]);
+                    if ($value !== '') {
+                        return $value;
+                    }
+                }
+            }
+
+            foreach ($node as $child) {
+                if (is_array($child)) {
+                    $queue[] = $child;
+                }
+            }
+        }
+
+        return '';
     }
 }

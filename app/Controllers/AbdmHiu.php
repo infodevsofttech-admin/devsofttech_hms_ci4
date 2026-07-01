@@ -163,6 +163,7 @@ class AbdmHiu extends BaseController
             if ($abhaAddress === '') {
                 $abhaAddress = $this->extractAbhaAddressFromLog((string) ($row['patient_log'] ?? ''));
             }
+            $abhaAddress = $this->canonicalizeAbhaAddress($abhaAddress, $abhaNumber);
             $latest = $this->findLatestConsentByAbhaAddress($abhaAddress);
 
             $items[] = [
@@ -173,7 +174,7 @@ class AbdmHiu extends BaseController
                 'abha_number' => $abhaNumber,
                 'abha_address' => $abhaAddress,
                 'has_abha_number' => preg_match('/^\d{14}$/', $abhaNumber) === 1 ? 1 : 0,
-                'has_abha_address' => $abhaAddress !== '' ? 1 : 0,
+                'has_abha_address' => $this->isValidAbhaAddress($abhaAddress) ? 1 : 0,
                 'latest_consent' => $latest,
             ];
         }
@@ -228,8 +229,27 @@ class AbdmHiu extends BaseController
             return null;
         }
 
+        $fields = $this->db->getFieldNames('abdm_hiu_workflows') ?? [];
+        $select = [
+            'id',
+            'operation',
+            'workflow_state',
+            'status',
+            'consent_id',
+            'request_id',
+            'transaction_id',
+            'created_at',
+            'updated_at',
+        ];
+        if (in_array('abdm_consent_request_id', $fields, true)) {
+            $select[] = 'abdm_consent_request_id';
+        }
+        if (in_array('abdm_consent_artifact_id', $fields, true)) {
+            $select[] = 'abdm_consent_artifact_id';
+        }
+
         $row = $this->db->table('abdm_hiu_workflows')
-            ->select('id, operation, workflow_state, status, consent_id, request_id, transaction_id, created_at, updated_at')
+            ->select(implode(', ', $select))
             ->where('abha_address', $abhaAddress)
             ->whereIn('operation', ['consent_request', 'consent_status', 'consent_fetch'])
             ->orderBy('id', 'DESC')
@@ -261,5 +281,30 @@ class AbdmHiu extends BaseController
         }
 
         return '';
+    }
+
+    private function canonicalizeAbhaAddress(string $abhaAddress, string $abhaNumber): string
+    {
+        $candidate = trim($abhaAddress);
+        if ($candidate !== '' && $this->isValidAbhaAddress($candidate)) {
+            return $candidate;
+        }
+
+        $addressDigits = preg_replace('/\D+/', '', $candidate) ?? '';
+        if (preg_match('/^\d{14}$/', $addressDigits) !== 1) {
+            $addressDigits = preg_replace('/\D+/', '', trim($abhaNumber)) ?? '';
+        }
+
+        if (preg_match('/^\d{14}$/', $addressDigits) === 1) {
+            $domain = trim((string) (getenv('ABDM_ABHA_ADDRESS_DEFAULT_DOMAIN') ?: 'sbx'));
+            return $addressDigits . '@' . $domain;
+        }
+
+        return '';
+    }
+
+    private function isValidAbhaAddress(string $value): bool
+    {
+        return preg_match('/^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+$/', trim($value)) === 1;
     }
 }
