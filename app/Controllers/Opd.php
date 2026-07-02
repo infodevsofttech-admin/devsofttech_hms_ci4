@@ -4936,10 +4936,16 @@ class Opd extends BaseController
                 $hasFilter = true;
             }
             if ($hasFilter) {
-                if (in_array('investigation_name', $invFields, true)) {
-                    $invBuilder->orderBy('investigation_name', 'ASC');
+                if (in_array('order_id', $invFields, true)) {
+                    $invBuilder->orderBy('CASE WHEN order_id IS NULL OR order_id = 0 THEN 1 ELSE 0 END', 'ASC', false);
+                    $invBuilder->orderBy('order_id', 'ASC');
+                    if (in_array('id', $invFields, true)) {
+                        $invBuilder->orderBy('id', 'ASC');
+                    }
                 } elseif (in_array('id', $invFields, true)) {
                     $invBuilder->orderBy('id', 'ASC');
+                } elseif (in_array('investigation_name', $invFields, true)) {
+                    $invBuilder->orderBy('investigation_name', 'ASC');
                 }
                 $data['rx_investigations'] = $invBuilder->get()->getResultArray();
             } else {
