@@ -7370,8 +7370,14 @@ class Opd_prescription extends BaseController
             return $this->response->setJSON(['rows' => []]);
         }
 
-        // Keep investigation panel order stable by record id (not alphabetical name).
-        if (in_array('id', $fields, true)) {
+        // Keep investigation panel order stable by explicit sequence when available.
+        if (in_array('order_id', $fields, true)) {
+            $builder->orderBy('CASE WHEN order_id IS NULL OR order_id = 0 THEN 1 ELSE 0 END', 'ASC', false);
+            $builder->orderBy('order_id', 'ASC');
+            if (in_array('id', $fields, true)) {
+                $builder->orderBy('id', 'ASC');
+            }
+        } elseif (in_array('id', $fields, true)) {
             $builder->orderBy('id', 'ASC');
         } elseif (in_array('investigation_name', $fields, true)) {
             $builder->orderBy('investigation_name', 'ASC');
@@ -7424,6 +7430,17 @@ class Opd_prescription extends BaseController
         }
         if (in_array('investigation_name', $fields, true)) {
             $insert['investigation_name'] = $name;
+        }
+        if (in_array('order_id', $fields, true)) {
+            $seqBuilder = $this->db->table($table)->selectMax('order_id', 'max_order');
+            if (in_array('opd_pre_id', $fields, true)) {
+                $seqBuilder->where('opd_pre_id', $sessionId);
+            } elseif (in_array('opd_id', $fields, true)) {
+                $seqBuilder->where('opd_id', $opdId);
+            }
+            $maxRow = $seqBuilder->get()->getRowArray();
+            $nextOrder = (int) ($maxRow['max_order'] ?? 0) + 1;
+            $insert['order_id'] = $nextOrder;
         }
 
         $builder = $this->db->table($table);
@@ -7520,6 +7537,7 @@ class Opd_prescription extends BaseController
         $hasOpdId = in_array('opd_id', $fields, true);
         $hasCode = in_array('investigation_code', $fields, true);
         $hasName = in_array('investigation_name', $fields, true);
+        $hasOrderId = in_array('order_id', $fields, true);
 
         $existingRowsBuilder = $this->db->table($table);
         if ($hasOpdPreId) {
@@ -7533,6 +7551,7 @@ class Opd_prescription extends BaseController
         $existingRows = $existingRowsBuilder->get()->getResultArray();
         $existingByCode = [];
         $existingByName = [];
+        $maxOrder = 0;
         foreach ($existingRows as $row) {
             $exCode = trim((string) ($row['investigation_code'] ?? ''));
             $exName = trim((string) ($row['investigation_name'] ?? ''));
@@ -7542,7 +7561,11 @@ class Opd_prescription extends BaseController
             if ($exName !== '') {
                 $existingByName[strtolower($exName)] = true;
             }
+            if ($hasOrderId) {
+                $maxOrder = max($maxOrder, (int) ($row['order_id'] ?? 0));
+            }
         }
+        $nextOrder = $maxOrder;
 
         $invLookup = $this->buildInvestigationLookupMaps();
 
@@ -7590,6 +7613,10 @@ class Opd_prescription extends BaseController
             }
             if ($hasName) {
                 $row['investigation_name'] = $name;
+            }
+            if ($hasOrderId) {
+                $nextOrder++;
+                $row['order_id'] = $nextOrder;
             }
             $insertRows[] = $row;
 
