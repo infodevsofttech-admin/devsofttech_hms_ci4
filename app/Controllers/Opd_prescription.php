@@ -7247,17 +7247,19 @@ class Opd_prescription extends BaseController
             $pName = $this->resolveFirstField($pFields, ['Name', 'name']);
             $jProfileCode = $this->resolveFirstField($jFields, ['ProfileCode', 'profile_code']);
             $jInvestCode = $this->resolveFirstField($jFields, ['InvestigationCode', 'investigation_code']);
-            $jPrintOrder = $this->resolveFirstField($jFields, ['printOrder', 'print_order', 'id']);
+            $jPrintOrder = $this->resolveFirstField($jFields, ['printOrder', 'print_order']);
+            $jId = $this->resolveFirstField($jFields, ['id']);
             $iCode = $this->resolveFirstField($iFields, ['Code', 'code']);
             $iName = $this->resolveFirstField($iFields, ['Name', 'name']);
-            $iSortOrder = $this->resolveFirstField($iFields, ['sort_id', 'sort_order', 'id', 'Code', 'code']);
 
             if ($pCode !== null && $pName !== null && $jProfileCode !== null && $jInvestCode !== null && $iCode !== null && $iName !== null) {
                 $orderExpr = 'p.`' . $pName . '` ASC';
-                if ($iSortOrder !== null) {
-                    $orderExpr .= ', i.`' . $iSortOrder . '` ASC';
-                } elseif ($jPrintOrder !== null) {
+                if ($jPrintOrder !== null) {
                     $orderExpr .= ', j.`' . $jPrintOrder . '` ASC';
+                } elseif ($jId !== null) {
+                    $orderExpr .= ', j.`' . $jId . '` ASC';
+                } else {
+                    $orderExpr .= ', i.`' . $iName . '` ASC';
                 }
 
                 $sql = 'SELECT '
