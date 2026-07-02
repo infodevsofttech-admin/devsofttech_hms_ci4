@@ -10873,11 +10873,19 @@ class Medical extends BaseController
 
         $qtyExpr = $qty !== null ? ('IFNULL(t.' . $qty . ',0)') : '0';
         $lineAmountExpr = $lineAmount !== null ? ('IFNULL(t.' . $lineAmount . ',0)') : '0';
-        $taxableExpr = $taxable !== null ? ('IFNULL(t.' . $taxable . ',0)') : $lineAmountExpr;
+        $baseTaxableExpr = $taxable !== null ? ('IFNULL(t.' . $taxable . ',0)') : '0';
         $cgstPerExpr = $cgstPer !== null ? ('IFNULL(t.' . $cgstPer . ',0)') : '0';
         $sgstPerExpr = $sgstPer !== null ? ('IFNULL(t.' . $sgstPer . ',0)') : $cgstPerExpr;
-        $cgstExpr = $cgst !== null ? ('IFNULL(t.' . $cgst . ',0)') : '((' . $taxableExpr . ' * ' . $cgstPerExpr . ')/100)';
-        $sgstExpr = $sgst !== null ? ('IFNULL(t.' . $sgst . ',0)') : '((' . $taxableExpr . ' * ' . $sgstPerExpr . ')/100)';
+        $derivedTaxableExpr = '(CASE '
+            . 'WHEN ' . $baseTaxableExpr . ' > 0 THEN ' . $baseTaxableExpr . ' '
+            . 'WHEN ((' . $cgstPerExpr . ' + ' . $sgstPerExpr . ') > 0 AND ' . $lineAmountExpr . ' > 0) THEN ROUND((' . $lineAmountExpr . ' * 100) / (100 + (' . $cgstPerExpr . ' + ' . $sgstPerExpr . ')), 2) '
+            . 'ELSE ' . $lineAmountExpr . ' END)';
+        $cgstExpr = $cgst !== null
+            ? '(CASE WHEN IFNULL(t.' . $cgst . ',0) > 0 THEN IFNULL(t.' . $cgst . ',0) WHEN ((' . $cgstPerExpr . ' + ' . $sgstPerExpr . ') > 0 AND ' . $derivedTaxableExpr . ' > 0) THEN ROUND((' . $derivedTaxableExpr . ' * ' . $cgstPerExpr . ') / 100, 2) ELSE 0 END)'
+            : '((' . $derivedTaxableExpr . ' * ' . $cgstPerExpr . ')/100)';
+        $sgstExpr = $sgst !== null
+            ? '(CASE WHEN IFNULL(t.' . $sgst . ',0) > 0 THEN IFNULL(t.' . $sgst . ',0) WHEN ((' . $cgstPerExpr . ' + ' . $sgstPerExpr . ') > 0 AND ' . $derivedTaxableExpr . ' > 0) THEN ROUND((' . $derivedTaxableExpr . ' * ' . $sgstPerExpr . ') / 100, 2) ELSE 0 END)'
+            : '((' . $derivedTaxableExpr . ' * ' . $sgstPerExpr . ')/100)';
 
         $where = [
             'DATE(m.' . $invDate . ') BETWEEN ? AND ?',
@@ -10891,7 +10899,7 @@ class Medical extends BaseController
             . 'SUM(' . $cgstExpr . ') AS tcgst,'
             . 'SUM(' . $sgstExpr . ') AS tsgst,'
             . 'SUM(' . $cgstExpr . ' + ' . $sgstExpr . ') AS tgst,'
-            . 'SUM(' . $taxableExpr . ') AS taxable_amount,'
+            . 'SUM(' . $derivedTaxableExpr . ') AS taxable_amount,'
             . 'SUM(' . $lineAmountExpr . ') AS amount '
             . 'FROM invoice_med_master m '
             . 'JOIN inv_med_item t ON m.' . $mid . '=t.' . $invMedId . ' '
