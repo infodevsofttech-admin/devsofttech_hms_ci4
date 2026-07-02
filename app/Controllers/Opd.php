@@ -120,7 +120,7 @@ class Opd extends BaseController
             // Patient
             'pName', 'pRelative', 'age_sex', 'phoneno', 'p_address',
             'uhid_no', 'opd_sr_no', 'opd_no', 'opd_date', 'exp_date',
-            'opd_fee_desc', 'total_no_visit', 'last_opdvisit_date', 'str_opd_book_date',
+            'opd_fee_amount', 'opd_fee_desc', 'total_no_visit', 'last_opdvisit_date', 'str_opd_book_date',
             // General Examination (raw values)
             'bp', 'bp_diastolic', 'pulse', 'temp', 'spo2', 'rr_min',
             'height', 'weight', 'waist',
@@ -2543,7 +2543,9 @@ class Opd extends BaseController
 
         $specName = trim((string) ($doctor->SpecName ?? $opd->doc_spec ?? ''));
         $doctorShortDescription = trim((string) ($doctor->doc_sign ?? $opd->doc_sign ?? ''));
-        $opdFeeDesc = trim((string) (($opd->opd_fee_amount ?? '') . ' ' . ($opd->opd_fee_desc ?? '')));
+        $opdFeeAmount = trim((string) ($opd->opd_fee_amount ?? ''));
+        $opdFeeDescription = trim((string) ($opd->opd_fee_desc ?? ''));
+        $opdFeeDisplay = trim($opdFeeAmount . ' ' . $opdFeeDescription);
         $totalNoVisit = $this->resolveTotalOpdVisitCountForPrint($opd);
         $lastVisitDate = '';
         $lastVisitText = '';
@@ -3022,7 +3024,7 @@ class Opd extends BaseController
             . '</td>'
             . '<td width="33.3%" valign="top">'
             . '<b>DEPARTMENT :</b><br>' . esc($specName) . '<br>'
-            . esc($opdFeeDesc) . '<br>'
+            . esc($opdFeeDisplay) . '<br>'
             . '<b>No. of Visit</b> : ' . esc($totalNoVisit) . '<br>'
             . esc($lastVisitText) . '<br>'
             . 'Book Time : ' . esc($bookTime)
@@ -3054,7 +3056,8 @@ class Opd extends BaseController
             'SpecName' => $specName,
             'short_description' => $doctorShortDescription,
             'doctor_short_description' => $doctorShortDescription,
-            'opd_fee_desc' => $opdFeeDesc,
+            'opd_fee_amount' => $opdFeeAmount,
+            'opd_fee_desc' => $opdFeeDescription,
             'total_no_visit' => $totalNoVisit,
             'last_opdvisit_date' => $lastVisitDate,
             'str_opd_book_date' => $bookTime,

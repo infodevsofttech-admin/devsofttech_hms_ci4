@@ -39,7 +39,7 @@ $patientSet = [
 ];
 
 $opdMasterSet = [
-    'opd_sr_no', 'opd_no', 'opd_date', 'exp_date', 'opd_fee_desc',
+    'opd_sr_no', 'opd_no', 'opd_date', 'exp_date', 'opd_fee_amount', 'opd_fee_desc',
     'total_no_visit', 'last_opdvisit_date', 'str_opd_book_date',
     'doctor_name', 'doctor_full_name', 'doctor_title',
     'doctor_reg_no', 'doctor_registration',
