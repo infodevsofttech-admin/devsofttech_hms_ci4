@@ -101,14 +101,23 @@ $getDoseLabel = function ($id, $type) use ($doseMasterMaps) {
 $medicineRows = [];
 if (! empty($legacyDrugRows)) {
     foreach ($legacyDrugRows as $row) {
+        $doseId = (int) ($row['dosage'] ?? 0);
+        $whenId = (int) ($row['dosage_when'] ?? 0);
+        $freqId = (int) ($row['dosage_freq'] ?? 0);
+        $doseLabel = $getDoseLabel($doseId, 'dose');
+        $whenLabel = $getDoseLabel($whenId, 'when');
+        $freqLabel = $getDoseLabel($freqId, 'freq');
         $medicineRows[] = [
             'id' => (int) ($row['id'] ?? 0),
             'source' => 'legacy',
             'med_name' => (string) ($row['med_name'] ?? ''),
             'med_type' => (string) ($row['med_type'] ?? ''),
-            'dosage' => $getDoseLabel($row['dosage'] ?? 0, 'dose'),
-            'dosage_when' => $getDoseLabel($row['dosage_when'] ?? 0, 'when'),
-            'dosage_freq' => $getDoseLabel($row['dosage_freq'] ?? 0, 'freq'),
+            'dosage' => $doseLabel !== '' ? $doseLabel : (string) ($row['dosage'] ?? ''),
+            'dosage_when' => $whenLabel !== '' ? $whenLabel : (string) ($row['dosage_when'] ?? ''),
+            'dosage_freq' => $freqLabel !== '' ? $freqLabel : (string) ($row['dosage_freq'] ?? ''),
+            'dosage_id' => $doseId,
+            'dosage_when_id' => $whenId,
+            'dosage_freq_id' => $freqId,
             'no_of_days' => (string) ($row['no_of_days'] ?? ''),
             'qty' => (string) ($row['qty'] ?? ''),
             'remark' => (string) ($row['remark'] ?? ''),
@@ -124,6 +133,9 @@ if (! empty($legacyDrugRows)) {
             'dosage' => (string) ($row['drug_dose'] ?? ''),
             'dosage_when' => '',
             'dosage_freq' => '',
+            'dosage_id' => 0,
+            'dosage_when_id' => 0,
+            'dosage_freq_id' => 0,
             'no_of_days' => (string) ($row['drug_day'] ?? ''),
             'qty' => '',
             'remark' => '',
@@ -1220,7 +1232,7 @@ $historyFields = [
                                                             <td colspan="9" class="text-muted text-center">No medicine added</td>
                                                         </tr>
                                                         <?php else: foreach ($medicineRows as $row): ?>
-                                                            <tr>
+                                                            <tr data-row-id="<?= (int) ($row['id'] ?? 0) ?>" data-row-source="<?= esc((string) ($row['source'] ?? 'legacy')) ?>">
                                                                 <td><?= esc((string) ($row['med_type'] ?? '')) ?></td>
                                                                 <td><?= esc((string) ($row['med_name'] ?? '')) ?></td>
                                                                 <td><?= esc((string) ($row['dosage'] ?? '')) ?></td>
@@ -1229,7 +1241,25 @@ $historyFields = [
                                                                 <td><?= esc((string) ($row['no_of_days'] ?? '')) ?></td>
                                                                 <td><?= esc((string) ($row['qty'] ?? '')) ?></td>
                                                                 <td><?= esc((string) ($row['remark'] ?? '')) ?></td>
-                                                                <td><button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_drug" data-reload-section="section-medicine" onclick="document.getElementById('drug_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';document.getElementById('drug_remove_source').value='<?= esc((string) ($row['source'] ?? 'legacy')) ?>';">Remove</button></td>
+                                                                <td class="d-flex gap-1">
+                                                                    <button
+                                                                        type="button"
+                                                                        class="btn btn-outline-primary btn-sm btn-edit-discharge-med"
+                                                                        data-id="<?= (int) ($row['id'] ?? 0) ?>"
+                                                                        data-source="<?= esc((string) ($row['source'] ?? 'legacy')) ?>"
+                                                                        data-med-name="<?= esc((string) ($row['med_name'] ?? '')) ?>"
+                                                                        data-med-type="<?= esc((string) ($row['med_type'] ?? '')) ?>"
+                                                                        data-dose-id="<?= (int) ($row['dosage_id'] ?? 0) ?>"
+                                                                        data-dose-when-id="<?= (int) ($row['dosage_when_id'] ?? 0) ?>"
+                                                                        data-dose-freq-id="<?= (int) ($row['dosage_freq_id'] ?? 0) ?>"
+                                                                        data-dose-label="<?= esc((string) ($row['dosage'] ?? '')) ?>"
+                                                                        data-dose-when-label="<?= esc((string) ($row['dosage_when'] ?? '')) ?>"
+                                                                        data-dose-freq-label="<?= esc((string) ($row['dosage_freq'] ?? '')) ?>"
+                                                                        data-days="<?= esc((string) ($row['no_of_days'] ?? '')) ?>"
+                                                                        data-qty="<?= esc((string) ($row['qty'] ?? '')) ?>"
+                                                                        data-remark="<?= esc((string) ($row['remark'] ?? '')) ?>">Edit</button>
+                                                                    <button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_drug" data-reload-section="section-medicine" onclick="document.getElementById('drug_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';document.getElementById('drug_remove_source').value='<?= esc((string) ($row['source'] ?? 'legacy')) ?>';">Remove</button>
+                                                                </td>
                                                             </tr>
                                                     <?php endforeach;
                                                     endif; ?>
@@ -1251,6 +1281,7 @@ $historyFields = [
                                             </div>
                                             <div class="card-body">
                                                 <input type="hidden" id="discharge_med_item_id" value="0">
+                                                <input type="hidden" id="discharge_med_item_source" value="legacy">
                                                 <input type="hidden" id="discharge_med_id" value="0">
 <div class="row g-2 mb-2">
                                                 <div class="col-8">
@@ -4352,6 +4383,91 @@ $historyFields = [
                     }
                 }
 
+                function resetMedicineFormState() {
+                    $('#discharge_med_item_id').val('0');
+                    $('#discharge_med_item_source').val('legacy');
+                    $('#btn_discharge_med_add').text('+ADD / Update');
+                }
+
+                function medicineActionButtonsHtml(rowId, rowSource) {
+                    var id = parseInt(rowId || 0, 10);
+                    var source = String(rowSource || 'legacy').trim() || 'legacy';
+                    return '<td class="d-flex gap-1">'
+                        + '<button type="button" class="btn btn-outline-primary btn-sm btn-edit-discharge-med" data-id="' + id + '" data-source="' + $('<div>').text(source).html() + '">Edit</button>'
+                        + '<button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_drug" data-reload-section="section-medicine" onclick="document.getElementById(\'drug_remove_id\').value=\'' + id + '\';document.getElementById(\'drug_remove_source\').value=\'' + $('<div>').text(source).html() + '\';">Remove</button>'
+                        + '</td>';
+                }
+
+                $(document).on('click', '.btn-edit-discharge-med', function() {
+                    var row = $(this).closest('tr');
+                    if (!row.length) {
+                        return;
+                    }
+
+                    var rowId = parseInt($(this).data('id') || row.data('row-id') || 0, 10);
+                    var rowSource = String($(this).data('source') || row.data('row-source') || 'legacy').trim() || 'legacy';
+
+                    var medName = String($(this).data('med-name') || row.find('td:eq(1)').text() || '').trim();
+                    var medType = String($(this).data('med-type') || row.find('td:eq(0)').text() || '').trim();
+                    var doseId = String($(this).data('dose-id') || '').trim();
+                    var whenId = String($(this).data('dose-when-id') || '').trim();
+                    var freqId = String($(this).data('dose-freq-id') || '').trim();
+                    var doseLabel = String($(this).data('dose-label') || row.find('td:eq(2)').text() || '').trim();
+                    var whenLabel = String($(this).data('dose-when-label') || row.find('td:eq(3)').text() || '').trim();
+                    var freqLabel = String($(this).data('dose-freq-label') || row.find('td:eq(4)').text() || '').trim();
+                    var noOfDays = String($(this).data('days') || row.find('td:eq(5)').text() || '').trim();
+                    var qty = String($(this).data('qty') || row.find('td:eq(6)').text() || '').trim();
+                    var remark = String($(this).data('remark') || row.find('td:eq(7)').text() || '').trim();
+
+                    $('#discharge_med_item_id').val(rowId > 0 ? rowId : 0);
+                    $('#discharge_med_item_source').val(rowSource);
+                    $('#discharge_med_name').val(medName);
+                    $('#discharge_med_type').val(medType);
+
+                    if (doseId !== '' && doseId !== '0') {
+                        $('#discharge_dosage').val(doseId);
+                    } else {
+                        ensureDoseOption('#discharge_dosage', doseLabel);
+                        $('#discharge_dosage').val(doseLabel);
+                    }
+
+                    if (whenId !== '' && whenId !== '0') {
+                        $('#discharge_dosage_when').val(whenId);
+                    } else {
+                        ensureDoseOption('#discharge_dosage_when', whenLabel);
+                        $('#discharge_dosage_when').val(whenLabel);
+                    }
+
+                    if (freqId !== '' && freqId !== '0') {
+                        $('#discharge_dosage_freq').val(freqId);
+                    } else {
+                        ensureDoseOption('#discharge_dosage_freq', freqLabel);
+                        $('#discharge_dosage_freq').val(freqLabel);
+                    }
+
+                    $('#discharge_no_of_days').val(noOfDays);
+                    $('#discharge_qty').val(qty);
+                    $('#discharge_remark').val(remark);
+
+                    $('#btn_discharge_med_add').text('Update Medicine');
+                    setMedicineStatus('Edit mode: update fields and click Update Medicine.', 'info');
+                    $('#discharge_med_name').trigger('focus');
+                });
+
+                $(document).on('click', '.btn-remove-discharge-med', function() {
+                    var row = $(this).closest('tr');
+                    var tbody = section.querySelector('#discharge_medicine_tbody');
+                    if (!row.length || !tbody) {
+                        return;
+                    }
+
+                    row.remove();
+                    if (!tbody.querySelector('tr')) {
+                        tbody.innerHTML = '<tr><td colspan="9" class="text-muted text-center">No medicine added</td></tr>';
+                    }
+                    setMedicineStatus('Medicine removed from current view.', 'info');
+                });
+
                 // Handle quick buttons
                 section.querySelectorAll('.discharge-quick-btn').forEach(function(btn) {
                     btn.addEventListener('click', function() {
@@ -4384,6 +4500,8 @@ $historyFields = [
                         var qty = $('#discharge_qty').val().trim();
                         var doseWhere = $('#discharge_dose_where').val();
                         var remark = $('#discharge_remark').val().trim();
+                        var editRowId = parseInt($('#discharge_med_item_id').val() || '0', 10);
+                        var editRowSource = String($('#discharge_med_item_source').val() || 'legacy').trim() || 'legacy';
 
                         if (medName === '') {
                             setMedicineStatus('Please enter medicine name.', 'error');
@@ -4439,6 +4557,8 @@ $historyFields = [
                         var payload = {
                             action: 'add_drug',
                             ajax_mode: 'json',
+                            drug_edit_id: editRowId,
+                            drug_edit_source: editRowSource,
                             new_drug_name: medName,
                             new_drug_type: medType,
                             new_drug_dose: dosage,
@@ -4462,7 +4582,6 @@ $historyFields = [
                             updateFormCsrf(activeForm, data || {});
 
                             if (data && parseInt(data.update || '0', 10) === 1) {
-                                // Add row to table
                                 var tbody = section.querySelector('#discharge_medicine_tbody');
                                 if (!tbody) {
                                     setMedicineStatus('Medicine table not found.', 'error');
@@ -4475,8 +4594,11 @@ $historyFields = [
                                     emptyRow.closest('tr').remove();
                                 }
 
-                                var tr = document.createElement('tr');
-                                tr.innerHTML = '<td>' + $('<div>').text(medType).html() + '</td>' +
+                                var responseRowId = parseInt((data && data.row_id) ? data.row_id : 0, 10);
+                                var responseRowSource = String((data && data.row_source) ? data.row_source : (editRowSource || 'legacy')).trim() || 'legacy';
+                                var rowIdToUse = responseRowId > 0 ? responseRowId : editRowId;
+
+                                var rowHtml = '<td>' + $('<div>').text(medType).html() + '</td>' +
                                     '<td>' + $('<div>').text(medName).html() + '</td>' +
                                     '<td>' + $('<div>').text(doseLabel).html() + '</td>' +
                                     '<td>' + $('<div>').text(whenLabel).html() + '</td>' +
@@ -4484,26 +4606,55 @@ $historyFields = [
                                     '<td>' + $('<div>').text(formattedDuration).html() + '</td>' +
                                     '<td>' + $('<div>').text(qty).html() + '</td>' +
                                     '<td>' + $('<div>').text(remark).html() + '</td>' +
-                                    '<td><button type="button" class="btn btn-outline-danger btn-sm btn-remove-discharge-med">Remove</button></td>';
-                                tbody.appendChild(tr);
+                                    medicineActionButtonsHtml(rowIdToUse, responseRowSource);
+
+                                if (editRowId > 0) {
+                                    var existingRow = tbody.querySelector('tr[data-row-id="' + editRowId + '"][data-row-source="' + editRowSource + '"]');
+                                    if (existingRow) {
+                                        existingRow.innerHTML = rowHtml;
+                                        existingRow.setAttribute('data-row-id', String(rowIdToUse));
+                                        existingRow.setAttribute('data-row-source', responseRowSource);
+                                    } else {
+                                        var updatedRow = document.createElement('tr');
+                                        updatedRow.setAttribute('data-row-id', String(rowIdToUse));
+                                        updatedRow.setAttribute('data-row-source', responseRowSource);
+                                        updatedRow.innerHTML = rowHtml;
+                                        tbody.appendChild(updatedRow);
+                                    }
+                                } else {
+                                    var tr = document.createElement('tr');
+                                    tr.setAttribute('data-row-id', String(rowIdToUse));
+                                    tr.setAttribute('data-row-source', responseRowSource);
+                                    tr.innerHTML = rowHtml;
+                                    tbody.appendChild(tr);
+                                }
+
+                                // Keep fresh values on edit button for repeated edits without reload
+                                var targetRow = tbody.querySelector('tr[data-row-id="' + rowIdToUse + '"][data-row-source="' + responseRowSource + '"]');
+                                if (targetRow) {
+                                    var editBtn = targetRow.querySelector('.btn-edit-discharge-med');
+                                    if (editBtn) {
+                                        editBtn.setAttribute('data-med-name', medName);
+                                        editBtn.setAttribute('data-med-type', medType);
+                                        editBtn.setAttribute('data-dose-id', dosage || '');
+                                        editBtn.setAttribute('data-dose-when-id', dosageWhen || '');
+                                        editBtn.setAttribute('data-dose-freq-id', dosageFreq || '');
+                                        editBtn.setAttribute('data-dose-label', doseLabel || '');
+                                        editBtn.setAttribute('data-dose-when-label', whenLabel || '');
+                                        editBtn.setAttribute('data-dose-freq-label', freqLabel || '');
+                                        editBtn.setAttribute('data-days', noOfDays || '');
+                                        editBtn.setAttribute('data-qty', qty || '');
+                                        editBtn.setAttribute('data-remark', remark || '');
+                                    }
+                                }
 
                                 // Clear form
                                 $('#discharge_med_name, #discharge_med_type, #discharge_no_of_days, #discharge_qty, #discharge_remark').val('');
                                 $('#discharge_dosage, #discharge_dosage_when, #discharge_dosage_freq, #discharge_dose_where').val('');
+                                resetMedicineFormState();
                                 $('#discharge_med_name').focus();
 
-                                setMedicineStatus('Medicine saved successfully.', 'success');
-
-                                // Bind remove button (Note: Remove is not yet AJAX - medicines load from DB on page reload)
-                                tr.querySelector('.btn-remove-discharge-med').addEventListener('click', function() {
-                                    if (confirm('Remove this medicine? This will only remove from the current view. Reload the page to see saved medicines.')) {
-                                        tr.remove();
-                                        if (tbody.children.length === 0) {
-                                            tbody.innerHTML = '<tr><td colspan="9" class="text-muted text-center">No medicine added</td></tr>';
-                                        }
-                                        setMedicineStatus('Medicine removed from view. Reload to see saved data.', 'info');
-                                    }
-                                });
+                                setMedicineStatus(editRowId > 0 ? 'Medicine updated successfully.' : 'Medicine saved successfully.', 'success');
                             } else {
                                 var errorMsg = (data && data.error_text) ? data.error_text : 'Unable to save medicine.';
                                 setMedicineStatus(errorMsg, 'error');
@@ -4524,6 +4675,7 @@ $historyFields = [
                             if (tbody) {
                                 tbody.innerHTML = '<tr><td colspan="9" class="text-muted text-center">No medicine added</td></tr>';
                             }
+                            resetMedicineFormState();
                             setMedicineStatus('All medicines removed.', 'info');
                         }
                     });

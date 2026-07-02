@@ -5447,6 +5447,8 @@ class Ipd_discharge extends BaseController
         if (strtolower($this->request->getMethod()) === 'post') {
             $action = (string) ($this->request->getPost('action') ?? 'save_main');
             $savedAny = false;
+            $ajaxRowId = 0;
+            $ajaxRowSource = '';
 
             if ((int) ($this->request->getPost('dietary_autosave') ?? 0) === 1) {
                 $instructionFoodIds = $this->readInstructionFoodIdsFromRequest();
@@ -5769,9 +5771,71 @@ class Ipd_discharge extends BaseController
                 $day = trim((string) ($this->request->getPost('new_drug_day') ?? ''));
                 $qty = trim((string) ($this->request->getPost('new_drug_qty') ?? ''));
                 $remark = trim((string) ($this->request->getPost('new_drug_remark') ?? ''));
+                $editId = (int) ($this->request->getPost('drug_edit_id') ?? 0);
+                $editSource = strtolower(trim((string) ($this->request->getPost('drug_edit_source') ?? 'legacy')));
 
                 $legacyDrugTable = $this->findFirstExistingTable(['ipd_discharge_prescrption_prescribed', 'ipd_discharge_prescription_prescribed']);
-                if ($name !== '' && $legacyDrugTable !== null && $this->tableHasColumns($legacyDrugTable, ['ipd_id', 'med_name'])) {
+                if ($name !== '' && $editId > 0) {
+                    $updated = false;
+
+                    if ($editSource === 'legacy' && $legacyDrugTable !== null && $this->tableHasColumns($legacyDrugTable, ['id', 'ipd_id'])) {
+                        $update = [
+                            'med_name' => $name,
+                            'med_type' => $type,
+                            'dosage' => $dose,
+                            'dosage_when' => $when,
+                            'dosage_freq' => $freq,
+                            'no_of_days' => $day,
+                            'qty' => $qty,
+                            'remark' => $remark,
+                            'update_by' => $userLabel,
+                        ];
+
+                        $allowed = [];
+                        foreach ($update as $field => $value) {
+                            if ($this->db->fieldExists($field, $legacyDrugTable)) {
+                                $allowed[$field] = $value;
+                            }
+                        }
+
+                        if (! empty($allowed)) {
+                            $updated = (bool) $this->db->table($legacyDrugTable)
+                                ->where('id', $editId)
+                                ->where('ipd_id', $ipdId)
+                                ->update($allowed);
+                        }
+
+                        if ($updated) {
+                            $ajaxRowId = $editId;
+                            $ajaxRowSource = 'legacy';
+                        }
+                    }
+
+                    if (! $updated && $this->tableHasColumns('ipd_discharge_drug', ['id', 'ipd_id'])) {
+                        $doseText = trim(implode(' ', array_filter([$type, $dose, $when, $freq], static fn ($v) => trim((string) $v) !== '')));
+                        $dayText = trim(implode(' ', array_filter([$day, $qty !== '' ? ('Qty:' . $qty) : '', $remark], static fn ($v) => trim((string) $v) !== '')));
+                        $update = [
+                            'drug_name' => $name,
+                            'drug_dose' => $doseText,
+                            'drug_day' => $dayText,
+                            'update_by' => $userLabel,
+                        ];
+
+                        $updated = (bool) $this->db->table('ipd_discharge_drug')
+                            ->where('id', $editId)
+                            ->where('ipd_id', $ipdId)
+                            ->update($update);
+
+                        if ($updated) {
+                            $ajaxRowId = $editId;
+                            $ajaxRowSource = 'classic';
+                        }
+                    }
+
+                    $savedAny = $updated;
+                    $notice = $savedAny ? 'Medicine row updated.' : 'Unable to update medicine row.';
+                    $noticeType = $savedAny ? 'success' : 'warning';
+                } elseif ($name !== '' && $legacyDrugTable !== null && $this->tableHasColumns($legacyDrugTable, ['ipd_id', 'med_name'])) {
                     $insert = [
                         'ipd_id' => $ipdId,
                         'med_id' => 0,
@@ -5799,6 +5863,10 @@ class Ipd_discharge extends BaseController
                     $savedAny = ! empty($allowed)
                         ? (bool) $this->db->table($legacyDrugTable)->insert($allowed)
                         : false;
+                    if ($savedAny) {
+                        $ajaxRowId = (int) ($this->db->insertID() ?? 0);
+                        $ajaxRowSource = 'legacy';
+                    }
                     $notice = $savedAny ? 'Medicine row added.' : 'Unable to add medicine row.';
                     $noticeType = $savedAny ? 'success' : 'warning';
                 } elseif ($name !== '' && $this->tableHasColumns('ipd_discharge_drug', ['ipd_id', 'drug_name'])) {
@@ -5817,6 +5885,10 @@ class Ipd_discharge extends BaseController
                         $insert['order_id'] = 0;
                     }
                     $savedAny = (bool) $this->db->table('ipd_discharge_drug')->insert($insert);
+                    if ($savedAny) {
+                        $ajaxRowId = (int) ($this->db->insertID() ?? 0);
+                        $ajaxRowSource = 'classic';
+                    }
                     $notice = $savedAny ? 'Drug row added.' : 'Unable to add drug row.';
                     $noticeType = $savedAny ? 'success' : 'warning';
                 } else {
@@ -6442,6 +6514,8 @@ class Ipd_discharge extends BaseController
                     'update' => $savedAny ? 1 : 0,
                     'error_text' => $notice,
                     'notice_type' => $noticeType,
+                    'row_id' => $ajaxRowId,
+                    'row_source' => $ajaxRowSource,
                     'csrfName' => csrf_token(),
                     'csrfHash' => csrf_hash(),
                 ]);
