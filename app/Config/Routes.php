@@ -597,6 +597,8 @@ $routes->get('Opd/invoice/(:num)', 'Opd::invoice/$1');
 $routes->get('Opd/invoice_print/(:num)', 'Opd::invoice_print/$1');
 $routes->get('Opd/opd_lettre_print/(:num)', 'Opd::opd_lettre_print/$1');
 $routes->get('Opd/opd_lettre_pdf/(:num)', 'Opd::opd_lettre_pdf/$1');
+$routes->get('Opd/opd_lettre_html', 'Opd::opd_lettre_html');
+$routes->get('Opd/opd_lettre_html/(:num)', 'Opd::opd_lettre_html/$1');
 $routes->get('Opd/print_template_builder', 'Opd::print_template_builder');
 $routes->post('Opd/print_template_save', 'Opd::print_template_save');
 $routes->post('Opd/print_template_rename', 'Opd::print_template_rename');

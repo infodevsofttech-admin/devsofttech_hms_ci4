@@ -24,6 +24,41 @@ class Opd extends BaseController
      */
     private array $scanAiDebug = [];
 
+    /**
+     * @var array{heading_style:string,line_gap:float,block_gap_mm:float}
+     */
+    private array $opdPlaceholderRenderOptions = [
+        'heading_style' => 'bold',
+        'line_gap' => 1.6,
+        'block_gap_mm' => 2.8,
+    ];
+
+    private function configureOpdPlaceholderRenderOptionsFromRequest(): void
+    {
+        $headingStyle = strtolower(trim((string) $this->request->getGet('heading_style')));
+        if (!in_array($headingStyle, ['bold', 'highlight', 'plain'], true)) {
+            $headingStyle = 'bold';
+        }
+
+        $lineGap = (float) $this->request->getGet('line_gap');
+        if (!is_finite($lineGap) || $lineGap <= 0) {
+            $lineGap = 1.6;
+        }
+        $lineGap = max(1.0, min(3.0, $lineGap));
+
+        $blockGapMm = (float) $this->request->getGet('block_gap_mm');
+        if (!is_finite($blockGapMm) || $blockGapMm < 0) {
+            $blockGapMm = 2.8;
+        }
+        $blockGapMm = max(0.0, min(10.0, $blockGapMm));
+
+        $this->opdPlaceholderRenderOptions = [
+            'heading_style' => $headingStyle,
+            'line_gap' => round($lineGap, 2),
+            'block_gap_mm' => round($blockGapMm, 2),
+        ];
+    }
+
     private function canAccessDoctorWorkPanel(): bool
     {
         $user = auth()->user();
@@ -2111,6 +2146,8 @@ class Opd extends BaseController
 
     public function opd_lettre_pdf(int $opdId)
     {
+        $this->configureOpdPlaceholderRenderOptionsFromRequest();
+
         $sessionId = (int) $this->request->getGet('session_id');
         $debugHtml = ((int) $this->request->getGet('debug_html')) === 1;
         $layoutMode = strtolower(trim((string) $this->request->getGet('layout')));
@@ -2421,6 +2458,48 @@ class Opd extends BaseController
             ->setHeader('Content-Type', 'application/pdf')
             ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
             ->setBody($mpdf->Output($fileName, 'S'));
+    }
+
+    public function opd_lettre_html(int $opdId = 0)
+    {
+        if ($opdId <= 0) {
+            $defaultHeading = esc((string) ($this->request->getGet('heading_style') ?: 'bold'));
+            $defaultLineGap = esc((string) ($this->request->getGet('line_gap') ?: '1.6'));
+            $defaultBlockGap = esc((string) ($this->request->getGet('block_gap_mm') ?: '2.8'));
+
+            $html = '<!doctype html><html><head><meta charset="UTF-8"><title>OPD HTML Preview</title>'
+                . '<style>body{font-family:Arial,sans-serif;padding:18px;}label{display:block;margin:8px 0 4px;}input,select{padding:6px 8px;min-width:260px;}button{margin-top:12px;padding:7px 14px;}code{background:#f4f4f4;padding:2px 5px;}</style>'
+                . '</head><body>'
+                . '<h2>OPD Letter HTML Preview</h2>'
+                . '<p>Enter OPD ID and style options. This opens rendered HTML debug output for placeholder and CSS verification.</p>'
+                . '<form method="get" onsubmit="var id=(document.getElementById(\'opd_id\').value||\'\').trim(); if(!id){return false;} this.action=\'' . base_url('Opd/opd_lettre_html') . '/\'+encodeURIComponent(id);">'
+                . '<label for="opd_id">OPD ID (opd_master.id)</label>'
+                . '<input id="opd_id" name="opd_id" type="number" min="1" required>'
+                . '<label for="heading_style">Heading Style</label>'
+                . '<select id="heading_style" name="heading_style">'
+                . '<option value="bold"' . ($defaultHeading === 'bold' ? ' selected' : '') . '>Bold</option>'
+                . '<option value="highlight"' . ($defaultHeading === 'highlight' ? ' selected' : '') . '>Highlight</option>'
+                . '<option value="plain"' . ($defaultHeading === 'plain' ? ' selected' : '') . '>Plain</option>'
+                . '</select>'
+                . '<label for="line_gap">Line Gap (line-height)</label>'
+                . '<input id="line_gap" name="line_gap" type="number" min="1" max="3" step="0.1" value="' . $defaultLineGap . '">'
+                . '<label for="block_gap_mm">Block Gap (mm between sections)</label>'
+                . '<input id="block_gap_mm" name="block_gap_mm" type="number" min="0" max="10" step="0.1" value="' . $defaultBlockGap . '">'
+                . '<div><button type="submit">Open HTML Preview</button></div>'
+                . '</form>'
+                . '<p style="margin-top:16px;">Direct URL example: <code>' . esc(base_url('Opd/opd_lettre_html/2047354?heading_style=highlight&line_gap=1.8&block_gap_mm=4')) . '</code></p>'
+                . '</body></html>';
+
+            return $this->response
+                ->setHeader('Content-Type', 'text/html; charset=UTF-8')
+                ->setBody($html);
+        }
+
+        $query = $this->request->getGet();
+        $query['debug_html'] = 1;
+        $target = base_url('Opd/opd_lettre_pdf/' . (int) $opdId) . '?' . http_build_query($query);
+
+        return redirect()->to($target);
     }
 
     public function opd_pdf_print(int $opdId)
@@ -3627,6 +3706,14 @@ class Opd extends BaseController
             }
         }
 
+        // Keep OPD fee tokens explicit for PDF templates.
+        $opdRow = $data['opd_master'][0] ?? null;
+        $opdFeeAmount = trim((string) ($opdRow->opd_fee_amount ?? ($tokens['opd_fee_amount'] ?? '')));
+        $opdFeeDescription = trim((string) ($opdRow->opd_fee_desc ?? ($tokens['opd_fee_desc'] ?? '')));
+        $tokens['opd_fee_amount'] = $opdFeeAmount;
+        $tokens['opd_fee_desc'] = $opdFeeDescription;
+        $tokens['opd_fee_combined'] = trim($opdFeeAmount . ' ' . $opdFeeDescription);
+
         // Add case-insensitive token aliases for legacy template compatibility.
         foreach ($tokens as $key => $value) {
             $lower = strtolower((string) $key);
@@ -3640,11 +3727,24 @@ class Opd extends BaseController
             }
         }
 
+        $headingStyleMode = (string) ($this->opdPlaceholderRenderOptions['heading_style'] ?? 'bold');
+        $lineGap = (float) ($this->opdPlaceholderRenderOptions['line_gap'] ?? 1.6);
+        $blockGapMm = (float) ($this->opdPlaceholderRenderOptions['block_gap_mm'] ?? 2.8);
+        $lineGapCss = number_format($lineGap, 2, '.', '');
+        $blockGapCss = number_format($blockGapMm, 2, '.', '');
+
+        $headingStyleCss = 'font-weight:700;font-size:inherit;letter-spacing:0.04em;text-transform:uppercase;color:#1a1a1a;';
+        if ($headingStyleMode === 'plain') {
+            $headingStyleCss = 'font-weight:400;font-size:inherit;letter-spacing:0.04em;text-transform:uppercase;color:#1a1a1a;';
+        } elseif ($headingStyleMode === 'highlight') {
+            $headingStyleCss = 'font-weight:700;font-size:inherit;letter-spacing:0.04em;text-transform:uppercase;color:#1a1a1a;background:#fff3cd;border:1px solid #f0d98a;border-radius:2px;padding:1px 4px;display:inline-block;';
+        }
+
         // mPDF-safe vertical spacer. Using a fixed-height block in mm is more reliable
         // than margins inside absolute-positioned containers.
-        $blockGapHtml = '<div style="display:block;height:2.8mm;line-height:0;font-size:0;">&nbsp;</div>';
+        $blockGapHtml = '<div style="display:block;height:' . $blockGapCss . 'mm;line-height:0;font-size:0;">&nbsp;</div>';
 
-        $formatBlock = static function (string $label, string $value, bool $lineBreakAfterLabel = false) use ($blockGapHtml): string {
+        $formatBlock = function (string $label, string $value, bool $lineBreakAfterLabel = false) use ($blockGapHtml, $headingStyleCss, $lineGapCss): string {
             $value = trim($value);
             if ($value === '') {
                 return '';
@@ -3652,15 +3752,15 @@ class Opd extends BaseController
 
             // Heading: bold + uppercase, same font-size as surrounding content so
             // heading and value stay visually matched (no mismatch from hardcoded px).
-            $headingHtml = '<strong style="font-weight:700;font-size:inherit;letter-spacing:0.04em;text-transform:uppercase;color:#1a1a1a;">' . $label . ' :</strong>';
+            $headingHtml = '<strong style="' . $headingStyleCss . '">' . $label . ' :</strong>';
 
             if ($lineBreakAfterLabel) {
                 // List-style sections (Complaint, Diagnosis …):
                 //   heading on its own line, content block below with a small left indent.
                 //   explicit spacer block is appended for consistent separation in mPDF.
-                return '<div style="display:block;line-height:1.6;">'
+                return '<div style="display:block;line-height:' . $lineGapCss . ';">'
                     . $headingHtml
-                    . '<div style="margin-top:3px;padding-left:6px;font-weight:400;color:#111;line-height:1.6;">'
+                    . '<div style="margin-top:3px;padding-left:6px;font-weight:400;color:#111;line-height:' . $lineGapCss . ';">'
                     . $value
                     . '</div></div>'
                     . $blockGapHtml;
@@ -3668,7 +3768,7 @@ class Opd extends BaseController
 
             // Inline sections (Vitals, Investigation, Next Visit):
             //   heading + value on the same line; explicit spacer appended after block.
-            return '<div style="display:block;line-height:1.6;">'
+            return '<div style="display:block;line-height:' . $lineGapCss . ';">'
                 . $headingHtml
                 . ' <span style="font-weight:400;color:#111;">'
                 . $value
@@ -4258,6 +4358,10 @@ class Opd extends BaseController
             '/<\?=\s*\$opd_master\[0\]->doc_name\s*\?>/i' => '{{doctor_name}}',
             '/<\?=\s*nl2br\(\s*\$opd_master\[0\]->doc_sign\s*\)\s*\?>/i' => '{{doctor_sign_html}}',
             '/<\?=\s*date\(\s*[\"\']d-m-Y\s+H:i:s[\"\']\s*\)\s*\?>/i' => '{{print_time}}',
+            '/<\?=\s*\$opd_master\[0\]->opd_fee_amount\s*\?>/i' => '{{opd_fee_amount}}',
+            '/<\?=\s*\$opd_master\[0\]->opd_fee_desc\s*\?>/i' => '{{opd_fee_desc}}',
+            '/<\?=\s*esc\(\s*\$opd_master\[0\]->opd_fee_amount\s*(?:\?\?\s*[\"\']\s*[\"\'])?\s*\)\s*\?>/i' => '{{opd_fee_amount}}',
+            '/<\?=\s*esc\(\s*\$opd_master\[0\]->opd_fee_desc\s*(?:\?\?\s*[\"\']\s*[\"\'])?\s*\)\s*\?>/i' => '{{opd_fee_desc}}',
             '/<\?=\s*\$content\s*\?>/i' => '{{content}}',
             '/<\?=\s*\$content\s*;?\s*\?>/i' => '{{content}}',
             '/<\?=\s*\$\w+\s*\?>/i' => '',
