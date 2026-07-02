@@ -111,6 +111,7 @@
     function clearForm() {
         $('#inv_profile_code').val('0');
         $('#inv_profile_name_master').val('');
+        $('#inv_profile_tests_select').empty();
         $('#inv_profile_tests_select').val(null).trigger('change');
         $('#inv_profile_form_title').text('New Profile');
         setMsg('normal', 'Ready.');
@@ -120,6 +121,7 @@
         row = row || {};
         $('#inv_profile_code').val(row.profile_code || 0);
         $('#inv_profile_name_master').val(row.profile_name || '');
+        $('#inv_profile_tests_select').empty();
         var values = [];
         (row.tests || []).forEach(function(test) {
             var code = (test.code || '').toString();
@@ -127,9 +129,7 @@
             if (!code || !name) {
                 return;
             }
-            if (!$('#inv_profile_tests_select option[value="' + code + '"]').length) {
-                $('#inv_profile_tests_select').append(new Option(name + ' [' + code + ']', code, true, true));
-            }
+            $('#inv_profile_tests_select').append(new window.Option(name + ' [' + code + ']', code, true, true));
             values.push(code);
         });
         $('#inv_profile_tests_select').val(values).trigger('change');
@@ -137,10 +137,15 @@
     }
 
     function buildPayload() {
+        var orderedCodes = [];
+        $('#inv_profile_tests_select option:selected').each(function() {
+            orderedCodes.push((this.value || '').toString());
+        });
+
         return {
             profile_code: parseInt($('#inv_profile_code').val() || '0', 10),
             profile_name: ($('#inv_profile_name_master').val() || '').trim(),
-            investigation_codes: ($('#inv_profile_tests_select').val() || []).join(',')
+            investigation_codes: orderedCodes.join(',')
         };
     }
 
@@ -178,6 +183,21 @@
                     };
                 }
             }
+        });
+
+        // Keep selected option order stable by appending newly selected options at the end.
+        $select.on('select2:select', function(e) {
+            var id = ((e.params || {}).data || {}).id;
+            if (id === undefined || id === null) {
+                return;
+            }
+            var value = id.toString().replace(/"/g, '\\"');
+            var $option = $select.find('option[value="' + value + '"]');
+            if ($option.length) {
+                $option.detach();
+                $select.append($option);
+            }
+            $select.trigger('change.select2');
         });
     }
 
