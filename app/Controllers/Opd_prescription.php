@@ -7366,10 +7366,11 @@ class Opd_prescription extends BaseController
             return $this->response->setJSON(['rows' => []]);
         }
 
-        if (in_array('investigation_name', $fields, true)) {
+        // Keep investigation panel order stable by record id (not alphabetical name).
+        if (in_array('id', $fields, true)) {
+            $builder->orderBy('id', 'ASC');
+        } elseif (in_array('investigation_name', $fields, true)) {
             $builder->orderBy('investigation_name', 'ASC');
-        } elseif (in_array('id', $fields, true)) {
-            $builder->orderBy('id', 'DESC');
         }
 
         $rows = $builder->get()->getResultArray();
