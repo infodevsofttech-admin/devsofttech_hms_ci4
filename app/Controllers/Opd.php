@@ -36,7 +36,7 @@ class Opd extends BaseController
     private function configureOpdPlaceholderRenderOptionsFromRequest(): void
     {
         $headingStyle = strtolower(trim((string) $this->request->getGet('heading_style')));
-        if (!in_array($headingStyle, ['bold', 'highlight', 'plain'], true)) {
+        if (!in_array($headingStyle, ['bold', 'highlight', 'plain', 'underline'], true)) {
             $headingStyle = 'bold';
         }
 
@@ -2209,6 +2209,7 @@ class Opd extends BaseController
             $html = $this->applyOpdPdfTemplateTokens($customHtml, $tokenVars);
             $html = $this->sanitizeOpdNamedHeaderFooterReferences($html);
             $html = $this->applyOpdLongContentPaginationGuard($html);
+            $html = mpdf_normalize_font_weight_css($html);
 
             if ($debugHtml) {
                 return $this->response
@@ -2416,9 +2417,11 @@ class Opd extends BaseController
         }
 
         $html = $this->applyOpdLongContentPaginationGuard($html);
+        $html = mpdf_normalize_font_weight_css($html);
 
         if ($rawHeaderHtml !== '') {
             $renderedHeaderHtml = $this->applyOpdPdfTemplateTokens($rawHeaderHtml, $tokenVars);
+            $renderedHeaderHtml = mpdf_normalize_font_weight_css($renderedHeaderHtml);
             if (preg_match('/<\s*(htmlpageheader|sethtmlpageheader)\b/i', $renderedHeaderHtml) === 1) {
                 $prefixHtml .= $renderedHeaderHtml;
             } else {
@@ -2429,6 +2432,7 @@ class Opd extends BaseController
 
         if ($rawFooterHtml !== '') {
             $renderedFooterHtml = $this->applyOpdPdfTemplateTokens($rawFooterHtml, $tokenVars);
+            $renderedFooterHtml = mpdf_normalize_font_weight_css($renderedFooterHtml);
             if (preg_match('/<\s*(htmlpagefooter|sethtmlpagefooter)\b/i', $renderedFooterHtml) === 1) {
                 $prefixHtml .= $renderedFooterHtml;
             } else {
@@ -2438,6 +2442,7 @@ class Opd extends BaseController
         }
 
         if ($prefixHtml !== '') {
+            $prefixHtml = mpdf_normalize_font_weight_css($prefixHtml);
             $mpdf->WriteHTML($prefixHtml, HTMLParserMode::HTML_HEADER_BUFFER);
         }
 
@@ -2478,6 +2483,7 @@ class Opd extends BaseController
                 . '<label for="heading_style">Heading Style</label>'
                 . '<select id="heading_style" name="heading_style">'
                 . '<option value="bold"' . ($defaultHeading === 'bold' ? ' selected' : '') . '>Bold</option>'
+                . '<option value="underline"' . ($defaultHeading === 'underline' ? ' selected' : '') . '>Bold + Underline (mPDF-safe)</option>'
                 . '<option value="highlight"' . ($defaultHeading === 'highlight' ? ' selected' : '') . '>Highlight</option>'
                 . '<option value="plain"' . ($defaultHeading === 'plain' ? ' selected' : '') . '>Plain</option>'
                 . '</select>'
@@ -3733,11 +3739,14 @@ class Opd extends BaseController
         $lineGapCss = number_format($lineGap, 2, '.', '');
         $blockGapCss = number_format($blockGapMm, 2, '.', '');
 
-        $headingStyleCss = 'font-weight:700;font-size:inherit;letter-spacing:0.04em;text-transform:uppercase;color:#1a1a1a;';
+        // mPDF supports font-weight as bold|normal (not numeric weights like 700).
+        $headingStyleCss = 'font-weight:bold;font-size:inherit;letter-spacing:0.04em;text-transform:uppercase;color:#1a1a1a;';
         if ($headingStyleMode === 'plain') {
-            $headingStyleCss = 'font-weight:400;font-size:inherit;letter-spacing:0.04em;text-transform:uppercase;color:#1a1a1a;';
+            $headingStyleCss = 'font-weight:normal;font-size:inherit;letter-spacing:0.04em;text-transform:uppercase;color:#1a1a1a;';
+        } elseif ($headingStyleMode === 'underline') {
+            $headingStyleCss = 'font-weight:bold;font-size:inherit;letter-spacing:0.04em;text-transform:uppercase;color:#1a1a1a;text-decoration:underline;';
         } elseif ($headingStyleMode === 'highlight') {
-            $headingStyleCss = 'font-weight:700;font-size:inherit;letter-spacing:0.04em;text-transform:uppercase;color:#1a1a1a;background:#fff3cd;border:1px solid #f0d98a;border-radius:2px;padding:1px 4px;display:inline-block;';
+            $headingStyleCss = 'font-weight:bold;font-size:inherit;letter-spacing:0.04em;text-transform:uppercase;color:#1a1a1a;background-color:#fff3cd;border:0.3mm solid #f0d98a;border-radius:1mm;padding:0.2mm 1mm;display:inline-block;';
         }
 
         // mPDF-safe vertical spacer. Using a fixed-height block in mm is more reliable
@@ -3752,7 +3761,7 @@ class Opd extends BaseController
 
             // Heading: bold + uppercase, same font-size as surrounding content so
             // heading and value stay visually matched (no mismatch from hardcoded px).
-            $headingHtml = '<strong style="' . $headingStyleCss . '">' . $label . ' :</strong>';
+            $headingHtml = '<b><span style="' . $headingStyleCss . '">' . $label . ' :</span></b>';
 
             if ($lineBreakAfterLabel) {
                 // List-style sections (Complaint, Diagnosis …):

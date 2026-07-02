@@ -1335,6 +1335,7 @@ class DoctorDocument extends BaseController
         }
 
         $html = view('doctor_document/doc_letterhead_print', $data);
+        $html = mpdf_normalize_font_weight_css($html);
 
         try {
             $mpdf->WriteHTML($html, HTMLParserMode::DEFAULT_MODE);

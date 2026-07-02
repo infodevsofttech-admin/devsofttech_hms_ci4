@@ -6747,17 +6747,20 @@ class Ipd_discharge extends BaseController
                     $this->applyDischargeTemplateTokens(trim((string) ($templateSettings['header_html'] ?? '')), $templateTokenVars),
                     false
                 );
+                $headerHtml = mpdf_normalize_font_weight_css($headerHtml);
             }
 
             $footerHtml = $this->sanitizeDischargePdfHtml(
                 $this->applyDischargeTemplateTokens(trim((string) ($templateSettings['footer_html'] ?? '')), $templateTokenVars),
                 false
             );
+            $footerHtml = mpdf_normalize_font_weight_css($footerHtml);
             if ($footerHtml === '') {
                 $footerHtml = '<div style="font-family:freeserif,serif;font-size:9pt;color:#6b7280;text-align:right;">Page {PAGENO}/{nbpg}</div>';
             }
 
             $pdfHtml = $this->buildDischargePdfHtml($panelData, $renderedHtml, $withHeader, $templateName);
+            $pdfHtml = mpdf_normalize_font_weight_css($pdfHtml);
 
             $mpdf = new Mpdf([
                 'mode' => 'utf-8',
@@ -6819,6 +6822,7 @@ class Ipd_discharge extends BaseController
                     $safeBody = (string) preg_replace('/<style\b[^>]*>[\s\S]*?<\/style>/i', '', $safeBody);
                     $safeBody = (string) preg_replace('/<script\b[^>]*>[\s\S]*?<\/script>/i', '', $safeBody);
                     $safePdfHtml = $this->buildDischargePdfHtml($panelData, $safeBody, false, $templateName);
+                    $safePdfHtml = mpdf_normalize_font_weight_css($safePdfHtml);
 
                     $fallbackPdf = new Mpdf([
                         'mode' => 'utf-8',

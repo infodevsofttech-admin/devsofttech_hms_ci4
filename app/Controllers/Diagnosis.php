@@ -1501,6 +1501,9 @@ class Diagnosis extends BaseController
             . $autoHeaderHtml
             . $autoFooterHtml, $tokens);
         $suffixHtml = $this->applyPdfTokens(trim((string) ($printSetting['mpdf_suffix_html'] ?? '')), $tokens);
+        $pdfHtml = mpdf_normalize_font_weight_css($pdfHtml);
+        $prefixHtml = mpdf_normalize_font_weight_css($prefixHtml);
+        $suffixHtml = mpdf_normalize_font_weight_css($suffixHtml);
 
         $marginTop = $this->cmToMm($printSetting['page_margin_top_cm'] ?? 1.2, 1.2);
         $marginBottom = $this->cmToMm($printSetting['page_margin_bottom_cm'] ?? 1.2, 1.2);
@@ -1535,6 +1538,7 @@ class Diagnosis extends BaseController
 
         if (! $headerHasTags) {
             $plainHeader = $this->applyPdfTokens($rawHeaderHtml . $rawFirstPageHeaderHtml, $tokens);
+            $plainHeader = mpdf_normalize_font_weight_css($plainHeader);
             if ($plainHeader !== '') {
                 $mpdf->SetHTMLHeader($plainHeader, 'O');
                 $mpdf->SetHTMLHeader($plainHeader, 'E');
@@ -1546,6 +1550,7 @@ class Diagnosis extends BaseController
             if ($plainFooter === '') {
                 $plainFooter = $this->applyPdfTokens($rawLastPageFooterHtml, $tokens);
             }
+            $plainFooter = mpdf_normalize_font_weight_css($plainFooter);
 
             if ($plainFooter !== '') {
                 $mpdf->SetHTMLFooter($plainFooter, 'O');
@@ -2447,6 +2452,9 @@ class Diagnosis extends BaseController
             . $autoHeaderHtml
             . $autoFooterHtml, $tokens);
         $suffixHtml = $this->applyPdfTokens(trim((string) ($printSetting['mpdf_suffix_html'] ?? '')), $tokens);
+        $pdfHtml = mpdf_normalize_font_weight_css($pdfHtml);
+        $prefixHtml = mpdf_normalize_font_weight_css($prefixHtml);
+        $suffixHtml = mpdf_normalize_font_weight_css($suffixHtml);
 
         $mpdfTempDir = WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'mpdf';
         if (! is_dir($mpdfTempDir)) {
@@ -2477,6 +2485,7 @@ class Diagnosis extends BaseController
 
         if (! $headerHasTags) {
             $plainHeader = $this->applyPdfTokens($rawHeaderHtml . $rawFirstPageHeaderHtml, $tokens);
+            $plainHeader = mpdf_normalize_font_weight_css($plainHeader);
             if ($plainHeader !== '') {
                 $mpdf->SetHTMLHeader($plainHeader, 'O');
                 $mpdf->SetHTMLHeader($plainHeader, 'E');
@@ -2488,6 +2497,7 @@ class Diagnosis extends BaseController
             if ($plainFooter === '') {
                 $plainFooter = $this->applyPdfTokens($rawLastPageFooterHtml, $tokens);
             }
+            $plainFooter = mpdf_normalize_font_weight_css($plainFooter);
 
             if ($plainFooter !== '') {
                 $mpdf->SetHTMLFooter($plainFooter, 'O');
