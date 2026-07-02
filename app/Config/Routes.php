@@ -837,6 +837,7 @@ $routes->get('Opd_prescription/opd_invest_master_get/(:num)', 'Opd_prescription:
 $routes->post('Opd_prescription/opd_invest_master_save', 'Opd_prescription::opd_invest_master_save');
 $routes->post('Opd_prescription/opd_invest_master_remove/(:num)', 'Opd_prescription::opd_invest_master_remove/$1');
 $routes->post('Opd_prescription/opd_invest_master_toggle_fav/(:num)', 'Opd_prescription::opd_invest_master_toggle_fav/$1');
+$routes->post('Opd_prescription/opd_invest_master_backfill_category', 'Opd_prescription::opd_invest_master_backfill_category');
 $routes->get('Opd_prescription/opd_invest_shortcuts_manager', 'Opd_prescription::opd_invest_shortcuts_manager', ['filter' => 'permission:doctor_work.medicine.manage,doctor_work.access']);
 $routes->get('Opd_prescription/opd_invest_shortcuts_all', 'Opd_prescription::opd_invest_shortcuts_all');
 $routes->post('Opd_prescription/opd_invest_shortcuts_save_item', 'Opd_prescription::opd_invest_shortcuts_save_item');

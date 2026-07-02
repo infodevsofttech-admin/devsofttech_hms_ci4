@@ -7,6 +7,9 @@ $med_specs = $med_specs ?? [];
         <h5 class="mb-0"><i class="bi bi-clipboard2-pulse me-1"></i> Investigation Master</h5>
         <span class="badge bg-secondary" id="inv_total_badge">—</span>
         <div class="ms-auto d-flex gap-2">
+            <button type="button" class="btn btn-outline-primary btn-sm" id="btn_inv_autofill_category">
+                <i class="bi bi-magic"></i> Auto Fill Category
+            </button>
             <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_inv_download_csv">
                 <i class="bi bi-download"></i> Export CSV
             </button>
@@ -449,6 +452,26 @@ $med_specs = $med_specs ?? [];
             a.download = 'investigation_master.csv';
             a.click();
         }, 'json');
+    });
+
+    $('#btn_inv_autofill_category').on('click', function() {
+        var msg = 'Auto-fill blank category values using test name rules?\n\n'
+            + 'Examples: X-Ray, Ultra Sound, CT-Scan, MRI, ECHO, Cardiology, Pathology.';
+        if (!confirm(msg)) {
+            return;
+        }
+
+        apiPost('<?= base_url('Opd_prescription/opd_invest_master_backfill_category') ?>', { force: 0 }, function(data) {
+            if (parseInt(data.update || 0, 10) !== 1) {
+                showToast(data.error_text || 'Unable to auto fill categories', 'err');
+                return;
+            }
+
+            var updated = parseInt(data.updated_count || '0', 10);
+            var total = parseInt(data.total_candidates || '0', 10);
+            showToast((data.error_text || 'Done') + ' (' + updated + '/' + total + ')', 'ok');
+            reloadTable();
+        });
     });
 
     /* ── SNOMED CT search autocomplete ─────────────────────────────── */

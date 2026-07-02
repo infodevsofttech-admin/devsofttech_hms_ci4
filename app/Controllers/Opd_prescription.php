@@ -3813,6 +3813,96 @@ class Opd_prescription extends BaseController
         ]);
     }
 
+    private function inferInvestigationCategory(string $name): string
+    {
+        $value = strtolower(trim($name));
+        if ($value === '') {
+            return 'Pathology';
+        }
+
+        if (preg_match('/\b(x\s*[-]?\s*ray|xray|radiograph|radiology)\b/i', $value) === 1) {
+            return 'X-Ray';
+        }
+        if (preg_match('/\b(ultra\s*sound|ultrasound|u\.?s\.?g\.?|usg|sonography|doppler)\b/i', $value) === 1) {
+            return 'Ultra Sound';
+        }
+        if (preg_match('/\b(ct\s*[-]?\s*scan|cect|hrct|ncct|computed tomography)\b/i', $value) === 1) {
+            return 'CT-Scan';
+        }
+        if (preg_match('/\b(mri|mr\s*i|magnetic resonance)\b/i', $value) === 1) {
+            return 'MRI';
+        }
+        if (preg_match('/\b(echo|echocardiography|2d\s*echo|doppler\s*echo)\b/i', $value) === 1) {
+            return 'ECHO';
+        }
+        if (preg_match('/\b(ecg|electrocardiogram|tmt|holter)\b/i', $value) === 1) {
+            return 'Cardiology';
+        }
+
+        return 'Pathology';
+    }
+
+    public function opd_invest_master_backfill_category()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
+        }
+        if (! $this->db->tableExists('investigation')) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Investigation table not found']);
+        }
+
+        $fields = $this->db->getFieldNames('investigation');
+        $keyField = $this->resolveFirstField($fields, ['id', 'Code', 'code']);
+        $nameField = $this->resolveFirstField($fields, ['Name', 'name']);
+        if ($keyField === null || $nameField === null || !in_array('category_name', $fields, true)) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Required fields not found']);
+        }
+
+        $force = ((int) $this->request->getPost('force')) === 1;
+
+        $builder = $this->db->table('investigation')
+            ->select($keyField . ' as id, ' . $nameField . ' as name, category_name');
+
+        if (! $force) {
+            $builder->groupStart()
+                ->where('category_name IS NULL', null, false)
+                ->orWhere("TRIM(category_name) = ''", null, false)
+                ->groupEnd();
+        }
+
+        $rows = $builder->get()->getResultArray();
+        $updated = 0;
+
+        foreach ($rows as $row) {
+            $id = (int) ($row['id'] ?? 0);
+            if ($id <= 0) {
+                continue;
+            }
+
+            $name = (string) ($row['name'] ?? '');
+            $category = $this->inferInvestigationCategory($name);
+
+            $ok = $this->db->table('investigation')
+                ->where($keyField, $id)
+                ->update(['category_name' => $category]);
+
+            if ($ok) {
+                $updated++;
+            }
+        }
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'updated_count' => $updated,
+            'total_candidates' => count($rows),
+            'error_text' => $updated > 0
+                ? ('Category updated for ' . $updated . ' investigation(s)')
+                : 'No rows needed category update',
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
     public function opd_invest_snomed_search()
     {
         $q = trim((string) $this->request->getGet('q'));
