@@ -1656,8 +1656,11 @@ class Medical extends BaseController
             return redirect()->to(base_url('Medical/invoice_edit/' . $invoiceId . '?msg=' . urlencode('Required stock tables are missing')));
         }
 
+        $purchaseItemFields = $this->db->getFieldNames('purchase_invoice_item') ?? [];
+        $igstPerStockExpr = in_array('IGST_per', $purchaseItemFields, true) ? 't.IGST_per' : '0 AS IGST_per';
+
         $stockSql = "SELECT p.id AS item_code,p.item_name,p.formulation,t.id AS stock_id,t.batch_no,t.expiry_date,t.mrp,t.selling_unit_rate,
-                    t.HSNCODE,t.CGST_per,t.SGST_per,t.packing,
+                    t.HSNCODE,t.CGST_per,t.SGST_per," . $igstPerStockExpr . ",t.packing,
                     (ifnull(t.total_unit,0)-ifnull(t.total_sale_unit,0)-ifnull(t.total_return_unit,0)-ifnull(t.total_lost_unit,0)) AS stock_qty
                 FROM med_product_master p
                 JOIN purchase_invoice_item t ON p.id=t.item_code
@@ -1682,6 +1685,10 @@ class Medical extends BaseController
         $amount = $qty * $price;
         $discAmount = ($discPer > 0) ? ($amount * $discPer / 100) : 0;
         $netAmount = $amount - $discAmount;
+        $cgstPer = (float) ($stock->CGST_per ?? 0);
+        $sgstPer = (float) ($stock->SGST_per ?? 0);
+        $igstPer = (float) ($stock->IGST_per ?? 0);
+        $taxBreakup = $this->calculateInvoiceItemTaxBreakup($netAmount, $cgstPer, $sgstPer, $igstPer);
 
         $itemFields = $this->db->getFieldNames('inv_med_item') ?? [];
         $insert = [];
@@ -1712,8 +1719,13 @@ class Medical extends BaseController
         $setIfExists($insert, $itemFields, 'amount', $amount);
         $setIfExists($insert, $itemFields, 'tamount', $netAmount);
         $setIfExists($insert, $itemFields, 'twdisc_amount', $netAmount);
-        $setIfExists($insert, $itemFields, 'CGST_per', (float) ($stock->CGST_per ?? 0));
-        $setIfExists($insert, $itemFields, 'SGST_per', (float) ($stock->SGST_per ?? 0));
+        $setIfExists($insert, $itemFields, 'TaxableAmount', $taxBreakup['taxable']);
+        $setIfExists($insert, $itemFields, 'CGST_per', $cgstPer);
+        $setIfExists($insert, $itemFields, 'CGST', $taxBreakup['cgst']);
+        $setIfExists($insert, $itemFields, 'SGST_per', $sgstPer);
+        $setIfExists($insert, $itemFields, 'SGST', $taxBreakup['sgst']);
+        $setIfExists($insert, $itemFields, 'IGST_per', $igstPer);
+        $setIfExists($insert, $itemFields, 'IGST', $taxBreakup['igst']);
         $setIfExists($insert, $itemFields, 'HSNCODE', (string) ($stock->HSNCODE ?? ''));
         $setIfExists($insert, $itemFields, 'store_stock_id', (int) ($stock->stock_id ?? 0));
         $setIfExists($insert, $itemFields, 'packing', (int) ($stock->packing ?? 1));
@@ -1875,6 +1887,10 @@ class Medical extends BaseController
         $amountValue = $updateQty * $itemRate;
         $discAmount = $amountValue * $discPer / 100;
         $tamountValue = $amountValue - $discAmount;
+        $cgstPer = (float) ($item->CGST_per ?? 0);
+        $sgstPer = (float) ($item->SGST_per ?? 0);
+        $igstPer = (float) ($item->IGST_per ?? 0);
+        $taxBreakup = $this->calculateInvoiceItemTaxBreakup($tamountValue, $cgstPer, $sgstPer, $igstPer);
 
         $update = [
             'qty' => $updateQty,
@@ -1884,6 +1900,18 @@ class Medical extends BaseController
         ];
         if (in_array('twdisc_amount', $itemFields, true)) {
             $update['twdisc_amount'] = $tamountValue;
+        }
+        if (in_array('TaxableAmount', $itemFields, true)) {
+            $update['TaxableAmount'] = $taxBreakup['taxable'];
+        }
+        if (in_array('CGST', $itemFields, true)) {
+            $update['CGST'] = $taxBreakup['cgst'];
+        }
+        if (in_array('SGST', $itemFields, true)) {
+            $update['SGST'] = $taxBreakup['sgst'];
+        }
+        if (in_array('IGST', $itemFields, true)) {
+            $update['IGST'] = $taxBreakup['igst'];
         }
 
         $this->db->table('inv_med_item')->where('id', $itemId)->update($update);
@@ -1988,6 +2016,10 @@ class Medical extends BaseController
 
         $discAmount = $amountValue * $discPer / 100;
         $tamountValue = $amountValue - $discAmount;
+        $cgstPer = (float) ($source['CGST_per'] ?? 0);
+        $sgstPer = (float) ($source['SGST_per'] ?? 0);
+        $igstPer = (float) ($source['IGST_per'] ?? 0);
+        $taxBreakup = $this->calculateInvoiceItemTaxBreakup($tamountValue, $cgstPer, $sgstPer, $igstPer);
 
         $payload = [];
         foreach ($itemFields as $field) {
@@ -2017,6 +2049,10 @@ class Medical extends BaseController
         $setIfExists($payload, $itemFields, 'disc_per', $discPer);
         $setIfExists($payload, $itemFields, 'disc_whole', 0);
         $setIfExists($payload, $itemFields, 'twdisc_amount', $tamountValue);
+        $setIfExists($payload, $itemFields, 'TaxableAmount', $taxBreakup['taxable']);
+        $setIfExists($payload, $itemFields, 'CGST', $taxBreakup['cgst']);
+        $setIfExists($payload, $itemFields, 'SGST', $taxBreakup['sgst']);
+        $setIfExists($payload, $itemFields, 'IGST', $taxBreakup['igst']);
         $setIfExists($payload, $itemFields, 'update_by_id', $userId);
         $setIfExists($payload, $itemFields, 'update_by_remark', $userInfo . '[' . $userId . '][' . date('d-m-Y H:i:s') . ']');
 
@@ -3421,6 +3457,23 @@ class Medical extends BaseController
         if (! empty($update)) {
             $this->db->table('invoice_med_master')->where('id', $invoiceId)->update($update);
         }
+    }
+
+    private function calculateInvoiceItemTaxBreakup(float $netAmount, float $cgstPer, float $sgstPer, float $igstPer): array
+    {
+        $rateTotal = $cgstPer + $sgstPer + $igstPer;
+        $taxable = $netAmount;
+
+        if ($rateTotal > 0) {
+            $taxable = round(($netAmount * 100) / (100 + $rateTotal), 2);
+        }
+
+        return [
+            'taxable' => $taxable,
+            'cgst' => round($taxable * $cgstPer / 100, 2),
+            'sgst' => round($taxable * $sgstPer / 100, 2),
+            'igst' => round($taxable * $igstPer / 100, 2),
+        ];
     }
 
     private function refreshInvoicePaymentFields(int $invoiceId, bool $rebuildFromItems = false): void
@@ -10780,6 +10833,7 @@ class Medical extends BaseController
         $lineAmount = $resolveField($iFields, ['twdisc_amount', 'tamount', 'amount']);
         $taxable = $resolveField($iFields, ['TaxableAmount', 'taxableamount']);
         $cgstPer = $resolveField($iFields, ['CGST_per', 'cgst_per']);
+        $sgstPer = $resolveField($iFields, ['SGST_per', 'sgst_per']);
         $cgst = $resolveField($iFields, ['CGST', 'c_gst_amt', 'cgst', 'cgst_amt']);
         $sgst = $resolveField($iFields, ['SGST', 's_gst_amt', 'sgst', 'sgst_amt']);
 
@@ -10789,10 +10843,19 @@ class Medical extends BaseController
 
         $qtyExpr = $qty !== null ? ('IFNULL(i.' . $qty . ',0)') : '0';
         $lineAmountExpr = $lineAmount !== null ? ('IFNULL(i.' . $lineAmount . ',0)') : '0';
-        $taxableExpr = $taxable !== null ? ('IFNULL(i.' . $taxable . ',0)') : $lineAmountExpr;
+        $baseTaxableExpr = $taxable !== null ? ('IFNULL(i.' . $taxable . ',0)') : '0';
         $cgstPerExpr = $cgstPer !== null ? ('IFNULL(i.' . $cgstPer . ',0)') : '0';
-        $cgstExpr = $cgst !== null ? ('IFNULL(i.' . $cgst . ',0)') : '((' . $taxableExpr . ' * ' . $cgstPerExpr . ')/100)';
-        $sgstExpr = $sgst !== null ? ('IFNULL(i.' . $sgst . ',0)') : '((' . $taxableExpr . ' * ' . $cgstPerExpr . ')/100)';
+        $sgstPerExpr = $sgstPer !== null ? ('IFNULL(i.' . $sgstPer . ',0)') : $cgstPerExpr;
+        $taxableExpr = '(CASE '
+            . 'WHEN ' . $baseTaxableExpr . ' > 0 THEN ' . $baseTaxableExpr . ' '
+            . 'WHEN ((' . $cgstPerExpr . ' + ' . $sgstPerExpr . ') > 0 AND ' . $lineAmountExpr . ' > 0) THEN ROUND((' . $lineAmountExpr . ' * 100) / (100 + (' . $cgstPerExpr . ' + ' . $sgstPerExpr . ')), 2) '
+            . 'ELSE ' . $lineAmountExpr . ' END)';
+        $cgstExpr = $cgst !== null
+            ? '(CASE WHEN IFNULL(i.' . $cgst . ',0) > 0 THEN IFNULL(i.' . $cgst . ',0) WHEN ((' . $cgstPerExpr . ' + ' . $sgstPerExpr . ') > 0 AND ' . $taxableExpr . ' > 0) THEN ROUND((' . $taxableExpr . ' * ' . $cgstPerExpr . ') / 100, 2) ELSE 0 END)'
+            : '((' . $taxableExpr . ' * ' . $cgstPerExpr . ')/100)';
+        $sgstExpr = $sgst !== null
+            ? '(CASE WHEN IFNULL(i.' . $sgst . ',0) > 0 THEN IFNULL(i.' . $sgst . ',0) WHEN ((' . $cgstPerExpr . ' + ' . $sgstPerExpr . ') > 0 AND ' . $taxableExpr . ' > 0) THEN ROUND((' . $taxableExpr . ' * ' . $sgstPerExpr . ') / 100, 2) ELSE 0 END)'
+            : '((' . $taxableExpr . ' * ' . $sgstPerExpr . ')/100)';
 
         $invTypeExpr = "'CASH'";
         if ($ipdId !== null && $ipdCredit !== null) {
