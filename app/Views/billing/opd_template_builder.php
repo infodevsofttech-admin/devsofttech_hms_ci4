@@ -360,12 +360,15 @@ foreach ($placeholderGroups as $groupName => $groupValues) {
                 </div>
                 <div class="box-body small vars-list">
                     <strong>Use placeholders with double curly braces:</strong><br>
-                    <code>{{pName}}</code>, <code>{{opd_date}}</code>, <code>{{doctor_name}}</code><br><br>
+                    <code>{{pName}}</code>, <code>{{opd_date}}</code>, <code>{{doctor_name}}</code>, <code>{{opd_fee_amount}}</code>, <code>{{opd_fee_desc}}</code><br><br>
 
                     <strong>Example:</strong><br>
                     Patient: <code>{{pName}}</code><br>
                     Date: <code>{{opd_date}}</code><br>
-                    Doctor: <code>{{doctor_name}}</code><br><br>
+                    Doctor: <code>{{doctor_name}}</code><br>
+                    OPD Fee Amount: <code>{{opd_fee_amount}}</code><br>
+                    OPD Fee Description: <code>{{opd_fee_desc}}</code><br>
+                    OPD Fee (combined): <code>{{opd_fee_amount}} {{opd_fee_desc}}</code><br><br>
 
                     <strong>Rule:</strong> The complete list is shown in <em>All Placeholders</em> above.
                 </div>
