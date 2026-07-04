@@ -4176,7 +4176,10 @@ class Opd extends BaseController
         $tokens['FindingBlock'] = (string) ($tokens['Finding_Examinations'] ?? '');
         $tokens['InvestigationBlock'] = (string) ($tokens['investigation'] ?? '');
         $tokens['RemarksBlock'] = (string) ($tokens['Prescriber_Remarks'] ?? '');
-        $tokens['AdviceBlock'] = (string) ($tokens['advice'] ?? '');
+        $adviceBlockBody = trim((string) ($tokens['advice'] ?? ''));
+        $tokens['AdviceBlock'] = $adviceBlockBody !== ''
+            ? '<strong>Advice</strong> : ' . $adviceBlockBody
+            : '';
         $tokens['NextVisitBlock'] = (string) ($tokens['next_visit'] ?? '');
 
         $tokens['RxTable'] = $medicalHtml;
