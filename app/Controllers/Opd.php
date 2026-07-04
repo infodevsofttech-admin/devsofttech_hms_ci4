@@ -2931,7 +2931,7 @@ class Opd extends BaseController
 
         $rxAdvice = $rxRead($rx, ['advice', 'Advice', 'prescription_advice', 'advice_notes', 'advice_note']);
         $rxAdviceLocal = '';
-        if ($rxAdvice === '' && !empty($data['rx_advices']) && is_array($data['rx_advices'])) {
+        if (!empty($data['rx_advices']) && is_array($data['rx_advices'])) {
             $parts = [];
             $partsLocal = [];
             foreach ($data['rx_advices'] as $adv) {
@@ -2940,14 +2940,19 @@ class Opd extends BaseController
                     $parts[] = $txt;
                 }
 
-                $localTxt = trim((string) ($adv['advice_hindi'] ?? ($adv['advice_txt_hindi'] ?? '')));
+                $localRaw = (string) ($adv['advice_hindi'] ?? ($adv['advice_txt_hindi'] ?? ''));
+                $localTxt = trim((string) preg_replace('/\r\n|\r|\n/', "\n", str_replace(['<br/>', '<br />', '<br>'], "\n", strip_tags($localRaw))));
                 if ($localTxt !== '') {
                     $partsLocal[] = $localTxt;
                 }
             }
-            $rxAdvice = implode(', ', $parts);
+
+            if ($rxAdvice === '' && !empty($parts)) {
+                $rxAdvice = implode(', ', array_values(array_unique($parts)));
+            }
+
             if (!empty($partsLocal)) {
-                $rxAdviceLocal = implode(' | ', $partsLocal);
+                $rxAdviceLocal = implode(' | ', array_values(array_unique($partsLocal)));
             }
         }
 
@@ -4177,9 +4182,19 @@ class Opd extends BaseController
         $tokens['InvestigationBlock'] = (string) ($tokens['investigation'] ?? '');
         $tokens['RemarksBlock'] = (string) ($tokens['Prescriber_Remarks'] ?? '');
         $adviceBlockBody = trim((string) ($tokens['advice'] ?? ''));
-        $tokens['AdviceBlock'] = $adviceBlockBody !== ''
-            ? '<strong>Advice</strong> : ' . $adviceBlockBody
-            : '';
+        $adviceBlockLocal = trim((string) ($tokens['advice_local'] ?? ''));
+        if ($adviceBlockBody !== '' || $adviceBlockLocal !== '') {
+            $adviceBlockLines = [];
+            if ($adviceBlockBody !== '') {
+                $adviceBlockLines[] = '<strong>Advice</strong> : ' . $adviceBlockBody;
+            }
+            if ($adviceBlockLocal !== '') {
+                $adviceBlockLines[] = '<strong>सलाह</strong> : ' . $adviceBlockLocal;
+            }
+            $tokens['AdviceBlock'] = implode('<br>', $adviceBlockLines);
+        } else {
+            $tokens['AdviceBlock'] = '';
+        }
         $tokens['NextVisitBlock'] = (string) ($tokens['next_visit'] ?? '');
 
         $tokens['RxTable'] = $medicalHtml;
@@ -4392,6 +4407,12 @@ class Opd extends BaseController
 
         // Convert generic echo statements that match a known scalar token key.
         $out = (string) preg_replace('/<\?php\s+echo\s+\$content\s*;?\s*\?>/i', '{{content}}', $out);
+
+        // Legacy templates often place {{advice}} on its own line (without label).
+        // Upgrade only standalone advice placeholders to {{AdviceBlock}} so
+        // existing templates that already print "Advice: {{advice}}" remain unchanged.
+        $out = (string) preg_replace('/(^|\n)\s*\{\{\s*advice\s*\}\}\s*(?=\n|$)/i', '$1{{AdviceBlock}}', $out);
+        $out = (string) preg_replace('/(^|\n)\s*\{\s*advice\s*\}\s*(?=\n|$)/i', '$1{{AdviceBlock}}', $out);
 
         // Remove remaining PHP blocks that cannot be interpreted safely.
         $out = (string) preg_replace('/<\?(?:php|=)[\s\S]*?\?>/i', '', $out);
