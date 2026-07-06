@@ -1,5 +1,3 @@
-<link href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css" rel="stylesheet">
-
 <style>
     
     .ipd-filters {
@@ -9,43 +7,76 @@
         padding: 12px;
         margin-bottom: 16px;
     }
+    .date-filter-inline {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: nowrap;
+    }
+    .date-filter-inline .input-group-text {
+        height: 38px;
+    }
+    #native-date-range {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: nowrap;
+    }
+    .native-date-input {
+        min-width: 150px;
+        flex: 1 1 0;
+    }
+    @media (max-width: 991.98px) {
+        .date-filter-inline {
+            flex-wrap: wrap;
+        }
+        #native-date-range {
+            width: 100%;
+        }
+        .native-date-input {
+            min-width: 0;
+            width: calc(50% - 4px);
+            flex: 1 1 calc(50% - 4px);
+        }
+    }
 </style>
 
 <div class="col-md-12">
     
     <div class="card">
-        <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
-            <h3 class="card-title mb-0">IPD Invoice</h3>
-        </div>
-        <div class="card-body">
-            
-            <div class="alert alert-warning d-none" id="datatable-missing">
-                DataTable plugin is not loaded. Please include jQuery DataTables to enable filtering.
-            </div>
-            <div class="row g-2 align-items-center ipd-filters">
-                <div class="col-md-4">
-                    <div class="input-group">
+        <div class="card-header">
+            <div class="row g-2 align-items-center ipd-filters w-100 m-0">
+                <div class="col-md-6">
+                    <div class="date-filter-inline">
                         <span class="input-group-text">
                             <input type="checkbox" id="chk_date" name="chk_date">
                         </span>
-                        <div id="reportrange" class="form-control" style="cursor: pointer;">
+                        <div id="reportrange" class="form-control flex-grow-1" style="cursor: pointer; min-width: 220px;">
                             <i class="bi bi-calendar"></i>&nbsp;
                             <span></span> <b class="caret"></b>
                         </div>
+                        <div id="native-date-range" class="d-none align-items-center flex-wrap gap-2 flex-grow-1">
+                            <input type="date" id="date_from" class="form-control   native-date-input" aria-label="From date">
+                            <input type="date" id="date_to" class="form-control  native-date-input" aria-label="To date">
+                        </div>
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <select class="form-select" id="ipd_admit_type" name="ipd_admit_type">
                         <option value="-1">All</option>
                         <option value="0">Admit</option>
                         <option value="1">Discharge</option>
                     </select>
                 </div>
-                <div class="col-md-5 text-muted small">
-                    Use filters to narrow results. Search per column below.
-                </div>
             </div>
-            <div class="table-responsive">
+        </div>
+        <div class="card-body" style="margin: auto;">
+            
+            <div class="alert alert-warning d-none" id="datatable-missing">
+                DataTable plugin is not loaded. Please include jQuery DataTables to enable filtering.
+            </div>
+            
+            <div class="table-responsive" style="margin-top: 10px;">
                 <table class="table table-striped table-hover align-middle TableData" id="ipd-invoice-grid" width="100%">
                     <thead>
                         <tr>
@@ -97,6 +128,45 @@
         var dateFilterReady = (typeof window.moment === 'function') && $.fn && (typeof $.fn.daterangepicker === 'function');
         var start = null;
         var end = null;
+        var startIso = '<?= date('Y-m-d') ?>';
+        var endIso = '<?= date('Y-m-d') ?>';
+
+        function getNativeRange() {
+            var from = ($('#date_from').val() || '').toString().trim();
+            var to = ($('#date_to').val() || '').toString().trim();
+
+            if (from === '' && to !== '') {
+                from = to;
+            }
+            if (to === '' && from !== '') {
+                to = from;
+            }
+            if (from === '' && to === '') {
+                from = startIso;
+                to = endIso;
+            }
+            if (from > to) {
+                var tmp = from;
+                from = to;
+                to = tmp;
+            }
+
+            return {
+                from: from,
+                to: to
+            };
+        }
+
+        function getActiveRange() {
+            if (dateFilterReady) {
+                return {
+                    from: fmtYmd(start),
+                    to: fmtYmd(end)
+                };
+            }
+
+            return getNativeRange();
+        }
 
         function fmtYmd(dateValue) {
             if (!dateValue) {
@@ -116,9 +186,13 @@
         if (dateFilterReady) {
             start = moment();
             end = moment();
+            startIso = start.format('YYYY-MM-DD');
+            endIso = end.format('YYYY-MM-DD');
 
             function cb(startDate, endDate) {
                 $('#reportrange span').html(startDate.format('MMMM D, YYYY') + ' - ' + endDate.format('MMMM D, YYYY'));
+                startIso = startDate.format('YYYY-MM-DD');
+                endIso = endDate.format('YYYY-MM-DD');
             }
 
             $('#reportrange').daterangepicker({
@@ -136,9 +210,10 @@
 
             cb(start, end);
         } else {
-            $('#chk_date').prop('checked', false).prop('disabled', true);
-            $('#reportrange').addClass('text-muted');
-            $('#reportrange span').text('Date filter unavailable (moment blocked by browser/privacy settings).');
+            $('#reportrange').addClass('d-none');
+            $('#native-date-range').removeClass('d-none').addClass('d-flex');
+            $('#date_from').val(startIso);
+            $('#date_to').val(endIso);
         }
 
         var dataTable = $('#ipd-invoice-grid').DataTable({
@@ -164,13 +239,11 @@
         $('#ipd-invoice-grid_filter').css('display', 'none');
 
         $('#chk_date').on('click', function() {
-            if (!dateFilterReady) {
-                return;
-            }
             if (this.checked) {
                 var choAdmitType = $('#ipd_admit_type').val();
-                var dateFirst = fmtYmd(start);
-                var dateSecond = fmtYmd(end);
+                var range = getActiveRange();
+                var dateFirst = range.from;
+                var dateSecond = range.to;
                 dataTable.columns(7).search(dateFirst + '/' + dateSecond + '/' + choAdmitType).draw();
             } else {
                 dataTable.columns(7).search('').draw();
@@ -178,15 +251,23 @@
         });
 
         $('#ipd_admit_type').change(function() {
-            if (!dateFilterReady) {
-                return;
-            }
             if ($('#chk_date').is(':checked')) {
                 var choAdmitType = $('#ipd_admit_type').val();
-                var dateFirst = fmtYmd(start);
-                var dateSecond = fmtYmd(end);
+                var range = getActiveRange();
+                var dateFirst = range.from;
+                var dateSecond = range.to;
                 dataTable.columns(7).search(dateFirst + '/' + dateSecond + '/' + choAdmitType).draw();
             }
+        });
+
+        $('#date_from, #date_to').on('change', function() {
+            if (dateFilterReady || !$('#chk_date').is(':checked')) {
+                return;
+            }
+
+            var choAdmitType = $('#ipd_admit_type').val();
+            var range = getActiveRange();
+            dataTable.columns(7).search(range.from + '/' + range.to + '/' + choAdmitType).draw();
         });
 
         $('input[type=text]').on('input', function() {
@@ -203,6 +284,8 @@
             var dateSecond = picker.endDate.format('YYYY-MM-DD');
             start = picker.startDate;
             end = picker.endDate;
+            startIso = dateFirst;
+            endIso = dateSecond;
 
             if ($('#chk_date').is(':checked')) {
                 var choAdmitType = $('#ipd_admit_type').val();

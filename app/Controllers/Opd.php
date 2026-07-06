@@ -3953,13 +3953,24 @@ class Opd extends BaseController
         }
         $tokens['diagnosis'] = $formatBlock('Diagnosis', $escape($diagnosisBlockValue), false);
         $tokens['Diagnosis'] = $tokens['diagnosis'];
+        $renderMultilineText = static function (string $value) use ($escape): string {
+            $value = trim(str_replace(["\r\n", "\r"], "\n", $value));
+            $value = str_replace('\\n', "\n", $value);
+            if ($value === '') {
+                return '';
+            }
+
+            return nl2br($escape($value));
+        };
+
         $provisionalBlockValue = (string) ($tokens['provisional_diagnosis_list'] ?? '');
         if ($provisionalBlockValue === '') {
-            $provisionalBlockValue = nl2br($escape((string) ($tokens['Provisional_diagnosis_raw'] ?? '')));
+            $provisionalBlockValue = $renderMultilineText((string) ($tokens['Provisional_diagnosis_raw'] ?? ''));
         }
         $tokens['Provisional_diagnosis'] = $formatBlock('Provisional Diagnosis', $provisionalBlockValue, true);
         $tokens['provisional_diagnosis'] = $tokens['Provisional_diagnosis'];
-        $findingItems = $splitClinicalText((string) ($tokens['Finding_Examinations_raw'] ?? ''));
+        $findingRaw = trim((string) ($tokens['Finding_Examinations_raw'] ?? ''));
+        $findingItems = $splitClinicalText($findingRaw);
         $findingTerms = [];
         foreach ($findingItems as $item) {
             $term = trim((string) ($item['term'] ?? ''));
@@ -3968,14 +3979,20 @@ class Opd extends BaseController
             }
         }
         $findingCompact = implode(', ', array_values(array_unique($findingTerms)));
-        if ($findingCompact === '') {
-            $findingCompact = trim((string) ($tokens['Finding_Examinations_raw'] ?? ''));
+        if (preg_match('/\R|\\n/', $findingRaw) === 1) {
+            $findingCompact = $renderMultilineText($findingRaw);
+        } elseif ($findingCompact === '') {
+            $findingCompact = $renderMultilineText($findingRaw);
+        } else {
+            $findingCompact = $escape($findingCompact);
         }
-        $tokens['Finding_Examinations'] = $formatBlock('Finding / Examination', $escape($findingCompact), false);
+        $tokens['Finding_Examinations'] = $formatBlock('Finding / Examination', $findingCompact, false);
         $tokens['finding_examinations'] = $tokens['Finding_Examinations'];
-        $tokens['investigation'] = $formatBlock('Investigation Advised', (string) ($tokens['investigation_raw'] ?? ''));
-        $tokens['Prescriber_Remarks'] = $formatBlock('Remarks', (string) ($tokens['Prescriber_Remarks_raw'] ?? ''));
+        $tokens['investigation'] = $formatBlock('Investigation Advised', $renderMultilineText((string) ($tokens['investigation_raw'] ?? '')));
+        $tokens['Prescriber_Remarks'] = $formatBlock('Remarks', $renderMultilineText((string) ($tokens['Prescriber_Remarks_raw'] ?? '')));
         $adviceRaw = trim((string) ($tokens['advice_raw'] ?? ''));
+        $adviceRaw = str_replace(["\r\n", "\r"], "\n", $adviceRaw);
+        $adviceRaw = str_replace('\\n', "\n", $adviceRaw);
         // Print advice exactly as typed — no AI/Hindi conversion applied.
         if ($adviceRaw !== '') {
             $tokens['advice'] = nl2br(htmlspecialchars($adviceRaw, ENT_QUOTES, 'UTF-8'));
