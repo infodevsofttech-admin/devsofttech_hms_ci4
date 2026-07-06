@@ -31,7 +31,17 @@ class M3HiuGatewayClient
 
     public function healthInformationRequest(array $payload): array
     {
-        return $this->call('/v3/hiu/health-information/request', $payload, 'health-information.request');
+        return $this->call('/v1/hiu/data/request', $payload, 'health-information.request');
+    }
+
+    public function reconcileConsentStatus(array $payload): array
+    {
+        return $this->callGet('/v1/hiu/consent/status', $payload, 'consent.status.reconcile');
+    }
+
+    public function fetchDecryptedData(array $payload): array
+    {
+        return $this->callGet('/v1/hiu/data/fetch', $payload, 'data.fetch');
     }
 
     private function call(string $path, array $payload, string $eventKey): array
@@ -95,6 +105,10 @@ class M3HiuGatewayClient
                 : ('HTTP ' . $httpCode . ' non-JSON response');
         }
 
+        if ($this->isCloudFrontBlockedResponse($httpCode, $raw, $response ?? [])) {
+            $errorText = 'Gateway edge block (CloudFront 403 Request blocked). Retry later or ask gateway team to unblock the endpoint.';
+        }
+
         $retryable = 0;
         if ($curlErr !== '' || $httpCode >= 500 || $httpCode === 0 || str_contains(strtolower($errorText), 'timed out')) {
             $retryable = 1;
@@ -105,6 +119,11 @@ class M3HiuGatewayClient
         $response['http_code'] = $httpCode;
         $response['error_text'] = $errorText;
         $response['retryable'] = $retryable;
+
+        if ($this->isCloudFrontBlockedResponse($httpCode, $raw, $response)) {
+            $response['retryable'] = 1;
+            $response['error_text'] = 'Gateway edge block (CloudFront 403 Request blocked). Retry later or ask gateway team to unblock the endpoint.';
+        }
 
         $gatewayRequestId = trim((string) ($response['request_id'] ?? $response['requestId'] ?? ''));
         if ($gatewayRequestId === '') {
@@ -117,8 +136,8 @@ class M3HiuGatewayClient
             'consent_request_id',
             'abdm_consent_request_id',
         ]);
-        if ($abdmConsentRequestId === '') {
-            $abdmConsentRequestId = trim((string) ($payload['consentRequestId'] ?? ''));
+        if ($abdmConsentRequestId !== '' && $this->isGatewayRefId($abdmConsentRequestId)) {
+            $abdmConsentRequestId = '';
         }
         if ($abdmConsentRequestId !== '') {
             $response['abdm_consent_request_id'] = $abdmConsentRequestId;
@@ -129,8 +148,8 @@ class M3HiuGatewayClient
             'consentId',
             'consent_id',
         ]);
-        if ($abdmConsentId === '') {
-            $abdmConsentId = trim((string) ($payload['consentId'] ?? $payload['consent_id'] ?? ''));
+        if ($abdmConsentId !== '' && $this->isGatewayRefId($abdmConsentId)) {
+            $abdmConsentId = '';
         }
         if ($abdmConsentId !== '') {
             $response['consent_id'] = $abdmConsentId;
@@ -145,6 +164,137 @@ class M3HiuGatewayClient
         }
 
         $this->writeApiLog($eventKey, $path, $payload, $response, $httpCode, $ok, $errorText, $hospitalId);
+
+        return $response;
+    }
+
+    private function callGet(string $path, array $query, string $eventKey): array
+    {
+        $settings = $this->resolveRuntimeSettings();
+        if (($settings['ok'] ?? 0) !== 1) {
+            return $settings;
+        }
+
+        $token = (string) ($settings['token'] ?? '');
+        $hfrId = (string) ($settings['hfr_id'] ?? '');
+        $hospitalId = (string) ($settings['hospital_id'] ?? '');
+
+        $payloadHfrId = trim((string) ($query['hfr_id'] ?? ''));
+        if ($payloadHfrId !== '' && strcasecmp($payloadHfrId, $hfrId) !== 0) {
+            return [
+                'ok' => 0,
+                'http_code' => 400,
+                'error_text' => 'hfr_id mismatch: payload hfr_id does not match hospital_setting.ABDM_HFR_ID',
+                'retryable' => 0,
+            ];
+        }
+
+        $headers = [
+            'Accept: application/json',
+            'Authorization: Bearer ' . $token,
+        ];
+        if ($hospitalId !== '') {
+            $headers[] = 'X-Hospital-Id: ' . $hospitalId;
+        }
+
+        $cleanQuery = [];
+        foreach ($query as $k => $v) {
+            if ($v === null) {
+                continue;
+            }
+            $val = trim((string) $v);
+            if ($val === '') {
+                continue;
+            }
+            $cleanQuery[$k] = $val;
+        }
+
+        // Bridge polling APIs require hfr_id in query for auth scope validation.
+        if ($hfrId !== '') {
+            $cleanQuery['hfr_id'] = $hfrId;
+        }
+
+        $url = $this->baseUrl . $path;
+        if (! empty($cleanQuery)) {
+            $url .= '?' . http_build_query($cleanQuery);
+        }
+
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => $this->timeoutSec,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_CUSTOMREQUEST => 'GET',
+        ]);
+
+        $raw = curl_exec($ch);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr = curl_error($ch);
+        curl_close($ch);
+
+        $decoded = json_decode((string) $raw, true);
+        $isJson = is_array($decoded);
+        $ok = $isJson ? (int) ($decoded['ok'] ?? ($httpCode >= 200 && $httpCode < 300 ? 1 : 0)) : (int) ($httpCode >= 200 && $httpCode < 300);
+
+        $errorText = '';
+        if ($curlErr !== '') {
+            $errorText = $curlErr;
+        } elseif ($ok !== 1) {
+            $errorText = $isJson
+                ? (string) ($decoded['message'] ?? $decoded['error_text'] ?? $decoded['error'] ?? ('HTTP ' . $httpCode))
+                : ('HTTP ' . $httpCode . ' non-JSON response');
+        }
+
+        if ($this->isCloudFrontBlockedResponse($httpCode, $raw, $decoded ?? [])) {
+            $errorText = 'Gateway edge block (CloudFront 403 Request blocked). Retry later or ask gateway team to unblock the endpoint.';
+        }
+
+        $retryable = 0;
+        if ($curlErr !== '' || $httpCode >= 500 || $httpCode === 0 || str_contains(strtolower($errorText), 'timed out')) {
+            $retryable = 1;
+        }
+
+        $response = $isJson ? $decoded : ['raw' => (string) $raw];
+        $response['ok'] = $ok;
+        $response['http_code'] = $httpCode;
+        $response['error_text'] = $errorText;
+        $response['retryable'] = $retryable;
+
+        if ($this->isCloudFrontBlockedResponse($httpCode, $raw, $response)) {
+            $response['retryable'] = 1;
+            $response['error_text'] = 'Gateway edge block (CloudFront 403 Request blocked). Retry later or ask gateway team to unblock the endpoint.';
+        }
+
+        $gatewayRequestId = trim((string) ($response['request_id'] ?? $response['requestId'] ?? $cleanQuery['request_id'] ?? ''));
+        $response['gateway_request_id'] = $gatewayRequestId;
+
+        $abdmConsentRequestId = $this->findFirstValueByKeys($response, [
+            'consentRequestId',
+            'consent_request_id',
+            'abdm_consent_request_id',
+        ]);
+        if ($abdmConsentRequestId !== '' && ! $this->isGatewayRefId($abdmConsentRequestId)) {
+            $response['abdm_consent_request_id'] = $abdmConsentRequestId;
+            $response['consent_request_id'] = $abdmConsentRequestId;
+        }
+
+        $abdmConsentId = $this->findFirstValueByKeys($response, [
+            'consentId',
+            'consent_id',
+            'abdm_consent_artifact_id',
+        ]);
+        if ($abdmConsentId !== '' && ! $this->isGatewayRefId($abdmConsentId)) {
+            $response['consent_id'] = $abdmConsentId;
+            $response['abdm_consent_artifact_id'] = $abdmConsentId;
+        }
+
+        if (! isset($response['transaction_id'])) {
+            $response['transaction_id'] = (string) ($response['transactionId'] ?? $cleanQuery['transaction_id'] ?? '');
+        }
+
+        $this->writeApiLog($eventKey, $path, $cleanQuery, $response, $httpCode, $ok, $errorText, $hospitalId, 'GET');
 
         return $response;
     }
@@ -207,7 +357,8 @@ class M3HiuGatewayClient
         int $httpCode,
         int $ok,
         string $errorText,
-        string $hospitalId
+        string $hospitalId,
+        string $httpMethod = 'POST'
     ): void {
         if (! $this->db->tableExists('abdm_api_logs')) {
             return;
@@ -229,7 +380,7 @@ class M3HiuGatewayClient
             'channel' => 'eatria_bridge',
             'event_type' => 'abdm.m3.hiu.' . $eventKey,
             'endpoint' => $this->baseUrl . $path,
-            'http_method' => 'POST',
+            'http_method' => strtoupper(trim($httpMethod)) !== '' ? strtoupper(trim($httpMethod)) : 'POST',
             'entity_type' => 'abdm_hiu',
             'entity_id' => $entityId,
             'request_json' => (string) json_encode($request, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
@@ -267,5 +418,26 @@ class M3HiuGatewayClient
         }
 
         return '';
+    }
+
+    private function isGatewayRefId(string $value): bool
+    {
+        return preg_match('/^REQ-/i', trim($value)) === 1;
+    }
+
+    private function isCloudFrontBlockedResponse(int $httpCode, $raw, array $response): bool
+    {
+        if ($httpCode !== 403) {
+            return false;
+        }
+
+        $text = strtolower((string) $raw);
+        if ($text === '' && isset($response['data']['raw'])) {
+            $text = strtolower((string) $response['data']['raw']);
+        }
+
+        return str_contains($text, 'generated by cloudfront')
+            || str_contains($text, 'request blocked')
+            || str_contains($text, 'the request could not be satisfied');
     }
 }

@@ -500,10 +500,10 @@
                 <div class="tab-pane fade" id="abha-register" role="tabpanel" aria-labelledby="abhareg-tab">
                   <div class="row">
                     <div class="col-12">
-                      <h6 class="fw-bold mb-3"><i class="bi bi-person-check-fill me-2 text-primary"></i>ABHA-Based Patient Registration</h6>
+                      <h6 class="fw-bold mb-3"><i class="bi bi-person-check-fill me-2 text-primary" style="margin-left: 10px;margin-right: 10px;"></i>ABHA-Based Patient Registration</h6>
 
                       <!-- Method selector cards -->
-                      <div id="abhareg_methods" class="row g-2 mb-3">
+                      <div id="abhareg_methods" class="row g-2 mb-3" style="margin-left: 10px;margin-right: 10px;">
                         <div class="col-6 col-md-3">
                           <div class="card border abhareg-method-card text-center py-3" data-method="number" role="button" tabindex="0" onclick="abhaRegSelectMethod('number')" style="cursor:pointer">
                             <div class="fs-2 mb-1">🆔</div>

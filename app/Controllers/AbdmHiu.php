@@ -43,6 +43,16 @@ class AbdmHiu extends BaseController
         return $this->handleOperation('hi_request', 'DATA_REQUESTED');
     }
 
+    public function consentReconcile()
+    {
+        return $this->handleOperation('consent_reconcile', 'STATUS_CHECKED');
+    }
+
+    public function dataFetch()
+    {
+        return $this->handleOperation('data_fetch', 'DATA_PENDING');
+    }
+
     public function timeline()
     {
         $filters = [
@@ -60,6 +70,17 @@ class AbdmHiu extends BaseController
             'count' => count($rows),
             'items' => $rows,
         ]);
+    }
+
+    public function pollSummary()
+    {
+        $lookback = (int) ($this->request->getGet('lookback') ?? 180);
+        if ($lookback <= 0) {
+            $lookback = 180;
+        }
+
+        $summary = $this->service->natPollSummary($lookback);
+        return $this->response->setJSON($summary);
     }
 
     public function patientLookup()

@@ -3,10 +3,19 @@
         <div class="col-12">
             <div class="card shadow-sm">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">ABDM M3 HIU Console</h5>
+                    <div class="d-flex align-items-center gap-2">
+                        <h5 class="mb-0">ABDM M3 HIU Console</h5>
+                        <span id="poll_summary_badge" class="badge bg-secondary">Poll: waiting</span>
+                        <button class="btn btn-sm btn-outline-warning" id="btnPollErrors" type="button">Show Poll Errors</button>
+                    </div>
                     <button class="btn btn-sm btn-outline-primary" id="btnRefreshTimeline">Refresh Timeline</button>
                 </div>
                 <div class="card-body">
+                    <div id="poll_error_panel" class="alert alert-warning d-none mb-3">
+                        <div class="fw-bold mb-1">Recent Poll Errors</div>
+                        <ul id="poll_error_list" class="mb-0 ps-3"></ul>
+                    </div>
+
                     <div class="alert alert-info mb-3">
                         Search patient first. Consent Request is enabled only when ABHA Number and ABHA Address are both present.
                     </div>
@@ -118,13 +127,16 @@
     var consentPollTimer = null;
     var consentPollAttempts = 0;
     var consentPollMaxAttempts = 12;
+    var recentPollErrors = [];
 
     var opRoute = {
         consent_request: '<?= base_url('AbdmHiu/consent_request') ?>',
-        consent_status: '<?= base_url('AbdmHiu/consent_request_status') ?>',
-        consent_fetch: '<?= base_url('AbdmHiu/consent_request_fetch') ?>',
-        hi_request: '<?= base_url('AbdmHiu/health_information_request') ?>'
+        consent_status: '<?= base_url('AbdmHiu/consent_reconcile') ?>',
+        consent_fetch: '<?= base_url('AbdmHiu/consent_reconcile') ?>',
+        hi_request: '<?= base_url('AbdmHiu/health_information_request') ?>',
+        data_fetch: '<?= base_url('AbdmHiu/data_fetch') ?>'
     };
+    var pollSummaryUrl = '<?= base_url('AbdmHiu/poll_summary') ?>';
 
     var patientLookupUrl = '<?= base_url('AbdmHiu/patient_lookup') ?>';
 
@@ -183,7 +195,7 @@
 
     function isConsentApproved(statusText) {
         var s = (statusText || '').toString().trim().toLowerCase();
-        return ['approved', 'granted', 'active', 'linked', 'completed'].indexOf(s) !== -1;
+        return ['approved', 'granted', 'active', 'linked', 'completed', 'status_checked'].indexOf(s) !== -1;
     }
 
     function isTerminalConsentState(statusText) {
@@ -192,7 +204,7 @@
     }
 
     function isGatewayRequestId(v) {
-        return /^REQ-\d{14}-[A-Za-z0-9]{6,}$/.test((v || '').toString().trim());
+        return /^REQ-/i.test((v || '').toString().trim());
     }
 
     function isValidConsentArtifactId(v) {
@@ -204,12 +216,15 @@
         var hasPatient = !!selectedPatient;
         var hasNum = hasPatient && selectedPatient.has_abha_number === 1;
         var hasAddr = hasPatient && selectedPatient.has_abha_address === 1;
-        var hasConsentRequestRef = (getFieldValue(['consent_request_id', 'consent_id']) !== '');
-        var hasConsentArtifactRef = (getFieldValue(['consent_artifact_id', 'consent_id']) !== '');
+        var consentRequestRef = getFieldValue(['consent_request_id', 'consent_id']);
+        var consentArtifactRef = getFieldValue(['consent_artifact_id', 'consent_id']);
+        var hasConsentRequestRef = (consentRequestRef !== '' && !isGatewayRequestId(consentRequestRef));
+        var hasConsentArtifactRef = (consentArtifactRef !== '' && !isGatewayRequestId(consentArtifactRef));
+        var canFetchByState = isConsentApproved(consentStateText) || isTerminalConsentState(consentStateText);
 
         document.getElementById('btnConsentRequest').disabled = !(hasNum && hasAddr);
         document.getElementById('btnConsentStatus').disabled = !hasConsentRequestRef;
-        document.getElementById('btnConsentFetch').disabled = !hasConsentArtifactRef;
+        document.getElementById('btnConsentFetch').disabled = !(hasConsentArtifactRef || (hasConsentRequestRef && canFetchByState));
         document.getElementById('btnHiRequest').disabled = !(hasConsentArtifactRef && isConsentApproved(consentStateText));
         updateReadinessBox(consentStateText);
     }
@@ -218,7 +233,6 @@
         selectedPatient = p;
         setFieldValue(['selected_patient'], (p.patient_name || '') + (p.patient_code ? ' (' + p.patient_code + ')' : ''));
         setFieldValue(['abha_address'], p.abha_address || '');
-        setFieldValue(['f_abha_address'], p.abha_address || '');
         setFieldValue(['request_id'], genReq('REQ-CONSENT'));
         setFieldValue(['transaction_id'], genReq('TXN-HIU'));
 
@@ -382,15 +396,24 @@
             return base;
         }
 
-        if (op === 'consent_status') {
+        if (op === 'consent_status' || op === 'consent_fetch') {
+            var requestIdRef = (raw.request_id || raw.requestId || '').toString().trim();
             var consentRequestId = (raw.abdm_consent_request_id || raw.consentRequestId || '').toString().trim();
-            if (!consentRequestId) {
-                throw new Error('consentRequestId is required for consent status.');
+            var consentIdRef = (raw.abdm_consent_artifact_id || raw.consentId || raw.consent_id || '').toString().trim();
+
+            if (!requestIdRef && !consentRequestId && !consentIdRef) {
+                throw new Error('Provide one of request_id, consentRequestId, or consentId for consent reconciliation.');
             }
-            if (isGatewayRequestId(consentRequestId)) {
-                throw new Error('mapping_error: consentRequestId looks like gateway request_id (REQ-...). Use actual ABDM consentRequestId from init response.');
+
+            if (requestIdRef) {
+                base.request_id = requestIdRef;
             }
-            base.consentRequestId = consentRequestId;
+            if (consentRequestId && !isGatewayRequestId(consentRequestId)) {
+                base.consent_request_id = consentRequestId;
+            }
+            if (consentIdRef && !isGatewayRequestId(consentIdRef)) {
+                base.consent_id = consentIdRef;
+            }
             return base;
         }
 
@@ -400,7 +423,7 @@
                 throw new Error('consentId is required for consent fetch.');
             }
             if (isGatewayRequestId(consentId)) {
-                throw new Error('mapping_error: consentId looks like gateway request_id (REQ-...). Use ABDM consent artifact id only.');
+                throw new Error('mapping_error: consentId looks like gateway/local request_id (REQ-...). Use ABDM consent artifact id only.');
             }
             base.consentId = consentId;
             return base;
@@ -409,7 +432,17 @@
         if (op === 'hi_request') {
             var hiRequest = raw.hiRequest;
             if (!hiRequest || typeof hiRequest !== 'object' || Array.isArray(hiRequest)) {
-                throw new Error('hiRequest object is required for health information request.');
+                hiRequest = {
+                    consent: {
+                        id: (raw.consentId || raw.consent_id || '').toString().trim()
+                    },
+                    dateRange: {
+                        from: new Date(Date.now() - (30 * 24 * 60 * 60 * 1000)).toISOString(),
+                        to: new Date().toISOString()
+                    },
+                    dataPushUrl: 'https://abdm-bridge.e-atria.in/api/v3/hiu/data/push',
+                    transactionId: (raw.transactionId || raw.transaction_id || '').toString().trim() || genReq('TXN-HIU')
+                };
             }
 
             if (!hiRequest.consent || typeof hiRequest.consent !== 'object') {
@@ -422,7 +455,13 @@
                 throw new Error('hiRequest.consent.id is required for health information request.');
             }
 
+            if (!hiRequest.transactionId) {
+                hiRequest.transactionId = (raw.transactionId || raw.transaction_id || '').toString().trim() || genReq('TXN-HIU');
+            }
+            setFieldValue(['transaction_id'], hiRequest.transactionId);
+
             base.hiRequest = hiRequest;
+            base.transactionId = hiRequest.transactionId;
             return base;
         }
 
@@ -484,19 +523,17 @@
                 if (op === 'consent_request') {
                     startConsentPolling();
                 }
-                if (op === 'consent_status' && isTerminalConsentState(state)) {
+                if ((op === 'consent_status' || op === 'consent_fetch') && isConsentApproved(state) && isValidConsentArtifactId(consentArtifactRef)) {
+                    run('hi_request', { silent: true });
+                }
+                if ((op === 'consent_status' || op === 'consent_fetch') && isTerminalConsentState(state)) {
                     stopConsentPolling();
                 }
-            } else if (op === 'consent_status') {
+            } else if (op === 'consent_status' || op === 'consent_fetch') {
                 var errState = ((res.data || {}).workflow_state || res.workflow_state || '').toString();
                 var errText = (res.error || ((res.data || {}).error_text) || '').toString().toLowerCase();
                 if (isTerminalConsentState(errState) || errText.indexOf('mapping_error') !== -1) {
                     stopConsentPolling();
-                }
-            } else if (op === 'consent_fetch') {
-                var fetchErr = (res.error || ((res.data || {}).error_text) || '').toString().toLowerCase();
-                if (fetchErr.indexOf('mapping_error') !== -1) {
-                    setFieldValue(['consent_artifact_id', 'consent_id'], '');
                 }
             }
 
@@ -526,6 +563,70 @@
             consentPollTimer = null;
         }
         consentPollAttempts = 0;
+    }
+
+    function renderPollErrors() {
+        var list = document.getElementById('poll_error_list');
+        if (!list) {
+            return;
+        }
+
+        list.innerHTML = '';
+        if (!recentPollErrors.length) {
+            var li = document.createElement('li');
+            li.textContent = 'No recent polling errors in selected lookback window.';
+            list.appendChild(li);
+            return;
+        }
+
+        recentPollErrors.forEach(function (row) {
+            var when = (row.updated_at || '-').toString();
+            var op = (row.operation || '-').toString();
+            var req = (row.request_id || '-').toString();
+            var err = (row.last_error || 'Unknown error').toString();
+            var li = document.createElement('li');
+            li.textContent = when + ' | ' + op + ' | ' + req + ' | ' + err;
+            list.appendChild(li);
+        });
+    }
+
+    function refreshPollSummary() {
+        fetch(pollSummaryUrl + '?lookback=180', {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+            var badge = document.getElementById('poll_summary_badge');
+            if (!badge) {
+                return;
+            }
+            if ((res.ok || 0) !== 1) {
+                badge.className = 'badge bg-danger';
+                badge.textContent = 'Poll: unavailable';
+                return;
+            }
+
+            var consentUpdates = parseInt(res.consent_updates || 0, 10);
+            var dataUpdates = parseInt(res.data_updates || 0, 10);
+            var failed = parseInt(res.failed || 0, 10);
+            var pending = parseInt(res.pending || 0, 10);
+            var lastAt = (res.last_polled_at || '-').toString();
+            recentPollErrors = Array.isArray(res.recent_errors) ? res.recent_errors : [];
+            renderPollErrors();
+
+            badge.className = failed > 0 ? 'badge bg-warning text-dark' : 'badge bg-success';
+            badge.textContent = 'Poll c:' + consentUpdates + ' d:' + dataUpdates + ' f:' + failed + ' p:' + pending + ' | ' + lastAt;
+        })
+        .catch(function () {
+            var badge = document.getElementById('poll_summary_badge');
+            if (!badge) {
+                return;
+            }
+            badge.className = 'badge bg-danger';
+            badge.textContent = 'Poll: unavailable';
+            recentPollErrors = [];
+            renderPollErrors();
+        });
     }
 
     function fetchTimeline() {
@@ -561,6 +662,8 @@
                     '<td>' + (row.last_error || '') + '</td>';
                 tbody.appendChild(tr);
             });
+
+            refreshPollSummary();
         });
     }
 
@@ -606,8 +709,25 @@
     if (btnRefreshTimeline) {
         btnRefreshTimeline.addEventListener('click', fetchTimeline);
     }
+    var btnPollErrors = document.getElementById('btnPollErrors');
+    if (btnPollErrors) {
+        btnPollErrors.addEventListener('click', function () {
+            var panel = document.getElementById('poll_error_panel');
+            if (!panel) {
+                return;
+            }
+            panel.classList.toggle('d-none');
+            if (panel.classList.contains('d-none')) {
+                btnPollErrors.textContent = 'Show Poll Errors';
+            } else {
+                renderPollErrors();
+                btnPollErrors.textContent = 'Hide Poll Errors';
+            }
+        });
+    }
 
     syncButtons();
+    refreshPollSummary();
     fetchTimeline();
 })();
 </script>
