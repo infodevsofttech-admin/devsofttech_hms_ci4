@@ -359,6 +359,68 @@
             border-color: #86b7fe !important;
             box-shadow: 0 0 0 0.15rem rgba(13, 110, 253, 0.12);
         }
+        .rx-jump-bookmarks {
+            position: fixed;
+            right: 14px;
+            top: 52%;
+            transform: translateY(-50%);
+            z-index: 1100;
+            display: flex;
+            flex-direction: column;
+            gap: .35rem;
+            border: 1px solid #d7e3f4;
+            background: rgba(248, 251, 255, .96);
+            border-radius: .6rem;
+            padding: .45rem;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, .12);
+        }
+        .rx-jump-bookmarks .rx-jump-drag-handle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            border: 1px dashed #b9cff4;
+            border-radius: .45rem;
+            background: #eef4ff;
+            color: #355f98;
+            font-size: .72rem;
+            padding: .12rem .35rem;
+            margin-bottom: .1rem;
+            cursor: grab;
+            user-select: none;
+            touch-action: none;
+        }
+        .rx-jump-bookmarks.is-dragging .rx-jump-drag-handle {
+            cursor: grabbing;
+            background: #dce9ff;
+        }
+        .rx-jump-bookmarks .rx-jump-link {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+            border-radius: 999px;
+            padding: .2rem .6rem;
+            font-size: .8rem;
+            justify-content: flex-start;
+            white-space: nowrap;
+        }
+        .rx-jump-bookmarks .rx-jump-link i {
+            font-size: .82rem;
+        }
+        @media (max-width: 991.98px) {
+            .rx-jump-bookmarks {
+                right: 8px;
+                top: auto;
+                bottom: 10px;
+                transform: none;
+                max-height: 62vh;
+                overflow-y: auto;
+            }
+            .rx-jump-bookmarks .rx-jump-link {
+                padding: .2rem .45rem;
+                font-size: .75rem;
+            }
+        }
         .rx-prefilled-morbidity {
             background: #f8fbff;
             border: 1px solid #d6e8ff;
@@ -424,13 +486,6 @@
                 <span id="rx_status_text" class="ms-2 text-muted">No local changes</span>
             </div>
             <div>
-                <select class="form-select form-select-sm d-inline-block" id="speech_mode_select" style="width:auto;min-width:150px;">
-                    <option value="auto">Mic Mode: Auto</option>
-                    <option value="browser">Mic Mode: Browser</option>
-                    <option value="server">Mic Mode: Server</option>
-                </select>
-                <button type="button" class="btn btn-outline-warning btn-sm" id="btn_new_opd_session_reset" title="Start clean OPD session view (clear Advice/Investigation/Medicine list)">New OPD Session</button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_restore_draft">Restore Draft</button>
                 <?php
                     $historyBackUrl = base_url('Opd_prescription/Prescription') . '/' . (int) ($opd_id ?? 0);
                     $historyUrl = base_url('billing/patient/show_profile_opd') . '/' . (int) ($patient_master[0]->id ?? 0) . '/1?' . http_build_query([
@@ -457,9 +512,28 @@
                    aria-label="Patient History">
                     <i class="bi bi-clock-history"></i>
                 </a>
-                <button type="button" class="btn btn-outline-success btn-sm" id="btn_local_clinical_assist" title="Local rule-based support using complaints + vitals">Clinical Assist (Local)</button>
-                <button type="button" class="btn btn-outline-primary btn-sm" id="btn_ai_full_draft" title="Use complete OPD data to generate draft notes">AI Draft (Full Form)</button>
+                <div class="btn-group btn-group-sm">
+                    <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">More Tools</button>
+                    <div class="dropdown-menu dropdown-menu-end p-2" style="min-width:280px;">
+                        <div class="mb-2">
+                            <select class="form-select form-select-sm" id="speech_mode_select">
+                                <option value="auto">Mic Mode: Auto</option>
+                                <option value="browser">Mic Mode: Browser</option>
+                                <option value="server">Mic Mode: Server</option>
+                            </select>
+                        </div>
+                        <div class="d-grid gap-1">
+                            <button type="button" class="btn btn-outline-warning btn-sm text-start" id="btn_new_opd_session_reset" title="Start clean OPD session view (clear Advice/Investigation/Medicine list)">New OPD Session</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm text-start" id="btn_restore_draft">Restore Draft</button>
+                            <button type="button" class="btn btn-outline-success btn-sm text-start" id="btn_local_clinical_assist" title="Local rule-based support using complaints + vitals">Clinical Assist (Local)</button>
+                            <button type="button" class="btn btn-outline-primary btn-sm text-start" id="btn_ai_full_draft" title="Use complete OPD data to generate draft notes">AI Draft (Full Form)</button>
+                            <button type="button" class="btn btn-outline-primary btn-sm text-start" id="btn_quick_preview_fhir">Preview FHIR JSON</button>
+                        </div>
+                    </div>
+                </div>
                 <button type="button" class="btn btn-primary btn-sm" id="btn_save_rx">Save Consult</button>
+                <button type="button" class="btn btn-outline-primary btn-sm" id="btn_toggle_consult_view_settings">Customize Sections</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_manage_autotype_keywords">Manage Keywords</button>
                 <div class="btn-group btn-group-sm">
                     <button type="button" class="btn btn-outline-dark dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">🖨 Print</button>
                     <ul class="dropdown-menu dropdown-menu-end">
@@ -477,6 +551,27 @@
             </div>
         </div>
         <div id="rx_scan_banner" class="rx-scan-banner"></div>
+        <div class="rx-jump-bookmarks" aria-label="Consult section bookmarks">
+            <div class="rx-jump-drag-handle" title="Drag to move bookmark panel"><i class="bi bi-grip-vertical"></i>&nbsp;Move</div>
+            <button type="button" class="btn btn-outline-primary btn-sm rx-jump-link" data-target="#rx_sec_vitals" title="Jump to Vitals">
+                <i class="bi bi-bookmark-fill"></i><span>Vitals</span>
+            </button>
+            <button type="button" class="btn btn-outline-primary btn-sm rx-jump-link" data-target="#rx_sec_complaints" title="Jump to Complaints">
+                <i class="bi bi-bookmark-fill"></i><span>Complaints</span>
+            </button>
+            <button type="button" class="btn btn-outline-primary btn-sm rx-jump-link" data-target="#rx_sec_diagnosis" title="Jump to Diagnosis">
+                <i class="bi bi-bookmark-fill"></i><span>Diagnosis</span>
+            </button>
+            <button type="button" class="btn btn-outline-primary btn-sm rx-jump-link" data-target="#panel_medicine" title="Jump to Prescribe Medicine">
+                <i class="bi bi-bookmark-fill"></i><span>Prescribe Medicine</span>
+            </button>
+            <button type="button" class="btn btn-outline-primary btn-sm rx-jump-link" data-target="#panel_investigation" title="Jump to Advise Investigation">
+                <i class="bi bi-bookmark-fill"></i><span>Advise Investigation</span>
+            </button>
+            <button type="button" class="btn btn-outline-primary btn-sm rx-jump-link" data-target="#panel_advice" title="Jump to Advice">
+                <i class="bi bi-bookmark-fill"></i><span>Advice</span>
+            </button>
+        </div>
 
         <div class="row g-3 rx-two-panel">
             <div class="col-lg-3 rx-left-panel">
@@ -490,10 +585,10 @@
                             <div class="rx-meta-line"><strong>UHID:</strong> <?= esc($patient_master[0]->p_code ?? '') ?></div>
                             <div class="rx-meta-line"><strong>Age:</strong> <?= esc($patient_master[0]->str_age ?? '') ?></div>
                             <div class="rx-meta-line"><strong>Gender:</strong> <?= esc($patient_master[0]->xgender ?? '') ?></div>
-                            <div class="rx-meta-line">
-                                <label for="abha_address" class="form-label mb-1"><strong>ABHA Address:</strong></label>
-                                <input type="text" class="form-control form-control-sm rx-instant" id="abha_address" value="<?= esc($patientAbhaAddress) ?>" placeholder="name@abdm" autocomplete="off">
-                            </div>
+                            <?php if ($patientAbhaAddress !== '') : ?>
+                            <div class="rx-meta-line"><strong>ABHA Address:</strong> <?= esc($patientAbhaAddress) ?></div>
+                            <?php endif; ?>
+                            <input type="hidden" id="abha_address" value="<?= esc($patientAbhaAddress) ?>">
                             <div class="rx-meta-line"><strong>OPD:</strong> <?= esc($opd_master[0]->opd_code ?? '') ?></div>
                             <div class="rx-meta-line"><strong>Date:</strong> <?= esc($opd_master[0]->apointment_date ?? '') ?></div>
                             <div class="rx-meta-line mb-0"><strong>Doctor:</strong> <?= esc($opd_master[0]->doc_name ?? '') ?></div>
@@ -606,19 +701,6 @@
 
             <div class="col-lg-9 rx-right-panel">
                 <div class="card mb-3">
-                    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-                        <div>
-                            <strong>Single Screen Consult</strong>
-                            <small class="text-muted ms-2">(Old familiar fields + AI assist)</small>
-                        </div>
-                        <div class="d-flex align-items-center gap-2">
-                            <span class="badge bg-light text-dark border">Doctor View</span>
-                            <button type="button" class="btn btn-outline-primary btn-sm" id="btn_quick_preview_fhir">Preview FHIR JSON</button>
-                            <button type="button" class="btn btn-outline-primary btn-sm" id="btn_toggle_consult_view_settings">Customize Sections</button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_manage_autotype_keywords">Manage Keywords</button>
-                        </div>
-                    </div>
-
                     <div class="card-body">
                         <div id="rx_consult_visibility_panel" class="rx-consult-visibility-panel">
                             <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
@@ -1028,7 +1110,7 @@
                                 </div>
                             </div>
 
-                            <div class="row g-2 mb-3">
+                            <div class="row g-2 mb-3 d-none">
                                 <div class="col-md-10">
                                     <input type="text" class="form-control" id="advice_text" list="advice_suggest" placeholder="Type advice (e.g., Rest, Hydration, Follow-up)">
                                     <datalist id="advice_suggest"></datalist>
@@ -1068,9 +1150,9 @@
                         <div id="panel_investigation" class="rx-panel">
                             <div class="mb-2">
                                 <label class="form-label"><strong>Advise Investigation</strong></label>
+                            </div>
+                            <div class="d-none">
                                 <textarea class="form-control form-control-sm" id="advise_investigation_notes" rows="2" placeholder="Optional notes for investigation advice..."></textarea>
-                                <div class="rx-recent-chip-label">Recent investigations</div>
-                                <div class="rx-recent-chip-box" id="recent_chips_investigation"><span class="text-muted small">Loading...</span></div>
                             </div>
 
                             <div class="mb-2">
@@ -1086,12 +1168,35 @@
                                 </div>
                             </div>
 
+                            <div class="border rounded p-2 mb-3 bg-light-subtle" id="investigation_category_box">
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-3"><label class="form-label mb-1">Pathology Test</label></div>
+                                    <div class="col-md-9"><select class="form-select form-select-sm inv-cat-select" id="inv_cat_pathology" data-category="pathology" multiple="multiple" style="width:100%;"></select></div>
+                                </div>
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-3"><label class="form-label mb-1">Radiology</label></div>
+                                    <div class="col-md-9"><select class="form-select form-select-sm inv-cat-select" id="inv_cat_radiology" data-category="radiology" multiple="multiple" style="width:100%;"></select></div>
+                                </div>
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-3"><label class="form-label mb-1">UltraSound</label></div>
+                                    <div class="col-md-9"><select class="form-select form-select-sm inv-cat-select" id="inv_cat_ultrasound" data-category="ultrasound" multiple="multiple" style="width:100%;"></select></div>
+                                </div>
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-3"><label class="form-label mb-1">Cardic Test</label></div>
+                                    <div class="col-md-9"><select class="form-select form-select-sm inv-cat-select" id="inv_cat_cardic" data-category="cardic" multiple="multiple" style="width:100%;"></select></div>
+                                </div>
+                                <div class="row g-2 align-items-end">
+                                    <div class="col-md-3"><label class="form-label mb-1">Others</label></div>
+                                    <div class="col-md-9"><textarea class="form-control form-control-sm" id="inv_cat_others" rows="3" placeholder="Type other investigations, comma separated"></textarea></div>
+                                </div>
+                            </div>
+
                             <div id="legacy_inv_shortcuts_panel" class="border rounded p-2 mb-3" style="display:none;">
                                 <div class="small fw-semibold mb-2">Legacy Investigation Shortcuts</div>
                                 <div id="legacy_inv_shortcuts_grouped"></div>
                             </div>
 
-                            <div class="row g-2 mb-3">
+                            <div class="row g-2 mb-3 d-none">
                                 <div class="col-md-10">
                                     <select class="form-select" id="investigation_name_select2" style="width:100%;">
                                         <option value="">Search investigation...</option>
@@ -1113,7 +1218,7 @@
                                     <button type="button" class="btn btn-outline-danger" id="btn_clear_investigation">Remove All</button>
                                 </div>
                             </div>
-                            <div class="table-responsive">
+                            <div class="table-responsive d-none">
                                 <table class="table table-bordered table-sm rx-list-table" id="tbl_investigation">
                                     <thead><tr><th>Test Name</th><th>Code</th><th width="90">Action</th></tr></thead>
                                     <tbody><tr><td colspan="3" class="text-muted">No investigation added</td></tr></tbody>
@@ -1605,6 +1710,7 @@
     };
     var patientId = <?= (int) ($patient_master[0]->id ?? 0) ?>;
     var doctorViewId = <?= (int) ($doctorId ?? 0) ?>;
+    var jumpBookmarkPositionKey = 'opd_jump_bookmark_position_' + doctorViewId;
     autotypeSuggestCacheLocalKey = autotypeSuggestCacheLocalKey + '_' + doctorViewId;
     var consultSectionPreferenceKey = 'opd_consult_section_pref_' + doctorViewId;
     var consultSectionMeta = [
@@ -1752,6 +1858,129 @@
             prefs = getConsultSectionDefaultPrefs();
             saveConsultSectionPrefs(prefs);
             applyConsultSectionPrefs(prefs);
+        });
+    }
+
+    function clampJumpBookmarkPosition(left, top, panelWidth, panelHeight) {
+        var viewportWidth = Math.max($(window).width() || 0, 320);
+        var viewportHeight = Math.max($(window).height() || 0, 320);
+        var safeLeft = Math.min(Math.max(left, 6), Math.max(6, viewportWidth - panelWidth - 6));
+        var safeTop = Math.min(Math.max(top, 6), Math.max(6, viewportHeight - panelHeight - 6));
+        return { left: safeLeft, top: safeTop };
+    }
+
+    function saveJumpBookmarkPosition(pos) {
+        try {
+            localStorage.setItem(jumpBookmarkPositionKey, JSON.stringify(pos || {}));
+        } catch (e) {
+            // Ignore private mode/quota errors.
+        }
+    }
+
+    function applySavedJumpBookmarkPosition($panel) {
+        if (!$panel || !$panel.length) {
+            return;
+        }
+        try {
+            var raw = localStorage.getItem(jumpBookmarkPositionKey);
+            if (!raw) {
+                return;
+            }
+            var parsed = JSON.parse(raw);
+            var left = Number(parsed && parsed.left);
+            var top = Number(parsed && parsed.top);
+            if (!isFinite(left) || !isFinite(top)) {
+                return;
+            }
+            var panelWidth = $panel.outerWidth() || 180;
+            var panelHeight = $panel.outerHeight() || 220;
+            var pos = clampJumpBookmarkPosition(left, top, panelWidth, panelHeight);
+            $panel.css({ left: pos.left + 'px', top: pos.top + 'px', right: 'auto', bottom: 'auto', transform: 'none' });
+        } catch (e) {
+            // Ignore parse failures.
+        }
+    }
+
+    function initJumpBookmarkDrag() {
+        var $panel = $('.rx-jump-bookmarks').first();
+        if (!$panel.length) {
+            return;
+        }
+
+        applySavedJumpBookmarkPosition($panel);
+
+        var dragState = { active: false, pointerId: null, startX: 0, startY: 0, baseLeft: 0, baseTop: 0 };
+
+        function getPointerCoords(ev) {
+            if (ev && ev.originalEvent && ev.originalEvent.touches && ev.originalEvent.touches.length) {
+                return { x: ev.originalEvent.touches[0].clientX, y: ev.originalEvent.touches[0].clientY };
+            }
+            if (ev && ev.originalEvent && ev.originalEvent.changedTouches && ev.originalEvent.changedTouches.length) {
+                return { x: ev.originalEvent.changedTouches[0].clientX, y: ev.originalEvent.changedTouches[0].clientY };
+            }
+            return { x: ev.clientX, y: ev.clientY };
+        }
+
+        function beginDrag(ev) {
+            var coords = getPointerCoords(ev);
+            var panelOffset = $panel.offset() || { left: 14, top: 100 };
+            dragState.active = true;
+            dragState.pointerId = (ev.originalEvent && typeof ev.originalEvent.pointerId !== 'undefined') ? ev.originalEvent.pointerId : null;
+            dragState.startX = coords.x;
+            dragState.startY = coords.y;
+            dragState.baseLeft = panelOffset.left;
+            dragState.baseTop = panelOffset.top;
+            $panel.addClass('is-dragging').css({ left: panelOffset.left + 'px', top: panelOffset.top + 'px', right: 'auto', bottom: 'auto', transform: 'none' });
+            ev.preventDefault();
+        }
+
+        function moveDrag(ev) {
+            if (!dragState.active) {
+                return;
+            }
+            if (dragState.pointerId !== null && ev.originalEvent && typeof ev.originalEvent.pointerId !== 'undefined' && ev.originalEvent.pointerId !== dragState.pointerId) {
+                return;
+            }
+            var coords = getPointerCoords(ev);
+            var nextLeft = dragState.baseLeft + (coords.x - dragState.startX);
+            var nextTop = dragState.baseTop + (coords.y - dragState.startY);
+            var panelWidth = $panel.outerWidth() || 180;
+            var panelHeight = $panel.outerHeight() || 220;
+            var pos = clampJumpBookmarkPosition(nextLeft, nextTop, panelWidth, panelHeight);
+            $panel.css({ left: pos.left + 'px', top: pos.top + 'px', right: 'auto', bottom: 'auto', transform: 'none' });
+            ev.preventDefault();
+        }
+
+        function endDrag() {
+            if (!dragState.active) {
+                return;
+            }
+            dragState.active = false;
+            dragState.pointerId = null;
+            $panel.removeClass('is-dragging');
+            var panelOffset = $panel.offset() || { left: 14, top: 100 };
+            saveJumpBookmarkPosition({ left: panelOffset.left, top: panelOffset.top });
+        }
+
+        $panel.off('pointerdown.rxJumpDrag touchstart.rxJumpDrag mousedown.rxJumpDrag', '.rx-jump-drag-handle');
+        $panel.on('pointerdown.rxJumpDrag touchstart.rxJumpDrag mousedown.rxJumpDrag', '.rx-jump-drag-handle', beginDrag);
+
+        $(document).off('pointermove.rxJumpDrag touchmove.rxJumpDrag mousemove.rxJumpDrag');
+        $(document).on('pointermove.rxJumpDrag touchmove.rxJumpDrag mousemove.rxJumpDrag', moveDrag);
+
+        $(document).off('pointerup.rxJumpDrag pointercancel.rxJumpDrag touchend.rxJumpDrag touchcancel.rxJumpDrag mouseup.rxJumpDrag');
+        $(document).on('pointerup.rxJumpDrag pointercancel.rxJumpDrag touchend.rxJumpDrag touchcancel.rxJumpDrag mouseup.rxJumpDrag', endDrag);
+
+        $(window).off('resize.rxJumpDrag').on('resize.rxJumpDrag', function() {
+            var panelOffset = $panel.offset();
+            if (!panelOffset) {
+                return;
+            }
+            var panelWidth = $panel.outerWidth() || 180;
+            var panelHeight = $panel.outerHeight() || 220;
+            var pos = clampJumpBookmarkPosition(panelOffset.left, panelOffset.top, panelWidth, panelHeight);
+            $panel.css({ left: pos.left + 'px', top: pos.top + 'px', right: 'auto', bottom: 'auto', transform: 'none' });
+            saveJumpBookmarkPosition({ left: pos.left, top: pos.top });
         });
     }
 
@@ -6661,6 +6890,332 @@
         });
     }
 
+    function normalizeInvestigationCategoryLabel(label) {
+        var txt = (label || '').toString().trim().toLowerCase();
+        if (!txt) {
+            return 'Pathology';
+        }
+        if (/\bx\s*[-]?\s*ray\b/i.test(txt) || txt.indexOf('xray') !== -1 || txt.indexOf('radiology') !== -1 || txt === 'x') {
+            return 'X-Ray';
+        }
+        if (txt.indexOf('ultra') !== -1 || txt.indexOf('ultra sound') !== -1 || txt.indexOf('ultrasound') !== -1 || txt.indexOf('usg') !== -1 || txt.indexOf('sonography') !== -1) {
+            return 'Ultra Sound';
+        }
+        if (txt.indexOf('card') !== -1 || txt.indexOf('cardio') !== -1 || txt.indexOf('ecg') !== -1 || txt.indexOf('echo') !== -1 || txt.indexOf('tmt') !== -1) {
+            return 'Cardic Test';
+        }
+        return 'Pathology';
+    }
+
+    function normalizeInvestigationTextKey(value) {
+        return (value || '')
+            .toString()
+            .toLowerCase()
+            .replace(/[()\[\]{}.,]/g, ' ')
+            .replace(/[-_/]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function buildInvestigationCategoryMap() {
+        var map = {};
+        (legacyInvestigationShortTests || []).forEach(function(row) {
+            var name = (row && row.name ? row.name : '').toString().trim().toLowerCase();
+            var code = (row && row.code ? row.code : '').toString().trim().toLowerCase();
+            var category = normalizeInvestigationCategoryLabel(row && row.short_name ? row.short_name : '');
+            if (name) {
+                map['n:' + name] = category;
+                map['n:' + normalizeInvestigationTextKey(name)] = category;
+            }
+            if (code) {
+                map['c:' + code] = category;
+            }
+        });
+        return map;
+    }
+
+    function detectInvestigationCategory(row, categoryMap) {
+        var name = (row && row.name ? row.name : '').toString().trim();
+        var code = (row && row.code ? row.code : '').toString().trim();
+        var shortName = (row && row.short_name ? row.short_name : '').toString().trim();
+        var categoryName = (row && row.category_name ? row.category_name : '').toString().trim();
+        var nameNorm = normalizeInvestigationTextKey(name);
+
+        // Name-based category must win for explicit tests like X-Ray Chest,
+        // even when master short/category fields are generic.
+        if (/\bx\s*[-]?\s*ray\b|\bpa\s*view\b|\bradiograph\b/i.test(nameNorm)) {
+            return 'X-Ray';
+        }
+        if (/\bultra\s*sound\b|\bultrasound\b|\busg\b|\bsonography\b/i.test(nameNorm)) {
+            return 'Ultra Sound';
+        }
+        if (/\becg\b|\becho\b|\btmt\b|\bcardi/i.test(nameNorm)) {
+            return 'Cardic Test';
+        }
+
+        if (categoryName) {
+            return normalizeInvestigationCategoryLabel(categoryName);
+        }
+
+        if (shortName) {
+            return normalizeInvestigationCategoryLabel(shortName);
+        }
+
+        var byCodeKey = 'c:' + code.toLowerCase();
+        if (code && categoryMap[byCodeKey]) {
+            return categoryMap[byCodeKey];
+        }
+
+        var byNameKey = 'n:' + name.toLowerCase();
+        if (name && categoryMap[byNameKey]) {
+            return categoryMap[byNameKey];
+        }
+
+        var byNameNormKey = 'n:' + nameNorm;
+        if (nameNorm && categoryMap[byNameNormKey]) {
+            return categoryMap[byNameNormKey];
+        }
+
+        return normalizeInvestigationCategoryLabel(name);
+    }
+
+    function clearInvestigationCategorySelections() {
+        ['#inv_cat_pathology', '#inv_cat_radiology', '#inv_cat_ultrasound', '#inv_cat_cardic'].forEach(function(sel) {
+            var $sel = $(sel);
+            if (!$sel.length) {
+                return;
+            }
+            $sel.val(null).trigger('change.select2');
+            $sel.find('option').remove();
+        });
+        $('#inv_cat_others').val('');
+    }
+
+    function appendInvestigationProfileToNotes(rows) {
+        rows = Array.isArray(rows) ? rows : [];
+        if (!rows.length) {
+            $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('No tests found in selected profile.');
+            return;
+        }
+
+        clearInvestigationCategorySelections();
+
+        var categoryOrder = ['Pathology', 'X-Ray', 'Ultra Sound', 'Cardic Test'];
+        var grouped = {
+            'Pathology': [],
+            'X-Ray': [],
+            'Ultra Sound': [],
+            'Cardic Test': []
+        };
+        var seen = {};
+        var categoryMap = buildInvestigationCategoryMap();
+
+        rows.forEach(function(row) {
+            var name = (row && row.name ? row.name : row).toString().trim();
+            var code = (row && row.code ? row.code : '').toString().trim();
+            if (!name) {
+                return;
+            }
+            var uniq = (code + '|' + name).toLowerCase();
+            if (seen[uniq]) {
+                return;
+            }
+            seen[uniq] = true;
+
+            var category = detectInvestigationCategory({
+                name: name,
+                code: code,
+                short_name: (row && row.short_name ? row.short_name : ''),
+                category_name: (row && row.category_name ? row.category_name : '')
+            }, categoryMap);
+            if (!grouped[category]) {
+                grouped[category] = [];
+                categoryOrder.push(category);
+            }
+            grouped[category].push(name);
+        });
+
+        fillCategorySelectorsFromRows(rows, categoryMap, categoryOrder, grouped);
+        buildInvestigationNotesFromCategories();
+        $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text('Investigation profile applied to category builder.');
+        markDirty('Investigation profile applied');
+    }
+
+    function ensureSelect2Option($sel, name, code) {
+        if (!$sel.length || !name) {
+            return;
+        }
+        var optionId = (name + ' [' + (code || '') + ']').trim();
+        var label = code ? (name + ' [' + code + ']') : name;
+        var exists = $sel.find('option').filter(function() {
+            return ($(this).val() || '') === optionId;
+        }).length > 0;
+        if (!exists) {
+            var opt = new Option(label, optionId, true, true);
+            $(opt).attr('data-name', name).attr('data-code', code || '');
+            $sel.append(opt);
+        }
+    }
+
+    function getSelectedCategoryNames(selector) {
+        var $sel = $(selector);
+        if (!$sel.length) {
+            return [];
+        }
+        var out = [];
+        var seen = {};
+        $sel.find('option:selected').each(function() {
+            var name = ($(this).attr('data-name') || $(this).text() || '').toString().trim();
+            name = name.replace(/\s*\[[^\]]*\]\s*$/, '').trim();
+            if (!name) {
+                return;
+            }
+            var key = name.toLowerCase();
+            if (seen[key]) {
+                return;
+            }
+            seen[key] = true;
+            out.push(name);
+        });
+        return out;
+    }
+
+    function buildInvestigationNotesFromCategories() {
+        var pathology = getSelectedCategoryNames('#inv_cat_pathology');
+        var radiology = getSelectedCategoryNames('#inv_cat_radiology');
+        var ultrasound = getSelectedCategoryNames('#inv_cat_ultrasound');
+        var cardic = getSelectedCategoryNames('#inv_cat_cardic');
+        var othersRaw = ($('#inv_cat_others').val() || '').toString().trim();
+
+        var lines = [];
+        if (pathology.length) {
+            lines.push('Pathology : ' + pathology.join(', '));
+        }
+        if (radiology.length) {
+            lines.push('X-Ray : ' + radiology.join(', '));
+        }
+        if (ultrasound.length) {
+            lines.push('Ultra Sound : ' + ultrasound.join(', '));
+        }
+        if (cardic.length) {
+            lines.push('Cardic Test : ' + cardic.join(', '));
+        }
+        if (othersRaw !== '') {
+            lines.push('Others : ' + othersRaw);
+        }
+
+        $('#advise_investigation_notes').val(lines.join('\n').trim()).trigger('input');
+    }
+
+    function fillCategorySelectorsFromRows(rows, categoryMap) {
+        var idMap = {
+            'Pathology': '#inv_cat_pathology',
+            'X-Ray': '#inv_cat_radiology',
+            'Ultra Sound': '#inv_cat_ultrasound',
+            'Cardic Test': '#inv_cat_cardic'
+        };
+
+        rows.forEach(function(row) {
+            var name = (row && row.name ? row.name : row).toString().trim();
+            var code = (row && row.code ? row.code : '').toString().trim();
+            if (!name) {
+                return;
+            }
+
+            var category = detectInvestigationCategory({
+                name: name,
+                code: code,
+                short_name: (row && row.short_name ? row.short_name : ''),
+                category_name: (row && row.category_name ? row.category_name : '')
+            }, categoryMap || buildInvestigationCategoryMap());
+
+            var target = idMap[category] || '#inv_cat_pathology';
+            ensureSelect2Option($(target), name, code);
+        });
+
+        Object.keys(idMap).forEach(function(k) {
+            var sel = idMap[k];
+            if ($(sel).length) {
+                $(sel).trigger('change.select2');
+            }
+        });
+    }
+
+    function parseInvestigationCategoryLabel(rawLabel) {
+        var label = (rawLabel || '').toString().trim().toLowerCase();
+        if (!label) {
+            return '';
+        }
+        if (label.indexOf('pathology') === 0) {
+            return 'pathology';
+        }
+        if (label.indexOf('x-ray') === 0 || label.indexOf('radiology') === 0 || label.indexOf('xray') === 0) {
+            return 'radiology';
+        }
+        if (label.indexOf('ultra sound') === 0 || label.indexOf('ultrasound') === 0 || label.indexOf('usg') === 0) {
+            return 'ultrasound';
+        }
+        if (label.indexOf('cardic') === 0 || label.indexOf('cardiac') === 0 || label.indexOf('cardio') === 0) {
+            return 'cardic';
+        }
+        if (label.indexOf('other') === 0) {
+            return 'others';
+        }
+        return '';
+    }
+
+    function hydrateCategoryBuilderFromNotes(textRaw) {
+        var text = (textRaw || '').toString();
+        if (text.trim() === '') {
+            return;
+        }
+
+        clearInvestigationCategorySelections();
+
+        var mapSel = {
+            pathology: '#inv_cat_pathology',
+            radiology: '#inv_cat_radiology',
+            ultrasound: '#inv_cat_ultrasound',
+            cardic: '#inv_cat_cardic'
+        };
+
+        var lines = text.split(/\r?\n/);
+        lines.forEach(function(line) {
+            var m = /^\s*([^:]+)\s*:\s*(.*)$/.exec(line || '');
+            if (!m) {
+                return;
+            }
+
+            var key = parseInvestigationCategoryLabel(m[1] || '');
+            var body = (m[2] || '').toString().trim();
+
+            if (key === 'others') {
+                $('#inv_cat_others').val(body);
+                return;
+            }
+
+            var target = mapSel[key] || '';
+            if (!target || body === '') {
+                return;
+            }
+
+            body.split(',').map(function(v) {
+                return (v || '').toString().trim();
+            }).filter(function(v) {
+                return v !== '';
+            }).forEach(function(name) {
+                ensureSelect2Option($(target), name, '');
+            });
+        });
+
+        Object.keys(mapSel).forEach(function(k) {
+            var sel = mapSel[k];
+            if ($(sel).length) {
+                $(sel).trigger('change.select2');
+            }
+        });
+    }
+
     function loadInvestigationList() {
         var opdId = $('#opd_id').val();
         var sid = parseInt($('#opd_session_id').val() || '0', 10);
@@ -6791,7 +7346,7 @@
     $(document).off('click.invProfileChip', '.inv-profile-chip').on('click.invProfileChip', '.inv-profile-chip', function() {
         var key = ($(this).data('profile') || '').toString().trim();
         if (legacyInvestigationProfiles[key] && legacyInvestigationProfiles[key].length) {
-            batchAddInvestigationRows(legacyInvestigationProfiles[key]);
+            appendInvestigationProfileToNotes(legacyInvestigationProfiles[key]);
             return;
         }
 
@@ -6800,7 +7355,9 @@
             $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('No tests found in selected profile.');
             return;
         }
-        batchAddInvestigations(tests);
+        appendInvestigationProfileToNotes(tests.map(function(name) {
+            return { name: (name || '').toString().trim(), code: '' };
+        }));
     });
 
     $('#btn_create_inv_profile').on('click', function() {
@@ -6848,12 +7405,92 @@
                 $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Selected profile has no tests.');
                 return;
             }
-            batchAddInvestigationRows(legacyRows);
+            appendInvestigationProfileToNotes(legacyRows);
             return;
         }
 
         $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Invalid profile selection.');
     });
+
+    function initInvestigationCategoryBuilders() {
+        if (!($.fn && $.fn.select2)) {
+            return;
+        }
+
+        $('.inv-cat-select').each(function() {
+            var $sel = $(this);
+            var category = ($sel.data('category') || '').toString();
+            $sel.select2({
+                width: '100%',
+                multiple: true,
+                placeholder: 'Search and select...',
+                minimumInputLength: 2,
+                allowClear: true,
+                language: {
+                    inputTooShort: function() {
+                        return 'Type at least 2 characters';
+                    }
+                },
+                ajax: {
+                    delay: 250,
+                    transport: function(params, success, failure) {
+                        var term = (params.data && params.data.term) ? params.data.term : '';
+                        if ((term || '').trim().length < 2) {
+                            success({ rows: [] });
+                            return;
+                        }
+                        $.ajax({
+                            url: '<?= base_url('Opd_prescription/investigation_search') ?>',
+                            dataType: 'json',
+                            data: { q: term, category: category },
+                            success: success,
+                            error: failure
+                        });
+                    },
+                    processResults: function(data) {
+                        var rows = (data && data.rows) ? data.rows : [];
+                        return {
+                            results: rows.map(function(row) {
+                                var name = (row.name || '').toString();
+                                var code = (row.code || '').toString();
+                                var text = code ? (name + ' [' + code + ']') : name;
+                                return { id: text, text: text, name: name, code: code };
+                            })
+                        };
+                    }
+                },
+                templateSelection: function(item) {
+                    return item.text || item.id || '';
+                }
+            }).on('select2:select', function(e) {
+                var d = (e && e.params && e.params.data) ? e.params.data : null;
+                if (!d) {
+                    return;
+                }
+                var name = (d.name || d.text || '').toString().replace(/\s*\[[^\]]*\]\s*$/, '').trim();
+                var code = (d.code || '').toString().trim();
+                var val = (d.id || d.text || '').toString();
+                $sel.find('option').each(function() {
+                    if (($(this).val() || '') === val) {
+                        $(this).attr('data-name', name).attr('data-code', code);
+                    }
+                });
+                buildInvestigationNotesFromCategories();
+            }).on('change', function() {
+                buildInvestigationNotesFromCategories();
+            });
+        });
+
+        $('#btn_build_inv_notes').on('click', function() {
+            buildInvestigationNotesFromCategories();
+            $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text('Investigation advice text updated from category builder.');
+            markDirty('Investigation advice rebuilt');
+        });
+
+        $('#inv_cat_others').on('input', function() {
+            buildInvestigationNotesFromCategories();
+        });
+    }
 
     $('#btn_toggle_legacy_inv_panel').on('click', function() {
         var $panel = $('#legacy_inv_shortcuts_panel');
@@ -6906,6 +7543,7 @@
     loadInvestigationShortcutsFromLegacy();
     initCustomInvestigationModal();
     initInvestigationPicker();
+    initInvestigationCategoryBuilders();
         loadInvSpecDropdown();
 
         $('#btn_inv_fav_toggle').on('click', function() {
@@ -6926,7 +7564,9 @@
         });
 
         loadMedicineDoseMasters();
-    $('#advise_investigation_notes').val($('#investigation').val() || '');
+        var savedInvestigationNotes = ($('#investigation').val() || '').toString();
+        $('#advise_investigation_notes').val(savedInvestigationNotes);
+        hydrateCategoryBuilderFromNotes(savedInvestigationNotes);
 
     $(document).off('click.investRemoveSingle', '.btn-del-invest').on('click.investRemoveSingle', '.btn-del-invest', function() {
         var id = $(this).data('id');
@@ -7949,6 +8589,45 @@
         }
     });
 
+    $(document).on('click', '.rx-jump-link', function() {
+        var targetSelector = ($(this).data('target') || '').toString();
+        if (targetSelector === '') {
+            return;
+        }
+
+        var $target = $(targetSelector);
+        if (!$target.length) {
+            $('.jsError').removeClass('text-success text-muted').addClass('text-danger').text('Jump target not found on this consult page.');
+            return;
+        }
+
+        var $foldWrap = $target.closest('.rx-foldable');
+        if ($foldWrap.length && $foldWrap.hasClass('is-collapsed')) {
+            $foldWrap.removeClass('is-collapsed');
+        }
+
+        var targetEl = $target.get(0);
+        if (targetEl && typeof targetEl.scrollIntoView === 'function') {
+            targetEl.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
+        }
+
+        setTimeout(function() {
+            var $scrollWrap = $target.closest('.rx-right-panel');
+            if ($scrollWrap.length) {
+                $scrollWrap.stop().animate({ scrollTop: Math.max(0, ($scrollWrap.scrollTop() || 0) - 18) }, 120);
+            } else {
+                var stickyHeight = $('.rx-sticky-actions:visible').outerHeight() || 0;
+                var jumpTop = ($target.offset() ? $target.offset().top : 0) - stickyHeight - 10;
+                $('html, body').stop().animate({ scrollTop: Math.max(0, jumpTop) }, 120);
+            }
+        }, 180);
+
+        $target.addClass('rx-scan-highlight');
+        setTimeout(function() {
+            $target.removeClass('rx-scan-highlight');
+        }, 1300);
+    });
+
     $(document).on('click', '.btn-substitute-add', function() {
         var medId = parseInt($(this).data('id') || '0', 10);
         var medName = ($(this).data('name') || '').toString().trim();
@@ -8248,6 +8927,7 @@
     });
 
     initConsultSectionDesigner();
+    initJumpBookmarkDrag();
 
     bindLegacyCommaAutocomplete('#complaints', '<?= base_url('Opd_prescription/complaints_search') ?>', function(row) {
         return (row && row.name) ? row.name : '';

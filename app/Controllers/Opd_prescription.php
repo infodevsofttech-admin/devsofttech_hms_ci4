@@ -390,8 +390,14 @@ class Opd_prescription extends BaseController
         $fields = $this->db->getFieldNames('opd_prescription');
         $patientRow = $this->db->table('patient_master')->where('id', (int) ($opdRow->p_id ?? 0))->get(1)->getRowArray() ?? [];
 
+        $abhaField = $this->resolvePatientAbhaField();
+        $currentAbha = $abhaField !== null ? trim((string) ($patientRow[$abhaField] ?? '')) : '';
+
         $abhaAddress = trim((string) $this->request->getPost('abha_address'));
-        if ($abhaAddress !== '' && ! $this->isValidAbhaAddress($abhaAddress)) {
+        // Keep existing patient ABHA as-is even if it doesn't pass current runtime
+        // validator pattern; only validate when user enters/changes the value.
+        $abhaChanged = $abhaAddress !== '' && $abhaAddress !== $currentAbha;
+        if ($abhaChanged && ! $this->isValidAbhaAddress($abhaAddress)) {
             return $this->response->setJSON([
                 'update' => 0,
                 'error_text' => 'Invalid ABHA Address format.',
@@ -400,9 +406,7 @@ class Opd_prescription extends BaseController
             ]);
         }
 
-        $abhaField = $this->resolvePatientAbhaField();
         if ($abhaField !== null && $abhaAddress !== '') {
-            $currentAbha = trim((string) ($patientRow[$abhaField] ?? ''));
             if ($currentAbha !== $abhaAddress) {
                 $this->db->table('patient_master')->where('id', (int) ($opdRow->p_id ?? 0))->update([$abhaField => $abhaAddress]);
                 $this->auditClinicalUpdate('patient_master', $abhaField, (int) ($opdRow->p_id ?? 0), $currentAbha, $abhaAddress);
@@ -7235,6 +7239,7 @@ class Opd_prescription extends BaseController
         $q       = trim((string) $this->request->getGet('q'));
         $favOnly = (int) $this->request->getGet('fav_only');
         $specId  = (int) $this->request->getGet('spec_id');
+        $category = strtolower(trim((string) $this->request->getGet('category')));
 
         if (! $this->db->tableExists('investigation')) {
             return $this->response->setJSON(['rows' => []]);
@@ -7244,6 +7249,7 @@ class Opd_prescription extends BaseController
         $codeField  = in_array('Code', $fields, true) ? 'Code' : (in_array('code', $fields, true) ? 'code' : null);
         $nameField  = in_array('Name', $fields, true) ? 'Name' : (in_array('name', $fields, true) ? 'name' : null);
         $shortField = in_array('short_name', $fields, true) ? 'short_name' : null;
+        $categoryField = in_array('category_name', $fields, true) ? 'category_name' : null;
         $hasFav     = in_array('is_favourite', $fields, true);
         $hasSpec    = in_array('spec_ids', $fields, true);
 
@@ -7252,11 +7258,17 @@ class Opd_prescription extends BaseController
         }
 
         // When no search term but fav/spec filter applied, still return results
-        if ($q === '' && $favOnly === 0 && $specId === 0) {
+        if ($q === '' && $favOnly === 0 && $specId === 0 && $category === '') {
             return $this->response->setJSON(['rows' => []]);
         }
 
         $selectCols = $codeField . ' as code, ' . $nameField . ' as name';
+        if ($shortField !== null) {
+            $selectCols .= ', ' . $shortField . ' as short_name';
+        }
+        if ($categoryField !== null) {
+            $selectCols .= ', ' . $categoryField . ' as category_name';
+        }
         if ($hasFav) {
             $selectCols .= ', is_favourite';
         }
@@ -7264,10 +7276,31 @@ class Opd_prescription extends BaseController
         $builder = $this->db->table('investigation')->select($selectCols);
 
         if ($q !== '') {
-            $builder->groupStart()->like($nameField, $q);
-            if ($shortField !== null) {
-                $builder->orLike($shortField, $q);
+            $qLen = mb_strlen($q);
+            $builder->groupStart();
+
+            if ($qLen <= 2) {
+                // 2-char search: prefix only (AB*) for tighter result set.
+                $builder->like($nameField, $q, 'after');
+                if ($shortField !== null) {
+                    $builder->orLike($shortField, $q, 'after');
+                }
+            } else {
+                // 3+ chars: prefix (ABC*) OR contains (*ABC*).
+                $builder->groupStart()
+                    ->like($nameField, $q, 'after');
+                if ($shortField !== null) {
+                    $builder->orLike($shortField, $q, 'after');
+                }
+                $builder->groupEnd()
+                    ->orGroupStart()
+                    ->like($nameField, $q, 'both');
+                if ($shortField !== null) {
+                    $builder->orLike($shortField, $q, 'both');
+                }
+                $builder->groupEnd();
             }
+
             $builder->groupEnd();
         }
 
@@ -7284,7 +7317,35 @@ class Opd_prescription extends BaseController
         }
         $builder->orderBy('LOWER(' . $this->db->protectIdentifiers($nameField) . ')', 'ASC', false);
 
-        $rows = $builder->limit(40)->get()->getResultArray();
+        $rows = $builder->limit($category !== '' ? 200 : 40)->get()->getResultArray();
+
+        if ($category !== '') {
+            $normalizeCategory = static function (array $row): string {
+                $txt = strtolower(trim((string) (($row['category_name'] ?? '') . ' ' . ($row['short_name'] ?? '') . ' ' . ($row['name'] ?? ''))));
+                if ($txt === '') {
+                    return 'pathology';
+                }
+                if (preg_match('/\bx\s*[-]?\s*ray\b|\bradiology\b|\bradiograph\b|\bct\b|\bmri\b/', $txt) === 1) {
+                    return 'radiology';
+                }
+                if (preg_match('/\bultra\s*sound\b|\bultrasound\b|\busg\b|\bsonography\b/', $txt) === 1) {
+                    return 'ultrasound';
+                }
+                if (preg_match('/\bcardi\b|\becg\b|\becho\b|\btmt\b/', $txt) === 1) {
+                    return 'cardic';
+                }
+                return 'pathology';
+            };
+
+            $rows = array_values(array_filter($rows, static function (array $row) use ($normalizeCategory, $category): bool {
+                return $normalizeCategory($row) === $category;
+            }));
+
+            if (count($rows) > 40) {
+                $rows = array_slice($rows, 0, 40);
+            }
+        }
+
         return $this->response->setJSON(['rows' => $rows]);
     }
 
@@ -7341,6 +7402,9 @@ class Opd_prescription extends BaseController
             $jId = $this->resolveFirstField($jFields, ['id']);
             $iCode = $this->resolveFirstField($iFields, ['Code', 'code']);
             $iName = $this->resolveFirstField($iFields, ['Name', 'name']);
+            $iShort = $this->resolveFirstField($iFields, ['short_name', 'shortName', 'short']);
+            $iCategory = $this->resolveFirstField($iFields, ['category_name', 'category']);
+            $iSpecIds = $this->resolveFirstField($iFields, ['spec_ids']);
 
             if ($pCode !== null && $pName !== null && $jProfileCode !== null && $jInvestCode !== null && $iCode !== null && $iName !== null) {
                 $orderExpr = 'p.`' . $pName . '` ASC';
@@ -7356,7 +7420,19 @@ class Opd_prescription extends BaseController
                     . 'p.`' . $pCode . '` AS profile_code, '
                     . 'p.`' . $pName . '` AS profile_name, '
                     . 'i.`' . $iCode . '` AS investigation_code, '
-                    . 'i.`' . $iName . '` AS investigation_name '
+                    . 'i.`' . $iName . '` AS investigation_name';
+
+                if ($iShort !== null) {
+                    $sql .= ', i.`' . $iShort . '` AS short_name';
+                }
+                if ($iCategory !== null) {
+                    $sql .= ', i.`' . $iCategory . '` AS category_name';
+                }
+                if ($iSpecIds !== null) {
+                    $sql .= ', i.`' . $iSpecIds . '` AS spec_ids';
+                }
+
+                $sql .= ' '
                     . 'FROM `invprofiles` p '
                     . 'JOIN `invtprofiles` j ON p.`' . $pCode . '` = j.`' . $jProfileCode . '` '
                     . 'JOIN `investigation` i ON i.`' . $iCode . '` = j.`' . $jInvestCode . '` '
@@ -7370,6 +7446,9 @@ class Opd_prescription extends BaseController
                     $profileName = trim((string) ($row['profile_name'] ?? ''));
                     $testCode = trim((string) ($row['investigation_code'] ?? ''));
                     $testName = trim((string) ($row['investigation_name'] ?? ''));
+                    $shortName = trim((string) ($row['short_name'] ?? ''));
+                    $categoryName = trim((string) ($row['category_name'] ?? ''));
+                    $specIds = trim((string) ($row['spec_ids'] ?? ''));
 
                     if ($profileCode === '' || $profileName === '' || $testName === '') {
                         continue;
@@ -7393,6 +7472,9 @@ class Opd_prescription extends BaseController
                     $profileMap[$profileCode]['tests'][] = [
                         'code' => $testCode,
                         'name' => $testName,
+                        'short_name' => $shortName,
+                        'category_name' => $categoryName,
+                        'spec_ids' => $specIds,
                     ];
                 }
 
