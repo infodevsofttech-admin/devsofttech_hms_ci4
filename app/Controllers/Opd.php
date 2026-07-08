@@ -2934,6 +2934,7 @@ class Opd extends BaseController
         if (!empty($data['rx_advices']) && is_array($data['rx_advices'])) {
             $parts = [];
             $partsLocal = [];
+            $partsPreferred = [];
             foreach ($data['rx_advices'] as $adv) {
                 $txt = trim((string) ($adv['advice_txt'] ?? $adv['advice'] ?? ''));
                 if ($txt !== '') {
@@ -2945,10 +2946,51 @@ class Opd extends BaseController
                 if ($localTxt !== '') {
                     $partsLocal[] = $localTxt;
                 }
+
+                $preferredTxt = $localTxt !== '' ? $localTxt : $txt;
+                if ($preferredTxt !== '') {
+                    $partsPreferred[] = $preferredTxt;
+                }
             }
 
-            if ($rxAdvice === '' && !empty($parts)) {
-                $rxAdvice = implode(', ', array_values(array_unique($parts)));
+            // Build final printable advice as: typed advice + selected advice
+            // (selected uses Hindi when available, else English), with de-duplication.
+            $typedAdviceLines = [];
+            $typedRaw = trim((string) $rxAdvice);
+            if ($typedRaw !== '') {
+                $typedRaw = str_replace(["\r\n", "\r"], "\n", $typedRaw);
+                $typedAdviceLines = array_values(array_filter(array_map(
+                    static fn(string $v): string => trim($v),
+                    explode("\n", $typedRaw)
+                ), static fn(string $v): bool => $v !== ''));
+            }
+
+            $selectedPreferred = !empty($partsPreferred)
+                ? array_values(array_unique($partsPreferred))
+                : array_values(array_unique($parts));
+
+            $seen = [];
+            $combined = [];
+            foreach ($typedAdviceLines as $line) {
+                $key = mb_strtolower(trim($line));
+                if ($key === '' || isset($seen[$key])) {
+                    continue;
+                }
+                $seen[$key] = true;
+                $combined[] = $line;
+            }
+            foreach ($selectedPreferred as $line) {
+                $line = trim((string) $line);
+                $key = mb_strtolower($line);
+                if ($key === '' || isset($seen[$key])) {
+                    continue;
+                }
+                $seen[$key] = true;
+                $combined[] = $line;
+            }
+
+            if (!empty($combined)) {
+                $rxAdvice = implode("\n", $combined);
             }
 
             if (!empty($partsLocal)) {
@@ -2986,9 +3028,6 @@ class Opd extends BaseController
         $complaintLocal = $this->translateToLocalPatientText($complaintText);
         $diagnosisLocal = $this->translateToLocalPatientText($diagnosisText);
         $investigationLocal = $this->translateToLocalPatientText($rxInvestigation);
-        if ($rxAdviceLocal === '') {
-            $rxAdviceLocal = $this->translateToLocalPatientText($rxAdvice);
-        }
 
         if (strtolower(trim($complaintLocal)) === strtolower(trim($complaintText))) {
             $complaintLocal = '';
@@ -4200,18 +4239,10 @@ class Opd extends BaseController
         $tokens['RemarksBlock'] = (string) ($tokens['Prescriber_Remarks'] ?? '');
         $adviceBlockBody = trim((string) ($tokens['advice'] ?? ''));
         $adviceBlockLocal = trim((string) ($tokens['advice_local'] ?? ''));
-        if ($adviceBlockBody !== '' || $adviceBlockLocal !== '') {
-            $adviceBlockLines = [];
-            if ($adviceBlockBody !== '') {
-                $adviceBlockLines[] = '<strong>Advice</strong> : ' . $adviceBlockBody;
-            }
-            if ($adviceBlockLocal !== '') {
-                $adviceBlockLines[] = '<strong>सलाह</strong> : ' . $adviceBlockLocal;
-            }
-            $tokens['AdviceBlock'] = implode('<br>', $adviceBlockLines);
-        } else {
-            $tokens['AdviceBlock'] = '';
-        }
+        $adviceBlockPreferred = $adviceBlockBody !== '' ? $adviceBlockBody : $adviceBlockLocal;
+        $tokens['AdviceBlock'] = $adviceBlockPreferred !== ''
+            ? ('<strong>Advice</strong> : ' . $adviceBlockPreferred)
+            : '';
         $tokens['NextVisitBlock'] = (string) ($tokens['next_visit'] ?? '');
 
         $tokens['RxTable'] = $medicalHtml;
@@ -4296,7 +4327,8 @@ class Opd extends BaseController
         $tokens['content'] = (string) ($tokens['content'] ?? '');
 
         $adviceLocal = trim((string) ($tokens['advice_local'] ?? ''));
-        $tokens['advice_local_line'] = $adviceLocal !== ''
+        $adviceMain = trim((string) ($tokens['advice'] ?? ''));
+        $tokens['advice_local_line'] = ($adviceMain === '' && $adviceLocal !== '')
             ? ('<br><strong>सलाह:</strong> ' . $adviceLocal)
             : '';
 
@@ -6062,10 +6094,15 @@ class Opd extends BaseController
             $personInfo[0]->age = get_age_1($personInfo[0]->dob ?? null, $personInfo[0]->age ?? '', $personInfo[0]->age_in_month ?? '', $personInfo[0]->estimate_dob ?? '', $opdRow->apointment_date ?? null);
         }
 
+        $hospitalEnabled = hospital_setting_value('ALLOW_IMAGE_PREUPLOAD_EDIT', '0') === '1';
+        $user = function_exists('auth') ? auth()->user() : null;
+        $userAllowed = $user && method_exists($user, 'can') && $user->can('media.image.preupload-edit');
+
         return view('billing/opd_scan_modal_body', [
             'opdid' => $opdid,
             'opd_master' => $opdMaster,
             'person_info' => $personInfo,
+            'allow_image_preupload_edit' => ($hospitalEnabled && $userAllowed) ? 1 : 0,
         ]);
     }
 

@@ -38,6 +38,7 @@ class HospitalProfile extends BaseController
             'sidebar_auto_hide_seconds' => $this->readSettingValue('SIDEBAR_AUTO_HIDE_SECONDS') !== ''
                 ? $this->readSettingValue('SIDEBAR_AUTO_HIDE_SECONDS')
                 : '7',
+            'allow_image_preupload_edit' => $this->readSettingValue('ALLOW_IMAGE_PREUPLOAD_EDIT') === '1' ? '1' : '0',
         ]);
     }
 
@@ -69,6 +70,7 @@ class HospitalProfile extends BaseController
         $pharmacyGst = trim((string) $this->request->getPost('pharmacy_gst'));
         $sidebarAutoHideSecondsRaw = trim((string) $this->request->getPost('sidebar_auto_hide_seconds'));
         $sidebarAutoHideSeconds = $sidebarAutoHideSecondsRaw === '' ? 7 : (int) $sidebarAutoHideSecondsRaw;
+        $allowImagePreuploadEdit = $this->request->getPost('allow_image_preupload_edit') === '1' ? '1' : '0';
 
         if ($name === '' || $address === '') {
             return $this->response->setJSON([
@@ -132,6 +134,9 @@ class HospitalProfile extends BaseController
             $savedCount++;
         }
         if ($this->upsertSettingValue('SIDEBAR_AUTO_HIDE_SECONDS', (string) $sidebarAutoHideSeconds)) {
+            $savedCount++;
+        }
+        if ($this->upsertSettingValue('ALLOW_IMAGE_PREUPLOAD_EDIT', $allowImagePreuploadEdit)) {
             $savedCount++;
         }
 
@@ -244,6 +249,7 @@ class HospitalProfile extends BaseController
             'H_Med_GST',
             'H_Med_logo',
             'SIDEBAR_AUTO_HIDE_SECONDS',
+            'ALLOW_IMAGE_PREUPLOAD_EDIT',
         ])->delete();
 
         if ($logo !== '') {

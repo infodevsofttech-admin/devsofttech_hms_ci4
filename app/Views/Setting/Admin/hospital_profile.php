@@ -41,6 +41,14 @@
                 <input type="number" class="form-control" id="sidebar_auto_hide_seconds" min="0" max="60" step="1" value="<?= esc($sidebar_auto_hide_seconds ?? '7') ?>" placeholder="7">
                 <div class="form-text">Desktop only. Set 0 to disable auto-hide.</div>
             </div>
+            <div class="col-md-6">
+                <label class="form-label d-block">Image Edit Permission</label>
+                <div class="form-check form-switch mt-2">
+                    <input class="form-check-input" type="checkbox" id="allow_image_preupload_edit" <?= ($allow_image_preupload_edit ?? '0') === '1' ? 'checked' : '' ?>>
+                    <label class="form-check-label" for="allow_image_preupload_edit">Allow rotate/crop before image upload</label>
+                </div>
+                <div class="form-text">Global master switch. User must also be granted permission <strong>media.image.preupload-edit</strong> from User Management → Give Permissions.</div>
+            </div>
 
             <div class="col-md-7">
                 <label class="form-label">Hospital Logo</label>
@@ -159,6 +167,7 @@
         fd.append('hospital_hfr_id', ($('#hospital_hfr_id').val() || '').trim());
         fd.append('footer_version', ($('#footer_version').val() || '').trim());
         fd.append('sidebar_auto_hide_seconds', ($('#sidebar_auto_hide_seconds').val() || '').trim());
+        fd.append('allow_image_preupload_edit', $('#allow_image_preupload_edit').is(':checked') ? '1' : '0');
         fd.append('pharmacy_name', ($('#pharmacy_name').val() || '').trim());
         fd.append('pharmacy_address', ($('#pharmacy_address').val() || '').trim());
         fd.append('pharmacy_phone', ($('#pharmacy_phone').val() || '').trim());
@@ -275,6 +284,7 @@
             $('#hospital_hfr_id').val('');
             $('#footer_version').val('');
             $('#sidebar_auto_hide_seconds').val('7');
+            $('#allow_image_preupload_edit').prop('checked', false);
             $('#pharmacy_name').val('');
             $('#pharmacy_address').val('');
             $('#pharmacy_phone').val('');
