@@ -40,10 +40,14 @@ if ($backUrl === '') {
                 }
                 .opd-history-file-preview {
                     display: block;
-                    width: 100%;
+                    width: auto;
+                    max-width: 100%;
+                    max-height: min(42vh, 360px);
                     height: auto;
+                    margin: 0 auto;
                     object-fit: contain;
                     cursor: zoom-in;
+                    background: #f8f9fa;
                 }
                 .opd-history-pdf-link {
                     display: flex;
@@ -53,6 +57,27 @@ if ($backUrl === '') {
                     text-align: center;
                     padding: 1rem;
                     background: #f8f9fa;
+                }
+                .opd-scan-modal-body {
+                    max-height: 75vh;
+                    overflow: auto;
+                    background: #f8f9fa;
+                }
+                .opd-scan-modal-img {
+                    max-width: 100%;
+                    max-height: 72vh;
+                    width: auto;
+                    height: auto;
+                    transform-origin: center center;
+                    transition: transform 0.12s ease;
+                    cursor: grab;
+                    user-select: none;
+                }
+                .opd-scan-modal-img.is-zoomed {
+                    cursor: zoom-out;
+                }
+                .opd-scan-modal-img.is-dragging {
+                    cursor: grabbing;
                 }
             </style>
 
@@ -157,10 +182,15 @@ if ($backUrl === '') {
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">OPD Scan</h5>
+                    <div class="d-flex align-items-center gap-2 me-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="opdScanZoomOut">-</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="opdScanZoomIn">+</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="opdScanZoomReset">Reset</button>
+                    </div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body text-center">
-                    <img id="opdScanModalImg" class="img-fluid" alt="OPD Scan">
+                <div class="modal-body text-center opd-scan-modal-body">
+                    <img id="opdScanModalImg" class="opd-scan-modal-img" alt="OPD Scan">
                 </div>
             </div>
         </div>
@@ -169,10 +199,101 @@ if ($backUrl === '') {
 
 <script>
 $(function() {
+    var zoom = 1;
+    var minZoom = 0.5;
+    var maxZoom = 3;
+    var step = 0.25;
+    var panX = 0;
+    var panY = 0;
+    var isDragging = false;
+    var dragStartX = 0;
+    var dragStartY = 0;
+
+    function applyZoom() {
+        var $img = $('#opdScanModalImg');
+        $img.css('transform', 'translate(' + panX + 'px, ' + panY + 'px) scale(' + zoom + ')');
+        $img.toggleClass('is-zoomed', zoom > 1);
+    }
+
+    function resetZoom() {
+        zoom = 1;
+        panX = 0;
+        panY = 0;
+        isDragging = false;
+        $('#opdScanModalImg').removeClass('is-dragging');
+        applyZoom();
+    }
+
     $('#opdScanModal').on('show.bs.modal', function(event) {
         var button = $(event.relatedTarget);
         var src = button.data('src');
         $('#opdScanModalImg').attr('src', src);
+        resetZoom();
+    });
+
+    $('#opdScanModal').on('hidden.bs.modal', function() {
+        $('#opdScanModalImg').attr('src', '');
+        resetZoom();
+    });
+
+    $('#opdScanZoomIn').on('click', function() {
+        zoom = Math.min(maxZoom, zoom + step);
+        applyZoom();
+    });
+
+    $('#opdScanZoomOut').on('click', function() {
+        zoom = Math.max(minZoom, zoom - step);
+        applyZoom();
+    });
+
+    $('#opdScanZoomReset').on('click', function() {
+        resetZoom();
+    });
+
+    $('#opdScanModalImg').on('click', function() {
+        if (zoom > 1) {
+            resetZoom();
+        }
+    });
+
+    $('#opdScanModalImg').on('wheel', function(e) {
+        e.preventDefault();
+        var evt = e.originalEvent;
+        var delta = evt && typeof evt.deltaY === 'number' ? evt.deltaY : 0;
+        zoom = delta < 0 ? Math.min(maxZoom, zoom + step) : Math.max(minZoom, zoom - step);
+        if (zoom <= 1) {
+            panX = 0;
+            panY = 0;
+        }
+        applyZoom();
+    });
+
+    $('#opdScanModalImg').on('mousedown', function(e) {
+        if (zoom <= 1) {
+            return;
+        }
+        isDragging = true;
+        dragStartX = e.clientX - panX;
+        dragStartY = e.clientY - panY;
+        $(this).addClass('is-dragging');
+        e.preventDefault();
+    });
+
+    $(document).on('mousemove.opdscanzoom', function(e) {
+        if (!isDragging) {
+            return;
+        }
+        panX = e.clientX - dragStartX;
+        panY = e.clientY - dragStartY;
+        applyZoom();
+    });
+
+    $(document).on('mouseup.opdscanzoom', function() {
+        if (!isDragging) {
+            return;
+        }
+        isDragging = false;
+        $('#opdScanModalImg').removeClass('is-dragging');
     });
 });
 </script>
