@@ -25,9 +25,6 @@
 		</div>
 		<div class="card admin-card">
 			<div class="card-body">
-				<div class="alert alert-warning d-none" id="datatable-missing">
-					DataTable plugin is not loaded. Please include jQuery DataTables to enable filtering.
-				</div>
 				<div class="table-responsive">
 					<table class="table table-striped table-hover align-middle TableData" id="employee-grid" width="100%">
 					<thead>
@@ -93,11 +90,6 @@
 <!-- /.content -->
 <script type="text/javascript" language="javascript" >
 			(function() {
-				if (!$.fn || !$.fn.DataTable) {
-					$('#datatable-missing').removeClass('d-none');
-					return;
-				}
-
 				var $table = $('#employee-grid');
 				if ($table.length === 0) {
 					return;
@@ -107,6 +99,82 @@
 					return;
 				}
 				$table.data('case-list-init', 1);
+
+				function escHtml(value) {
+					return String(value == null ? '' : value)
+						.replace(/&/g, '&amp;')
+						.replace(/</g, '&lt;')
+						.replace(/>/g, '&gt;')
+						.replace(/"/g, '&quot;')
+						.replace(/'/g, '&#39;');
+				}
+
+				function renderFallbackRows(rows) {
+					var $tbody = $('#employee-grid tbody');
+					$tbody.empty();
+
+					if (!rows || rows.length === 0) {
+						$tbody.append('<tr><td colspan="7" class="text-center text-muted">No records found</td></tr>');
+						return;
+					}
+
+					rows.forEach(function(res) {
+						var caseNo = res[0] || '';
+						var urlLink = "javascript:load_form('<?= base_url('Orgcase/case_invoice') ?>/" + encodeURIComponent(caseNo) + "');";
+						var statusHtml = escHtml(res[6] || '');
+
+						if ((res[6] || '') === 'submitted') {
+							statusHtml = '<a data-toggle="modal" data-target="#payModal" data-caseid="' + encodeURIComponent(caseNo) + '" href="#">' + statusHtml + '</a>';
+						}
+
+						$tbody.append(
+							'<tr>' +
+							'<td><a href="' + urlLink + '">' + escHtml(caseNo) + '</a></td>' +
+							'<td>' + escHtml(res[1] || '') + '</td>' +
+							'<td>' + (res[2] || '') + '</td>' +
+							'<td>' + escHtml(res[3] || '') + '</td>' +
+							'<td>' + escHtml(res[4] || '') + '</td>' +
+							'<td>' + escHtml(res[5] || '') + '</td>' +
+							'<td>' + statusHtml + '</td>' +
+							'</tr>'
+						);
+					});
+				}
+
+				function loadFallbackData() {
+					$.ajax({
+						url: "<?= base_url('Orgcase/getCaseTable') ?>",
+						type: 'post',
+						dataType: 'json',
+						data: {
+							'<?= csrf_token() ?>': '<?= csrf_hash() ?>',
+							draw: 1,
+							start: 0,
+							length: 200,
+							'order[0][column]': 0,
+							'order[0][dir]': 'desc',
+							'columns[0][search][value]': $('input[data-column="0"]').val() || '',
+							'columns[1][search][value]': $('input[data-column="1"]').val() || '',
+							'columns[2][search][value]': $('input[data-column="2"]').val() || '',
+							'columns[3][search][value]': $('#org_comp').val() || 0,
+							'columns[4][search][value]': $('input[data-column="4"]').val() || '',
+							'columns[5][search][value]': $('#org_status').val() || 0
+						}
+					})
+					.done(function(resp) {
+						renderFallbackRows(resp && Array.isArray(resp.data) ? resp.data : []);
+					})
+					.fail(function() {
+						renderFallbackRows([]);
+					});
+				}
+
+				if (!$.fn || !$.fn.DataTable) {
+					$(".search-input-select").off('change.caseListAllFallback').on('change.caseListAllFallback', loadFallbackData);
+					$('input[type=text]').off('input.caseListAllFallback').on('input.caseListAllFallback', loadFallbackData);
+					loadFallbackData();
+					return;
+				}
 
 				if ($.fn.DataTable.isDataTable($table)) {
 					$table.DataTable().destroy();

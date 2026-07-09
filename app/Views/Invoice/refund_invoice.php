@@ -25,9 +25,6 @@
     </div>
     <div class="card admin-card">
         <div class="card-body">
-            <div class="alert alert-warning d-none" id="datatable-missing">
-                DataTable plugin is not loaded. Please include jQuery DataTables to enable filtering.
-            </div>
             <div class="table-responsive">
                 <table class="table table-striped table-hover align-middle TableData" id="employee-grid" width="100%">
                 <thead>
@@ -67,13 +64,78 @@
 </div>
 <script type="text/javascript" language="javascript">
     (function() {
-        if (!$.fn || !$.fn.DataTable) {
-            $('#datatable-missing').removeClass('d-none');
+        var $table = $('#employee-grid');
+        if ($table.length === 0) {
             return;
         }
 
-        var $table = $('#employee-grid');
-        if ($table.length === 0) {
+        function escHtml(value) {
+            return String(value == null ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function renderFallbackRows(rows) {
+            var $tbody = $('#employee-grid tbody');
+            $tbody.empty();
+
+            if (!rows || rows.length === 0) {
+                $tbody.append('<tr><td colspan="7" class="text-center text-muted">No records found</td></tr>');
+                return;
+            }
+
+            rows.forEach(function(res) {
+                var refundNo = res[0] || '';
+                var link = "javascript:load_form('<?= base_url('Invoice/refund_form') ?>/" + encodeURIComponent(refundNo) + "');";
+                $tbody.append(
+                    '<tr>' +
+                    '<td><a class="btn btn-sm btn-outline-primary w-100 text-start" style="white-space: normal; word-break: break-word;" title="Refund No. : ' + escHtml(refundNo) + '" href="' + link + '">Refund No. : ' + escHtml(refundNo) + '</a></td>' +
+                    '<td>' + escHtml(res[1] || '') + '</td>' +
+                    '<td>' + escHtml(res[2] || '') + '</td>' +
+                    '<td>' + escHtml(res[3] || '') + '</td>' +
+                    '<td>' + escHtml(res[4] || '') + '</td>' +
+                    '<td>' + escHtml(res[5] || '') + '</td>' +
+                    '<td>' + escHtml(res[6] || '') + '</td>' +
+                    '</tr>'
+                );
+            });
+        }
+
+        function loadFallbackData() {
+            $.ajax({
+                url: "<?= base_url('Invoice/getRefundTable') ?>",
+                type: 'post',
+                dataType: 'json',
+                data: {
+                    "<?= csrf_token() ?>": "<?= csrf_hash() ?>",
+                    draw: 1,
+                    start: 0,
+                    length: 200,
+                    'order[0][column]': 0,
+                    'order[0][dir]': 'desc',
+                    'columns[0][search][value]': $('input[data-column="0"]').val() || '',
+                    'columns[1][search][value]': $('input[data-column="1"]').val() || '',
+                    'columns[2][search][value]': $('input[data-column="2"]').val() || '',
+                    'columns[3][search][value]': $('input[data-column="3"]').val() || '',
+                    'columns[5][search][value]': $('input[data-column="5"]').val() || '',
+                    'columns[6][search][value]': $('select[data-column="6"]').val() || ''
+                }
+            })
+            .done(function(resp) {
+                renderFallbackRows(resp && Array.isArray(resp.data) ? resp.data : []);
+            })
+            .fail(function() {
+                renderFallbackRows([]);
+            });
+        }
+
+        if (!$.fn || !$.fn.DataTable) {
+            $(".search-input-select").off('change.refundInvoiceFallback').on('change.refundInvoiceFallback', loadFallbackData);
+            $('input[data-column]').off('input.refundInvoiceFallback').on('input.refundInvoiceFallback', loadFallbackData);
+            loadFallbackData();
             return;
         }
 
