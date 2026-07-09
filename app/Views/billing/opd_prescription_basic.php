@@ -2110,7 +2110,7 @@
 
     function fetchMedicineSuggestions(query, scope, done) {
         var q = (query || '').trim();
-        if (q.length < 2) {
+        if (q.length < 1) {
             done([]);
             return;
         }
@@ -2570,10 +2570,10 @@
                 }
             })
             .autocomplete({
-                minLength: 2,
+                minLength: 1,
                 source: function(request, response) {
                     var term = extractLastCommaTerm(request.term || '').trim();
-                    if (term.length < 2) {
+                    if (term.length < 1) {
                         closeAutocompleteMenu();
                         response([]);
                         return;
@@ -5487,7 +5487,7 @@
         if (_complaintSearchTimer) {
             clearTimeout(_complaintSearchTimer);
         }
-        if (q.length < 2) {
+        if (q.length < 1) {
             closeComplaintDropdown();
             return;
         }
@@ -5864,7 +5864,7 @@
     $('#diagnosis_lookup').on('input', function() {
         var q = ($(this).val() || '').trim();
         if (_diagSearchTimer) clearTimeout(_diagSearchTimer);
-        if (q.length < 2) { var $dd2=$('#diagnosis_dropdown'); $dd2.closest('.rx-foldable').removeClass('dropdown-open'); $dd2.hide().empty(); return; }
+        if (q.length < 1) { var $dd2=$('#diagnosis_dropdown'); $dd2.closest('.rx-foldable').removeClass('dropdown-open'); $dd2.hide().empty(); return; }
         var cacheKey = q.toUpperCase();
         if (_diagSearchCache[cacheKey]) { openDiagnosisDropdown(_diagSearchCache[cacheKey]); return; }
         _diagSearchTimer = setTimeout(function() {
@@ -6742,7 +6742,7 @@
 
     $('#advice_text').on('input', function() {
         var q = ($(this).val() || '').trim();
-        if (q.length < 2) {
+        if (q.length < 1) {
             return;
         }
         apiGet('<?= base_url('Opd_prescription/advice_search') ?>?q=' + encodeURIComponent(q), function(data) {
@@ -7244,7 +7244,7 @@
 
     $('#investigation_name').on('input', function() {
         var q = ($(this).val() || '').trim();
-        if (q.length < 2) {
+        if (q.length < 1) {
             return;
         }
         apiGet('<?= base_url('Opd_prescription/investigation_search') ?>?q=' + encodeURIComponent(q), function(data) {
@@ -7424,18 +7424,18 @@
                 width: '100%',
                 multiple: true,
                 placeholder: 'Search and select...',
-                minimumInputLength: 2,
+                minimumInputLength: 1,
                 allowClear: true,
                 language: {
                     inputTooShort: function() {
-                        return 'Type at least 2 characters';
+                        return 'Type at least 1 character';
                     }
                 },
                 ajax: {
                     delay: 250,
                     transport: function(params, success, failure) {
                         var term = (params.data && params.data.term) ? params.data.term : '';
-                        if ((term || '').trim().length < 2) {
+                        if ((term || '').trim().length < 1) {
                             success({ rows: [] });
                             return;
                         }
@@ -8100,7 +8100,7 @@
             clearTimeout(crgcMedInputTimer);
             crgcMedInputTimer = null;
         }
-        if (q.length < 2) {
+        if (q.length < 1) {
             crgcMedSuggestRows = [];
             $('#crgc_med_suggest').html('');
             return;
@@ -8365,7 +8365,7 @@
             clearTimeout(medInputTimer);
             medInputTimer = null;
         }
-        if (q.length < 2) {
+        if (q.length < 1) {
             medicineSuggestRows = [];
             $('#medicine_suggest').html('');
             return;
@@ -8440,7 +8440,7 @@
                 .addClass(isFav ? 'btn-warning' : 'btn-outline-warning');
 
             $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text(data.error_text || (isFav ? 'Added to favorites' : 'Removed from favorites'));
-            if (($('#med_name').val() || '').trim().length >= 2) {
+            if (($('#med_name').val() || '').trim().length >= 1) {
                 $('#med_name').trigger('input');
             }
         });

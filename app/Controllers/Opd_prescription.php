@@ -7279,14 +7279,14 @@ class Opd_prescription extends BaseController
             $qLen = mb_strlen($q);
             $builder->groupStart();
 
-            if ($qLen <= 2) {
-                // 2-char search: prefix only (AB*) for tighter result set.
+            if ($qLen <= 1) {
+                // 1-char search: prefix only (A*) for tighter result set.
                 $builder->like($nameField, $q, 'after');
                 if ($shortField !== null) {
                     $builder->orLike($shortField, $q, 'after');
                 }
             } else {
-                // 3+ chars: prefix (ABC*) OR contains (*ABC*).
+                // 2+ chars: prefix (AB*) OR contains (*AB*).
                 $builder->groupStart()
                     ->like($nameField, $q, 'after');
                 if ($shortField !== null) {
