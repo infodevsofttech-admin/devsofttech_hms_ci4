@@ -823,7 +823,22 @@ class CaseMaster extends BaseController
 
     public function getCaseTable()
     {
-        $requestData = $_REQUEST;
+        $requestData = $this->request->getPost();
+        if (empty($requestData)) {
+            $requestData = $this->request->getGet();
+        }
+
+        $columnsInput = $requestData['columns'] ?? [];
+        $orderInput = $requestData['order'][0] ?? [];
+        $draw = (int) ($requestData['draw'] ?? 0);
+        $start = max(0, (int) ($requestData['start'] ?? 0));
+        $length = (int) ($requestData['length'] ?? 10);
+        if ($length <= 0) {
+            $length = 10;
+        }
+        if ($length > 500) {
+            $length = 500;
+        }
 
         $columns = [
             0 => 'case_id_code',
@@ -842,7 +857,16 @@ class CaseMaster extends BaseController
         Date_Format(c.date_registration,'%d-%m-%Y') as date_registration_in ,i.ipd_code ";
 
         $sqlCount = 'Select count(*) as no_rec ';
-        $sqlFrom = ' from ((organization_case_master c join patient_master p  on c.p_id=p.id ) left join ipd_master i on c.id=i.case_id  and   p.id=i.p_id) ';
+        $sqlFrom = " from (organization_case_master c join patient_master p on c.p_id=p.id)
+            left join (
+                select i1.id, i1.case_id, i1.p_id, i1.ipd_code
+                from ipd_master i1
+                inner join (
+                    select case_id, p_id, max(id) as max_id
+                    from ipd_master
+                    group by case_id, p_id
+                ) i2 on i1.id = i2.max_id
+            ) i on c.id=i.case_id and p.id=i.p_id ";
 
         $totalSql = $sqlCount . $sqlFrom;
         $totalData = (int) ($this->db->query($totalSql)->getResult()[0]->no_rec ?? 0);
@@ -850,51 +874,82 @@ class CaseMaster extends BaseController
 
         $sqlWhere = ' WHERE c.case_type=0 ';
 
-        if (! empty($requestData['columns'][0]['search']['value'])) {
-            $sqlWhere .= " AND case_id_code LIKE '%" . $requestData['columns'][0]['search']['value'] . "' ";
+        $caseCodeSearch = trim((string) ($columnsInput[0]['search']['value'] ?? ''));
+        if ($caseCodeSearch !== '') {
+            $safe = $this->db->escapeLikeString($caseCodeSearch);
+            $sqlWhere .= " AND case_id_code LIKE '%" . $safe . "%' ";
         }
 
-        if (! empty($requestData['columns'][1]['search']['value'])) {
-            $term = $requestData['columns'][1]['search']['value'];
-            $sqlWhere .= " AND ( p.p_fname LIKE '%" . $term . "%' ";
-            $sqlWhere .= " OR p.mphone1 LIKE '" . $term . "' ";
-            $sqlWhere .= " OR i.ipd_code LIKE '%" . $term . "' ";
-            $sqlWhere .= " OR p_code LIKE '%" . $term . "%' )";
+        $patientSearch = trim((string) ($columnsInput[1]['search']['value'] ?? ''));
+        if ($patientSearch !== '') {
+            $safeLike = $this->db->escapeLikeString($patientSearch);
+            $safeExact = $this->db->escape($patientSearch);
+            $sqlWhere .= " AND ( p.p_fname LIKE '%" . $safeLike . "%' ";
+            $sqlWhere .= " OR p.mphone1 = " . $safeExact . " ";
+            $sqlWhere .= " OR i.ipd_code LIKE '%" . $safeLike . "%' ";
+            $sqlWhere .= " OR p_code LIKE '%" . $safeLike . "%' )";
         }
 
-        if (! empty($requestData['columns'][2]['search']['value'])) {
-            $sqlWhere .= " AND c.insurance_card_name LIKE '%" . $requestData['columns'][2]['search']['value'] . "%' ";
+        $cardNameSearch = trim((string) ($columnsInput[2]['search']['value'] ?? ''));
+        if ($cardNameSearch !== '') {
+            $safe = $this->db->escapeLikeString($cardNameSearch);
+            $sqlWhere .= " AND c.insurance_card_name LIKE '%" . $safe . "%' ";
         }
 
-        if (! empty($requestData['columns'][3]['search']['value'])) {
-            if ($requestData['columns'][3]['search']['value'] < 0) {
+        $insuranceFilter = (int) ($columnsInput[3]['search']['value'] ?? 0);
+        if ($insuranceFilter !== 0) {
+            if ($insuranceFilter < 0) {
                 $sqlWhere .= ' AND c.insurance_id not in (1,2,53,63) ';
             }
-            if ($requestData['columns'][3]['search']['value'] > 0) {
-                $sqlWhere .= " AND c.insurance_id = '" . $requestData['columns'][3]['search']['value'] . "' ";
+            if ($insuranceFilter > 0) {
+                $sqlWhere .= " AND c.insurance_id = " . $insuranceFilter . " ";
             }
         }
 
-        if (! empty($requestData['columns'][4]['search']['value'])) {
-            $sqlWhere .= " AND ( c.insurance_no LIKE '" . $requestData['columns'][4]['search']['value'] . "%' ";
-            $sqlWhere .= " OR c.insurance_no_1 LIKE '" . $requestData['columns'][4]['search']['value'] . "%' ) ";
+        $regNoSearch = trim((string) ($columnsInput[4]['search']['value'] ?? ''));
+        if ($regNoSearch !== '') {
+            $safe = $this->db->escapeLikeString($regNoSearch);
+            $sqlWhere .= " AND ( c.insurance_no LIKE '" . $safe . "%' ";
+            $sqlWhere .= " OR c.insurance_no_1 LIKE '" . $safe . "%' ) ";
         }
 
-        if (! empty($requestData['columns'][5]['search']['value'])) {
-            $sqlWhere .= " AND c.status = '" . $requestData['columns'][5]['search']['value'] . "' ";
+        $statusFilter = (int) ($columnsInput[5]['search']['value'] ?? 0);
+        if ($statusFilter >= 0) {
+            $sqlWhere .= " AND c.status = " . $statusFilter . " ";
         }
 
         $totalFilterSql = $sqlCount . $sqlFrom . $sqlWhere;
         $totalFiltered = (int) ($this->db->query($totalFilterSql)->getResult()[0]->no_rec ?? 0);
 
-        $orderSql = ' group by c.id ORDER BY ' . $columns[$requestData['order'][0]['column']] . ' ' . $requestData['order'][0]['dir']
-            . ' LIMIT ' . $requestData['start'] . ' ,' . $requestData['length'];
+        $orderColumnIndex = (int) ($orderInput['column'] ?? 0);
+        if (! array_key_exists($orderColumnIndex, $columns)) {
+            $orderColumnIndex = 0;
+        }
+        $orderDir = strtolower((string) ($orderInput['dir'] ?? 'desc'));
+        if (! in_array($orderDir, ['asc', 'desc'], true)) {
+            $orderDir = 'desc';
+        }
+
+        $orderSql = ' ORDER BY ' . $columns[$orderColumnIndex] . ' ' . $orderDir
+            . ' LIMIT ' . $start . ' ,' . $length;
 
         $resultSql = $sqlAll . $sqlFrom . $sqlWhere . $orderSql;
-        $rdata = $this->db->query($resultSql)->getResultArray();
+        try {
+            $rdata = $this->db->query($resultSql)->getResultArray();
+        } catch (\Throwable $e) {
+            log_message('error', 'Orgcase/getCaseTable failed: {message}', ['message' => $e->getMessage()]);
+
+            return $this->response->setStatusCode(500)->setJSON([
+                'draw' => $draw,
+                'recordsTotal' => 0,
+                'recordsFiltered' => 0,
+                'data' => [],
+                'error' => 'Unable to load case list',
+            ]);
+        }
 
         $output = [
-            'draw' => (int) $requestData['draw'],
+            'draw' => $draw,
             'recordsTotal' => $totalData,
             'recordsFiltered' => $totalFiltered,
             'data' => [],

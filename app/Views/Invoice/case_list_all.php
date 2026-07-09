@@ -103,6 +103,11 @@
 					return;
 				}
 
+				if ($table.data('case-list-init') === 1) {
+					return;
+				}
+				$table.data('case-list-init', 1);
+
 				if ($.fn.DataTable.isDataTable($table)) {
 					$table.DataTable().destroy();
 				}
