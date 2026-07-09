@@ -9,7 +9,7 @@
             </div>
             <div class="col-md-6 d-flex gap-2">
                 <button type="button" class="btn btn-primary" onclick="chargesInvoiceSearch()">Search</button>
-                <button type="button" class="btn btn-light" onclick="load_form('<?= base_url('Invoice/chargeslist') ?>','Charges Invoice')">Reset</button>
+                <button type="button" class="btn btn-light" onclick="navigateOrLoad('<?= base_url('Invoice/chargeslist') ?>','Charges Invoice')">Reset</button>
             </div>
         </form>
 
@@ -42,7 +42,7 @@
                             <td><?= esc($invType) ?></td>
                             <td><?= esc(number_format((float) ($row->net_amount ?? 0), 2, '.', '')) ?></td>
                             <td>
-                                <button type="button" class="btn btn-outline-primary btn-sm" onclick="load_form('<?= base_url('billing/charges/show') ?>/<?= (int) ($row->inv_id ?? 0) ?>','Charges Invoice');">Open</button>
+                                <button type="button" class="btn btn-outline-primary btn-sm" onclick="navigateOrLoad('<?= base_url('billing/charges/show') ?>/<?= (int) ($row->inv_id ?? 0) ?>','Charges Invoice');">Open</button>
                             </td>
                         </tr>
                     <?php endforeach; ?>
@@ -53,9 +53,17 @@
 </div>
 
 <script>
+function navigateOrLoad(url, title) {
+    if (typeof window.load_form === 'function') {
+        window.load_form(url, title || '');
+        return;
+    }
+    window.location.href = url;
+}
+
 function chargesInvoiceSearch() {
     var q = (document.getElementById('charges_invoice_search') || {}).value || '';
-    load_form('<?= base_url('Invoice/chargeslist') ?>?q=' + encodeURIComponent(q), 'Charges Invoice');
+    navigateOrLoad('<?= base_url('Invoice/chargeslist') ?>?q=' + encodeURIComponent(q), 'Charges Invoice');
 }
 
 (function() {

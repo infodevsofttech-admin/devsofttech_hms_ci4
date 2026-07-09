@@ -31,6 +31,33 @@
 
     <link href="<?= base_url('assets/css/style.css') ?>" rel="stylesheet">
     <link href="<?= base_url('assets/css/custom-theme-dark-borders.css') ?>" rel="stylesheet">
+
+    <script>
+        // Early fallback so javascript:load_form(...) links never fail before full app scripts initialize.
+        if (typeof window.load_form !== 'function') {
+            window.load_form = function(ourl) {
+                if (ourl) {
+                    window.location.href = ourl;
+                }
+            };
+        }
+        if (typeof window.load_form_div !== 'function') {
+            window.load_form_div = function(ourl, xdiv) {
+                if (!ourl) {
+                    return;
+                }
+                if (!xdiv) {
+                    window.location.href = ourl;
+                    return;
+                }
+                var el = document.getElementById(String(xdiv));
+                if (el) {
+                    el.innerHTML = '<div class="text-muted">Loading...</div>';
+                }
+                window.location.href = ourl;
+            };
+        }
+    </script>
 </head>
 
 <body>

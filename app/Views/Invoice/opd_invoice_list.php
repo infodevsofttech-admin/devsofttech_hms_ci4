@@ -9,7 +9,7 @@
             </div>
             <div class="col-md-6 d-flex gap-2">
                 <button type="button" class="btn btn-primary" onclick="opdInvoiceSearch()">Search</button>
-                <button type="button" class="btn btn-light" onclick="load_form('<?= base_url('Invoice/opdlist') ?>','OPD Invoice')">Reset</button>
+                <button type="button" class="btn btn-light" onclick="navigateOrLoad('<?= base_url('Invoice/opdlist') ?>','OPD Invoice')">Reset</button>
             </div>
         </form>
 
@@ -42,7 +42,7 @@
                             <td><?= esc((string) ($row->mphone1 ?? '-')) ?></td>
                             <td><?= esc($invType) ?></td>
                             <td>
-                                <button type="button" class="btn btn-outline-primary btn-sm" onclick="load_form('<?= base_url('Opd/invoice') ?>/<?= (int) ($row->opd_id ?? 0) ?>','OPD Invoice');">Open</button>
+                                <button type="button" class="btn btn-outline-primary btn-sm" onclick="navigateOrLoad('<?= base_url('Opd/invoice') ?>/<?= (int) ($row->opd_id ?? 0) ?>','OPD Invoice');">Open</button>
                             </td>
                         </tr>
                     <?php endforeach; ?>
@@ -53,9 +53,17 @@
 </div>
 
 <script>
+function navigateOrLoad(url, title) {
+    if (typeof window.load_form === 'function') {
+        window.load_form(url, title || '');
+        return;
+    }
+    window.location.href = url;
+}
+
 function opdInvoiceSearch() {
     var q = (document.getElementById('opd_invoice_search') || {}).value || '';
-    load_form('<?= base_url('Invoice/opdlist') ?>?q=' + encodeURIComponent(q), 'OPD Invoice');
+    navigateOrLoad('<?= base_url('Invoice/opdlist') ?>?q=' + encodeURIComponent(q), 'OPD Invoice');
 }
 
 (function() {
