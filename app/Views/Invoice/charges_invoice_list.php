@@ -60,7 +60,16 @@ function chargesInvoiceSearch() {
 
 (function() {
     if (window.jQuery && $.fn && $.fn.DataTable) {
-        $('#chargesInvoiceTable').DataTable({
+        var $table = $('#chargesInvoiceTable');
+        if ($table.length === 0) {
+            return;
+        }
+
+        if ($.fn.DataTable.isDataTable($table)) {
+            $table.DataTable().destroy();
+        }
+
+        $table.DataTable({
             pageLength: 25,
             order: [[0, 'desc']]
         });

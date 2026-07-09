@@ -92,13 +92,22 @@
   </div>
 <!-- /.content -->
 <script type="text/javascript" language="javascript" >
-			$(document).ready(function() {
+			(function() {
 				if (!$.fn || !$.fn.DataTable) {
 					$('#datatable-missing').removeClass('d-none');
 					return;
 				}
 
-				var dataTable = $('#employee-grid').DataTable( {
+				var $table = $('#employee-grid');
+				if ($table.length === 0) {
+					return;
+				}
+
+				if ($.fn.DataTable.isDataTable($table)) {
+					$table.DataTable().destroy();
+				}
+
+				var dataTable = $table.DataTable( {
 					"order": [[ 0, "desc" ]],
 					"processing": true,
 					"serverSide": true,
@@ -155,20 +164,20 @@
 				//	dataTable.columns(i).search(v).draw();
 				//} );
 								
-				$( ".search-input-select" ).change(function() {
+				$( ".search-input-select" ).off('change.caseListAll').on('change.caseListAll', function() {
 				  var i =$(this).attr('data-column');  
 					var v =$(this).val();
 					dataTable.columns(i).search(v).draw();
 				});
 				
-				$('input[type=text').on('input', function(){
+				$('input[type=text').off('input.caseListAll').on('input.caseListAll', function(){
 					var i =$(this).attr('data-column');  
 					var v =$(this).val(); 
 					dataTable.columns(i).search(v).draw();
 					
 				});
 				
-				$('#payModal').on('shown.bs.modal', function (event) {
+				$('#payModal').off('shown.bs.modal.caseListAll').on('shown.bs.modal.caseListAll', function (event) {
 						
 						var button = $(event.relatedTarget); // Button that triggered the modal
 						var invid = button.data('caseid');
@@ -176,7 +185,7 @@
 						load_form_div('<?= base_url('Orgcase/load_model_box') ?>/'+invid,'payModal-bodyc');
 					})
 							
-				});
+				})();
 				
 				
 		

@@ -64,13 +64,22 @@
     </div>
 </div>
 <script type="text/javascript" language="javascript">
-    $(document).ready(function() {
+    (function() {
         if (!$.fn || !$.fn.DataTable) {
             $('#datatable-missing').removeClass('d-none');
             return;
         }
 
-        var dataTable = $('#employee-grid').DataTable({
+        var $table = $('#employee-grid');
+        if ($table.length === 0) {
+            return;
+        }
+
+        if ($.fn.DataTable.isDataTable($table)) {
+            $table.DataTable().destroy();
+        }
+
+        var dataTable = $table.DataTable({
             "order": [[0, "desc"]],
             "processing": true,
             "serverSide": true,
@@ -112,16 +121,16 @@
         $("#employee-grid_paginate").show();
         $("#employee-grid_info").show();
 
-        $(".search-input-select").change(function() {
+        $(".search-input-select").off('change.listReqPayment').on('change.listReqPayment', function() {
             var i = $(this).attr('data-column');
             var v = $(this).val();
             dataTable.columns(i).search(v).draw();
         });
 
-        $('input[data-column]').on('input', function() {
+        $('input[data-column]').off('input.listReqPayment').on('input.listReqPayment', function() {
             var i = $(this).attr('data-column');
             var v = $(this).val();
             dataTable.columns(i).search(v).draw();
         });
-    });
+    })();
 </script>

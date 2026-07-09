@@ -60,7 +60,16 @@ function opdInvoiceSearch() {
 
 (function() {
     if (window.jQuery && $.fn && $.fn.DataTable) {
-        $('#opdInvoiceTable').DataTable({
+        var $table = $('#opdInvoiceTable');
+        if ($table.length === 0) {
+            return;
+        }
+
+        if ($.fn.DataTable.isDataTable($table)) {
+            $table.DataTable().destroy();
+        }
+
+        $table.DataTable({
             pageLength: 25,
             order: [[0, 'desc']]
         });
