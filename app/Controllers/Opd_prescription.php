@@ -740,7 +740,7 @@ class Opd_prescription extends BaseController
         } catch (\Throwable $e) {
             log_message('error', 'opd_prescription_save failed: {message}', ['message' => $e->getMessage()]);
 
-            return $this->response->setStatusCode(500)->setJSON([
+            return $this->response->setJSON([
                 'update' => 0,
                 'error_text' => 'Unable to save prescription right now. Please retry.',
                 'csrfName' => csrf_token(),
