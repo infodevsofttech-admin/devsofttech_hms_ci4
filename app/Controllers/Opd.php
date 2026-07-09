@@ -1660,15 +1660,6 @@ class Opd extends BaseController
             ]);
         }
 
-        if ($abhaAddress !== '' && ! $this->isValidAbhaAddress($abhaAddress)) {
-            return $this->response->setJSON([
-                'insertid' => 0,
-                'error_text' => 'Invalid ABHA Address format.',
-                'csrfName' => csrf_token(),
-                'csrfHash' => csrf_hash(),
-            ]);
-        }
-
         $sql = "select * from patient_master where id=" . $pid;
         $query = $this->db->query($sql);
         $personInfo = $query->getResult();

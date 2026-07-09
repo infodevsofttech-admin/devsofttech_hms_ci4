@@ -30,12 +30,6 @@
                                 <input class="form-control" id="appointment_time" name="appointment_time"
                                     type="time" value="<?= date('H:i') ?>">
                             </div>
-                            <div class="col-md-3">
-                                <label class="form-label">ABHA Address</label>
-                                <input class="form-control" id="abha_address" name="abha_address" type="text"
-                                    maxlength="18" value="<?= esc($person_info[0]->abha_address ?? $person_info[0]->abha ?? '') ?>"
-                                    placeholder="e.g. ravi1234 or ravi.1234">
-                            </div>
                         </div>
 
                         <div class="row g-3 mt-2" id="ShowDoctor">
@@ -95,7 +89,7 @@
 
         $('#showfee').hide();
 
-        $('#btnnextfee').click(function() {
+        $('#btnnextfee').off('click.opdAppt').on('click.opdAppt', function() {
             var checkValue = $('#rdoc_id:checked').val();
             if (!checkValue) {
                 alert('Please Select Doctor Name');
@@ -117,12 +111,12 @@
             $('#ShowDoctor').hide();
         });
 
-        $('#backtodoc').click(function() {
+        $('#backtodoc').off('click.opdAppt').on('click.opdAppt', function() {
             $('#ShowDoctor').show();
             $('#showfee').hide();
         });
 
-        $('#btnnextconfirm').click(function() {
+        $('#btnnextconfirm').off('click.opdAppt').on('click.opdAppt', function() {
             var checkValue = $('#fee_id:checked').val();
             if (!checkValue) {
                 alert('Please Select Fee Name');
@@ -138,7 +132,6 @@
                 "pid": $('#pid').val(),
                 "datepicker_appointment": $('#datepicker_appointment').val(),
                 "appointment_time": $('#appointment_time').val(),
-                "abha_address": $('#abha_address').val(),
                 [csrf.name]: csrf.value
             }, function(data) {
                 updateCsrf(data);

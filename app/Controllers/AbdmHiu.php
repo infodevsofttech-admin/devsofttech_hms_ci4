@@ -53,6 +53,75 @@ class AbdmHiu extends BaseController
         return $this->handleOperation('data_fetch', 'DATA_PENDING');
     }
 
+    public function consentUpdateWebhook()
+    {
+        $signatureFailure = $this->validateGatewayWebhookSignature();
+        if ($signatureFailure !== null) {
+            return $signatureFailure;
+        }
+
+        $payload = $this->request->getJSON(true);
+        if (! is_array($payload) || empty($payload)) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
+                'error' => 'Invalid consent callback payload',
+            ]);
+        }
+
+        $result = $this->service->ingestConsentUpdateWebhook($payload);
+        $httpCode = (int) ($result['ok'] ?? 0) === 1 ? 202 : 400;
+
+        return $this->response->setStatusCode($httpCode)->setJSON($result);
+    }
+
+    public function healthInformationOnRequestWebhook()
+    {
+        $signatureFailure = $this->validateGatewayWebhookSignature();
+        if ($signatureFailure !== null) {
+            return $signatureFailure;
+        }
+
+        $payload = $this->request->getJSON(true);
+        if (! is_array($payload) || empty($payload)) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
+                'error' => 'Invalid health-information callback payload',
+            ]);
+        }
+
+        $result = $this->service->ingestHealthInformationCallback($payload, 'hi_on_request_callback');
+
+        return $this->response->setStatusCode(202)->setJSON([
+            'ok' => 1,
+            'status' => 'accepted',
+            'result' => $result,
+        ]);
+    }
+
+    public function healthInformationDataPushWebhook()
+    {
+        $signatureFailure = $this->validateGatewayWebhookSignature();
+        if ($signatureFailure !== null) {
+            return $signatureFailure;
+        }
+
+        $payload = $this->request->getJSON(true);
+        if (! is_array($payload) || empty($payload)) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
+                'error' => 'Invalid data push payload',
+            ]);
+        }
+
+        $result = $this->service->ingestHealthInformationCallback($payload, 'hi_data_push_callback');
+
+        return $this->response->setStatusCode(202)->setJSON([
+            'ok' => 1,
+            'status' => 'accepted',
+            'result' => $result,
+        ]);
+    }
+
     public function timeline()
     {
         $filters = [
@@ -327,5 +396,60 @@ class AbdmHiu extends BaseController
     private function isValidAbhaAddress(string $value): bool
     {
         return preg_match('/^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+$/', trim($value)) === 1;
+    }
+
+    private function validateGatewayWebhookSignature(): ?\CodeIgniter\HTTP\ResponseInterface
+    {
+        $secret = trim((string) (
+            $this->readRuntimeSetting('GATEWAY_TO_HMS_HMAC_SECRET')
+            ?: $this->readRuntimeSetting('EKA_WEBHOOK_SECRET')
+            ?: $this->readRuntimeSetting('HMS_WEBHOOK_SECRET')
+        ));
+
+        // If no secret is configured, accept payload to keep callback flow functional.
+        if ($secret === '') {
+            return null;
+        }
+
+        $rawBody = (string) $this->request->getBody();
+        $provided = trim((string) (
+            $this->request->getHeaderLine('X-Signature')
+            ?: $this->request->getHeaderLine('X-Hub-Signature-256')
+        ));
+
+        if ($provided === '') {
+            return $this->response->setStatusCode(401)->setJSON([
+                'ok' => 0,
+                'error' => 'Missing webhook signature',
+            ]);
+        }
+
+        $expected = hash_hmac('sha256', $rawBody, $secret);
+        $normalizedProvided = preg_replace('/^sha256=/i', '', $provided) ?? '';
+
+        if (! hash_equals($expected, $normalizedProvided)) {
+            return $this->response->setStatusCode(401)->setJSON([
+                'ok' => 0,
+                'error' => 'Invalid webhook signature',
+            ]);
+        }
+
+        return null;
+    }
+
+    private function readRuntimeSetting(string $name): string
+    {
+        if (! $this->db->tableExists('hospital_setting')) {
+            return '';
+        }
+
+        $row = $this->db->table('hospital_setting')
+            ->select('s_value')
+            ->where('s_name', $name)
+            ->orderBy('id', 'DESC')
+            ->get(1)
+            ->getRowArray();
+
+        return trim((string) ($row['s_value'] ?? ''));
     }
 }

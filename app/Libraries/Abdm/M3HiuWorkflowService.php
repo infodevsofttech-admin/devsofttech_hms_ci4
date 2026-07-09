@@ -246,6 +246,7 @@ class M3HiuWorkflowService
         }
 
         $builder = $this->db->table('abdm_hiu_workflows')->select('*')->orderBy('id', 'DESC');
+        $fields = $this->db->getFieldNames('abdm_hiu_workflows') ?? [];
 
         $hfrId = trim((string) ($filters['hfr_id'] ?? ''));
         if ($hfrId !== '') {
@@ -253,7 +254,16 @@ class M3HiuWorkflowService
         }
         $consentId = trim((string) ($filters['consent_id'] ?? ''));
         if ($consentId !== '') {
+            $builder->groupStart();
             $builder->where('consent_id', $consentId);
+            if (in_array('abdm_consent_request_id', $fields, true)) {
+                $builder->orWhere('abdm_consent_request_id', $consentId);
+            }
+            if (in_array('abdm_consent_artifact_id', $fields, true)) {
+                $builder->orWhere('abdm_consent_artifact_id', $consentId);
+            }
+            $builder->orWhere('request_id', $consentId);
+            $builder->groupEnd();
         }
         $transactionId = trim((string) ($filters['transaction_id'] ?? ''));
         if ($transactionId !== '') {
@@ -261,7 +271,12 @@ class M3HiuWorkflowService
         }
         $abhaAddress = trim((string) ($filters['abha_address'] ?? ''));
         if ($abhaAddress !== '') {
+            $builder->groupStart();
             $builder->where('abha_address', $abhaAddress);
+            // Older rows may store ABHA address only inside request_json consent.patient.id.
+            $builder->orLike('request_json', '"abha_address":"' . str_replace('"', '\\"', $abhaAddress) . '"');
+            $builder->orLike('request_json', '"id":"' . str_replace('"', '\\"', $abhaAddress) . '"');
+            $builder->groupEnd();
         }
         $from = trim((string) ($filters['date_from'] ?? ''));
         if ($from !== '') {
@@ -353,6 +368,188 @@ class M3HiuWorkflowService
             'failed' => $failed,
             'pending' => $pending,
             'recent_errors' => $errorRows,
+        ];
+    }
+
+    public function ingestConsentUpdateWebhook(array $payload): array
+    {
+        if (! $this->db->tableExists('abdm_hiu_workflows')) {
+            return [
+                'ok' => 1,
+                'persisted' => 0,
+                'message' => 'abdm_hiu_workflows table not found; callback accepted without persistence',
+            ];
+        }
+
+        $consent = is_array($payload['consent'] ?? null) ? (array) $payload['consent'] : [];
+        $consentDetail = is_array($payload['consentDetail'] ?? null) ? (array) $payload['consentDetail'] : [];
+        $consentObj = ! empty($consent) ? $consent : $consentDetail;
+
+        $status = strtolower(trim((string) (
+            $consentObj['status']
+            ?? $payload['consent_status']
+            ?? $payload['status']
+            ?? ''
+        )));
+        if ($status === '') {
+            $status = 'status_checked';
+        }
+
+        $consentId = trim((string) (
+            $consentObj['id']
+            ?? $payload['consent_id']
+            ?? $payload['consentId']
+            ?? $payload['abdm_consent_artifact_id']
+            ?? ''
+        ));
+
+        $requestId = trim((string) (
+            $payload['request_id']
+            ?? $payload['requestId']
+            ?? ($payload['response']['requestId'] ?? '')
+            ?? ''
+        ));
+        $transactionId = trim((string) (
+            $payload['transaction_id']
+            ?? $payload['transactionId']
+            ?? ($consentObj['transactionId'] ?? '')
+            ?? ''
+        ));
+
+        $abhaAddress = trim((string) (
+            ($consentObj['patient']['id'] ?? '')
+            ?: ($payload['abha_address'] ?? '')
+            ?: ($payload['abha_id'] ?? '')
+        ));
+        $abhaAddress = $this->canonicalizeAbhaAddress($abhaAddress, (string) ($payload['abha_id'] ?? ''));
+
+        $persistPayload = [
+            'request_id' => $requestId,
+            'requestId' => $requestId,
+            'transaction_id' => $transactionId,
+            'transactionId' => $transactionId,
+            'consent_id' => $consentId,
+            'consentId' => $consentId,
+            'abdm_consent_artifact_id' => $consentId,
+            'abha_address' => $abhaAddress,
+            'hfr_id' => trim((string) ($payload['hfr_id'] ?? '')),
+            'consent' => $consentObj,
+            'callback' => $payload,
+        ];
+
+        $result = [
+            'ok' => 1,
+            'http_code' => 202,
+            'status' => $status,
+            'consent_id' => $consentId,
+            'consentId' => $consentId,
+            'abdm_consent_artifact_id' => $consentId,
+            'request_id' => $requestId,
+            'transaction_id' => $transactionId,
+            'abha_address' => $abhaAddress,
+            'consent' => $consentObj,
+            'data' => $payload,
+            'retryable' => 0,
+        ];
+
+        $state = match ($status) {
+            'granted', 'approved', 'active' => 'GRANTED',
+            'revoked', 'denied' => 'REVOKED',
+            'expired' => 'EXPIRED',
+            default => 'STATUS_CHECKED',
+        };
+
+        $this->upsertWorkflow('consent_callback', $persistPayload, $result, $state, 'success', 202, false);
+
+        return [
+            'ok' => 1,
+            'persisted' => 1,
+            'workflow_state' => $state,
+            'consent_id' => $consentId,
+            'request_id' => $requestId,
+        ];
+    }
+
+    public function ingestHealthInformationCallback(array $payload, string $operation = 'hi_on_request_callback'): array
+    {
+        if (! $this->db->tableExists('abdm_hiu_workflows')) {
+            return [
+                'ok' => 1,
+                'persisted' => 0,
+                'message' => 'abdm_hiu_workflows table not found; callback accepted without persistence',
+            ];
+        }
+
+        $requestId = trim((string) (
+            $payload['request_id']
+            ?? $payload['requestId']
+            ?? ($payload['response']['requestId'] ?? '')
+            ?? ''
+        ));
+        $transactionId = trim((string) (
+            $payload['transaction_id']
+            ?? $payload['transactionId']
+            ?? ($payload['response']['transactionId'] ?? '')
+            ?? ''
+        ));
+        $consentId = trim((string) (
+            ($payload['hiRequest']['consent']['id'] ?? '')
+            ?: ($payload['consent']['id'] ?? '')
+            ?: ($payload['consent_id'] ?? '')
+            ?: ($payload['consentId'] ?? '')
+        ));
+        $abhaAddress = $this->canonicalizeAbhaAddress(trim((string) (
+            ($payload['patient']['id'] ?? '')
+            ?: ($payload['abha_address'] ?? '')
+            ?: ($payload['abha_id'] ?? '')
+        )), (string) ($payload['abha_id'] ?? ''));
+
+        $errorCode = trim((string) ($payload['error']['code'] ?? ''));
+        $errorMessage = trim((string) ($payload['error']['message'] ?? ''));
+        $errorText = trim(($errorCode !== '' ? $errorCode . ' ' : '') . $errorMessage);
+
+        $hasData = isset($payload['fhir_bundle'])
+            || isset($payload['fhirBundle'])
+            || isset($payload['bundles'])
+            || isset($payload['entries'])
+            || isset($payload['data']);
+
+        $ok = $errorText === '' ? 1 : 0;
+        $state = $hasData ? 'DATA_RECEIVED' : ($ok === 1 ? 'DATA_PENDING' : 'FAILED');
+
+        $persistPayload = [
+            'request_id' => $requestId,
+            'requestId' => $requestId,
+            'transaction_id' => $transactionId,
+            'transactionId' => $transactionId,
+            'consent_id' => $consentId,
+            'consentId' => $consentId,
+            'abdm_consent_artifact_id' => $consentId,
+            'abha_address' => $abhaAddress,
+            'callback' => $payload,
+        ];
+        $result = [
+            'ok' => $ok,
+            'http_code' => 202,
+            'status' => strtolower($state),
+            'error_text' => $errorText,
+            'request_id' => $requestId,
+            'transaction_id' => $transactionId,
+            'consent_id' => $consentId,
+            'abha_address' => $abhaAddress,
+            'retryable' => 0,
+            'data' => $payload,
+        ];
+
+        $this->upsertWorkflow($operation, $persistPayload, $result, $state, $ok === 1 ? 'success' : 'failed', 202, false);
+
+        return [
+            'ok' => 1,
+            'persisted' => 1,
+            'workflow_state' => $state,
+            'request_id' => $requestId,
+            'transaction_id' => $transactionId,
+            'error_text' => $errorText,
         ];
     }
 
@@ -555,10 +752,13 @@ class M3HiuWorkflowService
         if ($operation === 'consent_fetch') {
             $consentId = trim((string) ($clean['abdm_consent_artifact_id'] ?? $clean['consentId'] ?? $clean['consent_id'] ?? ''));
             if ($consentId === '') {
+                $consentId = $this->resolveAbdmConsentArtifactIdFromWorkflow($clean);
+            }
+            if ($consentId === '') {
                 return [
                     'ok' => 0,
                     'http_code' => 422,
-                    'error_text' => 'consentId is required for consent fetch.',
+                    'error_text' => 'consentId is required for consent fetch. Consent artifact is not available yet; run Check Consent Status until consent is GRANTED, then fetch using artifact id.',
                 ];
             }
             if ($this->isGatewayRequestIdPattern($consentId)) {
@@ -611,10 +811,11 @@ class M3HiuWorkflowService
 
             if (! isset($hiRequest['dateRange']) || ! is_array($hiRequest['dateRange'])) {
                 $hiRequest['dateRange'] = [
-                    'from' => gmdate('Y-m-d\T00:00:00.000\Z', strtotime('-30 days')),
+                    'from' => gmdate('Y-m-d\T00:00:00.000\Z', strtotime('-365 days')),
                     'to' => gmdate('Y-m-d\T00:00:00.000\Z'),
                 ];
             }
+            $hiRequest['dateRange'] = $this->resolveSafeHiDateRange($requestIdRef, $consentId, $hiRequest['dateRange']);
             if (trim((string) ($hiRequest['dataPushUrl'] ?? '')) === '') {
                 $hiRequest['dataPushUrl'] = rtrim((string) (getenv('EATRIA_BRIDGE_URL') ?: 'https://abdm-bridge.e-atria.in/api'), '/') . '/v3/hiu/data/push';
             }
@@ -743,7 +944,7 @@ class M3HiuWorkflowService
             'permission' => [
                 'accessMode' => 'VIEW',
                 'dateRange' => [
-                    'from' => gmdate('Y-m-d\T00:00:00.000\Z', strtotime('-30 days')),
+                    'from' => gmdate('Y-m-d\T00:00:00.000\Z', strtotime('-365 days')),
                     'to' => gmdate('Y-m-d\T00:00:00.000\Z'),
                 ],
                 'dataEraseAt' => gmdate('Y-m-d\T00:00:00.000\Z', strtotime('+365 days')),
@@ -793,13 +994,255 @@ class M3HiuWorkflowService
             'consent' => [
                 'id' => $consentId,
             ],
-            'dateRange' => [
-                'from' => gmdate('Y-m-d\T00:00:00.000\Z', strtotime('-30 days')),
+            'dateRange' => $this->resolveSafeHiDateRange($requestIdRef, $consentId, [
+                'from' => gmdate('Y-m-d\T00:00:00.000\Z', strtotime('-365 days')),
                 'to' => gmdate('Y-m-d\T00:00:00.000\Z'),
-            ],
+            ]),
             'dataPushUrl' => rtrim((string) (getenv('EATRIA_BRIDGE_URL') ?: 'https://abdm-bridge.e-atria.in/api'), '/') . '/v3/hiu/data/push',
             'transactionId' => $transactionId,
         ];
+    }
+
+    /**
+     * Build a safe HI date range by enforcing consent-granted permission window
+     * (from consent fetch/reconcile details), then clamping with from <= to <= now.
+     *
+     * @param array<string, mixed> $fallbackRange
+     * @return array<string, string>
+     */
+    private function resolveSafeHiDateRange(string $requestIdRef, string $consentId, array $fallbackRange): array
+    {
+        $grantedRange = $this->resolveGrantedConsentDateRange($requestIdRef, $consentId);
+        $consentRange = ! empty($grantedRange)
+            ? $grantedRange
+            : $this->resolveConsentRequestDateRangeByRequestId($requestIdRef);
+
+        $fromRaw = trim((string) ($consentRange['from'] ?? $fallbackRange['from'] ?? ''));
+        $toRaw = trim((string) ($consentRange['to'] ?? $fallbackRange['to'] ?? ''));
+
+        $nowMs = (int) floor(microtime(true) * 1000);
+        $fromMs = $this->parseIsoUtcToEpochMillis($fromRaw);
+        $toMs = $this->parseIsoUtcToEpochMillis($toRaw);
+        $grantedFromMs = $this->parseIsoUtcToEpochMillis((string) ($grantedRange['from'] ?? ''));
+        $grantedToMs = $this->parseIsoUtcToEpochMillis((string) ($grantedRange['to'] ?? ''));
+
+        if ($fromMs === null) {
+            $fromMs = $nowMs - (365 * 24 * 60 * 60 * 1000);
+        }
+        if ($toMs === null) {
+            $toMs = $nowMs;
+        }
+
+        // HMS-side requirement: keep HI range equal to or strictly within granted consent permission range.
+        if ($grantedFromMs !== null && $fromMs < $grantedFromMs) {
+            $fromMs = $grantedFromMs;
+        }
+        if ($grantedToMs !== null && $toMs > $grantedToMs) {
+            $toMs = $grantedToMs;
+        }
+
+        if ($toMs > $nowMs) {
+            $toMs = $nowMs;
+        }
+        if ($fromMs > $toMs) {
+            if ($grantedFromMs !== null && $grantedFromMs <= $toMs) {
+                $fromMs = $grantedFromMs;
+            } else {
+                $fromMs = $toMs;
+            }
+        }
+
+        return [
+            'from' => $this->formatEpochMillisToIsoUtc($fromMs),
+            'to' => $this->formatEpochMillisToIsoUtc($toMs),
+        ];
+    }
+
+    private function parseIsoUtcToEpochMillis(string $value): ?int
+    {
+        $raw = trim($value);
+        if ($raw === '') {
+            return null;
+        }
+
+        try {
+            $dt = new \DateTimeImmutable($raw);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        $sec = (int) $dt->format('U');
+        $micro = (int) $dt->format('u');
+
+        return ($sec * 1000) + intdiv($micro, 1000);
+    }
+
+    private function formatEpochMillisToIsoUtc(int $epochMs): string
+    {
+        $sec = intdiv($epochMs, 1000);
+        $ms = $epochMs - ($sec * 1000);
+        if ($ms < 0) {
+            $ms = 0;
+        }
+
+        $dt = (new \DateTimeImmutable('@' . $sec))->setTimezone(new \DateTimeZone('UTC'));
+
+        return $dt->format('Y-m-d\TH:i:s') . '.' . str_pad((string) $ms, 3, '0', STR_PAD_LEFT) . 'Z';
+    }
+
+    /**
+     * @return array{from?: string, to?: string}
+     */
+    private function resolveGrantedConsentDateRange(string $requestId, string $consentId): array
+    {
+        if (! $this->db->tableExists('abdm_hiu_workflows')) {
+            return [];
+        }
+
+        $fields = $this->db->getFieldNames('abdm_hiu_workflows') ?? [];
+        $builder = $this->db->table('abdm_hiu_workflows')
+            ->select('response_json, request_json')
+            ->whereIn('operation', ['consent_fetch', 'consent_reconcile', 'consent_status', 'consent_callback']);
+
+        $hasFilter = false;
+        $builder->groupStart();
+        if ($requestId !== '') {
+            $builder->orWhere('request_id', $requestId);
+            $hasFilter = true;
+        }
+        if ($consentId !== '') {
+            $builder->orWhere('consent_id', $consentId);
+            $hasFilter = true;
+            if (in_array('abdm_consent_artifact_id', $fields, true)) {
+                $builder->orWhere('abdm_consent_artifact_id', $consentId);
+            }
+        }
+        $builder->groupEnd();
+
+        if (! $hasFilter) {
+            return [];
+        }
+
+        $rows = $builder->orderBy('id', 'DESC')->get(30)->getResultArray();
+        foreach ($rows as $row) {
+            foreach (['response_json', 'request_json'] as $jsonCol) {
+                $decoded = json_decode((string) ($row[$jsonCol] ?? ''), true);
+                if (! is_array($decoded)) {
+                    continue;
+                }
+
+                $range = $this->extractPermissionDateRange($decoded);
+                if (! empty($range)) {
+                    return $range;
+                }
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array{from?: string, to?: string}
+     */
+    private function extractPermissionDateRange(array $data): array
+    {
+        $pathCandidates = [
+            $data['consent']['permission']['dateRange'] ?? null,
+            $data['consentDetail']['permission']['dateRange'] ?? null,
+            $data['data']['consent']['permission']['dateRange'] ?? null,
+            $data['data']['consentDetail']['permission']['dateRange'] ?? null,
+            $data['response']['consent']['permission']['dateRange'] ?? null,
+            $data['response']['consentDetail']['permission']['dateRange'] ?? null,
+        ];
+
+        foreach ($pathCandidates as $candidate) {
+            if (is_array($candidate)) {
+                $from = trim((string) ($candidate['from'] ?? ''));
+                $to = trim((string) ($candidate['to'] ?? ''));
+                if ($from !== '' || $to !== '') {
+                    $out = [];
+                    if ($from !== '') {
+                        $out['from'] = $from;
+                    }
+                    if ($to !== '') {
+                        $out['to'] = $to;
+                    }
+                    return $out;
+                }
+            }
+        }
+
+        if (isset($data['permission']) && is_array($data['permission'])) {
+            $range = $data['permission']['dateRange'] ?? null;
+            if (is_array($range)) {
+                $from = trim((string) ($range['from'] ?? ''));
+                $to = trim((string) ($range['to'] ?? ''));
+                if ($from !== '' || $to !== '') {
+                    $out = [];
+                    if ($from !== '') {
+                        $out['from'] = $from;
+                    }
+                    if ($to !== '') {
+                        $out['to'] = $to;
+                    }
+                    return $out;
+                }
+            }
+        }
+
+        foreach ($data as $value) {
+            if (! is_array($value)) {
+                continue;
+            }
+
+            $nested = $this->extractPermissionDateRange($value);
+            if (! empty($nested)) {
+                return $nested;
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * @return array{from?: string, to?: string}
+     */
+    private function resolveConsentRequestDateRangeByRequestId(string $requestId): array
+    {
+        if ($requestId === '' || ! $this->db->tableExists('abdm_hiu_workflows')) {
+            return [];
+        }
+
+        $row = $this->db->table('abdm_hiu_workflows')
+            ->select('request_json')
+            ->where('operation', 'consent_request')
+            ->where('request_id', $requestId)
+            ->orderBy('id', 'DESC')
+            ->get(1)
+            ->getRowArray();
+
+        if (empty($row['request_json'])) {
+            return [];
+        }
+
+        $decoded = json_decode((string) $row['request_json'], true);
+        if (! is_array($decoded)) {
+            return [];
+        }
+
+        $from = trim((string) ($decoded['consent']['permission']['dateRange']['from'] ?? ''));
+        $to = trim((string) ($decoded['consent']['permission']['dateRange']['to'] ?? ''));
+
+        $out = [];
+        if ($from !== '') {
+            $out['from'] = $from;
+        }
+        if ($to !== '') {
+            $out['to'] = $to;
+        }
+
+        return $out;
     }
 
     private function readSettingValue(string $key): string
@@ -937,7 +1380,10 @@ class M3HiuWorkflowService
             'consent_request' => 'REQUESTED',
             'consent_status' => 'STATUS_CHECKED',
             'consent_fetch' => 'CONSENT_FETCHED',
+            'consent_callback' => ($statusStr === 'granted' || $statusStr === 'approved' ? 'GRANTED' : ($statusStr === 'revoked' ? 'REVOKED' : ($statusStr === 'expired' ? 'EXPIRED' : 'STATUS_CHECKED'))),
             'hi_request' => ($statusStr === 'completed' ? 'COMPLETED' : 'DATA_REQUESTED'),
+            'hi_on_request_callback' => (($statusStr === 'data_received' || isset($result['fhir_bundle']) || isset($result['bundles']) || isset($result['entries'])) ? 'DATA_RECEIVED' : ($ok ? 'DATA_PENDING' : 'FAILED')),
+            'hi_data_push_callback' => (($statusStr === 'data_received' || isset($result['fhir_bundle']) || isset($result['bundles']) || isset($result['entries'])) ? 'DATA_RECEIVED' : ($ok ? 'DATA_PENDING' : 'FAILED')),
             'consent_reconcile' => ($statusStr === 'granted' ? 'GRANTED' : ($statusStr === 'revoked' ? 'REVOKED' : ($statusStr === 'expired' ? 'EXPIRED' : 'STATUS_CHECKED'))),
             'data_fetch' => (($statusStr === 'completed' || isset($result['fhir_bundle']) || isset($result['bundles'])) ? 'DATA_RECEIVED' : 'DATA_PENDING'),
             default => 'COMPLETED',
@@ -948,6 +1394,47 @@ class M3HiuWorkflowService
     {
         $requestId = trim((string) ($payload['request_id'] ?? ''));
         $transactionId = trim((string) ($payload['transaction_id'] ?? ''));
+
+        // HI operations should dedupe by transaction id so retries/new requests
+        // keep separate timeline rows instead of overwriting prior transactions.
+        if (in_array($operation, ['hi_request', 'data_fetch'], true)) {
+            if ($transactionId === '') {
+                return null;
+            }
+
+            return $this->db->table('abdm_hiu_workflows')
+                ->select('*')
+                ->where('operation', $operation)
+                ->where('transaction_id', $transactionId)
+                ->orderBy('id', 'DESC')
+                ->get(1)
+                ->getRowArray() ?: null;
+        }
+
+        if (in_array($operation, ['hi_on_request_callback', 'hi_data_push_callback'], true)) {
+            $builder = $this->db->table('abdm_hiu_workflows')->select('*')->where('operation', $operation);
+            if ($transactionId !== '') {
+                $row = $builder->where('transaction_id', $transactionId)->orderBy('id', 'DESC')->get(1)->getRowArray();
+                if (! empty($row)) {
+                    return $row;
+                }
+            }
+
+            if ($requestId !== '') {
+                $row = $this->db->table('abdm_hiu_workflows')
+                    ->select('*')
+                    ->where('operation', $operation)
+                    ->where('request_id', $requestId)
+                    ->orderBy('id', 'DESC')
+                    ->get(1)
+                    ->getRowArray();
+                if (! empty($row)) {
+                    return $row;
+                }
+            }
+
+            return null;
+        }
 
         $builder = $this->db->table('abdm_hiu_workflows')->select('*')->where('operation', $operation);
         if ($requestId !== '') {
@@ -1089,21 +1576,67 @@ class M3HiuWorkflowService
         int $forceId = 0
     ): void {
         $now = Time::now('Asia/Kolkata')->toDateTimeString();
-        $hmsRequestId = trim((string) ($payload['request_id'] ?? $payload['requestId'] ?? ''));
+        $hmsRequestId = $this->firstNonEmptyString([
+            $payload['request_id'] ?? null,
+            $payload['requestId'] ?? null,
+        ]);
         if ($hmsRequestId === '') {
-            $hmsRequestId = trim((string) ($result['hms_request_id'] ?? ''));
+            $hmsRequestId = $this->firstNonEmptyString([
+                $result['hms_request_id'] ?? null,
+            ]);
         }
-        $gatewayRequestId = trim((string) ($result['gateway_request_id'] ?? $result['request_id'] ?? $result['requestId'] ?? ''));
-        $abdmConsentRequestId = trim((string) ($result['abdm_consent_request_id'] ?? $result['consent_request_id'] ?? $payload['consentRequestId'] ?? $payload['consent_request_id'] ?? ''));
-        $transactionId = trim((string) ($payload['transaction_id'] ?? $payload['transactionId'] ?? $result['transaction_id'] ?? ''));
-        $consentId = trim((string) ($payload['abdm_consent_artifact_id'] ?? $payload['consent_id'] ?? $payload['consentId'] ?? $result['abdm_consent_artifact_id'] ?? $result['consent_id'] ?? $result['consentId'] ?? ''));
+        $gatewayRequestId = $this->firstNonEmptyString([
+            $result['gateway_request_id'] ?? null,
+            $result['request_id'] ?? null,
+            $result['requestId'] ?? null,
+        ]);
+        $abdmConsentRequestId = $this->firstNonEmptyString([
+            $result['abdm_consent_request_id'] ?? null,
+            $result['consent_request_id'] ?? null,
+            $payload['consentRequestId'] ?? null,
+            $payload['consent_request_id'] ?? null,
+        ]);
+        $transactionId = $this->firstNonEmptyString([
+            $payload['transaction_id'] ?? null,
+            $payload['transactionId'] ?? null,
+            $result['transaction_id'] ?? null,
+            $result['transactionId'] ?? null,
+        ]);
+        $consentId = $this->firstNonEmptyString([
+            $payload['abdm_consent_artifact_id'] ?? null,
+            $payload['consent_id'] ?? null,
+            $payload['consentId'] ?? null,
+            $payload['hiRequest']['consent']['id'] ?? null,
+            $result['abdm_consent_artifact_id'] ?? null,
+            $result['consent_id'] ?? null,
+            $result['consentId'] ?? null,
+            $result['hiRequest']['consent']['id'] ?? null,
+        ]);
         if ($consentId === '' && $operation !== 'consent_fetch' && $operation !== 'hi_request') {
             $consentId = $abdmConsentRequestId;
         }
-        $abhaAddress = trim((string) ($payload['abha_address'] ?? $payload['abha_id'] ?? $result['abha_address'] ?? ''));
-        $hfrId = $this->normalizeStoredHfrId((string) ($payload['hfr_id'] ?? $result['hfr_id'] ?? ''));
-        $hospitalId = trim((string) ($payload['hospital_id'] ?? $result['hospital_id'] ?? ''));
-        $errorText = trim((string) ($result['error_text'] ?? $result['message'] ?? ''));
+        $abhaAddress = $this->firstNonEmptyString([
+            $payload['abha_address'] ?? null,
+            $payload['abha_id'] ?? null,
+            $result['abha_address'] ?? null,
+        ]);
+        if ($abhaAddress === '') {
+            $abhaAddress = $this->firstNonEmptyString([
+                $payload['consent']['patient']['id'] ?? null,
+            ]);
+        }
+        $hfrId = $this->normalizeStoredHfrId($this->firstNonEmptyString([
+            $payload['hfr_id'] ?? null,
+            $result['hfr_id'] ?? null,
+        ]));
+        $hospitalId = $this->firstNonEmptyString([
+            $payload['hospital_id'] ?? null,
+            $result['hospital_id'] ?? null,
+        ]);
+        $errorText = $this->firstNonEmptyString([
+            $result['error_text'] ?? null,
+            $result['message'] ?? null,
+        ]);
 
         $retryCount = 0;
         $id = $forceId;
@@ -1185,6 +1718,21 @@ class M3HiuWorkflowService
         return preg_match('/^REQ-/i', trim($value)) === 1;
     }
 
+    /**
+     * @param array<int, mixed> $values
+     */
+    private function firstNonEmptyString(array $values): string
+    {
+        foreach ($values as $value) {
+            $text = trim((string) ($value ?? ''));
+            if ($text !== '') {
+                return $text;
+            }
+        }
+
+        return '';
+    }
+
     private function resolveAbdmConsentRequestIdFromWorkflow(array $payload): string
     {
         if (! $this->db->tableExists('abdm_hiu_workflows')) {
@@ -1234,6 +1782,84 @@ class M3HiuWorkflowService
                         $decoded['abdm_consent_request_id']
                         ?? $decoded['consent_request_id']
                         ?? $decoded['consentRequestId']
+                        ?? ''
+                    ));
+                    if ($candidate !== '' && ! $this->isGatewayRequestIdPattern($candidate)) {
+                        return $candidate;
+                    }
+                }
+            }
+
+            return '';
+        };
+
+        $resolved = $tryBuilder('request_id', $requestId);
+        if ($resolved !== '') {
+            return $resolved;
+        }
+
+        $resolved = $tryBuilder('transaction_id', $transactionId);
+        if ($resolved !== '') {
+            return $resolved;
+        }
+
+        $resolved = $tryBuilder('abha_address', $abhaAddress);
+        if ($resolved !== '') {
+            return $resolved;
+        }
+
+        return '';
+    }
+
+    private function resolveAbdmConsentArtifactIdFromWorkflow(array $payload): string
+    {
+        if (! $this->db->tableExists('abdm_hiu_workflows')) {
+            return '';
+        }
+
+        $fields = $this->db->getFieldNames('abdm_hiu_workflows') ?? [];
+        $hasAbdmConsentArtifactId = in_array('abdm_consent_artifact_id', $fields, true);
+
+        $requestId = trim((string) ($payload['requestId'] ?? $payload['request_id'] ?? ''));
+        $transactionId = trim((string) ($payload['transactionId'] ?? $payload['transaction_id'] ?? ''));
+        $abhaAddress = trim((string) ($payload['abha_address'] ?? $payload['abha_id'] ?? ''));
+
+        $tryBuilder = function (?string $whereCol, string $whereVal) use ($hasAbdmConsentArtifactId): string {
+            if ($whereCol === null || $whereVal === '') {
+                return '';
+            }
+
+            $select = ['consent_id', 'response_json'];
+            if ($hasAbdmConsentArtifactId) {
+                $select[] = 'abdm_consent_artifact_id';
+            }
+
+            $rows = $this->db->table('abdm_hiu_workflows')
+                ->select(implode(', ', $select))
+                ->where($whereCol, $whereVal)
+                ->whereIn('operation', ['consent_fetch', 'consent_reconcile', 'consent_status', 'hi_request'])
+                ->orderBy('id', 'DESC')
+                ->get(25)
+                ->getResultArray();
+
+            foreach ($rows as $row) {
+                $candidate = '';
+                if ($hasAbdmConsentArtifactId) {
+                    $candidate = trim((string) ($row['abdm_consent_artifact_id'] ?? ''));
+                }
+                if ($candidate === '') {
+                    $candidate = trim((string) ($row['consent_id'] ?? ''));
+                }
+                if ($candidate !== '' && ! $this->isGatewayRequestIdPattern($candidate)) {
+                    return $candidate;
+                }
+
+                $decoded = json_decode((string) ($row['response_json'] ?? ''), true);
+                if (is_array($decoded)) {
+                    $candidate = trim((string) (
+                        $decoded['abdm_consent_artifact_id']
+                        ?? $decoded['consent_id']
+                        ?? $decoded['consentId']
                         ?? ''
                     ));
                     if ($candidate !== '' && ! $this->isGatewayRequestIdPattern($candidate)) {

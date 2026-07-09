@@ -14,6 +14,23 @@ class M3HiuGatewayClient
         $this->baseUrl = rtrim((string) (getenv('EATRIA_BRIDGE_URL') ?: 'https://abdm-bridge.e-atria.in/api'), '/');
     }
 
+    private function sanitizeBearerToken(string $token): string
+    {
+        $token = trim($token);
+        if ($token === '') {
+            return '';
+        }
+
+        if (stripos($token, 'Bearer ') === 0) {
+            $token = trim(substr($token, 7));
+        }
+
+        $token = trim($token, " \t\n\r\0\x0B\"'");
+        $token = (string) preg_replace('/\s+/u', '', $token);
+
+        return $token;
+    }
+
     public function consentRequest(array $payload): array
     {
         return $this->call('/v3/hiu/consent/request', $payload, 'consent.request');
@@ -54,6 +71,10 @@ class M3HiuGatewayClient
         $token = (string) ($settings['token'] ?? '');
         $hfrId = (string) ($settings['hfr_id'] ?? '');
         $hospitalId = (string) ($settings['hospital_id'] ?? '');
+        $runtimeBaseUrl = trim((string) ($settings['base_url'] ?? ''));
+        if ($runtimeBaseUrl !== '') {
+            $this->baseUrl = rtrim($runtimeBaseUrl, '/');
+        }
 
         $payloadHfrId = trim((string) ($payload['hfr_id'] ?? ''));
         if ($payloadHfrId !== '' && strcasecmp($payloadHfrId, $hfrId) !== 0) {
@@ -105,7 +126,7 @@ class M3HiuGatewayClient
                 : ('HTTP ' . $httpCode . ' non-JSON response');
         }
 
-        if ($this->isCloudFrontBlockedResponse($httpCode, $raw, $response ?? [])) {
+        if ($this->isCloudFrontBlockedResponse($httpCode, $raw, $decoded ?? [])) {
             $errorText = 'Gateway edge block (CloudFront 403 Request blocked). Retry later or ask gateway team to unblock the endpoint.';
         }
 
@@ -178,6 +199,10 @@ class M3HiuGatewayClient
         $token = (string) ($settings['token'] ?? '');
         $hfrId = (string) ($settings['hfr_id'] ?? '');
         $hospitalId = (string) ($settings['hospital_id'] ?? '');
+        $runtimeBaseUrl = trim((string) ($settings['base_url'] ?? ''));
+        if ($runtimeBaseUrl !== '') {
+            $this->baseUrl = rtrim($runtimeBaseUrl, '/');
+        }
 
         $payloadHfrId = trim((string) ($query['hfr_id'] ?? ''));
         if ($payloadHfrId !== '' && strcasecmp($payloadHfrId, $hfrId) !== 0) {
@@ -305,24 +330,46 @@ class M3HiuGatewayClient
             return ['ok' => 0, 'http_code' => 500, 'error_text' => 'hospital_setting table not found', 'retryable' => 0];
         }
 
-        $rows = $this->db->table('hospital_setting')
+        $settingFields = $this->db->getFieldNames('hospital_setting') ?? [];
+        $orderCol = null;
+        foreach (['id', 's_id'] as $candidateOrderCol) {
+            if (in_array($candidateOrderCol, $settingFields, true)) {
+                $orderCol = $candidateOrderCol;
+                break;
+            }
+        }
+
+        $rowsBuilder = $this->db->table('hospital_setting')
             ->select('s_name, s_value')
-            ->whereIn('s_name', ['EATRIA_BRIDGE_TOKEN', 'ABDM_HFR_ID', 'ABDM_HOSPITAL_ID'])
-            ->get()
-            ->getResultArray();
+            ->whereIn('s_name', [
+                'EATRIA_BRIDGE_TOKEN',
+                'ABDM_HFR_ID',
+                'H_HFR_ID',
+                'ABDM_HOSPITAL_HFR_ID',
+                'ABDM_HOSPITAL_ID',
+                'ABDM_BRIDGE_HOSPITAL_ID',
+                'EATRIA_BRIDGE_HOSPITAL_ID',
+                'EATRIA_BRIDGE_URL',
+            ]);
+        if ($orderCol !== null) {
+            $rowsBuilder->orderBy($orderCol, 'DESC');
+        }
+
+        $rows = $rowsBuilder->get()->getResultArray();
 
         $kv = [];
         foreach ($rows as $row) {
             $key = trim((string) ($row['s_name'] ?? ''));
-            if ($key === '') {
+            if ($key === '' || array_key_exists($key, $kv)) {
                 continue;
             }
             $kv[$key] = trim((string) ($row['s_value'] ?? ''));
         }
 
-        $token = (string) ($kv['EATRIA_BRIDGE_TOKEN'] ?? '');
-        $hfrId = (string) ($kv['ABDM_HFR_ID'] ?? '');
-        $hospitalId = (string) ($kv['ABDM_HOSPITAL_ID'] ?? '');
+        $token = $this->sanitizeBearerToken((string) ($kv['EATRIA_BRIDGE_TOKEN'] ?? ''));
+        $hfrId = (string) ($kv['ABDM_HFR_ID'] ?? $kv['H_HFR_ID'] ?? $kv['ABDM_HOSPITAL_HFR_ID'] ?? '');
+        $hospitalId = (string) ($kv['ABDM_HOSPITAL_ID'] ?? $kv['ABDM_BRIDGE_HOSPITAL_ID'] ?? $kv['EATRIA_BRIDGE_HOSPITAL_ID'] ?? '');
+        $baseUrl = trim((string) ($kv['EATRIA_BRIDGE_URL'] ?? ''));
 
         if ($token === '') {
             return [
@@ -346,6 +393,7 @@ class M3HiuGatewayClient
             'token' => $token,
             'hfr_id' => $hfrId,
             'hospital_id' => $hospitalId,
+            'base_url' => $baseUrl,
         ];
     }
 

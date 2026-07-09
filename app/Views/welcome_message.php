@@ -255,12 +255,8 @@
                             delete_varible();
                         }
                         $("#wait").css("display", "none");
-                        var mainEl = document.getElementById('main');
-                        if (mainEl) {
-                            mainEl.innerHTML = html;
-                        } else {
-                            $("#main").html(html);
-                        }
+                        // Use jQuery html() so old node handlers/data are cleaned up.
+                        $("#main").html(html);
                         executeInjectedScripts('main');
                         if (typeof initfunc === 'function') {
                             initfunc();
@@ -306,12 +302,8 @@
                     timeout: REQUEST_TIMEOUT_MS
                 })
                     .done(function(html) {
-                        var targetEl = document.getElementById(xdiv);
-                        if (targetEl) {
-                            targetEl.innerHTML = html;
-                        } else {
-                            $("#" + xdiv).html(html);
-                        }
+                        // Use jQuery html() so old node handlers/data are cleaned up.
+                        $("#" + xdiv).html(html);
                         executeInjectedScripts(xdiv);
                         if (typeof initfunc === 'function') {
                             initfunc();

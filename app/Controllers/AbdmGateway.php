@@ -670,6 +670,121 @@ class AbdmGateway extends BaseController
         ]);
     }
 
+    // =========================================================================
+    // HIP Consent Notify Callback — gateway forwards consent notify updates.
+    // POST /AbdmGateway/hip_consent_notify_callback (no auth filter — public webhook)
+    // =========================================================================
+
+    public function hipConsentNotifyCallback()
+    {
+        $signatureFailure = $this->validateWebhookSignature();
+        if ($signatureFailure !== null) {
+            return $signatureFailure;
+        }
+
+        $payload = $this->request->getJSON(true);
+        if (! is_array($payload) || empty($payload)) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
+                'error_text' => 'Invalid JSON payload',
+            ]);
+        }
+
+        $consentObj = [];
+        if (is_array($payload['consent'] ?? null)) {
+            $consentObj = (array) $payload['consent'];
+        } elseif (is_array($payload['consentDetail'] ?? null)) {
+            $consentObj = (array) $payload['consentDetail'];
+        }
+
+        $requestId = trim((string) (
+            $payload['request_id']
+            ?? $payload['requestId']
+            ?? ($payload['response']['requestId'] ?? '')
+            ?? ''
+        ));
+        $consentId = trim((string) (
+            $consentObj['id']
+            ?? $payload['consent_id']
+            ?? $payload['consentId']
+            ?? ''
+        ));
+        $abhaAddress = trim((string) (
+            $consentObj['patient']['id']
+            ?? $payload['abha_address']
+            ?? $payload['abha_id']
+            ?? ''
+        ));
+        $statusRaw = trim((string) (
+            $consentObj['status']
+            ?? $payload['consent_status']
+            ?? $payload['status']
+            ?? 'status_checked'
+        ));
+        $status = strtolower($statusRaw);
+
+        // Keep existing M3 workflow in sync for dateRange and consent status lookups.
+        try {
+            $m3Service = new \App\Libraries\Abdm\M3HiuWorkflowService();
+            $m3Service->ingestConsentUpdateWebhook($payload);
+        } catch (\Throwable $e) {
+            // Fail-open: callback must still ACK to avoid upstream retry storms.
+        }
+
+        if ($this->db->tableExists('consent_logs')) {
+            $logStatus = match ($status) {
+                'granted', 'approved', 'active' => 'GRANTED',
+                'revoked', 'denied' => 'REVOKED',
+                'expired' => 'EXPIRED',
+                default => 'GRANTED',
+            };
+
+            $dateRange = $consentObj['permission']['dateRange'] ?? [];
+            $expiresAt = trim((string) ($dateRange['to'] ?? $payload['expires_at'] ?? ''));
+
+            $this->db->table('consent_logs')->insert([
+                'patient_id' => (int) ($payload['patient_id'] ?? 0),
+                'abha_id' => $abhaAddress !== '' ? $abhaAddress : null,
+                'consent_id' => $consentId !== '' ? $consentId : ($requestId !== '' ? $requestId : null),
+                'purpose' => trim((string) ($consentObj['purpose']['text'] ?? '')) ?: null,
+                'status' => $logStatus,
+                'created_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
+                'expires_at' => $expiresAt !== '' ? $expiresAt : null,
+            ]);
+        }
+
+        if ($this->db->tableExists('abdm_api_logs')) {
+            $this->db->table('abdm_api_logs')->insert([
+                'channel' => 'bridge',
+                'event_type' => 'abdm.hip.consent.notify.callback',
+                'endpoint' => '/AbdmGateway/hip_consent_notify_callback',
+                'http_method' => 'POST',
+                'entity_type' => 'consent',
+                'entity_id' => $consentId !== '' ? $consentId : $requestId,
+                'request_json' => (string) json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'response_code' => 202,
+                'response_json' => (string) json_encode([
+                    'ok' => 1,
+                    'status' => 'accepted',
+                    'request_id' => $requestId,
+                    'consent_id' => $consentId,
+                    'consent_status' => $statusRaw,
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'status' => 'success',
+                'error_message' => null,
+                'created_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
+            ]);
+        }
+
+        return $this->response->setStatusCode(202)->setJSON([
+            'ok' => 1,
+            'status' => 'accepted',
+            'request_id' => $requestId,
+            'consent_id' => $consentId !== '' ? $consentId : null,
+            'consent_status' => $statusRaw,
+        ]);
+    }
+
     public function scanShareLookup()
     {
         if (! $this->request->isAJAX()) {

@@ -624,6 +624,10 @@ $routes->post('AbdmGateway/scan_share_link_patient/(:num)', 'AbdmGateway::scanSh
 $routes->post('AbdmGateway/scan_share_lookup_result_callback', 'AbdmGateway::scanShareLookupResultCallback');
 $routes->post('AbdmGateway/consent_request', 'AbdmGateway::consentRequest', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmGateway/consent_callback', 'AbdmGateway::consentCallback');
+$routes->post('AbdmGateway/hip_consent_notify_callback', 'AbdmGateway::hipConsentNotifyCallback');
+$routes->post('api/v3/hiu/consent/on-notify', 'AbdmGateway::hipConsentNotifyCallback');
+$routes->post('api/v3/hiu/consent/on_notify', 'AbdmGateway::hipConsentNotifyCallback');
+$routes->post('api/v3/hiu/consent/notify', 'AbdmGateway::hipConsentNotifyCallback');
 $routes->post('AbdmGateway/consent_revoked_callback', 'AbdmGateway::consentRevokedCallback');
 $routes->post('AbdmGateway/record_linked_callback', 'AbdmGateway::recordLinkedCallback');
 // ABDM M3 HIU (HMS -> Gateway)
@@ -637,9 +641,17 @@ $routes->post('AbdmHiu/consent_request_fetch', 'AbdmHiu::consentRequestFetch', [
 $routes->post('AbdmHiu/health_information_request', 'AbdmHiu::healthInformationRequest', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmHiu/consent_reconcile', 'AbdmHiu::consentReconcile', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmHiu/data_fetch', 'AbdmHiu::dataFetch', ['filter' => $abdmPermFilter]);
+$routes->post('AbdmHiu/consent_update_callback', 'AbdmHiu::consentUpdateWebhook');
+$routes->post('AbdmHiu/health_information_on_request_callback', 'AbdmHiu::healthInformationOnRequestWebhook');
+$routes->post('AbdmHiu/health_information_data_push_callback', 'AbdmHiu::healthInformationDataPushWebhook');
 $routes->post('api/v3/hiu/consent/request', 'AbdmHiu::consentRequest', ['filter' => $abdmPermFilter]);
 $routes->post('api/v3/hiu/consent/request/status', 'AbdmHiu::consentRequestStatus', ['filter' => $abdmPermFilter]);
 $routes->post('api/v3/hiu/consent/request/fetch', 'AbdmHiu::consentRequestFetch', ['filter' => $abdmPermFilter]);
+$routes->post('api/v3/hiu/consent/on-update', 'AbdmHiu::consentUpdateWebhook');
+$routes->post('api/v3/hiu/consent/on_update', 'AbdmHiu::consentUpdateWebhook');
+$routes->post('api/v3/hiu/health-information/on-request', 'AbdmHiu::healthInformationOnRequestWebhook');
+$routes->post('api/v3/hiu/health-information/on_request', 'AbdmHiu::healthInformationOnRequestWebhook');
+$routes->post('api/v3/hiu/data/push', 'AbdmHiu::healthInformationDataPushWebhook');
 $routes->post('api/v3/hiu/health-information/request', 'AbdmHiu::healthInformationRequest', ['filter' => $abdmPermFilter]);
 $routes->post('api/v1/hiu/consent/status', 'AbdmHiu::consentReconcile', ['filter' => $abdmPermFilter]);
 $routes->post('api/v1/hiu/data/fetch', 'AbdmHiu::dataFetch', ['filter' => $abdmPermFilter]);
