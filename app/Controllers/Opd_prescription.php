@@ -475,7 +475,10 @@ class Opd_prescription extends BaseController
         ];
 
         $allergyStatusRaw = trim((string) ($payload['drug_allergy_status'] ?? ''));
-        $allergyStatusNorm = mb_strtolower(preg_replace('/\s+/', ' ', $allergyStatusRaw) ?? $allergyStatusRaw);
+        $allergyStatusNormalized = preg_replace('/\s+/', ' ', $allergyStatusRaw) ?? $allergyStatusRaw;
+        $allergyStatusNorm = function_exists('mb_strtolower')
+            ? mb_strtolower($allergyStatusNormalized)
+            : strtolower($allergyStatusNormalized);
         $allergyDetails = trim((string) ($payload['drug_allergy_details'] ?? ''));
 
         if ($allergyStatusRaw === '') {
@@ -633,7 +636,9 @@ class Opd_prescription extends BaseController
                 continue;
             }
 
-            if (mb_strlen((string) $value) > 4000) {
+            $valueText = (string) $value;
+            $valueLen = function_exists('mb_strlen') ? mb_strlen($valueText) : strlen($valueText);
+            if ($valueLen > 4000) {
                 return $this->response->setJSON([
                     'update' => 0,
                     'error_text' => 'Each section allows up to 4000 characters.',
