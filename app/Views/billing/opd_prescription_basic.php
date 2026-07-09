@@ -2031,6 +2031,48 @@
         });
     }
 
+    var investigationSearchUrl = '<?= base_url('Opd_prescription/investigation_search') ?>';
+    var investigationSearchLatest = {};
+
+    function requestInvestigationSearchLatest(key, queryData, onSuccess, onFailure) {
+        var reqKey = (key || 'default').toString();
+        var state = investigationSearchLatest[reqKey] || { seq: 0, xhr: null };
+        state.seq += 1;
+        var seq = state.seq;
+
+        if (state.xhr && state.xhr.readyState !== 4) {
+            state.xhr.abort();
+        }
+
+        state.xhr = $.ajax({
+            url: investigationSearchUrl,
+            dataType: 'json',
+            data: queryData || {}
+        }).done(function(data) {
+            var latest = investigationSearchLatest[reqKey];
+            if (!latest || latest.seq !== seq) {
+                return;
+            }
+            if (typeof onSuccess === 'function') {
+                onSuccess(data || { rows: [] });
+            }
+        }).fail(function(xhr, textStatus, errorThrown) {
+            var latest = investigationSearchLatest[reqKey];
+            if (!latest || latest.seq !== seq) {
+                return;
+            }
+            if (textStatus === 'abort') {
+                return;
+            }
+            if (typeof onFailure === 'function') {
+                onFailure(xhr, textStatus, errorThrown);
+            }
+        });
+
+        investigationSearchLatest[reqKey] = state;
+        return state.xhr;
+    }
+
     function apiPost(url, payload, cb) {
         var csrf = getCsrfPair();
         payload = payload || {};
@@ -3500,13 +3542,7 @@
                 delay: 250,
                 transport: function(params, success, failure) {
                     var term = (params.data && params.data.term) ? params.data.term : '';
-                    $.ajax({
-                        url: '<?= base_url('Opd_prescription/investigation_search') ?>',
-                        dataType: 'json',
-                        data: { q: term },
-                        success: success,
-                        error: failure
-                    });
+                    requestInvestigationSearchLatest('custom_investigation_select2', { q: term }, success, failure);
                 },
                 processResults: function(data) {
                     var rows = (data && data.rows) ? data.rows : [];
@@ -3548,13 +3584,7 @@
                     delay: 250,
                     transport: function(params, success, failure) {
                         var term = (params.data && params.data.term) ? params.data.term : '';
-                        $.ajax({
-                            url: '<?= base_url('Opd_prescription/investigation_search') ?>',
-                            dataType: 'json',
-                            data: { q: term },
-                            success: success,
-                            error: failure
-                        });
+                        requestInvestigationSearchLatest('investigation_name_select2', { q: term }, success, failure);
                     },
                     processResults: function(data) {
                         var rows = (data && data.rows) ? data.rows : [];
@@ -3638,13 +3668,12 @@
                         delay: 250,
                         transport: function(params, success, failure) {
                             var term = (params.data && params.data.term) ? params.data.term : '';
-                            $.ajax({
-                                url: '<?= base_url('Opd_prescription/investigation_search') ?>',
-                                dataType: 'json',
-                                data: { q: term, fav_only: invFavOnly ? 1 : 0, spec_id: invSpecId },
-                                success: success,
-                                error: failure
-                            });
+                            requestInvestigationSearchLatest(
+                                'investigation_name_select2',
+                                { q: term, fav_only: invFavOnly ? 1 : 0, spec_id: invSpecId },
+                                success,
+                                failure
+                            );
                         },
                         processResults: function(data) {
                             var rows = (data && data.rows) ? data.rows : [];
@@ -7247,13 +7276,15 @@
         if (q.length < 1) {
             return;
         }
-        apiGet('<?= base_url('Opd_prescription/investigation_search') ?>?q=' + encodeURIComponent(q), function(data) {
+        requestInvestigationSearchLatest('investigation_name_datalist', { q: q }, function(data) {
             var html = '';
             (data.rows || []).forEach(function(row) {
                 var text = (row.name || '') + ((row.code || '') ? ' [' + row.code + ']' : '');
                 html += '<option value="' + $('<div>').text(text).html() + '" data-code="' + $('<div>').text(row.code || '').html() + '" data-name="' + $('<div>').text(row.name || '').html() + '"></option>';
             });
             $('#investigation_suggest').html(html);
+        }, function() {
+            $('#investigation_suggest').html('');
         });
     });
 
@@ -7439,13 +7470,8 @@
                             success({ rows: [] });
                             return;
                         }
-                        $.ajax({
-                            url: '<?= base_url('Opd_prescription/investigation_search') ?>',
-                            dataType: 'json',
-                            data: { q: term, category: category },
-                            success: success,
-                            error: failure
-                        });
+                        var key = 'investigation_category_' + (category || 'all');
+                        requestInvestigationSearchLatest(key, { q: term, category: category }, success, failure);
                     },
                     processResults: function(data) {
                         var rows = (data && data.rows) ? data.rows : [];
