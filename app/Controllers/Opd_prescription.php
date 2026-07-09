@@ -354,12 +354,13 @@ class Opd_prescription extends BaseController
 
     public function opd_prescription_save()
     {
-        if (!$this->request->isAJAX()) {
-            return $this->response->setStatusCode(400)->setJSON([
-                'update' => 0,
-                'error_text' => 'Invalid request',
-            ]);
-        }
+        try {
+            if (!$this->request->isAJAX()) {
+                return $this->response->setStatusCode(400)->setJSON([
+                    'update' => 0,
+                    'error_text' => 'Invalid request',
+                ]);
+            }
 
         if (!$this->db->tableExists('opd_prescription')) {
             return $this->response->setJSON([
@@ -628,7 +629,11 @@ class Opd_prescription extends BaseController
         $abdmValidationErrors = $this->validateAbdmReadinessForConsult($payload, $patientRow, (array) $opdRow);
 
         foreach ($payload as $value) {
-            if (mb_strlen($value) > 4000) {
+            if (is_array($value) || is_object($value)) {
+                continue;
+            }
+
+            if (mb_strlen((string) $value) > 4000) {
                 return $this->response->setJSON([
                     'update' => 0,
                     'error_text' => 'Each section allows up to 4000 characters.',
@@ -722,16 +727,26 @@ class Opd_prescription extends BaseController
             log_message('error', 'SNOMED coding queue insert failed: ' . $queueEx->getMessage());
         }
 
-        return $this->response->setJSON([
-            'update' => 1,
-            'opd_session_id' => $recordId,
-            'error_text' => 'Prescription saved',
-            'fhir_stored' => $fhirStored ? 1 : 0,
-            'abdm_warnings' => $abdmValidationErrors,
-            'saved_at' => date('d-m-Y H:i:s'),
-            'csrfName' => csrf_token(),
-            'csrfHash' => csrf_hash(),
-        ]);
+            return $this->response->setJSON([
+                'update' => 1,
+                'opd_session_id' => $recordId,
+                'error_text' => 'Prescription saved',
+                'fhir_stored' => $fhirStored ? 1 : 0,
+                'abdm_warnings' => $abdmValidationErrors,
+                'saved_at' => date('d-m-Y H:i:s'),
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        } catch (\Throwable $e) {
+            log_message('error', 'opd_prescription_save failed: {message}', ['message' => $e->getMessage()]);
+
+            return $this->response->setStatusCode(500)->setJSON([
+                'update' => 0,
+                'error_text' => 'Unable to save prescription right now. Please retry.',
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
     }
 
     public function clinical_autotype()
