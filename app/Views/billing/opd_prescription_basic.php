@@ -4177,7 +4177,8 @@
         }, 8000);
     }
 
-    $('#btn_save_rx').on('click', function() {
+    $('#btn_save_rx').off('click.opdRx').on('click.opdRx', function(e) {
+        e.preventDefault();
         savePrescription(false);
     });
 
@@ -4202,15 +4203,18 @@
         openPrint();
     }
 
-    $('#btn_print0').on('click', function() {
+    $('#btn_print0').off('click.opdRx').on('click.opdRx', function(e) {
+        e.preventDefault();
         openLegacyPrescriptionPrint(0);
     });
 
-    $('#btn_print1').on('click', function() {
+    $('#btn_print1').off('click.opdRx').on('click.opdRx', function(e) {
+        e.preventDefault();
         openLegacyPrescriptionPrint(1);
     });
 
-    $('#btn_print2').on('click', function() {
+    $('#btn_print2').off('click.opdRx').on('click.opdRx', function(e) {
+        e.preventDefault();
         openLegacyPrescriptionPrint(2);
     });
 
