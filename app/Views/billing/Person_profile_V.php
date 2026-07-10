@@ -399,14 +399,26 @@
 <script>
 $(document).ready(function() {
 
+    function getPatientIdOrWarn() {
+        var raw = $('#p_id').val();
+        var patientId = parseInt(raw, 10);
+        if (!Number.isFinite(patientId) || patientId <= 0) {
+            console.error('Invalid patient id for OPD/IPD navigation', { raw: raw });
+            alert('Patient ID is missing. Please reload patient profile.');
+            return null;
+        }
+        return patientId;
+    }
+
     document.title = 'Pt.:<?=$data[0]->p_fname ?>/<?=$data[0]->id ?>';
 
-    $('#btn_opd').click(function() {
-        var p_id = $('#p_id').val();
+    $('#btn_opd').off('click.personProfile').on('click.personProfile', function() {
+        var p_id = getPatientIdOrWarn();
+        if (p_id === null) return;
         load_form('<?= base_url('Opd/addopd') ?>/' + p_id);
     });
 
-    $('#btn_update_aadhar').click(function() {
+    $('#btn_update_aadhar').off('click.personProfile').on('click.personProfile', function() {
         var p_id = $('#p_id').val();
         var udai = $('#input_Aadhar').val();
         var csrf_name = '<?= csrf_token() ?>';
@@ -423,7 +435,7 @@ $(document).ready(function() {
         }
     });
 
-    $('#btn_update_abha').click(function() {
+    $('#btn_update_abha').off('click.personProfile').on('click.personProfile', function() {
         var p_id = $('#p_id').val();
         var abha_id = ($('#input_abha_id').val() || '').trim();
         var csrf_name = '<?= csrf_token() ?>';
@@ -445,54 +457,62 @@ $(document).ready(function() {
         }
     });
 
-    $('#btn_inc_opd').click(function() {
-        var p_id = $('#p_id').val();
+    $('#btn_inc_opd').off('click.personProfile').on('click.personProfile', function() {
+        var p_id = getPatientIdOrWarn();
+        if (p_id === null) return;
         load_form('<?= base_url('Opdcase/addopd') ?>/' + p_id);
     });
 
-    $('#btn_ipd').click(function() {
-        var p_id = $('#p_id').val();
+    $('#btn_ipd').off('click.personProfile').on('click.personProfile', function() {
+        var p_id = getPatientIdOrWarn();
+        if (p_id === null) return;
         load_form('<?= base_url('IpdNew/addipd') ?>/' + p_id);
     });
 
-    $('#btn_lab').click(function() {
-        var p_id = $('#p_id').val();
+    $('#btn_lab').off('click.personProfile').on('click.personProfile', function() {
+        var p_id = getPatientIdOrWarn();
+        if (p_id === null) return;
         load_form('<?= base_url('billing/charges/add') ?>/' + p_id);
     });
 
-    $('#btn_inc_lab').click(function() {
-        var p_id = $('#p_id').val();
+    $('#btn_inc_lab').off('click.personProfile').on('click.personProfile', function() {
+        var p_id = getPatientIdOrWarn();
+        if (p_id === null) return;
         var ins_card_id = $('#ins_card_id').val();
         load_form('<?= base_url('billing/charges/add') ?>/' + p_id + '/' + ins_card_id);
     });
 
-    $('#btn_case_opd').click(function() {
-        var p_id = $('#p_id').val();
+    $('#btn_case_opd').off('click.personProfile').on('click.personProfile', function() {
+        var p_id = getPatientIdOrWarn();
+        if (p_id === null) return;
         var ins_id = $('#ins_id').val();
         var ins_card_id = $('#ins_card_id').val();
 
         load_form('<?= base_url('billing/case/newcase') ?>/' + p_id + '/' + ins_id + '/0');
     });
 
-    $('#btn_case_ipd_open').click(function() {
+    $('#btn_case_ipd_open').off('click.personProfile').on('click.personProfile', function() {
         var ins_org_id = $('#ins_org_id').val();
         load_form('<?= base_url('billing/case/open_case') ?>/' + ins_org_id + '/1');
     });
 
-    $('#btn_case_ipd').click(function() {
-        var p_id = $('#p_id').val();
+    $('#btn_case_ipd').off('click.personProfile').on('click.personProfile', function() {
+        var p_id = getPatientIdOrWarn();
+        if (p_id === null) return;
         var ins_id = $('#ins_id').val();
         var ins_card_id = $('#ins_card_id').val();
         load_form('<?= base_url('billing/case/newcase') ?>/' + p_id + '/' + ins_id + '/1');
     });
 
-    $('#btn_card').click(function() {
-        var p_id = $('#p_id').val();
+    $('#btn_card').off('click.personProfile').on('click.personProfile', function() {
+        var p_id = getPatientIdOrWarn();
+        if (p_id === null) return;
         load_form('<?= base_url('billing/patient/show_cards') ?>/' + p_id);
     });
 
-    $('#btn_update_card').click(function() {
-        var p_id = $('#p_id').val();
+    $('#btn_update_card').off('click.personProfile').on('click.personProfile', function() {
+        var p_id = getPatientIdOrWarn();
+        if (p_id === null) return;
         var ins_id = $('#ins_id').val();
         load_form('<?= base_url('billing/patient/show_cards') ?>/' + p_id + '/' + ins_id);
     });

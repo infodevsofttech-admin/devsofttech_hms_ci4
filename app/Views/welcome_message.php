@@ -260,6 +260,12 @@
 
             window.load_form = function(ourl, top_title = '') {
                 if (!requireJquery()) return;
+                var normalizedUrl = String(ourl || '');
+                if (!normalizedUrl || /(^|\/)undefined($|\/|\?|#)/i.test(normalizedUrl) || /(^|\/)null($|\/|\?|#)/i.test(normalizedUrl)) {
+                    console.error('load_form blocked invalid url', { url: ourl });
+                    $('#main').html('Invalid request URL. Please reload and try again.');
+                    return;
+                }
                 if (typeof window.pageCleanup === 'function') {
                     try {
                         window.pageCleanup();
@@ -268,7 +274,7 @@
                     }
                 }
                 $.ajax({
-                    url: ourl,
+                    url: normalizedUrl,
                     dataType: "html",
                     async: true,
                     timeout: REQUEST_TIMEOUT_MS,
@@ -282,8 +288,10 @@
                             delete_varible();
                         }
                         $("#wait").css("display", "none");
-                        // Use jQuery html() so old node handlers/data are cleaned up.
-                        $("#main").html(html);
+                        var mainEl = document.getElementById('main');
+                        if (mainEl) {
+                            mainEl.innerHTML = html;
+                        }
                         executeInjectedScripts('main');
                         if (typeof initfunc === 'function') {
                             initfunc();
@@ -294,7 +302,7 @@
                         $("#wait").css("display", "none");
                         if (handleAuthError(jqXHR)) return;
                         console.error('load_form failed', {
-                            url: ourl,
+                            url: normalizedUrl,
                             status: jqXHR.status,
                             statusText: jqXHR.statusText,
                             textStatus: textStatus,
@@ -329,8 +337,10 @@
                     timeout: REQUEST_TIMEOUT_MS
                 })
                     .done(function(html) {
-                        // Use jQuery html() so old node handlers/data are cleaned up.
-                        $("#" + xdiv).html(html);
+                        var targetEl = document.getElementById(String(xdiv));
+                        if (targetEl) {
+                            targetEl.innerHTML = html;
+                        }
                         executeInjectedScripts(xdiv);
                         if (typeof initfunc === 'function') {
                             initfunc();
