@@ -362,16 +362,44 @@ $paymentHistoryRows = $payment_history_rows ?? [];
             }
         }
 
-        $('#btn_update0').click(function() {
+        function getInvoiceIdOrWarn() {
+            var raw = $('#oid').val();
+            var invoiceId = parseInt(raw, 10);
+            if (!Number.isFinite(invoiceId) || invoiceId <= 0) {
+                console.error('Invalid OPD invoice id', { raw: raw });
+                if (typeof notify === 'function') {
+                    notify('error', 'Please Attention', 'Invalid invoice id. Please reload and try again.');
+                } else {
+                    $('div.jsError').html('Invalid invoice id. Please reload and try again.');
+                }
+                return null;
+            }
+            return invoiceId;
+        }
+
+        function reloadCurrentInvoice() {
+            var oid = getInvoiceIdOrWarn();
+            if (oid === null) {
+                return;
+            }
+            load_form('<?= base_url('Opd/invoice') ?>/' + oid);
+        }
+
+        $('#btn_update0').off('click.opdInvoice').on('click.opdInvoice', function() {
             $('#btn_update1').prop('disabled', true);
             $('#btn_update2').prop('disabled', true);
             var csrf = getCsrfPair();
             var spid = $('#spid').val();
+            var oid = getInvoiceIdOrWarn();
+            if (oid === null) {
+                setTimeout(enable_btn, 500);
+                return;
+            }
 
             if (confirm('Are you sure process this invoice')) {
                 $.post('<?= base_url('Opd/confirm_payment') ?>', {
                     "mode": "0",
-                    "oid": $('#oid').val(),
+                    "oid": oid,
                     "spid": spid,
                     [csrf.name]: csrf.value
                 }, function(data) {
@@ -379,7 +407,7 @@ $paymentHistoryRows = $payment_history_rows ?? [];
                     if (data.update == 0) {
                         $('div.jsError').html(data.error_text);
                     } else {
-                        load_form('<?= base_url('Opd/invoice') ?>/' + $('#oid').val());
+                        reloadCurrentInvoice();
                     }
                 }, 'json');
             } else {
@@ -387,16 +415,21 @@ $paymentHistoryRows = $payment_history_rows ?? [];
             }
         });
 
-        $('#btn_update1').click(function() {
+        $('#btn_update1').off('click.opdInvoice').on('click.opdInvoice', function() {
             $('#btn_update1').prop('disabled', true);
             $('#btn_update2').prop('disabled', true);
             var csrf = getCsrfPair();
             var spid = $('#spid').val();
+            var oid = getInvoiceIdOrWarn();
+            if (oid === null) {
+                setTimeout(enable_btn, 500);
+                return;
+            }
 
             if (confirm('Are you sure process this invoice')) {
                 $.post('<?= base_url('Opd/confirm_payment') ?>', {
                     "mode": "1",
-                    "oid": $('#oid').val(),
+                    "oid": oid,
                     "spid": spid,
                     [csrf.name]: csrf.value
                 }, function(data) {
@@ -404,7 +437,7 @@ $paymentHistoryRows = $payment_history_rows ?? [];
                     if (data.update == 0) {
                         $('div.jsError').html(data.error_text);
                     } else {
-                        load_form('<?= base_url('Opd/invoice') ?>/' + $('#oid').val());
+                        reloadCurrentInvoice();
                     }
                 }, 'json');
             } else {
@@ -412,16 +445,21 @@ $paymentHistoryRows = $payment_history_rows ?? [];
             }
         });
 
-        $('#btn_update2').click(function() {
+        $('#btn_update2').off('click.opdInvoice').on('click.opdInvoice', function() {
             $('#btn_update1').prop('disabled', true);
             $('#btn_update2').prop('disabled', true);
             var csrf = getCsrfPair();
             var spid = $('#spid').val();
+            var oid = getInvoiceIdOrWarn();
+            if (oid === null) {
+                setTimeout(enable_btn, 500);
+                return;
+            }
 
             if (confirm('Are you sure process this invoice')) {
                 $.post('<?= base_url('Opd/confirm_payment') ?>', {
                     "mode": "2",
-                    "oid": $('#oid').val(),
+                    "oid": oid,
                     "cbo_pay_type": $('#cbo_pay_type').val(),
                     "input_card_tran": $('#input_card_tran').val(),
                     "spid": spid,
@@ -434,7 +472,7 @@ $paymentHistoryRows = $payment_history_rows ?? [];
                         }
                         setTimeout(enable_btn, 5000);
                     } else {
-                        load_form('<?= base_url('Opd/invoice') ?>/' + $('#oid').val());
+                        reloadCurrentInvoice();
                     }
                 }, 'json');
             } else {
@@ -442,11 +480,15 @@ $paymentHistoryRows = $payment_history_rows ?? [];
             }
         });
 
-        $('#btn_update4').click(function() {
+        $('#btn_update4').off('click.opdInvoice').on('click.opdInvoice', function() {
             var csrf = getCsrfPair();
+            var oid = getInvoiceIdOrWarn();
+            if (oid === null) {
+                return;
+            }
             $.post('<?= base_url('Opd/confirm_payment') ?>', {
                 "mode": "4",
-                "oid": $('#oid').val(),
+                "oid": oid,
                 "case_id": $('#hidden_case_id').val(),
                 [csrf.name]: csrf.value
             }, function(data) {
@@ -454,57 +496,73 @@ $paymentHistoryRows = $payment_history_rows ?? [];
                 if (data.update == 0) {
                     $('div.jsError').html(data.error_text);
                 } else {
-                    load_form('<?= base_url('Opd/invoice') ?>/' + $('#oid').val());
+                    reloadCurrentInvoice();
                 }
             }, 'json');
         });
 
-        $('#btn_update_ded').click(function() {
+        $('#btn_update_ded').off('click.opdInvoice').on('click.opdInvoice', function() {
             var csrf = getCsrfPair();
+            var oid = getInvoiceIdOrWarn();
+            if (oid === null) {
+                return;
+            }
             if (confirm('Are you sure process this invoice')) {
-                $.post('<?= base_url('Opd/opd_discount_update') ?>/' + $('#oid').val(), {
-                    "oid": $('#oid').val(),
+                $.post('<?= base_url('Opd/opd_discount_update') ?>/' + oid, {
+                    "oid": oid,
                     "input_dis_desc": $('#input_dis_desc').val(),
                     "input_dis_amt": $('#input_dis_amt').val(),
                     [csrf.name]: csrf.value
                 }, function() {
-                    load_form('<?= base_url('Opd/invoice') ?>/' + $('#oid').val());
+                    reloadCurrentInvoice();
                 });
             }
         });
 
-        $('#btn_cancel_opd').click(function() {
+        $('#btn_cancel_opd').off('click.opdInvoice').on('click.opdInvoice', function() {
             var csrf = getCsrfPair();
+            var oid = getInvoiceIdOrWarn();
+            if (oid === null) {
+                return;
+            }
             if (confirm('Are you sure process this invoice')) {
-                $.post('<?= base_url('Opd/opd_cancel') ?>/' + $('#oid').val(), {
-                    "oid": $('#oid').val(),
+                $.post('<?= base_url('Opd/opd_cancel') ?>/' + oid, {
+                    "oid": oid,
                     "input_remark": $('#input_remark').val(),
                     [csrf.name]: csrf.value
                 }, function(data) {
                     updateCsrf(data);
-                    load_form('<?= base_url('Opd/invoice') ?>/' + $('#oid').val());
+                    reloadCurrentInvoice();
                 });
             }
         });
 
-        $('#btn_cr_org').click(function() {
+        $('#btn_cr_org').off('click.opdInvoice').on('click.opdInvoice', function() {
             var csrf = getCsrfPair();
+            var oid = getInvoiceIdOrWarn();
+            if (oid === null) {
+                return;
+            }
             if (confirm('Are you sure process this invoice')) {
-                $.post('<?= base_url('Opd/opd_crorg') ?>/' + $('#oid').val() + '/' + $('#hid_org_id').val(), {
-                    "oid": $('#oid').val(),
+                $.post('<?= base_url('Opd/opd_crorg') ?>/' + oid + '/' + $('#hid_org_id').val(), {
+                    "oid": oid,
                     "org_code_id": $('#hid_org_id').val(),
                     [csrf.name]: csrf.value
                 }, function() {
-                    load_form('<?= base_url('Opd/invoice') ?>/' + $('#oid').val());
+                    reloadCurrentInvoice();
                 });
             }
         });
 
-        $('#update_doc_date').click(function() {
+        $('#update_doc_date').off('click.opdInvoice').on('click.opdInvoice', function() {
             var csrf = getCsrfPair();
+            var oid = getInvoiceIdOrWarn();
+            if (oid === null) {
+                return;
+            }
             if (confirm('Are you sure process this invoice')) {
-                $.post('<?= base_url('Opd/update_doc_date') ?>/' + $('#oid').val(), {
-                    "oid": $('#oid').val(),
+                $.post('<?= base_url('Opd/update_doc_date') ?>/' + oid, {
+                    "oid": oid,
                     "doc_name_id": $('#doc_name_id').val(),
                     "opd_fee_amt": $('#input_opd_fee_amt').val(),
                     "datepicker_opddate": $('#datepicker_opddate').val(),
@@ -519,7 +577,7 @@ $paymentHistoryRows = $payment_history_rows ?? [];
                         }
                         return;
                     }
-                    load_form('<?= base_url('Opd/invoice') ?>/' + $('#oid').val());
+                    reloadCurrentInvoice();
                 }, 'json');
             }
         });
