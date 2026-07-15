@@ -7047,7 +7047,111 @@ class Ipd_discharge extends BaseController
         $out = (string) preg_replace('/\bheader\s*:\s*html[_a-z0-9-]+\s*;?/i', '', $out);
         $out = (string) preg_replace('/\bfooter\s*:\s*html[_a-z0-9-]+\s*;?/i', '', $out);
 
+        if ($this->looksLikeMalformedDischargeHtml($out)) {
+            $out = $this->normalizeMalformedDischargeHtmlForMpdf($out);
+        }
+
         return $this->forceValidUtf8($out);
+    }
+
+    private function looksLikeMalformedDischargeHtml(string $html): bool
+    {
+        if ($html === '') {
+            return false;
+        }
+
+        if (preg_match('/<p\b[^>]*>\s*<(?:div|table|h[1-6]|ul|ol|p)\b/i', $html) === 1) {
+            return true;
+        }
+
+        if (preg_match('/<(?!\/?(?:[a-z][a-z0-9:_-]*)(?:\s|\/?>)|!--|\?xml|!doctype)/i', $html) === 1) {
+            return true;
+        }
+
+        return preg_match('/<\/(?:p|div|span|strong|em|i|b)>\s*<\/(?:p|div)>/i', $html) === 1;
+    }
+
+    private function normalizeMalformedDischargeHtmlForMpdf(string $html): string
+    {
+        if ($html === '') {
+            return '';
+        }
+
+        $html = $this->escapeInvalidAngleBrackets($html);
+
+        if (! class_exists('DOMDocument')) {
+            return $html;
+        }
+
+        $previousUseInternalErrors = libxml_use_internal_errors(true);
+        libxml_clear_errors();
+
+        try {
+            $dom = new \DOMDocument('1.0', 'UTF-8');
+            $flags = 0;
+            if (defined('LIBXML_NOWARNING')) {
+                $flags |= LIBXML_NOWARNING;
+            }
+            if (defined('LIBXML_NOERROR')) {
+                $flags |= LIBXML_NOERROR;
+            }
+            if (defined('LIBXML_COMPACT')) {
+                $flags |= LIBXML_COMPACT;
+            }
+
+            $wrappedHtml = '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><div id="__discharge_pdf_root__">'
+                . $html
+                . '</div></body></html>';
+
+            $loaded = $dom->loadHTML('<?xml encoding="utf-8" ?>' . $wrappedHtml, $flags);
+            if ($loaded !== true) {
+                return $html;
+            }
+
+            $normalized = '';
+            $styleBlocks = [];
+
+            $styleNodes = $dom->getElementsByTagName('style');
+            foreach ($styleNodes as $styleNode) {
+                if (($styleNode->parentNode->nodeName ?? '') !== 'head') {
+                    continue;
+                }
+
+                $styleHtml = trim((string) $dom->saveHTML($styleNode));
+                if ($styleHtml !== '') {
+                    $styleBlocks[$styleHtml] = $styleHtml;
+                }
+            }
+
+            $root = $dom->getElementById('__discharge_pdf_root__');
+            if ($root instanceof \DOMElement) {
+                foreach ($root->childNodes as $childNode) {
+                    $normalized .= (string) $dom->saveHTML($childNode);
+                }
+            }
+
+            if ($normalized === '') {
+                return $html;
+            }
+
+            return implode('', $styleBlocks) . $normalized;
+        } finally {
+            libxml_clear_errors();
+            libxml_use_internal_errors($previousUseInternalErrors);
+        }
+    }
+
+    private function escapeInvalidAngleBrackets(string $html): string
+    {
+        if ($html === '') {
+            return '';
+        }
+
+        return (string) preg_replace(
+            '/<(?!\/?(?:[a-z][a-z0-9:_-]*)(?:\s|\/?>)|!--|\?xml|!doctype)/i',
+            '&lt;',
+            $html
+        );
     }
 
     private function sanitizeCKEditorSpecialChars(string $html): string
