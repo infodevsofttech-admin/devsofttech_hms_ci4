@@ -7123,9 +7123,17 @@ class Ipd_discharge extends BaseController
                 }
             }
 
-            $root = $dom->getElementById('__discharge_pdf_root__');
-            if ($root instanceof \DOMElement) {
-                foreach ($root->childNodes as $childNode) {
+            $bodyNode = $dom->getElementsByTagName('body')->item(0);
+            if ($bodyNode instanceof \DOMElement) {
+                foreach ($bodyNode->childNodes as $childNode) {
+                    if ($childNode instanceof \DOMElement && $childNode->getAttribute('id') === '__discharge_pdf_root__') {
+                        foreach ($childNode->childNodes as $wrappedChildNode) {
+                            $normalized .= (string) $dom->saveHTML($wrappedChildNode);
+                        }
+
+                        continue;
+                    }
+
                     $normalized .= (string) $dom->saveHTML($childNode);
                 }
             }
