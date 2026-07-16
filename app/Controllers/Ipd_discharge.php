@@ -1942,6 +1942,10 @@ class Ipd_discharge extends BaseController
             
             // Decode HTML entities that might have been double-encoded
             $value = html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+            if ($this->looksLikeMalformedDischargeHtml($value)) {
+                $value = $this->normalizeMalformedDischargeHtmlForMpdf($value);
+            }
             
             return trim($value);
         }
@@ -1972,6 +1976,10 @@ class Ipd_discharge extends BaseController
         // Check if content contains HTML tags (from HTML editor)
         if (preg_match('/<(?:p|div|span|strong|b|i|em|ul|ol|li|table|tr|td|th|thead|tbody|h[1-6])\b[^>]*>/i', $text)) {
             // Content is HTML - return as-is (already sanitized by normalizeRichText)
+            if ($this->looksLikeMalformedDischargeHtml($text)) {
+                $text = $this->normalizeMalformedDischargeHtmlForMpdf($text);
+            }
+
             return $text;
         }
 

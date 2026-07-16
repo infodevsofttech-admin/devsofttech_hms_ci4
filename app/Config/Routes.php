@@ -496,6 +496,11 @@ $routes->group('billing', function($routes) {
     $routes->get('patient/show_profile_image/(:num)/(:num)', 'Patient::show_profile_image/$1/$2');
     $routes->get('patient/show_profile_opd/(:num)', 'Patient::show_profile_opd/$1');
     $routes->get('patient/show_profile_opd/(:num)/(:num)', 'Patient::show_profile_opd/$1/$2');
+    $routes->get('patient/abdm_documents/(:num)', 'Patient::abdm_documents/$1');
+    $routes->get('patient/abdm_document_detail/(:num)/(:num)', 'Patient::abdm_document_detail/$1/$2');
+    $routes->get('patient/abdm_content_request/(:num)', 'Patient::abdm_content_request/$1');
+    $routes->get('patient/abdm_content_auto_flow/(:num)', 'Patient::abdm_content_auto_flow/$1');
+    $routes->get('patient/abdm_timeline/(:num)', 'Patient::abdm_timeline/$1');
     $routes->post('patient/save_profile_image/(:num)', 'Patient::save_profile_image/$1');
     $routes->match(['get', 'post'], 'patient/patient_file_upload/(:num)', 'Patient::patient_file_upload/$1');
     $routes->get('patient/city', 'Patient::city');
@@ -632,13 +637,14 @@ $routes->post('AbdmGateway/consent_revoked_callback', 'AbdmGateway::consentRevok
 $routes->post('AbdmGateway/record_linked_callback', 'AbdmGateway::recordLinkedCallback');
 // ABDM M3 HIU (HMS -> Gateway)
 $routes->get('AbdmHiu', 'AbdmHiu::index', ['filter' => $abdmPermFilter]);
+$routes->get('AbdmHiu/documents', 'AbdmHiu::documents', ['filter' => $abdmPermFilter]);
 $routes->get('AbdmHiu/patient_lookup', 'AbdmHiu::patientLookup', ['filter' => $abdmPermFilter]);
+$routes->get('AbdmHiu/documents_list', 'AbdmHiu::documentsList', ['filter' => $abdmPermFilter]);
+$routes->get('AbdmHiu/document_detail/(:num)', 'AbdmHiu::documentDetail/$1', ['filter' => $abdmPermFilter]);
 $routes->get('AbdmHiu/timeline', 'AbdmHiu::timeline', ['filter' => $abdmPermFilter]);
 $routes->get('AbdmHiu/poll_summary', 'AbdmHiu::pollSummary', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmHiu/consent_request', 'AbdmHiu::consentRequest', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmHiu/consent_request_status', 'AbdmHiu::consentRequestStatus', ['filter' => $abdmPermFilter]);
-$routes->post('AbdmHiu/consent_request_fetch', 'AbdmHiu::consentRequestFetch', ['filter' => $abdmPermFilter]);
-$routes->post('AbdmHiu/health_information_request', 'AbdmHiu::healthInformationRequest', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmHiu/consent_reconcile', 'AbdmHiu::consentReconcile', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmHiu/data_fetch', 'AbdmHiu::dataFetch', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmHiu/consent_update_callback', 'AbdmHiu::consentUpdateWebhook');
@@ -646,13 +652,11 @@ $routes->post('AbdmHiu/health_information_on_request_callback', 'AbdmHiu::health
 $routes->post('AbdmHiu/health_information_data_push_callback', 'AbdmHiu::healthInformationDataPushWebhook');
 $routes->post('api/v3/hiu/consent/request', 'AbdmHiu::consentRequest', ['filter' => $abdmPermFilter]);
 $routes->post('api/v3/hiu/consent/request/status', 'AbdmHiu::consentRequestStatus', ['filter' => $abdmPermFilter]);
-$routes->post('api/v3/hiu/consent/request/fetch', 'AbdmHiu::consentRequestFetch', ['filter' => $abdmPermFilter]);
 $routes->post('api/v3/hiu/consent/on-update', 'AbdmHiu::consentUpdateWebhook');
 $routes->post('api/v3/hiu/consent/on_update', 'AbdmHiu::consentUpdateWebhook');
 $routes->post('api/v3/hiu/health-information/on-request', 'AbdmHiu::healthInformationOnRequestWebhook');
 $routes->post('api/v3/hiu/health-information/on_request', 'AbdmHiu::healthInformationOnRequestWebhook');
 $routes->post('api/v3/hiu/data/push', 'AbdmHiu::healthInformationDataPushWebhook');
-$routes->post('api/v3/hiu/health-information/request', 'AbdmHiu::healthInformationRequest', ['filter' => $abdmPermFilter]);
 $routes->post('api/v1/hiu/consent/status', 'AbdmHiu::consentReconcile', ['filter' => $abdmPermFilter]);
 $routes->post('api/v1/hiu/data/fetch', 'AbdmHiu::dataFetch', ['filter' => $abdmPermFilter]);
 // HMS M2 adapter endpoints (Gateway -> HMS) - keep lowercase v1 path

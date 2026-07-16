@@ -3,10 +3,12 @@
 namespace App\Controllers;
 
 use App\Libraries\Abdm\M3HiuWorkflowService;
+use App\Libraries\Abdm\M3HiuDocumentRepository;
 
 class AbdmHiu extends BaseController
 {
     private M3HiuWorkflowService $service;
+    private M3HiuDocumentRepository $documentRepository;
 
     public function initController(
         \CodeIgniter\HTTP\RequestInterface $request,
@@ -16,11 +18,54 @@ class AbdmHiu extends BaseController
         parent::initController($request, $response, $logger);
         $this->db = \Config\Database::connect();
         $this->service = new M3HiuWorkflowService();
+        $this->documentRepository = new M3HiuDocumentRepository();
     }
 
     public function index()
     {
         return view('abdm/hiu_m3');
+    }
+
+    public function documents()
+    {
+        return view('abdm/hiu_documents');
+    }
+
+    public function documentsList()
+    {
+        $filters = [
+            'patient_id' => (int) ($this->request->getGet('patient_id') ?? 0),
+            'abha_address' => trim((string) ($this->request->getGet('abha_address') ?? '')),
+            'q' => trim((string) ($this->request->getGet('q') ?? '')),
+        ];
+        $limit = (int) ($this->request->getGet('limit') ?? 100);
+        if ($limit <= 0 || $limit > 300) {
+            $limit = 100;
+        }
+
+        $rows = $this->documentRepository->listDocuments($filters, $limit);
+        return $this->response->setJSON([
+            'ok' => 1,
+            'count' => count($rows),
+            'items' => $rows,
+        ]);
+    }
+
+    public function documentDetail($id = null)
+    {
+        $docId = (int) ($id ?? 0);
+        $row = $this->documentRepository->getDocument($docId);
+        if (empty($row)) {
+            return $this->response->setStatusCode(404)->setJSON([
+                'ok' => 0,
+                'error' => 'Document not found',
+            ]);
+        }
+
+        return $this->response->setJSON([
+            'ok' => 1,
+            'item' => $row,
+        ]);
     }
 
     public function consentRequest()
@@ -31,16 +76,6 @@ class AbdmHiu extends BaseController
     public function consentRequestStatus()
     {
         return $this->handleOperation('consent_status', 'STATUS_CHECKED');
-    }
-
-    public function consentRequestFetch()
-    {
-        return $this->handleOperation('consent_fetch', 'CONSENT_FETCHED');
-    }
-
-    public function healthInformationRequest()
-    {
-        return $this->handleOperation('hi_request', 'DATA_REQUESTED');
     }
 
     public function consentReconcile()

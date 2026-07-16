@@ -13,9 +13,11 @@ class AbdmGatewayPushClient
         'OPConsultRecord',
         'DiagnosticReportRecord',
         'DischargeSummaryRecord',
+        'ImmunizationRecord',
         'InvoiceRecord',
         'PrescriptionRecord',
         'HealthDocumentRecord',
+        'WellnessRecord',
     ];
 
     public function __construct(?BaseConnection $db = null)

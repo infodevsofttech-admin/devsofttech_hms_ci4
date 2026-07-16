@@ -4,16 +4,19 @@ namespace App\Libraries\Abdm;
 
 use CodeIgniter\I18n\Time;
 use App\Libraries\Abdm\M3HiuGatewayClient;
+use App\Libraries\Abdm\M3HiuDocumentRepository;
 
 class M3HiuWorkflowService
 {
     private \CodeIgniter\Database\BaseConnection $db;
     private M3HiuGatewayClient $client;
+    private M3HiuDocumentRepository $documentRepository;
 
     public function __construct()
     {
         $this->db = \Config\Database::connect();
         $this->client = new M3HiuGatewayClient();
+        $this->documentRepository = new M3HiuDocumentRepository();
     }
 
     public function runOperation(string $operation, array $payload): array
@@ -21,6 +24,24 @@ class M3HiuWorkflowService
         $hasWorkflowTable = $this->db->tableExists('abdm_hiu_workflows');
 
         $normalized = $this->normalizePayload($payload);
+        $retiredError = $this->retiredOperationError($operation, $normalized);
+        if ($retiredError !== null) {
+            if ($hasWorkflowTable) {
+                $this->upsertWorkflow(
+                    $operation,
+                    $normalized,
+                    $retiredError,
+                    'RETIRED',
+                    'failed',
+                    (int) ($retiredError['http_code'] ?? 410),
+                    false
+                );
+                $retiredError['workflow_persisted'] = 1;
+            }
+
+            return $retiredError;
+        }
+
         $prepared = $this->preparePayloadForOperation($operation, $normalized);
         if (($prepared['ok'] ?? 0) !== 1) {
             $failedResult = [
@@ -50,7 +71,7 @@ class M3HiuWorkflowService
         }
         $dispatchPayload = (array) ($prepared['payload'] ?? []);
 
-        if ($hasWorkflowTable && ! in_array($operation, ['consent_status', 'consent_reconcile', 'data_fetch', 'hi_request'], true)) {
+        if ($hasWorkflowTable && ! in_array($operation, ['consent_status', 'consent_reconcile', 'data_fetch'], true)) {
             $duplicate = $this->findDuplicate($operation, $normalized);
             if ($duplicate !== null) {
                 $dupResponse = json_decode((string) ($duplicate['response_json'] ?? ''), true);
@@ -82,14 +103,40 @@ class M3HiuWorkflowService
         }
 
         if ($hasWorkflowTable) {
-            $this->upsertWorkflow($operation, $persistPayload, $result, $state, $status, $httpCode, $retryable);
+            $workflowId = $this->upsertWorkflow($operation, $persistPayload, $result, $state, $status, $httpCode, $retryable);
             $result['workflow_persisted'] = 1;
+
+            if ($operation === 'data_fetch' && $ok) {
+                $docPersist = $this->documentRepository->persistFromDataFetch($persistPayload, $result, $workflowId);
+                $result['documents_persisted'] = (int) ($docPersist['saved'] ?? 0);
+                $result['documents_updated'] = (int) ($docPersist['updated'] ?? 0);
+            }
         } else {
             $result['workflow_persisted'] = 0;
             $result['workflow_warning'] = 'abdm_hiu_workflows table not found; operation executed without timeline persistence';
         }
 
         return $result;
+    }
+
+    private function retiredOperationError(string $operation, array $payload): ?array
+    {
+        if (! in_array($operation, ['consent_fetch', 'hi_request'], true)) {
+            return null;
+        }
+
+        return [
+            'ok' => 0,
+            'http_code' => 410,
+            'error_text' => 'Operation ' . $operation . ' is retired. Use consent_reconcile and data_fetch polling only.',
+            'retryable' => 0,
+            'request_id' => (string) ($payload['request_id'] ?? ''),
+            'transaction_id' => (string) ($payload['transaction_id'] ?? ''),
+            'consent_id' => (string) ($payload['consent_id'] ?? ''),
+            'abha_address' => (string) ($payload['abha_address'] ?? ''),
+            'workflow_state' => 'RETIRED',
+            'replacement_ops' => ['consent_reconcile', 'data_fetch'],
+        ];
     }
 
     public function retryDue(int $limit = 20): array
@@ -118,6 +165,11 @@ class M3HiuWorkflowService
             $operation = trim((string) ($row['operation'] ?? ''));
             $payload = json_decode((string) ($row['request_json'] ?? ''), true);
             if (! is_array($payload) || $operation === '') {
+                $summary['skipped']++;
+                continue;
+            }
+
+            if (in_array($operation, ['consent_fetch', 'hi_request'], true)) {
                 $summary['skipped']++;
                 continue;
             }
@@ -179,58 +231,41 @@ class M3HiuWorkflowService
             if ((int) ($consentResult['ok'] ?? 0) === 1) {
                 $summary['consent_updates']++;
 
-                $resolvedConsentId = trim((string) ($consentResult['abdm_consent_artifact_id'] ?? $consentResult['consent_id'] ?? ''));
-                if ($resolvedConsentId !== '' && ! $this->hasSuccessfulHiRequest($requestId, $resolvedConsentId)) {
-                    if (! $this->shouldAttemptHiRequest($requestId, $resolvedConsentId)) {
-                        $summary['skipped']++;
-                        continue;
-                    }
-
-                    $hiPayload = $payload;
-                    $hiPayload['consent_id'] = $resolvedConsentId;
-                    $hiPayload['abdm_consent_artifact_id'] = $resolvedConsentId;
-                    $hiPayload['transaction_id'] = $this->generateFreshHiTransactionId($requestId, trim((string) ($payload['transaction_id'] ?? '')));
-                    $hiResult = $this->runOperation('hi_request', $hiPayload);
-                    if ((int) ($hiResult['ok'] ?? 0) !== 1) {
-                        $summary['failed']++;
-                    }
+                $consentState = strtolower(trim((string) (
+                    $consentResult['workflow_state']
+                    ?? $consentResult['status']
+                    ?? $consentResult['consent_status']
+                    ?? ''
+                )));
+                if ($consentState !== 'granted') {
+                    $summary['skipped']++;
+                    continue;
                 }
-            } else {
-                $summary['failed']++;
-            }
-        }
 
-        $hiRows = $this->db->table('abdm_hiu_workflows')
-            ->select('*')
-            ->where('operation', 'hi_request')
-            ->where('status', 'success')
-            ->orderBy('id', 'DESC')
-            ->get($limit)
-            ->getResultArray();
+                $resolvedConsentId = trim((string) (
+                    $consentResult['abdm_consent_artifact_id']
+                    ?? $consentResult['consent_id']
+                    ?? $consentResult['abdm_consent_request_id']
+                    ?? $consentResult['consent_request_id']
+                    ?? ''
+                ));
+                if ($resolvedConsentId === '' || $this->isGatewayRequestIdPattern($resolvedConsentId)) {
+                    $summary['skipped']++;
+                    continue;
+                }
 
-        $seenTransactions = [];
-        foreach ($hiRows as $row) {
-            $transactionId = trim((string) ($row['transaction_id'] ?? ''));
-            $requestId = trim((string) ($row['request_id'] ?? ''));
-            $key = $transactionId !== '' ? $transactionId : $requestId;
-            if ($key === '' || isset($seenTransactions[$key])) {
-                $summary['skipped']++;
-                continue;
-            }
-            $seenTransactions[$key] = true;
+                $dataPayload = $payload;
+                $dataPayload['consent_id'] = $resolvedConsentId;
+                $dataPayload['consent_request_id'] = $resolvedConsentId;
+                $dataPayload['abdm_consent_artifact_id'] = $resolvedConsentId;
+                $dataPayload['abdm_consent_request_id'] = $resolvedConsentId;
 
-            $payload = [
-                'request_id' => $requestId,
-                'transaction_id' => $transactionId,
-                'consent_id' => trim((string) ($row['consent_id'] ?? '')),
-                'abdm_consent_artifact_id' => trim((string) ($row['abdm_consent_artifact_id'] ?? '')),
-                'abha_address' => trim((string) ($row['abha_address'] ?? '')),
-                'hfr_id' => $this->normalizeStoredHfrId((string) ($row['hfr_id'] ?? '')),
-            ];
-
-            $dataResult = $this->runOperation('data_fetch', $payload);
-            if ((int) ($dataResult['ok'] ?? 0) === 1) {
-                $summary['data_updates']++;
+                $dataResult = $this->runOperation('data_fetch', $dataPayload);
+                if ((int) ($dataResult['ok'] ?? 0) === 1) {
+                    $summary['data_updates']++;
+                } else {
+                    $summary['failed']++;
+                }
             } else {
                 $summary['failed']++;
             }
@@ -558,8 +593,6 @@ class M3HiuWorkflowService
         return match ($operation) {
             'consent_request' => $this->client->consentRequest($payload),
             'consent_status' => $this->client->consentRequestStatus($payload),
-            'consent_fetch' => $this->client->consentRequestFetch($payload),
-            'hi_request' => $this->client->healthInformationRequest($payload),
             'consent_reconcile' => $this->client->reconcileConsentStatus($payload),
             'data_fetch' => $this->client->fetchDecryptedData($payload),
             default => ['ok' => 0, 'http_code' => 400, 'error_text' => 'Unsupported operation: ' . $operation, 'retryable' => 0],
@@ -701,6 +734,7 @@ class M3HiuWorkflowService
                 }
             }
 
+            // Preserve requester.identifier for bridge deployments that validate strict requester schema.
             $requesterIdentifierValue = trim((string) ($consent['requester']['identifier']['value'] ?? ''));
             if ($requesterIdentifierValue === '') {
                 $requesterIdentifierValue = $hiuId !== '' ? $hiuId : trim((string) ($clean['hfr_id'] ?? ''));
@@ -715,6 +749,15 @@ class M3HiuWorkflowService
                 $consent['requester']['identifier']['system'] = 'https://abdm.gov.in/facility';
                 $consent['requester']['identifier']['type'] = 'HIU';
                 $consent['requester']['identifier']['value'] = $requesterIdentifierValue;
+            }
+
+            $consent['hiTypes'] = $this->normalizeConsentHiTypes($consent['hiTypes'] ?? []);
+            if (empty($consent['hiTypes'])) {
+                return [
+                    'ok' => 0,
+                    'http_code' => 422,
+                    'error_text' => 'consent.hiTypes is required for consent request.',
+                ];
             }
 
             return [
@@ -749,83 +792,6 @@ class M3HiuWorkflowService
             ];
         }
 
-        if ($operation === 'consent_fetch') {
-            $consentId = trim((string) ($clean['abdm_consent_artifact_id'] ?? $clean['consentId'] ?? $clean['consent_id'] ?? ''));
-            if ($consentId === '') {
-                $consentId = $this->resolveAbdmConsentArtifactIdFromWorkflow($clean);
-            }
-            if ($consentId === '') {
-                return [
-                    'ok' => 0,
-                    'http_code' => 422,
-                    'error_text' => 'consentId is required for consent fetch. Consent artifact is not available yet; run Check Consent Status until consent is GRANTED, then fetch using artifact id.',
-                ];
-            }
-            if ($this->isGatewayRequestIdPattern($consentId)) {
-                return [
-                    'ok' => 0,
-                    'http_code' => 422,
-                    'error_text' => 'mapping_error: consentId appears to be a local temporary request id; use ABDM consent artifact id only.',
-                ];
-            }
-
-            return [
-                'ok' => 1,
-                'payload' => $base + ['consentId' => $consentId],
-            ];
-        }
-
-        if ($operation === 'hi_request') {
-            $hiRequest = $clean['hiRequest'] ?? null;
-            if (! is_array($hiRequest) || empty($hiRequest)) {
-                $hiRequest = $this->buildDefaultHiRequest($clean);
-            }
-            if (! is_array($hiRequest) || empty($hiRequest)) {
-                return [
-                    'ok' => 0,
-                    'http_code' => 422,
-                    'error_text' => 'hiRequest object is required for health information request.',
-                ];
-            }
-
-            $consentId = trim((string) ($hiRequest['consent']['id'] ?? $clean['consentId'] ?? $clean['consent_id'] ?? ''));
-            if ($consentId === '') {
-                return [
-                    'ok' => 0,
-                    'http_code' => 422,
-                    'error_text' => 'hiRequest.consent.id is required for health information request.',
-                ];
-            }
-
-            if (! isset($hiRequest['consent']) || ! is_array($hiRequest['consent'])) {
-                $hiRequest['consent'] = [];
-            }
-            $hiRequest['consent']['id'] = $consentId;
-
-            $requestIdRef = trim((string) ($clean['request_id'] ?? $clean['requestId'] ?? ''));
-            $transactionId = $this->generateFreshHiTransactionId(
-                $requestIdRef,
-                trim((string) ($hiRequest['transactionId'] ?? $clean['transactionId'] ?? $clean['transaction_id'] ?? ''))
-            );
-            $hiRequest['transactionId'] = $transactionId;
-
-            if (! isset($hiRequest['dateRange']) || ! is_array($hiRequest['dateRange'])) {
-                $hiRequest['dateRange'] = [
-                    'from' => gmdate('Y-m-d\T00:00:00.000\Z', strtotime('-365 days')),
-                    'to' => gmdate('Y-m-d\T00:00:00.000\Z'),
-                ];
-            }
-            $hiRequest['dateRange'] = $this->resolveSafeHiDateRange($requestIdRef, $consentId, $hiRequest['dateRange']);
-            if (trim((string) ($hiRequest['dataPushUrl'] ?? '')) === '') {
-                $hiRequest['dataPushUrl'] = rtrim((string) (getenv('EATRIA_BRIDGE_URL') ?: 'https://abdm-bridge.e-atria.in/api'), '/') . '/v3/hiu/data/push';
-            }
-
-            return [
-                'ok' => 1,
-                'payload' => $base + ['transactionId' => $transactionId, 'transaction_id' => $transactionId, 'hiRequest' => $hiRequest],
-            ];
-        }
-
         if ($operation === 'consent_reconcile') {
             $requestIdRef = trim((string) ($clean['request_id'] ?? $clean['requestId'] ?? ''));
             $consentRequestId = trim((string) ($clean['abdm_consent_request_id'] ?? $clean['consentRequestId'] ?? ''));
@@ -857,27 +823,34 @@ class M3HiuWorkflowService
         }
 
         if ($operation === 'data_fetch') {
-            $transactionId = trim((string) ($clean['transaction_id'] ?? $clean['transactionId'] ?? ''));
-            $consentId = trim((string) ($clean['abdm_consent_artifact_id'] ?? $clean['consentId'] ?? $clean['consent_id'] ?? ''));
-            if ($consentId !== '' && $this->isGatewayRequestIdPattern($consentId)) {
-                $consentId = '';
+            $consentId = trim((string) (
+                $clean['abdm_consent_artifact_id']
+                ?? $clean['consentId']
+                ?? $clean['consent_id']
+                ?? $clean['abdm_consent_request_id']
+                ?? $clean['consentRequestId']
+                ?? $clean['consent_request_id']
+                ?? $clean['request_id']
+                ?? $clean['requestId']
+                ?? ''
+            ));
+            if ($consentId === '') {
+                $consentId = $this->resolveAbdmConsentArtifactIdFromWorkflow($clean);
+            }
+            if ($consentId === '') {
+                $consentId = $this->resolveAbdmConsentRequestIdFromWorkflow($clean);
             }
 
-            if ($transactionId === '' && $consentId === '') {
+            if ($consentId === '') {
                 return [
                     'ok' => 0,
                     'http_code' => 422,
-                    'error_text' => 'One of transaction_id or consent_id is required for data fetch polling.',
+                    'error_text' => 'consent_id is required for decrypted data fetch polling. Use consent artifact id, consent request id, or original request_id after consent is GRANTED.',
                 ];
             }
 
             $query = [];
-            if ($transactionId !== '') {
-                $query['transaction_id'] = $transactionId;
-            }
-            if ($consentId !== '') {
-                $query['consent_id'] = $consentId;
-            }
+            $query['consent_id'] = $consentId;
 
             return [
                 'ok' => 1,
@@ -977,272 +950,55 @@ class M3HiuWorkflowService
         return $consent;
     }
 
-    private function buildDefaultHiRequest(array $payload): array
-    {
-        $consentId = trim((string) ($payload['abdm_consent_artifact_id'] ?? $payload['consentId'] ?? $payload['consent_id'] ?? ''));
-        if ($consentId === '' || $this->isGatewayRequestIdPattern($consentId)) {
-            return [];
-        }
-
-        $requestIdRef = trim((string) ($payload['request_id'] ?? $payload['requestId'] ?? ''));
-        $transactionId = $this->generateFreshHiTransactionId(
-            $requestIdRef,
-            trim((string) ($payload['transactionId'] ?? $payload['transaction_id'] ?? ''))
-        );
-
-        return [
-            'consent' => [
-                'id' => $consentId,
-            ],
-            'dateRange' => $this->resolveSafeHiDateRange($requestIdRef, $consentId, [
-                'from' => gmdate('Y-m-d\T00:00:00.000\Z', strtotime('-365 days')),
-                'to' => gmdate('Y-m-d\T00:00:00.000\Z'),
-            ]),
-            'dataPushUrl' => rtrim((string) (getenv('EATRIA_BRIDGE_URL') ?: 'https://abdm-bridge.e-atria.in/api'), '/') . '/v3/hiu/data/push',
-            'transactionId' => $transactionId,
-        ];
-    }
-
     /**
-     * Build a safe HI date range by enforcing consent-granted permission window
-     * (from consent fetch/reconcile details), then clamping with from <= to <= now.
+     * Normalize legacy/record hiTypes to HIU consent hiTypes accepted by bridge.
      *
-     * @param array<string, mixed> $fallbackRange
-     * @return array<string, string>
+     * @param mixed $hiTypes
+     * @return array<int, string>
      */
-    private function resolveSafeHiDateRange(string $requestIdRef, string $consentId, array $fallbackRange): array
+    private function normalizeConsentHiTypes($hiTypes): array
     {
-        $grantedRange = $this->resolveGrantedConsentDateRange($requestIdRef, $consentId);
-        $consentRange = ! empty($grantedRange)
-            ? $grantedRange
-            : $this->resolveConsentRequestDateRangeByRequestId($requestIdRef);
-
-        $fromRaw = trim((string) ($consentRange['from'] ?? $fallbackRange['from'] ?? ''));
-        $toRaw = trim((string) ($consentRange['to'] ?? $fallbackRange['to'] ?? ''));
-
-        $nowMs = (int) floor(microtime(true) * 1000);
-        $fromMs = $this->parseIsoUtcToEpochMillis($fromRaw);
-        $toMs = $this->parseIsoUtcToEpochMillis($toRaw);
-        $grantedFromMs = $this->parseIsoUtcToEpochMillis((string) ($grantedRange['from'] ?? ''));
-        $grantedToMs = $this->parseIsoUtcToEpochMillis((string) ($grantedRange['to'] ?? ''));
-
-        if ($fromMs === null) {
-            $fromMs = $nowMs - (365 * 24 * 60 * 60 * 1000);
+        if (is_string($hiTypes)) {
+            $hiTypes = [$hiTypes];
         }
-        if ($toMs === null) {
-            $toMs = $nowMs;
-        }
-
-        // HMS-side requirement: keep HI range equal to or strictly within granted consent permission range.
-        if ($grantedFromMs !== null && $fromMs < $grantedFromMs) {
-            $fromMs = $grantedFromMs;
-        }
-        if ($grantedToMs !== null && $toMs > $grantedToMs) {
-            $toMs = $grantedToMs;
-        }
-
-        if ($toMs > $nowMs) {
-            $toMs = $nowMs;
-        }
-        if ($fromMs > $toMs) {
-            if ($grantedFromMs !== null && $grantedFromMs <= $toMs) {
-                $fromMs = $grantedFromMs;
-            } else {
-                $fromMs = $toMs;
-            }
-        }
-
-        return [
-            'from' => $this->formatEpochMillisToIsoUtc($fromMs),
-            'to' => $this->formatEpochMillisToIsoUtc($toMs),
-        ];
-    }
-
-    private function parseIsoUtcToEpochMillis(string $value): ?int
-    {
-        $raw = trim($value);
-        if ($raw === '') {
-            return null;
-        }
-
-        try {
-            $dt = new \DateTimeImmutable($raw);
-        } catch (\Throwable) {
-            return null;
-        }
-
-        $sec = (int) $dt->format('U');
-        $micro = (int) $dt->format('u');
-
-        return ($sec * 1000) + intdiv($micro, 1000);
-    }
-
-    private function formatEpochMillisToIsoUtc(int $epochMs): string
-    {
-        $sec = intdiv($epochMs, 1000);
-        $ms = $epochMs - ($sec * 1000);
-        if ($ms < 0) {
-            $ms = 0;
-        }
-
-        $dt = (new \DateTimeImmutable('@' . $sec))->setTimezone(new \DateTimeZone('UTC'));
-
-        return $dt->format('Y-m-d\TH:i:s') . '.' . str_pad((string) $ms, 3, '0', STR_PAD_LEFT) . 'Z';
-    }
-
-    /**
-     * @return array{from?: string, to?: string}
-     */
-    private function resolveGrantedConsentDateRange(string $requestId, string $consentId): array
-    {
-        if (! $this->db->tableExists('abdm_hiu_workflows')) {
+        if (! is_array($hiTypes)) {
             return [];
         }
 
-        $fields = $this->db->getFieldNames('abdm_hiu_workflows') ?? [];
-        $builder = $this->db->table('abdm_hiu_workflows')
-            ->select('response_json, request_json')
-            ->whereIn('operation', ['consent_fetch', 'consent_reconcile', 'consent_status', 'consent_callback']);
-
-        $hasFilter = false;
-        $builder->groupStart();
-        if ($requestId !== '') {
-            $builder->orWhere('request_id', $requestId);
-            $hasFilter = true;
-        }
-        if ($consentId !== '') {
-            $builder->orWhere('consent_id', $consentId);
-            $hasFilter = true;
-            if (in_array('abdm_consent_artifact_id', $fields, true)) {
-                $builder->orWhere('abdm_consent_artifact_id', $consentId);
-            }
-        }
-        $builder->groupEnd();
-
-        if (! $hasFilter) {
-            return [];
-        }
-
-        $rows = $builder->orderBy('id', 'DESC')->get(30)->getResultArray();
-        foreach ($rows as $row) {
-            foreach (['response_json', 'request_json'] as $jsonCol) {
-                $decoded = json_decode((string) ($row[$jsonCol] ?? ''), true);
-                if (! is_array($decoded)) {
-                    continue;
-                }
-
-                $range = $this->extractPermissionDateRange($decoded);
-                if (! empty($range)) {
-                    return $range;
-                }
-            }
-        }
-
-        return [];
-    }
-
-    /**
-     * @param array<string, mixed> $data
-     * @return array{from?: string, to?: string}
-     */
-    private function extractPermissionDateRange(array $data): array
-    {
-        $pathCandidates = [
-            $data['consent']['permission']['dateRange'] ?? null,
-            $data['consentDetail']['permission']['dateRange'] ?? null,
-            $data['data']['consent']['permission']['dateRange'] ?? null,
-            $data['data']['consentDetail']['permission']['dateRange'] ?? null,
-            $data['response']['consent']['permission']['dateRange'] ?? null,
-            $data['response']['consentDetail']['permission']['dateRange'] ?? null,
+        $map = [
+            'opconsultrecord' => 'OPConsultation',
+            'opconsultation' => 'OPConsultation',
+            'diagnosticreportrecord' => 'DiagnosticReport',
+            'diagnosticreport' => 'DiagnosticReport',
+            'prescriptionrecord' => 'Prescription',
+            'prescription' => 'Prescription',
+            'dischargesummaryrecord' => 'DischargeSummary',
+            'dischargesummary' => 'DischargeSummary',
+            'healthdocumentrecord' => 'HealthDocument',
+            'healthdocument' => 'HealthDocument',
+            'immunization' => 'ImmunizationRecord',
+            'immunizationrecord' => 'ImmunizationRecord',
+            'wellness' => 'Wellness',
+            'wellnessrecord' => 'Wellness',
+            'invoice' => 'Invoice',
+            'invoicerecord' => 'Invoice',
         ];
 
-        foreach ($pathCandidates as $candidate) {
-            if (is_array($candidate)) {
-                $from = trim((string) ($candidate['from'] ?? ''));
-                $to = trim((string) ($candidate['to'] ?? ''));
-                if ($from !== '' || $to !== '') {
-                    $out = [];
-                    if ($from !== '') {
-                        $out['from'] = $from;
-                    }
-                    if ($to !== '') {
-                        $out['to'] = $to;
-                    }
-                    return $out;
-                }
-            }
-        }
-
-        if (isset($data['permission']) && is_array($data['permission'])) {
-            $range = $data['permission']['dateRange'] ?? null;
-            if (is_array($range)) {
-                $from = trim((string) ($range['from'] ?? ''));
-                $to = trim((string) ($range['to'] ?? ''));
-                if ($from !== '' || $to !== '') {
-                    $out = [];
-                    if ($from !== '') {
-                        $out['from'] = $from;
-                    }
-                    if ($to !== '') {
-                        $out['to'] = $to;
-                    }
-                    return $out;
-                }
-            }
-        }
-
-        foreach ($data as $value) {
-            if (! is_array($value)) {
+        $normalized = [];
+        foreach ($hiTypes as $type) {
+            $raw = trim((string) $type);
+            if ($raw === '') {
                 continue;
             }
 
-            $nested = $this->extractPermissionDateRange($value);
-            if (! empty($nested)) {
-                return $nested;
+            $key = strtolower($raw);
+            $resolved = $map[$key] ?? $raw;
+            if (! in_array($resolved, $normalized, true)) {
+                $normalized[] = $resolved;
             }
         }
 
-        return [];
-    }
-
-    /**
-     * @return array{from?: string, to?: string}
-     */
-    private function resolveConsentRequestDateRangeByRequestId(string $requestId): array
-    {
-        if ($requestId === '' || ! $this->db->tableExists('abdm_hiu_workflows')) {
-            return [];
-        }
-
-        $row = $this->db->table('abdm_hiu_workflows')
-            ->select('request_json')
-            ->where('operation', 'consent_request')
-            ->where('request_id', $requestId)
-            ->orderBy('id', 'DESC')
-            ->get(1)
-            ->getRowArray();
-
-        if (empty($row['request_json'])) {
-            return [];
-        }
-
-        $decoded = json_decode((string) $row['request_json'], true);
-        if (! is_array($decoded)) {
-            return [];
-        }
-
-        $from = trim((string) ($decoded['consent']['permission']['dateRange']['from'] ?? ''));
-        $to = trim((string) ($decoded['consent']['permission']['dateRange']['to'] ?? ''));
-
-        $out = [];
-        if ($from !== '') {
-            $out['from'] = $from;
-        }
-        if ($to !== '') {
-            $out['to'] = $to;
-        }
-
-        return $out;
+        return $normalized;
     }
 
     private function readSettingValue(string $key): string
@@ -1460,102 +1216,6 @@ class M3HiuWorkflowService
         return null;
     }
 
-    private function hasSuccessfulHiRequest(string $requestId, string $consentId): bool
-    {
-        if (! $this->db->tableExists('abdm_hiu_workflows')) {
-            return false;
-        }
-
-        $builder = $this->db->table('abdm_hiu_workflows')
-            ->select('id')
-            ->where('operation', 'hi_request')
-            ->where('status', 'success');
-
-        $builder->groupStart();
-        if ($requestId !== '') {
-            $builder->orWhere('request_id', $requestId);
-        }
-        if ($consentId !== '') {
-            $builder->orWhere('consent_id', $consentId);
-            if (in_array('abdm_consent_artifact_id', $this->db->getFieldNames('abdm_hiu_workflows') ?? [], true)) {
-                $builder->orWhere('abdm_consent_artifact_id', $consentId);
-            }
-        }
-        $builder->groupEnd();
-
-        $row = $builder->orderBy('id', 'DESC')->get(1)->getRowArray();
-        return ! empty($row);
-    }
-
-    private function shouldAttemptHiRequest(string $requestId, string $consentId): bool
-    {
-        if (! $this->db->tableExists('abdm_hiu_workflows')) {
-            return true;
-        }
-
-        $row = $this->latestHiRequestRow($requestId, $consentId);
-        if (empty($row)) {
-            return true;
-        }
-
-        $status = strtolower(trim((string) ($row['status'] ?? '')));
-        $retryable = (int) ($row['is_retryable'] ?? 0) === 1;
-        $retryCount = (int) ($row['retry_count'] ?? 0);
-        $nextRetryAt = trim((string) ($row['next_retry_at'] ?? ''));
-        if ($status !== 'failed' || ! $retryable) {
-            return true;
-        }
-
-        if ($nextRetryAt === '') {
-            return $retryCount < 4;
-        }
-
-        return strtotime($nextRetryAt) <= time();
-    }
-
-    private function latestHiRequestRow(string $requestId, string $consentId): array
-    {
-        if (! $this->db->tableExists('abdm_hiu_workflows')) {
-            return [];
-        }
-
-        $fields = $this->db->getFieldNames('abdm_hiu_workflows') ?? [];
-        $builder = $this->db->table('abdm_hiu_workflows')
-            ->select('id, status, is_retryable, retry_count, next_retry_at')
-            ->where('operation', 'hi_request');
-
-        $builder->groupStart();
-        $hasCondition = false;
-        if ($requestId !== '') {
-            $builder->where('request_id', $requestId);
-            $hasCondition = true;
-        }
-        if ($consentId !== '') {
-            if ($hasCondition) {
-                $builder->orWhere('consent_id', $consentId);
-            } else {
-                $builder->where('consent_id', $consentId);
-                $hasCondition = true;
-            }
-
-            if (in_array('abdm_consent_artifact_id', $fields, true)) {
-                $builder->orWhere('abdm_consent_artifact_id', $consentId);
-            }
-        }
-        $builder->groupEnd();
-
-        if (! $hasCondition) {
-            return [];
-        }
-
-        return $builder->orderBy('id', 'DESC')->get(1)->getRowArray() ?? [];
-    }
-
-    private function generateFreshHiTransactionId(string $requestId, string $currentTransactionId): string
-    {
-        return $this->generateUuidV4();
-    }
-
     private function generateUuidV4(): string
     {
         $bytes = random_bytes(16);
@@ -1574,7 +1234,7 @@ class M3HiuWorkflowService
         int $httpCode,
         bool $retryable,
         int $forceId = 0
-    ): void {
+    ): int {
         $now = Time::now('Asia/Kolkata')->toDateTimeString();
         $hmsRequestId = $this->firstNonEmptyString([
             $payload['request_id'] ?? null,
@@ -1706,11 +1366,12 @@ class M3HiuWorkflowService
 
         if ($id > 0) {
             $this->db->table('abdm_hiu_workflows')->where('id', $id)->update($row);
-            return;
+            return $id;
         }
 
         $row['created_at'] = $now;
         $this->db->table('abdm_hiu_workflows')->insert($row);
+        return (int) ($this->db->insertID() ?: 0);
     }
 
     private function isGatewayRequestIdPattern(string $value): bool

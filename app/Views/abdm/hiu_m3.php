@@ -8,7 +8,10 @@
                         <span id="poll_summary_badge" class="badge bg-secondary">Poll: waiting</span>
                         <button class="btn btn-sm btn-outline-warning" id="btnPollErrors" type="button">Show Poll Errors</button>
                     </div>
-                    <button class="btn btn-sm btn-outline-primary" id="btnRefreshTimeline">Refresh Timeline</button>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-outline-success" id="btnOpenDocumentsAjax" type="button">View Fetched Documents</button>
+                        <button class="btn btn-sm btn-outline-primary" id="btnRefreshTimeline">Refresh Timeline</button>
+                    </div>
                 </div>
                 <div class="card-body">
                     <div id="poll_error_panel" class="alert alert-warning d-none mb-3">
@@ -88,8 +91,7 @@
                                 <span class="badge bg-secondary" data-step="1">1. Select Patient</span>
                                 <span class="badge bg-secondary" data-step="2">2. Create Consent Request</span>
                                 <span class="badge bg-secondary" data-step="3">3. Check Consent Status</span>
-                                <span class="badge bg-secondary" data-step="4">4. Access Consent Artifact</span>
-                                <span class="badge bg-secondary" data-step="5">5. Request Health Information</span>
+                                <span class="badge bg-secondary" data-step="4">4. Poll &amp; Fetch Decrypted Data</span>
                             </div>
                         </div>
                     </div>
@@ -113,8 +115,7 @@
                     <div class="d-flex gap-2 flex-wrap">
                         <button class="btn btn-primary" id="btnConsentRequest" data-op="consent_request" disabled>Create Consent Request</button>
                         <button class="btn btn-outline-primary" id="btnConsentStatus" data-op="consent_status" disabled>Check Consent Status</button>
-                        <button class="btn btn-outline-primary" id="btnConsentFetch" data-op="consent_fetch" disabled>Fetch Consent Artifact</button>
-                        <button class="btn btn-success" id="btnHiRequest" data-op="hi_request" disabled>Request Health Information</button>
+                        <button class="btn btn-outline-success" id="btnConsentFetch" data-op="data_fetch" disabled>Poll &amp; Fetch Decrypted Data</button>
                     </div>
 
                     <div class="d-flex gap-3 flex-wrap mt-2">
@@ -124,12 +125,38 @@
                         </div>
                         <div class="form-check form-switch mb-0">
                             <input class="form-check-input" type="checkbox" id="toggleAutoNextStep">
-                            <label class="form-check-label small" for="toggleAutoNextStep">Auto Next Step (Status -> Fetch -> HI)</label>
+                            <label class="form-check-label small" for="toggleAutoNextStep">Auto Next Step (Status -> Data Fetch)</label>
                         </div>
                     </div>
 
                     <hr>
                     <pre id="result_box" class="bg-dark text-light p-3 rounded" style="min-height:120px">{}</pre>
+
+                    <div class="card border-success mt-3 d-none" id="data_preview_card">
+                        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                            <div class="fw-semibold">Decrypted Data Preview</div>
+                            <div id="data_preview_meta" class="small text-muted">No data sessions yet.</div>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-sm table-striped mb-0" id="data_preview_table">
+                                    <thead>
+                                        <tr>
+                                            <th>Txn ID</th>
+                                            <th>Consent Ref</th>
+                                            <th>Status</th>
+                                            <th>Records</th>
+                                            <th>Care Contexts</th>
+                                            <th>Bundle Type</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr><td colspan="6" class="text-muted text-center">Run Poll &amp; Fetch Decrypted Data to load records.</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -177,6 +204,85 @@
                 </div>
             </div>
         </div>
+
+        <div class="col-12 d-none" id="ajax_docs_panel">
+            <div class="card shadow-sm border-success">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">Fetched ABDM Documents (AJAX View)</h6>
+                    <button class="btn btn-sm btn-outline-secondary" id="btnCloseAjaxDocs" type="button">Close</button>
+                </div>
+                <div class="card-body">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-4">
+                            <label class="form-label mb-1">Search Patient</label>
+                            <input id="ajax_doc_patient_search" class="form-control" placeholder="Name / UHID / ABHA / Mobile">
+                        </div>
+                        <div class="col-md-2">
+                            <button id="btnAjaxDocPatientSearch" class="btn btn-outline-secondary w-100" type="button">Search</button>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label mb-1">Search Documents</label>
+                            <input id="ajax_doc_search" class="form-control" placeholder="title / care context / doctor">
+                        </div>
+                        <div class="col-md-2">
+                            <button id="btnAjaxDocSearch" class="btn btn-outline-primary w-100" type="button">Load Documents</button>
+                        </div>
+                        <div class="col-12">
+                            <div class="small text-muted" id="ajax_doc_patient_status">Select a patient to view mapped ABDM documents.</div>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive mt-2">
+                        <table class="table table-sm table-hover mb-0" id="ajax_doc_patient_table">
+                            <thead>
+                                <tr>
+                                    <th>Action</th>
+                                    <th>Patient</th>
+                                    <th>UHID</th>
+                                    <th>ABHA Address</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="4" class="text-muted text-center">Search patient to start.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="row g-3 mt-1">
+                        <div class="col-lg-5">
+                            <div class="card h-100">
+                                <div class="card-header py-2">Document List</div>
+                                <div class="card-body p-0">
+                                    <div class="table-responsive" style="max-height: 420px;">
+                                        <table class="table table-sm table-striped mb-0" id="ajax_doc_table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Date</th>
+                                                    <th>Title</th>
+                                                    <th>Care Context</th>
+                                                    <th>Doctor</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr><td colspan="4" class="text-muted text-center">No documents loaded.</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-7">
+                            <div class="card h-100">
+                                <div class="card-header py-2">Document Detail</div>
+                                <div class="card-body" id="ajax_doc_detail_box">
+                                    <div class="text-muted">Select a document to view human-readable summary.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -219,13 +325,15 @@
     var opRoute = {
         consent_request: '<?= base_url('AbdmHiu/consent_request') ?>',
         consent_status: '<?= base_url('AbdmHiu/consent_reconcile') ?>',
-        consent_fetch: '<?= base_url('AbdmHiu/consent_request_fetch') ?>',
-        hi_request: '<?= base_url('AbdmHiu/health_information_request') ?>',
         data_fetch: '<?= base_url('AbdmHiu/data_fetch') ?>'
     };
     var pollSummaryUrl = '<?= base_url('AbdmHiu/poll_summary') ?>';
 
     var patientLookupUrl = '<?= base_url('AbdmHiu/patient_lookup') ?>';
+    var docListUrl = '<?= base_url('AbdmHiu/documents_list') ?>';
+    var docDetailBaseUrl = '<?= base_url('AbdmHiu/document_detail') ?>';
+    var ajaxDocSelectedPatient = null;
+    var ajaxDocItems = [];
 
     function escHtml(v) {
         return (v || '').toString()
@@ -275,7 +383,7 @@
         var state = (consentStateText || '').trim();
         var lockedCreate = hasExistingConsentFlowContext();
         var policyNote = lockedCreate
-            ? '<span class="badge bg-warning text-dark ms-1">Policy: reuse logged consent flow (Status -> Fetch -> HI)</span>'
+            ? '<span class="badge bg-warning text-dark ms-1">Policy: reuse logged consent flow (Status -> Data Fetch)</span>'
             : '<span class="badge bg-light text-dark ms-1">Policy: create consent only once per active flow</span>';
         var cooldownNote = isAutoCoolingDown()
             ? '<span class="badge bg-danger ms-1">Auto-next paused: ' + escHtml(autoCooldownReason || 'temporary cooldown') + '</span>'
@@ -310,13 +418,13 @@
 
     function isValidConsentArtifactId(v) {
         var val = (v || '').toString().trim();
-        return val !== '' && !isGatewayRequestId(val);
+        return val !== '';
     }
 
     function hasExistingConsentFlowContext() {
         var consentRequestRef = getFieldValue(['consent_request_id', 'consent_id']);
         var consentArtifactRef = getFieldValue(['consent_artifact_id', 'consent_id']);
-        return (consentRequestRef !== '' && !isGatewayRequestId(consentRequestRef)) || isValidConsentArtifactId(consentArtifactRef);
+        return consentRequestRef !== '' || isValidConsentArtifactId(consentArtifactRef);
     }
 
     function canCreateConsentRequest(consentStateText) {
@@ -437,7 +545,7 @@
             transactionId: transactionId,
             abhaAddress: abhaAddress,
             hfrId: pickFirstNonEmpty([row && row.hfr_id, req.hfr_id]),
-            consentRequestId: isGatewayRequestId(consentRequestId) ? '' : consentRequestId,
+            consentRequestId: consentRequestId,
             consentArtifactId: isValidConsentArtifactId(consentArtifactIdRaw) ? consentArtifactIdRaw : '',
             operation: (row && row.operation ? row.operation : '').toString().toLowerCase(),
             workflowState: (row && row.workflow_state ? row.workflow_state : '').toString().toLowerCase(),
@@ -463,14 +571,14 @@
         if (wf === 'REQUESTED') {
             return 'REQUESTED';
         }
-        if (wf === 'CONSENT_FETCHED') {
-            return 'FETCHED';
+        if (wf === 'CONSENT_FETCHED' || wf === 'DATA_RECEIVED') {
+            return 'DATA_RECEIVED';
         }
         if (wf === 'STATUS_CHECKED') {
             return 'STATUS_CHECKED';
         }
         if (wf === 'DATA_REQUESTED' || wf === 'DATA_RECEIVED') {
-            return 'FETCHED';
+            return 'DATA_RECEIVED';
         }
         if ((ctx.status || '').toLowerCase() === 'failed') {
             return 'FAILED';
@@ -486,7 +594,7 @@
             cls = 'bg-success';
         } else if (['REQUESTED', 'PENDING', 'STATUS_CHECKED'].indexOf(s) !== -1) {
             cls = 'bg-warning text-dark';
-        } else if (['FETCHED', 'CONSENT_FETCHED'].indexOf(s) !== -1) {
+        } else if (['FETCHED', 'CONSENT_FETCHED', 'DATA_RECEIVED'].indexOf(s) !== -1) {
             cls = 'bg-info text-dark';
         } else if (['FAILED', 'DENIED', 'REVOKED', 'EXPIRED'].indexOf(s) !== -1) {
             cls = 'bg-danger';
@@ -567,10 +675,10 @@
             return { op: 'consent_status', label: 'Check Consent Status', cls: 'btn-outline-primary' };
         }
         if (status === 'GRANTED' || status === 'STATUS_CHECKED' || state === 'GRANTED' || state === 'STATUS_CHECKED') {
-            return { op: 'consent_fetch', label: 'Access Consent Artifact', cls: 'btn-outline-primary' };
+            return { op: 'data_fetch', label: 'Poll & Fetch Decrypted Data', cls: 'btn-outline-success' };
         }
-        if (hasArtifact && (state === 'CONSENT_FETCHED' || status === 'FETCHED')) {
-            return { op: 'hi_request', label: 'Request Health Information', cls: 'btn-outline-success' };
+        if (hasArtifact && (state === 'CONSENT_FETCHED' || state === 'DATA_RECEIVED' || status === 'FETCHED' || status === 'DATA_RECEIVED')) {
+            return { op: 'data_fetch', label: 'Poll & Fetch Decrypted Data', cls: 'btn-outline-success' };
         }
 
         if (hasArtifact) {
@@ -659,19 +767,18 @@
         var hasArtifact = !!(latest && latest.consent_id);
 
         var selectedAbha = (selectedPatient.abha_address || '').toString().trim();
-        var hasHiRequest = (selectedItems || []).some(function (row) {
+        var hasDataFetch = (selectedItems || []).some(function (row) {
             var ctx = extractWorkflowContext(row);
             var op = (row.operation || '').toString().toLowerCase();
             var status = (row.status || '').toString().toLowerCase();
-            return ctx.abhaAddress === selectedAbha && op === 'hi_request' && status === 'success';
+            return ctx.abhaAddress === selectedAbha && op === 'data_fetch' && status === 'success';
         });
 
         var done = {
             1: true,
             2: hasConsentRequest,
             3: hasStatusChecked,
-            4: hasArtifact,
-            5: hasHiRequest
+            4: hasDataFetch
         };
 
         itemsHost.querySelectorAll('span[data-step]').forEach(function (el) {
@@ -725,8 +832,7 @@
                 actions.push('<button type="button" class="btn btn-sm ' + ((nextAction && nextAction.op === 'consent_status') ? 'btn-primary' : 'btn-outline-primary') + '" data-row-action="consent_status" data-row-idx="' + rowIdx + '">Check Status</button>');
             }
             if (canFetch) {
-                actions.push('<button type="button" class="btn btn-sm ' + ((nextAction && nextAction.op === 'consent_fetch') ? 'btn-primary' : 'btn-outline-primary') + '" data-row-action="consent_fetch" data-row-idx="' + rowIdx + '">Fetch Artifact</button>');
-                actions.push('<button type="button" class="btn btn-sm ' + ((nextAction && nextAction.op === 'hi_request') ? 'btn-primary' : 'btn-outline-success') + '" data-row-action="hi_request" data-row-idx="' + rowIdx + '">Request HI</button>');
+                actions.push('<button type="button" class="btn btn-sm ' + ((nextAction && nextAction.op === 'data_fetch') ? 'btn-primary' : 'btn-outline-success') + '" data-row-action="data_fetch" data-row-idx="' + rowIdx + '">Fetch Decrypted Data</button>');
             }
 
             var tr = document.createElement('tr');
@@ -770,8 +876,8 @@
             if (ctx.lastError.indexOf('consent record not found') !== -1 && hasStatusRef) {
                 return { op: 'consent_status', label: 'Check Consent Status' };
             }
-            if (ctx.operation === 'hi_request' && hasArtifact) {
-                return { op: 'hi_request', label: 'Retry Request HI' };
+            if (ctx.operation === 'data_fetch' && hasArtifact) {
+                return { op: 'data_fetch', label: 'Retry Data Fetch' };
             }
         }
 
@@ -783,20 +889,16 @@
             if (ctx.workflowState === 'requested' && hasStatusRef) {
                 return { op: 'consent_status', label: 'Check Consent Status' };
             }
-            if ((ctx.workflowState === 'granted' || ctx.workflowState === 'approved' || ctx.workflowState === 'status_checked') && hasArtifact) {
-                return { op: 'consent_fetch', label: 'Fetch Consent Artifact' };
+            if ((ctx.workflowState === 'granted' || ctx.workflowState === 'approved' || ctx.workflowState === 'status_checked') && hasStatusRef) {
+                return { op: 'data_fetch', label: 'Fetch Decrypted Data' };
             }
             if (hasStatusRef) {
                 return { op: 'consent_status', label: 'Check Consent Status' };
             }
         }
 
-        if (ctx.operation === 'consent_fetch' && hasArtifact) {
-            return { op: 'hi_request', label: 'Request Health Information' };
-        }
-
-        if (ctx.operation === 'hi_request' && hasArtifact) {
-            return { op: 'hi_request', label: 'Request Health Information' };
+        if ((ctx.operation === 'consent_fetch' || ctx.operation === 'data_fetch') && hasArtifact) {
+            return { op: 'data_fetch', label: 'Fetch Decrypted Data' };
         }
 
         return null;
@@ -827,7 +929,7 @@
 
         if (status === 'failed') {
             if (error.indexOf('consentid is required') !== -1) {
-                return { level: 'warning', message: 'Consent artifact id missing. Run Check Consent Status until consent is GRANTED, then Fetch Consent Artifact.' };
+                return { level: 'warning', message: 'Consent id missing. Run Check Consent Status until consent is GRANTED, then fetch decrypted data.' };
             }
             if (error.indexOf('consent record not found') !== -1) {
                 return { level: 'warning', message: 'Consent not found on gateway. Verify request_id/consentRequestId and run Check Consent Status again.' };
@@ -846,17 +948,14 @@
                 return { level: 'info', message: 'Consent still REQUESTED. Wait for patient approval in ABDM app, then Check Consent Status again.' };
             }
             if ((state === 'granted' || state === 'approved' || state === 'status_checked') && hasArtifact) {
-                return { level: 'success', message: 'Consent seems ready. Next step: ' + (nextAction ? nextAction.label : 'Fetch Consent Artifact') + ', then Request Health Information.' };
+                return { level: 'success', message: 'Consent seems ready. Next step: ' + (nextAction ? nextAction.label : 'Fetch Decrypted Data') + '.' };
             }
             if (state === 'granted' || state === 'approved' || state === 'status_checked') {
-                return { level: 'info', message: 'Consent state is ready, but artifact id is missing in this row. Use Latest Log Context and retry Fetch.' };
+                return { level: 'info', message: 'Consent state is ready. Use Latest Log Context and run data fetch with consent id.' };
             }
         }
-        if (operation === 'consent_fetch') {
-            return { level: 'success', message: 'Consent artifact fetched. Next step: Request Health Information.' };
-        }
-        if (operation === 'hi_request') {
-            return { level: 'success', message: 'Health information request sent. Next step: monitor timeline/poll summary for data updates.' };
+        if (operation === 'consent_fetch' || operation === 'data_fetch') {
+            return { level: 'success', message: 'Data polling executed. Monitor timeline/poll summary for decrypted records.' };
         }
 
         return { level: 'muted', message: 'Use this row context and continue with the next HIU operation.' };
@@ -964,14 +1063,13 @@
         var hasPatient = !!selectedPatient;
         var consentRequestRef = getFieldValue(['consent_request_id', 'consent_id']);
         var consentArtifactRef = getFieldValue(['consent_artifact_id', 'consent_id']);
-        var hasConsentRequestRef = (consentRequestRef !== '' && !isGatewayRequestId(consentRequestRef));
-        var hasConsentArtifactRef = (consentArtifactRef !== '' && !isGatewayRequestId(consentArtifactRef));
+        var hasConsentRequestRef = (consentRequestRef !== '');
+        var hasConsentArtifactRef = (consentArtifactRef !== '');
         var canFetchByState = isConsentApproved(consentStateText) || isTerminalConsentState(consentStateText);
 
         document.getElementById('btnConsentRequest').disabled = !canCreateConsentRequest(consentStateText);
         document.getElementById('btnConsentStatus').disabled = !hasConsentRequestRef;
-        document.getElementById('btnConsentFetch').disabled = !(hasConsentArtifactRef && isSuccessConsentState(consentStateText) && canFetchByState);
-        document.getElementById('btnHiRequest').disabled = !(hasConsentArtifactRef && isConsentApproved(consentStateText));
+        document.getElementById('btnConsentFetch').disabled = !((hasConsentArtifactRef || hasConsentRequestRef) && isSuccessConsentState(consentStateText) && canFetchByState);
         updateReadinessBox(consentStateText);
     }
 
@@ -986,7 +1084,7 @@
         var latest = p.latest_consent || {};
         var consentRequestRef = (latest.abdm_consent_request_id || '').toString();
         var consentArtifactRef = (latest.abdm_consent_artifact_id || latest.consent_id || '').toString();
-        if (consentRequestRef && !isGatewayRequestId(consentRequestRef)) {
+        if (consentRequestRef) {
             setFieldValue(['consent_request_id', 'consent_id'], consentRequestRef);
         }
         if (isValidConsentArtifactId(consentArtifactRef)) {
@@ -1088,6 +1186,43 @@
         return /^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+$/.test((v || '').toString().trim());
     }
 
+    function normalizeConsentHiTypes(hiTypes) {
+        var arr = Array.isArray(hiTypes) ? hiTypes : (hiTypes ? [hiTypes] : []);
+        var map = {
+            opconsultrecord: 'OPConsultation',
+            opconsultation: 'OPConsultation',
+            diagnosticreportrecord: 'DiagnosticReport',
+            diagnosticreport: 'DiagnosticReport',
+            prescriptionrecord: 'Prescription',
+            prescription: 'Prescription',
+            dischargesummaryrecord: 'DischargeSummary',
+            dischargesummary: 'DischargeSummary',
+            invoice: 'Invoice',
+            invoicerecord: 'Invoice',
+            healthdocumentrecord: 'HealthDocument',
+            healthdocument: 'HealthDocument',
+            immunization: 'ImmunizationRecord',
+            immunizationrecord: 'ImmunizationRecord',
+            wellness: 'Wellness',
+            wellnessrecord: 'Wellness'
+        };
+
+        var out = [];
+        arr.forEach(function (item) {
+            var raw = (item || '').toString().trim();
+            if (!raw) {
+                return;
+            }
+            var key = raw.toLowerCase();
+            var resolved = map[key] || raw;
+            if (out.indexOf(resolved) === -1) {
+                out.push(resolved);
+            }
+        });
+
+        return out;
+    }
+
     function buildGatewayPayload(op, raw) {
         var requestId = (raw.requestId || raw.request_id || '').toString().trim();
         var timestamp = (raw.timestamp || '').toString().trim();
@@ -1141,6 +1276,11 @@
                 throw new Error('Patient ABHA address must be in format like 91510165305101@sbx.');
             }
 
+            consent.hiTypes = normalizeConsentHiTypes(consent.hiTypes || []);
+            if (!consent.hiTypes.length) {
+                throw new Error('consent.hiTypes is required for consent request.');
+            }
+
             base.consent = consent;
             return base;
         }
@@ -1157,73 +1297,27 @@
             if (requestIdRef) {
                 base.request_id = requestIdRef;
             }
-            if (consentRequestId && !isGatewayRequestId(consentRequestId)) {
+            if (consentRequestId) {
                 base.consent_request_id = consentRequestId;
             }
-            if (consentIdRef && !isGatewayRequestId(consentIdRef)) {
+            if (consentIdRef) {
                 base.consent_id = consentIdRef;
             }
             return base;
         }
 
-        if (op === 'consent_fetch') {
-            var consentId = (raw.abdm_consent_artifact_id || raw.consentId || '').toString().trim();
+        if (op === 'data_fetch') {
+            var consentIdFetch = (raw.abdm_consent_artifact_id || raw.consentId || raw.consent_id || '').toString().trim();
+            var consentRequestRefFetch = (raw.abdm_consent_request_id || raw.consentRequestId || raw.consent_request_id || '').toString().trim();
+
+            // Gateway accepts original consent request id in consent_id for NAT polling.
             var requestIdRefFetch = (raw.request_id || raw.requestId || '').toString().trim();
-            var consentRequestIdFetch = (raw.abdm_consent_request_id || raw.consentRequestId || '').toString().trim();
-
-            if (consentId && isGatewayRequestId(consentId)) {
-                throw new Error('mapping_error: consentId looks like gateway/local request_id (REQ-...). Use ABDM consent artifact id only.');
+            var consentRef = consentIdFetch || consentRequestRefFetch || requestIdRefFetch;
+            if (!consentRef) {
+                throw new Error('consent_id is required for decrypted data fetch. Run status polling until consent is GRANTED.');
             }
 
-            if (consentId) {
-                base.consentId = consentId;
-            }
-            if (requestIdRefFetch) {
-                base.request_id = requestIdRefFetch;
-            }
-            if (consentRequestIdFetch && !isGatewayRequestId(consentRequestIdFetch)) {
-                base.consent_request_id = consentRequestIdFetch;
-            }
-
-            if (!base.consentId && !base.request_id && !base.consent_request_id) {
-                throw new Error('No fetch context found. Select a consent row first, then click Access Consent Artifact.');
-            }
-            return base;
-        }
-
-        if (op === 'hi_request') {
-            var hiRequest = raw.hiRequest;
-            if (!hiRequest || typeof hiRequest !== 'object' || Array.isArray(hiRequest)) {
-                hiRequest = {
-                    consent: {
-                        id: (raw.consentId || raw.consent_id || '').toString().trim()
-                    },
-                    dateRange: {
-                        from: new Date(Date.now() - (365 * 24 * 60 * 60 * 1000)).toISOString(),
-                        to: new Date().toISOString()
-                    },
-                    dataPushUrl: 'https://abdm-bridge.e-atria.in/api/v3/hiu/data/push',
-                    transactionId: (raw.transactionId || raw.transaction_id || '').toString().trim() || genReq('TXN-HIU')
-                };
-            }
-
-            if (!hiRequest.consent || typeof hiRequest.consent !== 'object') {
-                hiRequest.consent = {};
-            }
-            if (!hiRequest.consent.id) {
-                hiRequest.consent.id = (raw.consentId || raw.consent_id || '').toString().trim();
-            }
-            if (!(hiRequest.consent.id || '').toString().trim()) {
-                throw new Error('hiRequest.consent.id is required for health information request.');
-            }
-
-            if (!hiRequest.transactionId) {
-                hiRequest.transactionId = (raw.transactionId || raw.transaction_id || '').toString().trim() || genReq('TXN-HIU');
-            }
-            setFieldValue(['transaction_id'], hiRequest.transactionId);
-
-            base.hiRequest = hiRequest;
-            base.transactionId = hiRequest.transactionId;
+            base.consent_id = consentRef;
             return base;
         }
 
@@ -1231,7 +1325,90 @@
     }
 
     function setResult(obj) {
+        renderDataPreview(obj);
         document.getElementById('result_box').textContent = JSON.stringify(obj, null, 2);
+    }
+
+    function parseMaybeJson(raw) {
+        if (raw && typeof raw === 'object') {
+            return raw;
+        }
+        var txt = (raw || '').toString().trim();
+        if (!txt) {
+            return null;
+        }
+        try {
+            return JSON.parse(txt);
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function extractSessionsFromResponse(res) {
+        var data = (res && typeof res === 'object') ? (res.data || {}) : {};
+        var sessions = [];
+
+        if (Array.isArray(data.sessions)) {
+            sessions = data.sessions;
+        } else if (Array.isArray(res.sessions)) {
+            sessions = res.sessions;
+        }
+
+        return sessions;
+    }
+
+    function summarizeBundleType(decryptedItem) {
+        var parsed = parseMaybeJson((decryptedItem || {}).decrypted_data);
+        if (!parsed || typeof parsed !== 'object') {
+            return '-';
+        }
+        var bundleType = (parsed.type || '').toString().trim();
+        var resourceType = (parsed.resourceType || '').toString().trim();
+        if (resourceType && bundleType) {
+            return resourceType + ' / ' + bundleType;
+        }
+        return resourceType || bundleType || '-';
+    }
+
+    function renderDataPreview(res) {
+        var card = document.getElementById('data_preview_card');
+        var meta = document.getElementById('data_preview_meta');
+        var tbody = document.querySelector('#data_preview_table tbody');
+        if (!card || !meta || !tbody) {
+            return;
+        }
+
+        var sessions = extractSessionsFromResponse(res);
+        if (!sessions.length) {
+            card.classList.add('d-none');
+            return;
+        }
+
+        card.classList.remove('d-none');
+        var totalRecords = 0;
+        sessions.forEach(function (s) {
+            var items = Array.isArray(s.decrypted_data) ? s.decrypted_data : [];
+            totalRecords += items.length;
+        });
+        meta.textContent = 'Sessions: ' + sessions.length + ' | Records: ' + totalRecords;
+
+        tbody.innerHTML = '';
+        sessions.forEach(function (session) {
+            var records = Array.isArray(session.decrypted_data) ? session.decrypted_data : [];
+            var contexts = records.map(function (r) {
+                return (r.careContextReference || '').toString().trim();
+            }).filter(function (v) { return v !== ''; });
+
+            var tr = document.createElement('tr');
+            tr.innerHTML = '' +
+                '<td>' + escHtml((session.transaction_id || '-').toString()) + '</td>' +
+                '<td>' + escHtml((session.consent_id || '-').toString()) + '</td>' +
+                '<td>' + escHtml((session.status || '-').toString()) + '</td>' +
+                '<td>' + records.length + '</td>' +
+                '<td>' + escHtml((contexts.slice(0, 3).join(', ') || '-').toString()) + '</td>' +
+                '<td>' + escHtml(summarizeBundleType(records[0] || {})) + '</td>';
+            tbody.appendChild(tr);
+        });
     }
 
     function postJson(url, body) {
@@ -1244,6 +1421,238 @@
             body: JSON.stringify(body)
         }).then(function (r) {
             return r.json().catch(function () { return { ok: 0, message: 'Non-JSON response', http_code: r.status }; });
+        });
+    }
+
+    function parseDisplayDate(v) {
+        var txt = (v || '').toString().trim();
+        if (!txt) {
+            return '-';
+        }
+        var d = new Date(txt.replace(' ', 'T'));
+        if (isNaN(d.getTime())) {
+            return txt;
+        }
+        return d.toLocaleString();
+    }
+
+    function openAjaxDocsPanel() {
+        var panel = document.getElementById('ajax_docs_panel');
+        if (!panel) {
+            return;
+        }
+        panel.classList.remove('d-none');
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (!ajaxDocSelectedPatient) {
+            ajaxDocsSearchPatients();
+        }
+    }
+
+    function closeAjaxDocsPanel() {
+        var panel = document.getElementById('ajax_docs_panel');
+        if (!panel) {
+            return;
+        }
+        panel.classList.add('d-none');
+    }
+
+    function ajaxDocsRenderPatients(items) {
+        var tbody = document.querySelector('#ajax_doc_patient_table tbody');
+        if (!tbody) {
+            return;
+        }
+        tbody.innerHTML = '';
+        if (!items.length) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-muted text-center">No patients found.</td></tr>';
+            return;
+        }
+
+        items.forEach(function (p, idx) {
+            var tr = document.createElement('tr');
+            tr.innerHTML = '' +
+                '<td><button class="btn btn-sm btn-outline-primary" data-ajax-doc-patient-idx="' + idx + '">Select</button></td>' +
+                '<td>' + escHtml(p.patient_name || '') + '</td>' +
+                '<td>' + escHtml(p.patient_code || '') + '</td>' +
+                '<td>' + escHtml(p.abha_address || '') + '</td>';
+            tbody.appendChild(tr);
+        });
+
+        tbody.querySelectorAll('button[data-ajax-doc-patient-idx]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var idx = parseInt(btn.getAttribute('data-ajax-doc-patient-idx'), 10);
+                if (Number.isNaN(idx) || !items[idx]) {
+                    return;
+                }
+                ajaxDocSelectedPatient = items[idx];
+                var status = document.getElementById('ajax_doc_patient_status');
+                if (status) {
+                    status.textContent = 'Selected: ' + (ajaxDocSelectedPatient.patient_name || '-') + ' | ABHA: ' + (ajaxDocSelectedPatient.abha_address || '-');
+                }
+                ajaxDocsLoadDocuments();
+            });
+        });
+    }
+
+    function ajaxDocsSearchPatients() {
+        var q = getFieldValue(['ajax_doc_patient_search']);
+        fetch(patientLookupUrl + '?q=' + encodeURIComponent(q), {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+            if ((res.ok || 0) !== 1) {
+                var status = document.getElementById('ajax_doc_patient_status');
+                if (status) {
+                    status.textContent = res.error || 'Patient search failed';
+                }
+                return;
+            }
+            ajaxDocsRenderPatients(Array.isArray(res.items) ? res.items : []);
+            var s = document.getElementById('ajax_doc_patient_status');
+            if (s) {
+                s.textContent = (res.count || 0) + ' patient(s) found';
+            }
+        })
+        .catch(function (e) {
+            var status = document.getElementById('ajax_doc_patient_status');
+            if (status) {
+                status.textContent = e.message || 'Patient search failed';
+            }
+        });
+    }
+
+    function ajaxDocsRenderList(items) {
+        ajaxDocItems = items || [];
+        var tbody = document.querySelector('#ajax_doc_table tbody');
+        if (!tbody) {
+            return;
+        }
+        tbody.innerHTML = '';
+
+        if (!ajaxDocItems.length) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-muted text-center">No documents loaded.</td></tr>';
+            var box = document.getElementById('ajax_doc_detail_box');
+            if (box) {
+                box.innerHTML = '<div class="text-muted">No documents found for selected patient.</div>';
+            }
+            return;
+        }
+
+        ajaxDocItems.forEach(function (doc, idx) {
+            var tr = document.createElement('tr');
+            tr.style.cursor = 'pointer';
+            tr.setAttribute('data-ajax-doc-idx', idx);
+            tr.innerHTML = '' +
+                '<td>' + escHtml(parseDisplayDate(doc.document_date || doc.created_at)) + '</td>' +
+                '<td>' + escHtml(doc.document_title || '-') + '</td>' +
+                '<td>' + escHtml(doc.care_context_reference || '-') + '</td>' +
+                '<td>' + escHtml(doc.practitioner_name || '-') + '</td>';
+            tbody.appendChild(tr);
+        });
+
+        tbody.querySelectorAll('tr[data-ajax-doc-idx]').forEach(function (row) {
+            row.addEventListener('click', function () {
+                var idx = parseInt(row.getAttribute('data-ajax-doc-idx'), 10);
+                if (Number.isNaN(idx) || !ajaxDocItems[idx]) {
+                    return;
+                }
+                ajaxDocsLoadDetail((ajaxDocItems[idx].id || 0));
+            });
+        });
+
+        ajaxDocsLoadDetail((ajaxDocItems[0].id || 0));
+    }
+
+    function ajaxDocsLoadDocuments() {
+        if (!ajaxDocSelectedPatient) {
+            setResult({ ok: 0, message: 'Select a patient first in fetched documents panel.' });
+            return;
+        }
+
+        var q = getFieldValue(['ajax_doc_search']);
+        var url = docListUrl
+            + '?patient_id=' + encodeURIComponent(ajaxDocSelectedPatient.patient_id || 0)
+            + '&abha_address=' + encodeURIComponent(ajaxDocSelectedPatient.abha_address || '')
+            + '&q=' + encodeURIComponent(q);
+
+        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if ((res.ok || 0) !== 1) {
+                    ajaxDocsRenderList([]);
+                    return;
+                }
+                ajaxDocsRenderList(Array.isArray(res.items) ? res.items : []);
+            })
+            .catch(function () {
+                ajaxDocsRenderList([]);
+            });
+    }
+
+    function ajaxDocsRenderBulletList(title, rows, formatter) {
+        var list = Array.isArray(rows) ? rows : [];
+        if (!list.length) {
+            return '<div class="mb-2"><div class="fw-semibold">' + escHtml(title) + '</div><div class="text-muted">No data</div></div>';
+        }
+        var html = '<div class="mb-2"><div class="fw-semibold">' + escHtml(title) + '</div><ul class="mb-0">';
+        list.forEach(function (row) {
+            html += '<li>' + formatter(row) + '</li>';
+        });
+        html += '</ul></div>';
+        return html;
+    }
+
+    function ajaxDocsLoadDetail(id) {
+        var box = document.getElementById('ajax_doc_detail_box');
+        if (!box) {
+            return;
+        }
+        if (!id) {
+            box.innerHTML = '<div class="text-muted">Select a document to view detail.</div>';
+            return;
+        }
+
+        box.innerHTML = '<div class="text-muted">Loading...</div>';
+        fetch(docDetailBaseUrl + '/' + encodeURIComponent(id), {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+            if ((res.ok || 0) !== 1) {
+                box.innerHTML = '<div class="text-danger">Unable to load detail.</div>';
+                return;
+            }
+
+            var item = res.item || {};
+            var s = item.summary || {};
+            var html = ''
+                + '<div class="row g-2 mb-3">'
+                + '<div class="col-md-6"><span class="text-muted">Patient:</span> <strong>' + escHtml(s.patient_name || item.patient_name || '-') + '</strong></div>'
+                + '<div class="col-md-6"><span class="text-muted">ABHA:</span> ' + escHtml(item.abha_address || '-') + '</div>'
+                + '<div class="col-md-6"><span class="text-muted">Document:</span> ' + escHtml(item.document_title || '-') + '</div>'
+                + '<div class="col-md-6"><span class="text-muted">Date:</span> ' + escHtml(parseDisplayDate(item.document_date || '')) + '</div>'
+                + '<div class="col-md-6"><span class="text-muted">Doctor:</span> ' + escHtml(item.practitioner_name || '-') + '</div>'
+                + '<div class="col-md-6"><span class="text-muted">Organization:</span> ' + escHtml(item.organization_name || '-') + '</div>'
+                + '<div class="col-md-6"><span class="text-muted">Care Context:</span> ' + escHtml(item.care_context_reference || '-') + '</div>'
+                + '<div class="col-md-6"><span class="text-muted">Bundle:</span> ' + escHtml(item.bundle_type || '-') + '</div>'
+                + '</div>';
+
+            html += ajaxDocsRenderBulletList('Diagnoses', s.conditions || [], function (row) {
+                return escHtml((row && row.text) || '-');
+            });
+            html += ajaxDocsRenderBulletList('Vitals', s.vitals || [], function (row) {
+                return escHtml(((row && row.name) || '-') + ': ' + ((row && row.value) || '-'));
+            });
+            html += ajaxDocsRenderBulletList('Medications', s.medications || [], function (row) {
+                var name = (row && row.name) || '-';
+                var dose = (row && row.dose) || '';
+                return escHtml(name + (dose ? (' | ' + dose) : ''));
+            });
+
+            box.innerHTML = html;
+        })
+        .catch(function (e) {
+            box.innerHTML = '<div class="text-danger">' + escHtml(e.message || 'Unable to load detail') + '</div>';
         });
     }
 
@@ -1278,7 +1687,7 @@
             if ((res.ok || 0) === 1) {
                 var data = res.data || {};
                 var consentReqRef = (data.abdm_consent_request_id || data.consentRequestId || data.consent_request_id || '').toString();
-                if (consentReqRef && !isGatewayRequestId(consentReqRef)) {
+                if (consentReqRef) {
                     setFieldValue(['consent_request_id', 'consent_id'], consentReqRef);
                 }
 
@@ -1294,37 +1703,32 @@
                     startConsentPolling();
                 }
 
-                // Ordered workflow automation: status success -> fetch artifact, then fetch success -> request HI.
-                if (op === 'consent_status' && isSuccessConsentState(state) && isValidConsentArtifactId(consentArtifactRef)) {
+                // Ordered workflow automation: status success -> data fetch polling.
+                if (op === 'consent_status' && isSuccessConsentState(state) && (isValidConsentArtifactId(consentArtifactRef) || consentReqRef)) {
                     if (isAutoNextStepEnabled() && !isAutoCoolingDown()) {
-                        run('consent_fetch', { silent: true });
+                        run('data_fetch', { silent: true });
                     }
                 }
-                if (op === 'consent_fetch' && isConsentApproved(state) && isValidConsentArtifactId(consentArtifactRef)) {
+                if (op === 'data_fetch' && isConsentApproved(state) && isValidConsentArtifactId(consentArtifactRef)) {
                     // Always stop status polling once artifact fetch succeeds.
                     stopConsentPolling();
-                    if (isAutoNextStepEnabled() && !isAutoCoolingDown()) {
-                        run('hi_request', { silent: true });
-                    }
-                }
-                if (op === 'hi_request') {
                     clearAutoCooldown();
                 }
-                if ((op === 'consent_status' || op === 'consent_fetch') && isTerminalConsentState(state)) {
+                if ((op === 'consent_status' || op === 'data_fetch') && isTerminalConsentState(state)) {
                     stopConsentPolling();
                 }
-            } else if (op === 'consent_status' || op === 'consent_fetch') {
+            } else if (op === 'consent_status' || op === 'data_fetch') {
                 var errState = resolveConsentStateFromResponse(res, res.data || {});
                 var errText = (res.error || ((res.data || {}).error_text) || '').toString().toLowerCase();
                 if (isTerminalConsentState(errState) || errText.indexOf('mapping_error') !== -1) {
                     stopConsentPolling();
                 }
-            } else if (op === 'hi_request') {
-                var hiErrText = (res.error || ((res.data || {}).error_text) || '').toString().toLowerCase();
-                var hiCode = parseInt(((res.data || {}).http_code || res.http_code || 0), 10);
-                if (hiCode === 403 || hiErrText.indexOf('cloudfront') !== -1 || hiErrText.indexOf('request blocked') !== -1) {
-                    setAutoCooldown(180000, 'HI request blocked (403). Retry after cooldown or after gateway unblocks endpoint.');
-                    syncButtons();
+                if (op === 'data_fetch') {
+                    var dataCode = parseInt(((res.data || {}).http_code || res.http_code || 0), 10);
+                    if (dataCode === 403 || errText.indexOf('cloudfront') !== -1 || errText.indexOf('request blocked') !== -1) {
+                        setAutoCooldown(180000, 'Data fetch blocked (403). Retry after cooldown or after gateway unblocks endpoint.');
+                        syncButtons();
+                    }
                 }
             }
 
@@ -1530,6 +1934,40 @@
     var btnRefreshTimeline = document.getElementById('btnRefreshTimeline');
     if (btnRefreshTimeline) {
         btnRefreshTimeline.addEventListener('click', fetchTimeline);
+    }
+    var btnOpenDocumentsAjax = document.getElementById('btnOpenDocumentsAjax');
+    if (btnOpenDocumentsAjax) {
+        btnOpenDocumentsAjax.addEventListener('click', openAjaxDocsPanel);
+    }
+    var btnCloseAjaxDocs = document.getElementById('btnCloseAjaxDocs');
+    if (btnCloseAjaxDocs) {
+        btnCloseAjaxDocs.addEventListener('click', closeAjaxDocsPanel);
+    }
+    var btnAjaxDocPatientSearch = document.getElementById('btnAjaxDocPatientSearch');
+    if (btnAjaxDocPatientSearch) {
+        btnAjaxDocPatientSearch.addEventListener('click', ajaxDocsSearchPatients);
+    }
+    var btnAjaxDocSearch = document.getElementById('btnAjaxDocSearch');
+    if (btnAjaxDocSearch) {
+        btnAjaxDocSearch.addEventListener('click', ajaxDocsLoadDocuments);
+    }
+    var ajaxDocPatientSearch = document.getElementById('ajax_doc_patient_search');
+    if (ajaxDocPatientSearch) {
+        ajaxDocPatientSearch.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                ajaxDocsSearchPatients();
+            }
+        });
+    }
+    var ajaxDocSearch = document.getElementById('ajax_doc_search');
+    if (ajaxDocSearch) {
+        ajaxDocSearch.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                ajaxDocsLoadDocuments();
+            }
+        });
     }
     var btnUseLatestLog = document.getElementById('btnUseLatestLog');
     if (btnUseLatestLog) {

@@ -41,16 +41,6 @@ class M3HiuGatewayClient
         return $this->call('/v3/hiu/consent/request/status', $payload, 'consent.request.status');
     }
 
-    public function consentRequestFetch(array $payload): array
-    {
-        return $this->call('/v3/hiu/consent/request/fetch', $payload, 'consent.request.fetch');
-    }
-
-    public function healthInformationRequest(array $payload): array
-    {
-        return $this->call('/v1/hiu/data/request', $payload, 'health-information.request');
-    }
-
     public function reconcileConsentStatus(array $payload): array
     {
         return $this->callGet('/v1/hiu/consent/status', $payload, 'consent.status.reconcile');
@@ -121,9 +111,7 @@ class M3HiuGatewayClient
         if ($curlErr !== '') {
             $errorText = $curlErr;
         } elseif ($ok !== 1) {
-            $errorText = $isJson
-                ? (string) ($decoded['message'] ?? $decoded['error_text'] ?? $decoded['error'] ?? ('HTTP ' . $httpCode))
-                : ('HTTP ' . $httpCode . ' non-JSON response');
+            $errorText = $this->extractErrorText($decoded, $httpCode, $isJson);
         }
 
         if ($this->isCloudFrontBlockedResponse($httpCode, $raw, $decoded ?? [])) {
@@ -267,9 +255,7 @@ class M3HiuGatewayClient
         if ($curlErr !== '') {
             $errorText = $curlErr;
         } elseif ($ok !== 1) {
-            $errorText = $isJson
-                ? (string) ($decoded['message'] ?? $decoded['error_text'] ?? $decoded['error'] ?? ('HTTP ' . $httpCode))
-                : ('HTTP ' . $httpCode . ' non-JSON response');
+            $errorText = $this->extractErrorText($decoded, $httpCode, $isJson);
         }
 
         if ($this->isCloudFrontBlockedResponse($httpCode, $raw, $decoded ?? [])) {
@@ -438,6 +424,33 @@ class M3HiuGatewayClient
             'error_message' => $errorText !== '' ? mb_substr($errorText, 0, 1000) : null,
             'created_at' => date('Y-m-d H:i:s'),
         ]);
+    }
+
+    private function extractErrorText($decoded, int $httpCode, bool $isJson): string
+    {
+        if (! $isJson || ! is_array($decoded)) {
+            return 'HTTP ' . $httpCode . ' non-JSON response';
+        }
+
+        $code = trim((string) (
+            $decoded['data']['error']['code']
+            ?? $decoded['error']['code']
+            ?? ''
+        ));
+        $message = trim((string) (
+            $decoded['data']['error']['message']
+            ?? $decoded['error']['message']
+            ?? $decoded['message']
+            ?? $decoded['error_text']
+            ?? (is_string($decoded['error'] ?? null) ? $decoded['error'] : '')
+        ));
+
+        $combined = trim(($code !== '' ? $code . ' ' : '') . $message);
+        if ($combined !== '') {
+            return $combined;
+        }
+
+        return 'HTTP ' . $httpCode;
     }
 
     private function findFirstValueByKeys(array $root, array $keys): string

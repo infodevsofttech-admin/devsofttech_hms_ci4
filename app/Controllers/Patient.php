@@ -1109,6 +1109,452 @@ class Patient extends BaseController
 		]);
 	}
 
+	public function abdm_documents(int $pno)
+	{
+		if (! $this->db->tableExists('patient_master')) {
+			return $this->response->setStatusCode(500)->setJSON([
+				'ok' => 0,
+				'error' => 'patient_master table not found',
+			]);
+		}
+
+		$patientRow = $this->db->table('patient_master')->where('id', $pno)->get()->getRowArray();
+		if (! is_array($patientRow)) {
+			return $this->response->setStatusCode(404)->setJSON([
+				'ok' => 0,
+				'error' => 'Patient not found',
+			]);
+		}
+
+		if (! $this->db->tableExists('abdm_hiu_documents')) {
+			return $this->response->setJSON([
+				'ok' => 1,
+				'count' => 0,
+				'items' => [],
+				'abha' => $this->buildAbhaProfileContext($patientRow),
+			]);
+		}
+
+		$limit = (int) ($this->request->getGet('limit') ?? 100);
+		if ($limit <= 0 || $limit > 300) {
+			$limit = 100;
+		}
+
+		$q = trim((string) ($this->request->getGet('q') ?? ''));
+		$abhaContext = $this->buildAbhaProfileContext($patientRow);
+
+		$builder = $this->db->table('abdm_hiu_documents d')
+			->select('d.id, d.patient_id, d.abha_address, d.document_title, d.document_date, d.care_context_reference, d.practitioner_name, d.organization_name, d.bundle_type, d.created_at')
+			->orderBy('d.document_date', 'DESC')
+			->orderBy('d.id', 'DESC')
+			->limit($limit);
+
+		$builder->groupStart()
+			->where('d.patient_id', $pno);
+		if ($abhaContext['abha_address'] !== '') {
+			$builder->orWhere('d.abha_address', $abhaContext['abha_address']);
+		}
+		$builder->groupEnd();
+
+		if ($q !== '') {
+			$builder->groupStart()
+				->like('d.document_title', $q)
+				->orLike('d.care_context_reference', $q)
+				->orLike('d.practitioner_name', $q)
+				->orLike('d.organization_name', $q)
+				->groupEnd();
+		}
+
+		$rows = $builder->get()->getResultArray();
+
+		return $this->response->setJSON([
+			'ok' => 1,
+			'count' => count($rows),
+			'items' => $rows,
+			'abha' => $abhaContext,
+		]);
+	}
+
+	public function abdm_document_detail(int $pno, int $docId)
+	{
+		if ($docId <= 0 || ! $this->db->tableExists('abdm_hiu_documents')) {
+			return $this->response->setStatusCode(404)->setJSON([
+				'ok' => 0,
+				'error' => 'Document not found',
+			]);
+		}
+
+		$patientRow = $this->db->table('patient_master')->where('id', $pno)->get()->getRowArray();
+		if (! is_array($patientRow)) {
+			return $this->response->setStatusCode(404)->setJSON([
+				'ok' => 0,
+				'error' => 'Patient not found',
+			]);
+		}
+
+		$abhaContext = $this->buildAbhaProfileContext($patientRow);
+
+		$builder = $this->db->table('abdm_hiu_documents d')
+			->select('*')
+			->where('d.id', $docId)
+			->groupStart()
+				->where('d.patient_id', $pno);
+		if ($abhaContext['abha_address'] !== '') {
+			$builder->orWhere('d.abha_address', $abhaContext['abha_address']);
+		}
+		$builder->groupEnd();
+
+		$row = $builder->get(1)->getRowArray();
+		if (! is_array($row) || empty($row)) {
+			return $this->response->setStatusCode(404)->setJSON([
+				'ok' => 0,
+				'error' => 'Document not found for patient',
+			]);
+		}
+
+		$row['summary'] = json_decode((string) ($row['summary_json'] ?? ''), true) ?: [];
+
+		return $this->response->setJSON([
+			'ok' => 1,
+			'item' => $row,
+		]);
+	}
+
+	public function abdm_content_request(int $pno)
+	{
+		if (! $this->db->tableExists('patient_master')) {
+			return $this->response->setStatusCode(500)->setJSON([
+				'ok' => 0,
+				'error' => 'patient_master table not found',
+			]);
+		}
+
+		$patientRow = $this->db->table('patient_master')->where('id', $pno)->get()->getRowArray();
+		if (! is_array($patientRow)) {
+			return $this->response->setStatusCode(404)->setJSON([
+				'ok' => 0,
+				'error' => 'Patient not found',
+			]);
+		}
+
+		$abhaContext = $this->buildAbhaProfileContext($patientRow);
+		if ($abhaContext['abha_address'] === '') {
+			return $this->response->setStatusCode(422)->setJSON([
+				'ok' => 0,
+				'error' => 'ABHA Address not available for this patient.',
+				'abha' => $abhaContext,
+			]);
+		}
+
+		if ((int) ($abhaContext['is_verified'] ?? 0) !== 1) {
+			return $this->response->setStatusCode(422)->setJSON([
+				'ok' => 0,
+				'error' => 'ABHA is not marked as verified in HMS. Please verify ABHA first, then request content.',
+				'abha' => $abhaContext,
+			]);
+		}
+
+		$service = new \App\Libraries\Abdm\M3HiuWorkflowService();
+		$payload = [
+			'patient_id' => $pno,
+			'abha_address' => $abhaContext['abha_address'],
+			'hiTypes' => ['OPConsultation', 'Prescription', 'DiagnosticReport', 'HealthDocument'],
+		];
+
+		try {
+			$result = $service->runOperation('consent_request', $payload);
+		} catch (\Throwable $e) {
+			return $this->response->setStatusCode(500)->setJSON([
+				'ok' => 0,
+				'error' => 'Unable to start content request: ' . $e->getMessage(),
+			]);
+		}
+
+		$ok = (int) ($result['ok'] ?? 0) === 1;
+		$httpCode = (int) ($result['http_code'] ?? ($ok ? 200 : 422));
+		if ($httpCode < 100 || $httpCode > 599) {
+			$httpCode = $ok ? 200 : 422;
+		}
+
+		if (! $ok) {
+			return $this->response->setStatusCode($httpCode)->setJSON([
+				'ok' => 0,
+				'error' => (string) ($result['error_text'] ?? 'Content request failed.'),
+				'data' => $result,
+			]);
+		}
+
+		return $this->response->setStatusCode($httpCode)->setJSON([
+			'ok' => 1,
+			'message' => 'Consent/content request created successfully.',
+			'workflow_state' => 'REQUESTED',
+			'request_id' => (string) ($result['request_id'] ?? ''),
+			'data' => $result,
+		]);
+	}
+
+	public function abdm_content_auto_flow(int $pno)
+	{
+		if (! $this->db->tableExists('patient_master')) {
+			return $this->response->setStatusCode(500)->setJSON([
+				'ok' => 0,
+				'error' => 'patient_master table not found',
+			]);
+		}
+
+		$patientRow = $this->db->table('patient_master')->where('id', $pno)->get()->getRowArray();
+		if (! is_array($patientRow)) {
+			return $this->response->setStatusCode(404)->setJSON([
+				'ok' => 0,
+				'error' => 'Patient not found',
+			]);
+		}
+
+		$abhaContext = $this->buildAbhaProfileContext($patientRow);
+		if ($abhaContext['abha_address'] === '') {
+			return $this->response->setStatusCode(422)->setJSON([
+				'ok' => 0,
+				'error' => 'ABHA Address not available for this patient.',
+				'abha' => $abhaContext,
+			]);
+		}
+
+		if ((int) ($abhaContext['is_verified'] ?? 0) !== 1) {
+			return $this->response->setStatusCode(422)->setJSON([
+				'ok' => 0,
+				'error' => 'ABHA is not marked as verified in HMS. Please verify ABHA first, then request content.',
+				'abha' => $abhaContext,
+			]);
+		}
+
+		$service = new \App\Libraries\Abdm\M3HiuWorkflowService();
+		$flowRefId = trim((string) (
+			$this->request->getGet('request_id')
+			?? $this->request->getPost('request_id')
+			?? ''
+		));
+		$consentRequestRef = '';
+		$consentArtifactRef = '';
+
+		$consentResult = null;
+		$reconcileResult = null;
+		$fetchResult = null;
+
+		if ($flowRefId === '') {
+			$consentPayload = [
+				'patient_id' => $pno,
+				'abha_address' => $abhaContext['abha_address'],
+				'hiTypes' => ['OPConsultation', 'Prescription', 'DiagnosticReport', 'HealthDocument'],
+			];
+
+			try {
+				$consentResult = $service->runOperation('consent_request', $consentPayload);
+			} catch (\Throwable $e) {
+				return $this->response->setStatusCode(500)->setJSON([
+					'ok' => 0,
+					'error' => 'Unable to start consent request: ' . $e->getMessage(),
+				]);
+			}
+
+			if ((int) ($consentResult['ok'] ?? 0) !== 1) {
+				$httpCode = (int) ($consentResult['http_code'] ?? 422);
+				if ($httpCode < 100 || $httpCode > 599) {
+					$httpCode = 422;
+				}
+
+				return $this->response->setStatusCode($httpCode)->setJSON([
+					'ok' => 0,
+					'phase' => 'REQUEST_FAILED',
+					'error' => (string) ($consentResult['error_text'] ?? 'Consent request failed.'),
+					'request_id' => (string) ($consentResult['request_id'] ?? ''),
+					'data' => $consentResult,
+				]);
+			}
+
+			$flowRefId = trim((string) (
+				$consentResult['consent_request_id']
+				?? $consentResult['abdm_consent_request_id']
+				?? $consentResult['consent_id']
+				?? $consentResult['request_id']
+				?? ''
+			));
+			$consentRequestRef = trim((string) (
+				$consentResult['consent_request_id']
+				?? $consentResult['abdm_consent_request_id']
+				?? ''
+			));
+			if ($consentRequestRef === '') {
+				$consentRequestRef = $flowRefId;
+			}
+			$consentArtifactRef = trim((string) (
+				$consentResult['consent_id']
+				?? $consentResult['abdm_consent_artifact_id']
+				?? ''
+			));
+			if ($consentArtifactRef === '' && $consentRequestRef !== '' && preg_match('/^REQ-/i', $consentRequestRef) !== 1) {
+				$consentArtifactRef = $consentRequestRef;
+			}
+		}
+
+		if ($flowRefId === '') {
+			return $this->response->setStatusCode(422)->setJSON([
+				'ok' => 0,
+				'phase' => 'REQUEST_MISSING',
+				'error' => 'Unable to determine consent reference for auto flow.',
+			]);
+		}
+
+		$reconcilePayload = [
+			'abha_address' => $abhaContext['abha_address'],
+		];
+		if ($consentRequestRef !== '') {
+			$reconcilePayload['consentRequestId'] = $consentRequestRef;
+		} else {
+			$reconcilePayload['request_id'] = $flowRefId;
+		}
+
+		try {
+			$reconcileResult = $service->runOperation('consent_reconcile', $reconcilePayload);
+		} catch (\Throwable $e) {
+			return $this->response->setStatusCode(500)->setJSON([
+				'ok' => 0,
+				'phase' => 'STATUS_FAILED',
+				'error' => 'Unable to reconcile consent status: ' . $e->getMessage(),
+				'request_id' => $flowRefId,
+			]);
+		}
+
+		if ((int) ($reconcileResult['ok'] ?? 0) !== 1) {
+			$httpCode = (int) ($reconcileResult['http_code'] ?? 422);
+			if ($httpCode < 100 || $httpCode > 599) {
+				$httpCode = 422;
+			}
+
+			return $this->response->setStatusCode($httpCode)->setJSON([
+				'ok' => 0,
+				'phase' => 'STATUS_FAILED',
+				'error' => (string) ($reconcileResult['error_text'] ?? 'Consent status check failed.'),
+				'request_id' => $flowRefId,
+				'data' => [
+					'consent_request' => $consentResult,
+					'consent_reconcile' => $reconcileResult,
+				],
+			]);
+		}
+
+		$state = $this->deriveAutoFlowState($reconcileResult);
+		$pollAgain = in_array($state, ['REQUESTED', 'PENDING'], true);
+
+		if ($state === 'GRANTED') {
+			$fetchPayload = [
+				'abha_address' => $abhaContext['abha_address'],
+			];
+			if ($consentArtifactRef !== '') {
+				$fetchPayload['consentId'] = $consentArtifactRef;
+			} elseif ($consentRequestRef !== '') {
+				$fetchPayload['consentRequestId'] = $consentRequestRef;
+			} else {
+				$fetchPayload['request_id'] = $flowRefId;
+			}
+			try {
+				$fetchResult = $service->runOperation('data_fetch', $fetchPayload);
+			} catch (\Throwable $e) {
+				return $this->response->setStatusCode(500)->setJSON([
+					'ok' => 0,
+					'phase' => 'FETCH_FAILED',
+					'error' => 'Unable to fetch ABDM content: ' . $e->getMessage(),
+					'request_id' => $flowRefId,
+				]);
+			}
+
+			if ((int) ($fetchResult['ok'] ?? 0) !== 1) {
+				$httpCode = (int) ($fetchResult['http_code'] ?? 422);
+				if ($httpCode < 100 || $httpCode > 599) {
+					$httpCode = 422;
+				}
+
+				return $this->response->setStatusCode($httpCode)->setJSON([
+					'ok' => 0,
+					'phase' => 'FETCH_FAILED',
+					'error' => (string) ($fetchResult['error_text'] ?? 'Data fetch failed.'),
+					'request_id' => $flowRefId,
+					'data' => [
+						'consent_request' => $consentResult,
+						'consent_reconcile' => $reconcileResult,
+						'data_fetch' => $fetchResult,
+					],
+				]);
+			}
+
+			$state = 'COMPLETED';
+			$pollAgain = false;
+		}
+
+		$message = match ($state) {
+			'COMPLETED' => 'Data fetch completed and documents should now be available.',
+			'GRANTED' => 'Consent granted. Proceeding to fetch data.',
+			'DENIED' => 'Consent denied/revoked/expired by patient.',
+			default => 'Consent request created. Waiting for patient approval.',
+		};
+
+		return $this->response->setJSON([
+			'ok' => 1,
+			'phase' => $state,
+			'poll_again' => $pollAgain ? 1 : 0,
+			'request_id' => $flowRefId,
+			'message' => $message,
+			'data' => [
+				'consent_request' => $consentResult,
+				'consent_reconcile' => $reconcileResult,
+				'data_fetch' => $fetchResult,
+			],
+		]);
+	}
+
+	public function abdm_timeline(int $pno)
+	{
+		if (! $this->db->tableExists('patient_master')) {
+			return $this->response->setStatusCode(500)->setJSON([
+				'ok' => 0,
+				'error' => 'patient_master table not found',
+			]);
+		}
+
+		$patientRow = $this->db->table('patient_master')->where('id', $pno)->get()->getRowArray();
+		if (! is_array($patientRow)) {
+			return $this->response->setStatusCode(404)->setJSON([
+				'ok' => 0,
+				'error' => 'Patient not found',
+			]);
+		}
+
+		$abhaContext = $this->buildAbhaProfileContext($patientRow);
+		if ($abhaContext['abha_address'] === '') {
+			return $this->response->setJSON([
+				'ok' => 1,
+				'count' => 0,
+				'items' => [],
+				'note' => 'ABHA address not available for timeline filter.',
+			]);
+		}
+
+		$limit = (int) ($this->request->getGet('limit') ?? 15);
+		if ($limit <= 0 || $limit > 100) {
+			$limit = 15;
+		}
+
+		$service = new \App\Libraries\Abdm\M3HiuWorkflowService();
+		$rows = $service->listTimeline([
+			'abha_address' => (string) $abhaContext['abha_address'],
+		], $limit);
+
+		return $this->response->setJSON([
+			'ok' => 1,
+			'count' => count($rows),
+			'items' => $rows,
+		]);
+	}
+
 	public function save_profile_image(int $pid)
 	{
 		$patient = $this->db->table('patient_master')->where('id', $pid)->get()->getRow();
@@ -2199,6 +2645,70 @@ class Patient extends BaseController
 				'trigger' => 'patient.created',
 			]
 		);
+	}
+
+	/**
+	 * @param array<string, mixed> $row
+	 * @return array<string, mixed>
+	 */
+	private function buildAbhaProfileContext(array $row): array
+	{
+		$abhaField = $this->resolvePatientAbhaIdField();
+		$abhaIdRaw = $abhaField !== null ? trim((string) ($row[$abhaField] ?? '')) : '';
+		$abhaAddress = trim((string) ($row['abha_address'] ?? ''));
+
+		if ($abhaAddress === '' && $abhaIdRaw !== '' && $this->isLikelyAbhaAddress($abhaIdRaw)) {
+			$abhaAddress = $abhaIdRaw;
+		}
+
+		if ($abhaAddress === '' && preg_match('/abha_address\s*:\s*([A-Za-z0-9._-]+@[A-Za-z0-9.-]+)/i', (string) ($row['log'] ?? ''), $m) === 1) {
+			$abhaAddress = trim((string) ($m[1] ?? ''));
+		}
+
+		$verifiedStatus = strtoupper(trim((string) ($row['abha_verified_status'] ?? '')));
+		$kycVerified = (int) ($row['abha_kyc_verified'] ?? 0) === 1;
+		$mobileVerified = (int) ($row['abha_mobile_verified'] ?? 0) === 1;
+		$hasStatusColumn = array_key_exists('abha_verified_status', $row);
+		$isVerified = $verifiedStatus === 'VERIFIED' || ($kycVerified && $mobileVerified);
+		if (! $hasStatusColumn && $abhaAddress !== '') {
+			$isVerified = true;
+		}
+
+		return [
+			'abha_id' => $abhaIdRaw,
+			'abha_address' => $abhaAddress,
+			'verified_status' => $verifiedStatus,
+			'is_verified' => $isVerified ? 1 : 0,
+		];
+	}
+
+	private function deriveAutoFlowState(array $result): string
+	{
+		$blob = strtolower(json_encode($result, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '');
+
+		if (str_contains($blob, 'granted') || str_contains($blob, 'approved') || str_contains($blob, 'consent_granted')) {
+			return 'GRANTED';
+		}
+
+		if (str_contains($blob, 'denied') || str_contains($blob, 'revoked') || str_contains($blob, 'expired') || str_contains($blob, 'rejected')) {
+			return 'DENIED';
+		}
+
+		if (str_contains($blob, 'requested') || str_contains($blob, 'pending') || str_contains($blob, 'await')) {
+			return 'PENDING';
+		}
+
+		$explicit = strtoupper(trim((string) ($result['workflow_state'] ?? $result['state'] ?? $result['status'] ?? '')));
+		if ($explicit !== '') {
+			if (in_array($explicit, ['GRANTED', 'APPROVED', 'COMPLETED'], true)) {
+				return 'GRANTED';
+			}
+			if (in_array($explicit, ['REVOKED', 'EXPIRED', 'DENIED', 'REJECTED'], true)) {
+				return 'DENIED';
+			}
+		}
+
+		return 'REQUESTED';
 	}
 
 
