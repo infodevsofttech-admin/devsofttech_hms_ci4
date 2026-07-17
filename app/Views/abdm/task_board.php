@@ -1853,6 +1853,21 @@
             var loincLabel = { '8867-4':'HR','59408-5':'SpO₂','8480-6':'BP Sys','8462-4':'BP Dia','8310-5':'Temp','9279-1':'RR','8302-2':'Height','29463-7':'Weight' };
             var vitalLoincCodes = { '8867-4':1, '59408-5':1, '8480-6':1, '8462-4':1, '8310-5':1, '9279-1':1, '8302-2':1, '29463-7':1 };
 
+            function meaningfulText(v) {
+                var s = String(v || '').trim().toLowerCase();
+                if (!s) return false;
+                return ['-', '--', 'na', 'n/a', 'nil', 'none', 'not done'].indexOf(s) === -1;
+            }
+
+            function getObservationCategoryText(o) {
+                var categories = o.category || [];
+                for (var i = 0; i < categories.length; i++) {
+                    var t = (categories[i] || {}).text || '';
+                    if (t && String(t).trim() !== '') return String(t).trim();
+                }
+                return '';
+            }
+
             function isVitalObservation(o) {
                 var categories = o.category || [];
                 for (var ci = 0; ci < categories.length; ci++) {
@@ -1881,7 +1896,7 @@
                 if (!items.length) {
                     return;
                 }
-                html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">' + hesc(sectionTitle) + '</small></div><div class="card-body py-2"><div class="d-flex flex-wrap gap-2">';
+                html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-secondary">' + hesc(sectionTitle) + '</small></div><div class="card-body py-2"><div class="d-flex flex-wrap gap-2">';
                 items.forEach(function(o) {
                     var loinc = (((o.code || {}).coding) || [])[0] || {};
                     var label = loincLabel[loinc.code] || (o.code || {}).text || loinc.display || '';
@@ -1890,7 +1905,7 @@
                     if (val === undefined || val === null) {
                         val = o.valueString || o.valueCodeableConcept && o.valueCodeableConcept.text || '';
                     }
-                    if (val === undefined || val === null || val === '') {
+                    if (val === undefined || val === null || !meaningfulText(val)) {
                         return;
                     }
                     html += '<div class="border rounded px-2 py-1 text-center" style="min-width:80px;">';
@@ -1903,9 +1918,21 @@
                 html += '</div></div></div>';
             }
 
-            var vitalObservations = observations.filter(isVitalObservation);
-            var labObservations = observations.filter(function(o) { return !isVitalObservation(o); });
+            var admissionObservations = observations.filter(function(o) {
+                return getObservationCategoryText(o).toLowerCase() === 'condition on admission time';
+            });
+            var dischargeObservations = observations.filter(function(o) {
+                return getObservationCategoryText(o).toLowerCase() === 'condition on discharge time';
+            });
+            var remainingObservations = observations.filter(function(o) {
+                var cat = getObservationCategoryText(o).toLowerCase();
+                return cat !== 'condition on admission time' && cat !== 'condition on discharge time';
+            });
+            var vitalObservations = remainingObservations.filter(isVitalObservation);
+            var labObservations = remainingObservations.filter(function(o) { return !isVitalObservation(o); });
 
+            renderObservationCard('Condition on Admission Time', admissionObservations);
+            renderObservationCard('Condition on Discharge Time', dischargeObservations);
             renderObservationCard('Vitals', vitalObservations);
             renderObservationCard('Lab Results', labObservations);
         }
@@ -1947,6 +1974,10 @@
             serviceReqs.forEach(function(s) {
                 var text  = (s.code || {}).text || '';
                 var loinc = (((s.code || {}).coding) || [])[0] || {};
+                var normalized = String(text || '').trim().toLowerCase();
+                if (!normalized || normalized === '-' || normalized === '--' || normalized === 'na' || normalized === 'n/a' || normalized === 'nil' || normalized === 'none' || normalized === 'not done') {
+                    return;
+                }
                 html += '<li class="mb-1"><strong>' + hesc(text) + '</strong>';
                 if (loinc.code) html += ' <span class="badge bg-info text-dark" style="font-size:.7rem;">LOINC&nbsp;' + hesc(loinc.code) + '</span>';
                 html += '</li>';

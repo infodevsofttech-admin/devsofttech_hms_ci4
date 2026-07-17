@@ -2190,13 +2190,13 @@ class AbdmGateway extends BaseController
         foreach ($this->ipdRows('ipd_discharge_1_b', ['short_head', 'rdata'], $ipdId, 'ipd_d_id') as $row) {
             $label = trim((string) ($row['short_head'] ?? ''));
             $value = trim((string) ($row['rdata'] ?? ''));
-            if ($label === '' || $value === '') {
+            if ($label === '' || ! $this->isMeaningfulClinicalValue($value)) {
                 continue;
             }
             $observations[] = [
                 'text' => $label,
                 'value' => $value,
-                'category' => 'vital-signs',
+                'category' => 'Condition on Admission Time',
                 'category_code' => 'vital-signs',
                 'effective_at' => $this->toIsoDateTimeOrNow($admissionRaw),
             ];
@@ -2204,13 +2204,13 @@ class AbdmGateway extends BaseController
         foreach ($this->ipdRows('ipd_discharge_1_b_final', ['short_head', 'rdata'], $ipdId, 'ipd_d_id') as $row) {
             $label = trim((string) ($row['short_head'] ?? ''));
             $value = trim((string) ($row['rdata'] ?? ''));
-            if ($label === '' || $value === '') {
+            if ($label === '' || ! $this->isMeaningfulClinicalValue($value)) {
                 continue;
             }
             $observations[] = [
-                'text' => 'Discharge ' . $label,
+                'text' => $label,
                 'value' => $value,
-                'category' => 'vital-signs',
+                'category' => 'Condition on Discharge Time',
                 'category_code' => 'vital-signs',
                 'effective_at' => $this->toIsoDateTimeOrNow($dischargeRaw),
             ];
@@ -2220,22 +2220,22 @@ class AbdmGateway extends BaseController
         foreach ($this->ipdRows('ipd_discharge_1_d', ['short_head', 'rdata'], $ipdId, 'ipd_d_id') as $row) {
             $label = trim((string) ($row['short_head'] ?? ''));
             $value = trim((string) ($row['rdata'] ?? ''));
-            if ($label === '') {
+            if ($label === '' || ! $this->isMeaningfulClinicalValue($value)) {
                 continue;
             }
             $investigations[] = [
-                'text' => $value !== '' ? ($label . ': ' . $value) : $label,
+                'text' => $label . ': ' . $value,
                 'authored_on' => $this->toIsoDateTimeOrNow($admissionRaw),
             ];
         }
         foreach ($this->ipdRows('ipd_discharge_1_e', ['short_head', 'rdata'], $ipdId, 'ipd_d_id') as $row) {
             $label = trim((string) ($row['short_head'] ?? ''));
             $value = trim((string) ($row['rdata'] ?? ''));
-            if ($label === '') {
+            if ($label === '' || ! $this->isMeaningfulClinicalValue($value)) {
                 continue;
             }
             $investigations[] = [
-                'text' => $value !== '' ? ($label . ': ' . $value) : $label,
+                'text' => $label . ': ' . $value,
                 'authored_on' => $this->toIsoDateTimeOrNow($admissionRaw),
             ];
         }
@@ -2392,6 +2392,16 @@ class AbdmGateway extends BaseController
 
         $decoded = json_decode($json, true);
         return is_array($decoded) ? $decoded : [];
+    }
+
+    private function isMeaningfulClinicalValue(string $value): bool
+    {
+        $normalized = strtolower(trim($value));
+        if ($normalized === '') {
+            return false;
+        }
+
+        return ! in_array($normalized, ['-', '--', 'na', 'n/a', 'nil', 'none', 'not done'], true);
     }
 
     private function normalizeFhirGender(string $gender): string
