@@ -1716,6 +1716,17 @@
         var allergies     = byType('AllergyIntolerance');
         var carePlans     = byType('CarePlan');
 
+        var coursePlans = [];
+        var advicePlans = [];
+        carePlans.forEach(function(cp) {
+            var title = String(cp.title || '').trim().toLowerCase();
+            if (title === 'course in hospital') {
+                coursePlans.push(cp);
+            } else {
+                advicePlans.push(cp);
+            }
+        });
+
         var complaints = allConditions.filter(function(c) {
             return (c.category || []).some(function(cat) { return (cat.text || '').toLowerCase().includes('complaint'); });
         });
@@ -2001,11 +2012,25 @@
             html += '</ul></div></div>';
         }
 
+        // ── Course In Hospital
+        if (coursePlans.length) {
+            html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">Course In Hospital</small></div><div class="card-body py-2">';
+            html += '<ul class="mb-0 ps-3">';
+            coursePlans.forEach(function(cp) {
+                var title = cp.title || 'Care Plan';
+                var desc  = cp.description || '';
+                html += '<li class="mb-2"><strong>' + hesc(title) + '</strong>';
+                if (desc) html += '<div class="text-muted small">' + hesc(desc) + '</div>';
+                html += '</li>';
+            });
+            html += '</ul></div></div>';
+        }
+
         // ── Discharge Advice / Follow-up
-        if (carePlans.length) {
+        if (advicePlans.length) {
             html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">Discharge Advice & Follow-up</small></div><div class="card-body py-2">';
             html += '<ul class="mb-0 ps-3">';
-            carePlans.forEach(function(cp) {
+            advicePlans.forEach(function(cp) {
                 var title = cp.title || 'Care Plan';
                 var desc  = cp.description || '';
                 html += '<li class="mb-2"><strong>' + hesc(title) + '</strong>';

@@ -2079,13 +2079,30 @@ class AbdmGateway extends BaseController
 
         $doctorName = trim((string) ($ipdRow['r_doc_name'] ?? ''));
         $doctorId = (int) ($ipdRow['r_doc_id'] ?? 0);
-        if ($doctorName === '' && $doctorId > 0 && $this->db->tableExists('doctor_master')) {
+        $doctorRegNo = '';
+        if ($doctorId > 0 && $this->db->tableExists('doctor_master')) {
+            $dFields = $this->db->getFieldNames('doctor_master') ?? [];
+            $dSelect = ['p_fname', 'p_lname'];
+            foreach (['doctor_reg_no', 'registration_no', 'reg_no'] as $field) {
+                if (in_array($field, $dFields, true)) {
+                    $dSelect[] = $field;
+                }
+            }
             $dRow = $this->db->table('doctor_master')
-                ->select('p_fname,p_lname')
+                ->select(implode(',', array_unique($dSelect)))
                 ->where('id', $doctorId)
                 ->get(1)
                 ->getRowArray() ?? [];
-            $doctorName = trim(trim((string) ($dRow['p_fname'] ?? '')) . ' ' . trim((string) ($dRow['p_lname'] ?? '')));
+            if ($doctorName === '') {
+                $doctorName = trim(trim((string) ($dRow['p_fname'] ?? '')) . ' ' . trim((string) ($dRow['p_lname'] ?? '')));
+            }
+            foreach (['doctor_reg_no', 'registration_no', 'reg_no'] as $field) {
+                $candidate = trim((string) ($dRow[$field] ?? ''));
+                if ($candidate !== '') {
+                    $doctorRegNo = $candidate;
+                    break;
+                }
+            }
         }
 
         $rawAbha = trim($preferredAbhaId);
@@ -2309,6 +2326,15 @@ class AbdmGateway extends BaseController
             'completed_at' => $this->toIsoDateTimeOrNow($dischargeRaw),
             'department' => trim((string) ($ipdRow['dept_id'] ?? '')),
             'doctor_name' => $doctorName,
+            'doctor' => [
+                'id' => $doctorId > 0 ? (string) $doctorId : '',
+                'name' => $doctorName,
+                'registration_number' => $doctorRegNo,
+            ],
+            'organization' => [
+                'id' => $hfrId,
+                'name' => trim((string) ($hospital['name'] ?? '')),
+            ],
             'patient' => [
                 'id' => (string) $patientId,
                 'name' => $patientName,

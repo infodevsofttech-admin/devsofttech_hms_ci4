@@ -30,6 +30,28 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             $builder->addEncounter($encounter);
         }
 
+        $practitioner = $this->buildPractitioner($source);
+        if (! is_array($practitioner)) {
+            $fallbackDoctorName = trim((string) ($source['doctor_name'] ?? ''));
+            if ($fallbackDoctorName !== '') {
+                $practitioner = [
+                    'resourceType' => 'Practitioner',
+                    'id' => 'practitioner-' . md5($fallbackDoctorName),
+                    'name' => [[
+                        'text' => $fallbackDoctorName,
+                    ]],
+                ];
+            }
+        }
+        if (is_array($practitioner)) {
+            $builder->addPractitioner($practitioner);
+        }
+
+        $organization = $this->buildOrganization($source);
+        if (is_array($organization)) {
+            $builder->addOrganization($organization);
+        }
+
         $patientRef = 'urn:uuid:patient-' . $patientId;
         $encounterRef = is_array($encounter) ? 'urn:uuid:' . (string) ($encounter['id'] ?? '') : null;
 
