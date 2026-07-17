@@ -6109,6 +6109,112 @@ class Ipd_discharge extends BaseController
                     ],
                 ]);
 
+                $complaintJson = trim((string) ($this->request->getPost('discharge_complaints_json') ?? ''));
+                $decodedComplaints = [];
+                if ($complaintJson !== '') {
+                    $decoded = json_decode($complaintJson, true);
+                    if (is_array($decoded)) {
+                        $decodedComplaints = $decoded;
+                    }
+                }
+
+                if (empty($decodedComplaints)) {
+                    $postedIds = $this->request->getPost('complaint_row_id');
+                    $postedTerms = $this->request->getPost('complaint_term');
+                    $postedDurations = $this->request->getPost('complaint_duration');
+                    $postedFreq = $this->request->getPost('complaint_frequency');
+                    $postedSeverity = $this->request->getPost('complaint_severity');
+
+                    if (is_array($postedTerms)) {
+                        $count = count($postedTerms);
+                        for ($i = 0; $i < $count; $i++) {
+                            $decodedComplaints[] = [
+                                'id' => (int) (is_array($postedIds) ? ($postedIds[$i] ?? 0) : 0),
+                                'term' => (string) ($postedTerms[$i] ?? ''),
+                                'duration' => (string) (is_array($postedDurations) ? ($postedDurations[$i] ?? '') : ''),
+                                'frequency' => (string) (is_array($postedFreq) ? ($postedFreq[$i] ?? '') : ''),
+                                'severity' => (string) (is_array($postedSeverity) ? ($postedSeverity[$i] ?? '') : ''),
+                            ];
+                        }
+                    }
+                }
+
+                if (is_array($decodedComplaints) && $this->tableHasColumns('ipd_discharge_complaint', ['ipd_id', 'comp_report'])) {
+                    {
+                        $existingComplaintRows = $this->db->table('ipd_discharge_complaint')
+                            ->select('id')
+                            ->where('ipd_id', $ipdId)
+                            ->get()
+                            ->getResultArray();
+
+                        $existingIdSet = [];
+                        foreach ($existingComplaintRows as $row) {
+                            $existingId = (int) ($row['id'] ?? 0);
+                            if ($existingId > 0) {
+                                $existingIdSet[$existingId] = true;
+                            }
+                        }
+
+                        $keepIds = [];
+                        $orderIndex = 1;
+
+                        foreach ($decodedComplaints as $row) {
+                            if (! is_array($row)) {
+                                continue;
+                            }
+
+                            $term = trim((string) ($row['term'] ?? ''));
+                            if ($term === '') {
+                                continue;
+                            }
+
+                            $duration = trim((string) ($row['duration'] ?? ''));
+                            $rowId = (int) ($row['id'] ?? 0);
+
+                            $commonData = [
+                                'comp_report' => $term,
+                                'comp_remark' => $duration,
+                                'update_by' => $userLabel,
+                            ];
+                            if ($this->db->fieldExists('order_id', 'ipd_discharge_complaint')) {
+                                $commonData['order_id'] = $orderIndex;
+                            }
+
+                            if ($rowId > 0 && isset($existingIdSet[$rowId])) {
+                                $savedAny = (bool) $this->db->table('ipd_discharge_complaint')
+                                    ->where('id', $rowId)
+                                    ->where('ipd_id', $ipdId)
+                                    ->update($commonData) || $savedAny;
+                                $keepIds[$rowId] = $rowId;
+                            } else {
+                                $insertData = $commonData;
+                                $insertData['ipd_id'] = $ipdId;
+                                if ($this->db->fieldExists('comp_code', 'ipd_discharge_complaint')) {
+                                    $insertData['comp_code'] = 0;
+                                }
+
+                                $inserted = (bool) $this->db->table('ipd_discharge_complaint')->insert($insertData);
+                                $savedAny = $inserted || $savedAny;
+                                if ($inserted) {
+                                    $newId = (int) ($this->db->insertID() ?? 0);
+                                    if ($newId > 0) {
+                                        $keepIds[$newId] = $newId;
+                                    }
+                                }
+                            }
+
+                            $orderIndex++;
+                        }
+
+                        $deleteBuilder = $this->db->table('ipd_discharge_complaint')->where('ipd_id', $ipdId);
+                        if (! empty($keepIds)) {
+                            $deleteBuilder->whereNotIn('id', array_values($keepIds));
+                        }
+
+                        $savedAny = (bool) $deleteBuilder->delete() || $savedAny;
+                    }
+                }
+
                 if ($complaintRemark !== '' || $this->tableHasColumns('ipd_discharge_complaint_remark', ['ipd_id'])) {
                     $savedAny = $this->upsertByIpd('ipd_discharge_complaint_remark', $ipdId, [
                         'comp_report' => $this->buildComplaintMetaPayload(['pain_value' => $painValue]),

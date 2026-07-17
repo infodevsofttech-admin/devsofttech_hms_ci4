@@ -748,6 +748,22 @@ $historyFields = [
                                 </table>
 
                                 <!-- Hidden fields to store data for form submission -->
+                                <?php
+                                $complaintSeedRows = [];
+                                if (isset($complaint_rows) && is_array($complaint_rows)) {
+                                    foreach ($complaint_rows as $row) {
+                                        $complaintSeedRows[] = [
+                                            'id' => (int) ($row['id'] ?? 0),
+                                            'term' => (string) ($row['comp_report'] ?? ''),
+                                            'frequency' => '',
+                                            'severity' => '',
+                                            'duration' => (string) ($row['comp_remark'] ?? ''),
+                                            'date' => '',
+                                        ];
+                                    }
+                                }
+                                ?>
+                                <input type="hidden" id="discharge_complaint_seed_json" value="<?= esc((string) json_encode($complaintSeedRows), 'attr') ?>">
                                 <input type="hidden" name="discharge_complaints_json" id="discharge_complaints_json" value="">
 
                                 <!-- Fixed dropdowns for table cell inputs -->
@@ -1908,27 +1924,30 @@ $historyFields = [
             var selectedDischargeComplaints = [];
 
             function initDischargeComplaintsTable() {
-                // Load existing complaints from PHP (if any)
-                <?php if (isset($complaint_rows) && is_array($complaint_rows) && !empty($complaint_rows)): ?>
-                    selectedDischargeComplaints = [
-                        <?php
-                        $itemCount = count($complaint_rows);
-                        $currentIndex = 0;
-                        foreach ($complaint_rows as $row):
-                            $currentIndex++;
-                        ?> {
-                                id: <?= (int) ($row['id'] ?? 0) ?>,
-                                term: <?= json_encode((string) ($row['comp_report'] ?? '')) ?>,
-                                frequency: '',
-                                severity: '',
-                                duration: <?= json_encode((string) ($row['comp_remark'] ?? '')) ?>,
-                                date: ''
-                            }
-                            <?= $currentIndex < $itemCount ? ',' : '' ?>
+                // Always reset from server-rendered state to avoid stale rows after section reload.
+                selectedDischargeComplaints = [];
 
-                        <?php endforeach; ?>
-                    ];
-                <?php endif; ?>
+                // Load existing complaints from section-scoped seed JSON.
+                var seedEl = document.getElementById('discharge_complaint_seed_json');
+                if (seedEl) {
+                    try {
+                        var seedRows = JSON.parse(String(seedEl.value || '[]'));
+                        if (Array.isArray(seedRows)) {
+                            selectedDischargeComplaints = seedRows.map(function(row) {
+                                return {
+                                    id: parseInt((row && row.id) || 0, 10) || 0,
+                                    term: String((row && row.term) || ''),
+                                    frequency: String((row && row.frequency) || ''),
+                                    severity: String((row && row.severity) || ''),
+                                    duration: String((row && row.duration) || ''),
+                                    date: String((row && row.date) || '')
+                                };
+                            });
+                        }
+                    } catch (err) {
+                        selectedDischargeComplaints = [];
+                    }
+                }
 
                 renderDischargeComplaintTable();
             }
@@ -1941,6 +1960,7 @@ $historyFields = [
 
                 if (selectedDischargeComplaints.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="6" class="text-muted text-center">No complaints yet. Add using the input below.</td></tr>';
+                    syncDischargeComplaintJsonField();
                     return;
                 }
 
@@ -1959,6 +1979,7 @@ $historyFields = [
                     td2.className = 'p-1';
                     var nameInput = document.createElement('input');
                     nameInput.type = 'text';
+                    nameInput.name = 'complaint_term[]';
                     nameInput.className = 'form-control form-control-sm';
                     nameInput.value = item.term || '';
                     nameInput.placeholder = 'Complaint…';
@@ -1966,6 +1987,7 @@ $historyFields = [
                     nameInput.setAttribute('data-idx', idx);
                     nameInput.addEventListener('input', function() {
                         selectedDischargeComplaints[idx].term = this.value;
+                        syncDischargeComplaintJsonField();
                     });
                     td2.appendChild(nameInput);
                     tr.appendChild(td2);
@@ -1975,12 +1997,14 @@ $historyFields = [
                     td3.className = 'p-1';
                     var freqInput = document.createElement('input');
                     freqInput.type = 'text';
+                    freqInput.name = 'complaint_frequency[]';
                     freqInput.className = 'form-control form-control-sm';
                     freqInput.value = item.frequency || '';
                     freqInput.placeholder = 'daily…';
                     freqInput.style.fontSize = '.82rem';
                     freqInput.addEventListener('input', function() {
                         selectedDischargeComplaints[idx].frequency = this.value;
+                        syncDischargeComplaintJsonField();
                     });
                     td3.appendChild(freqInput);
                     tr.appendChild(td3);
@@ -1990,12 +2014,14 @@ $historyFields = [
                     td4.className = 'p-1';
                     var sevInput = document.createElement('input');
                     sevInput.type = 'text';
+                    sevInput.name = 'complaint_severity[]';
                     sevInput.className = 'form-control form-control-sm';
                     sevInput.value = item.severity || '';
                     sevInput.placeholder = 'mild…';
                     sevInput.style.fontSize = '.82rem';
                     sevInput.addEventListener('input', function() {
                         selectedDischargeComplaints[idx].severity = this.value;
+                        syncDischargeComplaintJsonField();
                     });
                     td4.appendChild(sevInput);
                     tr.appendChild(td4);
@@ -2005,15 +2031,23 @@ $historyFields = [
                     td5.className = 'p-1';
                     var durInput = document.createElement('input');
                     durInput.type = 'text';
+                    durInput.name = 'complaint_duration[]';
                     durInput.className = 'form-control form-control-sm';
                     durInput.value = item.duration || '';
                     durInput.placeholder = '2 days…';
                     durInput.style.fontSize = '.82rem';
                     durInput.addEventListener('input', function() {
                         selectedDischargeComplaints[idx].duration = this.value;
+                        syncDischargeComplaintJsonField();
                     });
                     td5.appendChild(durInput);
                     tr.appendChild(td5);
+
+                    var idInput = document.createElement('input');
+                    idInput.type = 'hidden';
+                    idInput.name = 'complaint_row_id[]';
+                    idInput.value = parseInt(item.id || 0, 10) || 0;
+                    tr.appendChild(idInput);
 
                     // Remove button
                     var td6 = document.createElement('td');
@@ -2024,13 +2058,111 @@ $historyFields = [
                     removeBtn.style.lineHeight = '1';
                     removeBtn.innerHTML = '×';
                     removeBtn.addEventListener('click', function() {
+                        var rowId = parseInt((item && item.id) || 0, 10) || 0;
+                        if (rowId > 0) {
+                            var painValue = '';
+                            var painHidden = document.getElementById('pain_value');
+                            if (painHidden) {
+                                painValue = String(painHidden.value || '').trim();
+                            }
+
+                            saveComplaintRowAjax({
+                                action: 'remove_complaint',
+                                complaint_remove_id: rowId,
+                                complaint_remark: getComplaintEditorText(),
+                                pain_value: painValue
+                            }, 'Complaint removed.');
+                            return;
+                        }
+
                         selectedDischargeComplaints.splice(idx, 1);
                         renderDischargeComplaintTable();
+                        syncDischargeComplaintJsonField();
                     });
                     td6.appendChild(removeBtn);
                     tr.appendChild(td6);
 
                     tbody.appendChild(tr);
+                });
+
+                syncDischargeComplaintJsonField();
+            }
+
+            function syncDischargeComplaintJsonField() {
+                var hidden = document.getElementById('discharge_complaints_json');
+                if (!hidden) {
+                    return;
+                }
+
+                var rows = [];
+                selectedDischargeComplaints.forEach(function(item) {
+                    var term = String((item && item.term) || '').trim();
+                    if (term === '') {
+                        return;
+                    }
+
+                    rows.push({
+                        id: parseInt((item && item.id) || 0, 10) || 0,
+                        term: term,
+                        frequency: String((item && item.frequency) || '').trim(),
+                        severity: String((item && item.severity) || '').trim(),
+                        duration: String((item && item.duration) || '').trim(),
+                        date: String((item && item.date) || '').trim()
+                    });
+                });
+
+                hidden.value = JSON.stringify(rows);
+            }
+
+            function refreshComplaintSectionFromServerHtml(html, form, statusText, statusLevel) {
+                var holder = document.createElement('div');
+                holder.innerHTML = String(html || '');
+
+                if (!patchSectionFromHtml(holder, 'section-complaints')) {
+                    setComplaintStatus('Unable to refresh complaint section.', 'error');
+                    return;
+                }
+
+                updateCsrfFromHtml(holder, form);
+                patchNoticeFromHtml(holder);
+                notifyFromHtml(holder);
+
+                initComplaintEditor();
+                initComplaintTools();
+                bindDischargeAjaxSubmit();
+                initNabhHistorySection(document.querySelector('form[action*="Ipd_discharge/ipd_select/"]'));
+                syncNavOnScroll();
+
+                if (statusText) {
+                    window.setTimeout(function() {
+                        setComplaintStatus(statusText, statusLevel || 'success');
+                    }, 0);
+                }
+            }
+
+            function saveComplaintRowAjax(payload, successText) {
+                var form = getDischargeForm();
+                if (!form || !window.jQuery) {
+                    setComplaintStatus('Unable to reach server right now.', 'error');
+                    return;
+                }
+
+                var csrf = getCsrfPair(form);
+                payload = payload || {};
+                payload[csrf.name] = csrf.value;
+
+                setComplaintStatus('Saving complaint...', 'muted');
+
+                window.jQuery.ajax({
+                    url: form.getAttribute('action') || window.location.href,
+                    type: 'POST',
+                    data: payload,
+                    dataType: 'html',
+                    timeout: 30000
+                }).done(function(html) {
+                    refreshComplaintSectionFromServerHtml(html, form, successText || 'Complaint saved.', 'success');
+                }).fail(function(xhr, status, error) {
+                    setComplaintStatus('Save failed: ' + (error || status), 'error');
                 });
             }
 
@@ -2137,25 +2269,18 @@ $historyFields = [
                             return;
                         }
 
-                        // Add to array
-                        selectedDischargeComplaints.push({
-                            id: 0,
-                            term: inputVal,
-                            frequency: '',
-                            severity: '',
-                            duration: '',
-                            date: ''
-                        });
-
-                        // Refresh table
-                        renderDischargeComplaintTable();
-
-                        // Clear input
-                        if (lookup) {
-                            lookup.value = '';
+                        var painValue = '';
+                        if (painHidden) {
+                            painValue = String(painHidden.value || '').trim();
                         }
 
-                        // No status message needed - table update is visual confirmation
+                        saveComplaintRowAjax({
+                            action: 'add_complaint',
+                            new_complaint_name: inputVal,
+                            new_complaint_remark: '',
+                            complaint_remark: getComplaintEditorText(),
+                            pain_value: painValue
+                        }, 'Complaint added.');
                     });
                 }
 
@@ -3853,6 +3978,25 @@ $historyFields = [
                 }
                 section.dataset.toolsBound = '1';
 
+                function reloadMedicineSectionFromServer() {
+                    if (!window.jQuery) {
+                        return;
+                    }
+
+                    var form = getDischargeForm();
+                    var url = form ? (form.getAttribute('action') || window.location.href) : window.location.href;
+                    window.jQuery.get(url, function(html) {
+                        var holder = document.createElement('div');
+                        holder.innerHTML = String(html || '');
+                        if (patchSectionFromHtml(holder, 'section-medicine')) {
+                            patchNoticeFromHtml(holder);
+                            initMedicineTools();
+                            bindDischargeAjaxSubmit();
+                            syncNavOnScroll();
+                        }
+                    });
+                }
+
                 if (!window.jQuery) {
                     return;
                 }
@@ -4655,11 +4799,29 @@ $historyFields = [
                                 $('#discharge_med_name').focus();
 
                                 setMedicineStatus(editRowId > 0 ? 'Medicine updated successfully.' : 'Medicine saved successfully.', 'success');
+
+                                // Keep UI in sync with actual DB-backed rendering rules.
+                                reloadMedicineSectionFromServer();
                             } else {
                                 var errorMsg = (data && data.error_text) ? data.error_text : 'Unable to save medicine.';
                                 setMedicineStatus(errorMsg, 'error');
                             }
                         }).fail(function(xhr, status, error) {
+                            // Some environments may return HTML instead of JSON for this endpoint.
+                            var responseHtml = xhr && typeof xhr.responseText === 'string' ? xhr.responseText : '';
+                            if (responseHtml !== '' && responseHtml.indexOf('section-medicine') !== -1) {
+                                var holder = document.createElement('div');
+                                holder.innerHTML = responseHtml;
+                                if (patchSectionFromHtml(holder, 'section-medicine')) {
+                                    patchNoticeFromHtml(holder);
+                                    initMedicineTools();
+                                    bindDischargeAjaxSubmit();
+                                    syncNavOnScroll();
+                                    setMedicineStatus('Medicine saved. Section refreshed from server response.', 'success');
+                                    return;
+                                }
+                            }
+
                             setMedicineStatus('Network error: ' + (error || status), 'error');
                         });
                     });
@@ -4718,6 +4880,8 @@ $historyFields = [
             }
 
             function syncEditorValues() {
+                syncDischargeComplaintJsonField();
+
                 if (!window.CKEDITOR) {
                     return;
                 }
