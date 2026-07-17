@@ -1711,7 +1711,10 @@
         var allConditions = byType('Condition');
         var observations  = byType('Observation');
         var medications   = byType('MedicationRequest');
+        var procedures    = byType('Procedure');
         var serviceReqs   = byType('ServiceRequest');
+        var allergies     = byType('AllergyIntolerance');
+        var carePlans     = byType('CarePlan');
 
         var complaints = allConditions.filter(function(c) {
             return (c.category || []).some(function(cat) { return (cat.text || '').toLowerCase().includes('complaint'); });
@@ -1923,6 +1926,20 @@
             html += '</ol></div></div>';
         }
 
+        // ── Procedures / Surgeries
+        if (procedures.length) {
+            html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">Procedures</small></div><div class="card-body py-2">';
+            html += '<ul class="mb-0 ps-3">';
+            procedures.forEach(function(p) {
+                var text = (p.code || {}).text || ((((p.code || {}).coding) || [])[0] || {}).display || '';
+                var at   = fmtDate(p.performedDateTime || '');
+                html += '<li class="mb-1"><strong>' + hesc(text || 'Procedure') + '</strong>';
+                if (at) html += ' <span class="text-muted small">(' + hesc(at) + ')</span>';
+                html += '</li>';
+            });
+            html += '</ul></div></div>';
+        }
+
         // ── Investigations
         if (serviceReqs.length) {
             html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">Investigations</small></div><div class="card-body py-2">';
@@ -1932,6 +1949,36 @@
                 var loinc = (((s.code || {}).coding) || [])[0] || {};
                 html += '<li class="mb-1"><strong>' + hesc(text) + '</strong>';
                 if (loinc.code) html += ' <span class="badge bg-info text-dark" style="font-size:.7rem;">LOINC&nbsp;' + hesc(loinc.code) + '</span>';
+                html += '</li>';
+            });
+            html += '</ul></div></div>';
+        }
+
+        // ── Allergy & Risk Profile
+        if (allergies.length) {
+            html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">Allergies / Risk Profile</small></div><div class="card-body py-2">';
+            html += '<ul class="mb-0 ps-3">';
+            allergies.forEach(function(a) {
+                var text = (a.code || {}).text || '';
+                var note = (((a.note || [])[0]) || {}).text || '';
+                var criticality = (a.criticality || '').toUpperCase();
+                html += '<li class="mb-1"><strong>' + hesc(text || 'Allergy') + '</strong>';
+                if (criticality) html += ' <span class="badge bg-warning text-dark" style="font-size:.7rem;">' + hesc(criticality) + '</span>';
+                if (note) html += ' <small class="text-muted d-block">' + hesc(note) + '</small>';
+                html += '</li>';
+            });
+            html += '</ul></div></div>';
+        }
+
+        // ── Discharge Advice / Follow-up
+        if (carePlans.length) {
+            html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">Discharge Advice & Follow-up</small></div><div class="card-body py-2">';
+            html += '<ul class="mb-0 ps-3">';
+            carePlans.forEach(function(cp) {
+                var title = cp.title || 'Care Plan';
+                var desc  = cp.description || '';
+                html += '<li class="mb-2"><strong>' + hesc(title) + '</strong>';
+                if (desc) html += '<div class="text-muted small">' + hesc(desc) + '</div>';
                 html += '</li>';
             });
             html += '</ul></div></div>';

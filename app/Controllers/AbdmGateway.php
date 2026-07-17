@@ -2186,6 +2186,119 @@ class AbdmGateway extends BaseController
             }
         }
 
+        $observations = [];
+        foreach ($this->ipdRows('ipd_discharge_1_b', ['short_head', 'rdata'], $ipdId, 'ipd_d_id') as $row) {
+            $label = trim((string) ($row['short_head'] ?? ''));
+            $value = trim((string) ($row['rdata'] ?? ''));
+            if ($label === '' || $value === '') {
+                continue;
+            }
+            $observations[] = [
+                'text' => $label,
+                'value' => $value,
+                'category' => 'vital-signs',
+                'category_code' => 'vital-signs',
+                'effective_at' => $this->toIsoDateTimeOrNow($admissionRaw),
+            ];
+        }
+        foreach ($this->ipdRows('ipd_discharge_1_b_final', ['short_head', 'rdata'], $ipdId, 'ipd_d_id') as $row) {
+            $label = trim((string) ($row['short_head'] ?? ''));
+            $value = trim((string) ($row['rdata'] ?? ''));
+            if ($label === '' || $value === '') {
+                continue;
+            }
+            $observations[] = [
+                'text' => 'Discharge ' . $label,
+                'value' => $value,
+                'category' => 'vital-signs',
+                'category_code' => 'vital-signs',
+                'effective_at' => $this->toIsoDateTimeOrNow($dischargeRaw),
+            ];
+        }
+
+        $investigations = [];
+        foreach ($this->ipdRows('ipd_discharge_1_d', ['short_head', 'rdata'], $ipdId, 'ipd_d_id') as $row) {
+            $label = trim((string) ($row['short_head'] ?? ''));
+            $value = trim((string) ($row['rdata'] ?? ''));
+            if ($label === '') {
+                continue;
+            }
+            $investigations[] = [
+                'text' => $value !== '' ? ($label . ': ' . $value) : $label,
+                'authored_on' => $this->toIsoDateTimeOrNow($admissionRaw),
+            ];
+        }
+        foreach ($this->ipdRows('ipd_discharge_1_e', ['short_head', 'rdata'], $ipdId, 'ipd_d_id') as $row) {
+            $label = trim((string) ($row['short_head'] ?? ''));
+            $value = trim((string) ($row['rdata'] ?? ''));
+            if ($label === '') {
+                continue;
+            }
+            $investigations[] = [
+                'text' => $value !== '' ? ($label . ': ' . $value) : $label,
+                'authored_on' => $this->toIsoDateTimeOrNow($admissionRaw),
+            ];
+        }
+
+        $allergies = [];
+        $carePlans = [];
+        $instructionRows = $this->ipdRows('ipd_discharge_instructions', ['comp_report', 'comp_remark', 'review_after'], $ipdId);
+        if (! empty($instructionRows)) {
+            $instructionRow = $instructionRows[0];
+            $instructionMeta = $this->parseJsonArray((string) ($instructionRow['comp_report'] ?? ''));
+            $nabhMeta = is_array($instructionMeta['nabh'] ?? null) ? $instructionMeta['nabh'] : [];
+
+            $allergyStatus = strtolower(trim((string) ($nabhMeta['drug_allergy_status'] ?? '')));
+            $allergyDetails = trim((string) ($nabhMeta['drug_allergy_details'] ?? ''));
+            if ($allergyStatus !== '' || $allergyDetails !== '') {
+                $allergies[] = [
+                    'text' => $allergyDetails !== '' ? $allergyDetails : ('Drug allergy status: ' . $allergyStatus),
+                    'note' => $allergyStatus,
+                    'criticality' => $allergyStatus === 'yes' ? 'high' : 'low',
+                    'recorded_at' => $this->toIsoDateTimeOrNow($dischargeRaw),
+                ];
+            }
+
+            $dietAdvice = trim((string) ($instructionRow['comp_remark'] ?? ''));
+            if ($dietAdvice !== '') {
+                $carePlans[] = [
+                    'title' => 'Dietary Advice',
+                    'description' => $dietAdvice,
+                    'created_at' => $this->toIsoDateTimeOrNow($dischargeRaw),
+                ];
+            }
+
+            $otherAdvice = trim((string) ($instructionMeta['other_text'] ?? ''));
+            if ($otherAdvice !== '') {
+                $carePlans[] = [
+                    'title' => 'Other Advice',
+                    'description' => $otherAdvice,
+                    'created_at' => $this->toIsoDateTimeOrNow($dischargeRaw),
+                ];
+            }
+
+            $reviewAfter = trim((string) ($instructionRow['review_after'] ?? ''));
+            if ($reviewAfter !== '') {
+                $carePlans[] = [
+                    'title' => 'Follow Up',
+                    'description' => 'Review After: ' . $reviewAfter,
+                    'created_at' => $this->toIsoDateTimeOrNow($dischargeRaw),
+                ];
+            }
+        }
+
+        $courseRows = $this->ipdRows('ipd_discharge_course_remark', ['comp_remark'], $ipdId);
+        if (! empty($courseRows)) {
+            $courseText = trim((string) ($courseRows[0]['comp_remark'] ?? ''));
+            if ($courseText !== '') {
+                $carePlans[] = [
+                    'title' => 'Course In Hospital',
+                    'description' => $courseText,
+                    'created_at' => $this->toIsoDateTimeOrNow($dischargeRaw),
+                ];
+            }
+        }
+
         $hospital = $this->getHospitalProfileForFhir();
         $hfrId = trim((string) ($hospital['hfr_id'] ?? ''));
 
@@ -2212,6 +2325,10 @@ class AbdmGateway extends BaseController
             'conditions' => $conditions,
             'procedures' => $procedures,
             'medications' => $medications,
+            'observations' => $observations,
+            'investigations' => $investigations,
+            'allergies' => $allergies,
+            'care_plans' => $carePlans,
         ];
 
         $factory = new FhirGeneratorFactory();
@@ -2233,9 +2350,9 @@ class AbdmGateway extends BaseController
      * @param array<int,string> $columns
      * @return array<int,array<string,mixed>>
      */
-    private function ipdRows(string $table, array $columns, int $ipdId): array
+    private function ipdRows(string $table, array $columns, int $ipdId, string $ipdKey = 'ipd_id'): array
     {
-        if ($ipdId <= 0 || ! $this->db->tableExists($table) || ! $this->db->fieldExists('ipd_id', $table)) {
+        if ($ipdId <= 0 || ! $this->db->tableExists($table) || ! $this->db->fieldExists($ipdKey, $table)) {
             return [];
         }
 
@@ -2254,13 +2371,27 @@ class AbdmGateway extends BaseController
 
         $builder = $this->db->table($table)
             ->select(implode(',', $available))
-            ->where('ipd_id', $ipdId);
+            ->where($ipdKey, $ipdId);
 
         if ($this->db->fieldExists('id', $table)) {
             $builder->orderBy('id', 'ASC');
         }
 
         return $builder->get()->getResultArray();
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    private function parseJsonArray(string $json): array
+    {
+        $json = trim($json);
+        if ($json === '') {
+            return [];
+        }
+
+        $decoded = json_decode($json, true);
+        return is_array($decoded) ? $decoded : [];
     }
 
     private function normalizeFhirGender(string $gender): string

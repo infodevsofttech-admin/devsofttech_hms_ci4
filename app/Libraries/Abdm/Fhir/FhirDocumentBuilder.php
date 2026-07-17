@@ -79,6 +79,24 @@ class FhirDocumentBuilder
     }
 
     /** @param array<string,mixed> $resource */
+    public function addServiceRequest(array $resource): self
+    {
+        return $this->addResource($resource);
+    }
+
+    /** @param array<string,mixed> $resource */
+    public function addAllergyIntolerance(array $resource): self
+    {
+        return $this->addResource($resource);
+    }
+
+    /** @param array<string,mixed> $resource */
+    public function addCarePlan(array $resource): self
+    {
+        return $this->addResource($resource);
+    }
+
+    /** @param array<string,mixed> $resource */
     public function addDiagnosticReport(array $resource): self
     {
         return $this->addResource($resource);
