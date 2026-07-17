@@ -684,7 +684,7 @@ class Ipd_discharge extends BaseController
             $existingPlain = (string) preg_replace('/\s+/u', ' ', trim(strip_tags((string) $presentingComplaints)));
             $remarkPlain = (string) preg_replace('/\s+/u', ' ', trim(strip_tags((string) $complaintRemarkText)));
             if ($remarkPlain !== '' && stripos($existingPlain, $remarkPlain) === false) {
-                $presentingComplaints .= '<div class="discharge-field"><strong>Other Complaints / Detailed History:</strong> '
+                $presentingComplaints .= '<div class="discharge-field">'
                     . $this->renderRichText($complaintRemarkText)
                     . '</div>';
             }
