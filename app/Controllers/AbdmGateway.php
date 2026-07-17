@@ -4,6 +4,8 @@ namespace App\Controllers;
 
 use App\Libraries\Abdm\AbdmConnectorInterface;
 use App\Libraries\Abdm\AbdmConnectorFactory;
+use App\Libraries\Abdm\Fhir\FhirGeneratorFactory;
+use App\Libraries\Abdm\Fhir\Support\GatewayPayloadAdapter;
 use App\Libraries\FhirR4Builder;
 use App\Libraries\FhirEncryptionService;
 use App\Libraries\AbdmAuditService;
@@ -1550,105 +1552,21 @@ class AbdmGateway extends BaseController
             }
         }
 
-        // ── Load IPD data ──────────────────────────────────────────────────────
-        $ipdRow = $this->db->tableExists('ipd_master')
-            ? ($this->db->table('ipd_master')->where('id', $ipdId)->get(1)->getRowArray() ?? [])
-            : [];
-
-        $summaryHtml = '';
-        if ($this->db->tableExists('ipd_discharge') && $this->db->fieldExists('content', 'ipd_discharge')) {
-            $summaryRow = $this->db->table('ipd_discharge')
-                ->select('content')
-                ->where('ipd_id', $ipdId)
-                ->orderBy('id', 'DESC')
-                ->get(1)
-                ->getRowArray();
-            $summaryHtml = trim((string) ($summaryRow['content'] ?? ''));
+        $fhirPayload = $this->buildIpdDischargeGatewayPayload($ipdId, $patientId, $abhaId);
+        if ($fhirPayload === null) {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'Unable to prepare IPD discharge FHIR payload']);
         }
 
-        // ── Load patient data ──────────────────────────────────────────────────
-        $patientRow = [];
-        if ($this->db->tableExists('patient_master')) {
-            $patientRow = $this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray() ?? [];
-        }
-        $patName = trim(
-            trim((string) ($patientRow['p_fname'] ?? '')) . ' ' .
-            trim((string) ($patientRow['p_lname'] ?? ''))
-        ) ?: trim((string) ($ipdRow['P_name'] ?? ''));
-
-        // ── Load hospital profile (HFR ID, name) ──────────────────────────────
-        $hospitalProfile = $this->getHospitalProfileForFhir();
-
-        // ── Load attending doctor ─────────────────────────────────────────────
-        $doctorId   = (int) ($ipdRow['r_doc_id'] ?? 0);
-        $doctorName = trim((string) ($ipdRow['r_doc_name'] ?? ''));
-        $doctorRegNo = '';
-        if ($doctorId > 0 && $this->db->tableExists('doctor_master')) {
-            $dFields = $this->db->getFieldNames('doctor_master') ?? [];
-            $dSelect = ['id'];
-            foreach (['p_fname', 'p_lname', 'doctor_reg_no', 'registration_no', 'reg_no'] as $f) {
-                if (in_array($f, $dFields, true)) {
-                    $dSelect[] = $f;
-                }
-            }
-            $dRow = $this->db->table('doctor_master')->select(implode(',', $dSelect))->where('id', $doctorId)->get(1)->getRowArray() ?? [];
-            if ($dRow !== [] && $doctorName === '') {
-                $doctorName = trim(trim((string) ($dRow['p_fname'] ?? '')) . ' ' . trim((string) ($dRow['p_lname'] ?? '')));
-            }
-            foreach (['doctor_reg_no', 'registration_no', 'reg_no'] as $f) {
-                if (! empty($dRow[$f])) {
-                    $doctorRegNo = trim((string) $dRow[$f]);
-                    break;
-                }
-            }
-        }
-
-        // ── Parse dates ───────────────────────────────────────────────────────
-        $admissionRaw  = trim((string) ($ipdRow['register_date'] ?? ''));
-        $dischargeRaw  = trim((string) ($ipdRow['discharge_date'] ?? ''));
-        $admissionDate = $admissionRaw !== '' ? (new \DateTime($admissionRaw, new \DateTimeZone('Asia/Kolkata')))->format('Y-m-d\TH:i:sP') : '';
-        $dischargeDate = $dischargeRaw !== '' ? (new \DateTime($dischargeRaw, new \DateTimeZone('Asia/Kolkata')))->format('Y-m-d\TH:i:sP') : '';
-        $visitDate     = $dischargeRaw !== '' ? date('Y-m-d', strtotime($dischargeRaw)) : ($admissionRaw !== '' ? date('Y-m-d', strtotime($admissionRaw)) : date('Y-m-d'));
-
-        // ── Build FHIR DischargeSummaryRecord bundle ────────────────────────────
-        $fhir = new FhirR4Builder();
-
-        $patient = [
-            'id'          => (string) $patientId,
-            'name'        => $patName,
-            'gender'      => trim((string) ($patientRow['gender'] ?? '')),
-            'birthDate'   => ! empty($patientRow['dob']) ? date('Y-m-d', strtotime((string) $patientRow['dob'])) : '',
-            'abhaAddress' => $abhaId,
-        ];
-
-        $encounter = [
-            'id'             => (string) $ipdId,
-            'admission_date' => $admissionDate,
-            'discharge_date' => $dischargeDate,
-            'ipd_code'       => trim((string) ($ipdRow['ipd_code'] ?? '')),
-        ];
-
-        // Parse summary HTML into structured sections where possible
-        $chiefComplaints = trim((string) ($ipdRow['problem'] ?? ''));
-        $summary = [
-            'title'                 => 'Discharge Summary',
-            'chief_complaints'      => $chiefComplaints,
-            'clinical_summary_html' => $summaryHtml,
-        ];
-
-        $practitioner = $doctorName !== ''
-            ? ['name' => $doctorName, 'registration_number' => $doctorRegNo]
-            : null;
-        $organization = $hospitalProfile['name'] !== ''
-            ? ['name' => $hospitalProfile['name'], 'hfr_id' => $hospitalProfile['hfr_id']]
-            : null;
-
-        $bundle     = $fhir->buildDischargeSummaryBundle($patient, $encounter, $summary, $practitioner, $organization);
+        $ipdRow = (array) ($fhirPayload['ipd_row'] ?? []);
+        $patName = (string) ($fhirPayload['patient_name'] ?? '');
+        $doctorName = (string) ($fhirPayload['doctor_name'] ?? '');
+        $visitDate = (string) ($fhirPayload['visit_date'] ?? date('Y-m-d'));
+        $ccRef = (string) ($fhirPayload['care_context_reference'] ?? ('IPD-' . $ipdId . '-' . $visitDate));
+        $ccDisplay = (string) ($fhirPayload['care_context_display'] ?? ('Discharge Summary ' . $visitDate));
+        $bundle = (array) ($fhirPayload['bundle'] ?? []);
         $bundleJson = (string) json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
         // ── Store health_record ───────────────────────────────────────────────
-        $ipdCode = trim((string) ($ipdRow['ipd_code'] ?? ''));
-        $ccRef   = 'IPD-' . $ipdId . ($ipdCode !== '' ? '-' . $ipdCode : '') . '-' . $visitDate;
         $healthRecordId = $this->storeHealthRecord([
             'patient_id'     => $patientId,
             'abha_id'        => $abhaId,
@@ -1703,8 +1621,8 @@ class AbdmGateway extends BaseController
                 'visit_date'             => $visitDate,
                 'doctor_name'            => $doctorName,
                 'care_context_reference' => $ccRef,
-                'care_context_display'    => 'Discharge Summary - ' . ($ipdCode !== '' ? 'IPD#' . $ipdCode : 'IPD#' . $ipdId),
-                'notes'                  => 'Discharge Summary - ' . ($ipdCode !== '' ? 'IPD#' . $ipdCode : 'IPD#' . $ipdId),
+                'care_context_display'    => $ccDisplay,
+                'notes'                  => $ccDisplay,
                 'queue_id'               => 'IPD-' . $ipdId . '-' . $visitDate,
                 'record_data'            => $bundle,
             ]);
@@ -2119,98 +2037,14 @@ class AbdmGateway extends BaseController
             ]);
         }
 
-        $ipdRow = $this->db->tableExists('ipd_master')
-            ? ($this->db->table('ipd_master')->where('id', $ipdId)->get(1)->getRowArray() ?? [])
-            : [];
-
-        if (empty($ipdRow)) {
+        $fhirPayload = $this->buildIpdDischargeGatewayPayload($ipdId, $patientId, $abhaId);
+        if ($fhirPayload === null) {
             return $this->response->setStatusCode(404)->setJSON([
                 'status' => 'error',
-                'message' => 'IPD record not found.',
+                'message' => 'Unable to prepare IPD discharge FHIR payload.',
             ]);
         }
-
-        $summaryHtml = '';
-        if ($this->db->tableExists('ipd_discharge') && $this->db->fieldExists('content', 'ipd_discharge')) {
-            $summaryRow = $this->db->table('ipd_discharge')
-                ->select('content')
-                ->where('ipd_id', $ipdId)
-                ->orderBy('id', 'DESC')
-                ->get(1)
-                ->getRowArray();
-            $summaryHtml = trim((string) ($summaryRow['content'] ?? ''));
-        }
-
-        $patientRow = [];
-        if ($this->db->tableExists('patient_master')) {
-            $patientRow = $this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray() ?? [];
-        }
-        $patName = trim(
-            trim((string) ($patientRow['p_fname'] ?? '')) . ' ' .
-            trim((string) ($patientRow['p_lname'] ?? ''))
-        ) ?: trim((string) ($ipdRow['P_name'] ?? ''));
-
-        $hospitalProfile = $this->getHospitalProfileForFhir();
-
-        $doctorId   = (int) ($ipdRow['r_doc_id'] ?? 0);
-        $doctorName = trim((string) ($ipdRow['r_doc_name'] ?? ''));
-        $doctorRegNo = '';
-        if ($doctorId > 0 && $this->db->tableExists('doctor_master')) {
-            $dFields = $this->db->getFieldNames('doctor_master') ?? [];
-            $dSelect = ['id'];
-            foreach (['p_fname', 'p_lname', 'doctor_reg_no', 'registration_no', 'reg_no'] as $f) {
-                if (in_array($f, $dFields, true)) {
-                    $dSelect[] = $f;
-                }
-            }
-            $dRow = $this->db->table('doctor_master')->select(implode(',', $dSelect))->where('id', $doctorId)->get(1)->getRowArray() ?? [];
-            if ($dRow !== [] && $doctorName === '') {
-                $doctorName = trim(trim((string) ($dRow['p_fname'] ?? '')) . ' ' . trim((string) ($dRow['p_lname'] ?? '')));
-            }
-            foreach (['doctor_reg_no', 'registration_no', 'reg_no'] as $f) {
-                if (! empty($dRow[$f])) {
-                    $doctorRegNo = trim((string) $dRow[$f]);
-                    break;
-                }
-            }
-        }
-
-        $admissionRaw  = trim((string) ($ipdRow['register_date'] ?? ''));
-        $dischargeRaw  = trim((string) ($ipdRow['discharge_date'] ?? ''));
-        $admissionDate = $admissionRaw !== '' ? (new \DateTime($admissionRaw, new \DateTimeZone('Asia/Kolkata')))->format('Y-m-d\TH:i:sP') : '';
-        $dischargeDate = $dischargeRaw !== '' ? (new \DateTime($dischargeRaw, new \DateTimeZone('Asia/Kolkata')))->format('Y-m-d\TH:i:sP') : '';
-
-        $fhir = new FhirR4Builder();
-
-        $patient = [
-            'id'          => (string) $patientId,
-            'name'        => $patName,
-            'gender'      => trim((string) ($patientRow['gender'] ?? '')),
-            'birthDate'   => ! empty($patientRow['dob']) ? date('Y-m-d', strtotime((string) $patientRow['dob'])) : '',
-            'abhaAddress' => $abhaId,
-        ];
-
-        $encounter = [
-            'id'             => (string) $ipdId,
-            'admission_date' => $admissionDate,
-            'discharge_date' => $dischargeDate,
-            'ipd_code'       => trim((string) ($ipdRow['ipd_code'] ?? '')),
-        ];
-
-        $summary = [
-            'title'                 => 'Discharge Summary',
-            'chief_complaints'      => trim((string) ($ipdRow['problem'] ?? '')),
-            'clinical_summary_html' => $summaryHtml,
-        ];
-
-        $practitioner = $doctorName !== ''
-            ? ['name' => $doctorName, 'registration_number' => $doctorRegNo]
-            : null;
-        $organization = $hospitalProfile['name'] !== ''
-            ? ['name' => $hospitalProfile['name'], 'hfr_id' => $hospitalProfile['hfr_id']]
-            : null;
-
-        $bundle = $fhir->buildDischargeSummaryBundle($patient, $encounter, $summary, $practitioner, $organization);
+        $bundle = (array) ($fhirPayload['bundle'] ?? []);
 
         return $this->response->setJSON([
             'status' => 'ok',
@@ -2219,6 +2053,244 @@ class AbdmGateway extends BaseController
             'abha_id' => $abhaId,
             'bundle' => $bundle,
         ]);
+    }
+
+    /**
+     * @return array<string,mixed>|null
+     */
+    private function buildIpdDischargeGatewayPayload(int $ipdId, int $patientId, string $preferredAbhaId = ''): ?array
+    {
+        $ipdRow = $this->db->tableExists('ipd_master')
+            ? ($this->db->table('ipd_master')->where('id', $ipdId)->get(1)->getRowArray() ?? [])
+            : [];
+        if (empty($ipdRow)) {
+            return null;
+        }
+
+        $patientRow = [];
+        if ($patientId > 0 && $this->db->tableExists('patient_master')) {
+            $patientRow = $this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray() ?? [];
+        }
+
+        $patientName = trim(trim((string) ($patientRow['p_fname'] ?? '')) . ' ' . trim((string) ($patientRow['p_lname'] ?? '')));
+        if ($patientName === '') {
+            $patientName = trim((string) ($ipdRow['P_name'] ?? ''));
+        }
+
+        $doctorName = trim((string) ($ipdRow['r_doc_name'] ?? ''));
+        $doctorId = (int) ($ipdRow['r_doc_id'] ?? 0);
+        if ($doctorName === '' && $doctorId > 0 && $this->db->tableExists('doctor_master')) {
+            $dRow = $this->db->table('doctor_master')
+                ->select('p_fname,p_lname')
+                ->where('id', $doctorId)
+                ->get(1)
+                ->getRowArray() ?? [];
+            $doctorName = trim(trim((string) ($dRow['p_fname'] ?? '')) . ' ' . trim((string) ($dRow['p_lname'] ?? '')));
+        }
+
+        $rawAbha = trim($preferredAbhaId);
+        if ($rawAbha === '') {
+            foreach (['abha_id', 'abha_no', 'abha'] as $field) {
+                $candidate = trim((string) ($patientRow[$field] ?? ''));
+                if ($candidate !== '') {
+                    $rawAbha = $candidate;
+                    break;
+                }
+            }
+        }
+        $abhaAddress = trim((string) ($patientRow['abha_address'] ?? ''));
+        if ($abhaAddress === '' && strpos($rawAbha, '@') !== false) {
+            $abhaAddress = $rawAbha;
+        }
+
+        $abhaDigits = preg_replace('/\D/', '', $rawAbha);
+        $abhaDigits = is_string($abhaDigits) ? $abhaDigits : '';
+
+        $admissionRaw = trim((string) ($ipdRow['register_date'] ?? ''));
+        $dischargeRaw = trim((string) ($ipdRow['discharge_date'] ?? ''));
+        $visitDate = $dischargeRaw !== ''
+            ? date('Y-m-d', strtotime($dischargeRaw))
+            : ($admissionRaw !== '' ? date('Y-m-d', strtotime($admissionRaw)) : date('Y-m-d'));
+
+        $conditions = [];
+        foreach ($this->ipdRows('ipd_discharge_diagnosis', ['comp_report'], $ipdId) as $row) {
+            $text = trim((string) ($row['comp_report'] ?? ''));
+            if ($text !== '') {
+                $conditions[] = ['text' => $text, 'code' => ''];
+            }
+        }
+        foreach ($this->ipdRows('ipd_discharge_complaint', ['comp_report'], $ipdId) as $row) {
+            $text = trim((string) ($row['comp_report'] ?? ''));
+            if ($text !== '') {
+                $conditions[] = ['text' => $text, 'code' => ''];
+            }
+        }
+        if (empty($conditions)) {
+            $problem = trim((string) ($ipdRow['problem'] ?? ''));
+            if ($problem !== '') {
+                $conditions[] = ['text' => $problem, 'code' => ''];
+            }
+        }
+
+        $procedures = [];
+        foreach ($this->ipdRows('ipd_discharge_surgery', ['surgery_name', 'surgery_date'], $ipdId) as $row) {
+            $text = trim((string) ($row['surgery_name'] ?? ''));
+            if ($text !== '') {
+                $procedures[] = [
+                    'text' => $text,
+                    'code' => '',
+                    'performed_at' => $this->toIsoDateTimeOrNow((string) ($row['surgery_date'] ?? '')),
+                ];
+            }
+        }
+        foreach ($this->ipdRows('ipd_discharge_procedure', ['procedure_name', 'procedure_date'], $ipdId) as $row) {
+            $text = trim((string) ($row['procedure_name'] ?? ''));
+            if ($text !== '') {
+                $procedures[] = [
+                    'text' => $text,
+                    'code' => '',
+                    'performed_at' => $this->toIsoDateTimeOrNow((string) ($row['procedure_date'] ?? '')),
+                ];
+            }
+        }
+
+        $medications = [];
+        $legacyMeds = $this->ipdRows('ipd_discharge_prescrption_prescribed', ['med_name', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days'], $ipdId);
+        if (empty($legacyMeds)) {
+            $legacyMeds = $this->ipdRows('ipd_discharge_prescription_prescribed', ['med_name', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days'], $ipdId);
+        }
+        foreach ($legacyMeds as $row) {
+            $name = trim((string) ($row['med_name'] ?? ''));
+            if ($name === '') {
+                continue;
+            }
+            $dosage = trim(implode(' ', array_filter([
+                (string) ($row['dosage'] ?? ''),
+                (string) ($row['dosage_when'] ?? ''),
+                (string) ($row['dosage_freq'] ?? ''),
+                (string) ($row['no_of_days'] ?? ''),
+            ], static fn ($v) => trim((string) $v) !== '')));
+            $medications[] = ['name' => $name, 'dosage' => $dosage];
+        }
+        if (empty($medications)) {
+            foreach ($this->ipdRows('ipd_discharge_drug', ['drug_name', 'drug_dose', 'drug_day'], $ipdId) as $row) {
+                $name = trim((string) ($row['drug_name'] ?? ''));
+                if ($name === '') {
+                    continue;
+                }
+                $dosage = trim(implode(' ', array_filter([
+                    (string) ($row['drug_dose'] ?? ''),
+                    (string) ($row['drug_day'] ?? ''),
+                ], static fn ($v) => trim((string) $v) !== '')));
+                $medications[] = ['name' => $name, 'dosage' => $dosage];
+            }
+        }
+
+        $hospital = $this->getHospitalProfileForFhir();
+        $hfrId = trim((string) ($hospital['hfr_id'] ?? ''));
+
+        $source = [
+            'record_id' => (string) $ipdId,
+            'session_id' => (string) $ipdId,
+            'visit_date' => $visitDate,
+            'completed_at' => $this->toIsoDateTimeOrNow($dischargeRaw),
+            'department' => trim((string) ($ipdRow['dept_id'] ?? '')),
+            'doctor_name' => $doctorName,
+            'patient' => [
+                'id' => (string) $patientId,
+                'name' => $patientName,
+                'gender' => $this->normalizeFhirGender((string) ($patientRow['gender'] ?? $patientRow['xgender'] ?? '')),
+                'dob' => ! empty($patientRow['dob']) ? date('Y-m-d', strtotime((string) $patientRow['dob'])) : '',
+                'abha_id' => $abhaDigits,
+                'abha_address' => $abhaAddress,
+            ],
+            'encounter' => [
+                'id' => (string) $ipdId,
+                'start' => $this->toIsoDateTimeOrNow($admissionRaw),
+                'end' => $this->toIsoDateTimeOrNow($dischargeRaw),
+            ],
+            'conditions' => $conditions,
+            'procedures' => $procedures,
+            'medications' => $medications,
+        ];
+
+        $factory = new FhirGeneratorFactory();
+        $output = $factory->discharge()->generate($source);
+        $payload = (new GatewayPayloadAdapter())->toGatewayPayload($output, $source, $hfrId);
+
+        return [
+            'bundle' => (array) ($payload['fhir_bundle'] ?? []),
+            'care_context_reference' => (string) ($payload['care_context_reference'] ?? ''),
+            'care_context_display' => (string) ($payload['care_context_display'] ?? ''),
+            'patient_name' => (string) ($payload['patient_name'] ?? $patientName),
+            'doctor_name' => (string) ($payload['doctor_name'] ?? $doctorName),
+            'visit_date' => (string) ($payload['visit_date'] ?? $visitDate),
+            'ipd_row' => $ipdRow,
+        ];
+    }
+
+    /**
+     * @param array<int,string> $columns
+     * @return array<int,array<string,mixed>>
+     */
+    private function ipdRows(string $table, array $columns, int $ipdId): array
+    {
+        if ($ipdId <= 0 || ! $this->db->tableExists($table) || ! $this->db->fieldExists('ipd_id', $table)) {
+            return [];
+        }
+
+        $available = [];
+        foreach ($columns as $column) {
+            if ($this->db->fieldExists($column, $table)) {
+                $available[] = $column;
+            }
+        }
+        if (empty($available)) {
+            return [];
+        }
+        if ($this->db->fieldExists('id', $table) && ! in_array('id', $available, true)) {
+            $available[] = 'id';
+        }
+
+        $builder = $this->db->table($table)
+            ->select(implode(',', $available))
+            ->where('ipd_id', $ipdId);
+
+        if ($this->db->fieldExists('id', $table)) {
+            $builder->orderBy('id', 'ASC');
+        }
+
+        return $builder->get()->getResultArray();
+    }
+
+    private function normalizeFhirGender(string $gender): string
+    {
+        $value = strtolower(trim($gender));
+        if ($value === 'm' || $value === 'male') {
+            return 'male';
+        }
+        if ($value === 'f' || $value === 'female') {
+            return 'female';
+        }
+        if ($value === 'other') {
+            return 'other';
+        }
+        return 'unknown';
+    }
+
+    private function toIsoDateTimeOrNow(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return date(DATE_ATOM);
+        }
+
+        $timestamp = strtotime($value);
+        if ($timestamp === false) {
+            return date(DATE_ATOM);
+        }
+
+        return date(DATE_ATOM, $timestamp);
     }
 
     public function nhcxClaimCreate()
