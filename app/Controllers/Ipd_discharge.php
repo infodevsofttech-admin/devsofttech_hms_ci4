@@ -578,7 +578,11 @@ class Ipd_discharge extends BaseController
         $surgery = $section(['<b>Surgery :', '>Surgery :', 'Surgery :']);
         $procedure = $section(['<b>Procedure :', '>Procedure :', 'Procedure :']);
         $personalHistory = $section(['Personal History']);
-        $presentingComplaints = $section(['Presenting Complaints and Reason for Admission']);
+        $presentingComplaints = $section([
+            'Presenting Complaints and Reason for Admission',
+            'Presenting Complaints with Duration and Reason for Admission',
+            'Complaints with Duration and Reason for Admission',
+        ]);
         $painMeasurement = $section(['Pain Measurement Scale']);
         $generalExam = $section(['General Examination on Admission']);
         $clinicalInvestigations = $section(['Clinical Investigation Reports']);
@@ -660,6 +664,20 @@ class Ipd_discharge extends BaseController
         if ($procedureText === '') {
             $procedureRows = $this->byIpdRows('ipd_discharge_procedure', ['procedure_name', 'procedure_date'], 'id ASC', $ipdId);
             $procedure = $this->buildNamedDateSection('Procedure', $procedureRows, 'procedure_name', 'procedure_date', 'Date of Procedure');
+        }
+
+        $presentingComplaintsText = trim(strip_tags((string) $presentingComplaints));
+        if ($presentingComplaintsText === '') {
+            $complaints = $this->byIpdRows('ipd_discharge_complaint', ['comp_report', 'comp_remark'], 'id ASC', $ipdId);
+            $complaintRemark = $this->firstRowByIpd('ipd_discharge_complaint_remark', $ipdId);
+            $complaintRemarkText = $this->sanitizeComplaintNarrativeRemark(
+                $this->normalizeRichText((string) ($complaintRemark['comp_remark'] ?? ''))
+            );
+            $presentingComplaints = $this->buildNarrativeSection(
+                'Presenting Complaints and Reason for Admission',
+                $complaints,
+                $complaintRemarkText
+            );
         }
 
         $vars = [
