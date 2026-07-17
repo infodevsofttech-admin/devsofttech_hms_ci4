@@ -3,6 +3,9 @@
 namespace App\Controllers;
 
 use App\Controllers\BaseController;
+use App\Libraries\Abdm\Fhir\FhirGeneratorFactory;
+use App\Libraries\Abdm\Fhir\Support\GatewayPayloadAdapter;
+use App\Libraries\Abdm\Sync\AbdmSyncOutboxService;
 use App\Libraries\AbdmWorkTaskService;
 use App\Libraries\BridgeSyncService;
 use App\Models\IpdBillingModel;
@@ -7602,6 +7605,203 @@ class Ipd_discharge extends BaseController
         } catch (\Throwable $e) {
             // Do not block discharge workflows if queue service is unavailable.
         }
+
+        // Also persist ABDM-compatible FHIR bundle in sync tables/outbox for M2 push.
+        // Fail-open: discharge save flow must never fail due to ABDM sync issues.
+        try {
+            $this->enqueueIpdDischargeFhirSync($ipdId, $patientId, $ipdRow, $patientRow);
+        } catch (\Throwable $e) {
+            // Intentionally ignored.
+        }
+    }
+
+    private function enqueueIpdDischargeFhirSync(int $ipdId, int $patientId, array $ipdRow, array $patientRow): void
+    {
+        if ($ipdId <= 0 || $patientId <= 0) {
+            return;
+        }
+
+        $hfrId = trim($this->getHospitalSettingValue('ABDM_HFR_ID'));
+        if ($hfrId === '') {
+            return;
+        }
+
+        $patientName = trim(trim((string) ($patientRow['p_fname'] ?? '')) . ' ' . trim((string) ($patientRow['p_lname'] ?? '')));
+        if ($patientName === '') {
+            $patientName = trim((string) ($ipdRow['P_name'] ?? ''));
+        }
+
+        $abhaIdRaw = '';
+        foreach (['abha_id', 'abha_no', 'abha'] as $field) {
+            $value = trim((string) ($patientRow[$field] ?? ''));
+            if ($value !== '') {
+                $abhaIdRaw = $value;
+                break;
+            }
+        }
+        if ($abhaIdRaw === '') {
+            $abhaIdRaw = trim((string) ($patientRow['abha_address'] ?? ''));
+        }
+
+        $abhaDigits = preg_replace('/\D/', '', $abhaIdRaw);
+        $abhaDigits = is_string($abhaDigits) ? $abhaDigits : '';
+        $abhaAddress = trim((string) ($patientRow['abha_address'] ?? ''));
+        if ($abhaAddress === '' && strpos($abhaIdRaw, '@') !== false) {
+            $abhaAddress = $abhaIdRaw;
+        }
+
+        $admissionRaw = trim((string) ($ipdRow['register_date'] ?? ''));
+        $dischargeRaw = trim((string) ($ipdRow['discharge_date'] ?? ''));
+        $admissionIso = $this->toIsoDateTimeOrNow($admissionRaw);
+        $dischargeIso = $this->toIsoDateTimeOrNow($dischargeRaw);
+        $visitDate = $dischargeRaw !== ''
+            ? date('Y-m-d', strtotime($dischargeRaw))
+            : ($admissionRaw !== '' ? date('Y-m-d', strtotime($admissionRaw)) : date('Y-m-d'));
+
+        $diagnosisRows = $this->byIpdRows('ipd_discharge_diagnosis', ['comp_report'], 'id ASC', $ipdId);
+        $conditionRows = [];
+        foreach ($diagnosisRows as $row) {
+            $text = trim((string) ($row['comp_report'] ?? ''));
+            if ($text !== '') {
+                $conditionRows[] = ['text' => $text, 'code' => ''];
+            }
+        }
+
+        $procedureRows = [];
+        foreach ($this->byIpdRows('ipd_discharge_surgery', ['surgery_name', 'surgery_date'], 'id ASC', $ipdId) as $row) {
+            $text = trim((string) ($row['surgery_name'] ?? ''));
+            if ($text !== '') {
+                $procedureRows[] = [
+                    'text' => $text,
+                    'code' => '',
+                    'performed_at' => $this->toIsoDateTimeOrNow(trim((string) ($row['surgery_date'] ?? ''))),
+                ];
+            }
+        }
+        foreach ($this->byIpdRows('ipd_discharge_procedure', ['procedure_name', 'procedure_date'], 'id ASC', $ipdId) as $row) {
+            $text = trim((string) ($row['procedure_name'] ?? ''));
+            if ($text !== '') {
+                $procedureRows[] = [
+                    'text' => $text,
+                    'code' => '',
+                    'performed_at' => $this->toIsoDateTimeOrNow(trim((string) ($row['procedure_date'] ?? ''))),
+                ];
+            }
+        }
+
+        $medicationRows = [];
+        $legacyMeds = $this->byIpdRows('ipd_discharge_prescrption_prescribed', ['med_name', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days'], 'id ASC', $ipdId);
+        if (empty($legacyMeds)) {
+            $legacyMeds = $this->byIpdRows('ipd_discharge_prescription_prescribed', ['med_name', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days'], 'id ASC', $ipdId);
+        }
+        foreach ($legacyMeds as $row) {
+            $name = trim((string) ($row['med_name'] ?? ''));
+            if ($name === '') {
+                continue;
+            }
+            $dose = trim(implode(' ', array_filter([
+                (string) ($row['dosage'] ?? ''),
+                (string) ($row['dosage_when'] ?? ''),
+                (string) ($row['dosage_freq'] ?? ''),
+                (string) ($row['no_of_days'] ?? ''),
+            ], static fn ($v) => trim((string) $v) !== '')));
+            $medicationRows[] = ['name' => $name, 'dosage' => $dose];
+        }
+        if (empty($medicationRows)) {
+            foreach ($this->byIpdRows('ipd_discharge_drug', ['drug_name', 'drug_dose', 'drug_day'], 'id ASC', $ipdId) as $row) {
+                $name = trim((string) ($row['drug_name'] ?? ''));
+                if ($name === '') {
+                    continue;
+                }
+                $dose = trim(implode(' ', array_filter([
+                    (string) ($row['drug_dose'] ?? ''),
+                    (string) ($row['drug_day'] ?? ''),
+                ], static fn ($v) => trim((string) $v) !== '')));
+                $medicationRows[] = ['name' => $name, 'dosage' => $dose];
+            }
+        }
+
+        $source = [
+            'record_id' => (string) $ipdId,
+            'session_id' => (string) $ipdId,
+            'visit_date' => $visitDate,
+            'completed_at' => $dischargeIso,
+            'department' => trim((string) ($ipdRow['dept_id'] ?? '')),
+            'doctor_name' => trim((string) ($ipdRow['r_doc_name'] ?? '')),
+            'patient' => [
+                'id' => (string) $patientId,
+                'name' => $patientName,
+                'gender' => $this->normalizeFhirGender((string) ($patientRow['gender'] ?? $patientRow['xgender'] ?? '')),
+                'dob' => ! empty($patientRow['dob']) ? date('Y-m-d', strtotime((string) $patientRow['dob'])) : '',
+                'abha_id' => $abhaDigits,
+                'abha_address' => $abhaAddress,
+            ],
+            'encounter' => [
+                'id' => (string) $ipdId,
+                'start' => $admissionIso,
+                'end' => $dischargeIso,
+            ],
+            'conditions' => $conditionRows,
+            'procedures' => $procedureRows,
+            'medications' => $medicationRows,
+        ];
+
+        $factory = new FhirGeneratorFactory();
+        $generatorOutput = $factory->discharge()->generate($source);
+        $adapter = new GatewayPayloadAdapter();
+        $gatewayPayload = $adapter->toGatewayPayload($generatorOutput, $source, $hfrId);
+
+        $sourceUpdatedAt = date('Y-m-d H:i:s', strtotime($dischargeRaw !== '' ? $dischargeRaw : 'now'));
+        $syncPayload = [
+            'local_record_id' => 'ipd-discharge-' . $ipdId,
+            'local_patient_id' => $patientId,
+            'hi_type' => (string) ($gatewayPayload['hi_type'] ?? 'DischargeSummaryRecord'),
+            'care_context_reference' => (string) ($gatewayPayload['care_context_reference'] ?? ''),
+            'care_context_display' => (string) ($gatewayPayload['care_context_display'] ?? ''),
+            'visit_date' => (string) ($gatewayPayload['visit_date'] ?? $visitDate),
+            'department' => (string) ($gatewayPayload['department'] ?? ''),
+            'doctor_name' => (string) ($gatewayPayload['doctor_name'] ?? ''),
+            'consent_id' => '',
+            'hfr_id' => $hfrId,
+            'source_updated_at' => $sourceUpdatedAt,
+            'patient_name' => (string) ($gatewayPayload['patient_name'] ?? $patientName),
+            'abha_id' => (string) ($gatewayPayload['abha_id'] ?? $abhaDigits),
+            'abha_address' => (string) ($gatewayPayload['abha_address'] ?? $abhaAddress),
+            'fhir_bundle' => (array) ($gatewayPayload['fhir_bundle'] ?? []),
+        ];
+
+        $outbox = new AbdmSyncOutboxService();
+        $outbox->enqueueRecordSync($syncPayload);
+    }
+
+    private function normalizeFhirGender(string $gender): string
+    {
+        $value = strtolower(trim($gender));
+        if ($value === 'm' || $value === 'male') {
+            return 'male';
+        }
+        if ($value === 'f' || $value === 'female') {
+            return 'female';
+        }
+        if ($value === 'other') {
+            return 'other';
+        }
+        return 'unknown';
+    }
+
+    private function toIsoDateTimeOrNow(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return date(DATE_ATOM);
+        }
+
+        $ts = strtotime($value);
+        if ($ts === false) {
+            return date(DATE_ATOM);
+        }
+
+        return date(DATE_ATOM, $ts);
     }
 
     private function getNextVisitOptions(string $baseDate): array
