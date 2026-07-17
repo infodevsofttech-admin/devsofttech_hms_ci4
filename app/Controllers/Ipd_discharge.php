@@ -666,18 +666,28 @@ class Ipd_discharge extends BaseController
             $procedure = $this->buildNamedDateSection('Procedure', $procedureRows, 'procedure_name', 'procedure_date', 'Date of Procedure');
         }
 
+        $complaints = $this->byIpdRows('ipd_discharge_complaint', ['comp_report', 'comp_remark'], 'id ASC', $ipdId);
+        $complaintRemark = $this->firstRowByIpd('ipd_discharge_complaint_remark', $ipdId);
+        $complaintRemarkText = $this->sanitizeComplaintNarrativeRemark(
+            $this->normalizeRichText((string) ($complaintRemark['comp_remark'] ?? ''))
+        );
+
         $presentingComplaintsText = trim(strip_tags((string) $presentingComplaints));
         if ($presentingComplaintsText === '') {
-            $complaints = $this->byIpdRows('ipd_discharge_complaint', ['comp_report', 'comp_remark'], 'id ASC', $ipdId);
-            $complaintRemark = $this->firstRowByIpd('ipd_discharge_complaint_remark', $ipdId);
-            $complaintRemarkText = $this->sanitizeComplaintNarrativeRemark(
-                $this->normalizeRichText((string) ($complaintRemark['comp_remark'] ?? ''))
-            );
             $presentingComplaints = $this->buildNarrativeSection(
                 'Presenting Complaints and Reason for Admission',
                 $complaints,
                 $complaintRemarkText
             );
+        } elseif ($complaintRemarkText !== '') {
+            // Cached/templated section may miss the narrative editor text. Force-append when absent.
+            $existingPlain = (string) preg_replace('/\s+/u', ' ', trim(strip_tags((string) $presentingComplaints)));
+            $remarkPlain = (string) preg_replace('/\s+/u', ' ', trim(strip_tags((string) $complaintRemarkText)));
+            if ($remarkPlain !== '' && stripos($existingPlain, $remarkPlain) === false) {
+                $presentingComplaints .= '<div class="discharge-field"><strong>Other Complaints / Detailed History:</strong> '
+                    . $this->renderRichText($complaintRemarkText)
+                    . '</div>';
+            }
         }
 
         $vars = [
