@@ -71,6 +71,7 @@
                                         'back_url' => $historyBackUrl,
                                         'back_title' => 'Doctor Patient Search',
                                     ]);
+                                $immunizationUrl = base_url('Immunization') . '?' . http_build_query(['patient_id' => $patientId]);
                                 $patientRawName = trim((string) ($patient['p_fname'] ?? '') . ' { ' . (string) ($patient['p_rname'] ?? '') . ' }');
                                 $patientAge = function_exists('get_age_1')
                                     ? trim((string) get_age_1($patient['dob'] ?? null, $patient['age'] ?? '', $patient['age_in_month'] ?? '', $patient['estimate_dob'] ?? '', $patient['last_visit'] ?? null))
@@ -95,6 +96,9 @@
                                         </a>
                                         <a href="javascript:load_form('<?= esc($documentUrl, 'js') ?>','Patient Documents');" class="btn btn-primary btn-sm">
                                             <i class="bi bi-file-earmark-text"></i> Issue Document
+                                        </a>
+                                        <a href="javascript:load_form('<?= esc($immunizationUrl, 'js') ?>','Immunization Record');" class="btn btn-success btn-sm">
+                                            <i class="bi bi-shield-check"></i> Immunization
                                         </a>
                                     </div>
                                 </td>

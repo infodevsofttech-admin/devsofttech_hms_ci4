@@ -379,6 +379,12 @@ if (! $canChargesSettings && $user && method_exists($user, 'inGroup')) {
             <span>Document Issue </span>
         </a>
     </li>
+        <li class="nav-item">
+            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Immunization') ?>','Immunization Record')">
+                <i class="bi bi-shield-check"></i>
+                <span>Immunization</span>
+            </a>
+        </li>
     <?php } ?>
    
     <?php if ($canPharmacy) { ?>

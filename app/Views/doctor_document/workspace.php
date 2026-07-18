@@ -31,6 +31,7 @@
                     </div>
                     <div class="d-flex gap-2 flex-wrap">
                         <button type="button" class="btn btn-success" onclick="openPatientDoc()">Open Patient Documents</button>
+                        <button type="button" class="btn btn-outline-success" onclick="openPatientImmunization()">Open Immunization</button>
                         <button type="button" class="btn btn-outline-secondary" onclick="load_form('<?= base_url('doctor_work/patient_search') ?>','Doctor Patient Search')">Search Patient with History</button>
                         <button type="button" class="btn btn-outline-primary" onclick="load_form('<?= base_url('Report/document_list') ?>', 'Document Issue Report')">Document Issue Report</button>
                     </div>
@@ -60,6 +61,34 @@ function openPatientDoc() {
         .then(function(data) {
             if (data && Number(data.status) === 1 && Number(data.patient_id) > 0) {
                 load_form('<?= base_url('Document_Patient/p_doc_record') ?>/' + Number(data.patient_id));
+                return;
+            }
+            alert((data && data.message) ? data.message : 'Patient not found');
+        })
+        .catch(function() {
+            alert('Unable to resolve patient. Try again.');
+        });
+}
+
+function openPatientImmunization() {
+    var patientKey = (document.getElementById('doc_workspace_patient_id').value || '').trim();
+    if (!patientKey) {
+        alert('Enter patient id');
+        return;
+    }
+
+    var resolveUrl = '<?= base_url('Document_Patient/open_by_key') ?>?patient_key=' + encodeURIComponent(patientKey);
+    fetch(resolveUrl, {
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+        .then(function(response) {
+            return response.json();
+        })
+        .then(function(data) {
+            if (data && Number(data.status) === 1 && Number(data.patient_id) > 0) {
+                load_form('<?= base_url('Immunization') ?>?patient_id=' + Number(data.patient_id), 'Immunization Record');
                 return;
             }
             alert((data && data.message) ? data.message : 'Patient not found');

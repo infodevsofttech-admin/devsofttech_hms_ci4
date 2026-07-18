@@ -683,6 +683,15 @@ $routes->post('AbdmGateway/share_diagnosis_report_bundle', 'AbdmGateway::shareDi
 $routes->post('AbdmGateway/shareDiagnosisReportBundle', 'AbdmGateway::shareDiagnosisReportBundle', ['filter' => $abdmPermFilter]);
 $routes->get('AbdmGateway/diagnosis_report_fhir_preview', 'AbdmGateway::diagnosisReportFhirPreview', ['filter' => $abdmPermFilter]);
 $routes->get('AbdmGateway/ipd_discharge_fhir_preview', 'AbdmGateway::ipdDischargeFhirPreview', ['filter' => $abdmPermFilter]);
+$routes->get('AbdmGateway/immunization_fhir_preview', 'AbdmGateway::immunizationFhirPreview', ['filter' => $abdmPermFilter]);
+$routes->post('AbdmGateway/share_immunization_bundle', 'AbdmGateway::shareImmunizationBundle', ['filter' => $abdmPermFilter]);
+$routes->get('Immunization', 'Immunization::index', ['filter' => 'permission:doctor_work.access,doctor_work.template_workspace.access,abdm.access,abdm.taskboard.access,abdm.gateway.use']);
+$routes->get('Immunization/schedule_master', 'Immunization::scheduleMaster', ['filter' => 'permission:doctor_work.access,doctor_work.template_workspace.access,abdm.access,abdm.taskboard.access,abdm.gateway.use']);
+$routes->post('Immunization/update_schedule/(:num)', 'Immunization::updateSchedule/$1', ['filter' => 'permission:doctor_work.access,doctor_work.template_workspace.access,abdm.access,abdm.taskboard.access,abdm.gateway.use']);
+$routes->get('Immunization/schedule', 'Immunization::schedule', ['filter' => 'permission:doctor_work.access,doctor_work.template_workspace.access,abdm.access,abdm.taskboard.access,abdm.gateway.use']);
+$routes->get('Immunization/patient/(:num)', 'Immunization::patient/$1', ['filter' => 'permission:doctor_work.access,doctor_work.template_workspace.access,abdm.access,abdm.taskboard.access,abdm.gateway.use']);
+$routes->post('Immunization/generate_patient_schedule/(:num)', 'Immunization::generatePatientSchedule/$1', ['filter' => 'permission:doctor_work.access,doctor_work.template_workspace.access,abdm.access,abdm.taskboard.access,abdm.gateway.use']);
+$routes->post('Immunization/complete/(:num)', 'Immunization::complete/$1', ['filter' => 'permission:doctor_work.access,doctor_work.template_workspace.access,abdm.access,abdm.taskboard.access,abdm.gateway.use']);
 $routes->post('AbdmGateway/push_health_record', 'AbdmGateway::pushHealthRecord', ['filter' => $abdmPermFilter]);
 $routes->get('AbdmGateway/health_records_list', 'AbdmGateway::healthRecordsList', ['filter' => $abdmPermFilter]);
 $routes->get('AbdmGateway/bridge_record_status/(:num)', 'AbdmGateway::bridgeRecordStatus/$1', ['filter' => $abdmPermFilter]);
@@ -767,6 +776,7 @@ $routes->get('Opd_prescription/section_template_list', 'Opd_prescription::sectio
 $routes->get('Opd_prescription/section_past_data', 'Opd_prescription::section_past_data');
 $routes->get('Opd_prescription/template_workspace', 'Opd_prescription::template_workspace', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
 $routes->get('doctor_work/document_workspace', 'DoctorDocument::workspace', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
+$routes->get('doctor_work/patient_search', 'DoctorDocument::patient_search', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
 
 // Legacy-compatible doctor document templates and issue flow.
 $routes->get('Doc_Admin/doc_list', 'DoctorDocument::doc_list', ['filter' => 'permission:doctor_work.template_workspace.access,doctor_work.access']);
