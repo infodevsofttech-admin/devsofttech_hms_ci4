@@ -2139,6 +2139,7 @@ class AbdmGateway extends BaseController
         $queueId = null;
         $bridgeRecordId = 0;
         $connectorError = null;
+        $bridgeResponse = [];
         try {
             $result = $this->connector->pushRecord([
                 'patient_id' => (string) $patientId,
@@ -2154,8 +2155,32 @@ class AbdmGateway extends BaseController
                 'queue_id' => $ccRef,
                 'record_data' => $bundle,
             ]);
-            $queueId = (string) ($result['queue_id'] ?? '');
-            $bridgeRecordId = (int) ($result['id'] ?? 0);
+            $bridgeResponse = $result;
+            $queueId = (string) ($result['queue_id'] ?? $result['existing_queue_id'] ?? '');
+            $bridgeRecordId = (int) ($result['record_id'] ?? $result['id'] ?? $result['existing_record_id'] ?? 0);
+
+            $httpCode = (int) ($result['http_code'] ?? 0);
+            $resultOk = (int) ($result['ok'] ?? 0) === 1;
+            $errorCode = strtoupper(trim((string) ($result['error_code'] ?? '')));
+            $isDuplicate = $httpCode === 409 || $errorCode === 'DUPLICATE_RECORD';
+
+            if ($isDuplicate) {
+                $resultOk = true;
+            }
+
+            if (! $resultOk) {
+                $connectorError = trim((string) (
+                    $result['message']
+                    ?? $result['error_text']
+                    ?? ($result['error_code'] ?? '')
+                ));
+                if ($connectorError === '' && ! empty($result['errors'])) {
+                    $connectorError = (string) json_encode($result['errors'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                }
+                if ($connectorError === '') {
+                    $connectorError = 'Bridge push failed';
+                }
+            }
         } catch (\Throwable $e) {
             $connectorError = $e->getMessage();
         }
@@ -2171,7 +2196,12 @@ class AbdmGateway extends BaseController
             'abha_id' => $abhaId,
             'patient_id' => $patientId,
             'request' => ['patient_id' => $patientId, 'record_id' => $recordId, 'hi_type' => 'ImmunizationRecord'],
-            'response' => ['queue_id' => $queueId],
+            'response' => [
+                'queue_id' => $queueId,
+                'bridge_record_id' => $bridgeRecordId > 0 ? $bridgeRecordId : null,
+                'http_code' => $bridgeResponse['http_code'] ?? null,
+                'error_code' => $bridgeResponse['error_code'] ?? null,
+            ],
             'outcome' => $connectorError === null ? 'success' : 'failure',
             'error_message' => (string) ($connectorError ?? ''),
         ]);

@@ -2,16 +2,26 @@
 $csrfName = csrf_token();
 $csrfHash = csrf_hash();
 $items = isset($items) && is_array($items) ? $items : [];
+$syncMeta = isset($sync_meta) && is_array($sync_meta) ? $sync_meta : [];
 ?>
 <div class="container-fluid py-3 immunization-master-ui">
     <div class="card shadow-sm">
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
             <div>
                 <h5 class="mb-0">UIP Schedule Master</h5>
-                <div class="small text-muted">Edit vaccine, age, route, dose and notes used for new patient schedules.</div>
+                <div class="small text-muted">
+                    Edit vaccine, age, route, dose and notes used for new patient schedules.
+                    <?php if (! empty($syncMeta)) : ?>
+                        Bridge version: <?= esc((string) ($syncMeta['version_code'] ?? '')) ?><?= ! empty($syncMeta['synced_at']) ? ' synced ' . esc((string) $syncMeta['synced_at']) : '' ?>.
+                    <?php endif; ?>
+                </div>
             </div>
-            <button type="button" class="btn btn-sm btn-outline-primary" onclick="load_form('<?= site_url('Immunization') ?>','Immunization Record')">Back to Immunization</button>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-success" id="btnSyncUipMaster">Sync From Bridge</button>
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="load_form('<?= site_url('Immunization') ?>','Immunization Record')">Back to Immunization</button>
+            </div>
         </div>
+        <div class="px-3 pt-3 d-none" id="uipSyncStatus"></div>
         <div class="card-body p-0">
             <input type="hidden" id="uipCsrfName" value="<?= esc($csrfName) ?>">
             <input type="hidden" id="uipCsrfHash" value="<?= esc($csrfHash) ?>">
@@ -165,6 +175,11 @@ $items = isset($items) && is_array($items) ? $items : [];
         $('#uipMasterStatus').html('<div class="alert ' + cls + ' py-2 mb-0">' + esc(message) + '</div>');
     }
 
+    function showSyncStatus(type, message) {
+        var cls = type === 'success' ? 'alert-success' : 'alert-warning';
+        $('#uipSyncStatus').removeClass('d-none').html('<div class="alert ' + cls + ' py-2 mb-0">' + esc(message) + '</div>');
+    }
+
     function fillModal(item) {
         $('#scheduleId').val(item.id || '');
         $('#ageLabel').val(item.age_label || '');
@@ -228,6 +243,37 @@ $items = isset($items) && is_array($items) ? $items : [];
         });
     }
 
+    function syncUipMaster() {
+        var payload = csrfPayload();
+        payload.force = 1;
+        $('#btnSyncUipMaster').prop('disabled', true).text('Syncing...');
+        showSyncStatus('success', 'Syncing UIP master from bridge...');
+
+        $.ajax({
+            url: '<?= site_url('Immunization/sync_uip_master') ?>',
+            method: 'POST',
+            dataType: 'json',
+            data: payload,
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+        }).done(function (data) {
+            updateCsrf(data);
+            if (parseInt(data.ok || 0, 10) !== 1) {
+                showSyncStatus('warning', data.error_text || 'Sync failed');
+                return;
+            }
+            showSyncStatus('success', data.message || 'UIP master synced. Reloading...');
+            window.setTimeout(function () {
+                load_form('<?= site_url('Immunization/schedule_master') ?>', 'UIP Schedule Master');
+            }, 650);
+        }).fail(function (xhr) {
+            updateCsrf(xhr.responseJSON || {});
+            var json = xhr.responseJSON || {};
+            showSyncStatus('warning', json.error_text || json.message || xhr.statusText || 'Sync failed');
+        }).always(function () {
+            $('#btnSyncUipMaster').prop('disabled', false).text('Sync From Bridge');
+        });
+    }
+
     $('#uipScheduleMasterTable').on('click', '.btnEditSchedule', function () {
         var raw = $(this).attr('data-item') || '{}';
         try {
@@ -237,5 +283,6 @@ $items = isset($items) && is_array($items) ? $items : [];
         }
     });
     $('#btnSaveSchedule').on('click', saveSchedule);
+    $('#btnSyncUipMaster').on('click', syncUipMaster);
 })();
 </script>

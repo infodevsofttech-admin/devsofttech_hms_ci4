@@ -687,6 +687,7 @@ $routes->get('AbdmGateway/immunization_fhir_preview', 'AbdmGateway::immunization
 $routes->post('AbdmGateway/share_immunization_bundle', 'AbdmGateway::shareImmunizationBundle', ['filter' => $abdmPermFilter]);
 $routes->get('Immunization', 'Immunization::index', ['filter' => 'permission:doctor_work.access,doctor_work.template_workspace.access,abdm.access,abdm.taskboard.access,abdm.gateway.use']);
 $routes->get('Immunization/schedule_master', 'Immunization::scheduleMaster', ['filter' => 'permission:doctor_work.access,doctor_work.template_workspace.access,abdm.access,abdm.taskboard.access,abdm.gateway.use']);
+$routes->post('Immunization/sync_uip_master', 'Immunization::syncUipMaster', ['filter' => 'permission:doctor_work.access,doctor_work.template_workspace.access,abdm.access,abdm.taskboard.access,abdm.gateway.use']);
 $routes->post('Immunization/update_schedule/(:num)', 'Immunization::updateSchedule/$1', ['filter' => 'permission:doctor_work.access,doctor_work.template_workspace.access,abdm.access,abdm.taskboard.access,abdm.gateway.use']);
 $routes->get('Immunization/schedule', 'Immunization::schedule', ['filter' => 'permission:doctor_work.access,doctor_work.template_workspace.access,abdm.access,abdm.taskboard.access,abdm.gateway.use']);
 $routes->get('Immunization/patient/(:num)', 'Immunization::patient/$1', ['filter' => 'permission:doctor_work.access,doctor_work.template_workspace.access,abdm.access,abdm.taskboard.access,abdm.gateway.use']);

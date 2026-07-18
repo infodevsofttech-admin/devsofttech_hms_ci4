@@ -872,6 +872,30 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
     }
 
     // -------------------------------------------------------------------------
+    // Immunization Master Data
+    // -------------------------------------------------------------------------
+
+    public function immunizationUipVersion(): array
+    {
+        return $this->get('/v3/master-data/immunization/uip/version');
+    }
+
+    public function immunizationUipSchedule(): array
+    {
+        return $this->get('/v3/master-data/immunization/uip');
+    }
+
+    public function immunizationUipChanges(string $sinceVersion): array
+    {
+        $query = [];
+        if ($sinceVersion !== '') {
+            $query['since_version'] = $sinceVersion;
+        }
+
+        return $this->get('/v3/master-data/immunization/uip/changes', $query);
+    }
+
+    // -------------------------------------------------------------------------
     // Bridge Records — list
     // -------------------------------------------------------------------------
 

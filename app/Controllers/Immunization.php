@@ -2,6 +2,7 @@
 
 namespace App\Controllers;
 
+use App\Libraries\ImmunizationMasterSyncService;
 use App\Libraries\ImmunizationScheduleService;
 
 class Immunization extends BaseController
@@ -40,9 +41,28 @@ class Immunization extends BaseController
 
     public function scheduleMaster()
     {
+        $syncService = new ImmunizationMasterSyncService($this->db);
+
         return view('immunization/schedule_master', [
             'page_title' => 'UIP Schedule Master',
             'items' => $this->loadScheduleRows(true),
+            'sync_meta' => $syncService->latestSyncMeta(),
+        ]);
+    }
+
+    public function syncUipMaster()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $force = (int) ($this->request->getPost('force') ?? 0) === 1;
+        $result = (new ImmunizationMasterSyncService($this->db))->syncUipMaster($force);
+        $httpCode = (int) ($result['ok'] ?? 0) === 1 ? 200 : 400;
+
+        return $this->response->setStatusCode($httpCode)->setJSON($result + [
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
         ]);
     }
 
