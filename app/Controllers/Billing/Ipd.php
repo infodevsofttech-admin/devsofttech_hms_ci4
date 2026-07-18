@@ -1918,6 +1918,7 @@ class Ipd extends BaseController
             'person_info' => $panelData['person_info'] ?? null,
             'checklist_items' => $checklistItems,
             'generated_at' => date('d-m-Y H:i:s'),
+            'output' => $output,
         ];
 
         $content = view('billing/ipd/ayushman_claim_sheet', $data);
