@@ -6193,6 +6193,7 @@ class Opd_prescription extends BaseController
         $out = [];
         $seen = [];
         $needle = mb_strtolower($this->normalizeAutocompleteSuggestionText($q));
+        $hasLocalSnomedRows = false;
 
         $csnotkRows = (new CsnotkTerminologyService())->searchDiagnosis($q, 20);
         foreach ($csnotkRows as $row) {
@@ -6206,6 +6207,9 @@ class Opd_prescription extends BaseController
 
             $conceptId = trim((string) ($row['concept_id'] ?? ''));
             $source = trim((string) ($row['source'] ?? 'csnotk'));
+            if (in_array($source, ['local', 'snomed'], true)) {
+                $hasLocalSnomedRows = true;
+            }
             $k = mb_strtoupper($name) . '|' . $conceptId;
             if (isset($seen[$k])) {
                 continue;
@@ -6224,7 +6228,7 @@ class Opd_prescription extends BaseController
             }
         }
 
-        $snomedRows = $this->fetchSnomedDiagnosisRows($q, 20);
+        $snomedRows = ($hasLocalSnomedRows || mb_strlen($needle) < 3) ? [] : $this->fetchSnomedDiagnosisRows($q, 20);
         foreach ($snomedRows as $row) {
             $name = $this->normalizeAutocompleteSuggestionText((string) ($row['term'] ?? ''));
             if ($name === '') {

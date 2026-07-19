@@ -107,6 +107,7 @@
     var latestFileId = 0;
     var cameraStorageKey = 'opd_scan_preferred_camera';
     var selectedDeviceId = '';
+    var cameraCleanupRequested = false;
     var editState = {
         originalDataUrl: '',
         currentDataUrl: '',
@@ -417,9 +418,14 @@
             return;
         }
 
+        cameraCleanupRequested = false;
         stopCamera();
 
         function attachStream(stream) {
+            if (cameraCleanupRequested) {
+                stream.getTracks().forEach(function(track) { track.stop(); });
+                return;
+            }
             streamRef = stream;
             var video = $video.get(0);
             video.srcObject = stream;
@@ -486,7 +492,20 @@
             streamRef.getTracks().forEach(function(track) { track.stop(); });
             streamRef = null;
         }
+        var video = $video.get(0);
+        if (video) {
+            try {
+                video.pause();
+            } catch (e) {
+            }
+            video.srcObject = null;
+        }
         $resolution.text('Camera: stopped');
+    }
+
+    function cleanupCamera() {
+        cameraCleanupRequested = true;
+        stopCamera();
     }
 
     function loadLastList() {
@@ -774,8 +793,23 @@
     startCamera(selectedDeviceId);
     loadLastList();
 
+    var previousPageCleanup = window.pageCleanup;
+    window.pageCleanup = function() {
+        cleanupCamera();
+        if (typeof previousPageCleanup === 'function') {
+            previousPageCleanup();
+        }
+    };
+
+    $(window).off('beforeunload.opdscan pagehide.opdscan').on('beforeunload.opdscan pagehide.opdscan', cleanupCamera);
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+            cleanupCamera();
+        }
+    });
+
     $('#tallModal').off('hidden.bs.modal.opdscan').on('hidden.bs.modal.opdscan', function() {
-        stopCamera();
+        cleanupCamera();
         $('#opd_scan_results').html('Captured image will appear here.');
         $resolution.text('Camera: closed');
     });

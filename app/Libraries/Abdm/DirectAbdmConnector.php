@@ -142,6 +142,14 @@ class DirectAbdmConnector implements AbdmConnectorInterface
         );
     }
 
+    public function facilityQrCode(): array
+    {
+        return [
+            'ok' => 0,
+            'error_text' => 'Facility QR API is not supported by DirectAbdmConnector. Use eatria_bridge connector.',
+        ];
+    }
+
     // -------------------------------------------------------------------------
     // Scan & Share
     // -------------------------------------------------------------------------

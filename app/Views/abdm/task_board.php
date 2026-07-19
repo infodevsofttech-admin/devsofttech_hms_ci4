@@ -2315,13 +2315,60 @@
                     }
 
                     var queueText = res.queue_id ? (' Queue ID: ' + res.queue_id) : '';
-                    setStatus('Submitted to ABDM gateway.' + queueText);
+                    var warningText = res.warning ? (' Warning: ' + res.warning) : '';
+                    setStatus('Submitted to ABDM gateway.' + queueText + warningText);
                     var badge = _fhirSubmitTaskRow.querySelector('.status-pill');
                     if (badge) {
                         badge.textContent = 'IN_PROGRESS';
                         badge.className = 'badge bg-info status-pill';
                     }
-                    alert('Submitted to ABDM gateway.' + queueText);
+                    alert('Submitted to ABDM gateway.' + queueText + warningText);
+                    if (res.queue_id) {
+                        var logUrl = '<?= base_url('AbdmBridgeLog') ?>' + '?search=' + encodeURIComponent(res.queue_id);
+                        window.open(logUrl, '_blank');
+                    }
+                    fhirPreviewModal.hide();
+                });
+                return;
+            }
+
+            if (taskType === 'ipd_discharge_publish') {
+                var ipdId = parseInt(_fhirSubmitTaskRow.getAttribute('data-entity-id') || '0', 10) || 0;
+                var ipdPatientId = parseInt(_fhirSubmitTaskRow.getAttribute('data-patient-id') || '0', 10) || 0;
+                if (ipdId <= 0 || ipdPatientId <= 0) {
+                    alert('Task data missing (ipd_id/patient_id).');
+                    return;
+                }
+
+                var origHtmlIpd = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Submitting…';
+
+                post('<?= base_url('AbdmGateway/share_ipd_discharge_bundle') ?>', {
+                    ipd_id: ipdId,
+                    patient_id: ipdPatientId,
+                    abha_id: _fhirSubmitAbha,
+                    consent_handle: ''
+                }, function (res) {
+                    btn.disabled = false;
+                    btn.innerHTML = origHtmlIpd;
+
+                    if (!res || parseInt(res.ok || '0', 10) !== 1) {
+                        var err = (res && (res.error || res.error_text || res.message)) ? (res.error || res.error_text || res.message) : 'Gateway submit failed';
+                        setStatus(err, true);
+                        alert('Submission failed:\n' + err);
+                        return;
+                    }
+
+                    var queueText = res.queue_id ? (' Queue ID: ' + res.queue_id) : '';
+                    var warningText = res.warning ? (' Warning: ' + res.warning) : '';
+                    setStatus('Submitted to ABDM gateway.' + queueText + warningText);
+                    var badge = _fhirSubmitTaskRow.querySelector('.status-pill');
+                    if (badge) {
+                        badge.textContent = 'IN_PROGRESS';
+                        badge.className = 'badge bg-info status-pill';
+                    }
+                    alert('Submitted to ABDM gateway.' + queueText + warningText);
                     if (res.queue_id) {
                         var logUrl = '<?= base_url('AbdmBridgeLog') ?>' + '?search=' + encodeURIComponent(res.queue_id);
                         window.open(logUrl, '_blank');

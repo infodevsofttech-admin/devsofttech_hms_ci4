@@ -609,7 +609,9 @@ $editReason = trim((string) ($edit_reason ?? ''));
                                 var chEl = document.getElementById('diag_abdm_consent_handle');
                                 if (chEl && !chEl.value) { chEl.value = resp.consent_handle; }
                             }
-                            setStatus(resp && resp.status ? ('Queued: ' + resp.status) : (resp && resp.message ? resp.message : 'Share request sent.'), !(resp && (resp.ok || resp.queue_id)));
+                            var msg = resp && resp.status ? ('Queued: ' + resp.status) : (resp && resp.message ? resp.message : 'Share request sent.');
+                            if (resp && resp.warning) { msg += ' Warning: ' + resp.warning; }
+                            setStatus(msg, !(resp && (resp.ok || resp.queue_id)));
                         });
                     });
                 }

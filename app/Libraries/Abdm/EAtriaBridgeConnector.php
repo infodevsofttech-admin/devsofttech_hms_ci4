@@ -847,6 +847,11 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         return $this->get('/v3/opd/queue', $params);
     }
 
+    public function facilityQrCode(): array
+    {
+        return $this->get('/v3/facility/qr-code');
+    }
+
     public function opdTokenCreate(array $payload): array
     {
         if (array_key_exists('gender', $payload)) {
@@ -858,12 +863,21 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             }
         }
 
+        if ($this->hfrId !== '' && empty($payload['hfr_id'])) {
+            $payload['hfr_id'] = $this->hfrId;
+        }
+
         return $this->post('/v3/opd/token', $payload);
     }
 
     public function opdTokenUpdateStatus(int $tokenId, string $status): array
     {
-        return $this->patch('/v3/opd/token/' . $tokenId, ['status' => $status]);
+        $body = ['status' => $status];
+        if ($this->hfrId !== '') {
+            $body['hfr_id'] = $this->hfrId;
+        }
+
+        return $this->patch('/v3/opd/token/' . $tokenId, $body);
     }
 
     public function opdRunningTokenStatus(): array

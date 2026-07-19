@@ -151,6 +151,7 @@ $(function() {
     var $clearHistory = $('#clear_history');
     var historyList = [];
     var currentIndex = -1;
+    var cameraCleanupRequested = false;
     var modalEl = document.getElementById('capturePreviewModal');
     var modalInstance = modalEl ? new bootstrap.Modal(modalEl) : null;
     var editModalEl = document.getElementById('profileEditModal');
@@ -464,6 +465,7 @@ $(function() {
             return;
         }
 
+        cameraCleanupRequested = false;
         if (stream) {
             stopCamera();
         }
@@ -471,6 +473,10 @@ $(function() {
         var preferredDeviceId = typeof deviceId === 'string' ? deviceId : ($cameraSelect.val() || selectedDeviceId || '');
 
         function attachStream(s, persistedDeviceId) {
+            if (cameraCleanupRequested) {
+                s.getTracks().forEach(function(track) { track.stop(); });
+                return;
+            }
             stream = s;
             video.srcObject = s;
             video.onloadedmetadata = function() {
@@ -522,8 +528,13 @@ $(function() {
         $cameraResolution.text('Camera: stopped');
     }
 
+    var previousPageCleanup = window.pageCleanup;
     window.pageCleanup = function() {
+        cameraCleanupRequested = true;
         stopCamera();
+        if (typeof previousPageCleanup === 'function') {
+            previousPageCleanup();
+        }
     };
 
     $startBtn.on('click', startCamera);
@@ -771,7 +782,8 @@ $(function() {
         }
     });
 
-    $(window).on('beforeunload', function() {
+    $(window).off('beforeunload.profilecamera pagehide.profilecamera').on('beforeunload.profilecamera pagehide.profilecamera', function() {
+        cameraCleanupRequested = true;
         stopCamera();
     });
 
@@ -786,6 +798,7 @@ $(function() {
 
     document.addEventListener('visibilitychange', function() {
         if (document.hidden) {
+            cameraCleanupRequested = true;
             stopCamera();
         }
     });

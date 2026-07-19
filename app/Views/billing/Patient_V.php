@@ -534,6 +534,10 @@
                         </div>
                       </div>
 
+                    </div>
+                  </div>
+                  <div class="row">
+                    <div class="col-12" style="margin: 10px;">
                       <!-- Active method banner -->
                       <div id="abhareg_active_banner" class="alert alert-primary d-flex align-items-center py-2 d-none mb-3">
                         <span id="abhareg_banner_icon" class="me-2 fs-5"></span>
@@ -623,23 +627,41 @@
                         </div>
                       </div>
 
-                      <!-- Panel: Method 3 - Facility QR (informational) -->
+                                            <!-- Panel: Method 3 - Facility QR -->
                       <div id="abhareg_panel_facility" class="abhareg-panel d-none">
-                        <div class="alert alert-info">
-                          <h6 class="fw-bold"><i class="bi bi-qr-code me-2"></i>Scan &amp; Share — Health Facility QR</h6>
-                          <p class="mb-2">In this method, the <strong>patient</strong> scans the hospital's facility QR code using their ABHA / PHR app.</p>
-                          <ol class="mb-2">
-                            <li>Patient opens their <strong>ABHA app</strong> (or PHR app)</li>
-                            <li>Selects "Scan Facility QR"</li>
-                            <li>Scans the hospital's QR code displayed at the OPD counter</li>
-                            <li>Grants consent — profile is sent to the HMS automatically</li>
-                          </ol>
-                          <p class="mb-0 text-muted small">The hospital's facility QR code is provided by NHA/ABDM based on your Health Facility Registry (HFR) ID.</p>
-                        </div>
-                        <div class="text-center mt-3">
-                          <a href="https://abha.abdm.gov.in/abha/v3/" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary btn-sm">
-                            <i class="bi bi-box-arrow-up-right me-1"></i>Open ABHA Portal
-                          </a>
+                                                <div id="abhareg_facility_alert"></div>
+                                                <div class="row g-3 align-items-start">
+                                                    <div class="col-md-4 text-center">
+                                                        <div class="border rounded bg-white p-3 d-inline-block shadow-sm" style="min-width:260px;min-height:260px">
+                                                            <div id="abhareg_facility_loading" class="text-muted small py-5">
+                                                                <span class="spinner-border spinner-border-sm me-1"></span>Loading facility QR...
+                                                            </div>
+                                                            <img id="abhareg_facility_qr_img" src="" alt="Health Facility QR" class="img-fluid d-none" style="max-width:230px">
+                                                        </div>
+                                                        <div class="mt-2 d-flex justify-content-center gap-2 flex-wrap">
+                                                            <button type="button" id="abhareg_facility_refresh_btn" class="btn btn-outline-primary btn-sm">
+                                                                <i class="bi bi-arrow-clockwise me-1"></i>Refresh QR
+                                                            </button>
+                                                            <button type="button" id="abhareg_facility_print_btn" class="btn btn-primary btn-sm d-none">
+                                                                <i class="bi bi-printer me-1"></i>Print QR
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-8">
+                                                        <div class="alert alert-info mb-2">
+                                                            <h6 class="fw-bold"><i class="bi bi-qr-code me-2"></i>Scan &amp; Share — Health Facility QR</h6>
+                                                            <p class="mb-2">Display or print this QR at the OPD counter. The patient scans it using their ABHA / PHR app.</p>
+                                                            <ol class="mb-2">
+                                                                <li>Patient opens their <strong>ABHA app</strong> (or PHR app)</li>
+                                                                <li>Selects "Scan Facility QR"</li>
+                                                                <li>Scans this hospital QR code</li>
+                                                                <li>Grants consent — profile appears in the ABDM OPD Queue automatically</li>
+                                                            </ol>
+                                                            <div class="small mb-1"><strong>Facility:</strong> <span id="abhareg_facility_name">—</span></div>
+                                                            <div class="small"><strong>HFR ID:</strong> <span id="abhareg_facility_hfr">—</span></div>
+                                                        </div>
+                                                        <div class="small text-muted">Source: ABDM Bridge <code>GET /api/v3/facility/qr-code</code>.</div>
+                                                    </div>
                         </div>
                       </div>
 
@@ -1045,6 +1067,8 @@
             var qrScriptLoading = false;
             var qrCameraStorageKey = 'abha_qr_preferred_camera';
             var qrSelectedCamera = '';
+            var facilityQrLoaded = false;
+            var qrCleanupRequested = false;
             var csrf         = function() { return $('input[name="<?= csrf_token() ?>"]').first().val(); };
 
             try {
@@ -1074,6 +1098,7 @@
                 $('#abhareg_result').addClass('d-none');
                 if (method === 'qr') { initQrScanner(); }
                 else { stopQrScanner(); }
+                if (method === 'facility') { loadFacilityQr(false); }
             };
 
             window.abhaRegReset = function() {
@@ -1093,6 +1118,76 @@
                 $('#abhareg_mob_step2').addClass('d-none');
                 $('#abhareg_mob_step1_alert,#abhareg_mob_step2_alert').html('');
             };
+
+            function loadFacilityQr(force) {
+                if (facilityQrLoaded && !force) {
+                    return;
+                }
+
+                $('#abhareg_facility_alert').html('');
+                $('#abhareg_facility_loading').removeClass('d-none').html('<span class="spinner-border spinner-border-sm me-1"></span>Loading facility QR...');
+                $('#abhareg_facility_qr_img,#abhareg_facility_print_btn').addClass('d-none');
+                $('#abhareg_facility_refresh_btn').prop('disabled', true);
+
+                $.getJSON('<?= base_url('abha/register/facility_qr') ?>', function(resp) {
+                    if (!resp || resp.ok != 1 || !resp.qr_data) {
+                        var msg = (resp && resp.error_text) ? resp.error_text : 'Unable to load Health Facility QR.';
+                        $('#abhareg_facility_loading').html('');
+                        $('#abhareg_facility_alert').html('<div class="alert alert-danger py-2">' + msg + '</div>');
+                        return;
+                    }
+
+                    var qrData = String(resp.qr_data || '');
+                    if (qrData && qrData.indexOf('data:image') !== 0) {
+                        qrData = 'data:image/png;base64,' + qrData;
+                    }
+
+                    facilityQrLoaded = true;
+                    $('#abhareg_facility_qr_img').attr('src', qrData).removeClass('d-none');
+                    $('#abhareg_facility_loading').addClass('d-none');
+                    $('#abhareg_facility_print_btn').removeClass('d-none');
+                    $('#abhareg_facility_name').text(resp.hospital_name || '—');
+                    $('#abhareg_facility_hfr').text(resp.hfr_id || '—');
+                    $('#abhareg_facility_qr_img').data('hospitalName', resp.hospital_name || 'Health Facility');
+                    $('#abhareg_facility_qr_img').data('hfrId', resp.hfr_id || '');
+                }).fail(function(xhr) {
+                    var msg = 'Unable to load Health Facility QR.';
+                    if (xhr && xhr.responseJSON && xhr.responseJSON.error_text) {
+                        msg = xhr.responseJSON.error_text;
+                    }
+                    $('#abhareg_facility_loading').html('');
+                    $('#abhareg_facility_alert').html('<div class="alert alert-danger py-2">' + msg + '</div>');
+                }).always(function() {
+                    $('#abhareg_facility_refresh_btn').prop('disabled', false);
+                });
+            }
+
+            function printFacilityQr() {
+                var qrSrc = $('#abhareg_facility_qr_img').attr('src') || '';
+                if (!qrSrc) {
+                    return;
+                }
+
+                var hospitalName = $('#abhareg_facility_qr_img').data('hospitalName') || 'Health Facility';
+                var hfrId = $('#abhareg_facility_qr_img').data('hfrId') || '';
+                var safeHospitalName = $('<div>').text(hospitalName).html();
+                var safeHfrId = $('<div>').text(hfrId).html();
+                var printWindow = window.open('', '_blank', 'width=520,height=680');
+                if (!printWindow) {
+                    alert('Please allow pop-ups to print the facility QR.');
+                    return;
+                }
+
+                printWindow.document.write('<!doctype html><html><head><title>Health Facility QR</title>'
+                    + '<style>body{font-family:Arial,sans-serif;text-align:center;padding:28px;color:#111}h2{margin:0 0 8px;font-size:22px}.muted{color:#555;margin-bottom:18px}.qr{width:320px;max-width:90%;border:1px solid #ddd;padding:14px}.hint{margin-top:18px;font-size:14px;line-height:1.5}@media print{button{display:none}}</style>'
+                    + '</head><body><h2>' + safeHospitalName + '</h2>'
+                    + '<div class="muted">Health Facility QR' + (safeHfrId ? ' | HFR ID: ' + safeHfrId : '') + '</div>'
+                    + '<img class="qr" src="' + qrSrc + '" alt="Health Facility QR">'
+                    + '<div class="hint">Scan this QR using ABHA / PHR app for Scan &amp; Share OPD registration.</div>'
+                    + '<p><button onclick="window.print()">Print</button></p></body></html>');
+                printWindow.document.close();
+                printWindow.focus();
+            }
 
             function regAlert(id, type, msg) {
                 $('#' + id).html(msg ? '<div class="alert alert-' + type + ' py-2">' + msg + '</div>' : '');
@@ -1172,6 +1267,7 @@
                     return;
                 }
 
+                qrCleanupRequested = false;
                 var selectedCameraId = typeof cameraId === 'string' ? cameraId : ($('#abhareg_qr_camera_select').val() || qrSelectedCamera || '');
 
                 if (!html5QrCode) {
@@ -1203,6 +1299,10 @@
                         },
                         function() {}
                     ).then(function() {
+                        if (qrCleanupRequested) {
+                            stopQrScanner();
+                            return;
+                        }
                         saveQrSelectedCamera(selectedCameraId);
                     }).catch(function(err) {
                         if (selectedCameraId) {
@@ -1402,6 +1502,26 @@
                 });
             }
 
+            function cleanupQrScanner() {
+                qrCleanupRequested = true;
+                stopQrScanner();
+            }
+
+            var previousPageCleanup = window.pageCleanup;
+            window.pageCleanup = function() {
+                cleanupQrScanner();
+                if (typeof previousPageCleanup === 'function') {
+                    previousPageCleanup();
+                }
+            };
+
+            $(window).off('beforeunload.abhaqr pagehide.abhaqr').on('beforeunload.abhaqr pagehide.abhaqr', cleanupQrScanner);
+            document.addEventListener('visibilitychange', function() {
+                if (document.hidden) {
+                    cleanupQrScanner();
+                }
+            });
+
             $('#abhareg_qr_stop_btn').on('click', function() { stopQrScanner(); });
             $('#abhareg_qr_camera_select').on('change', function() {
                 var cameraId = ($(this).val() || '').toString();
@@ -1416,6 +1536,8 @@
                     initQrScanner(qrSelectedCamera || '');
                 });
             });
+            $('#abhareg_facility_refresh_btn').on('click', function() { loadFacilityQr(true); });
+            $('#abhareg_facility_print_btn').on('click', function() { printFacilityQr(); });
 
             // Enter key on OTP fields
             $('#abhareg_num_otp_input').on('keypress', function(e) {

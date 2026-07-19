@@ -95,7 +95,7 @@ class Abha extends BaseController
             ?: ($payload['abha_address'] ?? '')
             ?: ''
         );
-        $name             = (string) ($profile['name'] ?? $profile['fullName'] ?? $profile['full_name'] ?? $payload['name'] ?? $payload['full_name'] ?? '');
+        $name             = $this->extractAbhaProfileName($profile, $payload);
         $photo            = (string) ($profile['profilePhoto'] ?? $profile['profile_photo'] ?? $payload['profilePhoto'] ?? $payload['profile_photo'] ?? '');
         $mobile           = (string) ($profile['mobile'] ?? $payload['mobile'] ?? $payload['mobileNumber'] ?? '');
         $profileGender    = (string) ($profile['gender'] ?? $payload['gender'] ?? '');
@@ -225,7 +225,7 @@ class Abha extends BaseController
             ?: ($payload['abha_address'] ?? '')
             ?: ''
         );
-        $name             = (string) ($profile['name'] ?? $profile['fullName'] ?? $profile['full_name'] ?? $payload['name'] ?? $payload['full_name'] ?? '');
+        $name             = $this->extractAbhaProfileName($profile, $payload);
         $photo            = (string) ($profile['profilePhoto'] ?? $profile['profile_photo'] ?? $payload['profilePhoto'] ?? $payload['profile_photo'] ?? '');
         $gender           = (string) ($profile['gender'] ?? $payload['gender'] ?? '');
         $dob              = (string) ($profile['dob'] ?? $profile['date_of_birth'] ?? $payload['dob'] ?? $payload['date_of_birth'] ?? '');
@@ -287,6 +287,41 @@ class Abha extends BaseController
 
         // Address assignment is noted for the staff. No gateway call available.
         return $this->response->setJSON(['ok' => 1, 'message' => 'ABHA created successfully.']);
+    }
+
+    // -------------------------------------------------------------------------
+    // Facility Scan & Share QR — GET abha/register/facility_qr
+    // -------------------------------------------------------------------------
+    public function facilityQr()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        try {
+            /** @var \App\Libraries\Abdm\AbdmConnectorInterface $connector */
+            $connector = AbdmConnectorFactory::make();
+            $result = $connector->facilityQrCode();
+        } catch (\Throwable $e) {
+            return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => $e->getMessage()]);
+        }
+
+        if (empty($result['ok']) || (int) $result['ok'] !== 1) {
+            return $this->response->setStatusCode((int) ($result['http_code'] ?? 502) ?: 502)->setJSON([
+                'ok' => 0,
+                'error_text' => $result['error_text'] ?? $result['message'] ?? $result['error'] ?? 'Unable to fetch facility QR code',
+                'bridge_http_code' => (int) ($result['http_code'] ?? 0),
+            ]);
+        }
+
+        return $this->response->setJSON([
+            'ok' => 1,
+            'hospital_id' => $result['hospital_id'] ?? $result['data']['hospital_id'] ?? '',
+            'hospital_name' => $result['hospital_name'] ?? $result['data']['hospital_name'] ?? '',
+            'hfr_id' => $result['hfr_id'] ?? $result['data']['hfr_id'] ?? '',
+            'qr_data' => $result['qr_data'] ?? $result['data']['qr_data'] ?? '',
+            'request_id' => $result['request_id'] ?? '',
+        ]);
     }
 
     // -------------------------------------------------------------------------
@@ -391,11 +426,20 @@ class Abha extends BaseController
         if ($existing) {
             $patientId = (int) ($existing['id'] ?? 0);
             $pCode     = (string) ($existing['p_code'] ?? '');
+            $existingUpdates = [];
+
+            $existingName = strtoupper(trim((string) ($existing['p_fname'] ?? '')));
+            if ($name !== '' && ($existingName === '' || $existingName === 'ABHA PATIENT')) {
+                $existingUpdates['p_fname'] = strtoupper($name);
+            }
+
             // Backfill ABHA field if it was empty
             if ($abhaField && empty($existing[$abhaField]) && $abhaNumClean !== '') {
-                $db->table('patient_master')
-                    ->where('id', $patientId)
-                    ->update([$abhaField => $abhaNumClean]);
+                $existingUpdates[$abhaField] = $abhaNumClean;
+            }
+
+            if ($existingUpdates !== []) {
+                $db->table('patient_master')->where('id', $patientId)->update($existingUpdates);
             }
 
             $this->syncAbhaMetaToPatient($patientId, $abhaMeta, $abhaNumClean, $abhaAddress, $fields);
@@ -689,10 +733,44 @@ class Abha extends BaseController
 
     /**
      * @param array<string, mixed> $profile
+     * @param array<string, mixed> $payload
+     */
+    private function extractAbhaProfileName(array $profile, array $payload): string
+    {
+        foreach ([$profile, $payload, $payload['gateway_abha_profile'] ?? [], $payload['gateway_patient'] ?? []] as $source) {
+            if (! is_array($source)) {
+                continue;
+            }
+
+            foreach (['name', 'fullName', 'full_name', 'patient_name'] as $key) {
+                $name = trim((string) ($source[$key] ?? ''));
+                if ($name !== '') {
+                    return $name;
+                }
+            }
+
+            $parts = [];
+            foreach (['firstName', 'first_name', 'middleName', 'middle_name', 'lastName', 'last_name'] as $key) {
+                $part = trim((string) ($source[$key] ?? ''));
+                if ($part !== '') {
+                    $parts[] = $part;
+                }
+            }
+
+            if ($parts !== []) {
+                return implode(' ', $parts);
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * @param array<string, mixed> $profile
      */
     private function looksLikeGatewayAbhaProfile(array $profile): bool
     {
-        foreach (['ABHANumber', 'abha_id', 'preferredAddress', 'preferredAbhaAddress', 'abha_address', 'name', 'fullName', 'full_name', 'gender', 'dob', 'date_of_birth', 'profilePhoto', 'profile_photo'] as $key) {
+        foreach (['ABHANumber', 'abha_id', 'preferredAddress', 'preferredAbhaAddress', 'abha_address', 'name', 'fullName', 'full_name', 'patient_name', 'firstName', 'first_name', 'lastName', 'last_name', 'gender', 'dob', 'date_of_birth', 'profilePhoto', 'profile_photo'] as $key) {
             if (array_key_exists($key, $profile) && trim((string) $profile[$key]) !== '') {
                 return true;
             }

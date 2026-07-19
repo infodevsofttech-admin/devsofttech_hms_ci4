@@ -9,7 +9,7 @@ $abhaNumber = trim((string) (($person->abha_id ?? '') ?: ($person->abha_no ?? ''
 $abhaAddress = trim((string) ($person->abha_address ?? ''));
 $abhaVerifiedRaw = strtolower(trim((string) (($person->abha_verified_status ?? '') ?: ($person->abha_status ?? '') ?: ($person->abha_verified ?? ''))));
 $abhaLooksVerified = in_array($abhaVerifiedRaw, ['1', 'verified', 'yes', 'y', 'true'], true);
-$canUseM3 = $patientId > 0 && $abhaAddress !== '';
+$canUseM3 = $patientId > 0 && $abhaAddress !== '' && $abhaLooksVerified;
 ?>
 
 <section class="content">
@@ -58,7 +58,13 @@ $canUseM3 = $patientId > 0 && $abhaAddress !== '';
                     </div>
                     <div class="card-body">
                         <div class="small text-muted mb-2" id="ayushmanAbdmStatus">
-                            <?= $canUseM3 ? 'Use Fetch From ABDM M3 to request consent and poll approved records, or load already fetched documents.' : 'ABHA address is required before M3 fetch can be started.' ?>
+                            <?php if ($canUseM3) : ?>
+                                Use Fetch From ABDM M3 to request consent and poll approved records, or load already fetched documents.
+                            <?php elseif ($abhaAddress === '') : ?>
+                                ABHA address is required before M3 fetch can be started.
+                            <?php else : ?>
+                                Verified ABHA status is required before M3 fetch can be started.
+                            <?php endif; ?>
                         </div>
                         <div class="row g-3">
                             <div class="col-lg-5">

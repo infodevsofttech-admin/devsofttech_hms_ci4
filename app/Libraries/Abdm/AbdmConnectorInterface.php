@@ -92,6 +92,12 @@ interface AbdmConnectorInterface
      */
     public function abhaMobileVerifyOtp(array $payload): array;
 
+    /**
+     * Fetch hospital facility details and official ABDM Scan & Share QR image.
+     * Gateway response includes hospital_name, hfr_id, and qr_data data URI/base64.
+     */
+    public function facilityQrCode(): array;
+
     // -------------------------------------------------------------------------
     // Health Record Sharing
     // -------------------------------------------------------------------------

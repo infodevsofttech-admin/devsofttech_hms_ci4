@@ -322,6 +322,14 @@ class DreamsoftConnector implements AbdmConnectorInterface
         ];
     }
 
+    public function facilityQrCode(): array
+    {
+        return [
+            'ok' => 0,
+            'error_text' => 'Facility QR API is not supported by DreamsoftConnector. Use eatria_bridge connector.',
+        ];
+    }
+
     public function opdTokenCreate(array $payload): array
     {
         return [

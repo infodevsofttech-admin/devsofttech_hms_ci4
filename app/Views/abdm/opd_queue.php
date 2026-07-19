@@ -408,6 +408,7 @@
                     aadhaar_number: t.aadhaar_number ?? t.aadhar_number ?? t.udai ?? '',
                     patient_name: t.patient_name ?? '', phone: t.phone ?? '',
                     gender: t.gender ?? '', dob: t.dob ?? '',
+                    age: t.age ?? t.patient_age ?? '', birth_year: t.birth_year ?? t.birthYear ?? t.year_of_birth ?? '',
                     relation_text: t.relation_text ?? '', relation_type: t.relation_type ?? '', relative_name: t.relative_name ?? '',
                     email: t.email ?? t.email1 ?? '',
                     address: t.address ?? t.add1 ?? '',
@@ -488,6 +489,7 @@
             aadhaar_number: t.aadhaar_number ?? '',
             patient_name: t.patient_name ?? '', phone: t.phone ?? '',
             gender: t.gender ?? '', dob: t.dob ?? '',
+            age: t.age ?? t.patient_age ?? '', birth_year: t.birth_year ?? t.birthYear ?? t.year_of_birth ?? '',
         }).then(r => {
             if (!r.ok) {
                 body.innerHTML = `<div class="alert alert-danger small">${esc(r.error_text ?? 'Failed to process token')}</div>
@@ -554,6 +556,7 @@
             aadhaar_number: t.aadhaar_number ?? '',
             patient_name: t.patient_name ?? '', phone: t.phone ?? '',
             gender: t.gender ?? '', dob: t.dob ?? '',
+            age: t.age ?? t.patient_age ?? '', birth_year: t.birth_year ?? t.birthYear ?? t.year_of_birth ?? '',
         }).then(handleProcessResult).catch(err => {
             body.innerHTML = `<div class="alert alert-danger small">Request error: ${esc(err.message)}</div>`;
         });

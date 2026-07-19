@@ -220,6 +220,23 @@ class AbdmOpdQueue extends BaseController
             return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => $e->getMessage()]);
         }
 
+        if (empty($result['ok']) || (int) $result['ok'] !== 1) {
+            $message = (string) (
+                $result['error_text']
+                ?? $result['message']
+                ?? $result['error']
+                ?? 'Bridge rejected OPD token status update'
+            );
+
+            return $this->response
+                ->setStatusCode((int) ($result['http_code'] ?? 502) ?: 502)
+                ->setJSON([
+                    'ok' => 0,
+                    'error_text' => $message,
+                    'bridge_http_code' => (int) ($result['http_code'] ?? 0),
+                ]);
+        }
+
         // Mirror status to local DB so list() stays consistent
         try {
             $db->table('abdm_opd_tokens')
@@ -285,6 +302,8 @@ class AbdmOpdQueue extends BaseController
         $phone     = trim((string) ($this->request->getPost('phone') ?? ''));
         $gender    = strtoupper(trim((string) ($this->request->getPost('gender') ?? '')));
         $dob       = trim((string) ($this->request->getPost('dob') ?? ''));      // YYYY-MM-DD from gateway
+        $age       = trim((string) ($this->request->getPost('age') ?? $this->request->getPost('patient_age') ?? ''));
+        $birthYear = trim((string) ($this->request->getPost('birth_year') ?? $this->request->getPost('birthYear') ?? $this->request->getPost('year_of_birth') ?? ''));
         $relationText = trim((string) ($this->request->getPost('relation_text') ?? ''));
         $relationType = trim((string) ($this->request->getPost('relation_type') ?? ''));
         $relationName = trim((string) ($this->request->getPost('relative_name') ?? ''));
@@ -307,7 +326,7 @@ class AbdmOpdQueue extends BaseController
         $abhaField    = $this->resolveFirstExistingColumn($fields, ['abha_id', 'abha_no', 'abha', 'abha_address']);
         $aadhaarField = $this->resolveFirstExistingColumn($fields, ['udai', 'aadhar_no', 'aadhaar_no', 'aadhaar', 'adhar_no']);
 
-        $matches = $this->findPatientMatches($db, $abhaField, $aadhaarField, $abhaRaw, $abhaAddr, $aadhaarRaw, $phone, $name, $gender, $dob);
+        $matches = $this->findPatientMatches($db, $abhaField, $aadhaarField, $abhaRaw, $abhaAddr, $aadhaarRaw, $phone, $name, $gender, $dob, $age, $birthYear);
 
         if ($action === 'check') {
             return $this->response->setJSON([
@@ -323,6 +342,8 @@ class AbdmOpdQueue extends BaseController
                     'phone'         => $phone,
                     'gender'        => $gender,
                     'dob'           => $dob,
+                    'age'           => $age,
+                    'birth_year'    => $birthYear,
                     'relation_text' => $relationText,
                     'relation_type' => $relationType,
                     'relative_name' => $relationName,
@@ -350,6 +371,8 @@ class AbdmOpdQueue extends BaseController
                     'phone'         => $phone,
                     'gender'        => $gender,
                     'dob'           => $dob,
+                    'age'           => $age,
+                    'birth_year'    => $birthYear,
                     'relation_text' => $relationText,
                     'relation_type' => $relationType,
                     'relative_name' => $relationName,
@@ -396,7 +419,7 @@ class AbdmOpdQueue extends BaseController
             if (! empty($backfill)) {
                 $db->table('patient_master')->where('id', $patientId)->update($backfill);
             }
-        } elseif (($action === '' || $action === 'auto') && count($matches) === 1) {
+        } elseif (($action === '' || $action === 'auto') && count($matches) === 1 && (int) ($matches[0]['match_score'] ?? 0) > 1) {
             $existing = $matches[0];
             $patientId = (int) ($existing['id'] ?? 0);
             $pCode     = (string) ($existing['p_code'] ?? '');
@@ -441,21 +464,14 @@ class AbdmOpdQueue extends BaseController
 
         $this->attachPatientToToken($db, $tokenId, $patientId);
 
-        // Mark token as CALLED on gateway (non-blocking)
-        try {
-            $this->gw->opdTokenUpdateStatus($tokenId, 'CALLED');
-        } catch (\Throwable $e) {
-            // non-critical
-        }
-
         $oldStatus = strtoupper(trim((string) ($tokenBefore['status'] ?? '')));
-        if ($oldStatus !== 'CALLED') {
+        if ($oldStatus !== '') {
             $this->logTokenAudit(
                 'abdm_opd_queue',
                 (string) $tokenId,
-                'status',
-                $oldStatus,
-                'CALLED',
+                'patient_id',
+                (string) ($tokenBefore['patient_id'] ?? ''),
+                (string) $patientId,
                 [
                     'source' => 'register_opd',
                     'action' => $action,
@@ -497,7 +513,9 @@ class AbdmOpdQueue extends BaseController
         string $phone,
         string $name = '',
         string $gender = '',
-        string $dob = ''
+        string $dob = '',
+        string $age = '',
+        string $birthYear = ''
     ): array {
         $select = 'id,p_code,p_fname,mphone1,dob,gender';
         if ($abhaField) {
@@ -548,7 +566,8 @@ class AbdmOpdQueue extends BaseController
         $nameUpper = strtoupper(trim($name));
         $genderDb  = ($gender === 'F' || $gender === '2') ? 2 : ($gender !== '' ? 1 : null);
         $dobValid  = preg_match('/^\d{4}-\d{2}-\d{2}$/', $dob) ? $dob : '';
-        $yearOnly  = $dobValid !== '' ? (int) substr($dobValid, 0, 4) : 0;
+        $yearOnly  = $dobValid !== '' ? (int) substr($dobValid, 0, 4) : (preg_match('/^(19|20)\d{2}$/', $birthYear) ? (int) $birthYear : 0);
+        $ageYears  = preg_match('/^\d{1,3}$/', $age) ? (int) $age : null;
 
         if ($nameUpper !== '' && $dobValid !== '') {
             // Name + exact DOB [+ gender] — high confidence (score 3)
@@ -580,6 +599,13 @@ class AbdmOpdQueue extends BaseController
             }
         }
 
+        foreach ($this->findFuzzyDemographicMatches($db, $select, $nameUpper, $genderDb, $dobValid, $yearOnly, $ageYears) as $row) {
+            $reason = (string) ($row['_match_reason'] ?? 'Similar Name + Demographics');
+            $score  = (int) ($row['_match_score'] ?? 2);
+            unset($row['_match_reason'], $row['_match_score']);
+            $append([$row], $reason, $score);
+        }
+
         // Phone match — supplementary only (score 1), ambiguous for families
         if ($phone !== '') {
             $rows = $db->table('patient_master')->select($select)->where('mphone1', $phone)->limit(10)->get()->getResultArray();
@@ -605,6 +631,96 @@ class AbdmOpdQueue extends BaseController
         unset($row);
 
         return $result;
+    }
+
+    private function findFuzzyDemographicMatches(
+        \CodeIgniter\Database\BaseConnection $db,
+        string $select,
+        string $nameUpper,
+        ?int $genderDb,
+        string $dobValid,
+        int $yearOnly,
+        ?int $ageYears
+    ): array {
+        if ($nameUpper === '' || strlen($this->normalizeMatchName($nameUpper)) < 4) {
+            return [];
+        }
+
+        $fields = $db->getFieldNames('patient_master') ?? [];
+        $queries = [];
+
+        if ($dobValid !== '') {
+            $queries[] = ['reason' => $genderDb !== null ? 'Similar Name + DOB + Gender' : 'Similar Name + DOB', 'score' => 3, 'dob' => $dobValid];
+        }
+        if ($yearOnly > 0) {
+            $queries[] = ['reason' => $genderDb !== null ? 'Similar Name + Year of Birth + Gender' : 'Similar Name + Year of Birth', 'score' => 2, 'year' => $yearOnly];
+        }
+        if ($ageYears !== null && in_array('age', $fields, true)) {
+            $queries[] = ['reason' => $genderDb !== null ? 'Similar Name + Age + Gender' : 'Similar Name + Age', 'score' => 2, 'age' => $ageYears];
+        }
+
+        $matches = [];
+        foreach ($queries as $query) {
+            $builder = $db->table('patient_master')->select($select);
+            if (isset($query['dob'])) {
+                $builder->where('dob', $query['dob']);
+            }
+            if (isset($query['year'])) {
+                $builder->where('YEAR(dob)', (int) $query['year']);
+            }
+            if (isset($query['age'])) {
+                $builder->where('age', (int) $query['age']);
+            }
+            if ($genderDb !== null) {
+                $builder->where('gender', $genderDb);
+            }
+
+            foreach ($builder->limit(100)->get()->getResultArray() as $row) {
+                if (! $this->isSimilarPatientName($nameUpper, (string) ($row['p_fname'] ?? ''))) {
+                    continue;
+                }
+                $id = (int) ($row['id'] ?? 0);
+                if ($id <= 0 || isset($matches[$id])) {
+                    continue;
+                }
+                $row['_match_reason'] = (string) $query['reason'];
+                $row['_match_score']  = (int) $query['score'];
+                $matches[$id] = $row;
+            }
+        }
+
+        return array_values($matches);
+    }
+
+    private function normalizeMatchName(string $name): string
+    {
+        return preg_replace('/[^A-Z0-9]+/', '', strtoupper($name)) ?? '';
+    }
+
+    private function isSimilarPatientName(string $incomingName, string $storedName): bool
+    {
+        $incoming = $this->normalizeMatchName($incomingName);
+        $stored   = $this->normalizeMatchName($storedName);
+        if ($incoming === '' || $stored === '' || $incoming === $stored) {
+            return false;
+        }
+
+        $maxDistance = strlen($incoming) <= 8 ? 1 : (strlen($incoming) <= 14 ? 2 : 3);
+        similar_text($incoming, $stored, $percent);
+        if (levenshtein($incoming, $stored) <= $maxDistance || $percent >= 86.0) {
+            return true;
+        }
+
+        $incomingFirst = $this->normalizeMatchName(strtok($incomingName, ' ') ?: $incomingName);
+        $storedFirst   = $this->normalizeMatchName(strtok($storedName, ' ') ?: $storedName);
+        if (strlen($incomingFirst) < 4 || strlen($storedFirst) < 4) {
+            return false;
+        }
+
+        $firstDistance = strlen($incomingFirst) <= 8 ? 1 : 2;
+        similar_text($incomingFirst, $storedFirst, $firstPercent);
+
+        return levenshtein($incomingFirst, $storedFirst) <= $firstDistance || $firstPercent >= 84.0;
     }
 
     private function createPatientFromToken(
@@ -711,7 +827,6 @@ class AbdmOpdQueue extends BaseController
             ->where('gateway_token_id', $tokenId)
             ->update([
                 'patient_id'   => $patientId,
-                'status'       => 'CALLED',
                 'processed_at' => date('Y-m-d H:i:s'),
                 'updated_at'   => date('Y-m-d H:i:s'),
             ]);

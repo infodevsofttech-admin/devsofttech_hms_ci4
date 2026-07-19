@@ -2669,7 +2669,7 @@ class Patient extends BaseController
 		$kycVerified = (int) ($row['abha_kyc_verified'] ?? 0) === 1;
 		$mobileVerified = (int) ($row['abha_mobile_verified'] ?? 0) === 1;
 		$hasStatusColumn = array_key_exists('abha_verified_status', $row);
-		$isVerified = $verifiedStatus === 'VERIFIED' || ($kycVerified && $mobileVerified);
+		$isVerified = in_array($verifiedStatus, ['1', 'VERIFIED', 'YES', 'Y', 'TRUE'], true) || ($kycVerified && $mobileVerified);
 		if (! $hasStatusColumn && $abhaAddress !== '') {
 			$isVerified = true;
 		}

@@ -67,7 +67,7 @@ class CsnotkTerminologyService
         // Local DB is primary — ~17ms vs ~330ms for external API from server
         $rows = $this->localSearch($q, $limit, ['finding', 'disorder', 'morphologic abnormality', 'disease']);
 
-        if (count($rows) < $limit && $this->apiEnabled && $this->baseUrl !== '') {
+        if (count($rows) < $limit && mb_strlen($q) >= 3 && $this->apiEnabled && $this->baseUrl !== '') {
             $rows = $this->mergeFallback($rows, $this->apiSearchDiagnosis($q, $limit), $limit);
         }
 
@@ -93,7 +93,7 @@ class CsnotkTerminologyService
         // Local DB is primary — ~17ms vs ~330ms for external API from server
         $rows = $this->localSearch($q, $limit, ['finding', 'disorder']);
 
-        if (count($rows) < $limit && $this->apiEnabled && $this->baseUrl !== '') {
+        if (count($rows) < $limit && mb_strlen($q) >= 3 && $this->apiEnabled && $this->baseUrl !== '') {
             $rows = $this->mergeFallback($rows, $this->apiSearchBySemTag($q, $limit, ['finding', 'disorder']), $limit);
         }
 
@@ -121,7 +121,7 @@ class CsnotkTerminologyService
 
         $rows = $this->localSearch($q, $limit, $substanceTags);
 
-        if (count($rows) < $limit && $this->apiEnabled && $this->baseUrl !== '') {
+        if (count($rows) < $limit && mb_strlen($q) >= 3 && $this->apiEnabled && $this->baseUrl !== '') {
             // CSNOtk: search substance tag first, then product tag as fallback
             $apiRows = $this->apiSearchBySemTag($q, $limit, ['substance', 'product']);
             $rows = $this->mergeFallback($rows, $apiRows, $limit);
@@ -160,7 +160,7 @@ class CsnotkTerminologyService
         // Local DB is primary — ~17ms vs ~330ms for external API from server
         $rows = $this->localSearch($q, $limit, ['procedure', 'observable entity', 'regime/therapy']);
 
-        if (count($rows) < $limit && $this->apiEnabled && $this->baseUrl !== '') {
+        if (count($rows) < $limit && mb_strlen($q) >= 3 && $this->apiEnabled && $this->baseUrl !== '') {
             $rows = $this->mergeFallback($rows, $this->apiSearchBySemTag($q, $limit, ['procedure', 'observable entity']), $limit);
         }
 

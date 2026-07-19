@@ -999,6 +999,8 @@ class AbdmGateway extends BaseController
             'phone' => trim((string) ($this->request->getPost('phone') ?? '')),
             'gender' => strtoupper(trim((string) ($this->request->getPost('gender') ?? ''))),
             'dob' => trim((string) ($this->request->getPost('dob') ?? '')),
+            'age' => trim((string) ($this->request->getPost('age') ?? $this->request->getPost('patient_age') ?? '')),
+            'birth_year' => trim((string) ($this->request->getPost('birth_year') ?? $this->request->getPost('birthYear') ?? $this->request->getPost('year_of_birth') ?? '')),
         ];
 
         $db = $this->db;
@@ -1542,15 +1544,15 @@ class AbdmGateway extends BaseController
 
         $hasAbha = $abhaId !== '';
         $consent = null;
+        $consentWarning = '';
         if ($hasAbha) {
             $consent = $this->getActiveConsentRecord($patientId, $abhaId, $consentHandle);
             if ($consent === null) {
-                return $this->response->setJSON([
-                    'ok'         => 0,
-                    'error_text' => 'No active consent found. Share blocked due to expiry/not-approved consent.',
-                ]);
+                $consentWarning = 'No active consent found. Proceeding with care-context push only.';
+                $this->logMissingConsentShareWarning('ipd', $ipdId, $patientId, $abhaId, $consentHandle, 'abdm.ipd.discharge.share.consent_missing', $consentWarning);
             }
         }
+        $effectiveConsent = (string) ($consent['consent_handle'] ?? $consentHandle);
 
         $fhirPayload = $this->buildIpdDischargeGatewayPayload($ipdId, $patientId, $abhaId);
         if ($fhirPayload === null) {
@@ -1575,7 +1577,7 @@ class AbdmGateway extends BaseController
             'entity_id'      => (string) $ipdId,
             'fhir_bundle'    => $bundleJson,
             'care_context_reference' => $ccRef,
-            'consent_handle' => (string) ($consent['consent_handle'] ?? ''),
+            'consent_handle' => $effectiveConsent,
         ]);
 
         if (! $hasAbha) {
@@ -1642,8 +1644,8 @@ class AbdmGateway extends BaseController
             'entity_id'     => (string) $ipdId,
             'abha_id'       => $abhaId,
             'patient_id'    => $patientId,
-            'request'       => ['ipd_id' => $ipdId, 'hi_type' => 'DischargeSummaryRecord', 'consent_handle' => (string) ($consent['consent_handle'] ?? '')],
-            'response'      => ['queue_id' => $queueId],
+            'request'       => ['ipd_id' => $ipdId, 'hi_type' => 'DischargeSummaryRecord', 'consent_handle' => $effectiveConsent],
+            'response'      => ['queue_id' => $queueId, 'warning' => $consentWarning],
             'outcome'       => $connectorError === null ? 'success' : 'failure',
             'error_message' => (string) ($connectorError ?? ''),
         ]);
@@ -1651,8 +1653,10 @@ class AbdmGateway extends BaseController
         return $this->response->setJSON([
             'ok'             => $connectorError === null ? 1 : 0,
             'queue_id'       => $queueId,
-            'consent_handle' => (string) ($consent['consent_handle'] ?? ''),
+            'consent_handle' => $effectiveConsent,
             'status'         => $connectorError === null ? 'queued' : 'failed',
+            'message'        => $connectorError === null && $consentWarning !== '' ? 'Record pushed to gateway without active consent. Recheck link status in M2 ABDM Gateway.' : null,
+            'warning'        => $consentWarning !== '' ? $consentWarning : null,
             'error'          => $connectorError,
         ]);
     }
@@ -1685,13 +1689,12 @@ class AbdmGateway extends BaseController
 
         $hasAbha = $abhaId !== '';
         $consentRecord = null;
+        $consentWarning = '';
         if ($hasAbha) {
             $consentRecord = $this->getActiveConsentRecord($patientId, $abhaId, $consentHandle);
             if ($consentRecord === null) {
-                return $this->response->setJSON([
-                    'ok' => 0,
-                    'error' => 'No active consent found. Share blocked due to expiry/not-approved consent.',
-                ]);
+                $consentWarning = 'No active consent found. Proceeding with care-context push only.';
+                $this->logMissingConsentShareWarning('lab', $labReqId, $patientId, $abhaId, $consentHandle, 'abdm.diagnosis.report.share.consent_missing', $consentWarning);
             }
         }
         $effectiveConsent = (string) ($consentRecord['consent_handle'] ?? $consentHandle);
@@ -1875,7 +1878,7 @@ class AbdmGateway extends BaseController
             'abha_id'       => $abhaId,
             'patient_id'    => $patientId,
             'request'       => ['lab_req_id' => $labReqId, 'hi_type' => 'DiagnosticReportRecord', 'consent_handle' => $effectiveConsent],
-            'response'      => ['queue_id' => $queueId],
+            'response'      => ['queue_id' => $queueId, 'warning' => $consentWarning],
             'outcome'       => $connectorError === null ? 'success' : 'failure',
             'error_message' => (string) ($connectorError ?? ''),
         ]);
@@ -1885,6 +1888,8 @@ class AbdmGateway extends BaseController
             'queue_id'       => $queueId,
             'consent_handle' => $effectiveConsent,
             'status'         => $connectorError === null ? 'queued' : 'failed',
+            'message'        => $connectorError === null && $consentWarning !== '' ? 'Record pushed to gateway without active consent. Recheck link status in M2 ABDM Gateway.' : null,
+            'warning'        => $consentWarning !== '' ? $consentWarning : null,
             'error'          => $connectorError,
         ]);
     }
@@ -2216,6 +2221,74 @@ class AbdmGateway extends BaseController
             'status' => $connectorError === null ? 'queued' : 'failed',
             'error' => $connectorError,
         ]);
+    }
+
+    public function shareWellnessBundle()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $patientId = (int) $this->request->getPost('patient_id');
+        $opdId = (int) $this->request->getPost('opd_id');
+        $abhaId = trim((string) ($this->request->getPost('abha_id') ?? $this->request->getPost('abha_address') ?? ''));
+        $consentHandle = trim((string) $this->request->getPost('consent_handle'));
+
+        if ($patientId <= 0) {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'patient_id is required']);
+        }
+
+        $payload = $this->buildWellnessRecordPayload($patientId, $opdId, $abhaId);
+        if ($payload === null) {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'No wellness/vital data found for this patient']);
+        }
+
+        return $this->pushAdditionalHiRecord($payload, $patientId, $abhaId, $consentHandle);
+    }
+
+    public function shareHealthDocumentBundle()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $patientId = (int) $this->request->getPost('patient_id');
+        $abhaId = trim((string) ($this->request->getPost('abha_id') ?? $this->request->getPost('abha_address') ?? ''));
+        $consentHandle = trim((string) $this->request->getPost('consent_handle'));
+
+        if ($patientId <= 0) {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'patient_id is required']);
+        }
+
+        $payload = $this->buildHealthDocumentRecordPayload($patientId, $abhaId);
+        if ($payload === null) {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'document_title with document_text/document_base64/file_path is required']);
+        }
+
+        return $this->pushAdditionalHiRecord($payload, $patientId, $abhaId, $consentHandle);
+    }
+
+    public function shareInvoiceBundle()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $invoiceId = (int) $this->request->getPost('invoice_id');
+        $patientId = (int) $this->request->getPost('patient_id');
+        $abhaId = trim((string) ($this->request->getPost('abha_id') ?? $this->request->getPost('abha_address') ?? ''));
+        $consentHandle = trim((string) $this->request->getPost('consent_handle'));
+
+        if ($invoiceId <= 0) {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'invoice_id is required']);
+        }
+
+        $payload = $this->buildInvoiceRecordPayload($invoiceId, $patientId, $abhaId);
+        if ($payload === null) {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'Invoice not found or patient could not be resolved']);
+        }
+
+        return $this->pushAdditionalHiRecord($payload, (int) $payload['patient_id'], $abhaId, $consentHandle);
     }
 
     public function ipdDischargeFhirPreview()
@@ -3911,6 +3984,16 @@ class AbdmGateway extends BaseController
             $identity['dob'] = $dob;
         }
 
+        $age = preg_replace('/\D/', '', (string) ($this->findFirstByKeys($payload, ['age', 'patient_age', 'patientAge']) ?? ''));
+        if ($age !== '' && preg_match('/^\d{1,3}$/', $age)) {
+            $identity['age'] = $age;
+        }
+
+        $birthYear = preg_replace('/\D/', '', (string) ($this->findFirstByKeys($payload, ['birth_year', 'birthYear', 'year_of_birth', 'yearOfBirth']) ?? ''));
+        if ($birthYear !== '' && preg_match('/^(19|20)\d{2}$/', $birthYear)) {
+            $identity['birth_year'] = $birthYear;
+        }
+
         return $identity;
     }
 
@@ -3982,7 +4065,10 @@ class AbdmGateway extends BaseController
         $genderDb  = ($rawGender === 'F' || $rawGender === '2') ? 2 : ($rawGender !== '' ? 1 : null);
         $dob       = trim((string) ($identity['dob'] ?? ''));
         $dobValid  = preg_match('/^\d{4}-\d{2}-\d{2}$/', $dob) ? $dob : '';
-        $yearOnly  = $dobValid !== '' ? (int) substr($dobValid, 0, 4) : 0;
+        $birthYear = trim((string) ($identity['birth_year'] ?? ''));
+        $yearOnly  = $dobValid !== '' ? (int) substr($dobValid, 0, 4) : (preg_match('/^(19|20)\d{2}$/', $birthYear) ? (int) $birthYear : 0);
+        $age       = trim((string) ($identity['age'] ?? ''));
+        $ageYears  = preg_match('/^\d{1,3}$/', $age) ? (int) $age : null;
 
         if ($nameUpper !== '' && $dobValid !== '') {
             // Name + exact DOB [+ gender] — high confidence (score 3)
@@ -4014,6 +4100,13 @@ class AbdmGateway extends BaseController
             }
         }
 
+        foreach ($this->findFuzzyDemographicMatches($this->db, $select, $nameUpper, $genderDb, $dobValid, $yearOnly, $ageYears) as $row) {
+            $reason = (string) ($row['_match_reason'] ?? 'Similar Name + Demographics');
+            $score  = (int) ($row['_match_score'] ?? 2);
+            unset($row['_match_reason'], $row['_match_score']);
+            $append([$row], $reason, $score);
+        }
+
         // Phone match — supplementary only (score 1), ambiguous for families
         if (($identity['phone'] ?? '') !== '') {
             $rows = $this->db->table('patient_master')->select($select)->where('mphone1', $identity['phone'])->limit(10)->get()->getResultArray();
@@ -4039,6 +4132,96 @@ class AbdmGateway extends BaseController
         unset($row);
 
         return $result;
+    }
+
+    private function findFuzzyDemographicMatches(
+        \CodeIgniter\Database\BaseConnection $db,
+        string $select,
+        string $nameUpper,
+        ?int $genderDb,
+        string $dobValid,
+        int $yearOnly,
+        ?int $ageYears
+    ): array {
+        if ($nameUpper === '' || strlen($this->normalizeMatchName($nameUpper)) < 4) {
+            return [];
+        }
+
+        $fields = $db->getFieldNames('patient_master') ?? [];
+        $queries = [];
+
+        if ($dobValid !== '') {
+            $queries[] = ['reason' => $genderDb !== null ? 'Similar Name + DOB + Gender' : 'Similar Name + DOB', 'score' => 3, 'dob' => $dobValid];
+        }
+        if ($yearOnly > 0) {
+            $queries[] = ['reason' => $genderDb !== null ? 'Similar Name + Year of Birth + Gender' : 'Similar Name + Year of Birth', 'score' => 2, 'year' => $yearOnly];
+        }
+        if ($ageYears !== null && in_array('age', $fields, true)) {
+            $queries[] = ['reason' => $genderDb !== null ? 'Similar Name + Age + Gender' : 'Similar Name + Age', 'score' => 2, 'age' => $ageYears];
+        }
+
+        $matches = [];
+        foreach ($queries as $query) {
+            $builder = $db->table('patient_master')->select($select);
+            if (isset($query['dob'])) {
+                $builder->where('dob', $query['dob']);
+            }
+            if (isset($query['year'])) {
+                $builder->where('YEAR(dob)', (int) $query['year']);
+            }
+            if (isset($query['age'])) {
+                $builder->where('age', (int) $query['age']);
+            }
+            if ($genderDb !== null) {
+                $builder->where('gender', $genderDb);
+            }
+
+            foreach ($builder->limit(100)->get()->getResultArray() as $row) {
+                if (! $this->isSimilarPatientName($nameUpper, (string) ($row['p_fname'] ?? ''))) {
+                    continue;
+                }
+                $id = (int) ($row['id'] ?? 0);
+                if ($id <= 0 || isset($matches[$id])) {
+                    continue;
+                }
+                $row['_match_reason'] = (string) $query['reason'];
+                $row['_match_score']  = (int) $query['score'];
+                $matches[$id] = $row;
+            }
+        }
+
+        return array_values($matches);
+    }
+
+    private function normalizeMatchName(string $name): string
+    {
+        return preg_replace('/[^A-Z0-9]+/', '', strtoupper($name)) ?? '';
+    }
+
+    private function isSimilarPatientName(string $incomingName, string $storedName): bool
+    {
+        $incoming = $this->normalizeMatchName($incomingName);
+        $stored   = $this->normalizeMatchName($storedName);
+        if ($incoming === '' || $stored === '' || $incoming === $stored) {
+            return false;
+        }
+
+        $maxDistance = strlen($incoming) <= 8 ? 1 : (strlen($incoming) <= 14 ? 2 : 3);
+        similar_text($incoming, $stored, $percent);
+        if (levenshtein($incoming, $stored) <= $maxDistance || $percent >= 86.0) {
+            return true;
+        }
+
+        $incomingFirst = $this->normalizeMatchName(strtok($incomingName, ' ') ?: $incomingName);
+        $storedFirst   = $this->normalizeMatchName(strtok($storedName, ' ') ?: $storedName);
+        if (strlen($incomingFirst) < 4 || strlen($storedFirst) < 4) {
+            return false;
+        }
+
+        $firstDistance = strlen($incomingFirst) <= 8 ? 1 : 2;
+        similar_text($incomingFirst, $storedFirst, $firstPercent);
+
+        return levenshtein($incomingFirst, $storedFirst) <= $firstDistance || $firstPercent >= 84.0;
     }
 
     private function resolveFirstExistingColumn(array $fields, array $candidates): ?string
@@ -5115,6 +5298,431 @@ class AbdmGateway extends BaseController
         };
     }
 
+    private function pushAdditionalHiRecord(array $payload, int $patientId, string $abhaId, string $consentHandle)
+    {
+        $hiType = (string) ($payload['hi_type'] ?? 'HealthDocumentRecord');
+        $entityType = (string) ($payload['entity_type'] ?? strtolower($hiType));
+        $entityId = (string) ($payload['entity_id'] ?? $patientId);
+        $ccRef = (string) ($payload['care_context_reference'] ?? ($hiType . '-' . $patientId . '-' . date('Y-m-d')));
+        $ccDisplay = (string) ($payload['care_context_display'] ?? $hiType);
+        $bundle = (array) ($payload['bundle'] ?? []);
+        $visitDate = (string) ($payload['visit_date'] ?? date('Y-m-d'));
+        $patientName = (string) ($payload['patient_name'] ?? ('PATIENT-' . $patientId));
+        $bundleJson = (string) json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        $consent = $abhaId !== '' ? $this->getActiveConsentRecord($patientId, $abhaId, $consentHandle) : null;
+        $consentWarning = '';
+        if ($abhaId !== '' && $consent === null) {
+            $consentWarning = 'No active consent found. Proceeding with care-context push only.';
+            $this->logMissingConsentShareWarning($entityType, (int) $entityId, $patientId, $abhaId, $consentHandle, 'abdm.' . $entityType . '.share.consent_missing', $consentWarning);
+        }
+        $effectiveConsent = (string) ($consent['consent_handle'] ?? $consentHandle);
+
+        $healthRecordId = $this->storeHealthRecord([
+            'patient_id' => $patientId,
+            'abha_id' => $abhaId,
+            'hi_type' => $hiType,
+            'entity_type' => $entityType,
+            'entity_id' => $entityId,
+            'fhir_bundle' => $bundleJson,
+            'care_context_reference' => $ccRef,
+            'consent_handle' => $effectiveConsent,
+        ]);
+
+        if ($abhaId === '') {
+            if ($healthRecordId > 0 && $this->db->tableExists('health_records')) {
+                $this->db->table('health_records')->where('id', $healthRecordId)->update([
+                    'push_status' => 'local_only',
+                    'updated_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
+                ]);
+            }
+
+            return $this->response->setJSON([
+                'ok' => 1,
+                'status' => 'local_stored',
+                'health_record_id' => $healthRecordId,
+                'care_context_reference' => $ccRef,
+                'message' => 'ABHA not available. Record stored locally for later discovery.',
+            ]);
+        }
+
+        $queueId = null;
+        $bridgeRecordId = 0;
+        $connectorError = null;
+        try {
+            $result = $this->connector->pushRecord([
+                'patient_id' => (string) $patientId,
+                'patient_name' => $patientName,
+                'abha_id' => preg_match('/^\d{14}$/', $abhaId) === 1 ? $abhaId : '',
+                'abha_address' => str_contains($abhaId, '@') ? $abhaId : '',
+                'hi_type' => $hiType,
+                'record_type' => $hiType,
+                'visit_date' => $visitDate,
+                'care_context_reference' => $ccRef,
+                'care_context_display' => $ccDisplay,
+                'notes' => $ccDisplay,
+                'queue_id' => $ccRef,
+                'record_data' => $bundle,
+            ]);
+            $queueId = (string) ($result['queue_id'] ?? $result['existing_queue_id'] ?? '');
+            $bridgeRecordId = (int) ($result['record_id'] ?? $result['id'] ?? $result['existing_record_id'] ?? 0);
+            $httpCode = (int) ($result['http_code'] ?? 0);
+            $errorCode = strtoupper(trim((string) ($result['error_code'] ?? '')));
+            if ((int) ($result['ok'] ?? 0) !== 1 && $httpCode !== 409 && $errorCode !== 'DUPLICATE_RECORD') {
+                $connectorError = trim((string) ($result['message'] ?? $result['error_text'] ?? $errorCode));
+                if ($connectorError === '') {
+                    $connectorError = 'Bridge push failed';
+                }
+            }
+        } catch (\Throwable $e) {
+            $connectorError = $e->getMessage();
+        }
+
+        if ($healthRecordId > 0) {
+            $this->updateHealthRecordTxn($healthRecordId, (string) ($queueId ?? ''), $connectorError, $bridgeRecordId);
+        }
+
+        $this->getAuditService()->log([
+            'action' => 'push_record',
+            'entity_type' => $entityType,
+            'entity_id' => $entityId,
+            'abha_id' => $abhaId,
+            'patient_id' => $patientId,
+            'request' => ['hi_type' => $hiType, 'care_context_reference' => $ccRef, 'consent_handle' => $effectiveConsent],
+            'response' => ['queue_id' => $queueId, 'bridge_record_id' => $bridgeRecordId > 0 ? $bridgeRecordId : null, 'warning' => $consentWarning],
+            'outcome' => $connectorError === null ? 'success' : 'failure',
+            'error_message' => (string) ($connectorError ?? ''),
+        ]);
+
+        return $this->response->setJSON([
+            'ok' => $connectorError === null ? 1 : 0,
+            'queue_id' => $queueId,
+            'bridge_record_id' => $bridgeRecordId > 0 ? $bridgeRecordId : null,
+            'health_record_id' => $healthRecordId,
+            'care_context_reference' => $ccRef,
+            'consent_handle' => $effectiveConsent,
+            'status' => $connectorError === null ? 'queued' : 'failed',
+            'message' => $connectorError === null && $consentWarning !== '' ? 'Record pushed to gateway without active consent. Recheck link status in M2 ABDM Gateway.' : null,
+            'warning' => $consentWarning !== '' ? $consentWarning : null,
+            'error' => $connectorError,
+        ]);
+    }
+
+    private function buildWellnessRecordPayload(int $patientId, int $opdId, string $abhaId): ?array
+    {
+        $patientRow = $this->loadPatientRow($patientId);
+        if (empty($patientRow)) {
+            return null;
+        }
+
+        $row = [];
+        if ($this->db->tableExists('opd_prescription')) {
+            $builder = $this->db->table('opd_prescription')->where('p_id', $patientId);
+            if ($opdId > 0) {
+                $builder->where('opd_id', $opdId);
+            }
+            $builder->groupStart()
+                ->where("COALESCE(NULLIF(TRIM(bp), ''), NULLIF(TRIM(diastolic), ''), NULLIF(TRIM(pulse), ''), NULLIF(TRIM(height), ''), NULLIF(TRIM(weight), ''), NULLIF(TRIM(temp), ''), NULLIF(TRIM(rr_min), ''), NULLIF(TRIM(spo2), ''), NULLIF(TRIM(glucose), '')) IS NOT NULL", null, false)
+                ->groupEnd();
+            $row = $builder->orderBy('id', 'DESC')->get(1)->getRowArray() ?? [];
+        }
+
+        $vitals = $this->extractWellnessVitals($row);
+        $lifestyle = $this->extractPatientLifestyleObservations($patientRow);
+        if (empty($vitals) && empty($lifestyle)) {
+            return null;
+        }
+
+        $patient = $this->buildAbdmPatientResource($patientRow, $patientId, $abhaId);
+        $bundle = $this->buildSimpleWellnessBundle($patient, $vitals, $lifestyle);
+        $visitDate = (string) ($row['date_opd_visit'] ?? date('Y-m-d'));
+        $entityId = (string) ($opdId > 0 ? $opdId : ($row['opd_id'] ?? $patientId));
+
+        return [
+            'hi_type' => 'WellnessRecord',
+            'entity_type' => 'wellness',
+            'entity_id' => $entityId,
+            'patient_id' => $patientId,
+            'patient_name' => $this->patientDisplayName($patientRow),
+            'visit_date' => $visitDate,
+            'care_context_reference' => 'WELLNESS-' . $entityId . '-' . date('Y-m-d', strtotime($visitDate)),
+            'care_context_display' => 'Wellness Record - ' . date('d/m/Y', strtotime($visitDate)),
+            'bundle' => $bundle,
+        ];
+    }
+
+    private function buildHealthDocumentRecordPayload(int $patientId, string $abhaId): ?array
+    {
+        $patientRow = $this->loadPatientRow($patientId);
+        if (empty($patientRow)) {
+            return null;
+        }
+
+        $title = trim((string) ($this->request->getPost('document_title') ?? $this->request->getPost('title') ?? ''));
+        $documentText = trim((string) ($this->request->getPost('document_text') ?? $this->request->getPost('notes') ?? ''));
+        $contentType = trim((string) ($this->request->getPost('content_type') ?? ''));
+        $base64 = trim((string) ($this->request->getPost('document_base64') ?? ''));
+        $filePath = trim((string) ($this->request->getPost('file_path') ?? $this->request->getPost('attachment_path') ?? ''));
+        if ($title === '') {
+            $title = 'Health Document';
+        }
+        if ($base64 === '' && $documentText !== '') {
+            $contentType = 'text/html';
+            $base64 = base64_encode('<div xmlns="http://www.w3.org/1999/xhtml">' . esc($documentText) . '</div>');
+        }
+        if ($base64 === '' && $filePath !== '') {
+            $file = $this->resolveReadableAttachmentPath($filePath);
+            if ($file !== '') {
+                $base64 = base64_encode((string) file_get_contents($file));
+                $contentType = $contentType !== '' ? $contentType : ((string) (mime_content_type($file) ?: 'application/octet-stream'));
+            }
+        }
+        if ($base64 === '') {
+            return null;
+        }
+        $contentType = $contentType !== '' ? $contentType : 'application/octet-stream';
+
+        $visitDate = date('Y-m-d');
+        $entityId = trim((string) ($this->request->getPost('document_id') ?? $this->request->getPost('entity_id') ?? '')) ?: (string) $patientId;
+        $patient = $this->buildAbdmPatientResource($patientRow, $patientId, $abhaId);
+        $bundle = $this->buildSimpleHealthDocumentBundle($patient, $title, $contentType, $base64);
+
+        return [
+            'hi_type' => 'HealthDocumentRecord',
+            'entity_type' => 'health_document',
+            'entity_id' => $entityId,
+            'patient_id' => $patientId,
+            'patient_name' => $this->patientDisplayName($patientRow),
+            'visit_date' => $visitDate,
+            'care_context_reference' => 'HDOC-' . $patientId . '-' . $entityId . '-' . $visitDate,
+            'care_context_display' => $title,
+            'bundle' => $bundle,
+        ];
+    }
+
+    private function buildInvoiceRecordPayload(int $invoiceId, int $patientId, string $abhaId): ?array
+    {
+        if (! $this->db->tableExists('invoice_master')) {
+            return null;
+        }
+        $invoice = $this->db->table('invoice_master')->where('id', $invoiceId)->get(1)->getRowArray() ?? [];
+        if (empty($invoice)) {
+            return null;
+        }
+        if ($patientId <= 0) {
+            $patientId = (int) ($invoice['attach_id'] ?? 0);
+        }
+        $patientRow = $this->loadPatientRow($patientId);
+        if ($patientId <= 0 || empty($patientRow)) {
+            return null;
+        }
+        $items = $this->db->tableExists('invoice_item')
+            ? $this->db->table('invoice_item')->where('inv_master_id', $invoiceId)->orderBy('id', 'ASC')->get()->getResultArray()
+            : [];
+
+        $visitDate = (string) ($invoice['inv_date'] ?? date('Y-m-d'));
+        $patient = $this->buildAbdmPatientResource($patientRow, $patientId, $abhaId);
+        $bundle = $this->buildSimpleInvoiceBundle($patient, $invoice, $items);
+
+        return [
+            'hi_type' => 'InvoiceRecord',
+            'entity_type' => 'invoice',
+            'entity_id' => (string) $invoiceId,
+            'patient_id' => $patientId,
+            'patient_name' => $this->patientDisplayName($patientRow),
+            'visit_date' => date('Y-m-d', strtotime($visitDate)),
+            'care_context_reference' => 'INV-' . $invoiceId . '-' . date('Y-m-d', strtotime($visitDate)),
+            'care_context_display' => 'Invoice ' . (string) ($invoice['invoice_code'] ?? $invoiceId),
+            'bundle' => $bundle,
+        ];
+    }
+
+    private function loadPatientRow(int $patientId): array
+    {
+        if ($patientId <= 0 || ! $this->db->tableExists('patient_master')) {
+            return [];
+        }
+        return $this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray() ?? [];
+    }
+
+    private function patientDisplayName(array $patientRow): string
+    {
+        return trim(trim((string) ($patientRow['p_fname'] ?? '')) . ' ' . trim((string) ($patientRow['p_lname'] ?? ''))) ?: 'Patient';
+    }
+
+    private function buildAbdmPatientResource(array $patientRow, int $patientId, string $abhaId): array
+    {
+        $genderRaw = trim((string) ($patientRow['gender'] ?? ''));
+        $gender = match ($genderRaw) {
+            '1', 'M', 'm', 'male', 'Male' => 'male',
+            '2', 'F', 'f', 'female', 'Female' => 'female',
+            default => 'unknown',
+        };
+        $patient = [
+            'resourceType' => 'Patient',
+            'id' => 'patient-' . $patientId,
+            'name' => [['text' => $this->patientDisplayName($patientRow)]],
+            'gender' => $gender,
+        ];
+        if (! empty($patientRow['dob'])) {
+            $patient['birthDate'] = date('Y-m-d', strtotime((string) $patientRow['dob']));
+        }
+        if ($abhaId !== '') {
+            $patient['identifier'] = [[
+                'system' => str_contains($abhaId, '@') ? 'https://healthid.ndhm.gov.in/abha-address' : 'https://healthid.ndhm.gov.in',
+                'value' => $abhaId,
+            ]];
+        }
+        return $patient;
+    }
+
+    private function extractWellnessVitals(array $row): array
+    {
+        if (empty($row)) {
+            return [];
+        }
+        $vitals = [];
+        $add = static function (string $code, string $display, mixed $value, string $unit, string $ucum) use (&$vitals): void {
+            if ($value === null || trim((string) $value) === '' || ! is_numeric($value)) {
+                return;
+            }
+            $vitals[] = ['loinc_code' => $code, 'display' => $display, 'value' => (float) $value, 'unit' => $unit, 'ucum_code' => $ucum];
+        };
+        $add('8480-6', 'Systolic blood pressure', $row['bp'] ?? null, 'mmHg', 'mm[Hg]');
+        $add('8462-4', 'Diastolic blood pressure', $row['diastolic'] ?? null, 'mmHg', 'mm[Hg]');
+        $add('8867-4', 'Heart rate', $row['pulse'] ?? null, '/min', '/min');
+        $add('8302-2', 'Body height', $row['height'] ?? null, 'cm', 'cm');
+        $add('29463-7', 'Body weight', $row['weight'] ?? null, 'kg', 'kg');
+        $temp = $row['temp'] ?? null;
+        if ($temp !== null && is_numeric($temp) && (float) $temp > 45) {
+            $temp = (((float) $temp - 32) * 5) / 9;
+        }
+        $add('8310-5', 'Body temperature', $temp, 'Cel', 'Cel');
+        $add('9279-1', 'Respiratory rate', $row['rr_min'] ?? null, '/min', '/min');
+        $add('59408-5', 'Oxygen saturation in Arterial blood by Pulse oximetry', $row['spo2'] ?? null, '%', '%');
+        $add('2339-0', 'Glucose', $row['glucose'] ?? null, 'mg/dL', 'mg/dL');
+        return $vitals;
+    }
+
+    private function extractPatientLifestyleObservations(array $patientRow): array
+    {
+        $map = [
+            'is_smoking' => 'Smoking status',
+            'is_alcohol' => 'Alcohol use',
+            'is_drug_abuse' => 'Drug abuse status',
+            'is_tobacoo' => 'Tobacco use',
+            'is_hypertesion' => 'Hypertension history',
+            'is_niddm' => 'Diabetes history',
+        ];
+        $items = [];
+        foreach ($map as $field => $label) {
+            $value = trim((string) ($patientRow[$field] ?? ''));
+            if ($value !== '' && $value !== '0') {
+                $items[] = ['display' => $label, 'value' => 'Yes'];
+            }
+        }
+        if (trim((string) ($patientRow['Others'] ?? '')) !== '') {
+            $items[] = ['display' => 'Other wellness notes', 'value' => trim((string) $patientRow['Others'])];
+        }
+        return $items;
+    }
+
+    private function buildSimpleWellnessBundle(array $patient, array $vitals, array $lifestyle): array
+    {
+        $issuedAt = Time::now('Asia/Kolkata')->format(DATE_ATOM);
+        $patientRef = 'Patient/' . (string) ($patient['id'] ?? 'patient-unknown');
+        $entries = [];
+        $sectionEntries = [];
+        $index = 1;
+        foreach ($vitals as $vital) {
+            $id = 'wellness-obs-' . $index++;
+            $sectionEntries[] = ['reference' => 'Observation/' . $id];
+            $entries[] = ['resource' => [
+                'resourceType' => 'Observation',
+                'id' => $id,
+                'status' => 'final',
+                'category' => [['coding' => [['system' => 'http://terminology.hl7.org/CodeSystem/observation-category', 'code' => 'vital-signs', 'display' => 'Vital Signs']]]],
+                'code' => ['coding' => [['system' => 'http://loinc.org', 'code' => (string) $vital['loinc_code'], 'display' => (string) $vital['display']]], 'text' => (string) $vital['display']],
+                'subject' => ['reference' => $patientRef],
+                'effectiveDateTime' => $issuedAt,
+                'valueQuantity' => ['value' => (float) $vital['value'], 'unit' => (string) $vital['unit'], 'system' => 'http://unitsofmeasure.org', 'code' => (string) $vital['ucum_code']],
+            ]];
+        }
+        foreach ($lifestyle as $item) {
+            $id = 'wellness-social-' . $index++;
+            $sectionEntries[] = ['reference' => 'Observation/' . $id];
+            $entries[] = ['resource' => [
+                'resourceType' => 'Observation',
+                'id' => $id,
+                'status' => 'final',
+                'category' => [['coding' => [['system' => 'http://terminology.hl7.org/CodeSystem/observation-category', 'code' => 'social-history', 'display' => 'Social History']]]],
+                'code' => ['text' => (string) ($item['display'] ?? 'Lifestyle')],
+                'subject' => ['reference' => $patientRef],
+                'effectiveDateTime' => $issuedAt,
+                'valueString' => (string) ($item['value'] ?? ''),
+            ]];
+        }
+        $composition = ['resource' => [
+            'resourceType' => 'Composition',
+            'id' => 'composition-wellness-' . date('YmdHis'),
+            'status' => 'final',
+            'type' => ['coding' => [['system' => 'http://snomed.info/sct', 'code' => '371529009', 'display' => 'Health maintenance report']]],
+            'subject' => ['reference' => $patientRef],
+            'date' => $issuedAt,
+            'title' => 'Wellness Record',
+            'section' => [['title' => 'Vital Signs and Wellness', 'entry' => $sectionEntries]],
+        ]];
+        return ['resourceType' => 'Bundle', 'type' => 'document', 'timestamp' => $issuedAt, 'entry' => array_merge([$composition, ['resource' => $patient]], $entries)];
+    }
+
+    private function buildSimpleHealthDocumentBundle(array $patient, string $title, string $contentType, string $base64): array
+    {
+        $issuedAt = Time::now('Asia/Kolkata')->format(DATE_ATOM);
+        $patientRef = 'Patient/' . (string) ($patient['id'] ?? 'patient-unknown');
+        $binaryId = 'binary-health-doc-' . date('YmdHis');
+        $docId = 'doc-health-' . date('YmdHis');
+        $composition = ['resource' => ['resourceType' => 'Composition', 'id' => 'composition-health-doc-' . date('YmdHis'), 'status' => 'final', 'type' => ['text' => 'Health Document Record'], 'subject' => ['reference' => $patientRef], 'date' => $issuedAt, 'title' => $title, 'section' => [['title' => $title, 'entry' => [['reference' => 'DocumentReference/' . $docId]]]]]];
+        $binary = ['resource' => ['resourceType' => 'Binary', 'id' => $binaryId, 'contentType' => $contentType, 'data' => $base64]];
+        $docRef = ['resource' => ['resourceType' => 'DocumentReference', 'id' => $docId, 'status' => 'current', 'type' => ['text' => $title], 'subject' => ['reference' => $patientRef], 'date' => $issuedAt, 'content' => [['attachment' => ['contentType' => $contentType, 'url' => 'Binary/' . $binaryId, 'title' => $title]]]]];
+        return ['resourceType' => 'Bundle', 'type' => 'document', 'timestamp' => $issuedAt, 'entry' => [$composition, ['resource' => $patient], $binary, $docRef]];
+    }
+
+    private function buildSimpleInvoiceBundle(array $patient, array $invoice, array $items): array
+    {
+        $issuedAt = Time::now('Asia/Kolkata')->format(DATE_ATOM);
+        $patientRef = 'Patient/' . (string) ($patient['id'] ?? 'patient-unknown');
+        $invoiceId = 'invoice-' . (int) ($invoice['id'] ?? 0);
+        $lineItems = [];
+        foreach ($items as $idx => $item) {
+            $lineItems[] = ['sequence' => $idx + 1, 'chargeItemCodeableConcept' => ['text' => (string) ($item['item_name'] ?? 'Item')], 'priceComponent' => [['type' => 'base', 'amount' => ['value' => (float) ($item['item_amount'] ?? 0), 'currency' => 'INR']]]];
+        }
+        $invoiceResource = ['resourceType' => 'Invoice', 'id' => $invoiceId, 'status' => 'issued', 'subject' => ['reference' => $patientRef], 'date' => ! empty($invoice['inv_date']) ? date('Y-m-d', strtotime((string) $invoice['inv_date'])) : date('Y-m-d'), 'totalNet' => ['value' => (float) ($invoice['net_amount'] ?? $invoice['total_amount'] ?? 0), 'currency' => 'INR'], 'totalGross' => ['value' => (float) ($invoice['total_amount'] ?? $invoice['net_amount'] ?? 0), 'currency' => 'INR']];
+        if (! empty($lineItems)) {
+            $invoiceResource['lineItem'] = $lineItems;
+        }
+        $composition = ['resource' => ['resourceType' => 'Composition', 'id' => 'composition-invoice-' . (int) ($invoice['id'] ?? 0), 'status' => 'final', 'type' => ['text' => 'Invoice Record'], 'subject' => ['reference' => $patientRef], 'date' => $issuedAt, 'title' => 'Invoice ' . (string) ($invoice['invoice_code'] ?? $invoice['id'] ?? ''), 'section' => [['title' => 'Invoice details', 'entry' => [['reference' => 'Invoice/' . $invoiceId]]]]]];
+        return ['resourceType' => 'Bundle', 'type' => 'document', 'timestamp' => $issuedAt, 'entry' => [$composition, ['resource' => $patient], ['resource' => $invoiceResource]]];
+    }
+
+    private function resolveReadableAttachmentPath(string $path): string
+    {
+        $candidate = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $path);
+        if (! str_starts_with($candidate, DIRECTORY_SEPARATOR) && ! preg_match('/^[A-Za-z]:\\\\/', $candidate)) {
+            $candidate = FCPATH . ltrim($candidate, DIRECTORY_SEPARATOR);
+        }
+        $real = realpath($candidate);
+        if ($real === false || ! is_file($real) || ! is_readable($real)) {
+            return '';
+        }
+        $allowed = array_filter([realpath(FCPATH), realpath(WRITEPATH)]);
+        foreach ($allowed as $root) {
+            if (str_starts_with($real, (string) $root)) {
+                return $real;
+            }
+        }
+        return '';
+    }
+
     private function getActiveConsentRecord(int $patientId, string $abhaId, string $consentHandle = ''): ?array
     {
         $hasAbdmConsentTable = $this->db->tableExists('abdm_consent_records');
@@ -5183,6 +5791,68 @@ class AbdmGateway extends BaseController
         }
 
         return null;
+    }
+
+    private function logMissingConsentShareBlock(string $entityType, int $entityId, int $patientId, string $abhaId, string $consentHandle, string $eventType): void
+    {
+        if (! $this->db->tableExists('abdm_api_logs')) {
+            return;
+        }
+
+        $message = 'No active consent found. Share blocked due to expiry/not-approved consent.';
+        $this->db->table('abdm_api_logs')->insert([
+            'channel' => 'bridge',
+            'event_type' => $eventType,
+            'endpoint' => '/AbdmGateway/share_' . $entityType,
+            'http_method' => 'POST',
+            'entity_type' => $entityType,
+            'entity_id' => (string) $entityId,
+            'request_json' => (string) json_encode([
+                'entity_type' => $entityType,
+                'entity_id' => $entityId,
+                'patient_id' => $patientId,
+                'abha_id' => $abhaId,
+                'consent_handle' => $consentHandle,
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'response_code' => 200,
+            'response_json' => (string) json_encode([
+                'ok' => 0,
+                'error_text' => $message,
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'status' => 'error',
+            'error_message' => $message,
+            'created_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
+        ]);
+    }
+
+    private function logMissingConsentShareWarning(string $entityType, int $entityId, int $patientId, string $abhaId, string $consentHandle, string $eventType, string $message): void
+    {
+        if (! $this->db->tableExists('abdm_api_logs')) {
+            return;
+        }
+
+        $this->db->table('abdm_api_logs')->insert([
+            'channel' => 'bridge',
+            'event_type' => $eventType,
+            'endpoint' => '/AbdmGateway/share_' . $entityType,
+            'http_method' => 'POST',
+            'entity_type' => $entityType,
+            'entity_id' => (string) $entityId,
+            'request_json' => json_encode([
+                'patient_id' => $patientId,
+                'abha_id' => $abhaId,
+                'consent_handle' => $consentHandle,
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'response_json' => json_encode([
+                'ok' => 1,
+                'note' => $message,
+                'care_context_push_only' => 1,
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'response_code' => 200,
+            'status' => 'warning',
+            'error_message' => $message,
+            'created_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
+        ]);
     }
 
     /**
