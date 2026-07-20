@@ -297,8 +297,8 @@
                             <td><span class="text-primary small"><?= esc((string) ($r['abha_id'] ?? '')) ?></span></td>
                             <td><?= esc(substr((string) ($r['apointment_date'] ?? ''), 0, 16)) ?></td>
                             <td><?= esc((string) ($r['doc_name'] ?? '')) ?></td>
-                            <td><span class="<?= esc($statusBadgeClass) ?>"><?= esc($statusLabel) ?></span></td>
-                            <td class="small text-muted" style="min-width:260px;max-width:340px;">
+                            <td><span class="<?= esc($statusBadgeClass) ?> opd-consult-status-badge"><?= esc($statusLabel) ?></span></td>
+                            <td class="small text-muted opd-consult-details" style="min-width:260px;max-width:340px;">
                                 <?php if ($statusNote !== ''): ?>
                                     <div><?= esc($statusNote) ?></div>
                                 <?php endif; ?>
@@ -2423,6 +2423,29 @@
             if (res.ok == 1) {
                 btn.className = 'btn btn-sm btn-success';
                 btn.innerHTML = '<i class="bi bi-check-circle"></i> Submitted ✓';
+
+                var rowSubmitBtn = document.querySelector('.btn-opd-consult-submit-gateway[data-opd-id="' + String(_fhirOpdId) + '"]');
+                if (rowSubmitBtn) {
+                    var row = rowSubmitBtn.closest('tr');
+                    if (row) {
+                        row.setAttribute('data-push-status', 'queued');
+                        var statusBadge = row.querySelector('.opd-consult-status-badge');
+                        if (statusBadge) {
+                            statusBadge.textContent = 'Submitted';
+                            statusBadge.className = 'badge bg-warning text-dark opd-consult-status-badge';
+                        }
+                        var detailsCell = row.querySelector('.opd-consult-details');
+                        if (detailsCell) {
+                            var queueHtml = res.queue_id ? ('<div><strong>Queue:</strong> ' + String(res.queue_id) + '</div>') : '';
+                            var bridgeHtml = res.bridge_record_id ? ('<div><strong>Bridge:</strong> #' + String(res.bridge_record_id) + '</div>') : '';
+                            detailsCell.innerHTML = '<div>Submitted to gateway and waiting for link workflow.</div>' + queueHtml + bridgeHtml;
+                        }
+                    }
+                    rowSubmitBtn.disabled = true;
+                    rowSubmitBtn.className = 'btn btn-sm btn-success ms-1';
+                    rowSubmitBtn.textContent = 'Submitted';
+                }
+
                 var qInfo = res.queue_id ? ' Queue ID: ' + res.queue_id : '';
                 alert('✅ Bundle submitted to ABDM bridge.\n' + (res.message || '') + qInfo);
             } else {

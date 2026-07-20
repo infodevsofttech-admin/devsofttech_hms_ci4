@@ -205,24 +205,57 @@ class AbdmGatewayPushClient
      */
     private function mapResponse(int $httpStatus, array $body, string $requestId): array
     {
-        $queueId = (string) ($body['queue_id'] ?? $body['existing_queue_id'] ?? '');
-        $recordId = (int) ($body['record_id'] ?? $body['id'] ?? $body['existing_record_id'] ?? 0);
-        $message = (string) ($body['message'] ?? $body['error_text'] ?? ('HTTP ' . $httpStatus));
-
-        if ($httpStatus === 201 || ((int) ($body['ok'] ?? 0) === 1 && $httpStatus >= 200 && $httpStatus < 300)) {
-            return [
-                'ok' => true,
-                'status' => 'done',
-                'http_status' => $httpStatus,
-                'request_id' => $requestId,
-                'gateway_record_id' => $recordId > 0 ? $recordId : null,
-                'gateway_queue_id' => $queueId !== '' ? $queueId : null,
-                'message' => $message,
-                'retryable' => false,
-            ];
+        $queueMeta = [
+            'queue_id' => $body['queue_id'] ?? null,
+            'existing_queue_id' => $body['existing_queue_id'] ?? null,
+            'response.queue_id' => $body['response']['queue_id'] ?? null,
+            'response.existing_queue_id' => $body['response']['existing_queue_id'] ?? null,
+            'data.queue_id' => $body['data']['queue_id'] ?? null,
+            'data.existing_queue_id' => $body['data']['existing_queue_id'] ?? null,
+        ];
+        $queueId = '';
+        $queueSource = 'none';
+        foreach ($queueMeta as $source => $value) {
+            $candidate = trim((string) $value);
+            if ($candidate !== '') {
+                $queueId = $candidate;
+                $queueSource = $source;
+                break;
+            }
         }
 
-        if ($httpStatus === 409 || strtoupper((string) ($body['error_code'] ?? '')) === 'DUPLICATE_RECORD') {
+        $recordMeta = [
+            'record_id' => $body['record_id'] ?? null,
+            'existing_record_id' => $body['existing_record_id'] ?? null,
+            'id' => $body['id'] ?? null,
+            'response.record_id' => $body['response']['record_id'] ?? null,
+            'response.existing_record_id' => $body['response']['existing_record_id'] ?? null,
+            'response.id' => $body['response']['id'] ?? null,
+            'data.record_id' => $body['data']['record_id'] ?? null,
+            'data.existing_record_id' => $body['data']['existing_record_id'] ?? null,
+            'data.id' => $body['data']['id'] ?? null,
+        ];
+        $recordId = 0;
+        $recordSource = 'none';
+        foreach ($recordMeta as $source => $value) {
+            $candidate = (int) $value;
+            if ($candidate > 0) {
+                $recordId = $candidate;
+                $recordSource = $source;
+                break;
+            }
+        }
+
+        $errorCode = strtoupper(trim((string) (
+            $body['error_code']
+            ?? ($body['response']['error_code'] ?? null)
+            ?? ($body['data']['error_code'] ?? '')
+        )));
+        $isDuplicate = $httpStatus === 409 || $errorCode === 'DUPLICATE_RECORD';
+        $isSubmitted = $httpStatus === 201 || $isDuplicate;
+        $message = (string) ($body['message'] ?? $body['error_text'] ?? ('HTTP ' . $httpStatus));
+
+        if ($isSubmitted || ((int) ($body['ok'] ?? 0) === 1 && $httpStatus >= 200 && $httpStatus < 300)) {
             return [
                 'ok' => true,
                 'status' => 'done',
@@ -230,7 +263,11 @@ class AbdmGatewayPushClient
                 'request_id' => $requestId,
                 'gateway_record_id' => $recordId > 0 ? $recordId : null,
                 'gateway_queue_id' => $queueId !== '' ? $queueId : null,
-                'message' => $message !== '' ? $message : 'Duplicate record handled as success.',
+                'gateway_record_source' => $recordSource,
+                'gateway_queue_source' => $queueSource,
+                'submitted' => $isSubmitted ? 1 : 0,
+                'duplicate' => $isDuplicate ? 1 : 0,
+                'message' => $message,
                 'retryable' => false,
             ];
         }
@@ -246,6 +283,10 @@ class AbdmGatewayPushClient
                 'retryable' => true,
                 'gateway_record_id' => null,
                 'gateway_queue_id' => null,
+                'gateway_record_source' => $recordSource,
+                'gateway_queue_source' => $queueSource,
+                'submitted' => 0,
+                'duplicate' => $isDuplicate ? 1 : 0,
             ];
         }
 
@@ -260,6 +301,10 @@ class AbdmGatewayPushClient
                 'retryable' => false,
                 'gateway_record_id' => null,
                 'gateway_queue_id' => null,
+                'gateway_record_source' => $recordSource,
+                'gateway_queue_source' => $queueSource,
+                'submitted' => 0,
+                'duplicate' => $isDuplicate ? 1 : 0,
             ];
         }
 
@@ -273,6 +318,10 @@ class AbdmGatewayPushClient
             'retryable' => false,
             'gateway_record_id' => null,
             'gateway_queue_id' => null,
+            'gateway_record_source' => $recordSource,
+            'gateway_queue_source' => $queueSource,
+            'submitted' => 0,
+            'duplicate' => $isDuplicate ? 1 : 0,
         ];
     }
 

@@ -4873,6 +4873,7 @@ class Opd_prescription extends BaseController
             $medications     = $this->getPrescriptionMedicines($sessionId);
             $conditions      = $this->getPrescriptionConditions($sessionId);
             $clinicalContext = $sessionId > 0 ? $this->getPrescriptionClinicalContext($sessionId, $opdRow) : [];
+            $clinicalContext['attachments'] = $this->collectOpdFhirAttachments($opdId);
             $bundle          = $this->fhirR4Builder->buildPrescriptionBundle($patient, $encounter, $medications, $conditions, $clinicalContext);
             $bundleJson      = (string) json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
@@ -4960,6 +4961,7 @@ class Opd_prescription extends BaseController
                 'document_id' => (int) ($row['id'] ?? 0),
             ]);
         }
+        $bundle = $this->appendOpdFhirAttachmentsToBundle($bundle, (int) $opdId);
 
         $prettyJson = (string) json_encode($bundle, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
@@ -5419,6 +5421,16 @@ class Opd_prescription extends BaseController
                 'csrfName' => csrf_token(),
                 'csrfHash' => csrf_hash(),
             ]);
+        }
+        $bundleWithAttachments = $this->appendOpdFhirAttachmentsToBundle($bundle, $opdId);
+        if ($bundleWithAttachments !== $bundle) {
+            $bundle = $bundleWithAttachments;
+            $this->db->table('opd_fhir_documents')
+                ->where('id', (int) ($bundleRow['id'] ?? 0))
+                ->update([
+                    'bundle_json' => (string) json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'generated_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
+                ]);
         }
 
         // Gather patient / OPD context for the push payload
@@ -11097,6 +11109,268 @@ class Opd_prescription extends BaseController
     }
 
     /**
+     * @return array<int, array<string, string>>
+     */
+    private function collectOpdFhirAttachments(int $opdId, int $limit = 5): array
+    {
+        if ($opdId <= 0 || ! $this->db->tableExists('file_upload_data')) {
+            return [];
+        }
+
+        $fields = $this->db->getFieldNames('file_upload_data') ?? [];
+        $select = [];
+        foreach (['id', 'full_path', 'public_path', 'file_ext', 'file_type', 'insert_date', 'document_type', 'scan_type', 'content_description', 'name', 'file_name', 'orig_name', 'client_name'] as $field) {
+            if (in_array($field, $fields, true)) {
+                $select[] = $field;
+            }
+        }
+        if (! in_array('id', $select, true) || ! in_array('full_path', $select, true)) {
+            return [];
+        }
+
+        $builder = $this->db->table('file_upload_data')
+            ->select(implode(',', array_unique($select)))
+            ->where('opd_id', $opdId);
+        if (in_array('show_type', $fields, true)) {
+            $builder->where('show_type', 0);
+        }
+
+        $rows = $builder->orderBy('id', 'DESC')
+            ->limit(max(1, min(10, $limit)))
+            ->get()
+            ->getResultArray();
+
+        $attachments = [];
+        foreach ($rows as $row) {
+            $path = $this->resolveOpdFhirAttachmentPath($row);
+            if ($path === '' || ! is_readable($path)) {
+                continue;
+            }
+
+            $size = (int) (@filesize($path) ?: 0);
+            if ($size <= 0 || $size > 8 * 1024 * 1024) {
+                continue;
+            }
+
+            $contentType = $this->normalizeOpdFhirAttachmentMimeType((string) ($row['file_type'] ?? ''), (string) ($row['file_ext'] ?? pathinfo($path, PATHINFO_EXTENSION)));
+            if (! in_array($contentType, ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'], true)) {
+                continue;
+            }
+
+            $raw = @file_get_contents($path);
+            if ($raw === false || $raw === '') {
+                continue;
+            }
+
+            $titleParts = [];
+            foreach (['document_type', 'scan_type', 'content_description'] as $field) {
+                $value = trim((string) ($row[$field] ?? ''));
+                if ($value !== '' && strtolower($value) !== 'general' && strtolower($value) !== 'queued for ai analysis') {
+                    $titleParts[] = $value;
+                }
+            }
+            $title = trim(implode(' - ', array_unique($titleParts)));
+            if ($title === '') {
+                $title = 'OPD scanned/uploaded document';
+            }
+
+            $attachments[] = [
+                'id' => (string) ((int) ($row['id'] ?? 0)),
+                'title' => $title,
+                'content_type' => $contentType,
+                'data_base64' => base64_encode($raw),
+                'date' => ! empty($row['insert_date']) ? date(DATE_ATOM, strtotime((string) $row['insert_date'])) : Time::now('Asia/Kolkata')->format(DATE_ATOM),
+            ];
+        }
+
+        return array_reverse($attachments);
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    private function resolveOpdFhirAttachmentPath(array $row): string
+    {
+        $candidates = [];
+        foreach (['full_path', 'public_path'] as $field) {
+            $value = trim((string) ($row[$field] ?? ''));
+            if ($value !== '') {
+                $candidates[] = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $value);
+            }
+        }
+
+        foreach ($candidates as $candidate) {
+            $checks = [$candidate];
+            if (! preg_match('/^[A-Za-z]:\\\\/', $candidate)) {
+                $relative = ltrim($candidate, DIRECTORY_SEPARATOR);
+                $checks[] = ROOTPATH . $relative;
+                $checks[] = FCPATH . $relative;
+            }
+
+            foreach ($checks as $check) {
+                $real = realpath($check);
+                if ($real !== false && is_file($real) && is_readable($real)) {
+                    return $real;
+                }
+            }
+        }
+
+        return '';
+    }
+
+    private function normalizeOpdFhirAttachmentMimeType(string $mimeType, string $extension): string
+    {
+        $mimeType = strtolower(trim($mimeType));
+        if (in_array($mimeType, ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'], true)) {
+            return $mimeType;
+        }
+
+        $extension = strtolower(ltrim(trim($extension), '.'));
+        return match ($extension) {
+            'pdf' => 'application/pdf',
+            'png' => 'image/png',
+            'webp' => 'image/webp',
+            'jpg', 'jpeg' => 'image/jpeg',
+            default => 'application/octet-stream',
+        };
+    }
+
+    /**
+     * @param array<string, mixed> $bundle
+     * @return array<string, mixed>
+     */
+    private function appendOpdFhirAttachmentsToBundle(array $bundle, int $opdId): array
+    {
+        $attachments = $this->collectOpdFhirAttachments($opdId);
+        if (empty($attachments) || empty($bundle['entry']) || ! is_array($bundle['entry'])) {
+            return $bundle;
+        }
+
+        $compositionIndex = null;
+        foreach ($bundle['entry'] as $index => $entry) {
+            $resource = is_array($entry) ? ($entry['resource'] ?? null) : null;
+            if (is_array($resource) && (string) ($resource['resourceType'] ?? '') === 'Composition') {
+                $compositionIndex = $index;
+                break;
+            }
+        }
+        if ($compositionIndex === null) {
+            return $bundle;
+        }
+
+        $patientRef = (string) ($bundle['entry'][$compositionIndex]['resource']['subject']['reference'] ?? '');
+        if ($patientRef === '') {
+            foreach ($bundle['entry'] as $entry) {
+                $resource = is_array($entry) ? ($entry['resource'] ?? null) : null;
+                if (is_array($resource) && (string) ($resource['resourceType'] ?? '') === 'Patient') {
+                    $patientRef = (string) ($entry['fullUrl'] ?? ('Patient/' . (string) ($resource['id'] ?? 'patient')));
+                    break;
+                }
+            }
+        }
+        if ($patientRef === '') {
+            $patientRef = 'Patient/unknown';
+        }
+
+        $stripGenerated = static function (array $entry): bool {
+            $resource = $entry['resource'] ?? null;
+            if (! is_array($resource)) {
+                return true;
+            }
+            $id = (string) ($resource['id'] ?? '');
+            return ! str_starts_with($id, 'opd-scan-') && ! str_starts_with($id, 'binary-opd-scan-');
+        };
+        $bundle['entry'] = array_values(array_filter($bundle['entry'], $stripGenerated));
+
+        $sectionRefs = [];
+        foreach ($attachments as $attachment) {
+            $attachmentId = preg_replace('/[^A-Za-z0-9\-\.]/', '-', (string) ($attachment['id'] ?? '')) ?: (string) random_int(1, 999999);
+            $suffix = bin2hex(random_bytes(6));
+            $docId = 'opd-scan-' . $attachmentId . '-' . $suffix;
+            $binaryId = 'binary-' . $docId;
+            $docRef = 'urn:uuid:' . $docId;
+            $binaryRef = 'urn:uuid:' . $binaryId;
+            $contentType = (string) ($attachment['content_type'] ?? 'application/octet-stream');
+            $title = (string) ($attachment['title'] ?? 'OPD scanned/uploaded document');
+            $dataBase64 = (string) ($attachment['data_base64'] ?? '');
+            $date = ! empty($attachment['date']) ? date(DATE_ATOM, strtotime((string) $attachment['date'])) : Time::now('Asia/Kolkata')->format(DATE_ATOM);
+
+            if ($dataBase64 === '') {
+                continue;
+            }
+
+            $sectionRefs[] = ['reference' => $docRef, 'display' => 'DocumentReference'];
+            $bundle['entry'][] = ['fullUrl' => $binaryRef, 'resource' => [
+                'resourceType' => 'Binary',
+                'id' => $binaryId,
+                'contentType' => $contentType,
+                'data' => $dataBase64,
+            ]];
+            $bundle['entry'][] = ['fullUrl' => $docRef, 'resource' => [
+                'resourceType' => 'DocumentReference',
+                'id' => $docId,
+                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentReference']],
+                'status' => 'current',
+                'type' => ['text' => $title],
+                'subject' => ['reference' => $patientRef, 'display' => 'Patient'],
+                'date' => $date,
+                'content' => [[
+                    'attachment' => [
+                        'contentType' => $contentType,
+                        'url' => $binaryRef,
+                        'data' => $dataBase64,
+                        'title' => $title,
+                    ],
+                ]],
+            ]];
+        }
+
+        if (empty($sectionRefs)) {
+            return $bundle;
+        }
+
+        $sections = (array) ($bundle['entry'][$compositionIndex]['resource']['section'] ?? []);
+        foreach ($sections as $index => $section) {
+            if (! is_array($section)) {
+                continue;
+            }
+            $entries = (array) ($section['entry'] ?? []);
+            $sections[$index]['entry'] = array_values(array_filter($entries, static function ($entry): bool {
+                return ! is_array($entry) || ! str_contains((string) ($entry['reference'] ?? ''), 'opd-scan-');
+            }));
+        }
+
+        $documentSectionIndex = null;
+        foreach ($sections as $index => $section) {
+            if (strcasecmp((string) ($section['title'] ?? ''), 'Document Reference') === 0) {
+                $documentSectionIndex = $index;
+                break;
+            }
+        }
+
+        if ($documentSectionIndex === null) {
+            $sections[] = [
+                'title' => 'Document Reference',
+                'code' => ['coding' => [[
+                    'system' => 'http://snomed.info/sct',
+                    'code' => '371530004',
+                    'display' => 'Clinical consultation report',
+                ]]],
+                'entry' => $sectionRefs,
+            ];
+        } else {
+            $existingEntries = (array) ($sections[$documentSectionIndex]['entry'] ?? []);
+            $sections[$documentSectionIndex]['entry'] = array_values(array_merge($existingEntries, $sectionRefs));
+        }
+
+        $bundle['entry'][$compositionIndex]['resource']['section'] = array_values(array_filter($sections, static function ($section): bool {
+            return ! is_array($section) || ! empty($section['entry']);
+        }));
+
+        return $bundle;
+    }
+
+    /**
      * @param array<string, mixed> $payload
      * @param array<int, string> $fields
      * @param array<string, string> $womenStructured
@@ -11163,6 +11437,7 @@ class Opd_prescription extends BaseController
         $medications = $this->getPrescriptionMedicines($sessionId);
         $conditions = $this->getPrescriptionConditions($sessionId);
         $clinicalContext = $this->getPrescriptionClinicalContext($sessionId, $opdRow);
+        $clinicalContext['attachments'] = $this->collectOpdFhirAttachments($opdId);
         $bundle = $this->fhirR4Builder->buildPrescriptionBundle($patient, $encounter, $medications, $conditions, $clinicalContext);
         $bundleJson = (string) json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 

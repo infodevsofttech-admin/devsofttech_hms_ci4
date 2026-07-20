@@ -1451,31 +1451,28 @@ class AbdmGateway extends BaseController
                 'queue_id'               => $careContextRef,
                 'record_data'            => $bundle,
             ]);
+            $this->logGatewayPushResolution('opd', $result);
 
-            $queueId = (string) ($result['queue_id'] ?? '');
-            $bridgeRecordId = (int) ($result['id'] ?? 0);
+            $queueId = $this->extractGatewayPushQueueId($result);
+            $bridgeRecordId = $this->extractGatewayPushRecordId($result);
 
-            $httpCode = (int) ($result['http_code'] ?? 0);
-            $resultOk = (int) ($result['ok'] ?? 0) === 1;
-            $errorCode = strtoupper(trim((string) ($result['error_code'] ?? '')));
-            $isDuplicate = $httpCode === 409 || $errorCode === 'DUPLICATE_RECORD';
+            $httpCode = $this->extractGatewayPushHttpCode($result);
+            $resultOk = $this->isGatewayPushSubmitted($result);
+            $isDuplicate = $this->isGatewayPushDuplicate($result);
 
             if ($isDuplicate) {
-                $bridgeRecordId = (int) ($result['existing_record_id'] ?? $bridgeRecordId);
                 $resultOk = true;
                 $status = 'duplicate';
             }
 
             if (! $resultOk) {
-                $connectorError = trim((string) (
-                    $result['message']
-                    ?? $result['error_text']
-                    ?? ($result['error_code'] ?? '')
-                ));
+                $connectorError = $this->extractGatewayPushErrorText($result);
                 if ($connectorError === '') {
                     $connectorError = 'Bridge push failed';
                 }
                 $status = 'failed';
+            } elseif (! $isDuplicate) {
+                $status = 'queued';
             }
         } catch (\Throwable $e) {
             $connectorError = $e->getMessage();
@@ -1628,8 +1625,15 @@ class AbdmGateway extends BaseController
                 'queue_id'               => 'IPD-' . $ipdId . '-' . $visitDate,
                 'record_data'            => $bundle,
             ]);
-            $queueId        = (string) ($result['queue_id'] ?? '');
-            $bridgeRecordId = (int) ($result['id'] ?? 0);
+            $this->logGatewayPushResolution('ipd_discharge', $result);
+            $queueId = $this->extractGatewayPushQueueId($result);
+            $bridgeRecordId = $this->extractGatewayPushRecordId($result);
+            if (! $this->isGatewayPushSubmitted($result)) {
+                $connectorError = $this->extractGatewayPushErrorText($result);
+                if ($connectorError === '') {
+                    $connectorError = 'Bridge push failed';
+                }
+            }
         } catch (\Throwable $e) {
             $connectorError = $e->getMessage();
         }
@@ -1861,8 +1865,15 @@ class AbdmGateway extends BaseController
                 'queue_id'               => 'LAB-' . $labReqId . '-' . $visitDate,
                 'record_data'            => $bundle,
             ]);
-            $queueId        = (string) ($result['queue_id'] ?? '');
-            $bridgeRecordId = (int) ($result['id'] ?? 0);
+            $this->logGatewayPushResolution('diagnostic_report', $result);
+            $queueId = $this->extractGatewayPushQueueId($result);
+            $bridgeRecordId = $this->extractGatewayPushRecordId($result);
+            if (! $this->isGatewayPushSubmitted($result)) {
+                $connectorError = $this->extractGatewayPushErrorText($result);
+                if ($connectorError === '') {
+                    $connectorError = 'Bridge push failed';
+                }
+            }
         } catch (\Throwable $e) {
             $connectorError = $e->getMessage();
         }
@@ -2160,25 +2171,13 @@ class AbdmGateway extends BaseController
                 'queue_id' => $ccRef,
                 'record_data' => $bundle,
             ]);
+            $this->logGatewayPushResolution('immunization', $result);
             $bridgeResponse = $result;
-            $queueId = (string) ($result['queue_id'] ?? $result['existing_queue_id'] ?? '');
-            $bridgeRecordId = (int) ($result['record_id'] ?? $result['id'] ?? $result['existing_record_id'] ?? 0);
+            $queueId = $this->extractGatewayPushQueueId($result);
+            $bridgeRecordId = $this->extractGatewayPushRecordId($result);
 
-            $httpCode = (int) ($result['http_code'] ?? 0);
-            $resultOk = (int) ($result['ok'] ?? 0) === 1;
-            $errorCode = strtoupper(trim((string) ($result['error_code'] ?? '')));
-            $isDuplicate = $httpCode === 409 || $errorCode === 'DUPLICATE_RECORD';
-
-            if ($isDuplicate) {
-                $resultOk = true;
-            }
-
-            if (! $resultOk) {
-                $connectorError = trim((string) (
-                    $result['message']
-                    ?? $result['error_text']
-                    ?? ($result['error_code'] ?? '')
-                ));
+            if (! $this->isGatewayPushSubmitted($result)) {
+                $connectorError = $this->extractGatewayPushErrorText($result);
                 if ($connectorError === '' && ! empty($result['errors'])) {
                     $connectorError = (string) json_encode($result['errors'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
                 }
@@ -3363,8 +3362,15 @@ class AbdmGateway extends BaseController
                 'queue_id'               => trim((string) ($hr['care_context_reference'] ?? '')),
                 'record_data'            => $fhirBundle,
             ]);
-            $queueId        = $result['queue_id'] ?? null;
-            $bridgeRecordId = (int) ($result['id'] ?? 0);
+            $this->logGatewayPushResolution('health_record_repush', $result);
+            $queueId = $this->extractGatewayPushQueueId($result);
+            $bridgeRecordId = $this->extractGatewayPushRecordId($result);
+            if (! $this->isGatewayPushSubmitted($result)) {
+                $connectorErr = $this->extractGatewayPushErrorText($result);
+                if ($connectorErr === '') {
+                    $connectorErr = 'Bridge push failed';
+                }
+            }
         } catch (\Throwable $e) {
             $connectorErr   = $e->getMessage();
             $bridgeRecordId = 0;
@@ -4741,6 +4747,209 @@ class AbdmGateway extends BaseController
     }
 
     /**
+     * @param array<string,mixed> $result
+     */
+    private function extractGatewayPushRecordMeta(array $result): array
+    {
+        $candidates = [
+            'record_id' => $result['record_id'] ?? null,
+            'existing_record_id' => $result['existing_record_id'] ?? null,
+            'id' => $result['id'] ?? null,
+            'response.record_id' => $result['response']['record_id'] ?? null,
+            'response.existing_record_id' => $result['response']['existing_record_id'] ?? null,
+            'response.id' => $result['response']['id'] ?? null,
+            'data.record_id' => $result['data']['record_id'] ?? null,
+            'data.existing_record_id' => $result['data']['existing_record_id'] ?? null,
+            'data.id' => $result['data']['id'] ?? null,
+        ];
+
+        foreach ($candidates as $source => $value) {
+            $id = (int) $value;
+            if ($id > 0) {
+                return ['id' => $id, 'source' => $source];
+            }
+        }
+
+        return ['id' => 0, 'source' => 'none'];
+    }
+
+    /**
+     * @param array<string,mixed> $result
+     */
+    private function extractGatewayPushRecordId(array $result): int
+    {
+        $meta = $this->extractGatewayPushRecordMeta($result);
+        return (int) ($meta['id'] ?? 0);
+    }
+
+    /**
+     * @param array<string,mixed> $result
+     */
+    private function extractGatewayPushQueueMeta(array $result): array
+    {
+        $candidates = [
+            'queue_id' => $result['queue_id'] ?? null,
+            'existing_queue_id' => $result['existing_queue_id'] ?? null,
+            'response.queue_id' => $result['response']['queue_id'] ?? null,
+            'response.existing_queue_id' => $result['response']['existing_queue_id'] ?? null,
+            'data.queue_id' => $result['data']['queue_id'] ?? null,
+            'data.existing_queue_id' => $result['data']['existing_queue_id'] ?? null,
+        ];
+
+        foreach ($candidates as $source => $value) {
+            $queueId = trim((string) $value);
+            if ($queueId !== '') {
+                return ['id' => $queueId, 'source' => $source];
+            }
+        }
+
+        return ['id' => '', 'source' => 'none'];
+    }
+
+    /**
+     * @param array<string,mixed> $result
+     */
+    private function extractGatewayPushQueueId(array $result): string
+    {
+        $meta = $this->extractGatewayPushQueueMeta($result);
+        return (string) ($meta['id'] ?? '');
+    }
+
+    /**
+     * @param array<string,mixed> $result
+     */
+    private function extractGatewayPushHttpCode(array $result): int
+    {
+        $candidates = [
+            $result['http_code'] ?? null,
+            $result['response']['http_code'] ?? null,
+            $result['data']['http_code'] ?? null,
+        ];
+
+        foreach ($candidates as $value) {
+            $httpCode = (int) $value;
+            if ($httpCode > 0) {
+                return $httpCode;
+            }
+        }
+
+        return 0;
+    }
+
+    /**
+     * @param array<string,mixed> $result
+     */
+    private function isGatewayPushDuplicate(array $result): bool
+    {
+        $httpCode = $this->extractGatewayPushHttpCode($result);
+        if ($httpCode === 409) {
+            return true;
+        }
+
+        $codes = [
+            $result['error_code'] ?? null,
+            $result['response']['error_code'] ?? null,
+            $result['data']['error_code'] ?? null,
+        ];
+        foreach ($codes as $code) {
+            if (strtoupper(trim((string) $code)) === 'DUPLICATE_RECORD') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * HTTP 201 and HTTP 409 (duplicate) are treated as submitted success states.
+     *
+     * @param array<string,mixed> $result
+     */
+    private function isGatewayPushSubmitted(array $result): bool
+    {
+        $httpCode = $this->extractGatewayPushHttpCode($result);
+        if ($httpCode === 201 || $httpCode === 409) {
+            return true;
+        }
+
+        if ($this->isGatewayPushDuplicate($result)) {
+            return true;
+        }
+
+        $okValues = [
+            $result['ok'] ?? null,
+            $result['response']['ok'] ?? null,
+            $result['data']['ok'] ?? null,
+        ];
+
+        foreach ($okValues as $ok) {
+            if ((int) $ok === 1 && $httpCode >= 200 && $httpCode < 300) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param array<string,mixed> $result
+     */
+    private function extractGatewayPushErrorText(array $result): string
+    {
+        $messages = [
+            $result['message'] ?? null,
+            $result['error_text'] ?? null,
+            $result['response']['message'] ?? null,
+            $result['response']['error_text'] ?? null,
+            $result['data']['message'] ?? null,
+            $result['data']['error_text'] ?? null,
+            $result['error_code'] ?? null,
+            $result['response']['error_code'] ?? null,
+            $result['data']['error_code'] ?? null,
+        ];
+
+        foreach ($messages as $message) {
+            $text = trim((string) $message);
+            if ($text !== '') {
+                return $text;
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Emit one diagnostic line to show exactly which gateway response fields
+     * supplied queue/record identifiers for records/push integration.
+     *
+     * @param array<string,mixed> $result
+     */
+    private function logGatewayPushResolution(string $context, array $result): void
+    {
+        try {
+            $recordMeta = $this->extractGatewayPushRecordMeta($result);
+            $queueMeta = $this->extractGatewayPushQueueMeta($result);
+            $httpCode = $this->extractGatewayPushHttpCode($result);
+            $submitted = $this->isGatewayPushSubmitted($result) ? 1 : 0;
+            $duplicate = $this->isGatewayPushDuplicate($result) ? 1 : 0;
+
+            log_message(
+                'info',
+                '[abdm.records.push.resolve][' . $context . '] '
+                . 'http_code=' . $httpCode
+                . ' submitted=' . $submitted
+                . ' duplicate=' . $duplicate
+                . ' record_id=' . (int) ($recordMeta['id'] ?? 0)
+                . ' record_source=' . (string) ($recordMeta['source'] ?? 'none')
+                . ' queue_id=' . (string) ($queueMeta['id'] ?? '')
+                . ' queue_source=' . (string) ($queueMeta['source'] ?? 'none')
+            );
+        } catch (\Throwable) {
+            // Fail-open diagnostics
+        }
+    }
+
+    /**
      * Update a health_record's push status and txn_id after getting a connector response.
      * Also creates a matching record_links row.
      *
@@ -5364,12 +5573,11 @@ class AbdmGateway extends BaseController
                 'queue_id' => $ccRef,
                 'record_data' => $bundle,
             ]);
-            $queueId = (string) ($result['queue_id'] ?? $result['existing_queue_id'] ?? '');
-            $bridgeRecordId = (int) ($result['record_id'] ?? $result['id'] ?? $result['existing_record_id'] ?? 0);
-            $httpCode = (int) ($result['http_code'] ?? 0);
-            $errorCode = strtoupper(trim((string) ($result['error_code'] ?? '')));
-            if ((int) ($result['ok'] ?? 0) !== 1 && $httpCode !== 409 && $errorCode !== 'DUPLICATE_RECORD') {
-                $connectorError = trim((string) ($result['message'] ?? $result['error_text'] ?? $errorCode));
+            $this->logGatewayPushResolution('additional_hi_record', $result);
+            $queueId = $this->extractGatewayPushQueueId($result);
+            $bridgeRecordId = $this->extractGatewayPushRecordId($result);
+            if (! $this->isGatewayPushSubmitted($result)) {
+                $connectorError = $this->extractGatewayPushErrorText($result);
                 if ($connectorError === '') {
                     $connectorError = 'Bridge push failed';
                 }

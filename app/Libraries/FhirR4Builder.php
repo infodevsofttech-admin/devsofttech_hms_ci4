@@ -11,6 +11,7 @@ class FhirR4Builder
      * @param array<string, mixed> $encounter
      * @param array<int, array<string, mixed>> $medications
      * @param array<int, array<string, mixed>> $conditions
+        * @param array<string, mixed> $context
      *
      * @return array<string, mixed>
      */
@@ -24,6 +25,7 @@ class FhirR4Builder
         $complaints      = is_array($context['complaints'] ?? null) ? (array) $context['complaints'] : [];
         $serviceRequests = is_array($context['service_requests'] ?? null) ? (array) $context['service_requests'] : [];
         $appointments    = is_array($context['appointments'] ?? null) ? (array) $context['appointments'] : [];
+        $attachments     = is_array($context['attachments'] ?? null) ? (array) $context['attachments'] : [];
 
         // UUID-based identity for every resource (ABDM IG v6.5.0 requirement)
         $bundleUuid      = $this->generateUuid();
@@ -49,6 +51,7 @@ class FhirR4Builder
         $medicationRefs         = [];
         $serviceRequestRefs     = [];
         $appointmentRefs        = [];
+        $documentRefs           = [];
 
         // Resource entries collected here; Composition prepended at the end.
         $resourceEntries = [];
@@ -475,6 +478,56 @@ class FhirR4Builder
             $resourceEntries[] = ['fullUrl' => 'urn:uuid:' . $apptUuid, 'resource' => $apptRes];
         }
 
+        // ── OPD scan/upload attachments (DocumentReference + Binary) ─────────
+        foreach ($attachments as $index => $attachment) {
+            if (! is_array($attachment)) {
+                continue;
+            }
+
+            $dataBase64 = trim((string) ($attachment['data_base64'] ?? ''));
+            if ($dataBase64 === '') {
+                continue;
+            }
+
+            $contentType = trim((string) ($attachment['content_type'] ?? 'application/octet-stream'));
+            $title = trim((string) ($attachment['title'] ?? 'OPD scanned document'));
+            $date = $this->normalizeIsoDateTime((string) ($attachment['date'] ?? ''), $issuedAt);
+            $attachmentId = preg_replace('/[^A-Za-z0-9\-\.]/', '-', trim((string) ($attachment['id'] ?? '')));
+            if ($attachmentId === '' || $attachmentId === null) {
+                $attachmentId = (string) ($index + 1);
+            }
+
+            $docUuid = 'opd-scan-' . $attachmentId . '-' . $this->generateUuid();
+            $binaryUuid = 'binary-' . $docUuid;
+            $docRef = 'urn:uuid:' . $docUuid;
+            $binaryRef = 'urn:uuid:' . $binaryUuid;
+
+            $documentRefs[] = ['reference' => $docRef, 'display' => 'DocumentReference'];
+            $resourceEntries[] = ['fullUrl' => $binaryRef, 'resource' => [
+                'resourceType' => 'Binary',
+                'id' => $binaryUuid,
+                'contentType' => $contentType,
+                'data' => $dataBase64,
+            ]];
+            $resourceEntries[] = ['fullUrl' => $docRef, 'resource' => [
+                'resourceType' => 'DocumentReference',
+                'id' => $docUuid,
+                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentReference']],
+                'status' => 'current',
+                'type' => ['text' => $title],
+                'subject' => ['reference' => $patientRef, 'display' => 'Patient'],
+                'date' => $date,
+                'content' => [[
+                    'attachment' => [
+                        'contentType' => $contentType,
+                        'url' => $binaryRef,
+                        'data' => $dataBase64,
+                        'title' => $title,
+                    ],
+                ]],
+            ]];
+        }
+
         // ── Composition sections (ABDM SNOMED section codes) ─────────────────
         $compositionSections = [];
         if (! empty($complaintRefs)) {
@@ -554,6 +607,17 @@ class FhirR4Builder
                     'display' => 'Outpatient care plan',
                 ]]],
                 'entry' => $appointmentRefs,
+            ];
+        }
+        if (! empty($documentRefs)) {
+            $compositionSections[] = [
+                'title' => 'Document Reference',
+                'code'  => ['coding' => [[
+                    'system'  => 'http://snomed.info/sct',
+                    'code'    => '371530004',
+                    'display' => 'Clinical consultation report',
+                ]]],
+                'entry' => $documentRefs,
             ];
         }
 

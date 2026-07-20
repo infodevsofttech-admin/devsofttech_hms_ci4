@@ -621,7 +621,7 @@ class AbdmTaskBoard extends BaseController
                     $statusTone = 'secondary';
                     $statusNote = 'Stored locally only (ABHA/consent not ready).';
                 } elseif ($pushStatus === 'queued') {
-                    $statusLabel = 'Gateway Queued';
+                    $statusLabel = 'Submitted';
                     $statusTone = 'warning';
                     $statusNote = 'Submitted to gateway and waiting for link workflow.';
                 } elseif ($pushStatus === 'linked') {
