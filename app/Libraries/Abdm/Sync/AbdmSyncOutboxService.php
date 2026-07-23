@@ -94,6 +94,13 @@ class AbdmSyncOutboxService
             return null;
         }
 
+        if (empty($payload['outbound_event'])) {
+            $payload['outbound_event'] = 'care_context_link';
+        }
+        if (empty($payload['retry_schedule_seconds']) || ! is_array($payload['retry_schedule_seconds'])) {
+            $payload['retry_schedule_seconds'] = [10, 30, 60];
+        }
+
         $sourceUpdatedAt = $this->normalizeSourceUpdatedAt((string) ($payload['source_updated_at'] ?? ''));
         $idempotencyKey = $this->buildRecordIdempotencyKey($hfrId, $careContextReference, $sourceUpdatedAt);
 
@@ -170,9 +177,9 @@ class AbdmSyncOutboxService
         ]);
     }
 
-    public function markRetryOrDead(int $id, int $retryCount, string $error): void
+    public function markRetryOrDead(int $id, int $retryCount, string $error, ?array $retryScheduleSeconds = null): void
     {
-        $next = $this->getNextRetryAt($retryCount);
+        $next = $this->getNextRetryAt($retryCount, $retryScheduleSeconds);
         $status = $next === null ? self::STATUS_DEAD : self::STATUS_FAILED;
 
         $this->outboxModel->update($id, [
@@ -260,17 +267,19 @@ class AbdmSyncOutboxService
         return $hfrId . '|' . $careContextReference . '|' . $epoch;
     }
 
-    public function getNextRetryAt(int $retryCount): ?string
+    public function getNextRetryAt(int $retryCount, ?array $retryScheduleSeconds = null): ?string
     {
+        $schedule = $this->normalizeRetrySchedule($retryScheduleSeconds);
+
         if ($retryCount <= 0) {
             return Time::now('Asia/Kolkata')->toDateTimeString();
         }
 
-        if ($retryCount > count($this->retryScheduleSeconds)) {
+        if ($retryCount > count($schedule)) {
             return null;
         }
 
-        $delay = $this->retryScheduleSeconds[$retryCount - 1];
+        $delay = $schedule[$retryCount - 1];
         return date('Y-m-d H:i:s', time() + $delay);
     }
 
@@ -328,5 +337,28 @@ class AbdmSyncOutboxService
     {
         $digits = preg_replace('/\D/', '', $abha);
         return is_string($digits) ? $digits : '';
+    }
+
+    /**
+     * @param array<int, mixed>|null $retryScheduleSeconds
+     * @return int[]
+     */
+    private function normalizeRetrySchedule(?array $retryScheduleSeconds): array
+    {
+        $schedule = [];
+        if (is_array($retryScheduleSeconds)) {
+            foreach ($retryScheduleSeconds as $seconds) {
+                $value = (int) $seconds;
+                if ($value > 0) {
+                    $schedule[] = $value;
+                }
+            }
+        }
+
+        if (empty($schedule)) {
+            return $this->retryScheduleSeconds;
+        }
+
+        return array_values($schedule);
     }
 }

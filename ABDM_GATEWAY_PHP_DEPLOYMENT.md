@@ -247,17 +247,34 @@ curl -i -H "Authorization: Bearer $TOKEN" https://abdm-bridge.e-atria.in/api/v3/
 ssh user@hms-server
 
 cd /opt/hms-ci4
-# Process up to 5 queued events
+# Install/update cron jobs for HMS background workers (idempotent)
+bash scripts/install_hms_cron.sh /opt/hms-ci4
+
+# Manual one-time run checks
+php spark abdm:push-sync --limit=20
 php spark bridge:sync --limit 5
 ```
 
 **Expected Output:**
 ```
+ABDM Push Sync
+Processed: N
+Success: N
+Failed: 0
+
 Bridge sync completed:
-- Processed: 5
-- Sent: 5
+- Processed: N
+- Sent: N
 - Failed: 0
-- Message: queue processing completed
+```
+
+### 4. Recommended Cron Block (Installed by Script)
+```cron
+* * * * * cd /opt/hms-ci4 && php spark abdm:push-sync --limit=20 --worker=cron-abdm-m2 >> /opt/hms-ci4/writable/logs/cron/abdm_push_sync.log 2>&1
+* * * * * cd /opt/hms-ci4 && php spark bridge:sync --limit 10 >> /opt/hms-ci4/writable/logs/cron/bridge_sync.log 2>&1
+* * * * * cd /opt/hms-ci4 && php spark snomed:process-coding >> /opt/hms-ci4/writable/logs/cron/snomed_process.log 2>&1
+*/2 * * * * cd /opt/hms-ci4 && php spark abdm:hiu-poll --limit=30 >> /opt/hms-ci4/writable/logs/cron/abdm_hiu_poll.log 2>&1
+*/5 * * * * cd /opt/hms-ci4 && php spark abdm:hiu-retry --limit=20 >> /opt/hms-ci4/writable/logs/cron/abdm_hiu_retry.log 2>&1
 ```
 
 ---

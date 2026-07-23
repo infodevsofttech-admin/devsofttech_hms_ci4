@@ -22,7 +22,7 @@ echo "=== Pushing to GitHub ==="
 git push origin main
 
 echo "=== Deploying to server ==="
-REMOTE_CMDS="cd $PROJECT && git config core.fileMode false && git pull origin main && php spark migrate --namespace App && echo DEPLOY_OK"
+REMOTE_CMDS="cd $PROJECT && git config core.fileMode false && git pull origin main && php spark migrate --namespace App && bash scripts/install_hms_cron.sh $PROJECT && echo DEPLOY_OK"
 
 if command -v plink &>/dev/null; then
     plink -ssh -batch -pw "$HMS_SSH_PASS" $SERVER "$REMOTE_CMDS"

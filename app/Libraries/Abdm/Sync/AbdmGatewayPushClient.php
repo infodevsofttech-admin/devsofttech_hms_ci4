@@ -20,6 +20,16 @@ class AbdmGatewayPushClient
         'WellnessRecord',
     ];
 
+    /** @var string[] */
+    private array $allowedRecordTypes = [
+        'PrescriptionRecord',
+        'DiagnosticReportRecord',
+        'DischargeSummaryRecord',
+        'OPConsultationRecord',
+        'WellnessRecord',
+        'HealthDocumentRecord',
+    ];
+
     public function __construct(?BaseConnection $db = null)
     {
         $this->db = $db ?? db_connect();
@@ -104,7 +114,7 @@ class AbdmGatewayPushClient
             $mapped['latency_ms'] = (int) round((microtime(true) - $startedAt) * 1000);
             $mapped['gateway_request_id'] = (string) ($response->getHeaderLine('X-Request-Id') ?: ($body['request_id'] ?? ''));
 
-            $this->logPush($payload, $mapped, $requestId);
+            $this->logPush($payload, $mapped, $requestId, '/api/v3/records/push', 'abdm.sync.outbox.records_push', 'record');
             return $mapped;
         } catch (\Throwable $e) {
             $result = [
@@ -118,7 +128,105 @@ class AbdmGatewayPushClient
                 'gateway_request_id' => '',
                 'latency_ms' => (int) round((microtime(true) - $startedAt) * 1000),
             ];
-            $this->logPush($payload, $result, $requestId);
+            $this->logPush($payload, $result, $requestId, '/api/v3/records/push', 'abdm.sync.outbox.records_push', 'record');
+            return $result;
+        }
+    }
+
+    /**
+     * @param array<string,mixed> $payload
+     * @return array<string,mixed>
+     */
+    public function pushCareContextLink(array $payload, string $idempotencyKey = ''): array
+    {
+        $requestId = $this->createRequestId();
+        $validation = $this->validateCareContextPayload($payload);
+        if (($validation['valid'] ?? false) !== true) {
+            return [
+                'ok' => false,
+                'status' => 'failed',
+                'http_status' => 400,
+                'request_id' => $requestId,
+                'error' => 'validation_failed',
+                'message' => implode('; ', $validation['errors'] ?? ['Invalid payload']),
+                'retryable' => false,
+            ];
+        }
+
+        $baseUrl = rtrim($this->readSetting('ABDM_BRIDGE_URL', 'EATRIA_BRIDGE_URL'), '/');
+        if ($baseUrl === '') {
+            return [
+                'ok' => false,
+                'status' => 'failed',
+                'http_status' => 500,
+                'request_id' => $requestId,
+                'error' => 'bridge_url_missing',
+                'message' => 'ABDM bridge URL is not configured.',
+                'retryable' => false,
+            ];
+        }
+
+        $token = trim($this->readSetting('EATRIA_BRIDGE_TOKEN', 'ABDM_BRIDGE_TOKEN'));
+        if ($token === '') {
+            return [
+                'ok' => false,
+                'status' => 'failed',
+                'http_status' => 500,
+                'request_id' => $requestId,
+                'error' => 'token_missing',
+                'message' => 'ABDM bridge token is not configured.',
+                'retryable' => false,
+            ];
+        }
+
+        $url = $this->buildGatewayUrl($baseUrl, '/api/v1/abdm/gateway/care-context/link');
+        $headers = [
+            'Authorization' => 'Bearer ' . $token,
+            'Content-Type' => 'application/json',
+            'X-Request-Id' => $requestId,
+        ];
+        if ($idempotencyKey !== '') {
+            $headers['X-Idempotency-Key'] = $idempotencyKey;
+        }
+
+        $startedAt = microtime(true);
+        try {
+            $client = service('curlrequest', [
+                'timeout' => 30,
+                'connect_timeout' => 10,
+                'http_errors' => false,
+            ]);
+
+            $response = $client->post($url, [
+                'headers' => $headers,
+                'json' => $payload,
+            ]);
+
+            $httpStatus = (int) $response->getStatusCode();
+            $body = json_decode((string) $response->getBody(), true);
+            if (! is_array($body)) {
+                $body = ['raw' => (string) $response->getBody()];
+            }
+
+            $mapped = $this->mapCareContextResponse($httpStatus, $body, $requestId);
+            $mapped['latency_ms'] = (int) round((microtime(true) - $startedAt) * 1000);
+            $mapped['gateway_request_id'] = (string) ($response->getHeaderLine('X-Request-Id') ?: ($body['request_id'] ?? ''));
+
+            $this->logPush($payload, $mapped, $requestId, '/api/v1/abdm/gateway/care-context/link', 'abdm.sync.outbox.care_context_link', 'care_context');
+            return $mapped;
+        } catch (\Throwable $e) {
+            $result = [
+                'ok' => false,
+                'status' => 'retry',
+                'http_status' => 0,
+                'request_id' => $requestId,
+                'error' => 'network_error',
+                'message' => $e->getMessage(),
+                'retryable' => true,
+                'gateway_request_id' => '',
+                'latency_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+            ];
+            $this->logPush($payload, $result, $requestId, '/api/v1/abdm/gateway/care-context/link', 'abdm.sync.outbox.care_context_link', 'care_context');
             return $result;
         }
     }
@@ -166,9 +274,89 @@ class AbdmGatewayPushClient
 
     /**
      * @param array<string,mixed> $payload
+     * @return array<string,mixed>
+     */
+    public function validateCareContextPayload(array $payload): array
+    {
+        $errors = [];
+
+        if ((int) ($payload['hospital_id'] ?? 0) <= 0) {
+            $errors[] = 'hospital_id is required';
+        }
+
+        $hfrId = trim((string) ($payload['hfr_id'] ?? ''));
+        if ($hfrId === '') {
+            $errors[] = 'hfr_id is required';
+        }
+
+        $patient = $payload['patient'] ?? null;
+        if (! is_array($patient)) {
+            $errors[] = 'patient object is required';
+        } else {
+            if (trim((string) ($patient['patient_id'] ?? '')) === '') {
+                $errors[] = 'patient.patient_id is required';
+            }
+            if (trim((string) ($patient['name'] ?? '')) === '') {
+                $errors[] = 'patient.name is required';
+            }
+
+            $mobileDigits = preg_replace('/\D/', '', (string) ($patient['mobile'] ?? ''));
+            if (! is_string($mobileDigits) || strlen($mobileDigits) !== 10) {
+                $errors[] = 'patient.mobile must be a 10-digit number';
+            }
+
+            $gender = strtoupper(trim((string) ($patient['gender'] ?? '')));
+            if (! in_array($gender, ['M', 'F', 'O'], true)) {
+                $errors[] = 'patient.gender must be M, F, or O';
+            }
+
+            $yob = (int) ($patient['year_of_birth'] ?? 0);
+            $currentYear = (int) date('Y');
+            if ($yob < 1900 || $yob > $currentYear) {
+                $errors[] = 'patient.year_of_birth must be a valid 4-digit year';
+            }
+        }
+
+        $contexts = $payload['care_contexts'] ?? null;
+        if (! is_array($contexts) || $contexts === []) {
+            $errors[] = 'care_contexts must contain at least one item';
+        } else {
+            foreach ($contexts as $index => $context) {
+                if (! is_array($context)) {
+                    $errors[] = 'care_contexts[' . $index . '] must be an object';
+                    continue;
+                }
+
+                if (trim((string) ($context['reference_number'] ?? '')) === '') {
+                    $errors[] = 'care_contexts[' . $index . '].reference_number is required';
+                }
+                if (trim((string) ($context['display'] ?? '')) === '') {
+                    $errors[] = 'care_contexts[' . $index . '].display is required';
+                }
+
+                $recordType = trim((string) ($context['record_type'] ?? ''));
+                if (! in_array($recordType, $this->allowedRecordTypes, true)) {
+                    $errors[] = 'care_contexts[' . $index . '].record_type is invalid';
+                }
+
+                $visitDate = trim((string) ($context['visit_date'] ?? ''));
+                if ($visitDate === '' || ! preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $visitDate)) {
+                    $errors[] = 'care_contexts[' . $index . '].visit_date must be YYYY-MM-DD HH:MM:SS';
+                }
+            }
+        }
+
+        return [
+            'valid' => empty($errors),
+            'errors' => $errors,
+        ];
+    }
+
+    /**
+     * @param array<string,mixed> $payload
      * @param array<string,mixed> $result
      */
-    private function logPush(array $payload, array $result, string $requestId): void
+    private function logPush(array $payload, array $result, string $requestId, string $endpoint, string $eventType, string $entityType): void
     {
         if (! $this->db->tableExists('abdm_api_logs')) {
             return;
@@ -185,10 +373,10 @@ class AbdmGatewayPushClient
 
         $this->db->table('abdm_api_logs')->insert([
             'channel' => 'eatria_bridge',
-            'event_type' => 'abdm.sync.outbox.records_push',
-            'endpoint' => '/api/v3/records/push',
+            'event_type' => $eventType,
+            'endpoint' => $endpoint,
             'http_method' => 'POST',
-            'entity_type' => 'record',
+            'entity_type' => $entityType,
             'entity_id' => (string) ($payload['local_record_id'] ?? ''),
             'request_json' => (string) json_encode($maskedPayload + ['request_id' => $requestId], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             'response_code' => (int) ($result['http_status'] ?? 0),
@@ -325,6 +513,77 @@ class AbdmGatewayPushClient
         ];
     }
 
+    /**
+     * @param array<string,mixed> $body
+     * @return array<string,mixed>
+     */
+    private function mapCareContextResponse(int $httpStatus, array $body, string $requestId): array
+    {
+        $message = (string) ($body['message'] ?? $body['error_text'] ?? ('HTTP ' . $httpStatus));
+        $ok = (int) ($body['ok'] ?? 0) === 1;
+
+        if (($httpStatus >= 200 && $httpStatus < 300) && $ok) {
+            return [
+                'ok' => true,
+                'status' => 'done',
+                'http_status' => $httpStatus,
+                'request_id' => $requestId,
+                'gateway_record_id' => null,
+                'gateway_queue_id' => null,
+                'submitted' => 1,
+                'duplicate' => 0,
+                'message' => $message !== '' ? $message : 'Care context linked successfully',
+                'retryable' => false,
+            ];
+        }
+
+        if ($httpStatus >= 500 || $httpStatus === 0) {
+            return [
+                'ok' => false,
+                'status' => 'retry',
+                'http_status' => $httpStatus,
+                'request_id' => $requestId,
+                'error' => 'gateway_unavailable',
+                'message' => $message,
+                'retryable' => true,
+                'gateway_record_id' => null,
+                'gateway_queue_id' => null,
+                'submitted' => 0,
+                'duplicate' => 0,
+            ];
+        }
+
+        if (in_array($httpStatus, [400, 401, 403, 422], true)) {
+            return [
+                'ok' => false,
+                'status' => 'failed',
+                'http_status' => $httpStatus,
+                'request_id' => $requestId,
+                'error' => 'validation_or_auth_error',
+                'message' => $message,
+                'retryable' => false,
+                'gateway_record_id' => null,
+                'gateway_queue_id' => null,
+                'submitted' => 0,
+                'duplicate' => 0,
+            ];
+        }
+
+        return [
+            'ok' => false,
+            'status' => 'failed',
+            'http_status' => $httpStatus,
+            'request_id' => $requestId,
+            'error' => 'unknown_error',
+            'message' => $message,
+            'retryable' => false,
+            'gateway_record_id' => null,
+            'gateway_queue_id' => null,
+            'submitted' => 0,
+            'duplicate' => 0,
+        ];
+    }
+
     private function createRequestId(): string
     {
         $bytes = random_bytes(16);
@@ -393,5 +652,11 @@ class AbdmGatewayPushClient
         }
 
         return str_repeat('*', strlen($left) - 4) . substr($left, -4) . ($right !== '' ? '@' . $right : '');
+    }
+
+    private function buildGatewayUrl(string $baseUrl, string $path): string
+    {
+        $url = rtrim($baseUrl, '/') . '/' . ltrim($path, '/');
+        return (string) preg_replace('#/api/api/#', '/api/', $url);
     }
 }

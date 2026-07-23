@@ -81,8 +81,9 @@ class AbdmSyncWorkerService
             }
 
             $retryCount = ((int) ($row['retry_count'] ?? 0)) + 1;
-            $this->outbox->markRetryOrDead($id, $retryCount, (string) ($result['message'] ?? 'Sync failed'));
-            if ($this->outbox->getNextRetryAt($retryCount) === null) {
+            $retrySchedule = $this->resolveRetryScheduleSeconds($payload);
+            $this->outbox->markRetryOrDead($id, $retryCount, (string) ($result['message'] ?? 'Sync failed'), $retrySchedule);
+            if ($this->outbox->getNextRetryAt($retryCount, $retrySchedule) === null) {
                 $summary['dead']++;
             } else {
                 $summary['failed']++;
@@ -103,28 +104,45 @@ class AbdmSyncWorkerService
             return ['ok' => false, 'retryable' => false, 'message' => 'Sync record not found'];
         }
 
-        $fhirBundle = $payload['fhir_bundle'] ?? json_decode((string) ($record['fhir_bundle_json'] ?? '{}'), true);
-        if (! is_array($fhirBundle)) {
-            $fhirBundle = [];
+        $patientProfile = $this->resolvePatientProfile((int) ($record['local_patient_id'] ?? 0), $payload);
+
+        $hospitalId = (int) ($payload['hospital_id'] ?? 0);
+        if ($hospitalId <= 0) {
+            $hospitalId = $this->resolveHospitalIdFromSettings();
         }
 
-        $gatewayPayload = [
+        $recordType = $this->mapHiTypeToRecordType((string) ($record['hi_type'] ?? ''));
+        $careContextPayload = [
+            'hospital_id' => $hospitalId,
             'hfr_id' => (string) ($record['hfr_id'] ?? ''),
-            'hi_type' => (string) ($record['hi_type'] ?? ''),
-            'record_type' => (string) ($record['hi_type'] ?? ''),
-            'abha_id' => $this->normalizeAbhaDigits((string) ($payload['abha_id'] ?? '')),
-            'abha_address' => trim((string) ($payload['abha_address'] ?? '')),
-            'patient_name' => trim((string) ($payload['patient_name'] ?? '')),
-            'local_patient_id' => (string) ($record['local_patient_id'] ?? ''),
-            'care_context_reference' => (string) ($record['care_context_reference'] ?? ''),
-            'care_context_display' => (string) ($record['care_context_display'] ?? ''),
-            'visit_date' => (string) ($record['visit_date'] ?? ''),
-            'department' => (string) ($record['department'] ?? ''),
-            'doctor_name' => (string) ($record['doctor_name'] ?? ''),
-            'fhir_bundle' => $fhirBundle,
+            'patient' => [
+                'patient_id' => $patientProfile['patient_id'],
+                'name' => $patientProfile['name'],
+                'mobile' => $patientProfile['mobile'],
+                'gender' => $patientProfile['gender'],
+                'year_of_birth' => $patientProfile['year_of_birth'],
+            ],
+            'care_contexts' => [[
+                'reference_number' => (string) ($record['care_context_reference'] ?? ''),
+                'display' => (string) ($record['care_context_display'] ?? $recordType),
+                'record_type' => $recordType,
+                'visit_date' => $this->normalizeVisitDateTime((string) ($record['visit_date'] ?? '')),
+                'doctor_name' => (string) ($record['doctor_name'] ?? ''),
+                'department' => (string) ($record['department'] ?? ''),
+            ]],
         ];
 
-        $result = $this->gatewayClient->pushRecord($gatewayPayload, $idempotencyKey);
+        $abhaAddress = trim((string) ($patientProfile['abha_address'] ?? ''));
+        if ($abhaAddress !== '') {
+            $careContextPayload['patient']['abha_address'] = $abhaAddress;
+        }
+
+        $abhaNumber = trim((string) ($patientProfile['abha_number'] ?? ''));
+        if ($abhaNumber !== '') {
+            $careContextPayload['patient']['abha_number'] = $abhaNumber;
+        }
+
+        $result = $this->gatewayClient->pushCareContextLink($careContextPayload, $idempotencyKey);
 
         $this->recordModel->update($syncRecordId, [
             'sync_status' => (bool) ($result['ok'] ?? false) ? 'done' : ((bool) ($result['retryable'] ?? false) ? 'failed' : 'dead'),
@@ -242,5 +260,187 @@ class AbdmSyncWorkerService
     {
         $digits = preg_replace('/\D/', '', $abha);
         return is_string($digits) ? $digits : '';
+    }
+
+    /**
+     * @param array<string,mixed> $payload
+     * @return int[]|null
+     */
+    private function resolveRetryScheduleSeconds(array $payload): ?array
+    {
+        $raw = $payload['retry_schedule_seconds'] ?? null;
+        if (! is_array($raw)) {
+            return null;
+        }
+
+        $schedule = [];
+        foreach ($raw as $seconds) {
+            $value = (int) $seconds;
+            if ($value > 0) {
+                $schedule[] = $value;
+            }
+        }
+
+        return $schedule !== [] ? array_values($schedule) : null;
+    }
+
+    /**
+     * @param array<string,mixed> $payload
+     * @return array<string,mixed>
+     */
+    private function resolvePatientProfile(int $localPatientId, array $payload): array
+    {
+        $row = [];
+        if ($localPatientId > 0 && $this->db->tableExists('patient_master')) {
+            $row = $this->db->table('patient_master')->where('id', $localPatientId)->get(1)->getRowArray() ?? [];
+        }
+
+        $name = trim((string) ($payload['patient_name'] ?? ''));
+        if ($name === '') {
+            $name = trim(trim((string) ($row['p_fname'] ?? '')) . ' ' . trim((string) ($row['p_lname'] ?? '')));
+        }
+        if ($name === '') {
+            $name = 'PATIENT-' . $localPatientId;
+        }
+
+        $mobile = trim((string) ($payload['mobile'] ?? $payload['patient_mobile'] ?? ''));
+        if ($mobile === '') {
+            foreach (['mphone1', 'mobile', 'phone', 'p_mobile'] as $field) {
+                $candidate = trim((string) ($row[$field] ?? ''));
+                if ($candidate !== '') {
+                    $mobile = $candidate;
+                    break;
+                }
+            }
+        }
+        $mobileDigits = preg_replace('/\D/', '', $mobile);
+        $mobile = is_string($mobileDigits) ? $mobileDigits : '';
+        if (strlen($mobile) > 10) {
+            $mobile = substr($mobile, -10);
+        }
+
+        $genderRaw = trim((string) ($payload['gender'] ?? $payload['patient_gender'] ?? ''));
+        if ($genderRaw === '') {
+            $genderRaw = trim((string) ($row['gender'] ?? $row['xgender'] ?? ''));
+        }
+
+        $dobRaw = trim((string) ($payload['dob'] ?? $payload['patient_dob'] ?? ''));
+        if ($dobRaw === '') {
+            foreach (['dob', 'p_dob', 'birth_date', 'date_of_birth'] as $field) {
+                $candidate = trim((string) ($row[$field] ?? ''));
+                if ($candidate !== '') {
+                    $dobRaw = $candidate;
+                    break;
+                }
+            }
+        }
+
+        $abhaAddress = trim((string) ($payload['abha_address'] ?? ''));
+        if ($abhaAddress === '') {
+            $abhaAddress = trim((string) ($row['abha_address'] ?? ''));
+        }
+
+        $abhaDigits = $this->normalizeAbhaDigits((string) ($payload['abha_id'] ?? ''));
+        if ($abhaDigits === '') {
+            foreach (['abha_id', 'abha_no', 'abha_number', 'abha'] as $field) {
+                $candidate = $this->normalizeAbhaDigits((string) ($row[$field] ?? ''));
+                if ($candidate !== '') {
+                    $abhaDigits = $candidate;
+                    break;
+                }
+            }
+        }
+
+        return [
+            'patient_id' => (string) ($localPatientId > 0 ? $localPatientId : ($payload['local_patient_id'] ?? '')),
+            'name' => $name,
+            'mobile' => $mobile,
+            'gender' => $this->normalizeBridgeGenderCode($genderRaw),
+            'year_of_birth' => $this->extractBirthYear($dobRaw),
+            'abha_address' => $abhaAddress,
+            'abha_number' => $abhaDigits,
+        ];
+    }
+
+    private function normalizeBridgeGenderCode(string $gender): string
+    {
+        $value = strtoupper(trim($gender));
+        if ($value === 'M' || $value === 'MALE' || $value === '1') {
+            return 'M';
+        }
+        if ($value === 'F' || $value === 'FEMALE' || $value === '2') {
+            return 'F';
+        }
+        if ($value === 'O' || $value === 'OTHER' || $value === 'OTHERS' || $value === '3') {
+            return 'O';
+        }
+
+        return 'O';
+    }
+
+    private function extractBirthYear(string $dob): int
+    {
+        $dob = trim($dob);
+        if ($dob !== '') {
+            $ts = strtotime($dob);
+            if ($ts !== false) {
+                return (int) date('Y', $ts);
+            }
+        }
+
+        return (int) date('Y');
+    }
+
+    private function mapHiTypeToRecordType(string $hiType): string
+    {
+        $type = trim($hiType);
+        return match ($type) {
+            'PrescriptionRecord' => 'PrescriptionRecord',
+            'DiagnosticReportRecord' => 'DiagnosticReportRecord',
+            'DischargeSummaryRecord' => 'DischargeSummaryRecord',
+            'OPConsultRecord' => 'OPConsultationRecord',
+            'OPConsultationRecord' => 'OPConsultationRecord',
+            'WellnessRecord' => 'WellnessRecord',
+            'HealthDocumentRecord' => 'HealthDocumentRecord',
+            default => 'HealthDocumentRecord',
+        };
+    }
+
+    private function normalizeVisitDateTime(string $visitDate): string
+    {
+        $visitDate = trim($visitDate);
+        if ($visitDate === '') {
+            return date('Y-m-d H:i:s');
+        }
+
+        $ts = strtotime($visitDate);
+        if ($ts === false) {
+            return date('Y-m-d H:i:s');
+        }
+
+        return date('Y-m-d H:i:s', $ts);
+    }
+
+    private function resolveHospitalIdFromSettings(): int
+    {
+        if (! $this->db->tableExists('hospital_setting')) {
+            return 0;
+        }
+
+        foreach (['ABDM_BRIDGE_HOSPITAL_ID', 'EATRIA_BRIDGE_HOSPITAL_ID', 'HOSPITAL_ID'] as $settingName) {
+            $row = $this->db->table('hospital_setting')
+                ->select('s_value')
+                ->where('s_name', $settingName)
+                ->orderBy('id', 'DESC')
+                ->get(1)
+                ->getRowArray();
+
+            $value = (int) trim((string) ($row['s_value'] ?? '0'));
+            if ($value > 0) {
+                return $value;
+            }
+        }
+
+        return 0;
     }
 }

@@ -49,6 +49,7 @@ class AbdmSync extends BaseController
         $payload = [
             'local_record_id' => (string) ($this->request->getPost('local_record_id') ?? ''),
             'local_patient_id' => (int) $this->request->getPost('local_patient_id'),
+            'hospital_id' => (int) ($this->request->getPost('hospital_id') ?? 0),
             'hi_type' => (string) ($this->request->getPost('hi_type') ?? ''),
             'care_context_reference' => (string) ($this->request->getPost('care_context_reference') ?? ''),
             'care_context_display' => (string) ($this->request->getPost('care_context_display') ?? ''),
@@ -59,6 +60,9 @@ class AbdmSync extends BaseController
             'hfr_id' => (string) ($this->request->getPost('hfr_id') ?? ''),
             'source_updated_at' => (string) ($this->request->getPost('source_updated_at') ?? date('Y-m-d H:i:s')),
             'patient_name' => (string) ($this->request->getPost('patient_name') ?? ''),
+            'mobile' => (string) ($this->request->getPost('mobile') ?? ''),
+            'gender' => (string) ($this->request->getPost('gender') ?? ''),
+            'dob' => (string) ($this->request->getPost('dob') ?? ''),
             'abha_id' => (string) ($this->request->getPost('abha_id') ?? ''),
             'abha_address' => (string) ($this->request->getPost('abha_address') ?? ''),
             'fhir_bundle' => $bundle,

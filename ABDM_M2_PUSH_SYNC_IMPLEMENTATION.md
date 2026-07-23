@@ -3,7 +3,7 @@
 ## Architecture Summary
 - Added dedicated sync tables: `abdm_sync_patient`, `abdm_sync_record`, `abdm_sync_outbox`.
 - Added queue/outbox service and worker command for reliable push delivery.
-- Added Gateway client for `/api/v3/records/push` with response mapping (201/409/4xx/5xx).
+- Added Gateway client for `/api/v1/abdm/gateway/care-context/link` with validation and response mapping.
 - Added FHIR generator framework with module-specific generators.
 - Added advanced coding resolver with LOINC/SNOMED/UCUM fallback logic and validation scoring.
 - Added observability endpoints:
@@ -32,8 +32,8 @@
 - Score < 70: mark review-needed (policy hook available)
 
 ## Outbox Retry Policy
-- 8 retries: 1m, 5m, 15m, 30m, 1h, 2h, 4h, 8h
-- After retry 8 -> `dead`
+- Care-context outbound default retries: 10s, 30s, 60s
+- Legacy schedule fallback still supported for older outbox rows
 
 ## Security Notes
 - Bearer token never logged.
@@ -62,6 +62,16 @@
 ## Commands
 - Worker: `php spark abdm:push-sync --limit=20`
 - Existing bridge worker remains separate: `php spark bridge:sync`
+
+## Cron Setup (HMS Server)
+- Use `bash scripts/install_hms_cron.sh /var/www/html/hms_etria`
+- Deploy script now runs this installer automatically after migrate.
+- Managed cron block includes:
+  - `abdm:push-sync` every minute
+  - `bridge:sync` every minute
+  - `snomed:process-coding` every minute
+  - `abdm:hiu-poll` every 2 minutes
+  - `abdm:hiu-retry` every 5 minutes
 
 ## Manual Replay
 - Endpoint: `POST /AbdmSync/replay_dead/{id}`
