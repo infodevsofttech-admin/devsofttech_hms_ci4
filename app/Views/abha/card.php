@@ -17,7 +17,7 @@
     align-items: center;
   }
   .abha-shell {
-    width: 450px;
+    width: 560px;
     max-width: 100%;
     background: #ffffff;
     border: 1px solid #d6e3f7;
@@ -66,11 +66,11 @@
     font-weight: 600;
   }
   .logo-wrap {
-    width: 54px;
+    width: 162px;
     height: 54px;
     border-radius: 10px;
     border: 1px solid #d5e4f7;
-    background: #f7fbff;
+    background: #ffffff;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -113,14 +113,16 @@
   }
   .patient-details { min-width: 0; }
   .patient-name {
-    font-size: 30px;
+    font-size: 24px;
     font-weight: 800;
     letter-spacing: 0.4px;
     color: #123f7d;
     text-transform: uppercase;
     line-height: 1.05;
     margin-bottom: 4px;
-    word-break: break-word;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .meta {
     font-size: 13px;
@@ -187,12 +189,14 @@
     margin-bottom: 2px;
   }
   .abha-number {
-    font-size: 33px;
+    font-size: 24px;
     font-weight: 900;
-    letter-spacing: 3px;
+    letter-spacing: 1.5px;
     color: #0f4186;
     line-height: 1.1;
-    word-break: break-word;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: clip;
   }
   .barcode-wrap {
     margin-top: 12px;
@@ -239,6 +243,16 @@
   .btn-print:hover { background: #0b3f82; }
 
   @media (max-width: 520px) {
+    .logo-wrap {
+      width: 132px;
+      height: 46px;
+    }
+    .header-text {
+      font-size: 11px;
+    }
+    .header-text span {
+      font-size: 10px;
+    }
     .patient-area {
       grid-template-columns: 1fr;
     }
@@ -247,17 +261,26 @@
       width: 100%;
     }
     .patient-name {
-      font-size: 24px;
+      font-size: 20px;
     }
     .abha-number {
-      font-size: 27px;
-      letter-spacing: 2px;
+      font-size: 20px;
+      letter-spacing: 1px;
     }
   }
 
   @media print {
+    @page {
+      size: A5 portrait;
+      margin: 8mm;
+    }
     body { background: #fff; padding: 0; }
-    .abha-shell { box-shadow: none; border-color: #d7e5f8; }
+    .abha-shell {
+      width: 100%;
+      max-width: 148mm;
+      box-shadow: none;
+      border-color: #d7e5f8;
+    }
     .actions { display: none; }
   }
 </style>
@@ -270,7 +293,7 @@ $abhaNumDisp = esc($abha_num ?? '');
 $genderDisp = esc($gender ?? '');
 $dobDisp = esc($dob ?? '');
 $hospitalName = esc($hospital_name ?? 'Hospital');
-$hospitalLogo = esc($hospital_logo_url ?? base_url('assets/img/logo.png'));
+$nhaOfficialLogo = esc(base_url('assets/img/abdm_official_logo.svg'));
 $profilePhotoUrl = (string) ($profile_photo_url ?? '/assets/images/no_image.svg');
 $profilePhotoUrlEsc = esc($profilePhotoUrl);
 $hmsId = esc($hms_id ?? '');
@@ -290,7 +313,7 @@ $mobileVerified = (bool) ($mobile_verified ?? false);
       </div>
     </div>
     <div class="logo-wrap">
-      <img src="<?= $hospitalLogo ?>" alt="Hospital Logo">
+      <img src="<?= $nhaOfficialLogo ?>" alt="NHA Official Logo">
     </div>
   </div>
 
