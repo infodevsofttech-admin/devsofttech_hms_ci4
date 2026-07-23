@@ -242,6 +242,7 @@ window.closeDrugMasterSubView = window.closeDrugMasterSubView || function () {
 
 (function () {
     var suggestTimer = null;
+    var suggestXhr = null;
     var lastQuery = '';
     var suggestionItems = [];
     var activeSuggestionIndex = -1;
@@ -326,6 +327,10 @@ window.closeDrugMasterSubView = window.closeDrugMasterSubView || function () {
     }
 
     function clearSuggestionBox() {
+        if (suggestXhr && typeof suggestXhr.abort === 'function') {
+            suggestXhr.abort();
+            suggestXhr = null;
+        }
         suggestionItems = [];
         activeSuggestionIndex = -1;
         $('#abdm-drug-suggest').hide().empty();
@@ -1142,6 +1147,7 @@ window.closeDrugMasterSubView = window.closeDrugMasterSubView || function () {
         var type = ($('#abdm_drug_search_type').val() || 'brand').trim();
 
         if (q.length < 2) {
+            lastQuery = '';
             clearSuggestionBox();
             return;
         }
@@ -1150,17 +1156,27 @@ window.closeDrugMasterSubView = window.closeDrugMasterSubView || function () {
         }
         lastQuery = q;
 
-        $.getJSON('<?= base_url('product_master/drug_terminology_autocomplete') ?>', {
+        if (suggestXhr && typeof suggestXhr.abort === 'function') {
+            suggestXhr.abort();
+            suggestXhr = null;
+        }
+
+        suggestXhr = $.getJSON('<?= base_url('product_master/drug_terminology_autocomplete') ?>', {
             q: q,
             type: type,
             limit: 10
         }, function (resp) {
+            suggestXhr = null;
             if (!resp || Number(resp.ok || 0) !== 1) {
                 clearSuggestionBox();
                 return;
             }
             renderSuggestions(resp.suggestions || []);
-        }).fail(function () {
+        }).fail(function (_xhr, status) {
+            suggestXhr = null;
+            if (status === 'abort') {
+                return;
+            }
             clearSuggestionBox();
         });
     }
@@ -1169,7 +1185,7 @@ window.closeDrugMasterSubView = window.closeDrugMasterSubView || function () {
         if (suggestTimer) {
             clearTimeout(suggestTimer);
         }
-        suggestTimer = setTimeout(fetchDrugSuggestions, 250);
+        suggestTimer = setTimeout(fetchDrugSuggestions, 1000);
     });
 
     $('#input_item_name').off('keydown.abdmDrug').on('keydown.abdmDrug', function (evt) {
