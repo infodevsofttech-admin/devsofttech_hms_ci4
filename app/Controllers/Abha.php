@@ -377,17 +377,10 @@ class Abha extends BaseController
         if ($hmsId === '') {
             $hmsId = 'PID-' . (string) ($patient['id'] ?? '');
         }
-
-        $officialCardUrl = trim((string) ($hospitalBrand['official_card_url'] ?? ''));
-        if ($officialCardUrl === '') {
-            $officialCardUrl = 'https://abha.abdm.gov.in/abha/v3/';
-        }
-
-        $bridgePortalUrl = trim((string) ($hospitalBrand['bridge_portal_url'] ?? ''));
-        if ($bridgePortalUrl === '') {
-            $bridgePortalUrl = 'https://abdm-bridge.e-atria.in/';
-        }
-
+        $profilePhotoUrl = $this->resolvePatientPhotoUrl($patient);
+        $mobileNo = trim((string) ($patient['mphone1'] ?? ''));
+        $mobileVerified = (int) ($patient['abha_mobile_verified'] ?? 0) === 1;
+        $abhaQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' . urlencode($abhaNumClean);
         $barcodeSvg = $this->buildCode39Svg($hmsId);
 
         return view('abha/card', [
@@ -400,111 +393,13 @@ class Abha extends BaseController
             'dob'        => $dobLabel,
             'hospital_name' => (string) ($hospitalBrand['hospital_name'] ?? 'E-Atria Hospital'),
             'hospital_logo_url' => (string) ($hospitalBrand['hospital_logo_url'] ?? base_url('assets/img/logo.png')),
-            'brand_name' => 'E-Atria',
+            'brand_name' => (string) ($hospitalBrand['brand_name'] ?? 'HMS'),
             'hms_id' => $hmsId,
             'hms_barcode_svg' => $barcodeSvg,
-            'official_card_url' => $officialCardUrl,
-            'bridge_portal_url' => $bridgePortalUrl,
-        ]);
-    }
-
-    // -------------------------------------------------------------------------
-    // ABHA Official Card fetch — GET abha/card/official/{abha_number}
-    // Proxies bridge GET /api/v3/abha/card and returns card_data for browser print.
-    // -------------------------------------------------------------------------
-    public function officialCard(string $abhaNumber = '')
-    {
-        $abhaNumClean = preg_replace('/\D/', '', $abhaNumber);
-        if (strlen($abhaNumClean) !== 14) {
-            return $this->response->setStatusCode(400)->setJSON([
-                'ok' => 0,
-                'error_text' => 'Invalid ABHA number.',
-            ]);
-        }
-
-        $db = \Config\Database::connect();
-        $fields = $db->getFieldNames('patient_master') ?? [];
-
-        $abhaField = null;
-        foreach (['abha_id', 'abha_no', 'abha'] as $f) {
-            if (in_array($f, $fields, true)) {
-                $abhaField = $f;
-                break;
-            }
-        }
-        if ($abhaField === null && in_array('abha_address', $fields, true)) {
-            $abhaField = 'abha_address';
-        }
-
-        $patient = null;
-        if ($abhaField) {
-            $patient = $db->table('patient_master')->where($abhaField, $abhaNumClean)->get()->getRowArray();
-            if (! $patient) {
-                $patient = $db->table('patient_master')->where($abhaField, $abhaNumber)->get()->getRowArray();
-            }
-        }
-
-        if (! $patient) {
-            return $this->response->setStatusCode(404)->setJSON([
-                'ok' => 0,
-                'error_text' => 'Patient not found for this ABHA number.',
-            ]);
-        }
-
-        $runtime = $this->resolveBridgeRuntimeSettings();
-        if (($runtime['ok'] ?? 0) !== 1) {
-            return $this->response->setStatusCode(500)->setJSON([
-                'ok' => 0,
-                'error_text' => (string) ($runtime['error_text'] ?? 'Bridge settings are incomplete.'),
-            ]);
-        }
-
-        $query = [
-            'abha_number' => $abhaNumClean,
-            'patient_id' => (int) ($patient['id'] ?? 0),
-            'abha_address' => trim((string) ($patient['abha_address'] ?? '')),
-            'hfr_id' => (string) ($runtime['hfr_id'] ?? ''),
-        ];
-
-        $result = $this->bridgeGet(
-            (string) ($runtime['url'] ?? ''),
-            (string) ($runtime['token'] ?? ''),
-            '/api/v3/abha/card',
-            $query
-        );
-
-        if (($result['ok'] ?? 0) !== 1) {
-            $httpCode = (int) ($result['http_code'] ?? 502);
-            if ($httpCode < 100 || $httpCode > 599) {
-                $httpCode = 502;
-            }
-            return $this->response->setStatusCode($httpCode)->setJSON([
-                'ok' => 0,
-                'error_text' => (string) ($result['error_text'] ?? 'Failed to fetch official ABHA card from bridge.'),
-                'bridge_http_code' => (int) ($result['http_code'] ?? 0),
-            ]);
-        }
-
-        $payload = $result['data'] ?? $result;
-        $cardData = trim((string) ($payload['card_data'] ?? $payload['cardData'] ?? ''));
-        if ($cardData === '') {
-            return $this->response->setStatusCode(502)->setJSON([
-                'ok' => 0,
-                'error_text' => 'Bridge response does not contain card_data.',
-            ]);
-        }
-
-        if (stripos($cardData, 'data:image') === 0) {
-            $parts = explode(',', $cardData, 2);
-            $cardData = $parts[1] ?? '';
-        }
-
-        return $this->response->setJSON([
-            'ok' => 1,
-            'card_data' => $cardData,
-            'abha_number' => $abhaNumClean,
-            'patient_id' => (int) ($patient['id'] ?? 0),
-            'request_id' => (string) ($result['request_id'] ?? ''),
+            'profile_photo_url' => $profilePhotoUrl,
+            'abha_qr_url' => $abhaQrUrl,
+            'patient_mobile' => $mobileNo,
+            'mobile_verified' => $mobileVerified,
         ]);
     }
 
@@ -516,8 +411,7 @@ class Abha extends BaseController
         $branding = [
             'hospital_name' => '',
             'hospital_logo_url' => base_url('assets/img/logo.png'),
-            'official_card_url' => '',
-            'bridge_portal_url' => '',
+            'brand_name' => 'HMS',
         ];
 
         try {
@@ -529,12 +423,11 @@ class Abha extends BaseController
             $rows = $db->table('hospital_setting')
                 ->select('s_name, s_value')
                 ->whereIn('s_name', [
+                    'H_Name',
+                    'H_logo',
                     'HOSPITAL_NAME',
                     'HOSPITAL_DISPLAY_NAME',
                     'HOSPITAL_TITLE',
-                    'ABDM_OFFICIAL_CARD_URL',
-                    'ABDM_BRIDGE_PORTAL_URL',
-                    'EATRIA_BRIDGE_URL',
                 ])
                 ->orderBy('id', 'DESC')
                 ->get()
@@ -549,26 +442,20 @@ class Abha extends BaseController
                 $settings[$key] = trim((string) ($row['s_value'] ?? ''));
             }
 
-            foreach (['HOSPITAL_NAME', 'HOSPITAL_DISPLAY_NAME', 'HOSPITAL_TITLE'] as $nameKey) {
+            foreach (['H_Name', 'HOSPITAL_NAME', 'HOSPITAL_DISPLAY_NAME', 'HOSPITAL_TITLE'] as $nameKey) {
                 if (! empty($settings[$nameKey])) {
                     $branding['hospital_name'] = (string) $settings[$nameKey];
                     break;
                 }
             }
 
-            if (! empty($settings['ABDM_OFFICIAL_CARD_URL'])) {
-                $branding['official_card_url'] = (string) $settings['ABDM_OFFICIAL_CARD_URL'];
+            $logoName = trim((string) ($settings['H_logo'] ?? ''));
+            if ($logoName !== '') {
+                $branding['hospital_logo_url'] = base_url('assets/images/' . rawurlencode($logoName));
             }
 
-            if (! empty($settings['ABDM_BRIDGE_PORTAL_URL'])) {
-                $branding['bridge_portal_url'] = (string) $settings['ABDM_BRIDGE_PORTAL_URL'];
-            } elseif (! empty($settings['EATRIA_BRIDGE_URL'])) {
-                $parsed = parse_url((string) $settings['EATRIA_BRIDGE_URL']);
-                $scheme = (string) ($parsed['scheme'] ?? 'https');
-                $host = (string) ($parsed['host'] ?? '');
-                if ($host !== '') {
-                    $branding['bridge_portal_url'] = $scheme . '://' . $host . '/';
-                }
+            if ($branding['hospital_name'] !== '') {
+                $branding['brand_name'] = $branding['hospital_name'];
             }
         } catch (\Throwable $e) {
             // Keep default branding if settings lookup fails.
@@ -582,131 +469,53 @@ class Abha extends BaseController
     }
 
     /**
-     * @return array<string,mixed>
+     * @param array<string,mixed> $patient
      */
-    private function resolveBridgeRuntimeSettings(): array
+    private function resolvePatientPhotoUrl(array $patient): string
     {
-        $settings = [
-            'url' => rtrim((string) (getenv('EATRIA_BRIDGE_URL') ?: 'https://abdm-bridge.e-atria.in/api'), '/'),
-            'token' => trim((string) (getenv('EATRIA_BRIDGE_TOKEN') ?: '')),
-            'hfr_id' => trim((string) (getenv('ABDM_HFR_ID') ?: '')),
-        ];
+        $photoPath = '/assets/images/no_image.svg';
 
-        try {
-            $db = \Config\Database::connect();
-            if ($db->tableExists('hospital_setting')) {
-                $rows = $db->table('hospital_setting')
-                    ->select('s_name,s_value')
-                    ->whereIn('s_name', ['EATRIA_BRIDGE_URL', 'EATRIA_BRIDGE_TOKEN', 'ABDM_HFR_ID', 'H_HFR_ID'])
-                    ->get()
-                    ->getResultArray();
-
-                foreach ($rows as $row) {
-                    $key = trim((string) ($row['s_name'] ?? ''));
-                    $val = trim((string) ($row['s_value'] ?? ''));
-                    if ($key === 'EATRIA_BRIDGE_URL' && $val !== '') {
-                        $settings['url'] = rtrim($val, '/');
-                    }
-                    if ($key === 'EATRIA_BRIDGE_TOKEN' && $val !== '') {
-                        $settings['token'] = $val;
-                    }
-                    if ($key === 'ABDM_HFR_ID' && $val !== '') {
-                        $settings['hfr_id'] = $val;
-                    }
-                    if ($key === 'H_HFR_ID' && $val !== '' && (string) $settings['hfr_id'] === '') {
-                        $settings['hfr_id'] = $val;
+        $profileFileId = (int) ($patient['profile_file_id'] ?? 0);
+        if ($profileFileId > 0) {
+            try {
+                $db = \Config\Database::connect();
+                if ($db->tableExists('file_upload_data')) {
+                    $fileRow = $db->table('file_upload_data')
+                        ->select('full_path')
+                        ->where('id', $profileFileId)
+                        ->get()
+                        ->getRowArray();
+                    $fullPath = trim((string) ($fileRow['full_path'] ?? ''));
+                    if ($fullPath !== '') {
+                        $pos = strpos($fullPath, '/uploads/', 1);
+                        if ($pos !== false) {
+                            return substr($fullPath, $pos);
+                        }
+                        return $fullPath;
                     }
                 }
+            } catch (\Throwable $e) {
+                // Fall through to next source.
             }
-        } catch (\Throwable $e) {
-            // Keep env/default values when DB lookup fails.
         }
 
-        if (stripos((string) $settings['token'], 'Bearer ') === 0) {
-            $settings['token'] = trim(substr((string) $settings['token'], 7));
-        }
-
-        if ((string) $settings['url'] === '') {
-            return ['ok' => 0, 'error_text' => 'EATRIA_BRIDGE_URL is missing.'];
-        }
-        if ((string) $settings['token'] === '') {
-            return ['ok' => 0, 'error_text' => 'EATRIA_BRIDGE_TOKEN is missing.'];
-        }
-        if ((string) $settings['hfr_id'] === '') {
-            return ['ok' => 0, 'error_text' => 'ABDM_HFR_ID is missing.'];
-        }
-
-        return ['ok' => 1] + $settings;
-    }
-
-    /**
-     * @param array<string,mixed> $query
-     * @return array<string,mixed>
-     */
-    private function bridgeGet(string $baseUrl, string $token, string $path, array $query = []): array
-    {
-        $base = rtrim($baseUrl, '/');
-        $normalizedPath = '/' . ltrim($path, '/');
-
-        $baseHasApiSuffix = (bool) preg_match('#/api$#i', $base);
-        $pathHasApiPrefix = str_starts_with($normalizedPath, '/api/');
-        if ($baseHasApiSuffix && $pathHasApiPrefix) {
-            $normalizedPath = substr($normalizedPath, 4);
-        }
-
-        $url = $base . $normalizedPath;
-        if ($query !== []) {
-            $url .= '?' . http_build_query($query);
-        }
-
-        try {
-            $client = service('curlrequest', [
-                'timeout' => 30,
-                'connect_timeout' => 10,
-                'http_errors' => false,
-            ]);
-
-            $response = $client->get($url, [
-                'headers' => [
-                    'Authorization' => 'Bearer ' . trim($token),
-                    'Accept' => 'application/json',
-                ],
-            ]);
-
-            $httpCode = (int) $response->getStatusCode();
-            $decoded = json_decode((string) $response->getBody(), true);
-            if (! is_array($decoded)) {
-                return [
-                    'ok' => 0,
-                    'http_code' => $httpCode,
-                    'error_text' => 'Non-JSON response from bridge.',
-                ];
+        $profilePicture = trim((string) ($patient['profile_picture'] ?? ''));
+        if ($profilePicture !== '') {
+            $pos = strpos($profilePicture, '/uploads/', 1);
+            if ($pos !== false) {
+                return substr($profilePicture, $pos);
             }
-
-            $ok = (int) ($decoded['ok'] ?? (($httpCode >= 200 && $httpCode < 300) ? 1 : 0));
-            if ($ok !== 1) {
-                return [
-                    'ok' => 0,
-                    'http_code' => $httpCode,
-                    'error_text' => (string) ($decoded['error_text'] ?? $decoded['message'] ?? $decoded['error'] ?? 'Bridge request failed.'),
-                    'data' => $decoded,
-                    'request_id' => (string) ($decoded['request_id'] ?? ''),
-                ];
-            }
-
-            return [
-                'ok' => 1,
-                'http_code' => $httpCode,
-                'data' => $decoded,
-                'request_id' => (string) ($decoded['request_id'] ?? ''),
-            ];
-        } catch (\Throwable $e) {
-            return [
-                'ok' => 0,
-                'http_code' => 0,
-                'error_text' => $e->getMessage(),
-            ];
+            return $profilePicture;
         }
+
+        $abhaPhotoBase64 = trim((string) ($patient['abha_profile_photo_base64'] ?? ''));
+        if ($abhaPhotoBase64 !== '') {
+            return str_starts_with($abhaPhotoBase64, 'data:image')
+                ? $abhaPhotoBase64
+                : 'data:image/jpeg;base64,' . $abhaPhotoBase64;
+        }
+
+        return $photoPath;
     }
 
     private function buildCode39Svg(string $value): string

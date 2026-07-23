@@ -725,7 +725,6 @@ $routes->post('abha/create/communication', 'Abha::communication');
 $routes->post('abha/create/verify_comm_otp', 'Abha::verifyCommOtp');
 $routes->post('abha/create/address', 'Abha::address');
 $routes->get('abha/card/(:segment)', 'Abha::card/$1');
-$routes->get('abha/card/official/(:segment)', 'Abha::officialCard/$1');
 $routes->post('abha/register/validate', 'Abha::validateAbha');
 $routes->get('abha/register/facility_qr', 'Abha::facilityQr');
 $routes->get('AbdmTaskBoard', 'AbdmTaskBoard::index', ['filter' => $abdmPermFilter]);
