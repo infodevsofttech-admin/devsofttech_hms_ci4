@@ -372,12 +372,406 @@ class Abha extends BaseController
             try { $dobLabel = (new \DateTime($dobRaw))->format('d M Y'); } catch (\Exception $e) { $dobLabel = $dobRaw; }
         }
 
+        $hospitalBrand = $this->loadHospitalBranding();
+        $hmsId = trim((string) ($patient['p_code'] ?? ''));
+        if ($hmsId === '') {
+            $hmsId = 'PID-' . (string) ($patient['id'] ?? '');
+        }
+
+        $officialCardUrl = trim((string) ($hospitalBrand['official_card_url'] ?? ''));
+        if ($officialCardUrl === '') {
+            $officialCardUrl = 'https://abha.abdm.gov.in/abha/v3/';
+        }
+
+        $bridgePortalUrl = trim((string) ($hospitalBrand['bridge_portal_url'] ?? ''));
+        if ($bridgePortalUrl === '') {
+            $bridgePortalUrl = 'https://abdm-bridge.e-atria.in/';
+        }
+
+        $barcodeSvg = $this->buildCode39Svg($hmsId);
+
         return view('abha/card', [
             'patient'    => $patient,
             'abha_num'   => $abhaDisp,
+            'abha_raw'   => $abhaNumClean,
+            'patient_id' => (int) ($patient['id'] ?? 0),
+            'abha_address' => (string) ($patient['abha_address'] ?? ''),
             'gender'     => $genderLabel,
             'dob'        => $dobLabel,
+            'hospital_name' => (string) ($hospitalBrand['hospital_name'] ?? 'E-Atria Hospital'),
+            'hospital_logo_url' => (string) ($hospitalBrand['hospital_logo_url'] ?? base_url('assets/img/logo.png')),
+            'brand_name' => 'E-Atria',
+            'hms_id' => $hmsId,
+            'hms_barcode_svg' => $barcodeSvg,
+            'official_card_url' => $officialCardUrl,
+            'bridge_portal_url' => $bridgePortalUrl,
         ]);
+    }
+
+    // -------------------------------------------------------------------------
+    // ABHA Official Card fetch — GET abha/card/official/{abha_number}
+    // Proxies bridge GET /api/v3/abha/card and returns card_data for browser print.
+    // -------------------------------------------------------------------------
+    public function officialCard(string $abhaNumber = '')
+    {
+        $abhaNumClean = preg_replace('/\D/', '', $abhaNumber);
+        if (strlen($abhaNumClean) !== 14) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
+                'error_text' => 'Invalid ABHA number.',
+            ]);
+        }
+
+        $db = \Config\Database::connect();
+        $fields = $db->getFieldNames('patient_master') ?? [];
+
+        $abhaField = null;
+        foreach (['abha_id', 'abha_no', 'abha'] as $f) {
+            if (in_array($f, $fields, true)) {
+                $abhaField = $f;
+                break;
+            }
+        }
+        if ($abhaField === null && in_array('abha_address', $fields, true)) {
+            $abhaField = 'abha_address';
+        }
+
+        $patient = null;
+        if ($abhaField) {
+            $patient = $db->table('patient_master')->where($abhaField, $abhaNumClean)->get()->getRowArray();
+            if (! $patient) {
+                $patient = $db->table('patient_master')->where($abhaField, $abhaNumber)->get()->getRowArray();
+            }
+        }
+
+        if (! $patient) {
+            return $this->response->setStatusCode(404)->setJSON([
+                'ok' => 0,
+                'error_text' => 'Patient not found for this ABHA number.',
+            ]);
+        }
+
+        $runtime = $this->resolveBridgeRuntimeSettings();
+        if (($runtime['ok'] ?? 0) !== 1) {
+            return $this->response->setStatusCode(500)->setJSON([
+                'ok' => 0,
+                'error_text' => (string) ($runtime['error_text'] ?? 'Bridge settings are incomplete.'),
+            ]);
+        }
+
+        $query = [
+            'abha_number' => $abhaNumClean,
+            'patient_id' => (int) ($patient['id'] ?? 0),
+            'abha_address' => trim((string) ($patient['abha_address'] ?? '')),
+            'hfr_id' => (string) ($runtime['hfr_id'] ?? ''),
+        ];
+
+        $result = $this->bridgeGet(
+            (string) ($runtime['url'] ?? ''),
+            (string) ($runtime['token'] ?? ''),
+            '/api/v3/abha/card',
+            $query
+        );
+
+        if (($result['ok'] ?? 0) !== 1) {
+            $httpCode = (int) ($result['http_code'] ?? 502);
+            if ($httpCode < 100 || $httpCode > 599) {
+                $httpCode = 502;
+            }
+            return $this->response->setStatusCode($httpCode)->setJSON([
+                'ok' => 0,
+                'error_text' => (string) ($result['error_text'] ?? 'Failed to fetch official ABHA card from bridge.'),
+                'bridge_http_code' => (int) ($result['http_code'] ?? 0),
+            ]);
+        }
+
+        $payload = $result['data'] ?? $result;
+        $cardData = trim((string) ($payload['card_data'] ?? $payload['cardData'] ?? ''));
+        if ($cardData === '') {
+            return $this->response->setStatusCode(502)->setJSON([
+                'ok' => 0,
+                'error_text' => 'Bridge response does not contain card_data.',
+            ]);
+        }
+
+        if (stripos($cardData, 'data:image') === 0) {
+            $parts = explode(',', $cardData, 2);
+            $cardData = $parts[1] ?? '';
+        }
+
+        return $this->response->setJSON([
+            'ok' => 1,
+            'card_data' => $cardData,
+            'abha_number' => $abhaNumClean,
+            'patient_id' => (int) ($patient['id'] ?? 0),
+            'request_id' => (string) ($result['request_id'] ?? ''),
+        ]);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function loadHospitalBranding(): array
+    {
+        $branding = [
+            'hospital_name' => '',
+            'hospital_logo_url' => base_url('assets/img/logo.png'),
+            'official_card_url' => '',
+            'bridge_portal_url' => '',
+        ];
+
+        try {
+            $db = \Config\Database::connect();
+            if (! $db->tableExists('hospital_setting')) {
+                return $branding;
+            }
+
+            $rows = $db->table('hospital_setting')
+                ->select('s_name, s_value')
+                ->whereIn('s_name', [
+                    'HOSPITAL_NAME',
+                    'HOSPITAL_DISPLAY_NAME',
+                    'HOSPITAL_TITLE',
+                    'ABDM_OFFICIAL_CARD_URL',
+                    'ABDM_BRIDGE_PORTAL_URL',
+                    'EATRIA_BRIDGE_URL',
+                ])
+                ->orderBy('id', 'DESC')
+                ->get()
+                ->getResultArray();
+
+            $settings = [];
+            foreach ($rows as $row) {
+                $key = trim((string) ($row['s_name'] ?? ''));
+                if ($key === '' || array_key_exists($key, $settings)) {
+                    continue;
+                }
+                $settings[$key] = trim((string) ($row['s_value'] ?? ''));
+            }
+
+            foreach (['HOSPITAL_NAME', 'HOSPITAL_DISPLAY_NAME', 'HOSPITAL_TITLE'] as $nameKey) {
+                if (! empty($settings[$nameKey])) {
+                    $branding['hospital_name'] = (string) $settings[$nameKey];
+                    break;
+                }
+            }
+
+            if (! empty($settings['ABDM_OFFICIAL_CARD_URL'])) {
+                $branding['official_card_url'] = (string) $settings['ABDM_OFFICIAL_CARD_URL'];
+            }
+
+            if (! empty($settings['ABDM_BRIDGE_PORTAL_URL'])) {
+                $branding['bridge_portal_url'] = (string) $settings['ABDM_BRIDGE_PORTAL_URL'];
+            } elseif (! empty($settings['EATRIA_BRIDGE_URL'])) {
+                $parsed = parse_url((string) $settings['EATRIA_BRIDGE_URL']);
+                $scheme = (string) ($parsed['scheme'] ?? 'https');
+                $host = (string) ($parsed['host'] ?? '');
+                if ($host !== '') {
+                    $branding['bridge_portal_url'] = $scheme . '://' . $host . '/';
+                }
+            }
+        } catch (\Throwable $e) {
+            // Keep default branding if settings lookup fails.
+        }
+
+        if ($branding['hospital_name'] === '') {
+            $branding['hospital_name'] = 'E-Atria Hospital';
+        }
+
+        return $branding;
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    private function resolveBridgeRuntimeSettings(): array
+    {
+        $settings = [
+            'url' => rtrim((string) (getenv('EATRIA_BRIDGE_URL') ?: 'https://abdm-bridge.e-atria.in/api'), '/'),
+            'token' => trim((string) (getenv('EATRIA_BRIDGE_TOKEN') ?: '')),
+            'hfr_id' => trim((string) (getenv('ABDM_HFR_ID') ?: '')),
+        ];
+
+        try {
+            $db = \Config\Database::connect();
+            if ($db->tableExists('hospital_setting')) {
+                $rows = $db->table('hospital_setting')
+                    ->select('s_name,s_value')
+                    ->whereIn('s_name', ['EATRIA_BRIDGE_URL', 'EATRIA_BRIDGE_TOKEN', 'ABDM_HFR_ID', 'H_HFR_ID'])
+                    ->get()
+                    ->getResultArray();
+
+                foreach ($rows as $row) {
+                    $key = trim((string) ($row['s_name'] ?? ''));
+                    $val = trim((string) ($row['s_value'] ?? ''));
+                    if ($key === 'EATRIA_BRIDGE_URL' && $val !== '') {
+                        $settings['url'] = rtrim($val, '/');
+                    }
+                    if ($key === 'EATRIA_BRIDGE_TOKEN' && $val !== '') {
+                        $settings['token'] = $val;
+                    }
+                    if ($key === 'ABDM_HFR_ID' && $val !== '') {
+                        $settings['hfr_id'] = $val;
+                    }
+                    if ($key === 'H_HFR_ID' && $val !== '' && (string) $settings['hfr_id'] === '') {
+                        $settings['hfr_id'] = $val;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // Keep env/default values when DB lookup fails.
+        }
+
+        if (stripos((string) $settings['token'], 'Bearer ') === 0) {
+            $settings['token'] = trim(substr((string) $settings['token'], 7));
+        }
+
+        if ((string) $settings['url'] === '') {
+            return ['ok' => 0, 'error_text' => 'EATRIA_BRIDGE_URL is missing.'];
+        }
+        if ((string) $settings['token'] === '') {
+            return ['ok' => 0, 'error_text' => 'EATRIA_BRIDGE_TOKEN is missing.'];
+        }
+        if ((string) $settings['hfr_id'] === '') {
+            return ['ok' => 0, 'error_text' => 'ABDM_HFR_ID is missing.'];
+        }
+
+        return ['ok' => 1] + $settings;
+    }
+
+    /**
+     * @param array<string,mixed> $query
+     * @return array<string,mixed>
+     */
+    private function bridgeGet(string $baseUrl, string $token, string $path, array $query = []): array
+    {
+        $base = rtrim($baseUrl, '/');
+        $normalizedPath = '/' . ltrim($path, '/');
+
+        $baseHasApiSuffix = (bool) preg_match('#/api$#i', $base);
+        $pathHasApiPrefix = str_starts_with($normalizedPath, '/api/');
+        if ($baseHasApiSuffix && $pathHasApiPrefix) {
+            $normalizedPath = substr($normalizedPath, 4);
+        }
+
+        $url = $base . $normalizedPath;
+        if ($query !== []) {
+            $url .= '?' . http_build_query($query);
+        }
+
+        try {
+            $client = service('curlrequest', [
+                'timeout' => 30,
+                'connect_timeout' => 10,
+                'http_errors' => false,
+            ]);
+
+            $response = $client->get($url, [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . trim($token),
+                    'Accept' => 'application/json',
+                ],
+            ]);
+
+            $httpCode = (int) $response->getStatusCode();
+            $decoded = json_decode((string) $response->getBody(), true);
+            if (! is_array($decoded)) {
+                return [
+                    'ok' => 0,
+                    'http_code' => $httpCode,
+                    'error_text' => 'Non-JSON response from bridge.',
+                ];
+            }
+
+            $ok = (int) ($decoded['ok'] ?? (($httpCode >= 200 && $httpCode < 300) ? 1 : 0));
+            if ($ok !== 1) {
+                return [
+                    'ok' => 0,
+                    'http_code' => $httpCode,
+                    'error_text' => (string) ($decoded['error_text'] ?? $decoded['message'] ?? $decoded['error'] ?? 'Bridge request failed.'),
+                    'data' => $decoded,
+                    'request_id' => (string) ($decoded['request_id'] ?? ''),
+                ];
+            }
+
+            return [
+                'ok' => 1,
+                'http_code' => $httpCode,
+                'data' => $decoded,
+                'request_id' => (string) ($decoded['request_id'] ?? ''),
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'ok' => 0,
+                'http_code' => 0,
+                'error_text' => $e->getMessage(),
+            ];
+        }
+    }
+
+    private function buildCode39Svg(string $value): string
+    {
+        $normalized = strtoupper(trim($value));
+        if ($normalized === '') {
+            return '';
+        }
+
+        $supported = [
+            '0' => 'nnnwwnwnn', '1' => 'wnnwnnnnw', '2' => 'nnwwnnnnw', '3' => 'wnwwnnnnn',
+            '4' => 'nnnwwnnnw', '5' => 'wnnwwnnnn', '6' => 'nnwwwnnnn', '7' => 'nnnwnnwnw',
+            '8' => 'wnnwnnwnn', '9' => 'nnwwnnwnn', 'A' => 'wnnnnwnnw', 'B' => 'nnwnnwnnw',
+            'C' => 'wnwnnwnnn', 'D' => 'nnnnwwnnw', 'E' => 'wnnnwwnnn', 'F' => 'nnwnwwnnn',
+            'G' => 'nnnnnwwnw', 'H' => 'wnnnnwwnn', 'I' => 'nnwnnwwnn', 'J' => 'nnnnwwwnn',
+            'K' => 'wnnnnnnww', 'L' => 'nnwnnnnww', 'M' => 'wnwnnnnwn', 'N' => 'nnnnwnnww',
+            'O' => 'wnnnwnnwn', 'P' => 'nnwnwnnwn', 'Q' => 'nnnnnnwww', 'R' => 'wnnnnnwwn',
+            'S' => 'nnwnnnwwn', 'T' => 'nnnnwnwwn', 'U' => 'wwnnnnnnw', 'V' => 'nwwnnnnnw',
+            'W' => 'wwwnnnnnn', 'X' => 'nwnnwnnnw', 'Y' => 'wwnnwnnnn', 'Z' => 'nwwnwnnnn',
+            '-' => 'nwnnnnwnw', '.' => 'wwnnnnwnn', ' ' => 'nwwnnnwnn', '$' => 'nwnwnwnnn',
+            '/' => 'nwnwnnnwn', '+' => 'nwnnnwnwn', '%' => 'nnnwnwnwn', '*' => 'nwnnwnwnn',
+        ];
+
+        $payload = '*' . $normalized . '*';
+        $clean = '';
+        $len = strlen($payload);
+        for ($i = 0; $i < $len; $i++) {
+            $ch = $payload[$i];
+            if (! isset($supported[$ch])) {
+                continue;
+            }
+            $clean .= $ch;
+        }
+
+        if ($clean === '') {
+            return '';
+        }
+
+        $narrow = 2;
+        $wide = 5;
+        $height = 56;
+        $quiet = 10;
+        $gap = 2;
+
+        $x = $quiet;
+        $rects = [];
+        $cleanLen = strlen($clean);
+        for ($i = 0; $i < $cleanLen; $i++) {
+            $pattern = $supported[$clean[$i]];
+            for ($j = 0; $j < 9; $j++) {
+                $w = ($pattern[$j] === 'w') ? $wide : $narrow;
+                if ($j % 2 === 0) {
+                    $rects[] = '<rect x="' . $x . '" y="0" width="' . $w . '" height="' . $height . '" fill="#111" />';
+                }
+                $x += $w;
+            }
+            if ($i < ($cleanLen - 1)) {
+                $x += $gap;
+            }
+        }
+
+        $width = $x + $quiet;
+        return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' . $width . ' ' . $height . '" role="img" aria-label="HMS Barcode">'
+            . implode('', $rects)
+            . '</svg>';
     }
 
     // -------------------------------------------------------------------------
