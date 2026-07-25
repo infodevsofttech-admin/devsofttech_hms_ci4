@@ -40,17 +40,7 @@
     gap: 10px;
     min-width: 0;
   }
-  .nha-tag {
-    width: 38px;
-    height: 38px;
-    border-radius: 9px;
-    background: #104998;
-    color: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 800;
-    font-size: 13px;
+  .header-right {
     flex: 0 0 auto;
   }
   .header-text {
@@ -82,16 +72,98 @@
     height: 100%;
     object-fit: contain;
   }
-  .hospital-name {
+  .abdm-logo {
+    object-fit: cover;
+    object-position: center;
+    transform: scale(1.16);
+  }
+  .brand-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border: 1px solid #d5e4f7;
+    border-radius: 10px;
+    background: #f7fbff;
+  }
+  .brand-logo {
+    width: 38px;
+    height: 38px;
+    object-fit: contain;
+    border-radius: 7px;
+    background: #fff;
+    border: 1px solid #d7e5f8;
+  }
+  .brand-text {
+    line-height: 1.1;
+  }
+  .brand-name {
+    font-size: 16px;
+    font-weight: 800;
+    color: #0f3f7f;
+  }
+  .brand-sub {
+    font-size: 10px;
+    color: #4c6485;
+    font-weight: 600;
+  }
+  .hospital-strip {
     border: 1px solid #d5e4f8;
     background: #f4f9ff;
     border-radius: 11px;
+    padding: 8px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .hospital-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .hospital-mini-logo {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+    border-radius: 6px;
+    border: 1px solid #cfe0f8;
+    background: #fff;
+    flex: 0 0 auto;
+  }
+  .hospital-name {
     font-size: 13px;
     color: #1e4a82;
-    padding: 8px 10px;
-    margin-bottom: 12px;
+    min-width: 0;
   }
   .hospital-name strong { color: #0f3f7f; }
+  .patient-id-strip {
+    width: 180px;
+    background: #fff;
+    border: 1px solid #d4e3f8;
+    border-radius: 8px;
+    padding: 4px 6px;
+    text-align: center;
+    flex: 0 0 auto;
+  }
+  .patient-id-strip svg {
+    width: 100%;
+    height: 28px;
+  }
+  .patient-id-label {
+    font-size: 9px;
+    color: #5f7291;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+  .patient-id-value {
+    font-size: 11px;
+    color: #123f7d;
+    font-weight: 700;
+    line-height: 1.1;
+  }
   .patient-area {
     display: grid;
     grid-template-columns: 1fr 132px;
@@ -198,27 +270,6 @@
     overflow: hidden;
     text-overflow: clip;
   }
-  .barcode-wrap {
-    margin-top: 12px;
-    border: 1px solid #d7e5f8;
-    border-radius: 11px;
-    padding: 8px 10px;
-    background: #ffffff;
-  }
-  .barcode-label {
-    font-size: 10px;
-    text-transform: uppercase;
-    color: #5f7291;
-    letter-spacing: 1px;
-    margin-bottom: 4px;
-  }
-  .barcode-id {
-    text-align: center;
-    font-size: 12px;
-    font-weight: 700;
-    color: #1d3f69;
-    margin-top: 4px;
-  }
   .footer {
     margin-top: 10px;
     text-align: right;
@@ -247,11 +298,24 @@
       width: 132px;
       height: 46px;
     }
+    .brand-name {
+      font-size: 14px;
+    }
+    .brand-sub {
+      font-size: 9px;
+    }
     .header-text {
       font-size: 11px;
     }
     .header-text span {
       font-size: 10px;
+    }
+    .hospital-strip {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .patient-id-strip {
+      width: 100%;
     }
     .patient-area {
       grid-template-columns: 1fr;
@@ -293,6 +357,8 @@ $abhaNumDisp = esc($abha_num ?? '');
 $genderDisp = esc($gender ?? '');
 $dobDisp = esc($dob ?? '');
 $hospitalName = esc($hospital_name ?? 'Hospital');
+$hospitalLogo = esc($hospital_logo_url ?? base_url('assets/img/logo.png'));
+$brandName = esc($brand_name ?? 'E-Atria');
 $nhaOfficialLogo = esc(base_url('assets/img/abdm_official_logo.svg'));
 $profilePhotoUrl = (string) ($profile_photo_url ?? '/assets/images/no_image.svg');
 $profilePhotoUrlEsc = esc($profilePhotoUrl);
@@ -306,18 +372,38 @@ $mobileVerified = (bool) ($mobile_verified ?? false);
 <div class="abha-shell">
   <div class="header">
     <div class="header-left">
-      <div class="nha-tag">NHA</div>
+      <div class="logo-wrap">
+        <img class="abdm-logo" src="<?= $nhaOfficialLogo ?>" alt="ABDM NHA Official Logo">
+      </div>
       <div class="header-text">
         Ayushman Bharat Digital Mission
-        <span>ABHA Health Account Card</span>
+        <span>NHA | ABHA Health Account Card</span>
       </div>
     </div>
-    <div class="logo-wrap">
-      <img src="<?= $nhaOfficialLogo ?>" alt="NHA Official Logo">
+    <div class="header-right">
+      <div class="brand-wrap">
+        <img class="brand-logo" src="<?= $hospitalLogo ?>" alt="Brand Logo">
+        <div class="brand-text">
+          <div class="brand-name"><?= $brandName !== '' ? $brandName : 'E-Atria' ?></div>
+          <div class="brand-sub">Digital Health Platform</div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <div class="hospital-name">Hospital: <strong><?= $hospitalName ?></strong></div>
+  <div class="hospital-strip">
+    <div class="hospital-info">
+      <img class="hospital-mini-logo" src="<?= $hospitalLogo ?>" alt="Hospital Logo">
+      <div class="hospital-name">Hospital: <strong><?= $hospitalName ?></strong></div>
+    </div>
+    <?php if ($barcodeSvg !== '' && $hmsId !== ''): ?>
+      <div class="patient-id-strip">
+        <div class="patient-id-label">Patient ID Barcode</div>
+        <div><?= $barcodeSvg ?></div>
+        <div class="patient-id-value"><?= $hmsId ?></div>
+      </div>
+    <?php endif; ?>
+  </div>
 
   <div class="patient-area">
     <div>
@@ -358,14 +444,6 @@ $mobileVerified = (bool) ($mobile_verified ?? false);
       <div class="qr-value"><?= $abhaNumDisp ?></div>
     </div>
   </div>
-
-  <?php if ($barcodeSvg !== '' && $hmsId !== ''): ?>
-    <div class="barcode-wrap">
-      <div class="barcode-label">HMS ID Barcode</div>
-      <div><?= $barcodeSvg ?></div>
-      <div class="barcode-id"><?= $hmsId ?></div>
-    </div>
-  <?php endif; ?>
 
   <div class="footer">Government of India | Ministry of Health &amp; Family Welfare</div>
 </div>
