@@ -128,15 +128,23 @@ if ($patientPhotoPath === '') {
                     background: #f8f9fa;
                 }
                 .opd-scan-modal-body {
-                    max-height: 75vh;
+                    max-height: calc(100vh - 140px);
+                    min-height: 70vh;
                     overflow: auto;
                     background: #f8f9fa;
+                    padding: .75rem;
+                }
+                .opd-scan-modal-dialog {
+                    width: min(96vw, 1600px);
+                    max-width: min(96vw, 1600px);
                 }
                 .opd-scan-modal-img {
+                    display: block;
                     max-width: 100%;
-                    max-height: 72vh;
+                    max-height: calc(100vh - 190px);
                     width: auto;
                     height: auto;
+                    margin: 0 auto;
                     transform-origin: center center;
                     transition: transform 0.12s ease;
                     cursor: grab;
@@ -370,7 +378,7 @@ if ($patientPhotoPath === '') {
     </div>
 
     <div class="modal fade" id="opdScanModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
+        <div class="modal-dialog opd-scan-modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">OPD Scan</h5>
