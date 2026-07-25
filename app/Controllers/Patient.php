@@ -971,6 +971,8 @@ class Patient extends BaseController
 			return $this->response->setStatusCode(404)->setBody('Patient not found');
 		}
 
+		$profileFilePath = $this->getProfileFilePath((int) ($patient->profile_file_id ?? 0));
+
 		$request = service('request');
 		$backUrl = trim((string) $request->getGet('back_url'));
 		$backTitle = trim((string) $request->getGet('back_title'));
@@ -996,6 +998,16 @@ class Patient extends BaseController
 			->orderBy('opd_id', 'DESC')
 			->get()
 			->getResultArray();
+
+		$totalOpdVisits = count($opdList);
+		$lastVisitDate = '';
+		$lastVisitSrNo = '';
+		if ($totalOpdVisits > 0 && !empty($opdList[0]['apointment_date'])) {
+			$lastVisitDate = (string) $opdList[0]['apointment_date'];
+		}
+		if ($totalOpdVisits > 0) {
+			$lastVisitSrNo = trim((string) ($opdList[0]['queue_no'] ?? ''));
+		}
 
 		$opdIds = array_column($opdList, 'opd_id');
 		$filesByOpd = [];
@@ -1103,7 +1115,11 @@ class Patient extends BaseController
 
 		return view('billing/Patient_Profile_Opd_V', [
 			'patient' => $patient,
+			'profileFilePath' => $profileFilePath,
 			'opdGroups' => $opdGroups,
+			'totalOpdVisits' => $totalOpdVisits,
+			'lastVisitDate' => $lastVisitDate,
+			'lastVisitSrNo' => $lastVisitSrNo,
 			'backUrl' => $backUrl,
 			'backTitle' => $backTitle,
 		]);

@@ -18,6 +18,39 @@ $abhaVerifiedStatus = strtoupper(trim((string) ($patient->abha_verified_status ?
 $abhaKycVerified = (int) ($patient->abha_kyc_verified ?? 0) === 1;
 $abhaMobileVerified = (int) ($patient->abha_mobile_verified ?? 0) === 1;
 $abhaIsVerified = $abhaVerifiedStatus === 'VERIFIED' || ($abhaKycVerified && $abhaMobileVerified);
+$totalOpdVisits = (int) ($totalOpdVisits ?? 0);
+$lastVisitDateRaw = trim((string) ($lastVisitDate ?? ''));
+$lastVisitDateLabel = $lastVisitDateRaw !== '' ? date('d-m-Y', strtotime($lastVisitDateRaw)) : 'Not available';
+$lastVisitSrNo = trim((string) ($lastVisitSrNo ?? ''));
+
+$patientAge = trim((string) get_age_1($patient->dob ?? null, $patient->age ?? '', $patient->age_in_month ?? '', $patient->estimate_dob ?? ''));
+$genderRaw = trim((string) ($patient->xgender ?? $patient->gender ?? ''));
+$genderNormalized = strtoupper($genderRaw);
+if ($genderNormalized === '1' || $genderNormalized === 'M' || $genderNormalized === 'MALE') {
+    $patientGender = 'Male';
+} elseif ($genderNormalized === '2' || $genderNormalized === 'F' || $genderNormalized === 'FEMALE') {
+    $patientGender = 'Female';
+} elseif ($genderNormalized === '3' || $genderNormalized === 'O' || $genderNormalized === 'OTHER') {
+    $patientGender = 'Other';
+} else {
+    $patientGender = $genderRaw !== '' ? $genderRaw : 'Not available';
+}
+
+$patientPhotoPath = trim((string) ($profileFilePath ?? ''));
+if ($patientPhotoPath === '') {
+    $patientPhotoPath = trim((string) ($patient->profile_picture ?? ''));
+}
+
+$abhaPhotoBase64 = trim((string) ($patient->abha_profile_photo_base64 ?? ''));
+if ($patientPhotoPath === '' && $abhaPhotoBase64 !== '') {
+    $patientPhotoPath = str_starts_with($abhaPhotoBase64, 'data:image')
+        ? $abhaPhotoBase64
+        : 'data:image/jpeg;base64,' . $abhaPhotoBase64;
+}
+
+if ($patientPhotoPath === '') {
+    $patientPhotoPath = '/assets/images/no_image.svg';
+}
 ?>
 
 <div class="pagetitle">
@@ -40,7 +73,19 @@ $abhaIsVerified = $abhaVerifiedStatus === 'VERIFIED' || ($abhaKycVerified && $ab
             </button>
         </div>
         <div class="card-body">
-            <p class="mb-3">Patient: <strong><?= esc($patient->p_fname ?? '') ?></strong></p>
+            <div class="opd-patient-meta-card" style="border:1px solid #dee2e6;border-radius:.5rem;padding:.75rem;margin-bottom:1rem;background:#fff;">
+                <div class="d-flex align-items-center gap-3 flex-wrap">
+                    <img src="<?= esc($patientPhotoPath) ?>" alt="Patient Photo" class="opd-patient-photo" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:1px solid #dee2e6;background:#f8f9fa;cursor:zoom-in;" data-bs-toggle="modal" data-bs-target="#patientPhotoModal">
+                    <div class="opd-patient-meta-row d-flex flex-wrap align-items-center gap-3">
+                        <span>Patient: <strong><?= esc($patient->p_fname ?? '') ?></strong></span>
+                        <span><strong>Age:</strong> <?= $patientAge !== '' ? esc($patientAge) : 'Not available' ?></span>
+                        <span><strong>Gender:</strong> <?= esc($patientGender) ?></span>
+                        <span><strong>Last Visit:</strong> <?= esc($lastVisitDateLabel) ?></span>
+                        <span><strong>OPD Sr No.:</strong> <?= $lastVisitSrNo !== '' ? esc($lastVisitSrNo) : 'Not available' ?></span>
+                        <span><strong>No. of Visit:</strong> <?= esc((string) $totalOpdVisits) ?></span>
+                    </div>
+                </div>
+            </div>
 
             <ul class="nav nav-tabs nav-tabs-bordered" role="tablist">
                 <li class="nav-item" role="presentation">
@@ -124,6 +169,24 @@ $abhaIsVerified = $abhaVerifiedStatus === 'VERIFIED' || ($abhaKycVerified && $ab
                     color: #198754;
                     border-color: #198754;
                     background: #e8f7ee;
+                }
+                .opd-patient-meta-card {
+                    border: 1px solid #dee2e6;
+                    border-radius: .5rem;
+                    padding: .75rem;
+                    margin-bottom: 1rem;
+                    background: #fff;
+                }
+                .opd-patient-photo {
+                    width: 72px;
+                    height: 72px;
+                    border-radius: 50%;
+                    object-fit: cover;
+                    border: 1px solid #dee2e6;
+                    background: #f8f9fa;
+                }
+                .opd-patient-meta-row {
+                    font-size: .95rem;
                 }
             </style>
 
@@ -287,6 +350,20 @@ $abhaIsVerified = $abhaVerifiedStatus === 'VERIFIED' || ($abhaKycVerified && $ab
                         </div>
                     </div>
 
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="patientPhotoModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Patient Photo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center bg-light">
+                    <img src="<?= esc($patientPhotoPath) ?>" alt="Patient Photo" style="max-width:100%;max-height:75vh;width:auto;height:auto;border-radius:.5rem;">
                 </div>
             </div>
         </div>
