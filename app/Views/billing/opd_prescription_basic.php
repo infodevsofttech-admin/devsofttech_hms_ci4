@@ -460,6 +460,25 @@
             object-fit: contain;
             background: #f8f9fa;
         }
+        .rx-history-scan-modal-body {
+            max-height: calc(100vh - 140px);
+            min-height: 70vh;
+            overflow: auto;
+            background: #f8f9fa;
+            padding: .75rem;
+        }
+        .rx-history-scan-modal-dialog {
+            width: min(96vw, 1600px);
+            max-width: min(96vw, 1600px);
+        }
+        .rx-history-scan-modal-img {
+            display: block;
+            max-width: 100%;
+            max-height: calc(100vh - 190px);
+            width: auto;
+            height: auto;
+            margin: 0 auto;
+        }
         @media (min-width: 992px) {
             .rx-two-panel {
                 --rx-panel-height: calc(100vh - 170px);
@@ -1632,6 +1651,20 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                     <button type="button" class="btn btn-primary" id="btn_add_custom_investigations">Add Selected</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="historyScanPreviewModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog rx-history-scan-modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="historyScanPreviewTitle">OPD Scan</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body rx-history-scan-modal-body text-center">
+                    <img src="" alt="OPD history scan" id="historyScanPreviewImage" class="rx-history-scan-modal-img">
                 </div>
             </div>
         </div>
@@ -6636,6 +6669,36 @@
         var $item = $(this).closest('.rx-history-item');
         $item.toggleClass('expanded');
         $(this).text($item.hasClass('expanded') ? 'Minimize' : 'Expand');
+    });
+
+    $(document).on('click', '.js-history-scan-link', function(e) {
+        var modalEl;
+        var modalInst;
+        var src;
+        var title;
+
+        e.preventDefault();
+
+        src = ($(this).data('scan-src') || $(this).attr('href') || '').toString().trim();
+        if (!src) {
+            return;
+        }
+
+        title = ($(this).data('scan-title') || 'OPD Scan').toString().trim();
+        $('#historyScanPreviewImage').attr('src', src);
+        $('#historyScanPreviewTitle').text(title || 'OPD Scan');
+
+        if (window.bootstrap && window.bootstrap.Modal) {
+            modalEl = document.getElementById('historyScanPreviewModal');
+            modalInst = window.bootstrap.Modal.getOrCreateInstance(modalEl);
+            modalInst.show();
+        } else {
+            window.open(src, '_blank');
+        }
+    });
+
+    $('#historyScanPreviewModal').on('hidden.bs.modal', function() {
+        $('#historyScanPreviewImage').attr('src', '');
     });
 
     $(document).on('click', '.btn-use-current-scan-report', function() {

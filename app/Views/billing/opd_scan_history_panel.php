@@ -14,7 +14,12 @@
                         <?php if (!empty($scan['is_pdf'])) { ?>
                             <a class="btn btn-outline-secondary btn-sm w-100" target="_blank" href="<?= esc((string) ($scan['path'] ?? '')) ?>">Open PDF</a>
                         <?php } else { ?>
-                            <a target="_blank" href="<?= esc((string) ($scan['path'] ?? '')) ?>">
+                            <a
+                                href="<?= esc((string) ($scan['path'] ?? '')) ?>"
+                                class="js-history-scan-link"
+                                data-scan-src="<?= esc((string) ($scan['path'] ?? '')) ?>"
+                                data-scan-title="<?= esc((string) (($scan['opd_code'] ?? '') !== '' ? $scan['opd_code'] : ('OPD #' . ((int) ($scan['opd_id'] ?? 0)))) . ' ' . ($scan['opd_date'] ?? '')) ?>"
+                            >
                                 <img src="<?= esc((string) ($scan['path'] ?? '')) ?>" loading="lazy" decoding="async" class="rx-history-preview" alt="history scan">
                             </a>
                             <button type="button" class="btn btn-sm btn-outline-secondary mt-1 w-100 btn-history-toggle-image">Expand</button>
