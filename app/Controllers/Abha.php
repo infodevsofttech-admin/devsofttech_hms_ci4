@@ -43,8 +43,8 @@ class Abha extends BaseController
 
         return $this->response->setJSON([
             'ok'         => 0,
-            'error_text' => $result['error_text'] ?? $result['message']
-                            ?? $result['data']['message'] ?? 'Failed to send OTP',
+            'error_text' => $this->extractBridgeErrorText($result, 'Failed to send OTP'),
+            'request_id' => (string) ($result['request_id'] ?? ''),
         ]);
     }
 
@@ -76,8 +76,8 @@ class Abha extends BaseController
         if (empty($result['ok']) || $result['ok'] != 1) {
             return $this->response->setJSON([
                 'ok'         => 0,
-                'error_text' => $result['error_text'] ?? $result['message']
-                                ?? $result['data']['message'] ?? 'OTP verification failed',
+                'error_text' => $this->extractBridgeErrorText($result, 'OTP verification failed'),
+                'request_id' => (string) ($result['request_id'] ?? ''),
             ]);
         }
         $payload  = $result['data'] ?? $result;
@@ -175,8 +175,8 @@ class Abha extends BaseController
 
         return $this->response->setJSON([
             'ok'         => 0,
-            'error_text' => $result['error_text'] ?? $result['message']
-                            ?? $result['data']['message'] ?? 'Failed to send mobile OTP',
+            'error_text' => $this->extractBridgeErrorText($result, 'Failed to send mobile OTP'),
+            'request_id' => (string) ($result['request_id'] ?? ''),
         ]);
     }
 
@@ -206,8 +206,8 @@ class Abha extends BaseController
         if (empty($result['ok']) || $result['ok'] != 1) {
             return $this->response->setJSON([
                 'ok'         => 0,
-                'error_text' => $result['error_text'] ?? $result['message']
-                                ?? $result['data']['message'] ?? 'Mobile OTP verification failed',
+                'error_text' => $this->extractBridgeErrorText($result, 'Mobile OTP verification failed'),
+                'request_id' => (string) ($result['request_id'] ?? ''),
             ]);
         }
 
@@ -581,6 +581,36 @@ class Abha extends BaseController
         return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' . $width . ' ' . $height . '" role="img" aria-label="HMS Barcode">'
             . implode('', $rects)
             . '</svg>';
+    }
+
+    /**
+     * Normalize nested bridge error payloads into a single readable message.
+     *
+     * @param array<string, mixed> $result
+     */
+    private function extractBridgeErrorText(array $result, string $fallback): string
+    {
+        $candidates = [
+            $result['error_text'] ?? null,
+            $result['message'] ?? null,
+            $result['error']['message'] ?? null,
+            $result['error']['description'] ?? null,
+            $result['error']['code'] ?? null,
+            $result['data']['message'] ?? null,
+            $result['data']['error']['message'] ?? null,
+            $result['data']['error']['description'] ?? null,
+            $result['data']['error']['code'] ?? null,
+            $result['description'] ?? null,
+            $result['data']['description'] ?? null,
+        ];
+
+        foreach ($candidates as $candidate) {
+            if (is_string($candidate) && trim($candidate) !== '') {
+                return trim($candidate);
+            }
+        }
+
+        return $fallback;
     }
 
     // -------------------------------------------------------------------------

@@ -751,6 +751,31 @@
             return $('input[name="<?= csrf_token() ?>"]').first().val() || '<?= csrf_hash() ?>';
         };
 
+        function pickApiMessage(resp, fallbackText) {
+            var r = resp || {};
+            var candidates = [
+                r.error_text,
+                r.message,
+                r.description,
+                r.error && r.error.message,
+                r.error && r.error.description,
+                r.error && r.error.code,
+                r.data && r.data.message,
+                r.data && r.data.description,
+                r.data && r.data.error && r.data.error.message,
+                r.data && r.data.error && r.data.error.description,
+                r.data && r.data.error && r.data.error.code
+            ];
+
+            for (var i = 0; i < candidates.length; i++) {
+                if (typeof candidates[i] === 'string' && candidates[i].trim() !== '') {
+                    return candidates[i].trim();
+                }
+            }
+
+            return fallbackText;
+        }
+
         $('form.form1').on('submit', function(form) {
             $("#RegisterPatient").prop("disabled", true);
             form.preventDefault();
@@ -849,7 +874,7 @@
                         txnId = resp.txn_id || null;
                         abhaStep(2);
                     } else {
-                        showAlert('abha_step1_alert', 'danger', (resp && resp.error_text) ? resp.error_text : 'Failed to send OTP. Please try again.');
+                        showAlert('abha_step1_alert', 'danger', pickApiMessage(resp, 'Failed to send OTP. Please try again.'));
                     }
                 }, 'json').fail(function() {
                     $('#abha_get_otp_spinner').addClass('d-none');
@@ -912,7 +937,7 @@
                         );
                         abhaStep(4);
                     } else {
-                        showAlert('abha_step2_alert', 'danger', (resp && resp.error_text) ? resp.error_text : 'Invalid OTP. Please try again.');
+                        showAlert('abha_step2_alert', 'danger', pickApiMessage(resp, 'Invalid OTP. Please try again.'));
                     }
                 }, 'json').fail(function() {
                     $('#abha_verify_otp_spinner').addClass('d-none');
@@ -953,7 +978,7 @@
                         $('#link_step_2').show();
                         linkAlert('link_step1_alert', 'success', 'OTP sent to mobile ending ' + mobile.slice(-4) + '.');
                     } else {
-                        linkAlert('link_step1_alert', 'danger', (resp && resp.error_text) ? resp.error_text : 'Failed to send OTP.');
+                        linkAlert('link_step1_alert', 'danger', pickApiMessage(resp, 'Failed to send OTP.'));
                     }
                 }, 'json').fail(function() {
                     $('#abha_link_send_spinner').addClass('d-none');
@@ -1012,7 +1037,7 @@
                             '</div>'
                         );
                     } else {
-                        linkAlert('link_step2_alert', 'danger', (resp && resp.error_text) ? resp.error_text : 'OTP verification failed.');
+                        linkAlert('link_step2_alert', 'danger', pickApiMessage(resp, 'OTP verification failed.'));
                     }
                 }, 'json').fail(function() {
                     $('#abha_link_verify_spinner').addClass('d-none');
@@ -1046,7 +1071,7 @@
                         + '</div>';
                     $('#abha_bridge_test_result').html(html);
                 } else {
-                    $('#abha_bridge_test_result').html('<div class="alert alert-danger py-2">' + ((resp && resp.error_text) ? resp.error_text : 'Bridge test failed') + '</div>');
+                    $('#abha_bridge_test_result').html('<div class="alert alert-danger py-2">' + pickApiMessage(resp, 'Bridge test failed') + '</div>');
                 }
             }, 'json').fail(function(xhr) {
                 $('#abha_bridge_test_spinner').addClass('d-none');
@@ -1131,7 +1156,7 @@
 
                 $.getJSON('<?= base_url('abha/register/facility_qr') ?>', function(resp) {
                     if (!resp || resp.ok != 1 || !resp.qr_data) {
-                        var msg = (resp && resp.error_text) ? resp.error_text : 'Unable to load Health Facility QR.';
+                        var msg = pickApiMessage(resp, 'Unable to load Health Facility QR.');
                         $('#abhareg_facility_loading').html('');
                         $('#abhareg_facility_alert').html('<div class="alert alert-danger py-2">' + msg + '</div>');
                         return;
@@ -1376,7 +1401,7 @@
                         $('#abhareg_abha_status').html('<span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>VALID</span>');
                         $('#abhareg_goto_stepB').removeClass('d-none');
                     } else {
-                        var msg = (resp && resp.error_text) ? resp.error_text : (resp && resp.status ? 'Status: ' + resp.status : 'ABHA not found or invalid.');
+                        var msg = pickApiMessage(resp, (resp && resp.status ? 'Status: ' + resp.status : 'ABHA not found or invalid.'));
                         regAlert('abhareg_num_stepA_alert', 'danger', msg);
                         $('#abhareg_abha_status').html('<span class="badge bg-danger">INVALID</span>');
                     }
@@ -1416,7 +1441,7 @@
                         regTxnId = resp.txn_id || null;
                         onSuccess(mobile);
                     } else {
-                        regAlert(alertId, 'danger', (resp && resp.error_text) ? resp.error_text : 'Failed to send OTP.');
+                        regAlert(alertId, 'danger', pickApiMessage(resp, 'Failed to send OTP.'));
                     }
                 }, 'json').fail(function() {
                     $('#' + spinId).addClass('d-none');
@@ -1438,7 +1463,7 @@
                     if (resp && resp.ok == 1) {
                         showRegResult(resp);
                     } else {
-                        regAlert(alertId, 'danger', (resp && resp.error_text) ? resp.error_text : 'OTP verification failed.');
+                        regAlert(alertId, 'danger', pickApiMessage(resp, 'OTP verification failed.'));
                     }
                 }, 'json').fail(function() {
                     $('#' + spinId).addClass('d-none');

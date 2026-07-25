@@ -356,6 +356,30 @@ $_aadh = esc($data[0]->udai ?? '');
         if (html !== undefined) b.innerHTML = html;
     }
     function safe(s) { return $('<div>').text(s).html(); }
+    function pickApiMessage(res, fallbackText) {
+        var r = res || {};
+        var candidates = [
+            r.error_text,
+            r.message,
+            r.description,
+            r.error && r.error.message,
+            r.error && r.error.description,
+            r.error && r.error.code,
+            r.data && r.data.message,
+            r.data && r.data.description,
+            r.data && r.data.error && r.data.error.message,
+            r.data && r.data.error && r.data.error.description,
+            r.data && r.data.error && r.data.error.code
+        ];
+
+        for (var i = 0; i < candidates.length; i++) {
+            if (typeof candidates[i] === 'string' && candidates[i].trim() !== '') {
+                return candidates[i].trim();
+            }
+        }
+
+        return fallbackText;
+    }
 
     /* ── step indicator ──────────────────────────────────────────── */
     function setStep(n) {
@@ -464,7 +488,7 @@ $_aadh = esc($data[0]->udai ?? '');
                 setTimeout(function () { document.getElementById('cvp_otp_input').focus(); }, 80);
             } else {
                 showMsg('cvp_step1_msg', 'danger', '<i class="bi bi-x-circle me-1"></i>' +
-                    safe(res.error_text || res.message || res.error || 'Failed to send OTP.'));
+                    safe(pickApiMessage(res, 'Failed to send OTP.')));
             }
         });
     });
@@ -487,7 +511,8 @@ $_aadh = esc($data[0]->udai ?? '');
                 showMsg('cvp_step2_msg', 'success', '<i class="bi bi-check-circle me-1"></i>New OTP sent.');
                 $('#cvp_otp_input').val('').trigger('focus');
             } else {
-                showMsg('cvp_step2_msg', 'danger', 'Resend failed: ' + safe(res.message || res.error || ''));
+                showMsg('cvp_step2_msg', 'danger', '<i class="bi bi-x-circle me-1"></i>' +
+                    safe(pickApiMessage(res, 'Resend failed.')));
             }
         });
     });
@@ -506,7 +531,7 @@ $_aadh = esc($data[0]->udai ?? '');
             setBtn('cvp_btn_verify_otp', false, '<i class="bi bi-check-circle me-1"></i>Verify OTP');
             if (res.ok != 1) {
                 showMsg('cvp_step2_msg', 'danger', '<i class="bi bi-x-circle me-1"></i>' +
-                    safe(res.error_text || res.message || res.error || 'Verification failed.'));
+                    safe(pickApiMessage(res, 'Verification failed.')));
                 return;
             }
             var abhaData = extractAbha(res);
@@ -544,7 +569,7 @@ $_aadh = esc($data[0]->udai ?? '');
                 setTimeout(function () { document.getElementById('cvp_mob_otp_input').focus(); }, 80);
             } else {
                 showMsg('cvp_step3_send_msg', 'danger', '<i class="bi bi-x-circle me-1"></i>' +
-                    safe(res.error_text || res.message || res.error || 'Failed to send OTP.'));
+                    safe(pickApiMessage(res, 'Failed to send OTP.')));
             }
         });
     });
@@ -567,7 +592,7 @@ $_aadh = esc($data[0]->udai ?? '');
             setBtn('cvp_btn_mob_verify_otp', false, '<i class="bi bi-check-circle me-1"></i>Verify Mobile OTP');
             if (res.ok != 1) {
                 showMsg('cvp_step3_otp_msg', 'danger', '<i class="bi bi-x-circle me-1"></i>' +
-                    safe(res.error_text || res.message || res.error || 'Verification failed.'));
+                    safe(pickApiMessage(res, 'Verification failed.')));
                 return;
             }
             var abhaData = extractAbha(res);
@@ -626,7 +651,7 @@ $_aadh = esc($data[0]->udai ?? '');
                 setTimeout(function () { document.getElementById('cvpv_a_otp').focus(); }, 80);
             } else {
                 showMsg('cvpv_a_step1_msg', 'danger', '<i class="bi bi-x-circle me-1"></i>' +
-                    safe(res.error_text || res.message || res.error || 'Failed to send OTP.'));
+                    safe(pickApiMessage(res, 'Failed to send OTP.')));
             }
         });
     });
@@ -649,7 +674,7 @@ $_aadh = esc($data[0]->udai ?? '');
             setBtn('cvpv_btn_a_verify', false, '<i class="bi bi-check-circle me-1"></i>Verify &amp; Link ABHA');
             if (res.ok != 1) {
                 showMsg('cvpv_a_step2_msg', 'danger', '<i class="bi bi-x-circle me-1"></i>' +
-                    safe(res.error_text || res.message || res.error || 'Verification failed.'));
+                    safe(pickApiMessage(res, 'Verification failed.')));
                 return;
             }
             var abhaData = extractAbha(res);
@@ -687,7 +712,7 @@ $_aadh = esc($data[0]->udai ?? '');
                 setTimeout(function () { document.getElementById('cvpv_m_otp').focus(); }, 80);
             } else {
                 showMsg('cvpv_m_step1_msg', 'danger', '<i class="bi bi-x-circle me-1"></i>' +
-                    safe(res.error_text || res.message || res.error || 'Failed to send OTP.'));
+                    safe(pickApiMessage(res, 'Failed to send OTP.')));
             }
         });
     });
@@ -707,7 +732,7 @@ $_aadh = esc($data[0]->udai ?? '');
             setBtn('cvpv_btn_m_verify', false, '<i class="bi bi-check-circle me-1"></i>Verify &amp; Link ABHA');
             if (res.ok != 1) {
                 showMsg('cvpv_m_step2_msg', 'danger', '<i class="bi bi-x-circle me-1"></i>' +
-                    safe(res.error_text || res.message || res.error || 'Verification failed.'));
+                    safe(pickApiMessage(res, 'Verification failed.')));
                 return;
             }
             var abhaData = extractAbha(res);
