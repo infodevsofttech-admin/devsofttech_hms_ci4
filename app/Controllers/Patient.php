@@ -986,7 +986,9 @@ class Patient extends BaseController
 		$opdFields = $this->db->getFieldNames('opd_master') ?? [];
 		$opdSelect = [
 			'opd_id',
+			'opd_no',
 			'opd_code',
+			'doc_id',
 			'doc_name',
 			'apointment_date',
 		];
@@ -1001,12 +1003,12 @@ class Patient extends BaseController
 
 		$totalOpdVisits = count($opdList);
 		$lastVisitDate = '';
-		$lastVisitSrNo = '';
+		$lastVisitOpdNo = '';
 		if ($totalOpdVisits > 0 && !empty($opdList[0]['apointment_date'])) {
 			$lastVisitDate = (string) $opdList[0]['apointment_date'];
 		}
 		if ($totalOpdVisits > 0) {
-			$lastVisitSrNo = trim((string) ($opdList[0]['queue_no'] ?? ''));
+			$lastVisitOpdNo = trim((string) (($opdList[0]['opd_no'] ?? '') !== '' ? $opdList[0]['opd_no'] : ($opdList[0]['opd_code'] ?? '')));
 		}
 
 		$opdIds = array_column($opdList, 'opd_id');
@@ -1119,7 +1121,7 @@ class Patient extends BaseController
 			'opdGroups' => $opdGroups,
 			'totalOpdVisits' => $totalOpdVisits,
 			'lastVisitDate' => $lastVisitDate,
-			'lastVisitSrNo' => $lastVisitSrNo,
+			'lastVisitOpdNo' => $lastVisitOpdNo,
 			'backUrl' => $backUrl,
 			'backTitle' => $backTitle,
 		]);

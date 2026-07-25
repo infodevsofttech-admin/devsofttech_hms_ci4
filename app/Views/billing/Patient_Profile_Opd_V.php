@@ -21,7 +21,7 @@ $abhaIsVerified = $abhaVerifiedStatus === 'VERIFIED' || ($abhaKycVerified && $ab
 $totalOpdVisits = (int) ($totalOpdVisits ?? 0);
 $lastVisitDateRaw = trim((string) ($lastVisitDate ?? ''));
 $lastVisitDateLabel = $lastVisitDateRaw !== '' ? date('d-m-Y', strtotime($lastVisitDateRaw)) : 'Not available';
-$lastVisitSrNo = trim((string) ($lastVisitSrNo ?? ''));
+$lastVisitOpdNo = trim((string) ($lastVisitOpdNo ?? ''));
 
 $patientAge = trim((string) get_age_1($patient->dob ?? null, $patient->age ?? '', $patient->age_in_month ?? '', $patient->estimate_dob ?? ''));
 $genderRaw = trim((string) ($patient->xgender ?? $patient->gender ?? ''));
@@ -81,7 +81,7 @@ if ($patientPhotoPath === '') {
                         <span><strong>Age:</strong> <?= $patientAge !== '' ? esc($patientAge) : 'Not available' ?></span>
                         <span><strong>Gender:</strong> <?= esc($patientGender) ?></span>
                         <span><strong>Last Visit:</strong> <?= esc($lastVisitDateLabel) ?></span>
-                        <span><strong>OPD Sr No.:</strong> <?= $lastVisitSrNo !== '' ? esc($lastVisitSrNo) : 'Not available' ?></span>
+                        <span><strong>OPD No.:</strong> <?= $lastVisitOpdNo !== '' ? esc($lastVisitOpdNo) : 'Not available' ?></span>
                         <span><strong>No. of Visit:</strong> <?= esc((string) $totalOpdVisits) ?></span>
                     </div>
                 </div>
@@ -203,7 +203,7 @@ if ($patientPhotoPath === '') {
                                         <span class="text-muted ms-2">Dr. <?= esc($group['doc_name']) ?></span>
                                     </div>
                                     <div class="text-muted text-end">
-                                        <?= esc($group['opd_date']) ?> <?= esc($group['queue_no']) ?>
+                                        <?= esc($group['opd_date']) ?> <?= esc($group['queue_no'] !== '' ? $group['queue_no'] : ($group['rx_queue_no'] ?? '')) ?>
                                     </div>
                                 </div>
 
