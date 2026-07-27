@@ -1660,11 +1660,10 @@ class Patient extends BaseController
 				return $this->response->setJSON([
 					'ok' => 1,
 					'phase' => 'REQUESTED',
-					// Avoid repeated not-found polling loops against bridge.
-					'poll_again' => 0,
-					'reset_request_id' => 1,
+					// Keep tracking the same first request; bridge may still be processing callbacks.
+					'poll_again' => 1,
 					'request_id' => $flowRefId,
-					'message' => 'Consent status not found on bridge for this request yet. Please retry sync after 1-2 minutes.',
+					'message' => 'Consent request is still being processed. Waiting for bridge callback update.',
 					'data' => [
 						'consent_request' => $consentResult,
 						'consent_reconcile' => $reconcileResult,
@@ -3103,8 +3102,8 @@ class Patient extends BaseController
 				$phase = 'DENIED';
 				$priority = 300;
 			} elseif ($status === 'FAILED' && $httpCode === 404 && stripos($errorText, 'consent record not found') !== false) {
-				$phase = 'FAILED';
-				$priority = 280;
+				$phase = 'REQUESTED';
+				$priority = 200;
 			} elseif ($status === 'FAILED') {
 				$phase = 'FAILED';
 				$priority = 260;
@@ -3121,7 +3120,7 @@ class Patient extends BaseController
 			} elseif ($phase === 'DENIED') {
 				$message = 'Consent was denied/revoked/expired in previous attempt.';
 			} elseif ($status === 'FAILED' && $httpCode === 404) {
-				$message = 'Last consent request was not found on bridge. Start a new consent request.';
+				$message = 'Last consent request is still being processed by bridge. Please wait and refresh.';
 			} elseif ($phase === 'FAILED') {
 				$message = 'Last consent request failed. Start a new consent request.';
 			}
