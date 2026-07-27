@@ -1476,9 +1476,10 @@ class Patient extends BaseController
 				return $this->response->setJSON([
 					'ok' => 1,
 					'phase' => 'REQUESTED',
-					'poll_again' => 1,
+					// Avoid repeated not-found polling loops against bridge.
+					'poll_again' => 0,
 					'request_id' => $flowRefId,
-					'message' => 'Consent request is still being indexed. Please wait and retry automatically.',
+					'message' => 'Consent status not found on bridge for this request yet. Please retry sync after 1-2 minutes.',
 					'data' => [
 						'consent_request' => $consentResult,
 						'consent_reconcile' => $reconcileResult,
