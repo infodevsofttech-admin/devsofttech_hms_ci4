@@ -602,6 +602,7 @@ class M3HiuWorkflowService
     private function normalizePayload(array $payload): array
     {
         $normalized = $payload;
+        $generatedRequestId = false;
 
         // Accept both legacy snake_case and guide-defined camelCase keys.
         if (! isset($normalized['request_id']) && isset($normalized['requestId'])) {
@@ -641,6 +642,7 @@ class M3HiuWorkflowService
 
         if ($normalized['request_id'] === '') {
             $normalized['request_id'] = 'REQ-HIU-' . date('YmdHis') . '-' . strtoupper(bin2hex(random_bytes(3)));
+            $generatedRequestId = true;
         }
 
         if (! isset($normalized['requestId']) || trim((string) $normalized['requestId']) === '') {
@@ -656,11 +658,14 @@ class M3HiuWorkflowService
             $normalized['consentId'] = $normalized['consent_id'];
         }
 
+        $normalized['__generated_request_id'] = $generatedRequestId ? 1 : 0;
+
         return $normalized;
     }
 
     private function preparePayloadForOperation(string $operation, array $normalized): array
     {
+        $requestIdGenerated = (int) ($normalized['__generated_request_id'] ?? 0) === 1;
         $clean = $this->stripInternalNoise($normalized);
         $requestId = trim((string) ($clean['requestId'] ?? $clean['request_id'] ?? ''));
         if ($requestId === '') {
@@ -794,6 +799,9 @@ class M3HiuWorkflowService
 
         if ($operation === 'consent_reconcile') {
             $requestIdRef = trim((string) ($clean['request_id'] ?? $clean['requestId'] ?? ''));
+            if ($requestIdGenerated) {
+                $requestIdRef = '';
+            }
             $consentRequestId = trim((string) ($clean['abdm_consent_request_id'] ?? $clean['consentRequestId'] ?? ''));
             $consentId = trim((string) ($clean['abdm_consent_artifact_id'] ?? $clean['consentId'] ?? $clean['consent_id'] ?? ''));
 
@@ -823,6 +831,15 @@ class M3HiuWorkflowService
         }
 
         if ($operation === 'data_fetch') {
+            $requestFallback = '';
+            if (! $requestIdGenerated) {
+                $requestFallback = trim((string) (
+                    $clean['request_id']
+                    ?? $clean['requestId']
+                    ?? ''
+                ));
+            }
+
             $consentId = trim((string) (
                 $clean['abdm_consent_artifact_id']
                 ?? $clean['consentId']
@@ -830,9 +847,7 @@ class M3HiuWorkflowService
                 ?? $clean['abdm_consent_request_id']
                 ?? $clean['consentRequestId']
                 ?? $clean['consent_request_id']
-                ?? $clean['request_id']
-                ?? $clean['requestId']
-                ?? ''
+                ?? $requestFallback
             ));
             if ($consentId === '') {
                 $consentId = $this->resolveAbdmConsentArtifactIdFromWorkflow($clean);
@@ -871,7 +886,8 @@ class M3HiuWorkflowService
             $payload['csrf_test_name'],
             $payload['patient_id'],
             $payload['abha_id'],
-            $payload['abhaId']
+            $payload['abhaId'],
+            $payload['__generated_request_id']
         );
 
         if (isset($payload['requestId'])) {

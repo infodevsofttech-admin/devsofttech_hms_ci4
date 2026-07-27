@@ -1375,18 +1375,36 @@ class Patient extends BaseController
 			}
 
 			if ((int) ($consentResult['ok'] ?? 0) !== 1) {
-				$httpCode = (int) ($consentResult['http_code'] ?? 422);
-				if ($httpCode < 100 || $httpCode > 599) {
-					$httpCode = 422;
+				$errorText = trim((string) ($consentResult['error_text'] ?? 'Consent request failed.'));
+				$isDuplicateConsent = stripos($errorText, 'ABDM-1070') !== false
+					|| stripos($errorText, 'Duplicate consent request') !== false;
+
+				if ($isDuplicateConsent) {
+					$existingRequestId = $this->findLatestAbdmGatewayRequestId($abhaContext['abha_address']);
+					if ($existingRequestId !== '') {
+						$consentResult['ok'] = 1;
+						$consentResult['http_code'] = 200;
+						$consentResult['request_id'] = $existingRequestId;
+						$consentResult['workflow_state'] = 'REQUESTED';
+						$consentResult['reused_existing_request'] = 1;
+						$consentResult['message'] = 'Duplicate consent detected. Reusing latest request for reconciliation.';
+					}
 				}
 
-				return $this->response->setStatusCode($httpCode)->setJSON([
-					'ok' => 0,
-					'phase' => 'REQUEST_FAILED',
-					'error' => (string) ($consentResult['error_text'] ?? 'Consent request failed.'),
-					'request_id' => (string) ($consentResult['request_id'] ?? ''),
-					'data' => $consentResult,
-				]);
+				if ((int) ($consentResult['ok'] ?? 0) !== 1) {
+					$httpCode = (int) ($consentResult['http_code'] ?? 422);
+					if ($httpCode < 100 || $httpCode > 599) {
+						$httpCode = 422;
+					}
+
+					return $this->response->setStatusCode($httpCode)->setJSON([
+						'ok' => 0,
+						'phase' => 'REQUEST_FAILED',
+						'error' => (string) ($consentResult['error_text'] ?? 'Consent request failed.'),
+						'request_id' => (string) ($consentResult['request_id'] ?? ''),
+						'data' => $consentResult,
+					]);
+				}
 			}
 
 			$flowRefId = trim((string) (
@@ -1401,9 +1419,6 @@ class Patient extends BaseController
 				?? $consentResult['abdm_consent_request_id']
 				?? ''
 			));
-			if ($consentRequestRef === '') {
-				$consentRequestRef = $flowRefId;
-			}
 			$consentArtifactRef = trim((string) (
 				$consentResult['consent_id']
 				?? $consentResult['abdm_consent_artifact_id']
@@ -1422,13 +1437,21 @@ class Patient extends BaseController
 			]);
 		}
 
+		if ($consentRequestRef === '' && preg_match('/^REQ-HIU-/i', $flowRefId) === 1) {
+			$resolvedRequestId = $this->findLatestAbdmGatewayRequestId($abhaContext['abha_address']);
+			if ($resolvedRequestId !== '') {
+				$flowRefId = $resolvedRequestId;
+			}
+		}
+
 		$reconcilePayload = [
 			'abha_address' => $abhaContext['abha_address'],
 		];
+		if ($flowRefId !== '') {
+			$reconcilePayload['request_id'] = $flowRefId;
+		}
 		if ($consentRequestRef !== '') {
 			$reconcilePayload['consentRequestId'] = $consentRequestRef;
-		} else {
-			$reconcilePayload['request_id'] = $flowRefId;
 		}
 
 		try {
@@ -2727,6 +2750,54 @@ class Patient extends BaseController
 		}
 
 		return 'REQUESTED';
+	}
+
+	private function findLatestAbdmGatewayRequestId(string $abhaAddress): string
+	{
+		$abhaAddress = trim($abhaAddress);
+		if ($abhaAddress === '' || ! $this->db->tableExists('abdm_hiu_workflows')) {
+			return '';
+		}
+
+		$fields = $this->db->getFieldNames('abdm_hiu_workflows') ?? [];
+		$select = ['request_id', 'response_json'];
+		if (in_array('gateway_request_id', $fields, true)) {
+			$select[] = 'gateway_request_id';
+		}
+		if (in_array('hms_request_id', $fields, true)) {
+			$select[] = 'hms_request_id';
+		}
+
+		$rows = $this->db->table('abdm_hiu_workflows')
+			->select(implode(', ', $select))
+			->where('operation', 'consent_request')
+			->where('abha_address', $abhaAddress)
+			->where('status', 'success')
+			->orderBy('id', 'DESC')
+			->get(20)
+			->getResultArray();
+
+		foreach ($rows as $row) {
+			$candidates = [
+				trim((string) ($row['gateway_request_id'] ?? '')),
+				trim((string) ($row['request_id'] ?? '')),
+			];
+
+			$decoded = json_decode((string) ($row['response_json'] ?? ''), true);
+			if (is_array($decoded)) {
+				$candidates[] = trim((string) ($decoded['gateway_request_id'] ?? ''));
+				$candidates[] = trim((string) ($decoded['request_id'] ?? ''));
+				$candidates[] = trim((string) ($decoded['requestId'] ?? ''));
+			}
+
+			foreach ($candidates as $candidate) {
+				if ($candidate !== '' && preg_match('/^REQ-/i', $candidate) === 1) {
+					return $candidate;
+				}
+			}
+		}
+
+		return '';
 	}
 
 
