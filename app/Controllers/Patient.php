@@ -1547,6 +1547,74 @@ class Patient extends BaseController
 					|| stripos($errorText, 'NOT_FOUND') !== false);
 
 			if ($isNonFatalPending) {
+				$fallbackLookup = [
+					'abha_address' => $abhaContext['abha_address'],
+				];
+				if ($consentRequestRef !== '') {
+					$fallbackLookup['consentRequestId'] = $consentRequestRef;
+				}
+				if ($consentArtifactRef !== '') {
+					$fallbackLookup['consentId'] = $consentArtifactRef;
+				}
+				if ($flowRefId !== '') {
+					$fallbackLookup['request_id'] = $flowRefId;
+				}
+
+				if ($consentRequestRef !== '' || $consentArtifactRef !== '') {
+					try {
+						$fallbackReconcile = $service->runOperation('consent_reconcile', $fallbackLookup);
+					} catch (\Throwable $e) {
+						$fallbackReconcile = [
+							'ok' => 0,
+							'http_code' => 500,
+							'error_text' => 'Unable to reconcile consent status using fallback reference: ' . $e->getMessage(),
+						];
+					}
+
+					if ((int) ($fallbackReconcile['ok'] ?? 0) === 1) {
+						$reconcileResult = $fallbackReconcile;
+						$state = $this->deriveAutoFlowState($reconcileResult);
+						if ($state === 'GRANTED') {
+							$fetchPayload = [
+								'abha_address' => $abhaContext['abha_address'],
+								'consentId' => $consentArtifactRef,
+							];
+							if ($fetchPayload['consentId'] === '') {
+								unset($fetchPayload['consentId']);
+								if ($consentRequestRef !== '') {
+									$fetchPayload['consentRequestId'] = $consentRequestRef;
+								}
+							}
+
+							try {
+								$fetchResult = $service->runOperation('data_fetch', $fetchPayload);
+							} catch (\Throwable $e) {
+								return $this->response->setStatusCode(500)->setJSON([
+									'ok' => 0,
+									'phase' => 'FETCH_FAILED',
+									'error' => 'Unable to fetch ABDM content after fallback reconcile: ' . $e->getMessage(),
+									'request_id' => $flowRefId,
+								]);
+							}
+
+							if ((int) ($fetchResult['ok'] ?? 0) === 1) {
+								return $this->response->setJSON([
+									'ok' => 1,
+									'phase' => 'COMPLETED',
+									'poll_again' => 0,
+									'request_id' => $flowRefId,
+									'message' => 'Consent status was resolved using fallback bridge reference and data fetched successfully.',
+									'data' => [
+										'consent_request' => $consentResult,
+										'consent_reconcile' => $reconcileResult,
+										'data_fetch' => $fetchResult,
+									],
+								]);
+							}
+						}
+					}
+				}
+
 				$altConsentRequestRef = trim((string) ($consentRequestRef !== '' ? $consentRequestRef : ($lastSync['consent_request_id'] ?? '')));
 				$altConsentArtifactRef = trim((string) ($consentArtifactRef !== '' ? $consentArtifactRef : ($lastSync['consent_id'] ?? '')));
 				$canDirectFetch = ($altConsentArtifactRef !== '' && preg_match('/^REQ-/i', $altConsentArtifactRef) !== 1)
