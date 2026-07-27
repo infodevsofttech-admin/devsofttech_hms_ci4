@@ -3027,7 +3027,7 @@ class Patient extends BaseController
 		}
 
 		$fields = $this->db->getFieldNames('abdm_hiu_workflows') ?? [];
-		$select = ['operation', 'workflow_state', 'status', 'request_id', 'consent_id', 'updated_at', 'last_error', 'http_code', 'response_json'];
+		$select = ['id', 'operation', 'workflow_state', 'status', 'request_id', 'consent_id', 'updated_at', 'last_error', 'http_code', 'response_json'];
 		if (in_array('gateway_request_id', $fields, true)) {
 			$select[] = 'gateway_request_id';
 		}
@@ -3060,6 +3060,8 @@ class Patient extends BaseController
 
 		$best = null;
 		$bestPriority = -1;
+		$bestGrantedOrCompleted = null;
+		$bestGrantedOrCompletedId = -1;
 
 		foreach ($rows as $row) {
 			$decoded = json_decode((string) ($row['response_json'] ?? ''), true);
@@ -3152,6 +3154,7 @@ class Patient extends BaseController
 
 			if ($best === null || $priority > $bestPriority) {
 				$best = [
+					'id' => (int) ($row['id'] ?? 0),
 					'phase' => $phase,
 					'request_id' => $requestId,
 					'consent_request_id' => $consentRequestId,
@@ -3163,10 +3166,39 @@ class Patient extends BaseController
 				];
 				$bestPriority = $priority;
 			}
+
+			if (in_array($phase, ['GRANTED', 'COMPLETED'], true)) {
+				$currentId = (int) ($row['id'] ?? 0);
+				if ($currentId > $bestGrantedOrCompletedId) {
+					$bestGrantedOrCompleted = [
+						'id' => $currentId,
+						'phase' => $phase,
+						'request_id' => $requestId,
+						'consent_request_id' => $consentRequestId,
+						'consent_id' => $consentId,
+						'message' => $message,
+						'updated_at' => trim((string) ($row['updated_at'] ?? '')),
+						'operation' => strtolower(trim((string) ($row['operation'] ?? ''))),
+						'status' => strtolower(trim((string) ($row['status'] ?? ''))),
+					];
+					$bestGrantedOrCompletedId = $currentId;
+				}
+			}
 		}
 
 		if (! is_array($best)) {
 			return $snapshot;
+		}
+
+		// Guardrail: if top-ranked row is transient pending/not-found, but we already
+		// have a more recent granted/completed record, prefer the success state.
+		if (
+			is_array($bestGrantedOrCompleted)
+			&& in_array((string) ($best['phase'] ?? ''), ['REQUESTED', 'PENDING'], true)
+			&& (string) ($best['status'] ?? '') === 'failed'
+			&& stripos((string) ($best['message'] ?? ''), 'processed by bridge') !== false
+		) {
+			$best = $bestGrantedOrCompleted;
 		}
 
 		if (($best['request_id'] ?? '') === '') {
