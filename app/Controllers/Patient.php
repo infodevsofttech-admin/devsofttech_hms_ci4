@@ -1466,7 +1466,26 @@ class Patient extends BaseController
 		}
 
 		if ((int) ($reconcileResult['ok'] ?? 0) !== 1) {
+			$errorText = trim((string) ($reconcileResult['error_text'] ?? 'Consent status check failed.'));
 			$httpCode = (int) ($reconcileResult['http_code'] ?? 422);
+			$isNonFatalPending = $httpCode === 404
+				&& (stripos($errorText, 'Consent record not found') !== false
+					|| stripos($errorText, 'NOT_FOUND') !== false);
+
+			if ($isNonFatalPending) {
+				return $this->response->setJSON([
+					'ok' => 1,
+					'phase' => 'REQUESTED',
+					'poll_again' => 1,
+					'request_id' => $flowRefId,
+					'message' => 'Consent request is still being indexed. Please wait and retry automatically.',
+					'data' => [
+						'consent_request' => $consentResult,
+						'consent_reconcile' => $reconcileResult,
+					],
+				]);
+			}
+
 			if ($httpCode < 100 || $httpCode > 599) {
 				$httpCode = 422;
 			}
