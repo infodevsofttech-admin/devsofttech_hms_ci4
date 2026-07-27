@@ -316,6 +316,10 @@ if ($patientPhotoPath === '') {
                                         <span class="abdm-btn-spinner spinner-border spinner-border-sm me-1 d-none" role="status" aria-hidden="true"></span>
                                         <span id="btnAutoAbdmFlowLabel">Fetch ABDM Records</span>
                                     </button>
+                                    <button type="button" class="btn btn-success d-none" id="btnFetchRecordsOnly">
+                                        <span class="abdm-btn-spinner spinner-border spinner-border-sm me-1 d-none" role="status" aria-hidden="true"></span>
+                                        <span id="btnFetchRecordsOnlyLabel">Fetch Records</span>
+                                    </button>
                                     <div>
                                         <button type="button" class="btn btn-link btn-sm p-0 mt-1" id="btnLoadAbdmDocs">Refresh list</button>
                                     </div>
@@ -421,6 +425,7 @@ $(function() {
     var patientId = <?= (int) ($patient->id ?? 0) ?>;
     var abdmDocumentsUrl = '<?= base_url('billing/patient/abdm_documents/' . (int) ($patient->id ?? 0)) ?>';
     var abdmAutoFlowUrl = '<?= base_url('billing/patient/abdm_content_auto_flow/' . (int) ($patient->id ?? 0)) ?>';
+    var abdmFetchOnlyUrl = '<?= base_url('billing/patient/abdm_content_fetch_only/' . (int) ($patient->id ?? 0)) ?>';
     var abdmDocDetailBaseUrl = '<?= base_url('billing/patient/abdm_document_detail/' . (int) ($patient->id ?? 0)) ?>';
     var currentAbdmRows = [];
     var autoFlowTimer = null;
@@ -429,6 +434,7 @@ $(function() {
     var autoFlowMaxAttempts = 15;
     var autoFlowNeedsFreshRequest = false;
     var autoFlowRunning = false;
+    var fetchOnlyRunning = false;
 
     function updateConsentBadge(phase, needsFresh) {
         var text = (phase || '').toString().toUpperCase();
@@ -457,9 +463,22 @@ $(function() {
     }
 
     function applyConsentButtonState() {
-        $('#btnAutoAbdmFlow').prop('disabled', autoFlowRunning);
+        $('#btnAutoAbdmFlow').prop('disabled', autoFlowRunning || fetchOnlyRunning);
         $('#btnAutoAbdmFlow .abdm-btn-spinner').toggleClass('d-none', !autoFlowRunning);
         $('#btnAutoAbdmFlowLabel').text(autoFlowRunning ? 'Fetching...' : 'Fetch ABDM Records');
+    }
+
+    function applyFetchOnlyButtonState() {
+        $('#btnFetchRecordsOnly').prop('disabled', autoFlowRunning || fetchOnlyRunning);
+        $('#btnFetchRecordsOnly .abdm-btn-spinner').toggleClass('d-none', !fetchOnlyRunning);
+        $('#btnFetchRecordsOnlyLabel').text(fetchOnlyRunning ? 'Fetching...' : 'Fetch Records');
+    }
+
+    // Only show the standalone "Fetch Records" action once consent has actually
+    // been granted (or already completed once) — it re-pulls data using the
+    // saved consent reference without creating a brand-new consent request.
+    function showFetchRecordsButton(show) {
+        $('#btnFetchRecordsOnly').toggleClass('d-none', !show);
     }
 
     var zoom = 1;
@@ -677,6 +696,7 @@ $(function() {
                     setFlowProgress(0);
                 }
 
+                showFetchRecordsButton(lastPhase === 'GRANTED' || lastPhase === 'COMPLETED');
                 updateConsentBadge(lastPhase, autoFlowNeedsFreshRequest);
 
                 var baseMsg = 'Loaded ' + currentAbdmRows.length + ' fetched ABDM record(s).';
@@ -763,6 +783,7 @@ $(function() {
                 } else if (phase === 'REQUESTED' || phase === 'PENDING') {
                     setFlowProgress(1);
                 }
+                showFetchRecordsButton(phase === 'GRANTED' || phase === 'COMPLETED');
                 updateConsentBadge(phase, autoFlowNeedsFreshRequest);
 
                 $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text(info + (autoFlowRequestId ? (' | Request ID: ' + autoFlowRequestId) : ''));
@@ -815,6 +836,46 @@ $(function() {
             });
     }
 
+    // Standalone fetch: consent is already GRANTED, so this skips consent_request
+    // and reconcile polling entirely and just pulls data using the saved consent
+    // reference. Used by the "Fetch Records" button once consent is granted.
+    function runFetchOnlyStep() {
+        if (fetchOnlyRunning || autoFlowRunning) {
+            return;
+        }
+        fetchOnlyRunning = true;
+        applyFetchOnlyButtonState();
+        applyConsentButtonState();
+        $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text('Fetching latest records using existing granted consent...');
+
+        fetch(abdmFetchOnlyUrl, { credentials: 'same-origin' })
+            .then(function(resp) { return resp.json().then(function(data) { return { status: resp.status, data: data }; }); })
+            .then(function(wrapped) {
+                var data = wrapped.data;
+                if (!data || data.ok !== 1) {
+                    throw new Error((data && data.error) || 'Fetch failed.');
+                }
+
+                setFlowProgress(3);
+                showFetchRecordsButton(true);
+                updateConsentBadge('COMPLETED', false);
+
+                var info = (data.message || 'Records fetched successfully.').toString();
+                $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text(info);
+
+                fetchOnlyRunning = false;
+                applyFetchOnlyButtonState();
+                applyConsentButtonState();
+                loadAbdmDocs();
+            })
+            .catch(function(err) {
+                fetchOnlyRunning = false;
+                applyFetchOnlyButtonState();
+                applyConsentButtonState();
+                $('#abdmStatusBox').removeClass('text-muted').addClass('text-danger').text('Fetch failed: ' + (err.message || err));
+            });
+    }
+
     $(document).off('click.abdmOpd', '#btnLoadAbdmDocs').on('click.abdmOpd', '#btnLoadAbdmDocs', function() {
         loadAbdmDocs();
     });
@@ -854,6 +915,10 @@ $(function() {
         runAutoFlowStep();
     });
 
+    $(document).off('click.abdmOpd', '#btnFetchRecordsOnly').on('click.abdmOpd', '#btnFetchRecordsOnly', function() {
+        runFetchOnlyStep();
+    });
+
     $(document).off('shown.bs.tab.abdmOpd', '[data-bs-target="#opd-abdm-tab"]').on('shown.bs.tab.abdmOpd', '[data-bs-target="#opd-abdm-tab"]', function() {
         if (!currentAbdmRows.length) {
             loadAbdmDocs();
@@ -863,6 +928,7 @@ $(function() {
     $('[data-bs-toggle="tooltip"]').tooltip();
 
     applyConsentButtonState();
+    applyFetchOnlyButtonState();
     updateConsentBadge('IDLE', false);
 });
 </script>

@@ -500,6 +500,7 @@ $routes->group('billing', function($routes) {
     $routes->get('patient/abdm_document_detail/(:num)/(:num)', 'Patient::abdm_document_detail/$1/$2');
     $routes->get('patient/abdm_content_request/(:num)', 'Patient::abdm_content_request/$1');
     $routes->get('patient/abdm_content_auto_flow/(:num)', 'Patient::abdm_content_auto_flow/$1');
+    $routes->get('patient/abdm_content_fetch_only/(:num)', 'Patient::abdm_content_fetch_only/$1');
     $routes->get('patient/abdm_timeline/(:num)', 'Patient::abdm_timeline/$1');
     $routes->post('patient/save_profile_image/(:num)', 'Patient::save_profile_image/$1');
     $routes->match(['GET', 'POST'], 'patient/patient_file_upload/(:num)', 'Patient::patient_file_upload/$1');

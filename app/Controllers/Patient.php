@@ -1756,6 +1756,103 @@ class Patient extends BaseController
 		]);
 	}
 
+	/**
+	 * Fetch-only action for a patient whose consent is already GRANTED.
+	 * Unlike abdm_content_auto_flow(), this does NOT create a new consent
+	 * request and does NOT re-run consent reconcile polling — it directly
+	 * pulls health data using the already-saved consent reference. This
+	 * avoids spamming the bridge with duplicate consent_request/reconcile
+	 * calls just to re-fetch already-granted records.
+	 */
+	public function abdm_content_fetch_only(int $pno)
+	{
+		if (! $this->db->tableExists('patient_master')) {
+			return $this->response->setStatusCode(500)->setJSON([
+				'ok' => 0,
+				'error' => 'patient_master table not found',
+			]);
+		}
+
+		$patientRow = $this->db->table('patient_master')->where('id', $pno)->get()->getRowArray();
+		if (! is_array($patientRow)) {
+			return $this->response->setStatusCode(404)->setJSON([
+				'ok' => 0,
+				'error' => 'Patient not found',
+			]);
+		}
+
+		$abhaContext = $this->buildAbhaProfileContext($patientRow);
+		if ($abhaContext['abha_address'] === '') {
+			return $this->response->setStatusCode(422)->setJSON([
+				'ok' => 0,
+				'error' => 'ABHA Address not available for this patient.',
+			]);
+		}
+
+		$lastSync = $this->getLatestAbdmSyncSnapshot((string) ($abhaContext['abha_address'] ?? ''));
+		$phase = strtoupper(trim((string) ($lastSync['phase'] ?? '')));
+		if (! in_array($phase, ['GRANTED', 'COMPLETED'], true)) {
+			return $this->response->setStatusCode(422)->setJSON([
+				'ok' => 0,
+				'phase' => $phase !== '' ? $phase : 'IDLE',
+				'error' => 'Consent is not granted yet. Use "Fetch ABDM Records" to send/track a consent request first.',
+			]);
+		}
+
+		$consentRequestRef = trim((string) ($lastSync['consent_request_id'] ?? ''));
+		$consentArtifactRef = trim((string) ($lastSync['consent_id'] ?? ''));
+		if ($consentArtifactRef === '' && $consentRequestRef === '') {
+			return $this->response->setStatusCode(422)->setJSON([
+				'ok' => 0,
+				'phase' => $phase,
+				'error' => 'No saved consent reference found. Use "Fetch ABDM Records" to re-establish consent.',
+			]);
+		}
+
+		$service = new \App\Libraries\Abdm\M3HiuWorkflowService();
+		$fetchPayload = [
+			'abha_address' => $abhaContext['abha_address'],
+		];
+		if ($consentArtifactRef !== '') {
+			$fetchPayload['consentId'] = $consentArtifactRef;
+		} else {
+			$fetchPayload['consentRequestId'] = $consentRequestRef;
+		}
+
+		try {
+			$fetchResult = $service->runOperation('data_fetch', $fetchPayload);
+		} catch (\Throwable $e) {
+			return $this->response->setStatusCode(500)->setJSON([
+				'ok' => 0,
+				'phase' => 'FETCH_FAILED',
+				'error' => 'Unable to fetch ABDM content: ' . $e->getMessage(),
+			]);
+		}
+
+		if ((int) ($fetchResult['ok'] ?? 0) !== 1) {
+			$httpCode = (int) ($fetchResult['http_code'] ?? 422);
+			if ($httpCode < 100 || $httpCode > 599) {
+				$httpCode = 422;
+			}
+
+			return $this->response->setStatusCode($httpCode)->setJSON([
+				'ok' => 0,
+				'phase' => 'FETCH_FAILED',
+				'error' => (string) ($fetchResult['error_text'] ?? 'Data fetch failed.'),
+				'data' => ['data_fetch' => $fetchResult],
+			]);
+		}
+
+		return $this->response->setJSON([
+			'ok' => 1,
+			'phase' => 'COMPLETED',
+			'message' => 'Records fetched successfully using existing granted consent.',
+			'documents_persisted' => (int) ($fetchResult['documents_persisted'] ?? 0),
+			'documents_updated' => (int) ($fetchResult['documents_updated'] ?? 0),
+			'data' => ['data_fetch' => $fetchResult],
+		]);
+	}
+
 	public function abdm_timeline(int $pno)
 	{
 		if (! $this->db->tableExists('patient_master')) {

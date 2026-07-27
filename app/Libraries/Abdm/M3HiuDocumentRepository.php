@@ -60,8 +60,13 @@ class M3HiuDocumentRepository
                 $resolvedAbha = $abhaAddress !== '' ? $abhaAddress : trim((string) ($summary['abha_address'] ?? ''));
                 $patientMap = $this->mapPatientByAbha($resolvedAbha, (string) ($summary['abha_number'] ?? ''));
 
+                // NOTE: request_id is intentionally excluded from the dedup key.
+                // It is unique per polling/fetch call, so including it here would
+                // create a brand-new duplicate row every time the same document is
+                // re-fetched (e.g. repeated "Fetch ABDM Records" clicks or retries).
+                // transaction_id + consent_ref + care_context_reference + bundle_id
+                // identify the same underlying document across repeated fetches.
                 $docHash = sha1(implode('|', [
-                    $requestId,
                     $transactionId,
                     $consentRef,
                     $careContextRef,
