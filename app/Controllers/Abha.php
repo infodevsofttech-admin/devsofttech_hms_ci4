@@ -1039,13 +1039,80 @@ class Abha extends BaseController
         }
 
         if (empty($result['ok']) || $result['ok'] != 1) {
+            $errorText = '';
+            foreach ([
+                $result['error_text'] ?? null,
+                $result['message'] ?? null,
+                $result['description'] ?? null,
+                $result['error'] ?? null,
+                $result['error']['message'] ?? null,
+                $result['error']['description'] ?? null,
+                $result['data']['message'] ?? null,
+                $result['data']['description'] ?? null,
+                $result['data']['error'] ?? null,
+                $result['data']['error']['message'] ?? null,
+                $result['data']['error']['description'] ?? null,
+                $result['data']['raw_response'] ?? null,
+            ] as $candidate) {
+                if (is_string($candidate) && trim($candidate) !== '') {
+                    $errorText = trim($candidate);
+                    break;
+                }
+            }
+
+            $requestId = '';
+            foreach ([
+                $result['request_id'] ?? null,
+                $result['data']['request_id'] ?? null,
+                $result['result']['request_id'] ?? null,
+            ] as $candidate) {
+                if (is_string($candidate) && trim($candidate) !== '') {
+                    $requestId = trim($candidate);
+                    break;
+                }
+            }
+
+            if ($errorText === '') {
+                $errorText = 'ABHA validation failed';
+            }
+            if ($requestId !== '' && stripos($errorText, $requestId) === false) {
+                $errorText .= ' (Ref: ' . $requestId . ')';
+            }
+
+            if (stripos($errorText, 'Please make a valid request.') !== false) {
+                $errorText = 'Bridge validation rejected this request. Please contact bridge support with the reference shown. '
+                    . $errorText;
+            }
+
             return $this->response->setJSON([
                 'ok'         => 0,
-                'error_text' => $result['error_text'] ?? $result['message']
-                                ?? $result['data']['message'] ?? 'ABHA validation failed',
+                'error_text' => $errorText,
             ]);
         }
 
-        return $this->response->setJSON(['ok' => 1, 'status' => (string) ($result['data']['status'] ?? 'UNKNOWN')]);
+        $statusRaw = '';
+        foreach ([
+            $result['status'] ?? null,
+            $result['validation_status'] ?? null,
+            $result['data']['status'] ?? null,
+            $result['data']['validation_status'] ?? null,
+            $result['result']['status'] ?? null,
+            $result['data']['result']['status'] ?? null,
+        ] as $candidate) {
+            if (is_string($candidate) && trim($candidate) !== '') {
+                $statusRaw = strtoupper(trim($candidate));
+                break;
+            }
+        }
+
+        // Bridge adapters may return ACTIVE/VERIFIED/EXISTS for successful ABHA checks.
+        $validStates = ['VALID', 'ACTIVE', 'VERIFIED', 'EXISTS', 'FOUND', 'SUCCESS'];
+        $status = in_array($statusRaw, $validStates, true) || $statusRaw === '' ? 'VALID' : $statusRaw;
+
+        return $this->response->setJSON([
+            'ok' => 1,
+            'status' => $status,
+            'raw_status' => $statusRaw,
+        ]);
     }
 }

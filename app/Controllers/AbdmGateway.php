@@ -1206,10 +1206,11 @@ class AbdmGateway extends BaseController
         }
 
         $patientName = '';
+        $patientRow = [];
         if ($this->db->tableExists('patient_master')) {
             $pmFields = $this->db->getFieldNames('patient_master') ?? [];
             $pmSelect = ['id'];
-            foreach (['p_fname', 'p_lname', 'abha_address', 'abha_id', 'abha_no', 'abha'] as $f) {
+            foreach (['p_fname', 'p_lname', 'dob', 'p_dob', 'birth_date', 'date_of_birth', 'birth_year', 'year_of_birth', 'age', 'p_age', 'abha_address', 'abha_id', 'abha_no', 'abha'] as $f) {
                 if (in_array($f, $pmFields, true)) {
                     $pmSelect[] = $f;
                 }
@@ -1221,10 +1222,7 @@ class AbdmGateway extends BaseController
                 ->get(1)
                 ->getRowArray() ?? [];
 
-            $patientName = trim(
-                trim((string) ($patientRow['p_fname'] ?? '')) . ' ' .
-                trim((string) ($patientRow['p_lname'] ?? ''))
-            );
+            $patientName = $this->patientDisplayName($patientRow);
 
             if ($abhaAddress === '') {
                 foreach (['abha_address', 'abha', 'abha_id', 'abha_no'] as $field) {
@@ -1247,6 +1245,8 @@ class AbdmGateway extends BaseController
                 }
             }
         }
+
+        $patientBirthYear = $this->resolvePatientBirthYear($patientRow, $abhaAddress, $abhaNumber);
 
         if ($abhaAddress === '' && $abhaNumber === '') {
             $logBridge('error', ['ok' => 0, 'error_text' => 'ABHA address or ABHA number is required for record push.'], 'ABHA address or ABHA number is required for record push.', 'abdm.opd.prescription.share.validation');
@@ -1442,6 +1442,7 @@ class AbdmGateway extends BaseController
                 'patient_name'           => $patientName !== '' ? $patientName : ('PATIENT-' . $patientId),
                 'abha_id'                => $abhaNumber,
                 'abha_address'           => $abhaAddress,
+                'year_of_birth'          => $patientBirthYear,
                 'hi_type'                => $hiType,
                 'record_type'            => $hiType,
                 'visit_date'             => $visitDate,
@@ -1560,6 +1561,7 @@ class AbdmGateway extends BaseController
         $patName = (string) ($fhirPayload['patient_name'] ?? '');
         $doctorName = (string) ($fhirPayload['doctor_name'] ?? '');
         $visitDate = (string) ($fhirPayload['visit_date'] ?? date('Y-m-d'));
+        $birthYear = (int) ($fhirPayload['year_of_birth'] ?? 0);
         $ccRef = (string) ($fhirPayload['care_context_reference'] ?? ('IPD-' . $ipdId . '-' . $visitDate));
         $ccDisplay = (string) ($fhirPayload['care_context_display'] ?? ('Discharge Summary ' . $visitDate));
         $bundle = (array) ($fhirPayload['bundle'] ?? []);
@@ -1613,8 +1615,9 @@ class AbdmGateway extends BaseController
         try {
             $result = $this->connector->pushRecord([
                 'patient_id'             => (string) $patientId,
-                'patient_name'           => $patName,
+                'patient_name'           => $patName !== '' ? $patName : ('PATIENT-' . $patientId),
                 'abha_id'                => $abhaId,
+                'year_of_birth'          => $birthYear,
                 'hi_type'                => 'DischargeSummaryRecord',
                 'record_type'            => 'DischargeSummaryRecord',
                 'visit_date'             => $visitDate,
@@ -1708,10 +1711,11 @@ class AbdmGateway extends BaseController
         if ($this->db->tableExists('patient_master')) {
             $patientRow = $this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray() ?? [];
         }
-        $patName = trim(
-            trim((string) ($patientRow['p_fname'] ?? '')) . ' ' .
-            trim((string) ($patientRow['p_lname'] ?? ''))
-        ) ?: trim((string) ($labReq->patient_name ?? ''));
+        $patName = $this->patientDisplayName($patientRow);
+        if ($patName === '') {
+            $patName = trim((string) ($labReq->patient_name ?? ''));
+        }
+        $patientBirthYear = $this->resolvePatientBirthYear($patientRow, str_contains($abhaId, '@') ? $abhaId : '', str_contains($abhaId, '@') ? '' : $abhaId);
 
         // ── Load test / charge name ────────────────────────────────────────────
         $testTitle = '';
@@ -1856,6 +1860,7 @@ class AbdmGateway extends BaseController
                 'patient_id'             => (string) $patientId,
                 'patient_name'           => $patName,
                 'abha_id'                => $abhaId,
+                'year_of_birth'          => $patientBirthYear,
                 'hi_type'                => 'DiagnosticReportRecord',
                 'record_type'            => 'DiagnosticReportRecord',
                 'visit_date'             => $visitDate,
@@ -1939,10 +1944,10 @@ class AbdmGateway extends BaseController
         if ($this->db->tableExists('patient_master')) {
             $patientRow = $this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray() ?? [];
         }
-        $patName = trim(
-            trim((string) ($patientRow['p_fname'] ?? '')) . ' ' .
-            trim((string) ($patientRow['p_lname'] ?? ''))
-        ) ?: trim((string) ($labReq->patient_name ?? ''));
+        $patName = $this->patientDisplayName($patientRow);
+        if ($patName === '') {
+            $patName = trim((string) ($labReq->patient_name ?? ''));
+        }
 
         $testTitle = '';
         $chargeId  = (int) ($labReq->charge_id ?? 0);
@@ -2162,6 +2167,7 @@ class AbdmGateway extends BaseController
                 'patient_name' => $patientName,
                 'abha_id' => preg_match('/^\d{14}$/', $abhaId) === 1 ? $abhaId : '',
                 'abha_address' => str_contains($abhaId, '@') ? $abhaId : '',
+                'year_of_birth' => (int) ($payload['year_of_birth'] ?? 0),
                 'hi_type' => 'ImmunizationRecord',
                 'record_type' => 'ImmunizationRecord',
                 'visit_date' => $visitDate,
@@ -2342,7 +2348,7 @@ class AbdmGateway extends BaseController
             $patientRow = $this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray() ?? [];
         }
 
-        $patientName = trim(trim((string) ($patientRow['p_fname'] ?? '')) . ' ' . trim((string) ($patientRow['p_lname'] ?? '')));
+        $patientName = $this->patientDisplayName($patientRow);
         if ($patientName === '') {
             $patientName = trim((string) ($ipdRow['P_name'] ?? ''));
         }
@@ -2673,7 +2679,7 @@ class AbdmGateway extends BaseController
             return null;
         }
 
-        $patientName = trim(trim((string) ($patientRow['p_fname'] ?? '')) . ' ' . trim((string) ($patientRow['p_lname'] ?? '')));
+        $patientName = $this->patientDisplayName($patientRow);
         $rawAbha = trim($preferredAbhaId);
         if ($rawAbha === '') {
             foreach (['abha_address', 'abha_id', 'abha_no', 'abha'] as $field) {
@@ -2751,6 +2757,7 @@ class AbdmGateway extends BaseController
             'care_context_reference' => $ccRef,
             'care_context_display' => 'Immunization Record - ' . $visitDate,
             'patient_name' => $patient['name'],
+            'year_of_birth' => $this->resolvePatientBirthYear($patientRow, str_contains($rawAbha, '@') ? $rawAbha : '', str_contains($rawAbha, '@') ? '' : $rawAbha),
             'visit_date' => $visitDate,
             'records' => $records,
         ];
@@ -3345,12 +3352,24 @@ class AbdmGateway extends BaseController
         $queueId      = null;
         $connectorErr = null;
         try {
+            $patientRowForPush = $this->loadPatientRow($patientId);
+            $sanitizedPatientName = trim((string) $patientName);
+            if ($sanitizedPatientName === '' || preg_match('/\s0$/', $sanitizedPatientName) === 1) {
+                $sanitizedPatientName = $this->patientDisplayName($patientRowForPush);
+            }
+            $patientBirthYear = $this->resolvePatientBirthYear(
+                $patientRowForPush,
+                str_contains($abhaId, '@') ? $abhaId : '',
+                str_contains($abhaId, '@') ? '' : $abhaId
+            );
+
             // Use the new store-and-link flow (POST /v3/records/push) for re-push:
             // No consent needed — bridge stores record and serves it when ABDM requests data.
             $result  = $this->connector->pushRecord([
                 'patient_id'             => (string) $patientId,
-                'patient_name'           => $patientName,
+                'patient_name'           => $sanitizedPatientName !== '' ? $sanitizedPatientName : ('PATIENT-' . $patientId),
                 'abha_id'                => $abhaId,
+                'year_of_birth'          => $patientBirthYear,
                 'hi_type'                => $hiType,
                 'record_type'            => $this->mapHiTypeToRecordType($hiType),
                 'visit_date'             => $visitDate !== '' ? $visitDate : date('Y-m-d'),
@@ -5559,11 +5578,18 @@ class AbdmGateway extends BaseController
         $bridgeRecordId = 0;
         $connectorError = null;
         try {
+            $patientRowForPush = $this->loadPatientRow($patientId);
+            $patientBirthYear = $this->resolvePatientBirthYear(
+                $patientRowForPush,
+                str_contains($abhaId, '@') ? $abhaId : '',
+                str_contains($abhaId, '@') ? '' : $abhaId
+            );
             $result = $this->connector->pushRecord([
                 'patient_id' => (string) $patientId,
                 'patient_name' => $patientName,
                 'abha_id' => preg_match('/^\d{14}$/', $abhaId) === 1 ? $abhaId : '',
                 'abha_address' => str_contains($abhaId, '@') ? $abhaId : '',
+                'year_of_birth' => $patientBirthYear,
                 'hi_type' => $hiType,
                 'record_type' => $hiType,
                 'visit_date' => $visitDate,
@@ -5755,7 +5781,66 @@ class AbdmGateway extends BaseController
 
     private function patientDisplayName(array $patientRow): string
     {
-        return trim(trim((string) ($patientRow['p_fname'] ?? '')) . ' ' . trim((string) ($patientRow['p_lname'] ?? ''))) ?: 'Patient';
+        $first = trim((string) ($patientRow['p_fname'] ?? ''));
+        $last = trim((string) ($patientRow['p_lname'] ?? ''));
+
+        if (in_array(strtolower($last), ['0', '00', 'na', 'n/a', 'null', 'nil', '-'], true)) {
+            $last = '';
+        }
+
+        $full = trim($first . ' ' . $last);
+        return $full !== '' ? $full : 'Patient';
+    }
+
+    /**
+     * Resolve patient birth year required by ABDM link-token flow.
+     */
+    private function resolvePatientBirthYear(array $patientRow, string $abhaAddress = '', string $abhaNumber = ''): int
+    {
+        $year = 0;
+
+        foreach (['birth_year', 'year_of_birth'] as $field) {
+            $candidate = preg_replace('/\D/', '', (string) ($patientRow[$field] ?? ''));
+            $candidate = is_string($candidate) ? (int) $candidate : 0;
+            if ($candidate >= 1900 && $candidate <= 2200) {
+                return $candidate;
+            }
+        }
+
+        foreach (['dob', 'p_dob', 'birth_date', 'date_of_birth'] as $field) {
+            $raw = trim((string) ($patientRow[$field] ?? ''));
+            if ($raw === '') {
+                continue;
+            }
+            $ts = strtotime($raw);
+            if ($ts !== false) {
+                $candidate = (int) date('Y', $ts);
+                if ($candidate >= 1900 && $candidate <= 2200) {
+                    return $candidate;
+                }
+            }
+        }
+
+        foreach (['age', 'p_age', 'patient_age'] as $field) {
+            $ageDigits = preg_replace('/\D/', '', (string) ($patientRow[$field] ?? ''));
+            $age = is_string($ageDigits) ? (int) $ageDigits : 0;
+            if ($age > 0 && $age < 130) {
+                $candidate = (int) date('Y') - $age;
+                if ($candidate >= 1900 && $candidate <= 2200) {
+                    return $candidate;
+                }
+            }
+        }
+
+        $source = trim($abhaAddress !== '' ? $abhaAddress : $abhaNumber);
+        if ($source !== '' && preg_match('/(19\d{2}|20\d{2}|21\d{2}|2200)/', $source, $m) === 1) {
+            $year = (int) ($m[1] ?? 0);
+            if ($year >= 1900 && $year <= 2200) {
+                return $year;
+            }
+        }
+
+        return 0;
     }
 
     private function buildAbdmPatientResource(array $patientRow, int $patientId, string $abhaId): array

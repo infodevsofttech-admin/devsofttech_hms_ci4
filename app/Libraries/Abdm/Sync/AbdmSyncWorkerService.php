@@ -297,8 +297,14 @@ class AbdmSyncWorkerService
 
         $name = trim((string) ($payload['patient_name'] ?? ''));
         if ($name === '') {
-            $name = trim(trim((string) ($row['p_fname'] ?? '')) . ' ' . trim((string) ($row['p_lname'] ?? '')));
+            $first = trim((string) ($row['p_fname'] ?? ''));
+            $last = trim((string) ($row['p_lname'] ?? ''));
+            if (in_array(strtolower($last), ['0', '00', 'na', 'n/a', 'null', 'nil', '-'], true)) {
+                $last = '';
+            }
+            $name = trim($first . ' ' . $last);
         }
+        $name = preg_replace('/\s0$/', '', $name) ?? $name;
         if ($name === '') {
             $name = 'PATIENT-' . $localPatientId;
         }
@@ -351,12 +357,15 @@ class AbdmSyncWorkerService
             }
         }
 
+        $birthYearRaw = trim((string) ($payload['birth_year'] ?? $payload['year_of_birth'] ?? $row['birth_year'] ?? $row['year_of_birth'] ?? ''));
+        $ageRaw = trim((string) ($payload['age'] ?? $payload['patient_age'] ?? $row['age'] ?? $row['p_age'] ?? ''));
+
         return [
             'patient_id' => (string) ($localPatientId > 0 ? $localPatientId : ($payload['local_patient_id'] ?? '')),
             'name' => $name,
             'mobile' => $mobile,
             'gender' => $this->normalizeBridgeGenderCode($genderRaw),
-            'year_of_birth' => $this->extractBirthYear($dobRaw),
+            'year_of_birth' => $this->extractBirthYear($dobRaw, $birthYearRaw, $ageRaw, $abhaAddress),
             'abha_address' => $abhaAddress,
             'abha_number' => $abhaDigits,
         ];
@@ -378,13 +387,38 @@ class AbdmSyncWorkerService
         return 'O';
     }
 
-    private function extractBirthYear(string $dob): int
+    private function extractBirthYear(string $dob, string $birthYear = '', string $age = '', string $abhaAddress = ''): int
     {
+        $birthYearDigits = preg_replace('/\D/', '', $birthYear);
+        $birthYearInt = is_string($birthYearDigits) ? (int) $birthYearDigits : 0;
+        if ($birthYearInt >= 1900 && $birthYearInt <= 2200) {
+            return $birthYearInt;
+        }
+
         $dob = trim($dob);
         if ($dob !== '') {
             $ts = strtotime($dob);
             if ($ts !== false) {
-                return (int) date('Y', $ts);
+                $year = (int) date('Y', $ts);
+                if ($year >= 1900 && $year <= 2200) {
+                    return $year;
+                }
+            }
+        }
+
+        $ageDigits = preg_replace('/\D/', '', $age);
+        $ageInt = is_string($ageDigits) ? (int) $ageDigits : 0;
+        if ($ageInt > 0 && $ageInt < 130) {
+            $year = (int) date('Y') - $ageInt;
+            if ($year >= 1900 && $year <= 2200) {
+                return $year;
+            }
+        }
+
+        if ($abhaAddress !== '' && preg_match('/(19\d{2}|20\d{2}|21\d{2}|2200)/', $abhaAddress, $match) === 1) {
+            $year = (int) ($match[1] ?? 0);
+            if ($year >= 1900 && $year <= 2200) {
+                return $year;
             }
         }
 

@@ -917,6 +917,24 @@ class M3HiuWorkflowService
             $hiuId = trim((string) ($payload['hfr_id'] ?? ''));
         }
 
+        $istTz = new \DateTimeZone('Asia/Kolkata');
+        $utcTz = new \DateTimeZone('UTC');
+        $nowIst = new \DateTimeImmutable('now', $istTz);
+        $fromUtc = $nowIst
+            ->modify('-365 days')
+            ->setTime(0, 0, 0)
+            ->setTimezone($utcTz)
+            ->format('Y-m-d\TH:i:s.000\Z');
+        $toUtc = $nowIst
+            ->setTime(23, 59, 59)
+            ->setTimezone($utcTz)
+            ->format('Y-m-d\TH:i:s.000\Z');
+        $eraseAtUtc = $nowIst
+            ->modify('+365 days')
+            ->setTime(23, 59, 59)
+            ->setTimezone($utcTz)
+            ->format('Y-m-d\TH:i:s.000\Z');
+
         $consent = [
             'purpose' => [
                 'code' => 'CAREMGT',
@@ -933,10 +951,10 @@ class M3HiuWorkflowService
             'permission' => [
                 'accessMode' => 'VIEW',
                 'dateRange' => [
-                    'from' => gmdate('Y-m-d\T00:00:00.000\Z', strtotime('-365 days')),
-                    'to' => gmdate('Y-m-d\T00:00:00.000\Z'),
+                    'from' => $fromUtc,
+                    'to' => $toUtc,
                 ],
-                'dataEraseAt' => gmdate('Y-m-d\T00:00:00.000\Z', strtotime('+365 days')),
+                'dataEraseAt' => $eraseAtUtc,
                 'frequency' => [
                     'unit' => 'HOUR',
                     'value' => 1,

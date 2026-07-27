@@ -492,11 +492,107 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
 
     public function validateAbha(string $abhaId, array $fullPayload = []): array
     {
-        $body = $fullPayload !== [] ? $fullPayload : ['abha_id' => $abhaId];
-        if ($this->hfrId !== '' && empty($body['hfr_id'])) {
+        $inputValue = '';
+        $inputType  = 'abha-number';
+
+        if ($fullPayload !== []) {
+            $abhaAddress = trim((string) ($fullPayload['abha_address'] ?? ''));
+            $abhaNumber  = trim((string) ($fullPayload['abha_id'] ?? $abhaId));
+
+            if ($abhaAddress !== '') {
+                $inputType  = 'abha-address';
+                $inputValue = $abhaAddress;
+            } else {
+                $digits = preg_replace('/\D/', '', $abhaNumber);
+                $inputValue = $digits !== '' ? $digits : $abhaNumber;
+            }
+        } else {
+            $abhaRaw = trim((string) $abhaId);
+            if (str_contains($abhaRaw, '@')) {
+                $inputType  = 'abha-address';
+                $inputValue = $abhaRaw;
+            } else {
+                $digits = preg_replace('/\D/', '', $abhaRaw);
+                $inputValue = $digits !== '' ? $digits : $abhaRaw;
+            }
+        }
+
+        $body = [
+            'type'  => $inputType,
+            'value' => $inputValue,
+        ];
+        if ($this->hfrId !== '') {
             $body['hfr_id'] = $this->hfrId;
         }
-        return $this->post('/v3/abha/validate', $body);
+
+        $result = $this->post('/v3/abha/login/search', $body);
+
+        // Backward-compat: if a bridge does not yet expose login/search, retry legacy validate.
+        if (empty($result['ok']) || (int) ($result['ok'] ?? 0) !== 1) {
+            $httpCode = (int) ($result['http_code'] ?? 0);
+            if (in_array($httpCode, [404, 405], true)) {
+                $legacyBody = $inputType === 'abha-address'
+                    ? ['abha_address' => $inputValue]
+                    : ['abha_id' => $inputValue];
+                if ($this->hfrId !== '') {
+                    $legacyBody['hfr_id'] = $this->hfrId;
+                }
+                $result = $this->post('/v3/abha/validate', $legacyBody);
+            }
+        }
+
+        if (empty($result['ok']) || (int) ($result['ok'] ?? 0) !== 1) {
+            return $result;
+        }
+
+        $data = is_array($result['data'] ?? null) ? $result['data'] : [];
+        $accounts = is_array($data['accounts'] ?? null) ? $data['accounts'] : [];
+        $firstAccount = isset($accounts[0]) && is_array($accounts[0]) ? $accounts[0] : [];
+
+        $status = '';
+        foreach ([
+            $result['status'] ?? null,
+            $result['account_status'] ?? null,
+            $data['status'] ?? null,
+            $data['account_status'] ?? null,
+            $data['accountStatus'] ?? null,
+            $data['abhaStatus'] ?? null,
+            $firstAccount['status'] ?? null,
+            $firstAccount['accountStatus'] ?? null,
+            $firstAccount['abhaStatus'] ?? null,
+        ] as $candidate) {
+            if (is_string($candidate) && trim($candidate) !== '') {
+                $status = strtoupper(trim($candidate));
+                break;
+            }
+        }
+
+        $authMethods = [];
+        foreach ([
+            $data['authMethods'] ?? null,
+            $data['auth_methods'] ?? null,
+            $data['availableAuthMethods'] ?? null,
+            $firstAccount['authMethods'] ?? null,
+            $firstAccount['auth_methods'] ?? null,
+            $firstAccount['availableAuthMethods'] ?? null,
+        ] as $candidate) {
+            if (is_array($candidate) && ! empty($candidate)) {
+                foreach ($candidate as $method) {
+                    $m = strtoupper(trim((string) $method));
+                    if ($m !== '' && ! in_array($m, $authMethods, true)) {
+                        $authMethods[] = $m;
+                    }
+                }
+            }
+        }
+
+        if (! empty($authMethods)) {
+            $result['auth_methods'] = $authMethods;
+        }
+
+        // HMS callers expect a status-like field; treat successful search as VALID when absent.
+        $result['status'] = $status !== '' ? $status : 'VALID';
+        return $result;
     }
 
     // -------------------------------------------------------------------------

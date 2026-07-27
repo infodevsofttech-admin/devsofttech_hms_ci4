@@ -285,7 +285,13 @@
                             $bridgeRecordId = trim((string) ($r['bridge_record_id'] ?? ''));
                             $hasFhir = (int) ($r['has_fhir'] ?? 0) === 1;
                             $pushStatusRaw = strtolower(trim((string) ($r['push_status'] ?? '')));
-                            $canSubmitGateway = $hasFhir && ! in_array($pushStatusRaw, ['queued', 'linked'], true);
+                            $canSubmitGateway = $hasFhir;
+                            $submitButtonLabel = in_array($pushStatusRaw, ['queued', 'linked', 'failed'], true)
+                                ? 'Submit Again'
+                                : 'Submit to ABDM';
+                            $submitButtonClass = in_array($pushStatusRaw, ['queued', 'linked'], true)
+                                ? 'btn-outline-secondary'
+                                : 'btn-outline-warning';
                             $statusBadgeClass = 'badge bg-' . $statusTone;
                             if ($statusTone === 'warning') {
                                 $statusBadgeClass .= ' text-dark';
@@ -323,10 +329,10 @@
                                 <?php if ($canSubmitGateway): ?>
                                     <button
                                         type="button"
-                                        class="btn btn-sm btn-outline-warning btn-opd-consult-submit-gateway ms-1"
+                                        class="btn btn-sm <?= esc($submitButtonClass) ?> btn-opd-consult-submit-gateway ms-1"
                                         data-opd-id="<?= (int) ($r['opd_id'] ?? 0) ?>"
                                         data-abha-id="<?= esc((string) ($r['abha_id'] ?? '')) ?>"
-                                    >Submit to ABDM</button>
+                                    ><?= esc($submitButtonLabel) ?></button>
                                 <?php endif; ?>
                             </td>
                         </tr>
@@ -2441,9 +2447,9 @@
                             detailsCell.innerHTML = '<div>Submitted to gateway and waiting for link workflow.</div>' + queueHtml + bridgeHtml;
                         }
                     }
-                    rowSubmitBtn.disabled = true;
-                    rowSubmitBtn.className = 'btn btn-sm btn-success ms-1';
-                    rowSubmitBtn.textContent = 'Submitted';
+                    rowSubmitBtn.disabled = false;
+                    rowSubmitBtn.className = 'btn btn-sm btn-outline-secondary btn-opd-consult-submit-gateway ms-1';
+                    rowSubmitBtn.textContent = 'Submit Again';
                 }
 
                 var qInfo = res.queue_id ? ' Queue ID: ' + res.queue_id : '';
