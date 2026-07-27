@@ -408,6 +408,7 @@ $(function() {
     var autoFlowRequestId = '';
     var autoFlowAttempts = 0;
     var autoFlowMaxAttempts = 15;
+    var autoFlowNeedsFreshRequest = false;
 
     var zoom = 1;
     var minZoom = 0.5;
@@ -609,7 +610,8 @@ $(function() {
 
                 var lastSync = data.last_sync || null;
                 if (lastSync && (lastSync.request_id || '').toString().trim() !== '') {
-                    autoFlowRequestId = (lastSync.request_id || '').toString().trim();
+                    autoFlowRequestId = lastSync.restart_required ? '' : (lastSync.request_id || '').toString().trim();
+                    autoFlowNeedsFreshRequest = !!lastSync.restart_required;
                 }
 
                 var lastPhase = lastSync ? (lastSync.phase || '').toString().toUpperCase() : '';
@@ -694,6 +696,7 @@ $(function() {
                 autoFlowRequestId = (data.request_id || autoFlowRequestId || '').toString();
                 var phase = (data.phase || '').toString();
                 var msg = (data.message || '').toString();
+                var resetRequestId = Number(data.reset_request_id || 0) === 1;
                 var info = msg !== '' ? msg : ('Phase: ' + (phase || 'UNKNOWN'));
 
                 if (phase === 'COMPLETED') {
@@ -705,6 +708,16 @@ $(function() {
                 }
 
                 $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text(info + (autoFlowRequestId ? (' | Request ID: ' + autoFlowRequestId) : ''));
+
+                if (resetRequestId) {
+                    autoFlowNeedsFreshRequest = true;
+                    autoFlowRequestId = '';
+                    if (autoFlowAttempts < autoFlowMaxAttempts) {
+                        autoFlowAttempts += 1;
+                        autoFlowTimer = setTimeout(runAutoFlowStep, 1200);
+                        return;
+                    }
+                }
 
                 var shouldPoll = Number(data.poll_again || 0) === 1;
                 if (shouldPoll && autoFlowAttempts < autoFlowMaxAttempts) {
@@ -771,6 +784,10 @@ $(function() {
         }
         stopAutoFlowLoop();
         autoFlowAttempts = 0;
+        if (autoFlowNeedsFreshRequest) {
+            autoFlowRequestId = '';
+            autoFlowNeedsFreshRequest = false;
+        }
         setFlowProgress(1);
         $btn.prop('disabled', true).text('Sync Running...');
         $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text('Starting one-click sync flow...');

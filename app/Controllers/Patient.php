@@ -1594,6 +1594,7 @@ class Patient extends BaseController
 					'phase' => 'REQUESTED',
 					// Avoid repeated not-found polling loops against bridge.
 					'poll_again' => 0,
+					'reset_request_id' => 1,
 					'request_id' => $flowRefId,
 					'message' => 'Consent status not found on bridge for this request yet. Please retry sync after 1-2 minutes.',
 					'data' => [
@@ -2950,6 +2951,7 @@ class Patient extends BaseController
 			'updated_at' => '',
 			'operation' => '',
 			'status' => '',
+			'restart_required' => false,
 		];
 
 		$abhaAddress = trim($abhaAddress);
@@ -3102,6 +3104,11 @@ class Patient extends BaseController
 		$snapshot['updated_at'] = (string) ($best['updated_at'] ?? '');
 		$snapshot['operation'] = (string) ($best['operation'] ?? '');
 		$snapshot['status'] = (string) ($best['status'] ?? '');
+		$snapshot['restart_required'] = (bool) (
+			($snapshot['phase'] === 'REQUESTED')
+			&& ($snapshot['status'] === 'failed')
+			&& stripos((string) ($snapshot['message'] ?? ''), 'not found on bridge') !== false
+		);
 
 		return $snapshot;
 	}
