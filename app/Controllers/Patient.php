@@ -1362,6 +1362,7 @@ class Patient extends BaseController
 		$reconcileResult = null;
 		$fetchResult = null;
 		$lastSync = $this->getLatestAbdmSyncSnapshot((string) ($abhaContext['abha_address'] ?? ''));
+		$resumedFromLastSync = false;
 
 		if ($flowRefId === '') {
 			$lastRequestId = trim((string) ($lastSync['request_id'] ?? ''));
@@ -1370,6 +1371,7 @@ class Patient extends BaseController
 				$flowRefId = $lastRequestId;
 				$consentRequestRef = trim((string) ($lastSync['consent_request_id'] ?? ''));
 				$consentArtifactRef = trim((string) ($lastSync['consent_id'] ?? ''));
+				$resumedFromLastSync = true;
 				$consentResult = [
 					'ok' => 1,
 					'http_code' => 200,
@@ -1467,6 +1469,55 @@ class Patient extends BaseController
 			}
 		}
 
+		// If we already have a granted snapshot with a concrete consent reference,
+		// continue directly with fetch instead of re-reconciling a stale request_id.
+		if ($resumedFromLastSync && strtoupper(trim((string) ($lastSync['phase'] ?? ''))) === 'GRANTED') {
+			if ($consentArtifactRef === '' && $consentRequestRef === '') {
+				$consentRequestRef = trim((string) ($lastSync['consent_request_id'] ?? ''));
+				$consentArtifactRef = trim((string) ($lastSync['consent_id'] ?? ''));
+			}
+
+			$canDirectFetch = ($consentArtifactRef !== '' && preg_match('/^REQ-/i', $consentArtifactRef) !== 1)
+				|| ($consentRequestRef !== '' && preg_match('/^REQ-/i', $consentRequestRef) !== 1);
+
+			if ($canDirectFetch) {
+				$fetchPayload = [
+					'abha_address' => $abhaContext['abha_address'],
+				];
+				if ($consentArtifactRef !== '' && preg_match('/^REQ-/i', $consentArtifactRef) !== 1) {
+					$fetchPayload['consentId'] = $consentArtifactRef;
+				} elseif ($consentRequestRef !== '' && preg_match('/^REQ-/i', $consentRequestRef) !== 1) {
+					$fetchPayload['consentRequestId'] = $consentRequestRef;
+				}
+
+				try {
+					$fetchResult = $service->runOperation('data_fetch', $fetchPayload);
+				} catch (\Throwable $e) {
+					return $this->response->setStatusCode(500)->setJSON([
+						'ok' => 0,
+						'phase' => 'FETCH_FAILED',
+						'error' => 'Unable to fetch ABDM content: ' . $e->getMessage(),
+						'request_id' => $flowRefId,
+					]);
+				}
+
+				if ((int) ($fetchResult['ok'] ?? 0) === 1) {
+					return $this->response->setJSON([
+						'ok' => 1,
+						'phase' => 'COMPLETED',
+						'poll_again' => 0,
+						'request_id' => $flowRefId,
+						'message' => 'Resumed previous granted consent flow and fetched data successfully.',
+						'data' => [
+							'consent_request' => $consentResult,
+							'consent_reconcile' => $reconcileResult,
+							'data_fetch' => $fetchResult,
+						],
+					]);
+				}
+			}
+		}
+
 		$reconcilePayload = [
 			'abha_address' => $abhaContext['abha_address'],
 		];
@@ -1496,6 +1547,48 @@ class Patient extends BaseController
 					|| stripos($errorText, 'NOT_FOUND') !== false);
 
 			if ($isNonFatalPending) {
+				$altConsentRequestRef = trim((string) ($consentRequestRef !== '' ? $consentRequestRef : ($lastSync['consent_request_id'] ?? '')));
+				$altConsentArtifactRef = trim((string) ($consentArtifactRef !== '' ? $consentArtifactRef : ($lastSync['consent_id'] ?? '')));
+				$canDirectFetch = ($altConsentArtifactRef !== '' && preg_match('/^REQ-/i', $altConsentArtifactRef) !== 1)
+					|| ($altConsentRequestRef !== '' && preg_match('/^REQ-/i', $altConsentRequestRef) !== 1);
+
+				if ($canDirectFetch) {
+					$fetchPayload = [
+						'abha_address' => $abhaContext['abha_address'],
+					];
+					if ($altConsentArtifactRef !== '' && preg_match('/^REQ-/i', $altConsentArtifactRef) !== 1) {
+						$fetchPayload['consentId'] = $altConsentArtifactRef;
+					} elseif ($altConsentRequestRef !== '' && preg_match('/^REQ-/i', $altConsentRequestRef) !== 1) {
+						$fetchPayload['consentRequestId'] = $altConsentRequestRef;
+					}
+
+					try {
+						$fetchResult = $service->runOperation('data_fetch', $fetchPayload);
+					} catch (\Throwable $e) {
+						return $this->response->setStatusCode(500)->setJSON([
+							'ok' => 0,
+							'phase' => 'FETCH_FAILED',
+							'error' => 'Unable to fetch ABDM content: ' . $e->getMessage(),
+							'request_id' => $flowRefId,
+						]);
+					}
+
+					if ((int) ($fetchResult['ok'] ?? 0) === 1) {
+						return $this->response->setJSON([
+							'ok' => 1,
+							'phase' => 'COMPLETED',
+							'poll_again' => 0,
+							'request_id' => $flowRefId,
+							'message' => 'Consent status lookup returned not found for old request id, but data fetch succeeded using saved consent reference.',
+							'data' => [
+								'consent_request' => $consentResult,
+								'consent_reconcile' => $reconcileResult,
+								'data_fetch' => $fetchResult,
+							],
+						]);
+					}
+				}
+
 				return $this->response->setJSON([
 					'ok' => 1,
 					'phase' => 'REQUESTED',
