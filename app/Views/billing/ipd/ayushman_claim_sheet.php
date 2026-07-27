@@ -55,7 +55,7 @@ $canUseM3 = $patientId > 0 && $abhaAddress !== '' && $abhaLooksVerified;
                                     tabindex="0"
                                     data-bs-toggle="tooltip"
                                     data-bs-placement="top"
-                                    title="Completed: data fetched. Granted: approved. Pending: waiting patient action. Failed: previous request failed. Failed - New Required: click New Consent Request."
+                                    title="Completed: data fetched. Granted: approved. Pending: waiting patient action. Failed: previous request failed. The system will restart automatically when needed."
                                     aria-label="Consent status help"
                                 >?</span>
                             </div>
@@ -63,7 +63,6 @@ $canUseM3 = $patientId > 0 && $abhaAddress !== '' && $abhaLooksVerified;
                         <div class="d-flex gap-2 flex-wrap">
                             <button type="button" class="btn btn-sm btn-outline-primary" id="btnAyushmanLoadAbdmDocs" <?= $patientId > 0 ? '' : 'disabled' ?>>Load Fetched Data</button>
                             <button type="button" class="btn btn-sm btn-success" id="btnAyushmanFetchAbdmM3" <?= $canUseM3 ? '' : 'disabled' ?>>Fetch From ABDM M3</button>
-                            <button type="button" class="btn btn-sm btn-outline-danger" id="btnAyushmanNewConsent" <?= $canUseM3 ? '' : 'disabled' ?> style="display:none;">New Consent Request</button>
                             <button type="button" class="btn btn-sm btn-outline-secondary" onclick="load_form('<?= site_url('AbdmHiu') ?>','ABDM HIU M3')">Open M3 Console</button>
                         </div>
                     </div>
@@ -185,8 +184,7 @@ $canUseM3 = $patientId > 0 && $abhaAddress !== '' && $abhaLooksVerified;
     }
 
     function applyConsentButtons() {
-        $('#btnAyushmanNewConsent').toggle(needsFreshRequest);
-        $('#btnAyushmanFetchAbdmM3').text(needsFreshRequest ? 'Retry ABDM M3 Sync' : 'Fetch From ABDM M3');
+        $('#btnAyushmanFetchAbdmM3').text(pollTimer ? 'Fetching...' : 'Fetch From ABDM M3');
     }
 
     function esc(value) {
@@ -346,13 +344,15 @@ $canUseM3 = $patientId > 0 && $abhaAddress !== '' && $abhaLooksVerified;
                 updateConsentBadge(phase, needsFreshRequest);
 
                 if (resetRequestId) {
-                    needsFreshRequest = true;
                     currentRequestId = '';
+                    updateConsentBadge('FAILED', false);
+                    setStatus('Previous consent request is stale/failed. HMS is starting a fresh request automatically.', false);
+                    if (pollAttempts < maxPollAttempts) {
+                        pollAttempts += 1;
+                        pollTimer = setTimeout(runM3AutoFlow, 1200);
+                        return;
+                    }
                     stopPolling();
-                    $('#btnAyushmanFetchAbdmM3').prop('disabled', false);
-                    updateConsentBadge('FAILED', true);
-                    applyConsentButtons();
-                    setStatus('Previous consent request is stale/failed. Click "New Consent Request" and run sync again.', false);
                     return;
                 }
 
@@ -400,16 +400,6 @@ $canUseM3 = $patientId > 0 && $abhaAddress !== '' && $abhaLooksVerified;
         $button.prop('disabled', true).text('Fetching...');
         setStatus('Starting ABDM M3 consent and data fetch flow...', false);
         runM3AutoFlow();
-    });
-
-    $(document).off('click.ayushmanAbdm', '#btnAyushmanNewConsent').on('click.ayushmanAbdm', '#btnAyushmanNewConsent', function () {
-        needsFreshRequest = false;
-        currentRequestId = '';
-        pollAttempts = 0;
-        stopPolling();
-        updateConsentBadge('IDLE', false);
-        applyConsentButtons();
-        setStatus('Fresh consent request context prepared. Click "Fetch From ABDM M3" to create a new request.', false);
     });
 
     $('[data-bs-toggle="tooltip"]').tooltip();

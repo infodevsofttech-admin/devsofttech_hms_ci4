@@ -324,8 +324,7 @@ if ($patientPhotoPath === '') {
                         </div>
                         <div class="d-flex gap-2 flex-wrap">
                             <button type="button" class="btn btn-outline-primary btn-sm" id="btnLoadAbdmDocs">Refresh Fetched Data</button>
-                            <button type="button" class="btn btn-primary btn-sm" id="btnAutoAbdmFlow" <?= ($abhaIsVerified && $patientAbhaAddress !== '') ? '' : 'disabled' ?>>Start ABDM Sync</button>
-                            <button type="button" class="btn btn-outline-danger btn-sm" id="btnNewAbdmConsent" <?= ($abhaIsVerified && $patientAbhaAddress !== '') ? '' : 'disabled' ?> style="display:none;">New Consent Request</button>
+                            <button type="button" class="btn btn-primary btn-sm" id="btnAutoAbdmFlow" <?= ($abhaIsVerified && $patientAbhaAddress !== '') ? '' : 'disabled' ?>>Fetch Request</button>
                         </div>
                     </div>
 
@@ -449,14 +448,7 @@ $(function() {
     }
 
     function applyConsentButtonState() {
-        var $newBtn = $('#btnNewAbdmConsent');
-        var canUse = autoFlowNeedsFreshRequest;
-        $newBtn.toggle(canUse);
-        if (canUse) {
-            $('#btnAutoAbdmFlow').text('Retry Sync');
-        } else {
-            $('#btnAutoAbdmFlow').text('Start ABDM Sync');
-        }
+        $('#btnAutoAbdmFlow').text(autoFlowTimer ? 'Fetching...' : 'Fetch Request');
     }
 
     var zoom = 1;
@@ -765,15 +757,14 @@ $(function() {
                 $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text(info + (autoFlowRequestId ? (' | Request ID: ' + autoFlowRequestId) : ''));
 
                 if (resetRequestId) {
-                    autoFlowNeedsFreshRequest = true;
                     autoFlowRequestId = '';
-                    stopAutoFlowLoop();
-                    $('#btnAutoAbdmFlow').prop('disabled', false);
-                    updateConsentBadge('FAILED', true);
-                    applyConsentButtonState();
-                    $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text(
-                        'Previous consent request is stale/failed. Click "New Consent Request" to start a fresh request.'
-                    );
+                    updateConsentBadge('FAILED', false);
+                    $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text('Previous consent request is stale/failed. HMS is starting a fresh request automatically.');
+                    if (autoFlowAttempts < autoFlowMaxAttempts) {
+                        autoFlowAttempts += 1;
+                        autoFlowTimer = setTimeout(runAutoFlowStep, 1200);
+                        return;
+                    }
                     return;
                 }
 
@@ -784,7 +775,7 @@ $(function() {
                     return;
                 }
 
-                $('#btnAutoAbdmFlow').prop('disabled', false).text('One-Click Sync');
+                $('#btnAutoAbdmFlow').prop('disabled', false);
                 applyConsentButtonState();
                 if (phase === 'COMPLETED') {
                     loadAbdmDocs();
@@ -852,16 +843,6 @@ $(function() {
         $btn.prop('disabled', true).text('Sync Running...');
         $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text('Starting one-click sync flow...');
         runAutoFlowStep();
-    });
-
-    $(document).off('click.abdmOpd', '#btnNewAbdmConsent').on('click.abdmOpd', '#btnNewAbdmConsent', function() {
-        autoFlowNeedsFreshRequest = false;
-        autoFlowRequestId = '';
-        autoFlowAttempts = 0;
-        stopAutoFlowLoop();
-        updateConsentBadge('IDLE', false);
-        applyConsentButtonState();
-        $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text('Fresh consent request context prepared. Click "Start ABDM Sync".');
     });
 
     $(document).off('shown.bs.tab.abdmOpd', '[data-bs-target="#opd-abdm-tab"]').on('shown.bs.tab.abdmOpd', '[data-bs-target="#opd-abdm-tab"]', function() {
