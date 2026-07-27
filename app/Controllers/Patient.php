@@ -3131,9 +3131,16 @@ class Patient extends BaseController
 			} elseif ($status === 'FAILED' && $httpCode === 404 && stripos($errorText, 'consent record not found') !== false) {
 				$phase = 'REQUESTED';
 				$priority = 200;
-			} elseif ($status === 'FAILED') {
+			} elseif ($status === 'FAILED' && $operation === 'CONSENT_REQUEST') {
+				// Only a failed *submission* of the consent request itself is terminal.
+				// A failed status-check/reconcile/data-fetch attempt is transient bridge
+				// noise and must NOT force HMS to create a brand-new consent request
+				// (which would show up as a duplicate entry in the patient's PHR app).
 				$phase = 'FAILED';
 				$priority = 260;
+			} elseif ($status === 'FAILED') {
+				$phase = 'REQUESTED';
+				$priority = 190;
 			} elseif (in_array($state, ['REQUESTED', 'PENDING', 'STATUS_CHECKED'], true)) {
 				$phase = 'REQUESTED';
 				$priority = 180;
