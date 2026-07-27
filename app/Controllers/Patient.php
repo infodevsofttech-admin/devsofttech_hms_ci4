@@ -3067,6 +3067,14 @@ class Patient extends BaseController
 				$decoded = [];
 			}
 
+			$rawConsentStatus = strtoupper(trim((string) (
+				$decoded['consent']['status']
+				?? $decoded['consent_status']
+				?? $decoded['status']
+				?? $decoded['data']['consent']['status']
+				?? ''
+			)));
+
 			$requestId = trim((string) (
 				$row['gateway_request_id']
 				?? $row['request_id']
@@ -3103,6 +3111,12 @@ class Patient extends BaseController
 			if (($operation === 'DATA_FETCH' || $operation === 'HI_DATA_PUSH_CALLBACK') && $status === 'SUCCESS') {
 				$phase = 'COMPLETED';
 				$priority = 500;
+			} elseif (in_array($rawConsentStatus, ['GRANTED', 'APPROVED', 'ACTIVE'], true)) {
+				$phase = 'GRANTED';
+				$priority = 430;
+			} elseif (in_array($rawConsentStatus, ['REVOKED', 'DENIED', 'EXPIRED'], true)) {
+				$phase = 'DENIED';
+				$priority = 310;
 			} elseif (in_array($state, ['DATA_RECEIVED'], true)) {
 				$phase = 'COMPLETED';
 				$priority = 480;
