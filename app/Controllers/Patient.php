@@ -3041,7 +3041,15 @@ class Patient extends BaseController
 		$rows = $this->db->table('abdm_hiu_workflows')
 			->select(implode(', ', $select))
 			->where('abha_address', $abhaAddress)
-			->whereIn('operation', ['consent_request', 'consent_reconcile', 'data_fetch', 'consent_callback'])
+			->whereIn('operation', [
+				'consent_request',
+				'consent_status',
+				'consent_reconcile',
+				'data_fetch',
+				'consent_callback',
+				'hi_on_request_callback',
+				'hi_data_push_callback',
+			])
 			->orderBy('id', 'DESC')
 			->get(40)
 			->getResultArray();
@@ -3092,9 +3100,12 @@ class Patient extends BaseController
 			$phase = 'REQUESTED';
 			$priority = 120;
 
-			if ($operation === 'DATA_FETCH' && $status === 'SUCCESS') {
+			if (($operation === 'DATA_FETCH' || $operation === 'HI_DATA_PUSH_CALLBACK') && $status === 'SUCCESS') {
 				$phase = 'COMPLETED';
 				$priority = 500;
+			} elseif (in_array($state, ['DATA_RECEIVED'], true)) {
+				$phase = 'COMPLETED';
+				$priority = 480;
 			} elseif (in_array($state, ['GRANTED'], true)) {
 				$phase = 'GRANTED';
 				$priority = 420;
