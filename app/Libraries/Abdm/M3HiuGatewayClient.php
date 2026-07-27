@@ -335,6 +335,23 @@ class M3HiuGatewayClient
             $response['abdm_consent_artifact_id'] = $abdmConsentId;
         }
 
+        // Per bridge contract, consent status/date_range/expiry come back nested
+        // under `consent{}` (e.g. { consent: { status: "GRANTED", ... } }) rather
+        // than at the top level. Flatten them so resolveState()/snapshot logic
+        // (which reads $response['consent_status']) can see the real value —
+        // otherwise GRANTED consents keep getting misclassified as pending.
+        $abdmConsentStatus = $this->findFirstValueByKeys($response, ['status']);
+        if ($abdmConsentStatus !== '') {
+            $response['consent_status'] = strtoupper($abdmConsentStatus);
+        }
+        if (isset($response['consent']) && is_array($response['consent'])) {
+            foreach (['date_range', 'dateRange', 'expiry', 'purpose', 'hi_types', 'abha_address', 'granted_at'] as $flattenKey) {
+                if (! isset($response[$flattenKey]) && isset($response['consent'][$flattenKey])) {
+                    $response[$flattenKey] = $response['consent'][$flattenKey];
+                }
+            }
+        }
+
         if (! isset($response['transaction_id'])) {
             $response['transaction_id'] = (string) ($response['transactionId'] ?? $cleanQuery['transaction_id'] ?? '');
         }

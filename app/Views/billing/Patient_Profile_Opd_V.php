@@ -295,49 +295,57 @@ if ($patientPhotoPath === '') {
                 </div>
 
                 <div class="tab-pane fade" id="opd-abdm-tab" role="tabpanel">
-                    <div class="alert alert-light border d-flex justify-content-between align-items-center flex-wrap gap-2 mt-2">
-                        <div>
-                            <div class="fw-semibold">ABHA Context</div>
-                            <div class="small text-muted">
-                                ABHA ID: <strong><?= $patientAbhaId !== '' ? esc($patientAbhaId) : 'Not available' ?></strong>
-                                &nbsp;|&nbsp;
-                                ABHA Address: <strong><?= $patientAbhaAddress !== '' ? esc($patientAbhaAddress) : 'Not available' ?></strong>
-                                &nbsp;|&nbsp;
-                                Status:
-                                <?php if ($abhaIsVerified) { ?>
-                                    <span class="badge bg-success-subtle text-success border border-success-subtle">VERIFIED</span>
-                                <?php } else { ?>
-                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle"><?= $abhaVerifiedStatus !== '' ? esc($abhaVerifiedStatus) : 'UNVERIFIED' ?></span>
-                                <?php } ?>
-                                &nbsp;|&nbsp;
-                                Last Consent: <span class="badge bg-secondary" id="abdmLastConsentBadge">Unknown</span>
-                                <span
-                                    class="ms-1 text-muted"
-                                    role="button"
-                                    tabindex="0"
-                                    data-bs-toggle="tooltip"
-                                    data-bs-placement="top"
-                                    title="Completed: data fetched. Granted: approved. Pending: waiting patient action. Failed: previous request failed. Failed - New Required: click New Consent Request."
-                                    aria-label="Consent status help"
-                                >?</span>
+                    <div class="card border mt-2 mb-3">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                                <div>
+                                    <div class="fw-semibold mb-1">ABDM M3 — Fetch Patient Health Records</div>
+                                    <div class="small text-muted">
+                                        ABHA Address: <strong><?= $patientAbhaAddress !== '' ? esc($patientAbhaAddress) : 'Not available' ?></strong>
+                                        &nbsp;|&nbsp;
+                                        ABHA Status:
+                                        <?php if ($abhaIsVerified) { ?>
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle">VERIFIED</span>
+                                        <?php } else { ?>
+                                            <span class="badge bg-warning-subtle text-warning border border-warning-subtle"><?= $abhaVerifiedStatus !== '' ? esc($abhaVerifiedStatus) : 'UNVERIFIED' ?></span>
+                                        <?php } ?>
+                                    </div>
+                                </div>
+                                <div class="text-end">
+                                    <button type="button" class="btn btn-primary" id="btnAutoAbdmFlow" <?= ($abhaIsVerified && $patientAbhaAddress !== '') ? '' : 'disabled' ?>>
+                                        <span class="abdm-btn-spinner spinner-border spinner-border-sm me-1 d-none" role="status" aria-hidden="true"></span>
+                                        <span id="btnAutoAbdmFlowLabel">Fetch ABDM Records</span>
+                                    </button>
+                                    <div>
+                                        <button type="button" class="btn btn-link btn-sm p-0 mt-1" id="btnLoadAbdmDocs">Refresh list</button>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                        <div class="d-flex gap-2 flex-wrap">
-                            <button type="button" class="btn btn-outline-primary btn-sm" id="btnLoadAbdmDocs">Refresh Fetched Data</button>
-                            <button type="button" class="btn btn-primary btn-sm" id="btnAutoAbdmFlow" <?= ($abhaIsVerified && $patientAbhaAddress !== '') ? '' : 'disabled' ?>>Fetch Request</button>
-                        </div>
-                    </div>
 
-                    <div id="abdmStatusBox" class="small text-muted mb-2">Click "Refresh Fetched Data" to load ABDM records mapped to this patient.</div>
+                            <?php if (! $abhaIsVerified || $patientAbhaAddress === '') { ?>
+                                <div class="alert alert-warning mt-3 mb-0 small">
+                                    ABHA must be linked and verified for this patient before ABDM records can be requested. Verify ABHA from the patient's profile first.
+                                </div>
+                            <?php } else { ?>
+                                <div class="small text-muted mt-2 mb-0">
+                                    One click sends a consent request to the patient's ABHA (PHR) app. Once the patient approves it there, HMS automatically fetches their health records — no need to click again.
+                                </div>
+                            <?php } ?>
 
-                    <div class="border rounded p-2 mb-3 bg-light">
-                        <div class="d-flex flex-wrap align-items-center gap-2 mb-2" id="abdmFlowSteps">
-                            <span class="abdm-flow-step" data-step="1">1. Requested</span>
-                            <span class="abdm-flow-step" data-step="2">2. Granted</span>
-                            <span class="abdm-flow-step" data-step="3">3. Fetched</span>
-                        </div>
-                        <div class="progress" style="height: 8px;">
-                            <div id="abdmFlowProgressBar" class="progress-bar" role="progressbar" style="width:0%"></div>
+                            <div class="border rounded p-3 mt-3 bg-light">
+                                <div class="d-flex flex-wrap align-items-center gap-2 mb-2" id="abdmFlowSteps">
+                                    <span class="abdm-flow-step" data-step="1">1. Consent Requested</span>
+                                    <span class="abdm-flow-step" data-step="2">2. Consent Granted</span>
+                                    <span class="abdm-flow-step" data-step="3">3. Records Fetched</span>
+                                </div>
+                                <div class="progress mb-2" style="height: 8px;">
+                                    <div id="abdmFlowProgressBar" class="progress-bar" role="progressbar" style="width:0%"></div>
+                                </div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="badge bg-secondary" id="abdmLastConsentBadge">Unknown</span>
+                                    <span id="abdmStatusBox" class="small text-muted flex-grow-1">Click "Fetch ABDM Records" to request and load the patient's ABDM health records.</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -420,6 +428,7 @@ $(function() {
     var autoFlowAttempts = 0;
     var autoFlowMaxAttempts = 15;
     var autoFlowNeedsFreshRequest = false;
+    var autoFlowRunning = false;
 
     function updateConsentBadge(phase, needsFresh) {
         var text = (phase || '').toString().toUpperCase();
@@ -448,7 +457,9 @@ $(function() {
     }
 
     function applyConsentButtonState() {
-        $('#btnAutoAbdmFlow').text(autoFlowTimer ? 'Fetching...' : 'Fetch Request');
+        $('#btnAutoAbdmFlow').prop('disabled', autoFlowRunning);
+        $('#btnAutoAbdmFlow .abdm-btn-spinner').toggleClass('d-none', !autoFlowRunning);
+        $('#btnAutoAbdmFlowLabel').text(autoFlowRunning ? 'Fetching...' : 'Fetch ABDM Records');
     }
 
     var zoom = 1;
@@ -760,7 +771,7 @@ $(function() {
                     autoFlowRequestId = '';
                     stopAutoFlowLoop();
                     updateConsentBadge('FAILED', false);
-                    $('#btnAutoAbdmFlow').prop('disabled', false);
+                    autoFlowRunning = false;
                     applyConsentButtonState();
                     $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text('Previous request is still being processed. Please wait for the first request to finish before starting a new one.');
                     return;
@@ -773,7 +784,7 @@ $(function() {
                     return;
                 }
 
-                $('#btnAutoAbdmFlow').prop('disabled', false);
+                autoFlowRunning = false;
                 applyConsentButtonState();
                 if (phase === 'COMPLETED') {
                     loadAbdmDocs();
@@ -781,7 +792,7 @@ $(function() {
             })
             .catch(function(err) {
                 stopAutoFlowLoop();
-                $('#btnAutoAbdmFlow').prop('disabled', false);
+                autoFlowRunning = false;
                 applyConsentButtonState();
                 $('#abdmStatusBox').removeClass('text-muted').addClass('text-danger').text('Auto flow failed: ' + (err.message || err));
             });
@@ -827,8 +838,7 @@ $(function() {
     });
 
     $(document).off('click.abdmOpd', '#btnAutoAbdmFlow').on('click.abdmOpd', '#btnAutoAbdmFlow', function() {
-        var $btn = $(this);
-        if ($btn.prop('disabled')) {
+        if (autoFlowRunning) {
             return;
         }
         stopAutoFlowLoop();
@@ -838,8 +848,9 @@ $(function() {
             autoFlowNeedsFreshRequest = false;
         }
         setFlowProgress(1);
-        $btn.prop('disabled', true).text('Sync Running...');
-        $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text('Starting one-click sync flow...');
+        autoFlowRunning = true;
+        applyConsentButtonState();
+        $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text('Sending consent request to patient\'s ABHA app...');
         runAutoFlowStep();
     });
 
