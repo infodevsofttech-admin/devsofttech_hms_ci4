@@ -758,13 +758,11 @@ $(function() {
 
                 if (resetRequestId) {
                     autoFlowRequestId = '';
+                    stopAutoFlowLoop();
                     updateConsentBadge('FAILED', false);
-                    $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text('Previous consent request is stale/failed. HMS is starting a fresh request automatically.');
-                    if (autoFlowAttempts < autoFlowMaxAttempts) {
-                        autoFlowAttempts += 1;
-                        autoFlowTimer = setTimeout(runAutoFlowStep, 1200);
-                        return;
-                    }
+                    $('#btnAutoAbdmFlow').prop('disabled', false);
+                    applyConsentButtonState();
+                    $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text('Previous request is still being processed. Please wait for the first request to finish before starting a new one.');
                     return;
                 }
 
