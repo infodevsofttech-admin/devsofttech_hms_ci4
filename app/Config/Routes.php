@@ -657,7 +657,7 @@ $routes->post('api/v3/hiu/consent/on_update', 'AbdmHiu::consentUpdateWebhook');
 $routes->post('api/v3/hiu/health-information/on-request', 'AbdmHiu::healthInformationOnRequestWebhook');
 $routes->post('api/v3/hiu/health-information/on_request', 'AbdmHiu::healthInformationOnRequestWebhook');
 $routes->post('api/v3/hiu/data/push', 'AbdmHiu::healthInformationDataPushWebhook');
-$routes->post('api/v1/hiu/consent/status', 'AbdmHiu::consentReconcile', ['filter' => $abdmPermFilter]);
+$routes->post('api/v1/hiu/consent/status', 'AbdmHiu::consentRequestStatus', ['filter' => $abdmPermFilter]);
 $routes->post('api/v1/hiu/data/fetch', 'AbdmHiu::dataFetch', ['filter' => $abdmPermFilter]);
 // HMS M2 adapter endpoints (Gateway -> HMS) - keep lowercase v1 path
 $routes->get('api/v1/abdm/gateway/health', 'AbdmGateway::m2GatewayHealth');
