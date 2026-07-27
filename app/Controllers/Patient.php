@@ -3035,11 +3035,11 @@ class Patient extends BaseController
 				$phase = 'DENIED';
 				$priority = 300;
 			} elseif ($status === 'FAILED' && $httpCode === 404 && stripos($errorText, 'consent record not found') !== false) {
-				$phase = 'REQUESTED';
-				$priority = 80;
+				$phase = 'FAILED';
+				$priority = 280;
 			} elseif ($status === 'FAILED') {
-				$phase = 'PENDING';
-				$priority = 100;
+				$phase = 'FAILED';
+				$priority = 260;
 			} elseif (in_array($state, ['REQUESTED', 'PENDING', 'STATUS_CHECKED'], true)) {
 				$phase = 'REQUESTED';
 				$priority = 180;
@@ -3053,7 +3053,9 @@ class Patient extends BaseController
 			} elseif ($phase === 'DENIED') {
 				$message = 'Consent was denied/revoked/expired in previous attempt.';
 			} elseif ($status === 'FAILED' && $httpCode === 404) {
-				$message = 'Consent status was not found on bridge in previous check. Retry after a short delay.';
+				$message = 'Last consent request was not found on bridge. Start a new consent request.';
+			} elseif ($phase === 'FAILED') {
+				$message = 'Last consent request failed. Start a new consent request.';
 			}
 
 			if ($best === null || $priority > $bestPriority) {
@@ -3105,9 +3107,10 @@ class Patient extends BaseController
 		$snapshot['operation'] = (string) ($best['operation'] ?? '');
 		$snapshot['status'] = (string) ($best['status'] ?? '');
 		$snapshot['restart_required'] = (bool) (
-			($snapshot['phase'] === 'REQUESTED')
-			&& ($snapshot['status'] === 'failed')
-			&& stripos((string) ($snapshot['message'] ?? ''), 'not found on bridge') !== false
+			($snapshot['phase'] === 'FAILED')
+			|| (($snapshot['phase'] === 'REQUESTED')
+				&& ($snapshot['status'] === 'failed')
+				&& stripos((string) ($snapshot['message'] ?? ''), 'not found on bridge') !== false)
 		);
 
 		return $snapshot;

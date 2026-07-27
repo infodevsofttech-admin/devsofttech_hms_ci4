@@ -309,11 +309,23 @@ if ($patientPhotoPath === '') {
                                 <?php } else { ?>
                                     <span class="badge bg-warning-subtle text-warning border border-warning-subtle"><?= $abhaVerifiedStatus !== '' ? esc($abhaVerifiedStatus) : 'UNVERIFIED' ?></span>
                                 <?php } ?>
+                                &nbsp;|&nbsp;
+                                Last Consent: <span class="badge bg-secondary" id="abdmLastConsentBadge">Unknown</span>
+                                <span
+                                    class="ms-1 text-muted"
+                                    role="button"
+                                    tabindex="0"
+                                    data-bs-toggle="tooltip"
+                                    data-bs-placement="top"
+                                    title="Completed: data fetched. Granted: approved. Pending: waiting patient action. Failed: previous request failed. Failed - New Required: click New Consent Request."
+                                    aria-label="Consent status help"
+                                >?</span>
                             </div>
                         </div>
                         <div class="d-flex gap-2 flex-wrap">
                             <button type="button" class="btn btn-outline-primary btn-sm" id="btnLoadAbdmDocs">Refresh Fetched Data</button>
                             <button type="button" class="btn btn-primary btn-sm" id="btnAutoAbdmFlow" <?= ($abhaIsVerified && $patientAbhaAddress !== '') ? '' : 'disabled' ?>>Start ABDM Sync</button>
+                            <button type="button" class="btn btn-outline-danger btn-sm" id="btnNewAbdmConsent" <?= ($abhaIsVerified && $patientAbhaAddress !== '') ? '' : 'disabled' ?> style="display:none;">New Consent Request</button>
                         </div>
                     </div>
 
@@ -409,6 +421,43 @@ $(function() {
     var autoFlowAttempts = 0;
     var autoFlowMaxAttempts = 15;
     var autoFlowNeedsFreshRequest = false;
+
+    function updateConsentBadge(phase, needsFresh) {
+        var text = (phase || '').toString().toUpperCase();
+        var $badge = $('#abdmLastConsentBadge');
+        if (!$badge.length) {
+            return;
+        }
+
+        $badge.removeClass('bg-secondary bg-success bg-info bg-warning bg-danger');
+        if (needsFresh) {
+            $badge.addClass('bg-danger').text('Failed - New Required');
+            return;
+        }
+
+        if (text === 'COMPLETED') {
+            $badge.addClass('bg-success').text('Completed');
+        } else if (text === 'GRANTED') {
+            $badge.addClass('bg-info').text('Granted');
+        } else if (text === 'REQUESTED' || text === 'PENDING') {
+            $badge.addClass('bg-warning').text('Pending');
+        } else if (text === 'FAILED' || text === 'DENIED') {
+            $badge.addClass('bg-danger').text('Failed');
+        } else {
+            $badge.addClass('bg-secondary').text('Unknown');
+        }
+    }
+
+    function applyConsentButtonState() {
+        var $newBtn = $('#btnNewAbdmConsent');
+        var canUse = autoFlowNeedsFreshRequest;
+        $newBtn.toggle(canUse);
+        if (canUse) {
+            $('#btnAutoAbdmFlow').text('Retry Sync');
+        } else {
+            $('#btnAutoAbdmFlow').text('Start ABDM Sync');
+        }
+    }
 
     var zoom = 1;
     var minZoom = 0.5;
@@ -621,7 +670,11 @@ $(function() {
                     setFlowProgress(2);
                 } else if (lastPhase === 'REQUESTED' || lastPhase === 'PENDING') {
                     setFlowProgress(1);
+                } else if (lastPhase === 'FAILED' || lastPhase === 'DENIED') {
+                    setFlowProgress(0);
                 }
+
+                updateConsentBadge(lastPhase, autoFlowNeedsFreshRequest);
 
                 var baseMsg = 'Loaded ' + currentAbdmRows.length + ' fetched ABDM record(s).';
                 if (lastSync && (lastSync.message || '').toString().trim() !== '') {
@@ -635,6 +688,7 @@ $(function() {
                 }
 
                 $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text(baseMsg);
+                applyConsentButtonState();
             })
             .catch(function(err) {
                 $('#abdmStatusBox').removeClass('text-muted').addClass('text-danger').text('ABDM load failed: ' + (err.message || err));
@@ -706,17 +760,21 @@ $(function() {
                 } else if (phase === 'REQUESTED' || phase === 'PENDING') {
                     setFlowProgress(1);
                 }
+                updateConsentBadge(phase, autoFlowNeedsFreshRequest);
 
                 $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text(info + (autoFlowRequestId ? (' | Request ID: ' + autoFlowRequestId) : ''));
 
                 if (resetRequestId) {
                     autoFlowNeedsFreshRequest = true;
                     autoFlowRequestId = '';
-                    if (autoFlowAttempts < autoFlowMaxAttempts) {
-                        autoFlowAttempts += 1;
-                        autoFlowTimer = setTimeout(runAutoFlowStep, 1200);
-                        return;
-                    }
+                    stopAutoFlowLoop();
+                    $('#btnAutoAbdmFlow').prop('disabled', false);
+                    updateConsentBadge('FAILED', true);
+                    applyConsentButtonState();
+                    $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text(
+                        'Previous consent request is stale/failed. Click "New Consent Request" to start a fresh request.'
+                    );
+                    return;
                 }
 
                 var shouldPoll = Number(data.poll_again || 0) === 1;
@@ -727,13 +785,15 @@ $(function() {
                 }
 
                 $('#btnAutoAbdmFlow').prop('disabled', false).text('One-Click Sync');
+                applyConsentButtonState();
                 if (phase === 'COMPLETED') {
                     loadAbdmDocs();
                 }
             })
             .catch(function(err) {
                 stopAutoFlowLoop();
-                $('#btnAutoAbdmFlow').prop('disabled', false).text('One-Click Sync');
+                $('#btnAutoAbdmFlow').prop('disabled', false);
+                applyConsentButtonState();
                 $('#abdmStatusBox').removeClass('text-muted').addClass('text-danger').text('Auto flow failed: ' + (err.message || err));
             });
     }
@@ -794,10 +854,25 @@ $(function() {
         runAutoFlowStep();
     });
 
+    $(document).off('click.abdmOpd', '#btnNewAbdmConsent').on('click.abdmOpd', '#btnNewAbdmConsent', function() {
+        autoFlowNeedsFreshRequest = false;
+        autoFlowRequestId = '';
+        autoFlowAttempts = 0;
+        stopAutoFlowLoop();
+        updateConsentBadge('IDLE', false);
+        applyConsentButtonState();
+        $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text('Fresh consent request context prepared. Click "Start ABDM Sync".');
+    });
+
     $(document).off('shown.bs.tab.abdmOpd', '[data-bs-target="#opd-abdm-tab"]').on('shown.bs.tab.abdmOpd', '[data-bs-target="#opd-abdm-tab"]', function() {
         if (!currentAbdmRows.length) {
             loadAbdmDocs();
         }
     });
+
+    $('[data-bs-toggle="tooltip"]').tooltip();
+
+    applyConsentButtonState();
+    updateConsentBadge('IDLE', false);
 });
 </script>

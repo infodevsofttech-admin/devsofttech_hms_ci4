@@ -48,11 +48,22 @@ $canUseM3 = $patientId > 0 && $abhaAddress !== '' && $abhaLooksVerified;
                                 ABHA Number: <strong><?= $abhaNumber !== '' ? esc($abhaNumber) : 'Not available' ?></strong>
                                 &nbsp;|&nbsp; ABHA Address: <strong><?= $abhaAddress !== '' ? esc($abhaAddress) : 'Not available' ?></strong>
                                 &nbsp;|&nbsp; Status: <?= $abhaLooksVerified ? '<span class="badge bg-success">Verified</span>' : '<span class="badge bg-secondary">Not verified in HMS</span>' ?>
+                                &nbsp;|&nbsp; Last Consent: <span class="badge bg-secondary" id="ayushmanLastConsentBadge">Unknown</span>
+                                <span
+                                    class="ms-1 text-muted"
+                                    role="button"
+                                    tabindex="0"
+                                    data-bs-toggle="tooltip"
+                                    data-bs-placement="top"
+                                    title="Completed: data fetched. Granted: approved. Pending: waiting patient action. Failed: previous request failed. Failed - New Required: click New Consent Request."
+                                    aria-label="Consent status help"
+                                >?</span>
                             </div>
                         </div>
                         <div class="d-flex gap-2 flex-wrap">
                             <button type="button" class="btn btn-sm btn-outline-primary" id="btnAyushmanLoadAbdmDocs" <?= $patientId > 0 ? '' : 'disabled' ?>>Load Fetched Data</button>
                             <button type="button" class="btn btn-sm btn-success" id="btnAyushmanFetchAbdmM3" <?= $canUseM3 ? '' : 'disabled' ?>>Fetch From ABDM M3</button>
+                            <button type="button" class="btn btn-sm btn-outline-danger" id="btnAyushmanNewConsent" <?= $canUseM3 ? '' : 'disabled' ?> style="display:none;">New Consent Request</button>
                             <button type="button" class="btn btn-sm btn-outline-secondary" onclick="load_form('<?= site_url('AbdmHiu') ?>','ABDM HIU M3')">Open M3 Console</button>
                         </div>
                     </div>
@@ -145,6 +156,38 @@ $canUseM3 = $patientId > 0 && $abhaAddress !== '' && $abhaLooksVerified;
     var pollTimer = null;
     var pollAttempts = 0;
     var maxPollAttempts = 15;
+    var needsFreshRequest = false;
+
+    function updateConsentBadge(phase, needsFresh) {
+        var text = (phase || '').toString().toUpperCase();
+        var $badge = $('#ayushmanLastConsentBadge');
+        if (!$badge.length) {
+            return;
+        }
+
+        $badge.removeClass('bg-secondary bg-success bg-info bg-warning bg-danger');
+        if (needsFresh) {
+            $badge.addClass('bg-danger').text('Failed - New Required');
+            return;
+        }
+
+        if (text === 'COMPLETED') {
+            $badge.addClass('bg-success').text('Completed');
+        } else if (text === 'GRANTED') {
+            $badge.addClass('bg-info').text('Granted');
+        } else if (text === 'REQUESTED' || text === 'PENDING') {
+            $badge.addClass('bg-warning').text('Pending');
+        } else if (text === 'FAILED' || text === 'DENIED') {
+            $badge.addClass('bg-danger').text('Failed');
+        } else {
+            $badge.addClass('bg-secondary').text('Unknown');
+        }
+    }
+
+    function applyConsentButtons() {
+        $('#btnAyushmanNewConsent').toggle(needsFreshRequest);
+        $('#btnAyushmanFetchAbdmM3').text(needsFreshRequest ? 'Retry ABDM M3 Sync' : 'Fetch From ABDM M3');
+    }
 
     function esc(value) {
         return $('<div>').text(value == null ? '' : String(value)).html();
@@ -238,6 +281,18 @@ $canUseM3 = $patientId > 0 && $abhaAddress !== '' && $abhaLooksVerified;
                 }
                 var rows = Array.isArray(data.items) ? data.items : [];
                 renderRows(rows);
+
+                var lastSync = data.last_sync || null;
+                if (lastSync) {
+                    var lastPhase = (lastSync.phase || '').toString().toUpperCase();
+                    needsFreshRequest = !!lastSync.restart_required;
+                    if (!needsFreshRequest && (lastSync.request_id || '').toString().trim() !== '') {
+                        currentRequestId = (lastSync.request_id || '').toString().trim();
+                    }
+                    updateConsentBadge(lastPhase, needsFreshRequest);
+                    applyConsentButtons();
+                }
+
                 setStatus('Loaded ' + rows.length + ' fetched ABDM record(s).', false);
             })
             .catch(function (error) {
@@ -286,7 +341,20 @@ $canUseM3 = $patientId > 0 && $abhaAddress !== '' && $abhaLooksVerified;
                 currentRequestId = (data.request_id || currentRequestId || '').toString();
                 var phase = (data.phase || '').toString();
                 var message = (data.message || ('Phase: ' + (phase || 'UNKNOWN'))).toString();
+                var resetRequestId = parseInt(data.reset_request_id || 0, 10) === 1;
                 setStatus(message + (currentRequestId ? (' | Request ID: ' + currentRequestId) : ''), false);
+                updateConsentBadge(phase, needsFreshRequest);
+
+                if (resetRequestId) {
+                    needsFreshRequest = true;
+                    currentRequestId = '';
+                    stopPolling();
+                    $('#btnAyushmanFetchAbdmM3').prop('disabled', false);
+                    updateConsentBadge('FAILED', true);
+                    applyConsentButtons();
+                    setStatus('Previous consent request is stale/failed. Click "New Consent Request" and run sync again.', false);
+                    return;
+                }
 
                 if (parseInt(data.poll_again || 0, 10) === 1 && pollAttempts < maxPollAttempts) {
                     pollAttempts += 1;
@@ -294,14 +362,16 @@ $canUseM3 = $patientId > 0 && $abhaAddress !== '' && $abhaLooksVerified;
                     return;
                 }
 
-                $('#btnAyushmanFetchAbdmM3').prop('disabled', false).text('Fetch From ABDM M3');
+                $('#btnAyushmanFetchAbdmM3').prop('disabled', false);
+                applyConsentButtons();
                 if (phase === 'COMPLETED') {
                     loadDocs();
                 }
             })
             .catch(function (error) {
                 stopPolling();
-                $('#btnAyushmanFetchAbdmM3').prop('disabled', false).text('Fetch From ABDM M3');
+                $('#btnAyushmanFetchAbdmM3').prop('disabled', false);
+                applyConsentButtons();
                 setStatus('M3 fetch failed: ' + (error.message || error), true);
             });
     }
@@ -331,6 +401,21 @@ $canUseM3 = $patientId > 0 && $abhaAddress !== '' && $abhaLooksVerified;
         setStatus('Starting ABDM M3 consent and data fetch flow...', false);
         runM3AutoFlow();
     });
+
+    $(document).off('click.ayushmanAbdm', '#btnAyushmanNewConsent').on('click.ayushmanAbdm', '#btnAyushmanNewConsent', function () {
+        needsFreshRequest = false;
+        currentRequestId = '';
+        pollAttempts = 0;
+        stopPolling();
+        updateConsentBadge('IDLE', false);
+        applyConsentButtons();
+        setStatus('Fresh consent request context prepared. Click "Fetch From ABDM M3" to create a new request.', false);
+    });
+
+    $('[data-bs-toggle="tooltip"]').tooltip();
+
+    applyConsentButtons();
+    updateConsentBadge('IDLE', false);
 })();
 </script>
 <?php endif; ?>
