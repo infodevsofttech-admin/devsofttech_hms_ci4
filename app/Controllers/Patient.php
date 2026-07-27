@@ -1144,12 +1144,16 @@ class Patient extends BaseController
 			]);
 		}
 
+		$abhaContext = $this->buildAbhaProfileContext($patientRow);
+		$lastSync = $this->getLatestAbdmSyncSnapshot((string) ($abhaContext['abha_address'] ?? ''));
+
 		if (! $this->db->tableExists('abdm_hiu_documents')) {
 			return $this->response->setJSON([
 				'ok' => 1,
 				'count' => 0,
 				'items' => [],
-				'abha' => $this->buildAbhaProfileContext($patientRow),
+				'abha' => $abhaContext,
+				'last_sync' => $lastSync,
 			]);
 		}
 
@@ -1159,7 +1163,6 @@ class Patient extends BaseController
 		}
 
 		$q = trim((string) ($this->request->getGet('q') ?? ''));
-		$abhaContext = $this->buildAbhaProfileContext($patientRow);
 
 		$builder = $this->db->table('abdm_hiu_documents d')
 			->select('d.id, d.patient_id, d.abha_address, d.document_title, d.document_date, d.care_context_reference, d.practitioner_name, d.organization_name, d.bundle_type, d.created_at')
@@ -1190,6 +1193,7 @@ class Patient extends BaseController
 			'count' => count($rows),
 			'items' => $rows,
 			'abha' => $abhaContext,
+			'last_sync' => $lastSync,
 		]);
 	}
 
@@ -1357,6 +1361,25 @@ class Patient extends BaseController
 		$consentResult = null;
 		$reconcileResult = null;
 		$fetchResult = null;
+		$lastSync = $this->getLatestAbdmSyncSnapshot((string) ($abhaContext['abha_address'] ?? ''));
+
+		if ($flowRefId === '') {
+			$lastRequestId = trim((string) ($lastSync['request_id'] ?? ''));
+			$lastPhase = strtoupper(trim((string) ($lastSync['phase'] ?? '')));
+			if ($lastRequestId !== '' && in_array($lastPhase, ['REQUESTED', 'PENDING', 'GRANTED'], true)) {
+				$flowRefId = $lastRequestId;
+				$consentRequestRef = trim((string) ($lastSync['consent_request_id'] ?? ''));
+				$consentArtifactRef = trim((string) ($lastSync['consent_id'] ?? ''));
+				$consentResult = [
+					'ok' => 1,
+					'http_code' => 200,
+					'request_id' => $flowRefId,
+					'workflow_state' => $lastPhase,
+					'reused_existing_request' => 1,
+					'message' => 'Resuming previous ABDM consent flow from saved status.',
+				];
+			}
+		}
 
 		if ($flowRefId === '') {
 			$consentPayload = [
@@ -2818,6 +2841,122 @@ class Patient extends BaseController
 		}
 
 		return '';
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function getLatestAbdmSyncSnapshot(string $abhaAddress): array
+	{
+		$snapshot = [
+			'phase' => 'IDLE',
+			'request_id' => '',
+			'consent_request_id' => '',
+			'consent_id' => '',
+			'message' => 'No previous ABDM sync activity found.',
+			'updated_at' => '',
+			'operation' => '',
+			'status' => '',
+		];
+
+		$abhaAddress = trim($abhaAddress);
+		if ($abhaAddress === '' || ! $this->db->tableExists('abdm_hiu_workflows')) {
+			return $snapshot;
+		}
+
+		$fields = $this->db->getFieldNames('abdm_hiu_workflows') ?? [];
+		$select = ['operation', 'workflow_state', 'status', 'request_id', 'consent_id', 'updated_at', 'last_error', 'http_code', 'response_json'];
+		if (in_array('gateway_request_id', $fields, true)) {
+			$select[] = 'gateway_request_id';
+		}
+		if (in_array('abdm_consent_request_id', $fields, true)) {
+			$select[] = 'abdm_consent_request_id';
+		}
+		if (in_array('abdm_consent_artifact_id', $fields, true)) {
+			$select[] = 'abdm_consent_artifact_id';
+		}
+
+		$row = $this->db->table('abdm_hiu_workflows')
+			->select(implode(', ', $select))
+			->where('abha_address', $abhaAddress)
+			->whereIn('operation', ['consent_request', 'consent_reconcile', 'data_fetch', 'consent_callback'])
+			->orderBy('id', 'DESC')
+			->get(1)
+			->getRowArray();
+
+		if (! is_array($row) || empty($row)) {
+			return $snapshot;
+		}
+
+		$decoded = json_decode((string) ($row['response_json'] ?? ''), true);
+		if (! is_array($decoded)) {
+			$decoded = [];
+		}
+
+		$requestId = trim((string) (
+			$row['gateway_request_id']
+			?? $row['request_id']
+			?? $decoded['gateway_request_id']
+			?? $decoded['request_id']
+			?? $decoded['requestId']
+			?? ''
+		));
+		$consentRequestId = trim((string) (
+			$row['abdm_consent_request_id']
+			?? $decoded['abdm_consent_request_id']
+			?? $decoded['consent_request_id']
+			?? $decoded['consentRequestId']
+			?? ''
+		));
+		$consentId = trim((string) (
+			$row['abdm_consent_artifact_id']
+			?? $row['consent_id']
+			?? $decoded['abdm_consent_artifact_id']
+			?? $decoded['consent_id']
+			?? $decoded['consentId']
+			?? ''
+		));
+
+		$operation = strtoupper(trim((string) ($row['operation'] ?? '')));
+		$status = strtoupper(trim((string) ($row['status'] ?? '')));
+		$state = strtoupper(trim((string) ($row['workflow_state'] ?? '')));
+		$errorText = trim((string) ($row['last_error'] ?? $decoded['error_text'] ?? ''));
+		$httpCode = (int) ($row['http_code'] ?? $decoded['http_code'] ?? 0);
+
+		$phase = 'REQUESTED';
+		if ($operation === 'DATA_FETCH' && $status === 'SUCCESS') {
+			$phase = 'COMPLETED';
+		} elseif (in_array($state, ['GRANTED'], true)) {
+			$phase = 'GRANTED';
+		} elseif (in_array($state, ['REVOKED', 'EXPIRED'], true)) {
+			$phase = 'DENIED';
+		} elseif ($status === 'FAILED' && $httpCode === 404 && stripos($errorText, 'consent record not found') !== false) {
+			$phase = 'REQUESTED';
+		} elseif ($status === 'FAILED') {
+			$phase = 'PENDING';
+		}
+
+		$message = 'Last status loaded from previous ABDM sync.';
+		if ($phase === 'COMPLETED') {
+			$message = 'Last sync completed successfully.';
+		} elseif ($phase === 'GRANTED') {
+			$message = 'Consent was granted. Continue sync to fetch records.';
+		} elseif ($phase === 'DENIED') {
+			$message = 'Consent was denied/revoked/expired in previous attempt.';
+		} elseif ($status === 'FAILED' && $httpCode === 404) {
+			$message = 'Consent status was not found on bridge in previous check. Retry after a short delay.';
+		}
+
+		$snapshot['phase'] = $phase;
+		$snapshot['request_id'] = $requestId;
+		$snapshot['consent_request_id'] = $consentRequestId;
+		$snapshot['consent_id'] = $consentId;
+		$snapshot['message'] = $message;
+		$snapshot['updated_at'] = trim((string) ($row['updated_at'] ?? ''));
+		$snapshot['operation'] = strtolower(trim((string) ($row['operation'] ?? '')));
+		$snapshot['status'] = strtolower(trim((string) ($row['status'] ?? '')));
+
+		return $snapshot;
 	}
 
 

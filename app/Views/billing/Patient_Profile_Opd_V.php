@@ -606,7 +606,33 @@ $(function() {
                 }
                 currentAbdmRows = Array.isArray(data.items) ? data.items : [];
                 renderAbdmRows(currentAbdmRows);
-                $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text('Loaded ' + currentAbdmRows.length + ' fetched ABDM record(s).');
+
+                var lastSync = data.last_sync || null;
+                if (lastSync && (lastSync.request_id || '').toString().trim() !== '') {
+                    autoFlowRequestId = (lastSync.request_id || '').toString().trim();
+                }
+
+                var lastPhase = lastSync ? (lastSync.phase || '').toString().toUpperCase() : '';
+                if (lastPhase === 'COMPLETED') {
+                    setFlowProgress(3);
+                } else if (lastPhase === 'GRANTED') {
+                    setFlowProgress(2);
+                } else if (lastPhase === 'REQUESTED' || lastPhase === 'PENDING') {
+                    setFlowProgress(1);
+                }
+
+                var baseMsg = 'Loaded ' + currentAbdmRows.length + ' fetched ABDM record(s).';
+                if (lastSync && (lastSync.message || '').toString().trim() !== '') {
+                    baseMsg = (lastSync.message || '').toString();
+                    if ((lastSync.updated_at || '').toString().trim() !== '') {
+                        baseMsg += ' | Last update: ' + (lastSync.updated_at || '').toString();
+                    }
+                    if ((lastSync.request_id || '').toString().trim() !== '') {
+                        baseMsg += ' | Request ID: ' + (lastSync.request_id || '').toString();
+                    }
+                }
+
+                $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text(baseMsg);
             })
             .catch(function(err) {
                 $('#abdmStatusBox').removeClass('text-muted').addClass('text-danger').text('ABDM load failed: ' + (err.message || err));
@@ -744,7 +770,6 @@ $(function() {
             return;
         }
         stopAutoFlowLoop();
-        autoFlowRequestId = '';
         autoFlowAttempts = 0;
         setFlowProgress(1);
         $btn.prop('disabled', true).text('Sync Running...');
