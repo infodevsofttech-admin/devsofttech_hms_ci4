@@ -668,10 +668,13 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         string $consentHandle,
         array  $rawPayload = []
     ): array {
+        [$safeFrom, $safeTo] = $this->buildSafeConsentDateRange();
         $body = [
             'patient_abha' => $abhaId,
             'purpose'      => $purposeCode !== '' ? $purposeCode : 'TREATMENT',
             'hi_types'     => $rawPayload['hi_types'] ?? ['OPConsultation'],
+            'date_range_from' => (string) ($rawPayload['date_range_from'] ?? $safeFrom),
+            'date_range_to'   => $this->clampUtcIsoToSafePast((string) ($rawPayload['date_range_to'] ?? $safeTo)),
         ];
         if ($expiresAt !== '') {
             $body['expires_at'] = $expiresAt;
@@ -682,6 +685,46 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             $result['gateway_consent_id'] = $result['consent_id'];
         }
         return $result;
+    }
+
+    /**
+     * @return array{0:string,1:string}
+     */
+    private function buildSafeConsentDateRange(): array
+    {
+        $nowUtc = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
+        $safeTo = $nowUtc->modify('-120 seconds');
+        $safeFrom = $safeTo->modify('-365 days');
+
+        return [
+            $safeFrom->format('Y-m-d\TH:i:s.000\Z'),
+            $safeTo->format('Y-m-d\TH:i:s.000\Z'),
+        ];
+    }
+
+    private function clampUtcIsoToSafePast(string $candidate): string
+    {
+        $candidate = trim($candidate);
+        $safeNowUtc = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))
+            ->modify('-120 seconds');
+        $safeNowIso = $safeNowUtc->format('Y-m-d\TH:i:s.000\Z');
+
+        if ($candidate === '') {
+            return $safeNowIso;
+        }
+
+        try {
+            $candidateAt = new \DateTimeImmutable($candidate);
+            if ($candidateAt->getTimestamp() > $safeNowUtc->getTimestamp()) {
+                return $safeNowIso;
+            }
+
+            return $candidateAt
+                ->setTimezone(new \DateTimeZone('UTC'))
+                ->format('Y-m-d\TH:i:s.000\Z');
+        } catch (\Throwable $e) {
+            return $safeNowIso;
+        }
     }
 
     // -------------------------------------------------------------------------

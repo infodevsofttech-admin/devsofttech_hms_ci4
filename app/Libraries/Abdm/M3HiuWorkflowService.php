@@ -922,13 +922,15 @@ class M3HiuWorkflowService
         $istTz = new \DateTimeZone('Asia/Kolkata');
         $utcTz = new \DateTimeZone('UTC');
         $nowIst = new \DateTimeImmutable('now', $istTz);
+        $safeToUtc = $nowIst
+            ->setTimezone($utcTz)
+            ->modify('-120 seconds');
         $fromUtc = $nowIst
             ->modify('-365 days')
             ->setTime(0, 0, 0)
             ->setTimezone($utcTz)
             ->format('Y-m-d\TH:i:s.000\Z');
-        $toUtc = $nowIst
-            ->setTimezone($utcTz)
+        $toUtc = $safeToUtc
             ->format('Y-m-d\TH:i:s.000\Z');
         $eraseAtUtc = $nowIst
             ->modify('+365 days')
@@ -999,17 +1001,18 @@ class M3HiuWorkflowService
             return $consent;
         }
 
-        $nowUtc = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
-        $nowIso = $nowUtc->format('Y-m-d\TH:i:s.000\Z');
+        $safeNowUtc = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))
+            ->modify('-120 seconds');
+        $safeNowIso = $safeNowUtc->format('Y-m-d\TH:i:s.000\Z');
 
         try {
             $toAt = new \DateTimeImmutable($toRaw);
-            if ($toAt->getTimestamp() > $nowUtc->getTimestamp()) {
-                $consent['permission']['dateRange']['to'] = $nowIso;
+            if ($toAt->getTimestamp() > $safeNowUtc->getTimestamp()) {
+                $consent['permission']['dateRange']['to'] = $safeNowIso;
             }
         } catch (\Throwable $e) {
             // Fall back to current UTC to avoid sending invalid timestamp shapes.
-            $consent['permission']['dateRange']['to'] = $nowIso;
+            $consent['permission']['dateRange']['to'] = $safeNowIso;
         }
 
         return $consent;

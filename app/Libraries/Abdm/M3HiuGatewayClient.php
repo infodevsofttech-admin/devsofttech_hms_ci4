@@ -195,16 +195,17 @@ class M3HiuGatewayClient
             return $payload;
         }
 
-        $nowUtc = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
-        $nowIso = $nowUtc->format('Y-m-d\TH:i:s.000\Z');
+        $safeNowUtc = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))
+            ->modify('-120 seconds');
+        $safeNowIso = $safeNowUtc->format('Y-m-d\TH:i:s.000\Z');
 
         try {
             $toAt = new \DateTimeImmutable($toRaw);
-            if ($toAt->getTimestamp() > $nowUtc->getTimestamp()) {
-                $payload['consent']['permission']['dateRange']['to'] = $nowIso;
+            if ($toAt->getTimestamp() > $safeNowUtc->getTimestamp()) {
+                $payload['consent']['permission']['dateRange']['to'] = $safeNowIso;
             }
         } catch (\Throwable $e) {
-            $payload['consent']['permission']['dateRange']['to'] = $nowIso;
+            $payload['consent']['permission']['dateRange']['to'] = $safeNowIso;
         }
 
         return $payload;
