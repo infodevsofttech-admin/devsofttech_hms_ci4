@@ -23,6 +23,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
     private string $hfrId;
     private string $bridgeHospitalId;
     private int    $timeoutSec;
+    private bool   $sslVerify = true;
     /** @var array<int, string> */
     private array $tokenCandidates = [];
     /** @var array<string, string> */
@@ -76,6 +77,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
                     'ABDM_HOSPITAL_HFR_ID',
                     'ABDM_BRIDGE_HOSPITAL_ID',
                     'EATRIA_BRIDGE_HOSPITAL_ID',
+                    'ABDM_BRIDGE_SSL_VERIFY',
                 ]);
 
             // Ensure deterministic override when duplicate setting rows exist.
@@ -146,6 +148,15 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             ));
             if ($dbBridgeHospitalId !== '') {
                 $this->bridgeHospitalId = $dbBridgeHospitalId;
+            }
+
+            // SSL verification stays ON by default (secure). Admin → ABDM Gateway
+            // page can opt out per-deployment for servers with a stale local CA
+            // bundle (cURL error 60); an env override on that specific machine
+            // takes precedence over the DB setting.
+            $dbSslVerifyRaw = strtolower(trim((string) ($dbSettings['ABDM_BRIDGE_SSL_VERIFY'] ?? '')));
+            if ($dbSslVerifyRaw !== '') {
+                $this->sslVerify = ! in_array($dbSslVerifyRaw, ['0', 'false', 'no', 'off'], true);
             }
         } catch (\Throwable $e) {
             log_message('warning', '[EAtriaBridge] refreshRuntimeSettingsFromDb failed: ' . $e->getMessage());
@@ -308,10 +319,13 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             // SSL verification stays ON by default. Some local WAMP/XAMPP
             // installs ship a stale bundled cacert.pem, causing cURL error 60
             // on outbound HTTPS calls. Fix that by updating curl.cainfo in
-            // php.ini on the affected machine; only as a last resort can a
-            // specific deployment opt out via ABDM_BRIDGE_SSL_VERIFY=false.
-            $sslVerifyRaw = strtolower(trim((string) (getenv('ABDM_BRIDGE_SSL_VERIFY') ?: '')));
-            $sslVerify = ! in_array($sslVerifyRaw, ['0', 'false', 'no', 'off'], true);
+            // php.ini on the affected machine, or opt out for this specific
+            // deployment via Admin → ABDM Gateway (or ABDM_BRIDGE_SSL_VERIFY=false
+            // in that machine's .env, which takes precedence).
+            $sslVerifyEnvRaw = strtolower(trim((string) (getenv('ABDM_BRIDGE_SSL_VERIFY') ?: '')));
+            $sslVerify = $sslVerifyEnvRaw !== ''
+                ? ! in_array($sslVerifyEnvRaw, ['0', 'false', 'no', 'off'], true)
+                : $this->sslVerify;
 
             $ch = curl_init();
             $curlOptions = [

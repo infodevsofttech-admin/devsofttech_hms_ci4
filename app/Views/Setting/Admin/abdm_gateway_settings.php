@@ -51,6 +51,27 @@
             </div>
         </div>
 
+        <!-- SSL Verification -->
+        <div class="mb-3">
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" id="abdm_ssl_verify"
+                       <?= (! isset($ssl_verify) || $ssl_verify) ? 'checked' : '' ?>>
+                <label class="form-check-label fw-semibold" for="abdm_ssl_verify">Verify SSL Certificate</label>
+            </div>
+            <div class="form-text">
+                Keep this <strong>ON</strong> (default). Only turn it <strong>OFF</strong> if this server's local PHP
+                has an outdated CA certificate bundle causing "SSL certificate problem" (cURL error 60) errors when
+                calling the gateway — this is a local server issue, not a gateway issue. Disabling verification
+                removes protection against man-in-the-middle attacks, so use it only as a temporary workaround on a
+                trusted network while the server's CA bundle is updated.
+            </div>
+            <div class="alert alert-warning py-1 px-2 mt-1 d-none" id="abdm_ssl_verify_warning" style="font-size:12px">
+                <i class="bi bi-exclamation-triangle me-1"></i>SSL verification is OFF. Health data will still be
+                encrypted in transit, but the gateway's certificate identity won't be checked. Turn this back on once
+                the server's CA bundle is fixed.
+            </div>
+        </div>
+
         <!-- API Key -->
         <div class="mb-3">
             <label class="form-label fw-semibold">API Key (Bearer Token)</label>
@@ -89,6 +110,13 @@
                     <a href="<?= esc($gateway_url ?? 'https://abdm-bridge.e-atria.in/api') ?>" target="_blank">
                         <?= esc($gateway_url ?? 'https://abdm-bridge.e-atria.in/api') ?>
                     </a>
+                </span>
+                <span><strong>SSL Verify:</strong>
+                    <?php if (! isset($ssl_verify) || $ssl_verify) : ?>
+                        <span class="badge bg-success">ON</span>
+                    <?php else : ?>
+                        <span class="badge bg-warning text-dark">OFF</span>
+                    <?php endif; ?>
                 </span>
             </div>
         </div>
@@ -180,9 +208,16 @@
             gateway_url: ($('#abdm_gateway_url').val() || '').trim(),
             api_token:   ($('#abdm_api_token').val() || '').trim(),
             hfr_id:      ($('#abdm_hfr_id').val() || '').trim(),
-            hms_name:    ($('#abdm_hms_name').val() || '').trim()
+            hms_name:    ($('#abdm_hms_name').val() || '').trim(),
+            ssl_verify:  $('#abdm_ssl_verify').is(':checked') ? 1 : 0
         };
     }
+
+    function updateSslWarning() {
+        $('#abdm_ssl_verify_warning').toggleClass('d-none', $('#abdm_ssl_verify').is(':checked'));
+    }
+    updateSslWarning();
+    $('#abdm_ssl_verify').on('change', updateSslWarning);
 
     // Toggle show/hide API key
     $('#btn_toggle_abdm_token').on('click', function () {

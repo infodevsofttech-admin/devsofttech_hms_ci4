@@ -20,6 +20,8 @@ class AbdmGatewaySettings extends BaseController
         $hmsName  = $this->readSettingValue('ABDM_HMS_NAME');
         $gwUrl    = $this->readSettingValue('EATRIA_BRIDGE_URL') ?: 'https://abdm-bridge.e-atria.in/api';
         $bridgeHospitalId = $this->readSettingValue('ABDM_BRIDGE_HOSPITAL_ID');
+        $sslVerifyRaw = strtolower(trim($this->readSettingValue('ABDM_BRIDGE_SSL_VERIFY')));
+        $sslVerify = ! in_array($sslVerifyRaw, ['0', 'false', 'no', 'off'], true);
 
         return view('Setting/Admin/abdm_gateway_settings', [
             'gateway_url'          => $gwUrl,
@@ -30,6 +32,7 @@ class AbdmGatewaySettings extends BaseController
             'token_exists'         => $token !== '',
             'connector'            => $this->readSettingValue('ABDM_CONNECTOR') ?: 'eatria_bridge',
             'abdm_sync_provider'   => $this->readSettingValue('ABDM_SYNC_PROVIDER') ?: 'eatria',
+            'ssl_verify'           => $sslVerify,
         ]);
     }
 
@@ -51,6 +54,8 @@ class AbdmGatewaySettings extends BaseController
         $token  = $this->sanitizeBearerToken((string) $this->request->getPost('api_token'));
         $hfrId  = trim((string) $this->request->getPost('hfr_id'));
         $hmsName = trim((string) $this->request->getPost('hms_name'));
+        $sslVerifyPosted = $this->request->getPost('ssl_verify');
+        $sslVerify = $sslVerifyPosted === null ? true : (bool) (int) $sslVerifyPosted;
 
         // Validate gateway URL format
         if ($gwUrl !== '' && ! filter_var($gwUrl, FILTER_VALIDATE_URL)) {
@@ -87,6 +92,7 @@ class AbdmGatewaySettings extends BaseController
         // Always set connector to eatria_bridge when saving from this page
         $this->upsertSettingValue('ABDM_CONNECTOR', 'eatria_bridge');
         $this->upsertSettingValue('ABDM_SYNC_PROVIDER', 'eatria');
+        $this->upsertSettingValue('ABDM_BRIDGE_SSL_VERIFY', $sslVerify ? '1' : '0');
 
         if ($saved === 0) {
             return $this->response->setJSON([
@@ -104,6 +110,7 @@ class AbdmGatewaySettings extends BaseController
             'error_text' => 'ABDM Gateway settings saved.',
             'token_exists'  => $storedToken !== '',
             'token_masked'  => $this->maskKey($storedToken),
+            'ssl_verify'    => $sslVerify,
             'csrfName' => csrf_token(),
             'csrfHash' => csrf_hash(),
         ]);
@@ -139,6 +146,16 @@ class AbdmGatewaySettings extends BaseController
 
         $gwUrl = rtrim($gwUrl, '/');
 
+        // ssl_verify: prefer explicitly posted value (from the unsaved form state),
+        // else fall back to the stored setting. Defaults to secure (verify ON).
+        $sslVerifyPosted = $this->request->getPost('ssl_verify');
+        if ($sslVerifyPosted !== null) {
+            $sslVerify = (bool) (int) $sslVerifyPosted;
+        } else {
+            $sslVerifyRaw = strtolower(trim($this->readSettingValue('ABDM_BRIDGE_SSL_VERIFY')));
+            $sslVerify = ! in_array($sslVerifyRaw, ['0', 'false', 'no', 'off'], true);
+        }
+
         // ── Step 1: Health check — include Bearer if available (gateway may require auth even on /health) ──
         $healthUrl     = $gwUrl . '/v3/health' . ($hfrId !== '' ? '?hfr_id=' . urlencode($hfrId) : '');
         $healthHeaders = ['Accept: application/json'];
@@ -150,7 +167,8 @@ class AbdmGatewaySettings extends BaseController
             CURLOPT_URL            => $healthUrl,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT        => 10,
-            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYPEER => $sslVerify,
+            CURLOPT_SSL_VERIFYHOST => $sslVerify ? 2 : 0,
             CURLOPT_HTTPHEADER     => $healthHeaders,
         ]);
         $rawHealth     = (string) curl_exec($ch);
@@ -222,7 +240,8 @@ class AbdmGatewaySettings extends BaseController
             CURLOPT_URL            => $statusUrl,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT        => 10,
-            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYPEER => $sslVerify,
+            CURLOPT_SSL_VERIFYHOST => $sslVerify ? 2 : 0,
             CURLOPT_HTTPHEADER     => [
                 'Accept: application/json',
                 'Authorization: Bearer ' . $token,

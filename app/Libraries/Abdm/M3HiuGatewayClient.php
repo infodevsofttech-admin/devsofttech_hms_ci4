@@ -19,16 +19,26 @@ class M3HiuGatewayClient
      * WAMP/XAMPP/Laragon installs ship a stale bundled cacert.pem which makes
      * outbound HTTPS calls fail with cURL error 60 (SSL certificate problem).
      * Rather than disabling verification for everyone, allow an explicit,
-     * per-deployment opt-out via env for that specific broken environment:
-     *   ABDM_BRIDGE_SSL_VERIFY=false
-     * The correct long-term fix on the affected machine is to update PHP's
-     * CA bundle (curl.cainfo in php.ini), not to disable verification.
+     * per-deployment opt-out configured in Admin → ABDM Gateway
+     * (hospital_setting.ABDM_BRIDGE_SSL_VERIFY), or via env for that specific
+     * machine (ABDM_BRIDGE_SSL_VERIFY=false, takes precedence over the DB
+     * setting). The correct long-term fix on the affected machine is to
+     * update PHP's CA bundle (curl.cainfo in php.ini), not to disable
+     * verification.
      */
-    private function sslVerifyEnabled(): bool
+    private function sslVerifyEnabled(string $dbSetting = ''): bool
     {
-        $raw = strtolower(trim((string) (getenv('ABDM_BRIDGE_SSL_VERIFY') ?: '')));
+        $envRaw = strtolower(trim((string) (getenv('ABDM_BRIDGE_SSL_VERIFY') ?: '')));
+        if ($envRaw !== '') {
+            return ! in_array($envRaw, ['0', 'false', 'no', 'off'], true);
+        }
 
-        return ! in_array($raw, ['0', 'false', 'no', 'off'], true);
+        $dbRaw = strtolower(trim($dbSetting));
+        if ($dbRaw !== '') {
+            return ! in_array($dbRaw, ['0', 'false', 'no', 'off'], true);
+        }
+
+        return true;
     }
 
     private function sanitizeBearerToken(string $token): string
@@ -105,7 +115,7 @@ class M3HiuGatewayClient
             $headers[] = 'X-Hospital-Id: ' . $hospitalId;
         }
 
-        $sslVerify = $this->sslVerifyEnabled();
+        $sslVerify = $this->sslVerifyEnabled((string) ($settings['ssl_verify'] ?? ''));
         $ch = curl_init();
         curl_setopt_array($ch, [
             CURLOPT_URL => $url,
@@ -285,7 +295,7 @@ class M3HiuGatewayClient
             $url .= '?' . http_build_query($cleanQuery);
         }
 
-        $sslVerify = $this->sslVerifyEnabled();
+        $sslVerify = $this->sslVerifyEnabled((string) ($settings['ssl_verify'] ?? ''));
         $ch = curl_init();
         curl_setopt_array($ch, [
             CURLOPT_URL => $url,
@@ -408,6 +418,7 @@ class M3HiuGatewayClient
                 'ABDM_BRIDGE_HOSPITAL_ID',
                 'EATRIA_BRIDGE_HOSPITAL_ID',
                 'EATRIA_BRIDGE_URL',
+                'ABDM_BRIDGE_SSL_VERIFY',
             ]);
         if ($orderCol !== null) {
             $rowsBuilder->orderBy($orderCol, 'DESC');
@@ -452,6 +463,7 @@ class M3HiuGatewayClient
             'hfr_id' => $hfrId,
             'hospital_id' => $hospitalId,
             'base_url' => $baseUrl,
+            'ssl_verify' => (string) ($kv['ABDM_BRIDGE_SSL_VERIFY'] ?? ''),
         ];
     }
 
