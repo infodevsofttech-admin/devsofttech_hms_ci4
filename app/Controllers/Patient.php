@@ -2876,85 +2876,139 @@ class Patient extends BaseController
 			$select[] = 'abdm_consent_artifact_id';
 		}
 
-		$row = $this->db->table('abdm_hiu_workflows')
+		$rows = $this->db->table('abdm_hiu_workflows')
 			->select(implode(', ', $select))
 			->where('abha_address', $abhaAddress)
 			->whereIn('operation', ['consent_request', 'consent_reconcile', 'data_fetch', 'consent_callback'])
 			->orderBy('id', 'DESC')
-			->get(1)
-			->getRowArray();
+			->get(40)
+			->getResultArray();
 
-		if (! is_array($row) || empty($row)) {
+		if ($rows === []) {
 			return $snapshot;
 		}
 
-		$decoded = json_decode((string) ($row['response_json'] ?? ''), true);
-		if (! is_array($decoded)) {
-			$decoded = [];
-		}
+		$best = null;
+		$bestPriority = -1;
 
-		$requestId = trim((string) (
-			$row['gateway_request_id']
-			?? $row['request_id']
-			?? $decoded['gateway_request_id']
-			?? $decoded['request_id']
-			?? $decoded['requestId']
-			?? ''
-		));
-		$consentRequestId = trim((string) (
-			$row['abdm_consent_request_id']
-			?? $decoded['abdm_consent_request_id']
-			?? $decoded['consent_request_id']
-			?? $decoded['consentRequestId']
-			?? ''
-		));
-		$consentId = trim((string) (
-			$row['abdm_consent_artifact_id']
-			?? $row['consent_id']
-			?? $decoded['abdm_consent_artifact_id']
-			?? $decoded['consent_id']
-			?? $decoded['consentId']
-			?? ''
-		));
+		foreach ($rows as $row) {
+			$decoded = json_decode((string) ($row['response_json'] ?? ''), true);
+			if (! is_array($decoded)) {
+				$decoded = [];
+			}
 
-		$operation = strtoupper(trim((string) ($row['operation'] ?? '')));
-		$status = strtoupper(trim((string) ($row['status'] ?? '')));
-		$state = strtoupper(trim((string) ($row['workflow_state'] ?? '')));
-		$errorText = trim((string) ($row['last_error'] ?? $decoded['error_text'] ?? ''));
-		$httpCode = (int) ($row['http_code'] ?? $decoded['http_code'] ?? 0);
+			$requestId = trim((string) (
+				$row['gateway_request_id']
+				?? $row['request_id']
+				?? $decoded['gateway_request_id']
+				?? $decoded['request_id']
+				?? $decoded['requestId']
+				?? ''
+			));
+			$consentRequestId = trim((string) (
+				$row['abdm_consent_request_id']
+				?? $decoded['abdm_consent_request_id']
+				?? $decoded['consent_request_id']
+				?? $decoded['consentRequestId']
+				?? ''
+			));
+			$consentId = trim((string) (
+				$row['abdm_consent_artifact_id']
+				?? $row['consent_id']
+				?? $decoded['abdm_consent_artifact_id']
+				?? $decoded['consent_id']
+				?? $decoded['consentId']
+				?? ''
+			));
 
-		$phase = 'REQUESTED';
-		if ($operation === 'DATA_FETCH' && $status === 'SUCCESS') {
-			$phase = 'COMPLETED';
-		} elseif (in_array($state, ['GRANTED'], true)) {
-			$phase = 'GRANTED';
-		} elseif (in_array($state, ['REVOKED', 'EXPIRED'], true)) {
-			$phase = 'DENIED';
-		} elseif ($status === 'FAILED' && $httpCode === 404 && stripos($errorText, 'consent record not found') !== false) {
+			$operation = strtoupper(trim((string) ($row['operation'] ?? '')));
+			$status = strtoupper(trim((string) ($row['status'] ?? '')));
+			$state = strtoupper(trim((string) ($row['workflow_state'] ?? '')));
+			$errorText = trim((string) ($row['last_error'] ?? $decoded['error_text'] ?? ''));
+			$httpCode = (int) ($row['http_code'] ?? $decoded['http_code'] ?? 0);
+
 			$phase = 'REQUESTED';
-		} elseif ($status === 'FAILED') {
-			$phase = 'PENDING';
+			$priority = 120;
+
+			if ($operation === 'DATA_FETCH' && $status === 'SUCCESS') {
+				$phase = 'COMPLETED';
+				$priority = 500;
+			} elseif (in_array($state, ['GRANTED'], true)) {
+				$phase = 'GRANTED';
+				$priority = 420;
+			} elseif (in_array($state, ['REVOKED', 'EXPIRED'], true)) {
+				$phase = 'DENIED';
+				$priority = 300;
+			} elseif ($status === 'FAILED' && $httpCode === 404 && stripos($errorText, 'consent record not found') !== false) {
+				$phase = 'REQUESTED';
+				$priority = 80;
+			} elseif ($status === 'FAILED') {
+				$phase = 'PENDING';
+				$priority = 100;
+			} elseif (in_array($state, ['REQUESTED', 'PENDING', 'STATUS_CHECKED'], true)) {
+				$phase = 'REQUESTED';
+				$priority = 180;
+			}
+
+			$message = 'Last status loaded from previous ABDM sync.';
+			if ($phase === 'COMPLETED') {
+				$message = 'Last sync completed successfully.';
+			} elseif ($phase === 'GRANTED') {
+				$message = 'Consent was granted. Continue sync to fetch records.';
+			} elseif ($phase === 'DENIED') {
+				$message = 'Consent was denied/revoked/expired in previous attempt.';
+			} elseif ($status === 'FAILED' && $httpCode === 404) {
+				$message = 'Consent status was not found on bridge in previous check. Retry after a short delay.';
+			}
+
+			if ($best === null || $priority > $bestPriority) {
+				$best = [
+					'phase' => $phase,
+					'request_id' => $requestId,
+					'consent_request_id' => $consentRequestId,
+					'consent_id' => $consentId,
+					'message' => $message,
+					'updated_at' => trim((string) ($row['updated_at'] ?? '')),
+					'operation' => strtolower(trim((string) ($row['operation'] ?? ''))),
+					'status' => strtolower(trim((string) ($row['status'] ?? ''))),
+				];
+				$bestPriority = $priority;
+			}
 		}
 
-		$message = 'Last status loaded from previous ABDM sync.';
-		if ($phase === 'COMPLETED') {
-			$message = 'Last sync completed successfully.';
-		} elseif ($phase === 'GRANTED') {
-			$message = 'Consent was granted. Continue sync to fetch records.';
-		} elseif ($phase === 'DENIED') {
-			$message = 'Consent was denied/revoked/expired in previous attempt.';
-		} elseif ($status === 'FAILED' && $httpCode === 404) {
-			$message = 'Consent status was not found on bridge in previous check. Retry after a short delay.';
+		if (! is_array($best)) {
+			return $snapshot;
 		}
 
-		$snapshot['phase'] = $phase;
-		$snapshot['request_id'] = $requestId;
-		$snapshot['consent_request_id'] = $consentRequestId;
-		$snapshot['consent_id'] = $consentId;
-		$snapshot['message'] = $message;
-		$snapshot['updated_at'] = trim((string) ($row['updated_at'] ?? ''));
-		$snapshot['operation'] = strtolower(trim((string) ($row['operation'] ?? '')));
-		$snapshot['status'] = strtolower(trim((string) ($row['status'] ?? '')));
+		if (($best['request_id'] ?? '') === '') {
+			foreach ($rows as $row) {
+				$decoded = json_decode((string) ($row['response_json'] ?? ''), true);
+				if (! is_array($decoded)) {
+					$decoded = [];
+				}
+				$fallbackRequestId = trim((string) (
+					$row['gateway_request_id']
+					?? $row['request_id']
+					?? $decoded['gateway_request_id']
+					?? $decoded['request_id']
+					?? $decoded['requestId']
+					?? ''
+				));
+				if ($fallbackRequestId !== '') {
+					$best['request_id'] = $fallbackRequestId;
+					break;
+				}
+			}
+		}
+
+		$snapshot['phase'] = (string) ($best['phase'] ?? 'REQUESTED');
+		$snapshot['request_id'] = (string) ($best['request_id'] ?? '');
+		$snapshot['consent_request_id'] = (string) ($best['consent_request_id'] ?? '');
+		$snapshot['consent_id'] = (string) ($best['consent_id'] ?? '');
+		$snapshot['message'] = (string) ($best['message'] ?? 'Last status loaded from previous ABDM sync.');
+		$snapshot['updated_at'] = (string) ($best['updated_at'] ?? '');
+		$snapshot['operation'] = (string) ($best['operation'] ?? '');
+		$snapshot['status'] = (string) ($best['status'] ?? '');
 
 		return $snapshot;
 	}
