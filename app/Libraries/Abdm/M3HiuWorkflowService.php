@@ -765,6 +765,8 @@ class M3HiuWorkflowService
                 ];
             }
 
+            $consent = $this->clampConsentPermissionDateRangeToNow($consent);
+
             return [
                 'ok' => 1,
                 'payload' => $base + ['consent' => $consent],
@@ -926,7 +928,6 @@ class M3HiuWorkflowService
             ->setTimezone($utcTz)
             ->format('Y-m-d\TH:i:s.000\Z');
         $toUtc = $nowIst
-            ->setTime(23, 59, 59)
             ->setTimezone($utcTz)
             ->format('Y-m-d\TH:i:s.000\Z');
         $eraseAtUtc = $nowIst
@@ -979,6 +980,36 @@ class M3HiuWorkflowService
                     'value' => $fallbackId,
                 ];
             }
+        }
+
+        return $consent;
+    }
+
+    private function clampConsentPermissionDateRangeToNow(array $consent): array
+    {
+        if (! isset($consent['permission']) || ! is_array($consent['permission'])) {
+            return $consent;
+        }
+        if (! isset($consent['permission']['dateRange']) || ! is_array($consent['permission']['dateRange'])) {
+            return $consent;
+        }
+
+        $toRaw = trim((string) ($consent['permission']['dateRange']['to'] ?? ''));
+        if ($toRaw === '') {
+            return $consent;
+        }
+
+        $nowUtc = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
+        $nowIso = $nowUtc->format('Y-m-d\TH:i:s.000\Z');
+
+        try {
+            $toAt = new \DateTimeImmutable($toRaw);
+            if ($toAt->getTimestamp() > $nowUtc->getTimestamp()) {
+                $consent['permission']['dateRange']['to'] = $nowIso;
+            }
+        } catch (\Throwable $e) {
+            // Fall back to current UTC to avoid sending invalid timestamp shapes.
+            $consent['permission']['dateRange']['to'] = $nowIso;
         }
 
         return $consent;

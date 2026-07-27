@@ -76,6 +76,7 @@ class M3HiuGatewayClient
             ];
         }
         $payload['hfr_id'] = $hfrId;
+        $payload = $this->clampConsentDateRangeToNow($payload);
 
         $url = $this->baseUrl . $path;
         $headers = [
@@ -175,6 +176,38 @@ class M3HiuGatewayClient
         $this->writeApiLog($eventKey, $path, $payload, $response, $httpCode, $ok, $errorText, $hospitalId);
 
         return $response;
+    }
+
+    private function clampConsentDateRangeToNow(array $payload): array
+    {
+        if (! isset($payload['consent']) || ! is_array($payload['consent'])) {
+            return $payload;
+        }
+        if (! isset($payload['consent']['permission']) || ! is_array($payload['consent']['permission'])) {
+            return $payload;
+        }
+        if (! isset($payload['consent']['permission']['dateRange']) || ! is_array($payload['consent']['permission']['dateRange'])) {
+            return $payload;
+        }
+
+        $toRaw = trim((string) ($payload['consent']['permission']['dateRange']['to'] ?? ''));
+        if ($toRaw === '') {
+            return $payload;
+        }
+
+        $nowUtc = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
+        $nowIso = $nowUtc->format('Y-m-d\TH:i:s.000\Z');
+
+        try {
+            $toAt = new \DateTimeImmutable($toRaw);
+            if ($toAt->getTimestamp() > $nowUtc->getTimestamp()) {
+                $payload['consent']['permission']['dateRange']['to'] = $nowIso;
+            }
+        } catch (\Throwable $e) {
+            $payload['consent']['permission']['dateRange']['to'] = $nowIso;
+        }
+
+        return $payload;
     }
 
     private function callGet(string $path, array $query, string $eventKey): array
