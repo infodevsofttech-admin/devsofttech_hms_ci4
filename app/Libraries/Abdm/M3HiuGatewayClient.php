@@ -14,6 +14,23 @@ class M3HiuGatewayClient
         $this->baseUrl = rtrim((string) (getenv('EATRIA_BRIDGE_URL') ?: 'https://abdm-bridge.e-atria.in/api'), '/');
     }
 
+    /**
+     * SSL peer/host verification is ON by default (secure). Some local
+     * WAMP/XAMPP/Laragon installs ship a stale bundled cacert.pem which makes
+     * outbound HTTPS calls fail with cURL error 60 (SSL certificate problem).
+     * Rather than disabling verification for everyone, allow an explicit,
+     * per-deployment opt-out via env for that specific broken environment:
+     *   ABDM_BRIDGE_SSL_VERIFY=false
+     * The correct long-term fix on the affected machine is to update PHP's
+     * CA bundle (curl.cainfo in php.ini), not to disable verification.
+     */
+    private function sslVerifyEnabled(): bool
+    {
+        $raw = strtolower(trim((string) (getenv('ABDM_BRIDGE_SSL_VERIFY') ?: '')));
+
+        return ! in_array($raw, ['0', 'false', 'no', 'off'], true);
+    }
+
     private function sanitizeBearerToken(string $token): string
     {
         $token = trim($token);
@@ -88,12 +105,14 @@ class M3HiuGatewayClient
             $headers[] = 'X-Hospital-Id: ' . $hospitalId;
         }
 
+        $sslVerify = $this->sslVerifyEnabled();
         $ch = curl_init();
         curl_setopt_array($ch, [
             CURLOPT_URL => $url,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT => $this->timeoutSec,
-            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYPEER => $sslVerify,
+            CURLOPT_SSL_VERIFYHOST => $sslVerify ? 2 : 0,
             CURLOPT_HTTPHEADER => $headers,
             CURLOPT_CUSTOMREQUEST => 'POST',
             CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
@@ -266,12 +285,14 @@ class M3HiuGatewayClient
             $url .= '?' . http_build_query($cleanQuery);
         }
 
+        $sslVerify = $this->sslVerifyEnabled();
         $ch = curl_init();
         curl_setopt_array($ch, [
             CURLOPT_URL => $url,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT => $this->timeoutSec,
-            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYPEER => $sslVerify,
+            CURLOPT_SSL_VERIFYHOST => $sslVerify ? 2 : 0,
             CURLOPT_HTTPHEADER => $headers,
             CURLOPT_CUSTOMREQUEST => 'GET',
         ]);

@@ -305,13 +305,22 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
                 . ' | token_source=' . $tokenSource
                 . ' | body=' . json_encode($safeRequestBody));
 
+            // SSL verification stays ON by default. Some local WAMP/XAMPP
+            // installs ship a stale bundled cacert.pem, causing cURL error 60
+            // on outbound HTTPS calls. Fix that by updating curl.cainfo in
+            // php.ini on the affected machine; only as a last resort can a
+            // specific deployment opt out via ABDM_BRIDGE_SSL_VERIFY=false.
+            $sslVerifyRaw = strtolower(trim((string) (getenv('ABDM_BRIDGE_SSL_VERIFY') ?: '')));
+            $sslVerify = ! in_array($sslVerifyRaw, ['0', 'false', 'no', 'off'], true);
+
             $ch = curl_init();
             $curlOptions = [
                 CURLOPT_URL            => $url,
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_TIMEOUT        => $this->timeoutSec,
                 CURLOPT_HTTPHEADER     => $headers,
-                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_SSL_VERIFYPEER => $sslVerify,
+                CURLOPT_SSL_VERIFYHOST => $sslVerify ? 2 : 0,
                 CURLOPT_CUSTOMREQUEST  => $method,
             ];
 
