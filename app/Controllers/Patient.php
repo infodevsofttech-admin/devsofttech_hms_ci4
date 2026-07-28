@@ -11,6 +11,11 @@ use App\Models\PatientModel;
 
 class Patient extends BaseController
 {
+    // A consent request left in REQUESTED/PENDING for longer than this (no GRANTED/DENIED
+    // callback from the ABDM bridge) is treated as abandoned/stale so "Fetch ABDM Records"
+    // starts a fresh consent request instead of resuming a request that will never resolve.
+    private const ABDM_PENDING_STALE_SECONDS = 3600;
+
     public function index()
     {
         $user = auth()->user();
@@ -1367,7 +1372,10 @@ class Patient extends BaseController
 		if ($flowRefId === '') {
 			$lastRequestId = trim((string) ($lastSync['request_id'] ?? ''));
 			$lastPhase = strtoupper(trim((string) ($lastSync['phase'] ?? '')));
-			if ($lastRequestId !== '' && in_array($lastPhase, ['REQUESTED', 'PENDING', 'GRANTED'], true)) {
+			$lastSyncStale = (bool) ($lastSync['restart_required'] ?? false);
+			// Do not resume a stale pending request (older than 1 hour with no bridge
+			// callback) — fall through so a fresh consent_request is created instead.
+			if ($lastRequestId !== '' && ! $lastSyncStale && in_array($lastPhase, ['REQUESTED', 'PENDING', 'GRANTED'], true)) {
 				$flowRefId = $lastRequestId;
 				$consentRequestRef = trim((string) ($lastSync['consent_request_id'] ?? ''));
 				$consentArtifactRef = trim((string) ($lastSync['consent_id'] ?? ''));
@@ -3334,11 +3342,34 @@ class Patient extends BaseController
 		$snapshot['updated_at'] = (string) ($best['updated_at'] ?? '');
 		$snapshot['operation'] = (string) ($best['operation'] ?? '');
 		$snapshot['status'] = (string) ($best['status'] ?? '');
+
+		// A consent request stuck in REQUESTED/PENDING for more than ABDM_PENDING_STALE_SECONDS
+		// (1 hour) with no GRANTED/DENIED callback from the bridge is considered abandoned by
+		// PHR/ABHA — the patient likely never saw/approved it, or the bridge silently dropped
+		// it. Flag it so the UI/auto-flow can start a brand-new consent request instead of
+		// resuming (and thus indefinitely polling) a request that will never resolve.
+		$isStalePending = false;
+		if (in_array($snapshot['phase'], ['REQUESTED', 'PENDING'], true) && $snapshot['updated_at'] !== '') {
+			try {
+				$updatedAt = new \DateTimeImmutable($snapshot['updated_at'], new \DateTimeZone('Asia/Kolkata'));
+				$nowIst = new \DateTimeImmutable('now', new \DateTimeZone('Asia/Kolkata'));
+				$pendingAgeSeconds = $nowIst->getTimestamp() - $updatedAt->getTimestamp();
+				$isStalePending = $pendingAgeSeconds > self::ABDM_PENDING_STALE_SECONDS;
+			} catch (\Throwable $e) {
+				$isStalePending = false;
+			}
+		}
+
+		if ($isStalePending) {
+			$snapshot['message'] = 'Previous consent request has been pending for over 1 hour with no response from ABDM/PHR. Click "Fetch ABDM Records" to start a fresh request.';
+		}
+
 		$snapshot['restart_required'] = (bool) (
 			($snapshot['phase'] === 'FAILED')
 			|| (($snapshot['phase'] === 'REQUESTED')
 				&& ($snapshot['status'] === 'failed')
 				&& stripos((string) ($snapshot['message'] ?? ''), 'not found on bridge') !== false)
+			|| $isStalePending
 		);
 
 		return $snapshot;
