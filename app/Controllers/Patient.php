@@ -1168,11 +1168,16 @@ class Patient extends BaseController
 		}
 
 		$q = trim((string) ($this->request->getGet('q') ?? ''));
+		$filterConsentRequestId = trim((string) ($this->request->getGet('consent_request_id') ?? ''));
+		$includeSummary = ((int) ($this->request->getGet('include_summary') ?? 0)) === 1;
 
 		$docFields = $this->db->getFieldNames('abdm_hiu_documents') ?? [];
 		$selectCols = ['d.id', 'd.patient_id', 'd.abha_address', 'd.document_title', 'd.document_date', 'd.care_context_reference', 'd.practitioner_name', 'd.organization_name', 'd.bundle_type', 'd.created_at'];
 		if (in_array('consent_request_id', $docFields, true)) {
 			$selectCols[] = 'd.consent_request_id';
+		}
+		if ($includeSummary) {
+			$selectCols[] = 'd.summary_json';
 		}
 
 		$builder = $this->db->table('abdm_hiu_documents d')
@@ -1188,6 +1193,10 @@ class Patient extends BaseController
 		}
 		$builder->groupEnd();
 
+		if ($filterConsentRequestId !== '' && in_array('consent_request_id', $docFields, true)) {
+			$builder->where('d.consent_request_id', $filterConsentRequestId);
+		}
+
 		if ($q !== '') {
 			$builder->groupStart()
 				->like('d.document_title', $q)
@@ -1199,6 +1208,22 @@ class Patient extends BaseController
 
 		$rows = $builder->get()->getResultArray();
 
+		if ($includeSummary) {
+			foreach ($rows as &$rowRef) {
+				$summary = json_decode((string) ($rowRef['summary_json'] ?? ''), true);
+				if (! is_array($summary)) {
+					$summary = [];
+				}
+				// Attachments carry base64 image/PDF data — strip them from this
+				// list payload to keep it light; use abdm_document_detail for the
+				// full attachment content of a single document.
+				unset($summary['attachments']);
+				$rowRef['summary'] = $summary;
+				unset($rowRef['summary_json']);
+			}
+			unset($rowRef);
+		}
+
 		return $this->response->setJSON([
 			'ok' => 1,
 			'count' => count($rows),
@@ -1207,6 +1232,7 @@ class Patient extends BaseController
 			'last_sync' => $lastSync,
 		]);
 	}
+
 
 	public function abdm_document_detail(int $pno, int $docId)
 	{
@@ -4027,6 +4053,17 @@ class Patient extends BaseController
 			}
 		}
 
+		// A short, human-friendly identifier for this session (the "Request ID"
+		// guid is too long to display in a table column) -- use the underlying
+		// abdm_hiu_workflows row id of this session's own CONSENT_REQUEST row
+		// (falling back to whichever row scored best) since it's already a
+		// small, unique, DB-backed integer.
+		$displayId = (int) (is_array($consentRequestRow) ? ($consentRequestRow['id'] ?? 0) : 0);
+		if ($displayId <= 0) {
+			$displayId = (int) ($best['id'] ?? 0);
+		}
+
+
 		$requestedHiTypes = [];
 		$requestedOn = '';
 		$purpose = '';
@@ -4129,6 +4166,7 @@ class Patient extends BaseController
 		return [
 			'ok' => 1,
 			'consent' => [
+				'id' => $displayId,
 				'consent_id' => $consentId,
 				'consent_request_id' => $consentRequestId,
 				'abha_address' => $abhaAddress,

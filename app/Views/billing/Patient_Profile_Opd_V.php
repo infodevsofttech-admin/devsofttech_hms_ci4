@@ -347,13 +347,13 @@ if ($patientPhotoPath === '') {
                                 <table class="table table-sm table-hover mb-0" id="abdmRequestsTable">
                                     <thead>
                                         <tr>
+                                            <th>ID</th>
                                             <th>Status</th>
-                                            <th>Request ID</th>
-                                            <th>HI Types</th>
-                                            <th>Requested By</th>
-                                            <th>Requested On</th>
-                                            <th>Expiry</th>
-                                            <th class="text-end">Actions</th>
+                                            <th>Expiry Date</th>
+                                            <th>Date From</th>
+                                            <th>Date To</th>
+                                            <th>View</th>
+                                            <th class="text-end">Show Data</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -441,6 +441,20 @@ if ($patientPhotoPath === '') {
                 </div>
                 <div class="modal-body" id="abdmConsentDetailBody">
                     <div class="text-muted small">Loading...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="abdmFetchResultModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Fetched Health Records</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="abdmFetchResultModalBody">
+                    <div class="text-muted small text-center">Loading...</div>
                 </div>
             </div>
         </div>
@@ -687,21 +701,18 @@ $(function() {
         var html = '';
         requests.forEach(function(consent, idx) {
             var status = (consent.status || '').toString().toUpperCase();
-            var hiTypes = (consent.requested_hi_types && consent.requested_hi_types.length) ? consent.requested_hi_types : (consent.granted_hi_types || []);
-            var hiTypesText = hiTypes.length ? hiTypes.join(', ') : '-';
             var canFetch = (status === 'GRANTED' || status === 'COMPLETED');
-            var requestId = consent.consent_request_id || '-';
+            var rowId = consent.id || (idx + 1);
 
             html += '<tr>'
+                + '<td class="small">' + escHtml(rowId) + '</td>'
                 + '<td><span class="badge ' + consentStatusBadgeClass(status) + '">' + escHtml(status || 'UNKNOWN') + '</span></td>'
-                + '<td class="small text-truncate" style="max-width:160px;" title="' + escHtml(requestId) + '">' + escHtml(requestId) + '</td>'
-                + '<td class="small">' + escHtml(hiTypesText) + '</td>'
-                + '<td class="small">' + escHtml(consent.requested_by || 'HMS') + '</td>'
-                + '<td class="small">' + fmtConsentTs(consent.requested_on) + '</td>'
+                + '<td class="small">' + fmtConsentTs(consent.erase_at) + '</td>'
+                + '<td class="small">' + fmtConsentTs(consent.valid_from) + '</td>'
                 + '<td class="small">' + fmtConsentTs(consent.valid_to) + '</td>'
+                + '<td><button type="button" class="btn btn-link btn-sm p-0 abdm-view-request-btn" data-idx="' + idx + '">View</button></td>'
                 + '<td class="text-end">'
-                + '<button type="button" class="btn btn-link btn-sm p-0 me-2 abdm-view-request-btn" data-idx="' + idx + '">View</button>'
-                + (canFetch ? ('<button type="button" class="btn btn-link btn-sm p-0 abdm-fetch-request-btn" data-idx="' + idx + '">Fetch Records</button>') : '')
+                + (canFetch ? ('<button type="button" class="btn btn-link btn-sm p-0 abdm-fetch-request-btn" data-idx="' + idx + '">Show Data</button>') : '<span class="text-muted small">-</span>')
                 + '</td>'
                 + '</tr>';
         });
@@ -736,6 +747,8 @@ $(function() {
         fetchOnlyRunningIdx = idx;
         applyNewRequestButtonState();
         setAbdmStatus('Fetching latest records using existing granted consent...', false);
+        openAbdmFetchResultModal();
+        $('#abdmFetchResultModalBody').html('<div class="text-muted small text-center">Fetching latest records...</div>');
 
         var url = abdmFetchOnlyUrl + '?consent_id=' + encodeURIComponent(consent.consent_id || '') + '&consent_request_id=' + encodeURIComponent(consent.consent_request_id || '');
         fetch(url, { credentials: 'same-origin' })
@@ -749,12 +762,93 @@ $(function() {
                 applyNewRequestButtonState();
                 loadAbdmDocs();
                 loadAbdmConsentRequests();
+                loadAbdmFetchResultModalData(consent);
             })
             .catch(function(err) {
                 fetchOnlyRunningIdx = -1;
                 applyNewRequestButtonState();
                 setAbdmStatus('Fetch failed: ' + (err.message || err), true);
+                // Even if the fetch call itself failed, still show whatever records
+                // are already saved locally for this consent request.
+                loadAbdmFetchResultModalData(consent);
             });
+    }
+
+    function openAbdmFetchResultModal() {
+        var bsModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('abdmFetchResultModal'));
+        bsModal.show();
+    }
+
+    function loadAbdmFetchResultModalData(consent) {
+        var url = abdmDocumentsUrl + '?limit=200&include_summary=1';
+        var reqId = (consent && consent.consent_request_id) ? consent.consent_request_id : '';
+        if (reqId !== '') {
+            url += '&consent_request_id=' + encodeURIComponent(reqId);
+        }
+
+        fetch(url, { credentials: 'same-origin' })
+            .then(function(resp) { return resp.json(); })
+            .then(function(data) {
+                if (!data || data.ok !== 1) {
+                    throw new Error((data && data.error) || 'Unable to load fetched records.');
+                }
+                renderAbdmFetchResultModal(Array.isArray(data.items) ? data.items : []);
+            })
+            .catch(function(err) {
+                $('#abdmFetchResultModalBody').html('<div class="text-danger small text-center">' + escHtml('Failed to load records: ' + (err.message || err)) + '</div>');
+            });
+    }
+
+    function renderAbdmFetchResultModal(docs) {
+        if (!docs || !docs.length) {
+            $('#abdmFetchResultModalBody').html('<div class="text-muted small text-center">No fetched records found for this consent request yet.</div>');
+            return;
+        }
+
+        var html = '';
+        docs.forEach(function(doc, di) {
+            var summary = doc.summary || {};
+            var sections = Array.isArray(summary.sections) ? summary.sections : [];
+            var accId = 'abdmFetchAcc' + di;
+
+            html += '<div class="card mb-3">'
+                + '<div class="card-body">'
+                + '<div class="fw-semibold">' + escHtml(doc.document_title || 'ABDM Document') + '</div>'
+                + '<div class="small text-muted mb-2">'
+                + escHtml(doc.organization_name || '-') + ' &nbsp;|&nbsp; '
+                + escHtml(doc.practitioner_name || '-') + ' &nbsp;|&nbsp; '
+                + 'Date: ' + escHtml(fmtDateTime(doc.document_date || doc.created_at))
+                + '</div>';
+
+            if (sections.length) {
+                html += '<div class="accordion" id="' + accId + '">';
+                sections.forEach(function(sec, si) {
+                    var itemId = accId + '_' + si;
+                    var body = '';
+                    if (sec.items && sec.items.length) {
+                        body = '<ul class="mb-0 small">' + sec.items.map(function(it) { return '<li>' + escHtml(it) + '</li>'; }).join('') + '</ul>';
+                    } else if (sec.narrative) {
+                        body = '<div class="small" style="white-space:pre-line;">' + escHtml(sec.narrative) + '</div>';
+                    } else {
+                        body = '<div class="small text-muted">No details recorded.</div>';
+                    }
+                    html += '<div class="accordion-item">'
+                        + '<h2 class="accordion-header">'
+                        + '<button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#' + itemId + '">' + escHtml(sec.title || 'Section') + '</button>'
+                        + '</h2>'
+                        + '<div id="' + itemId + '" class="accordion-collapse collapse" data-bs-parent="#' + accId + '">'
+                        + '<div class="accordion-body">' + body + '</div>'
+                        + '</div>'
+                        + '</div>';
+                });
+                html += '</div>';
+            } else {
+                html += '<div class="small text-muted">No structured sections available for this record.</div>';
+            }
+
+            html += '</div></div>';
+        });
+        $('#abdmFetchResultModalBody').html(html);
     }
 
     var zoom = 1;

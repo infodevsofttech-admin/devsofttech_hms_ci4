@@ -270,12 +270,25 @@ class M3HiuDocumentRepository
         $conditions = [];
         $vitals = [];
         $medications = [];
+        // Indexed by "ResourceType/id" and by fullUrl, so Composition.section[].entry
+        // references (e.g. {"reference": "Condition/xyz"}) can be resolved back to
+        // their actual resource below.
+        $resourcesByRef = [];
 
         foreach ($entries as $entry) {
             $resource = is_array($entry['resource'] ?? null) ? (array) $entry['resource'] : [];
             $type = trim((string) ($resource['resourceType'] ?? ''));
             if ($type === '') {
                 continue;
+            }
+
+            $resourceId = trim((string) ($resource['id'] ?? ''));
+            if ($resourceId !== '') {
+                $resourcesByRef[$type . '/' . $resourceId] = $resource;
+            }
+            $fullUrl = trim((string) ($entry['fullUrl'] ?? ''));
+            if ($fullUrl !== '') {
+                $resourcesByRef[$fullUrl] = $resource;
             }
 
             if ($type === 'Patient' && empty($patient)) {
@@ -336,7 +349,119 @@ class M3HiuDocumentRepository
             'vitals' => $vitals,
             'medications' => $medications,
             'attachments' => $this->extractAttachments($bundle),
+            // Mirrors the Composition's own section breakdown (Chief Complaints,
+            // Physical Examination, Allergies, Investigations, Medications,
+            // Procedures, Medical History, Care Plan, Documents, etc.) so the UI
+            // can render an accordion per record exactly like the source document
+            // is organized, instead of a fixed hard-coded set of categories.
+            'sections' => $this->buildCompositionSections($composition, $resourcesByRef),
         ];
+    }
+
+    /**
+     * Resolves each Composition.section[].entry[] reference to its underlying
+     * resource and produces a short display label for it, falling back to the
+     * section's own narrative text (section.text.div) when there are no
+     * resolvable entries (some HIPs only populate the narrative).
+     *
+     * @return array<int, array{title: string, items: array<int, string>, narrative: string}>
+     */
+    private function buildCompositionSections(array $composition, array $resourcesByRef): array
+    {
+        $sections = [];
+
+        foreach ((array) ($composition['section'] ?? []) as $section) {
+            if (! is_array($section)) {
+                continue;
+            }
+
+            $title = trim((string) (($section['title'] ?? '') ?: ($section['code']['text'] ?? '')));
+            if ($title === '') {
+                continue;
+            }
+
+            $items = [];
+            foreach ((array) ($section['entry'] ?? []) as $ref) {
+                if (! is_array($ref)) {
+                    continue;
+                }
+                $refStr = trim((string) ($ref['reference'] ?? ''));
+                if ($refStr === '' || ! isset($resourcesByRef[$refStr])) {
+                    continue;
+                }
+                $label = $this->describeResourceForSection((array) $resourcesByRef[$refStr]);
+                if ($label !== '') {
+                    $items[] = $label;
+                }
+            }
+
+            $narrative = '';
+            if ($items === []) {
+                $div = trim((string) ($section['text']['div'] ?? ''));
+                if ($div !== '') {
+                    $div = preg_replace('/<li[^>]*>/i', "\n- ", $div) ?? $div;
+                    $div = preg_replace('/<br\s*\/?>/i', "\n", $div) ?? $div;
+                    $narrative = trim(html_entity_decode(strip_tags($div), ENT_QUOTES | ENT_HTML5));
+                }
+            }
+
+            $sections[] = [
+                'title' => $title,
+                'items' => $items,
+                'narrative' => $narrative,
+            ];
+        }
+
+        return $sections;
+    }
+
+    /**
+     * Produces a short, human-readable one-line label for a FHIR resource, for
+     * display inside a Composition section's accordion body.
+     */
+    private function describeResourceForSection(array $resource): string
+    {
+        $type = trim((string) ($resource['resourceType'] ?? ''));
+
+        switch ($type) {
+            case 'Condition':
+            case 'AllergyIntolerance':
+            case 'Procedure':
+            case 'ServiceRequest':
+                return trim((string) (($resource['code']['text'] ?? '') ?: ($resource['code']['coding'][0]['display'] ?? '')));
+
+            case 'Observation':
+                $name = trim((string) (($resource['code']['text'] ?? '') ?: ($resource['code']['coding'][0]['display'] ?? '')));
+                $val = '';
+                if (isset($resource['valueQuantity']) && is_array($resource['valueQuantity'])) {
+                    $val = trim((string) (($resource['valueQuantity']['value'] ?? '') . ' ' . ($resource['valueQuantity']['unit'] ?? '')));
+                } elseif (isset($resource['valueString'])) {
+                    $val = trim((string) $resource['valueString']);
+                } elseif (isset($resource['valueCodeableConcept'])) {
+                    $val = trim((string) (($resource['valueCodeableConcept']['text'] ?? '') ?: ($resource['valueCodeableConcept']['coding'][0]['display'] ?? '')));
+                }
+                return $val !== '' ? ($name . ': ' . $val) : $name;
+
+            case 'MedicationRequest':
+            case 'MedicationStatement':
+                $med = trim((string) (($resource['medicationCodeableConcept']['text'] ?? '') ?: ($resource['medicationCodeableConcept']['coding'][0]['display'] ?? '')));
+                $dose = trim((string) ($resource['dosageInstruction'][0]['text'] ?? ($resource['dosage'][0]['text'] ?? '')));
+                return $dose !== '' ? ($med . ' — ' . $dose) : $med;
+
+            case 'DiagnosticReport':
+                $name = trim((string) (($resource['code']['text'] ?? '') ?: ($resource['code']['coding'][0]['display'] ?? '')));
+                $conclusion = trim((string) ($resource['conclusion'] ?? ''));
+                return $conclusion !== '' ? ($name . ' — ' . $conclusion) : $name;
+
+            case 'CarePlan':
+                return trim((string) (($resource['description'] ?? '') ?: ($resource['title'] ?? '')));
+
+            case 'DocumentReference':
+                return trim((string) (($resource['description'] ?? '') ?: ($resource['type']['text'] ?? '') ?: ($resource['type']['coding'][0]['display'] ?? '')));
+
+            default:
+                return '';
+        }
     }
 
     /**
