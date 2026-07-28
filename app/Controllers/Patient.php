@@ -3539,7 +3539,12 @@ class Patient extends BaseController
 		}
 
 		$fields = $this->db->getFieldNames('abdm_hiu_workflows') ?? [];
-		$select = ['id', 'operation', 'workflow_state', 'status', 'request_id', 'consent_id', 'updated_at', 'last_error', 'http_code', 'response_json'];
+		// See fetchAbdmWorkflowRows() for why response_json is capped to NULL
+		// for data_fetch/hi_data_push_callback rows -- those can carry
+		// multi-MB decrypted bundles with base64 attachments that this method
+		// never reads fields out of anyway (only consent status/hi_types).
+		$responseJsonExpr = "(CASE WHEN operation IN ('data_fetch', 'hi_data_push_callback') THEN NULL ELSE response_json END) AS response_json";
+		$select = ['id', 'operation', 'workflow_state', 'status', 'request_id', 'consent_id', 'updated_at', 'last_error', 'http_code', $responseJsonExpr];
 		if (in_array('gateway_request_id', $fields, true)) {
 			$select[] = 'gateway_request_id';
 		}
@@ -3863,7 +3868,18 @@ class Patient extends BaseController
 	private function fetchAbdmWorkflowRows(string $abhaAddress): array
 	{
 		$fields = $this->db->getFieldNames('abdm_hiu_workflows') ?? [];
-		$select = ['id', 'operation', 'workflow_state', 'status', 'request_id', 'consent_id', 'hfr_id', 'created_at', 'updated_at', 'completed_at', 'expired_at', 'revoked_at', 'last_error', 'http_code', 'request_json', 'response_json'];
+
+		// `data_fetch` / `hi_data_push_callback` rows can carry the ENTIRE
+		// decrypted FHIR bundle in response_json -- including base64 scanned
+		// document attachments that are sometimes multiple MB per row. None of
+		// the fields this list actually reads out of response_json (consent
+		// status, hi_types, granted_at) ever appear in those bulk-data
+		// payloads, so cap it out at the SQL level for those two operations to
+		// avoid buffering tens/hundreds of MB into PHP memory just to build a
+		// consent-history list (this previously caused a fatal "Allowed memory
+		// size exhausted" error once enough data_fetch rows accumulated).
+		$responseJsonExpr = "(CASE WHEN operation IN ('data_fetch', 'hi_data_push_callback') THEN NULL ELSE response_json END) AS response_json";
+		$select = ['id', 'operation', 'workflow_state', 'status', 'request_id', 'consent_id', 'hfr_id', 'created_at', 'updated_at', 'completed_at', 'expired_at', 'revoked_at', 'last_error', 'http_code', 'request_json', $responseJsonExpr];
 		foreach (['abdm_consent_request_id', 'abdm_consent_artifact_id', 'gateway_request_id'] as $optionalField) {
 			if (in_array($optionalField, $fields, true)) {
 				$select[] = $optionalField;
