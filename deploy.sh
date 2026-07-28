@@ -22,7 +22,11 @@ echo "=== Pushing to GitHub ==="
 git push origin main
 
 echo "=== Deploying to server ==="
-REMOTE_CMDS="cd $PROJECT && git config core.fileMode false && git pull origin main && php spark migrate --namespace App && bash scripts/install_hms_cron.sh $PROJECT && echo DEPLOY_OK"
+# NOTE: this server's default `php` CLI is NOT the app-compatible PHP version;
+# use `php83` explicitly (resolved to its absolute path on the server) for both
+# the migration step and the cron installer, otherwise cron jobs silently fail
+# with "syntax error, unexpected ')'" parse errors from an incompatible PHP CLI.
+REMOTE_CMDS="cd $PROJECT && git config core.fileMode false && git pull origin main && PHP_BIN=\$(command -v php83 || command -v php) && \$PHP_BIN spark migrate --namespace App && PHP_BIN=\$PHP_BIN bash scripts/install_hms_cron.sh $PROJECT && echo DEPLOY_OK"
 
 if command -v plink &>/dev/null; then
     plink -ssh -batch -pw "$HMS_SSH_PASS" $SERVER "$REMOTE_CMDS"
