@@ -998,6 +998,35 @@ class M3HiuWorkflowService
                 ];
             }
 
+            // Method 1 (per bridge gateway team, 2026-07-29): GET /v1/hiu/data/fetch
+            // ?request_id=... fetches data for the ONE specific consent request that
+            // request_id belongs to -- this is the "self"/current session's own data,
+            // distinct from Method 2 (consent_id, which can resolve to a different/
+            // stale session sharing the same consent artifact) and Method 3 (abha_address,
+            // which returns unrelated historical sessions across every past consent).
+            // Callers opt in explicitly via fetch_by_request_id=1.
+            $fetchByRequestId = (int) ($clean['fetch_by_request_id'] ?? 0) === 1;
+            if ($fetchByRequestId) {
+                $requestIdOnly = trim((string) (
+                    $clean['abdm_consent_request_id']
+                    ?? $clean['consentRequestId']
+                    ?? $clean['consent_request_id']
+                    ?? ''
+                ));
+                if ($requestIdOnly === '') {
+                    return [
+                        'ok' => 0,
+                        'http_code' => 422,
+                        'error_text' => 'consent_request_id is required to fetch data by request_id (Method 1).',
+                    ];
+                }
+
+                return [
+                    'ok' => 1,
+                    'payload' => ['request_id' => $requestIdOnly],
+                ];
+            }
+
             $requestFallback = '';
             if (! $requestIdGenerated) {
                 $requestFallback = trim((string) (

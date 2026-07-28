@@ -2070,6 +2070,39 @@ class Patient extends BaseController
 		$documentsPersisted = (int) ($fetchResult['documents_persisted'] ?? 0);
 		$documentsUpdated = (int) ($fetchResult['documents_updated'] ?? 0);
 
+		// The consent-artifact-scoped fetch above (bridge "Method 2") may resolve
+		// to a stale/different session sharing the same consent artifact id. Per
+		// the bridge gateway team, GET /v1/hiu/data/fetch?request_id=... ("Method
+		// 1") targets the ONE specific consent request instead -- this is the
+		// "self"/current session's own data. Try it before falling back to the
+		// broader by-ABHA-address historical lookup (Method 3).
+		if ($documentsPersisted + $documentsUpdated === 0 && $consentRequestRef !== '') {
+			try {
+				$requestIdFetchResult = $service->runOperation('data_fetch', [
+					'abha_address' => $abhaContext['abha_address'],
+					'consentRequestId' => $consentRequestRef,
+					'fetch_by_request_id' => 1,
+				]);
+			} catch (\Throwable $e) {
+				$requestIdFetchResult = null;
+			}
+
+			if (is_array($requestIdFetchResult) && (int) ($requestIdFetchResult['ok'] ?? 0) === 1) {
+				$reqDocumentsPersisted = (int) ($requestIdFetchResult['documents_persisted'] ?? 0);
+				$reqDocumentsUpdated = (int) ($requestIdFetchResult['documents_updated'] ?? 0);
+				if ($reqDocumentsPersisted + $reqDocumentsUpdated > 0) {
+					return $this->response->setJSON([
+						'ok' => 1,
+						'phase' => 'COMPLETED',
+						'message' => 'Records fetched successfully using existing granted consent.',
+						'documents_persisted' => $reqDocumentsPersisted,
+						'documents_updated' => $reqDocumentsUpdated,
+						'data' => ['data_fetch' => $fetchResult, 'data_fetch_by_request_id' => $requestIdFetchResult],
+					]);
+				}
+			}
+		}
+
 		// The consent-artifact-scoped fetch above (bridge "Method 1/2") only
 		// returns data for the ONE consent/request we targeted. Per the bridge
 		// gateway team, GET /v1/hiu/data/fetch?abha_address=... ("Method 3")
@@ -3552,7 +3585,16 @@ class Patient extends BaseController
 			$phase = 'REQUESTED';
 			$priority = 120;
 
-			if (($operation === 'DATA_FETCH' || $operation === 'HI_DATA_PUSH_CALLBACK') && $status === 'SUCCESS') {
+			// NOTE: `status` only reflects whether the bridge API call itself
+			// succeeded (no HTTP/transport error) -- it does NOT mean the HIP
+			// actually sent any health records (see M3HiuWorkflowService::
+			// resolveState()/runOperation(), which always set status=success for
+			// any error-free response, even one reporting decrypted_data=[]).
+			// Whether data truly arrived is tracked separately via workflow_state
+			// (DATA_PENDING vs DATA_RECEIVED); require that here too, otherwise a
+			// broad/historical data_fetch attempt with empty decrypted_data can
+			// wrongly hijack "latest consent" resolution with a stale consent_id.
+			if (($operation === 'DATA_FETCH' || $operation === 'HI_DATA_PUSH_CALLBACK') && $status === 'SUCCESS' && $state === 'DATA_RECEIVED') {
 				$phase = 'COMPLETED';
 				$priority = 500;
 			} elseif (in_array($rawConsentStatus, ['GRANTED', 'APPROVED', 'ACTIVE'], true)) {
