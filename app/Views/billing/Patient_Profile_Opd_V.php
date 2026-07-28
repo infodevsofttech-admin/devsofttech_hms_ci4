@@ -504,19 +504,30 @@ if ($patientPhotoPath === '') {
                             </div>
                         </div>
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" for="abdmCustomPurpose">Purpose Of Request</label>
+                        <select class="form-select" id="abdmCustomPurpose">
+                            <option value="CAREMGT" data-text="Care Management" selected>Care Management</option>
+                            <option value="BTG" data-text="Break The Glass">Break The Glass</option>
+                            <option value="PUBHLTH" data-text="Public Health">Public Health</option>
+                            <option value="HPAYMT" data-text="Healthcare Payment">Healthcare Payment</option>
+                            <option value="DSRCH" data-text="Disease Specific Healthcare Research">Disease Specific Healthcare Research</option>
+                            <option value="PATRQT" data-text="Self Requested">Self Requested</option>
+                        </select>
+                    </div>
                     <div class="row g-3 mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold" for="abdmCustomDateFrom">Valid From</label>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold" for="abdmCustomDateFrom">Date From</label>
                             <input type="date" class="form-control" id="abdmCustomDateFrom">
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold" for="abdmCustomDateTo">Valid To</label>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold" for="abdmCustomDateTo">Date To</label>
                             <input type="date" class="form-control" id="abdmCustomDateTo">
                         </div>
-                    </div>
-                    <div class="mb-2">
-                        <label class="form-label fw-semibold" for="abdmCustomPurpose">Purpose</label>
-                        <input type="text" class="form-control" id="abdmCustomPurpose" value="Care Management">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold" for="abdmCustomEraseDate">Expiry Date</label>
+                            <input type="date" class="form-control" id="abdmCustomEraseDate">
+                        </div>
                     </div>
                     <div class="small text-danger d-none" id="abdmCustomConsentError"></div>
                 </div>
@@ -1074,6 +1085,11 @@ $(function() {
         if (!$('#abdmCustomDateTo').val()) {
             $('#abdmCustomDateTo').val(new Date().toISOString().slice(0, 10));
         }
+        if (!$('#abdmCustomEraseDate').val()) {
+            var erase = new Date();
+            erase.setDate(erase.getDate() + 365);
+            $('#abdmCustomEraseDate').val(erase.toISOString().slice(0, 10));
+        }
     });
 
     $(document).off('click.abdmOpd', '#btnSendCustomConsent').on('click.abdmOpd', '#btnSendCustomConsent', function() {
@@ -1092,8 +1108,13 @@ $(function() {
 
         var dateFrom = $('#abdmCustomDateFrom').val();
         var dateTo = $('#abdmCustomDateTo').val();
+        var eraseDate = $('#abdmCustomEraseDate').val();
         if (dateFrom && dateTo && dateFrom >= dateTo) {
-            $('#abdmCustomConsentError').removeClass('d-none').text('"Valid From" date must be earlier than "Valid To" date.');
+            $('#abdmCustomConsentError').removeClass('d-none').text('"Date From" must be earlier than "Date To".');
+            return;
+        }
+        if (eraseDate && dateTo && eraseDate < dateTo) {
+            $('#abdmCustomConsentError').removeClass('d-none').text('"Expiry Date" must be on or after "Date To".');
             return;
         }
 
@@ -1109,7 +1130,8 @@ $(function() {
                 hi_types: hiTypes,
                 date_from: dateFrom,
                 date_to: dateTo,
-                purpose: $('#abdmCustomPurpose').val()
+                erase_date: eraseDate,
+                purpose_code: $('#abdmCustomPurpose').val()
             }
         }).done(function(data) {
             if (!data || data.ok !== 1) {

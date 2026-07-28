@@ -1377,7 +1377,22 @@ class Patient extends BaseController
 
 		$dateFromInput = trim((string) $this->request->getPost('date_from'));
 		$dateToInput = trim((string) $this->request->getPost('date_to'));
-		$purposeInput = trim((string) $this->request->getPost('purpose'));
+		$eraseDateInput = trim((string) $this->request->getPost('erase_date'));
+
+		// Purpose is a fixed ABDM vocabulary, selected from a dropdown (not free
+		// text) so it can never be mistyped into an invalid purpose code.
+		$purposeTextByCode = [
+			'CAREMGT' => 'Care Management',
+			'BTG' => 'Break The Glass',
+			'PUBHLTH' => 'Public Health',
+			'HPAYMT' => 'Healthcare Payment',
+			'DSRCH' => 'Disease Specific Healthcare Research',
+			'PATRQT' => 'Self Requested',
+		];
+		$purposeCode = strtoupper(trim((string) $this->request->getPost('purpose_code')));
+		if (! array_key_exists($purposeCode, $purposeTextByCode)) {
+			$purposeCode = 'CAREMGT';
+		}
 
 		$istTz = new \DateTimeZone('Asia/Kolkata');
 		$utcTz = new \DateTimeZone('UTC');
@@ -1388,7 +1403,7 @@ class Patient extends BaseController
 		} catch (\Throwable $e) {
 			return $this->response->setStatusCode(422)->setJSON([
 				'ok' => 0,
-				'error' => 'Invalid "Valid From" date.',
+				'error' => 'Invalid "Date From" date.',
 			]);
 		}
 		try {
@@ -1396,13 +1411,28 @@ class Patient extends BaseController
 		} catch (\Throwable $e) {
 			return $this->response->setStatusCode(422)->setJSON([
 				'ok' => 0,
-				'error' => 'Invalid "Valid To" date.',
+				'error' => 'Invalid "Date To" date.',
 			]);
 		}
 		if ($fromIst->getTimestamp() >= $toIst->getTimestamp()) {
 			return $this->response->setStatusCode(422)->setJSON([
 				'ok' => 0,
-				'error' => '"Valid From" date must be earlier than "Valid To" date.',
+				'error' => '"Date From" must be earlier than "Date To".',
+			]);
+		}
+
+		try {
+			$eraseIst = $eraseDateInput !== '' ? new \DateTimeImmutable($eraseDateInput, $istTz) : $nowIst->modify('+365 days');
+		} catch (\Throwable $e) {
+			return $this->response->setStatusCode(422)->setJSON([
+				'ok' => 0,
+				'error' => 'Invalid "Expiry Date" date.',
+			]);
+		}
+		if ($eraseIst->setTime(23, 59, 59)->getTimestamp() < $toIst->getTimestamp()) {
+			return $this->response->setStatusCode(422)->setJSON([
+				'ok' => 0,
+				'error' => '"Expiry Date" must be on or after "Date To".',
 			]);
 		}
 
@@ -1413,12 +1443,12 @@ class Patient extends BaseController
 
 		$fromUtc = $fromIst->setTime(0, 0, 0)->setTimezone($utcTz)->format('Y-m-d\TH:i:s.000\Z');
 		$toUtc = $toIst->setTimezone($utcTz)->format('Y-m-d\TH:i:s.000\Z');
-		$eraseAtUtc = $nowIst->modify('+365 days')->setTime(23, 59, 59)->setTimezone($utcTz)->format('Y-m-d\TH:i:s.000\Z');
+		$eraseAtUtc = $eraseIst->setTime(23, 59, 59)->setTimezone($utcTz)->format('Y-m-d\TH:i:s.000\Z');
 
 		$consent = [
 			'purpose' => [
-				'code' => 'CAREMGT',
-				'text' => $purposeInput !== '' ? $purposeInput : 'Care Management',
+				'code' => $purposeCode,
+				'text' => $purposeTextByCode[$purposeCode],
 				'refUri' => 'https://abdm.gov.in',
 			],
 			'patient' => [
