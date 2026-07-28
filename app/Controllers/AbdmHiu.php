@@ -23,7 +23,22 @@ class AbdmHiu extends BaseController
 
     public function index()
     {
-        return view('abdm/hiu_m3');
+        return view('abdm/patient_request_list');
+    }
+
+    public function patientRequestListData()
+    {
+        $q = trim((string) ($this->request->getGet('q') ?? ''));
+        $status = trim((string) ($this->request->getGet('status') ?? ''));
+        $limit = (int) ($this->request->getGet('limit') ?? 300);
+        if ($limit <= 0 || $limit > 1000) {
+            $limit = 300;
+        }
+
+        $service = new \App\Libraries\Abdm\ConsentSessionListService();
+        $result = $service->getGlobalConsentRequestsList(['q' => $q, 'status' => $status], $limit);
+
+        return $this->response->setJSON($result);
     }
 
     public function documents()

@@ -641,6 +641,7 @@ $routes->post('AbdmGateway/consent_revoked_callback', 'AbdmGateway::consentRevok
 $routes->post('AbdmGateway/record_linked_callback', 'AbdmGateway::recordLinkedCallback');
 // ABDM M3 HIU (HMS -> Gateway)
 $routes->get('AbdmHiu', 'AbdmHiu::index', ['filter' => $abdmPermFilter]);
+$routes->get('AbdmHiu/patient_request_list_data', 'AbdmHiu::patientRequestListData', ['filter' => $abdmPermFilter]);
 $routes->get('AbdmHiu/documents', 'AbdmHiu::documents', ['filter' => $abdmPermFilter]);
 $routes->get('AbdmHiu/patient_lookup', 'AbdmHiu::patientLookup', ['filter' => $abdmPermFilter]);
 $routes->get('AbdmHiu/documents_list', 'AbdmHiu::documentsList', ['filter' => $abdmPermFilter]);

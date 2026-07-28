@@ -415,9 +415,9 @@ if (! $canChargesSettings && $user && method_exists($user, 'inGroup')) {
             </a>
         </li>
         <li class="nav-item">
-            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('AbdmHiu') ?>','ABDM HIU M3')">
-                <i class="bi bi-diagram-3"></i>
-                <span>ABDM HIU M3</span>
+            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('AbdmHiu') ?>','ABHA Patient Request List')">
+                <i class="bi bi-clipboard2-pulse"></i>
+                <span>ABHA Patient Request List</span>
             </a>
         </li>
         <li class="nav-item">
