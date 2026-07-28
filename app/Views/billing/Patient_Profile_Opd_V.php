@@ -316,6 +316,9 @@ if ($patientPhotoPath === '') {
                                         <span class="abdm-btn-spinner spinner-border spinner-border-sm me-1 d-none" role="status" aria-hidden="true"></span>
                                         <span id="btnAutoAbdmFlowLabel">Fetch ABDM Records</span>
                                     </button>
+                                    <button type="button" class="btn btn-outline-primary" id="btnCustomAbdmRequest" data-bs-toggle="modal" data-bs-target="#abdmCustomConsentModal" <?= ($abhaIsVerified && $patientAbhaAddress !== '') ? '' : 'disabled' ?>>
+                                        Custom Request
+                                    </button>
                                     <button type="button" class="btn btn-success d-none" id="btnFetchRecordsOnly">
                                         <span class="abdm-btn-spinner spinner-border spinner-border-sm me-1 d-none" role="status" aria-hidden="true"></span>
                                         <span id="btnFetchRecordsOnlyLabel">Fetch Records</span>
@@ -433,6 +436,94 @@ if ($patientPhotoPath === '') {
             </div>
         </div>
     </div>
+
+    <div class="modal fade" id="abdmCustomConsentModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">New Consent Request</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Health Information Types</label>
+                        <div class="row row-cols-2 row-cols-md-3 g-2" id="abdmCustomHiTypes">
+                            <div class="col">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" value="OPConsultation" id="hiOPConsultation" checked>
+                                    <label class="form-check-label" for="hiOPConsultation">OP Consultation</label>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" value="DiagnosticReport" id="hiDiagnosticReport" checked>
+                                    <label class="form-check-label" for="hiDiagnosticReport">Diagnostic Report</label>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" value="Prescription" id="hiPrescription">
+                                    <label class="form-check-label" for="hiPrescription">Prescription</label>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" value="DischargeSummary" id="hiDischargeSummary">
+                                    <label class="form-check-label" for="hiDischargeSummary">Discharge Summary</label>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" value="HealthDocument" id="hiHealthDocument">
+                                    <label class="form-check-label" for="hiHealthDocument">Health Document</label>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" value="ImmunizationRecord" id="hiImmunizationRecord">
+                                    <label class="form-check-label" for="hiImmunizationRecord">Immunization Record</label>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" value="Wellness" id="hiWellness">
+                                    <label class="form-check-label" for="hiWellness">Wellness</label>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" value="Invoice" id="hiInvoice">
+                                    <label class="form-check-label" for="hiInvoice">Invoice</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="abdmCustomDateFrom">Valid From</label>
+                            <input type="date" class="form-control" id="abdmCustomDateFrom">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="abdmCustomDateTo">Valid To</label>
+                            <input type="date" class="form-control" id="abdmCustomDateTo">
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label fw-semibold" for="abdmCustomPurpose">Purpose</label>
+                        <input type="text" class="form-control" id="abdmCustomPurpose" value="Care Management">
+                    </div>
+                    <div class="small text-danger d-none" id="abdmCustomConsentError"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="btnSendCustomConsent">
+                        <span class="spinner-border spinner-border-sm me-1 d-none" id="abdmCustomConsentSpinner" role="status" aria-hidden="true"></span>
+                        Send Consent Request
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 </section>
 
 <script>
@@ -442,6 +533,7 @@ $(function() {
     var abdmAutoFlowUrl = '<?= base_url('billing/patient/abdm_content_auto_flow/' . (int) ($patient->id ?? 0)) ?>';
     var abdmFetchOnlyUrl = '<?= base_url('billing/patient/abdm_content_fetch_only/' . (int) ($patient->id ?? 0)) ?>';
     var abdmConsentDetailUrl = '<?= base_url('billing/patient/abdm_consent_detail/' . (int) ($patient->id ?? 0)) ?>';
+    var abdmCustomRequestUrl = '<?= base_url('billing/patient/abdm_content_request_custom/' . (int) ($patient->id ?? 0)) ?>';
     var abdmDocDetailBaseUrl = '<?= base_url('billing/patient/abdm_document_detail/' . (int) ($patient->id ?? 0)) ?>';
     var currentAbdmRows = [];
     var autoFlowTimer = null;
@@ -1043,6 +1135,80 @@ $(function() {
 
     $('#abdmConsentDetailModal').on('show.bs.modal', function() {
         loadAbdmConsentDetail();
+    });
+
+    $('#abdmCustomConsentModal').on('show.bs.modal', function() {
+        $('#abdmCustomConsentError').addClass('d-none').text('');
+        if (!$('#abdmCustomDateFrom').val()) {
+            var from = new Date();
+            from.setDate(from.getDate() - 365);
+            $('#abdmCustomDateFrom').val(from.toISOString().slice(0, 10));
+        }
+        if (!$('#abdmCustomDateTo').val()) {
+            $('#abdmCustomDateTo').val(new Date().toISOString().slice(0, 10));
+        }
+    });
+
+    $(document).off('click.abdmOpd', '#btnSendCustomConsent').on('click.abdmOpd', '#btnSendCustomConsent', function() {
+        if (autoFlowRunning || fetchOnlyRunning) {
+            return;
+        }
+
+        var hiTypes = [];
+        $('#abdmCustomHiTypes input:checked').each(function() {
+            hiTypes.push($(this).val());
+        });
+        if (!hiTypes.length) {
+            $('#abdmCustomConsentError').removeClass('d-none').text('Select at least one Health Information Type.');
+            return;
+        }
+
+        var dateFrom = $('#abdmCustomDateFrom').val();
+        var dateTo = $('#abdmCustomDateTo').val();
+        if (dateFrom && dateTo && dateFrom >= dateTo) {
+            $('#abdmCustomConsentError').removeClass('d-none').text('"Valid From" date must be earlier than "Valid To" date.');
+            return;
+        }
+
+        var $btn = $('#btnSendCustomConsent');
+        $btn.prop('disabled', true);
+        $('#abdmCustomConsentSpinner').removeClass('d-none');
+        $('#abdmCustomConsentError').addClass('d-none').text('');
+
+        $.ajax({
+            url: abdmCustomRequestUrl,
+            method: 'POST',
+            data: {
+                hi_types: hiTypes,
+                date_from: dateFrom,
+                date_to: dateTo,
+                purpose: $('#abdmCustomPurpose').val()
+            }
+        }).done(function(data) {
+            if (!data || data.ok !== 1) {
+                throw new Error((data && data.error) || 'Consent request failed.');
+            }
+
+            var bsModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('abdmCustomConsentModal'));
+            bsModal.hide();
+
+            stopAutoFlowLoop();
+            autoFlowAttempts = 0;
+            autoFlowNeedsFreshRequest = false;
+            autoFlowRequestId = (data.request_id || '').toString();
+            setFlowProgress(1);
+            autoFlowRunning = true;
+            applyConsentButtonState();
+            $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text('Sending custom consent request to patient\'s ABHA app...');
+            runAutoFlowStep();
+        }).fail(function(xhr) {
+            var data = xhr.responseJSON;
+            var errMsg = (data && data.error) || 'Consent request failed.';
+            $('#abdmCustomConsentError').removeClass('d-none').text(errMsg);
+        }).always(function() {
+            $btn.prop('disabled', false);
+            $('#abdmCustomConsentSpinner').addClass('d-none');
+        });
     });
 
     $('[data-bs-toggle="tooltip"]').tooltip();

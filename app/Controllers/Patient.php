@@ -1320,6 +1320,165 @@ class Patient extends BaseController
 		]);
 	}
 
+	/**
+	 * Manual consent request form submission — lets the user pick specific Health
+	 * Information Types and an editable validity date range instead of always
+	 * using the hardcoded defaults from M3HiuWorkflowService::buildDefaultConsent().
+	 * Returns the same shape as abdm_content_request() so the existing JS auto-flow
+	 * polling (runAutoFlowStep) can pick up the request_id and continue tracking
+	 * consent status / data fetch to completion.
+	 */
+	public function abdm_content_request_custom(int $pno)
+	{
+		if (! $this->db->tableExists('patient_master')) {
+			return $this->response->setStatusCode(500)->setJSON([
+				'ok' => 0,
+				'error' => 'patient_master table not found',
+			]);
+		}
+
+		$patientRow = $this->db->table('patient_master')->where('id', $pno)->get()->getRowArray();
+		if (! is_array($patientRow)) {
+			return $this->response->setStatusCode(404)->setJSON([
+				'ok' => 0,
+				'error' => 'Patient not found',
+			]);
+		}
+
+		$abhaContext = $this->buildAbhaProfileContext($patientRow);
+		if ($abhaContext['abha_address'] === '') {
+			return $this->response->setStatusCode(422)->setJSON([
+				'ok' => 0,
+				'error' => 'ABHA Address not available for this patient.',
+				'abha' => $abhaContext,
+			]);
+		}
+
+		if ((int) ($abhaContext['is_verified'] ?? 0) !== 1) {
+			return $this->response->setStatusCode(422)->setJSON([
+				'ok' => 0,
+				'error' => 'ABHA is not marked as verified in HMS. Please verify ABHA first, then request content.',
+				'abha' => $abhaContext,
+			]);
+		}
+
+		$hiTypesInput = $this->request->getPost('hi_types');
+		if (! is_array($hiTypesInput)) {
+			$decoded = json_decode((string) $hiTypesInput, true);
+			$hiTypesInput = is_array($decoded) ? $decoded : [];
+		}
+		$hiTypes = $this->normalizeHiTypesList($hiTypesInput);
+		if ($hiTypes === []) {
+			return $this->response->setStatusCode(422)->setJSON([
+				'ok' => 0,
+				'error' => 'Select at least one Health Information Type.',
+			]);
+		}
+
+		$dateFromInput = trim((string) $this->request->getPost('date_from'));
+		$dateToInput = trim((string) $this->request->getPost('date_to'));
+		$purposeInput = trim((string) $this->request->getPost('purpose'));
+
+		$istTz = new \DateTimeZone('Asia/Kolkata');
+		$utcTz = new \DateTimeZone('UTC');
+		$nowIst = new \DateTimeImmutable('now', $istTz);
+
+		try {
+			$fromIst = $dateFromInput !== '' ? new \DateTimeImmutable($dateFromInput, $istTz) : $nowIst->modify('-365 days');
+		} catch (\Throwable $e) {
+			return $this->response->setStatusCode(422)->setJSON([
+				'ok' => 0,
+				'error' => 'Invalid "Valid From" date.',
+			]);
+		}
+		try {
+			$toIst = $dateToInput !== '' ? new \DateTimeImmutable($dateToInput, $istTz) : $nowIst;
+		} catch (\Throwable $e) {
+			return $this->response->setStatusCode(422)->setJSON([
+				'ok' => 0,
+				'error' => 'Invalid "Valid To" date.',
+			]);
+		}
+		if ($fromIst->getTimestamp() >= $toIst->getTimestamp()) {
+			return $this->response->setStatusCode(422)->setJSON([
+				'ok' => 0,
+				'error' => '"Valid From" date must be earlier than "Valid To" date.',
+			]);
+		}
+
+		$safeNowIst = $nowIst->modify('-120 seconds');
+		if ($toIst->getTimestamp() > $safeNowIst->getTimestamp()) {
+			$toIst = $safeNowIst;
+		}
+
+		$fromUtc = $fromIst->setTime(0, 0, 0)->setTimezone($utcTz)->format('Y-m-d\TH:i:s.000\Z');
+		$toUtc = $toIst->setTimezone($utcTz)->format('Y-m-d\TH:i:s.000\Z');
+		$eraseAtUtc = $nowIst->modify('+365 days')->setTime(23, 59, 59)->setTimezone($utcTz)->format('Y-m-d\TH:i:s.000\Z');
+
+		$consent = [
+			'purpose' => [
+				'code' => 'CAREMGT',
+				'text' => $purposeInput !== '' ? $purposeInput : 'Care Management',
+				'refUri' => 'https://abdm.gov.in',
+			],
+			'patient' => [
+				'id' => $abhaContext['abha_address'],
+			],
+			'hiTypes' => $hiTypes,
+			'permission' => [
+				'accessMode' => 'VIEW',
+				'dateRange' => [
+					'from' => $fromUtc,
+					'to' => $toUtc,
+				],
+				'dataEraseAt' => $eraseAtUtc,
+				'frequency' => [
+					'unit' => 'HOUR',
+					'value' => 1,
+					'repeats' => 0,
+				],
+			],
+		];
+
+		$service = new \App\Libraries\Abdm\M3HiuWorkflowService();
+		$payload = [
+			'patient_id' => $pno,
+			'abha_address' => $abhaContext['abha_address'],
+			'consent' => $consent,
+		];
+
+		try {
+			$result = $service->runOperation('consent_request', $payload);
+		} catch (\Throwable $e) {
+			return $this->response->setStatusCode(500)->setJSON([
+				'ok' => 0,
+				'error' => 'Unable to start content request: ' . $e->getMessage(),
+			]);
+		}
+
+		$ok = (int) ($result['ok'] ?? 0) === 1;
+		$httpCode = (int) ($result['http_code'] ?? ($ok ? 200 : 422));
+		if ($httpCode < 100 || $httpCode > 599) {
+			$httpCode = $ok ? 200 : 422;
+		}
+
+		if (! $ok) {
+			return $this->response->setStatusCode($httpCode)->setJSON([
+				'ok' => 0,
+				'error' => (string) ($result['error_text'] ?? 'Content request failed.'),
+				'data' => $result,
+			]);
+		}
+
+		return $this->response->setStatusCode($httpCode)->setJSON([
+			'ok' => 1,
+			'message' => 'Consent/content request created successfully.',
+			'workflow_state' => 'REQUESTED',
+			'request_id' => (string) ($result['request_id'] ?? ''),
+			'data' => $result,
+		]);
+	}
+
 	public function abdm_content_auto_flow(int $pno)
 	{
 		if (! $this->db->tableExists('patient_master')) {
