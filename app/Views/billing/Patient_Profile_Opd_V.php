@@ -1087,7 +1087,7 @@ $(function() {
         }
         if (!$('#abdmCustomEraseDate').val()) {
             var erase = new Date();
-            erase.setDate(erase.getDate() + 365);
+            erase.setFullYear(erase.getFullYear() + 1);
             $('#abdmCustomEraseDate').val(erase.toISOString().slice(0, 10));
         }
     });

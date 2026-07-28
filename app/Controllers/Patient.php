@@ -1422,7 +1422,7 @@ class Patient extends BaseController
 		}
 
 		try {
-			$eraseIst = $eraseDateInput !== '' ? new \DateTimeImmutable($eraseDateInput, $istTz) : $nowIst->modify('+365 days');
+			$eraseIst = $eraseDateInput !== '' ? new \DateTimeImmutable($eraseDateInput, $istTz) : $nowIst->modify('+1 year');
 		} catch (\Throwable $e) {
 			return $this->response->setStatusCode(422)->setJSON([
 				'ok' => 0,
