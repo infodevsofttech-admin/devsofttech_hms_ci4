@@ -277,12 +277,144 @@ class M3HiuWorkflowService
                 } else {
                     $summary['failed']++;
                 }
+
+                // Merged-by-request-id fetch discovers NEW sibling artifacts, but
+                // does not reliably keep returning sessions for artifacts already
+                // established earlier (verified: an already-"received" artifact
+                // stopped appearing in the merged list while still returning real
+                // data when queried by its own artifact id). So remember every
+                // artifact id ever seen for this consent request, and re-poll each
+                // one individually every cycle too, for full coverage.
+                $singleArtifactId = trim((string) (
+                    $consentResult['abdm_consent_artifact_id'] ?? ''
+                ));
+                $fetchSessions = is_array($dataResult['sessions'] ?? null) ? $dataResult['sessions'] : [];
+                $this->recordDiscoveredArtifacts(
+                    $resolvedConsentId,
+                    $fetchSessions,
+                    $payload['abha_address'],
+                    $payload['hfr_id']
+                );
+                if ($singleArtifactId !== '' && ! $this->isGatewayRequestIdPattern($singleArtifactId)) {
+                    $this->rememberArtifact($resolvedConsentId, $singleArtifactId, $payload['abha_address'], $payload['hfr_id']);
+                }
+
+                foreach ($this->getKnownArtifactIds($resolvedConsentId) as $artifactId) {
+                    if ($artifactId === '' || $artifactId === $resolvedConsentId) {
+                        continue;
+                    }
+                    $artifactPayload = $payload;
+                    $artifactPayload['consent_id'] = $artifactId;
+                    $artifactPayload['consent_request_id'] = $artifactId;
+                    $artifactPayload['abdm_consent_artifact_id'] = $artifactId;
+                    $artifactPayload['abdm_consent_request_id'] = $artifactId;
+
+                    $artifactResult = $this->runOperation('data_fetch', $artifactPayload);
+                    if ((int) ($artifactResult['ok'] ?? 0) === 1) {
+                        $summary['data_updates']++;
+                        $this->markArtifactPolled($resolvedConsentId, $artifactId, (string) ($artifactResult['consent_status'] ?? ''));
+                    } else {
+                        $summary['failed']++;
+                    }
+                }
             } else {
                 $summary['failed']++;
             }
         }
 
         return $summary;
+    }
+
+    /**
+     * Extracts and upserts every distinct artifact id found in a data_fetch
+     * result's sessions[] array (each session's consent_id is typically
+     * "artifactId:internalRequestId" or a bare artifact id) into the
+     * abdm_hiu_consent_artifacts registry, so future poll cycles keep
+     * checking each artifact individually.
+     */
+    private function recordDiscoveredArtifacts(string $consentRequestId, array $sessions, string $abhaAddress, string $hfrId): void
+    {
+        foreach ($sessions as $session) {
+            if (! is_array($session)) {
+                continue;
+            }
+            $rawConsentId = trim((string) ($session['consent_id'] ?? ''));
+            if ($rawConsentId === '') {
+                continue;
+            }
+            $artifactId = strpos($rawConsentId, ':') !== false
+                ? trim(explode(':', $rawConsentId)[0])
+                : $rawConsentId;
+            if ($artifactId === '' || $this->isGatewayRequestIdPattern($artifactId)) {
+                continue;
+            }
+            $this->rememberArtifact($consentRequestId, $artifactId, $abhaAddress, $hfrId, (string) ($session['status'] ?? ''));
+        }
+    }
+
+    private function rememberArtifact(string $consentRequestId, string $artifactId, string $abhaAddress, string $hfrId, string $status = ''): void
+    {
+        if (! $this->db->tableExists('abdm_hiu_consent_artifacts') || $consentRequestId === '' || $artifactId === '') {
+            return;
+        }
+        $now = Time::now('Asia/Kolkata')->toDateTimeString();
+        $existing = $this->db->table('abdm_hiu_consent_artifacts')
+            ->where('consent_request_id', $consentRequestId)
+            ->where('artifact_id', $artifactId)
+            ->get(1)
+            ->getRowArray();
+
+        if (! empty($existing)) {
+            $update = ['updated_at' => $now];
+            if ($status !== '') {
+                $update['last_status'] = $status;
+            }
+            $this->db->table('abdm_hiu_consent_artifacts')->where('id', (int) $existing['id'])->update($update);
+            return;
+        }
+
+        $this->db->table('abdm_hiu_consent_artifacts')->insert([
+            'consent_request_id' => $consentRequestId,
+            'artifact_id' => $artifactId,
+            'abha_address' => $abhaAddress !== '' ? $abhaAddress : null,
+            'hfr_id' => $hfrId !== '' ? $hfrId : null,
+            'last_status' => $status !== '' ? $status : null,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+    }
+
+    private function markArtifactPolled(string $consentRequestId, string $artifactId, string $status): void
+    {
+        if (! $this->db->tableExists('abdm_hiu_consent_artifacts')) {
+            return;
+        }
+        $now = Time::now('Asia/Kolkata')->toDateTimeString();
+        $update = ['last_polled_at' => $now, 'updated_at' => $now];
+        if ($status !== '') {
+            $update['last_status'] = $status;
+        }
+        $this->db->table('abdm_hiu_consent_artifacts')
+            ->where('consent_request_id', $consentRequestId)
+            ->where('artifact_id', $artifactId)
+            ->update($update);
+    }
+
+    private function getKnownArtifactIds(string $consentRequestId): array
+    {
+        if (! $this->db->tableExists('abdm_hiu_consent_artifacts') || $consentRequestId === '') {
+            return [];
+        }
+        $rows = $this->db->table('abdm_hiu_consent_artifacts')
+            ->select('artifact_id')
+            ->where('consent_request_id', $consentRequestId)
+            ->get()
+            ->getResultArray();
+
+        return array_values(array_unique(array_map(
+            static fn (array $row): string => trim((string) ($row['artifact_id'] ?? '')),
+            $rows
+        )));
     }
 
     public function listTimeline(array $filters, int $limit = 200): array
