@@ -3736,9 +3736,27 @@ class Patient extends BaseController
 				$select[] = $optionalField;
 			}
 		}
+		$selectSql = implode(', ', $select);
 
-		return $this->db->table('abdm_hiu_workflows')
-			->select(implode(', ', $select))
+		// The per-artifact re-poll loop (M3HiuWorkflowService::pollNatGateway())
+		// can generate many `data_fetch` rows per consent per cron cycle. A flat
+		// "most recent 200 rows" window can therefore push an older but still-
+		// relevant CONSENT_REQUEST anchor row out of range, which breaks
+		// groupWorkflowRowsIntoSessions() (it requires every session to start
+		// with its own CONSENT_REQUEST row) and produces a blank/orphaned
+		// session in the UI. Always include every CONSENT_REQUEST row for this
+		// ABHA (there are only ever a handful) regardless of the recent-activity
+		// window, then merge with the most recent 200 rows of any operation.
+		$anchorRows = $this->db->table('abdm_hiu_workflows')
+			->select($selectSql)
+			->where('abha_address', $abhaAddress)
+			->where('operation', 'consent_request')
+			->orderBy('id', 'DESC')
+			->get(100)
+			->getResultArray();
+
+		$recentRows = $this->db->table('abdm_hiu_workflows')
+			->select($selectSql)
 			->where('abha_address', $abhaAddress)
 			->whereIn('operation', [
 				'consent_request',
@@ -3752,6 +3770,14 @@ class Patient extends BaseController
 			->orderBy('id', 'DESC')
 			->get(200)
 			->getResultArray();
+
+		$merged = [];
+		foreach (array_merge($anchorRows, $recentRows) as $row) {
+			$merged[(int) $row['id']] = $row;
+		}
+		krsort($merged);
+
+		return array_values($merged);
 	}
 
 	/**
