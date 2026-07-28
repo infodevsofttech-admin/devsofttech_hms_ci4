@@ -56,10 +56,29 @@ if ($baseUrl === '' || $token === '') {
     exit(1);
 }
 
+// Sanity check: confirm auth/connectivity works against a known endpoint
+// before testing the candidate care-context-link paths.
+$sanityUrl = rtrim($baseUrl, '/') . '/api/v3/gateway/status';
+$sanityUrl = (string) preg_replace('#/api/api/#', '/api/', $sanityUrl);
+$ch = curl_init($sanityUrl);
+curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $token],
+    CURLOPT_TIMEOUT => 15,
+]);
+$sanityBody = curl_exec($ch);
+$sanityCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
+echo "=== Sanity check: GET {$sanityUrl} ===\n";
+echo "HTTP {$sanityCode}\n";
+echo "Body: " . substr((string) $sanityBody, 0, 300) . "\n\n";
+
 $paths = [
     '/api/v1/abdm/gateway/care-context/link',
     '/api/v3/care-context/link',
     '/api/v3/records/care-context/link',
+    '/api/v1/hip/care-context/link',
+    '/api/v3/gateway/care-context/link',
 ];
 
 $payload = json_encode([
@@ -78,7 +97,10 @@ $payload = json_encode([
 ]);
 
 foreach ($paths as $path) {
-    $url = $baseUrl . $path;
+    // Mirror AbdmGatewayPushClient::buildGatewayUrl(), which collapses a
+    // duplicated "/api/api/" segment when $baseUrl already ends in "/api".
+    $url = rtrim($baseUrl, '/') . '/' . ltrim($path, '/');
+    $url = (string) preg_replace('#/api/api/#', '/api/', $url);
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
