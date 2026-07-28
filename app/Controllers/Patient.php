@@ -1956,23 +1956,44 @@ class Patient extends BaseController
 			]);
 		}
 
-		$lastSync = $this->getLatestAbdmSyncSnapshot((string) ($abhaContext['abha_address'] ?? ''));
-		$phase = strtoupper(trim((string) ($lastSync['phase'] ?? '')));
-		if (! in_array($phase, ['GRANTED', 'COMPLETED'], true)) {
-			return $this->response->setStatusCode(422)->setJSON([
-				'ok' => 0,
-				'phase' => $phase !== '' ? $phase : 'IDLE',
-				'error' => 'Consent is not granted yet. Use "Fetch ABDM Records" to send/track a consent request first.',
-			]);
+		// Optional overrides let the "Fetch Records" action in the Consent Request
+		// History list target a SPECIFIC past session's consent reference, instead
+		// of always re-pulling using the globally-latest granted consent.
+		$overrideConsentId = trim((string) (
+			$this->request->getGet('consent_id')
+			?? $this->request->getPost('consent_id')
+			?? ''
+		));
+		$overrideConsentRequestId = trim((string) (
+			$this->request->getGet('consent_request_id')
+			?? $this->request->getPost('consent_request_id')
+			?? ''
+		));
+
+		if ($overrideConsentId !== '' || $overrideConsentRequestId !== '') {
+			$phase = 'GRANTED';
+			$consentArtifactRef = $overrideConsentId;
+			$consentRequestRef = $overrideConsentRequestId;
+		} else {
+			$lastSync = $this->getLatestAbdmSyncSnapshot((string) ($abhaContext['abha_address'] ?? ''));
+			$phase = strtoupper(trim((string) ($lastSync['phase'] ?? '')));
+			if (! in_array($phase, ['GRANTED', 'COMPLETED'], true)) {
+				return $this->response->setStatusCode(422)->setJSON([
+					'ok' => 0,
+					'phase' => $phase !== '' ? $phase : 'IDLE',
+					'error' => 'Consent is not granted yet. Use "+ New Request" to send/track a consent request first.',
+				]);
+			}
+
+			$consentRequestRef = trim((string) ($lastSync['consent_request_id'] ?? ''));
+			$consentArtifactRef = trim((string) ($lastSync['consent_id'] ?? ''));
 		}
 
-		$consentRequestRef = trim((string) ($lastSync['consent_request_id'] ?? ''));
-		$consentArtifactRef = trim((string) ($lastSync['consent_id'] ?? ''));
 		if ($consentArtifactRef === '' && $consentRequestRef === '') {
 			return $this->response->setStatusCode(422)->setJSON([
 				'ok' => 0,
 				'phase' => $phase,
-				'error' => 'No saved consent reference found. Use "Fetch ABDM Records" to re-establish consent.',
+				'error' => 'No saved consent reference found. Use "+ New Request" to re-establish consent.',
 			]);
 		}
 
@@ -2057,6 +2078,40 @@ class Patient extends BaseController
 		}
 
 		return $this->response->setJSON($detail);
+	}
+
+	/**
+	 * Full history of this patient's ABDM consent requests (one entry per distinct
+	 * consent request "session"), most recent first — used by the "Consent Request
+	 * History" table on the OPD ABDM tab.
+	 */
+	public function abdm_consent_requests(int $pno)
+	{
+		if (! $this->db->tableExists('patient_master')) {
+			return $this->response->setStatusCode(500)->setJSON([
+				'ok' => 0,
+				'error' => 'patient_master table not found',
+			]);
+		}
+
+		$patientRow = $this->db->table('patient_master')->where('id', $pno)->get()->getRowArray();
+		if (! is_array($patientRow)) {
+			return $this->response->setStatusCode(404)->setJSON([
+				'ok' => 0,
+				'error' => 'Patient not found',
+			]);
+		}
+
+		$abhaContext = $this->buildAbhaProfileContext($patientRow);
+		$abhaAddress = trim((string) ($abhaContext['abha_address'] ?? ''));
+		if ($abhaAddress === '') {
+			return $this->response->setStatusCode(422)->setJSON([
+				'ok' => 0,
+				'error' => 'ABHA Address not available for this patient.',
+			]);
+		}
+
+		return $this->response->setJSON($this->getAbdmConsentRequestsList($abhaAddress));
 	}
 
 	public function abdm_timeline(int $pno)
@@ -3594,15 +3649,65 @@ class Patient extends BaseController
 			return ['ok' => 0, 'error' => 'No ABDM consent activity found for this patient.'];
 		}
 
+		$rows = $this->fetchAbdmWorkflowRows($abhaAddress);
+		if ($rows === []) {
+			return ['ok' => 0, 'error' => 'No ABDM consent activity found for this patient.'];
+		}
+
+		$sessions = $this->groupWorkflowRowsIntoSessions($rows);
+		if ($sessions === []) {
+			return ['ok' => 0, 'error' => 'No ABDM consent activity found for this patient.'];
+		}
+
+		// Sessions are chronological (oldest first); the last one is the most recent.
+		return $this->computeConsentSessionDetail(end($sessions), $abhaAddress);
+	}
+
+	/**
+	 * Builds one detail entry (same shape as getAbdmConsentArtifactDetail) per
+	 * distinct consent request the patient has had over time, for the "Consent
+	 * Request History" list — most recent first.
+	 */
+	private function getAbdmConsentRequestsList(string $abhaAddress): array
+	{
+		$abhaAddress = trim($abhaAddress);
+		if ($abhaAddress === '' || ! $this->db->tableExists('abdm_hiu_workflows')) {
+			return ['ok' => 1, 'requests' => []];
+		}
+
+		$rows = $this->fetchAbdmWorkflowRows($abhaAddress);
+		if ($rows === []) {
+			return ['ok' => 1, 'requests' => []];
+		}
+
+		$sessions = $this->groupWorkflowRowsIntoSessions($rows);
+		$requests = [];
+		foreach ($sessions as $sessionRows) {
+			$detail = $this->computeConsentSessionDetail($sessionRows, $abhaAddress);
+			if ((int) ($detail['ok'] ?? 0) === 1) {
+				$requests[] = $detail['consent'];
+			}
+		}
+
+		return ['ok' => 1, 'requests' => array_reverse($requests)];
+	}
+
+	/**
+	 * Fetches the raw consent-related workflow rows for a patient's ABHA address,
+	 * most recent first. Shared by getAbdmConsentArtifactDetail() and
+	 * getAbdmConsentRequestsList().
+	 */
+	private function fetchAbdmWorkflowRows(string $abhaAddress): array
+	{
 		$fields = $this->db->getFieldNames('abdm_hiu_workflows') ?? [];
-		$select = ['id', 'operation', 'workflow_state', 'status', 'request_id', 'consent_id', 'created_at', 'updated_at', 'completed_at', 'expired_at', 'revoked_at', 'last_error', 'http_code', 'request_json', 'response_json'];
+		$select = ['id', 'operation', 'workflow_state', 'status', 'request_id', 'consent_id', 'hfr_id', 'created_at', 'updated_at', 'completed_at', 'expired_at', 'revoked_at', 'last_error', 'http_code', 'request_json', 'response_json'];
 		foreach (['abdm_consent_request_id', 'abdm_consent_artifact_id', 'gateway_request_id'] as $optionalField) {
 			if (in_array($optionalField, $fields, true)) {
 				$select[] = $optionalField;
 			}
 		}
 
-		$rows = $this->db->table('abdm_hiu_workflows')
+		return $this->db->table('abdm_hiu_workflows')
 			->select(implode(', ', $select))
 			->where('abha_address', $abhaAddress)
 			->whereIn('operation', [
@@ -3615,9 +3720,51 @@ class Patient extends BaseController
 				'hi_data_push_callback',
 			])
 			->orderBy('id', 'DESC')
-			->get(60)
+			->get(200)
 			->getResultArray();
+	}
 
+	/**
+	 * Splits a DESC-by-id set of workflow rows into distinct consent request
+	 * "sessions" — each CONSENT_REQUEST row starts a new session, and every
+	 * subsequent row (status/reconcile/data_fetch/callback) belongs to that
+	 * session until the next CONSENT_REQUEST row appears. Returns sessions in
+	 * chronological order (oldest session first); rows within CONSENT_REQUEST
+	 * are always the first row of their session.
+	 *
+	 * @param array<int, array<string, mixed>> $rows rows ordered DESC by id
+	 * @return array<int, array<int, array<string, mixed>>>
+	 */
+	private function groupWorkflowRowsIntoSessions(array $rows): array
+	{
+		$chronological = array_reverse($rows);
+
+		$sessions = [];
+		$current = [];
+		foreach ($chronological as $row) {
+			$operation = strtoupper(trim((string) ($row['operation'] ?? '')));
+			if ($operation === 'CONSENT_REQUEST' && $current !== []) {
+				$sessions[] = $current;
+				$current = [];
+			}
+			$current[] = $row;
+		}
+		if ($current !== []) {
+			$sessions[] = $current;
+		}
+
+		return $sessions;
+	}
+
+	/**
+	 * Computes the requested-vs-granted Health Information Type breakdown for a
+	 * single consent request "session" (one CONSENT_REQUEST row plus its
+	 * subsequent status/reconcile/data_fetch/callback rows).
+	 *
+	 * @param array<int, array<string, mixed>> $rows the session's rows (any order)
+	 */
+	private function computeConsentSessionDetail(array $rows, string $abhaAddress): array
+	{
 		if ($rows === []) {
 			return ['ok' => 0, 'error' => 'No ABDM consent activity found for this patient.'];
 		}
@@ -3699,30 +3846,13 @@ class Patient extends BaseController
 		$phase = (string) $best['_phase'];
 		$consentId = trim((string) ($best['abdm_consent_artifact_id'] ?? $best['consent_id'] ?? $bestDecoded['consent_id'] ?? $bestDecoded['consentId'] ?? ''));
 		$consentRequestId = trim((string) ($best['abdm_consent_request_id'] ?? $bestDecoded['abdm_consent_request_id'] ?? $bestDecoded['consent_request_id'] ?? $bestDecoded['consentRequestId'] ?? ''));
-		$bestRequestId = trim((string) ($best['request_id'] ?? ''));
 
-		// Find the original consent_request row for this same chain, to get the
-		// requested hi_types list + the original requested-on timestamp.
+		// The session should start with its own CONSENT_REQUEST row.
 		$consentRequestRow = null;
 		foreach ($rows as $row) {
-			if (strtoupper((string) ($row['operation'] ?? '')) !== 'CONSENT_REQUEST') {
-				continue;
-			}
-			$rowConsentReqId = trim((string) ($row['abdm_consent_request_id'] ?? ''));
-			$rowRequestId = trim((string) ($row['request_id'] ?? ''));
-			if (($consentRequestId !== '' && $rowConsentReqId === $consentRequestId)
-				|| ($bestRequestId !== '' && $rowRequestId === $bestRequestId)
-			) {
+			if (strtoupper((string) ($row['operation'] ?? '')) === 'CONSENT_REQUEST') {
 				$consentRequestRow = $row;
 				break;
-			}
-		}
-		if ($consentRequestRow === null) {
-			foreach ($rows as $row) {
-				if (strtoupper((string) ($row['operation'] ?? '')) === 'CONSENT_REQUEST') {
-					$consentRequestRow = $row;
-					break;
-				}
 			}
 		}
 
@@ -3732,6 +3862,8 @@ class Patient extends BaseController
 		$validFrom = '';
 		$validTo = '';
 		$eraseAt = '';
+		$requestedBy = '';
+		$hfrId = trim((string) ($best['hfr_id'] ?? ''));
 
 		if (is_array($consentRequestRow)) {
 			$reqPayload = json_decode((string) ($consentRequestRow['request_json'] ?? ''), true);
@@ -3745,6 +3877,10 @@ class Patient extends BaseController
 			$validFrom = trim((string) ($consentBlock['permission']['dateRange']['from'] ?? ''));
 			$validTo = trim((string) ($consentBlock['permission']['dateRange']['to'] ?? ''));
 			$eraseAt = trim((string) ($consentBlock['permission']['dataEraseAt'] ?? ''));
+			$requestedBy = trim((string) ($consentBlock['requester']['name'] ?? ''));
+			if ($hfrId === '') {
+				$hfrId = trim((string) ($consentRequestRow['hfr_id'] ?? ''));
+			}
 		}
 
 		// Bridge flattens consent.hi_types -> top-level hi_types on consent_status /
@@ -3752,7 +3888,8 @@ class Patient extends BaseController
 		// flatten logic). The "best" row for overall phase can be a data_fetch /
 		// hi_data_push_callback row (once records are COMPLETED) whose response is
 		// a FHIR data bundle with no hi_types field at all — so look separately for
-		// the most recent row that actually carries the granted hi_types payload.
+		// the most recent row (within this session) that actually carries the
+		// granted hi_types payload.
 		$grantedHiTypes = [];
 		$grantedOn = '';
 		foreach ($rows as $row) {
@@ -3824,6 +3961,8 @@ class Patient extends BaseController
 				'granted_on' => $grantedOn,
 				'revoked_on' => $revokedOn,
 				'expired_on' => $expiredOn,
+				'hfr_id' => $hfrId,
+				'requested_by' => $requestedBy !== '' ? $requestedBy : 'HMS',
 				'items' => $items,
 			],
 		];

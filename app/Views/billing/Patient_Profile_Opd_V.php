@@ -312,16 +312,8 @@ if ($patientPhotoPath === '') {
                                     </div>
                                 </div>
                                 <div class="text-end">
-                                    <button type="button" class="btn btn-primary" id="btnAutoAbdmFlow" <?= ($abhaIsVerified && $patientAbhaAddress !== '') ? '' : 'disabled' ?>>
-                                        <span class="abdm-btn-spinner spinner-border spinner-border-sm me-1 d-none" role="status" aria-hidden="true"></span>
-                                        <span id="btnAutoAbdmFlowLabel">Fetch ABDM Records</span>
-                                    </button>
-                                    <button type="button" class="btn btn-outline-primary" id="btnCustomAbdmRequest" data-bs-toggle="modal" data-bs-target="#abdmCustomConsentModal" <?= ($abhaIsVerified && $patientAbhaAddress !== '') ? '' : 'disabled' ?>>
-                                        Custom Request
-                                    </button>
-                                    <button type="button" class="btn btn-success d-none" id="btnFetchRecordsOnly">
-                                        <span class="abdm-btn-spinner spinner-border spinner-border-sm me-1 d-none" role="status" aria-hidden="true"></span>
-                                        <span id="btnFetchRecordsOnlyLabel">Fetch Records</span>
+                                    <button type="button" class="btn btn-primary" id="btnNewAbdmRequest" data-bs-toggle="modal" data-bs-target="#abdmCustomConsentModal" <?= ($abhaIsVerified && $patientAbhaAddress !== '') ? '' : 'disabled' ?>>
+                                        + New Request
                                     </button>
                                     <div>
                                         <button type="button" class="btn btn-link btn-sm p-0 mt-1" id="btnLoadAbdmDocs">Refresh list</button>
@@ -335,24 +327,38 @@ if ($patientPhotoPath === '') {
                                 </div>
                             <?php } else { ?>
                                 <div class="small text-muted mt-2 mb-0">
-                                    One click sends a consent request to the patient's ABHA (PHR) app. Once the patient approves it there, HMS automatically fetches their health records — no need to click again.
+                                    Send a consent request to the patient's ABHA (PHR) app. Once the patient approves it there, HMS automatically fetches their health records — no need to click again.
                                 </div>
                             <?php } ?>
 
-                            <div class="border rounded p-3 mt-3 bg-light">
-                                <div class="d-flex flex-wrap align-items-center gap-2 mb-2" id="abdmFlowSteps">
-                                    <span class="abdm-flow-step" data-step="1">1. Consent Requested</span>
-                                    <span class="abdm-flow-step" data-step="2">2. Consent Granted</span>
-                                    <span class="abdm-flow-step" data-step="3">3. Records Fetched</span>
-                                </div>
-                                <div class="progress mb-2" style="height: 8px;">
-                                    <div id="abdmFlowProgressBar" class="progress-bar" role="progressbar" style="width:0%"></div>
-                                </div>
-                                <div class="d-flex align-items-center gap-2">
-                                    <span class="badge bg-secondary" id="abdmLastConsentBadge">Unknown</span>
-                                    <span id="abdmStatusBox" class="small text-muted flex-grow-1">Click "Fetch ABDM Records" to request and load the patient's ABDM health records.</span>
-                                    <button type="button" class="btn btn-link btn-sm p-0 d-none" id="btnViewAbdmConsent" data-bs-toggle="modal" data-bs-target="#abdmConsentDetailModal">View Consent</button>
-                                </div>
+                            <div id="abdmStatusBoxWrap" class="border rounded p-3 mt-3 bg-light d-none">
+                                <span id="abdmStatusBox" class="small text-muted"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card border mt-2 mb-3">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div class="fw-semibold">Consent Request History</div>
+                                <button type="button" class="btn btn-link btn-sm p-0" id="btnRefreshAbdmRequests">Refresh</button>
+                            </div>
+                            <div class="table-responsive border rounded">
+                                <table class="table table-sm table-hover mb-0" id="abdmRequestsTable">
+                                    <thead>
+                                        <tr>
+                                            <th>Status</th>
+                                            <th>HI Types</th>
+                                            <th>Requested By</th>
+                                            <th>Requested On</th>
+                                            <th>Expiry</th>
+                                            <th class="text-end">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr><td colspan="6" class="text-muted text-center">No consent requests yet.</td></tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
@@ -533,65 +539,28 @@ $(function() {
     var abdmAutoFlowUrl = '<?= base_url('billing/patient/abdm_content_auto_flow/' . (int) ($patient->id ?? 0)) ?>';
     var abdmFetchOnlyUrl = '<?= base_url('billing/patient/abdm_content_fetch_only/' . (int) ($patient->id ?? 0)) ?>';
     var abdmConsentDetailUrl = '<?= base_url('billing/patient/abdm_consent_detail/' . (int) ($patient->id ?? 0)) ?>';
+    var abdmConsentRequestsUrl = '<?= base_url('billing/patient/abdm_consent_requests/' . (int) ($patient->id ?? 0)) ?>';
     var abdmCustomRequestUrl = '<?= base_url('billing/patient/abdm_content_request_custom/' . (int) ($patient->id ?? 0)) ?>';
     var abdmDocDetailBaseUrl = '<?= base_url('billing/patient/abdm_document_detail/' . (int) ($patient->id ?? 0)) ?>';
     var currentAbdmRows = [];
+    var currentAbdmRequests = [];
     var autoFlowTimer = null;
     var autoFlowRequestId = '';
     var autoFlowAttempts = 0;
     var autoFlowMaxAttempts = 15;
-    var autoFlowNeedsFreshRequest = false;
     var autoFlowRunning = false;
-    var fetchOnlyRunning = false;
+    var fetchOnlyRunningIdx = -1;
 
-    function updateConsentBadge(phase, needsFresh) {
-        var text = (phase || '').toString().toUpperCase();
-        var $badge = $('#abdmLastConsentBadge');
-        if (!$badge.length) {
-            return;
+    function consentStatusBadgeClass(status) {
+        switch ((status || '').toString().toUpperCase()) {
+            case 'GRANTED': return 'bg-info-subtle text-info border border-info-subtle';
+            case 'COMPLETED': return 'bg-success-subtle text-success border border-success-subtle';
+            case 'REVOKED': return 'bg-secondary-subtle text-secondary border border-secondary-subtle';
+            case 'EXPIRED': return 'bg-warning-subtle text-warning border border-warning-subtle';
+            case 'DENIED': return 'bg-danger-subtle text-danger border border-danger-subtle';
+            case 'FAILED': return 'bg-danger-subtle text-danger border border-danger-subtle';
+            default: return 'bg-warning-subtle text-warning border border-warning-subtle';
         }
-
-        $badge.removeClass('bg-secondary bg-success bg-info bg-warning bg-danger');
-        if (needsFresh) {
-            $badge.addClass('bg-danger').text('Failed - New Required');
-            return;
-        }
-
-        if (text === 'COMPLETED') {
-            $badge.addClass('bg-success').text('Completed');
-        } else if (text === 'GRANTED') {
-            $badge.addClass('bg-info').text('Granted');
-        } else if (text === 'REQUESTED' || text === 'PENDING') {
-            $badge.addClass('bg-warning').text('Pending');
-        } else if (text === 'FAILED' || text === 'DENIED') {
-            $badge.addClass('bg-danger').text('Failed');
-        } else {
-            $badge.addClass('bg-secondary').text('Unknown');
-        }
-    }
-
-    function applyConsentButtonState() {
-        $('#btnAutoAbdmFlow').prop('disabled', autoFlowRunning || fetchOnlyRunning);
-        $('#btnAutoAbdmFlow .abdm-btn-spinner').toggleClass('d-none', !autoFlowRunning);
-        $('#btnAutoAbdmFlowLabel').text(autoFlowRunning ? 'Fetching...' : 'Fetch ABDM Records');
-    }
-
-    function applyFetchOnlyButtonState() {
-        $('#btnFetchRecordsOnly').prop('disabled', autoFlowRunning || fetchOnlyRunning);
-        $('#btnFetchRecordsOnly .abdm-btn-spinner').toggleClass('d-none', !fetchOnlyRunning);
-        $('#btnFetchRecordsOnlyLabel').text(fetchOnlyRunning ? 'Fetching...' : 'Fetch Records');
-    }
-
-    // Only show the standalone "Fetch Records" action once consent has actually
-    // been granted (or already completed once) — it re-pulls data using the
-    // saved consent reference without creating a brand-new consent request.
-    function showFetchRecordsButton(show) {
-        $('#btnFetchRecordsOnly').toggleClass('d-none', !show);
-    }
-
-    // "View Consent" is shown once any consent activity has started (not just IDLE).
-    function showViewConsentLink(show) {
-        $('#btnViewAbdmConsent').toggleClass('d-none', !show);
     }
 
     function consentItemBadgeClass(status) {
@@ -671,18 +640,104 @@ $(function() {
         return stepperHtml + metaHtml + tableHtml;
     }
 
-    function loadAbdmConsentDetail() {
-        $('#abdmConsentDetailBody').html('<div class="text-muted small">Loading...</div>');
-        fetch(abdmConsentDetailUrl, { credentials: 'same-origin' })
+    function setAbdmStatus(text, isError) {
+        var t = (text || '').toString().trim();
+        if (t === '') {
+            $('#abdmStatusBoxWrap').addClass('d-none');
+            $('#abdmStatusBox').text('');
+            return;
+        }
+        $('#abdmStatusBoxWrap').removeClass('d-none');
+        $('#abdmStatusBox').toggleClass('text-danger', !!isError).toggleClass('text-muted', !isError).text(t);
+    }
+
+    function applyNewRequestButtonState() {
+        $('#btnNewAbdmRequest').prop('disabled', autoFlowRunning || fetchOnlyRunningIdx !== -1);
+    }
+
+    // Renders one request's detail (from already-loaded list data, no extra
+    // network call) into the shared Consent Details modal.
+    function showAbdmConsentDetailForIndex(idx) {
+        var consent = currentAbdmRequests[idx];
+        $('#abdmConsentDetailBody').html(renderAbdmConsentDetail(consent));
+        var bsModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('abdmConsentDetailModal'));
+        bsModal.show();
+    }
+
+    function renderAbdmRequestsTable(requests) {
+        if (!requests || !requests.length) {
+            $('#abdmRequestsTable tbody').html('<tr><td colspan="6" class="text-muted text-center">No consent requests yet.</td></tr>');
+            return;
+        }
+
+        var html = '';
+        requests.forEach(function(consent, idx) {
+            var status = (consent.status || '').toString().toUpperCase();
+            var hiTypes = (consent.requested_hi_types && consent.requested_hi_types.length) ? consent.requested_hi_types : (consent.granted_hi_types || []);
+            var hiTypesText = hiTypes.length ? hiTypes.join(', ') : '-';
+            var canFetch = (status === 'GRANTED' || status === 'COMPLETED');
+
+            html += '<tr>'
+                + '<td><span class="badge ' + consentStatusBadgeClass(status) + '">' + escHtml(status || 'UNKNOWN') + '</span></td>'
+                + '<td class="small">' + escHtml(hiTypesText) + '</td>'
+                + '<td class="small">' + escHtml(consent.requested_by || 'HMS') + '</td>'
+                + '<td class="small">' + fmtConsentTs(consent.requested_on) + '</td>'
+                + '<td class="small">' + fmtConsentTs(consent.valid_to) + '</td>'
+                + '<td class="text-end">'
+                + '<button type="button" class="btn btn-link btn-sm p-0 me-2 abdm-view-request-btn" data-idx="' + idx + '">View</button>'
+                + (canFetch ? ('<button type="button" class="btn btn-link btn-sm p-0 abdm-fetch-request-btn" data-idx="' + idx + '">Fetch Records</button>') : '')
+                + '</td>'
+                + '</tr>';
+        });
+        $('#abdmRequestsTable tbody').html(html);
+    }
+
+    function loadAbdmConsentRequests() {
+        fetch(abdmConsentRequestsUrl, { credentials: 'same-origin' })
             .then(function(resp) { return resp.json(); })
             .then(function(data) {
                 if (!data || data.ok !== 1) {
-                    throw new Error((data && data.error) || 'Unable to load consent details.');
+                    throw new Error((data && data.error) || 'Unable to load consent request history.');
                 }
-                $('#abdmConsentDetailBody').html(renderAbdmConsentDetail(data.consent));
+                currentAbdmRequests = Array.isArray(data.requests) ? data.requests : [];
+                renderAbdmRequestsTable(currentAbdmRequests);
             })
             .catch(function(err) {
-                $('#abdmConsentDetailBody').html('<div class="text-danger small">' + escHtml('Failed to load consent details: ' + (err.message || err)) + '</div>');
+                $('#abdmRequestsTable tbody').html('<tr><td colspan="6" class="text-danger text-center">' + escHtml('Failed to load consent request history: ' + (err.message || err)) + '</td></tr>');
+            });
+    }
+
+    // Re-pulls data for a specific (already GRANTED/COMPLETED) request row using
+    // its saved consent reference, without creating a brand-new consent request.
+    function runFetchRecordsForRow(idx) {
+        if (autoFlowRunning || fetchOnlyRunningIdx !== -1) {
+            return;
+        }
+        var consent = currentAbdmRequests[idx];
+        if (!consent) {
+            return;
+        }
+        fetchOnlyRunningIdx = idx;
+        applyNewRequestButtonState();
+        setAbdmStatus('Fetching latest records using existing granted consent...', false);
+
+        var url = abdmFetchOnlyUrl + '?consent_id=' + encodeURIComponent(consent.consent_id || '') + '&consent_request_id=' + encodeURIComponent(consent.consent_request_id || '');
+        fetch(url, { credentials: 'same-origin' })
+            .then(function(resp) { return resp.json(); })
+            .then(function(data) {
+                if (!data || data.ok !== 1) {
+                    throw new Error((data && data.error) || 'Fetch failed.');
+                }
+                setAbdmStatus((data.message || 'Records fetched successfully.').toString(), false);
+                fetchOnlyRunningIdx = -1;
+                applyNewRequestButtonState();
+                loadAbdmDocs();
+                loadAbdmConsentRequests();
+            })
+            .catch(function(err) {
+                fetchOnlyRunningIdx = -1;
+                applyNewRequestButtonState();
+                setAbdmStatus('Fetch failed: ' + (err.message || err), true);
             });
     }
 
@@ -873,7 +928,6 @@ $(function() {
         if (q !== '') {
             url += '&q=' + encodeURIComponent(q);
         }
-        $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text('Loading ABDM records...');
 
         fetch(url, { credentials: 'same-origin' })
             .then(function(resp) { return resp.json(); })
@@ -883,77 +937,10 @@ $(function() {
                 }
                 currentAbdmRows = Array.isArray(data.items) ? data.items : [];
                 renderAbdmRows(currentAbdmRows);
-
-                var lastSync = data.last_sync || null;
-                if (lastSync && (lastSync.request_id || '').toString().trim() !== '') {
-                    autoFlowRequestId = lastSync.restart_required ? '' : (lastSync.request_id || '').toString().trim();
-                    autoFlowNeedsFreshRequest = !!lastSync.restart_required;
-                }
-
-                var lastPhase = lastSync ? (lastSync.phase || '').toString().toUpperCase() : '';
-                if (lastPhase === 'COMPLETED') {
-                    setFlowProgress(3);
-                } else if (lastPhase === 'GRANTED') {
-                    setFlowProgress(2);
-                } else if (lastPhase === 'REQUESTED' || lastPhase === 'PENDING') {
-                    setFlowProgress(1);
-                } else if (lastPhase === 'FAILED' || lastPhase === 'DENIED') {
-                    setFlowProgress(0);
-                }
-
-                showFetchRecordsButton(lastPhase === 'GRANTED' || lastPhase === 'COMPLETED');
-                showViewConsentLink(lastPhase !== '' && lastPhase !== 'IDLE');
-                updateConsentBadge(lastPhase, autoFlowNeedsFreshRequest);
-
-                var baseMsg = 'Loaded ' + currentAbdmRows.length + ' fetched ABDM record(s).';
-                if (lastSync && (lastSync.message || '').toString().trim() !== '') {
-                    baseMsg = (lastSync.message || '').toString();
-                    if ((lastSync.updated_at || '').toString().trim() !== '') {
-                        baseMsg += ' | Last update: ' + (lastSync.updated_at || '').toString();
-                    }
-                    if ((lastSync.request_id || '').toString().trim() !== '') {
-                        baseMsg += ' | Request ID: ' + (lastSync.request_id || '').toString();
-                    }
-                }
-
-                $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text(baseMsg);
-                applyConsentButtonState();
             })
             .catch(function(err) {
-                $('#abdmStatusBox').removeClass('text-muted').addClass('text-danger').text('ABDM load failed: ' + (err.message || err));
+                setAbdmStatus('ABDM load failed: ' + (err.message || err), true);
             });
-    }
-
-    function setFlowProgress(step) {
-        var current = Number(step || 0);
-        if (current < 0) {
-            current = 0;
-        }
-        if (current > 3) {
-            current = 3;
-        }
-
-        var width = 0;
-        if (current === 1) {
-            width = 34;
-        } else if (current === 2) {
-            width = 67;
-        } else if (current >= 3) {
-            width = 100;
-        }
-
-        $('#abdmFlowProgressBar').css('width', width + '%');
-
-        $('#abdmFlowSteps .abdm-flow-step').each(function() {
-            var $el = $(this);
-            var stepNo = Number($el.data('step') || 0);
-            $el.removeClass('is-active is-done');
-            if (stepNo < current) {
-                $el.addClass('is-done');
-            } else if (stepNo === current && current > 0) {
-                $el.addClass('is-active');
-            }
-        });
     }
 
     function stopAutoFlowLoop() {
@@ -982,26 +969,15 @@ $(function() {
                 var resetRequestId = Number(data.reset_request_id || 0) === 1;
                 var info = msg !== '' ? msg : ('Phase: ' + (phase || 'UNKNOWN'));
 
-                if (phase === 'COMPLETED') {
-                    setFlowProgress(3);
-                } else if (phase === 'GRANTED') {
-                    setFlowProgress(2);
-                } else if (phase === 'REQUESTED' || phase === 'PENDING') {
-                    setFlowProgress(1);
-                }
-                showFetchRecordsButton(phase === 'GRANTED' || phase === 'COMPLETED');
-                showViewConsentLink(phase !== '' && phase !== 'IDLE');
-                updateConsentBadge(phase, autoFlowNeedsFreshRequest);
-
-                $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text(info + (autoFlowRequestId ? (' | Request ID: ' + autoFlowRequestId) : ''));
+                setAbdmStatus(info + (autoFlowRequestId ? (' | Request ID: ' + autoFlowRequestId) : ''), false);
 
                 if (resetRequestId) {
                     autoFlowRequestId = '';
                     stopAutoFlowLoop();
-                    updateConsentBadge('FAILED', false);
                     autoFlowRunning = false;
-                    applyConsentButtonState();
-                    $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text('Previous request is still being processed. Please wait for the first request to finish before starting a new one.');
+                    applyNewRequestButtonState();
+                    setAbdmStatus('Previous request is still being processed. Please wait for the first request to finish before starting a new one.', false);
+                    loadAbdmConsentRequests();
                     return;
                 }
 
@@ -1013,7 +989,8 @@ $(function() {
                 }
 
                 autoFlowRunning = false;
-                applyConsentButtonState();
+                applyNewRequestButtonState();
+                loadAbdmConsentRequests();
                 if (phase === 'COMPLETED') {
                     loadAbdmDocs();
                 }
@@ -1021,8 +998,9 @@ $(function() {
             .catch(function(err) {
                 stopAutoFlowLoop();
                 autoFlowRunning = false;
-                applyConsentButtonState();
-                $('#abdmStatusBox').removeClass('text-muted').addClass('text-danger').text('Auto flow failed: ' + (err.message || err));
+                applyNewRequestButtonState();
+                setAbdmStatus('Auto flow failed: ' + (err.message || err), true);
+                loadAbdmConsentRequests();
             });
     }
 
@@ -1043,49 +1021,12 @@ $(function() {
             });
     }
 
-    // Standalone fetch: consent is already GRANTED, so this skips consent_request
-    // and reconcile polling entirely and just pulls data using the saved consent
-    // reference. Used by the "Fetch Records" button once consent is granted.
-    function runFetchOnlyStep() {
-        if (fetchOnlyRunning || autoFlowRunning) {
-            return;
-        }
-        fetchOnlyRunning = true;
-        applyFetchOnlyButtonState();
-        applyConsentButtonState();
-        $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text('Fetching latest records using existing granted consent...');
-
-        fetch(abdmFetchOnlyUrl, { credentials: 'same-origin' })
-            .then(function(resp) { return resp.json().then(function(data) { return { status: resp.status, data: data }; }); })
-            .then(function(wrapped) {
-                var data = wrapped.data;
-                if (!data || data.ok !== 1) {
-                    throw new Error((data && data.error) || 'Fetch failed.');
-                }
-
-                setFlowProgress(3);
-                showFetchRecordsButton(true);
-                showViewConsentLink(true);
-                updateConsentBadge('COMPLETED', false);
-
-                var info = (data.message || 'Records fetched successfully.').toString();
-                $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text(info);
-
-                fetchOnlyRunning = false;
-                applyFetchOnlyButtonState();
-                applyConsentButtonState();
-                loadAbdmDocs();
-            })
-            .catch(function(err) {
-                fetchOnlyRunning = false;
-                applyFetchOnlyButtonState();
-                applyConsentButtonState();
-                $('#abdmStatusBox').removeClass('text-muted').addClass('text-danger').text('Fetch failed: ' + (err.message || err));
-            });
-    }
-
     $(document).off('click.abdmOpd', '#btnLoadAbdmDocs').on('click.abdmOpd', '#btnLoadAbdmDocs', function() {
         loadAbdmDocs();
+    });
+
+    $(document).off('click.abdmOpd', '#btnRefreshAbdmRequests').on('click.abdmOpd', '#btnRefreshAbdmRequests', function() {
+        loadAbdmConsentRequests();
     });
 
     $(document).off('click.abdmOpd', '#btnSearchAbdmDocs').on('click.abdmOpd', '#btnSearchAbdmDocs', function() {
@@ -1106,35 +1047,21 @@ $(function() {
         loadAbdmDocDetail(docId);
     });
 
-    $(document).off('click.abdmOpd', '#btnAutoAbdmFlow').on('click.abdmOpd', '#btnAutoAbdmFlow', function() {
-        if (autoFlowRunning) {
-            return;
-        }
-        stopAutoFlowLoop();
-        autoFlowAttempts = 0;
-        if (autoFlowNeedsFreshRequest) {
-            autoFlowRequestId = '';
-            autoFlowNeedsFreshRequest = false;
-        }
-        setFlowProgress(1);
-        autoFlowRunning = true;
-        applyConsentButtonState();
-        $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text('Sending consent request to patient\'s ABHA app...');
-        runAutoFlowStep();
+    $(document).off('click.abdmOpd', '.abdm-view-request-btn').on('click.abdmOpd', '.abdm-view-request-btn', function() {
+        var idx = Number($(this).data('idx'));
+        showAbdmConsentDetailForIndex(idx);
     });
 
-    $(document).off('click.abdmOpd', '#btnFetchRecordsOnly').on('click.abdmOpd', '#btnFetchRecordsOnly', function() {
-        runFetchOnlyStep();
+    $(document).off('click.abdmOpd', '.abdm-fetch-request-btn').on('click.abdmOpd', '.abdm-fetch-request-btn', function() {
+        var idx = Number($(this).data('idx'));
+        runFetchRecordsForRow(idx);
     });
 
     $(document).off('shown.bs.tab.abdmOpd', '[data-bs-target="#opd-abdm-tab"]').on('shown.bs.tab.abdmOpd', '[data-bs-target="#opd-abdm-tab"]', function() {
         if (!currentAbdmRows.length) {
             loadAbdmDocs();
         }
-    });
-
-    $('#abdmConsentDetailModal').on('show.bs.modal', function() {
-        loadAbdmConsentDetail();
+        loadAbdmConsentRequests();
     });
 
     $('#abdmCustomConsentModal').on('show.bs.modal', function() {
@@ -1150,7 +1077,7 @@ $(function() {
     });
 
     $(document).off('click.abdmOpd', '#btnSendCustomConsent').on('click.abdmOpd', '#btnSendCustomConsent', function() {
-        if (autoFlowRunning || fetchOnlyRunning) {
+        if (autoFlowRunning || fetchOnlyRunningIdx !== -1) {
             return;
         }
 
@@ -1194,12 +1121,10 @@ $(function() {
 
             stopAutoFlowLoop();
             autoFlowAttempts = 0;
-            autoFlowNeedsFreshRequest = false;
             autoFlowRequestId = (data.request_id || '').toString();
-            setFlowProgress(1);
             autoFlowRunning = true;
-            applyConsentButtonState();
-            $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text('Sending custom consent request to patient\'s ABHA app...');
+            applyNewRequestButtonState();
+            setAbdmStatus('Sending consent request to patient\'s ABHA app...', false);
             runAutoFlowStep();
         }).fail(function(xhr) {
             var data = xhr.responseJSON;
@@ -1213,8 +1138,8 @@ $(function() {
 
     $('[data-bs-toggle="tooltip"]').tooltip();
 
-    applyConsentButtonState();
-    applyFetchOnlyButtonState();
-    updateConsentBadge('IDLE', false);
+    applyNewRequestButtonState();
+    loadAbdmConsentRequests();
 });
 </script>
+
