@@ -242,11 +242,22 @@ class M3HiuWorkflowService
                     continue;
                 }
 
+                // IMPORTANT: use the UMBRELLA consent_request_id here, not a single
+                // resolved consent artifact id. Multi-facility ABDM M3 consents
+                // produce ONE consent artifact PER linked HIP facility under the
+                // same consent_request_id. Per the bridge's own contract, calling
+                // GET /v1/hiu/data/fetch with the consent_request_id (instead of
+                // one specific artifact id) returns ALL sessions/artifacts merged
+                // in a single response (verified 2026-07-28: querying by
+                // consent_request_id surfaced a sibling artifact that had NEVER
+                // been seen by HMS before, alongside the originally-tracked one).
+                // Falls back to a single artifact id only if no request id is
+                // available (should not normally happen for a granted consent).
                 $resolvedConsentId = trim((string) (
-                    $consentResult['abdm_consent_artifact_id']
-                    ?? $consentResult['consent_id']
-                    ?? $consentResult['abdm_consent_request_id']
+                    $consentResult['abdm_consent_request_id']
                     ?? $consentResult['consent_request_id']
+                    ?? $consentResult['abdm_consent_artifact_id']
+                    ?? $consentResult['consent_id']
                     ?? ''
                 ));
                 if ($resolvedConsentId === '' || $this->isGatewayRequestIdPattern($resolvedConsentId)) {
