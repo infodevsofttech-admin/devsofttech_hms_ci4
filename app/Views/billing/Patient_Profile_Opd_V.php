@@ -348,6 +348,7 @@ if ($patientPhotoPath === '') {
                                 <div class="d-flex align-items-center gap-2">
                                     <span class="badge bg-secondary" id="abdmLastConsentBadge">Unknown</span>
                                     <span id="abdmStatusBox" class="small text-muted flex-grow-1">Click "Fetch ABDM Records" to request and load the patient's ABDM health records.</span>
+                                    <button type="button" class="btn btn-link btn-sm p-0 d-none" id="btnViewAbdmConsent" data-bs-toggle="modal" data-bs-target="#abdmConsentDetailModal">View Consent</button>
                                 </div>
                             </div>
                         </div>
@@ -418,6 +419,20 @@ if ($patientPhotoPath === '') {
             </div>
         </div>
     </div>
+
+    <div class="modal fade" id="abdmConsentDetailModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Consent Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="abdmConsentDetailBody">
+                    <div class="text-muted small">Loading...</div>
+                </div>
+            </div>
+        </div>
+    </div>
 </section>
 
 <script>
@@ -426,6 +441,7 @@ $(function() {
     var abdmDocumentsUrl = '<?= base_url('billing/patient/abdm_documents/' . (int) ($patient->id ?? 0)) ?>';
     var abdmAutoFlowUrl = '<?= base_url('billing/patient/abdm_content_auto_flow/' . (int) ($patient->id ?? 0)) ?>';
     var abdmFetchOnlyUrl = '<?= base_url('billing/patient/abdm_content_fetch_only/' . (int) ($patient->id ?? 0)) ?>';
+    var abdmConsentDetailUrl = '<?= base_url('billing/patient/abdm_consent_detail/' . (int) ($patient->id ?? 0)) ?>';
     var abdmDocDetailBaseUrl = '<?= base_url('billing/patient/abdm_document_detail/' . (int) ($patient->id ?? 0)) ?>';
     var currentAbdmRows = [];
     var autoFlowTimer = null;
@@ -479,6 +495,103 @@ $(function() {
     // saved consent reference without creating a brand-new consent request.
     function showFetchRecordsButton(show) {
         $('#btnFetchRecordsOnly').toggleClass('d-none', !show);
+    }
+
+    // "View Consent" is shown once any consent activity has started (not just IDLE).
+    function showViewConsentLink(show) {
+        $('#btnViewAbdmConsent').toggleClass('d-none', !show);
+    }
+
+    function consentItemBadgeClass(status) {
+        switch ((status || '').toString().toUpperCase()) {
+            case 'GRANTED': return 'bg-success-subtle text-success border border-success-subtle';
+            case 'REVOKED': return 'bg-secondary-subtle text-secondary border border-secondary-subtle';
+            case 'EXPIRED': return 'bg-warning-subtle text-warning border border-warning-subtle';
+            case 'DENIED': return 'bg-danger-subtle text-danger border border-danger-subtle';
+            case 'FAILED': return 'bg-danger-subtle text-danger border border-danger-subtle';
+            default: return 'bg-info-subtle text-info border border-info-subtle';
+        }
+    }
+
+    function fmtConsentTs(value) {
+        value = (value || '').toString().trim();
+        if (value === '') {
+            return '-';
+        }
+        // Accept both plain 'YYYY-MM-DD HH:MM:SS' and ISO forms.
+        var d = new Date(value.indexOf('T') === -1 ? value.replace(' ', 'T') : value);
+        if (isNaN(d.getTime())) {
+            return escHtml(value);
+        }
+        return escHtml(d.toLocaleString());
+    }
+
+    function renderAbdmConsentDetail(consent) {
+        if (!consent) {
+            return '<div class="text-danger small">No consent details available.</div>';
+        }
+
+        var steps = ['REQUESTED', 'GRANTED'];
+        var statusUpper = (consent.status || '').toString().toUpperCase();
+        if (statusUpper === 'REVOKED') { steps.push('REVOKED'); }
+        else if (statusUpper === 'EXPIRED') { steps.push('EXPIRED'); }
+
+        var stepperHtml = '<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">';
+        steps.forEach(function(step, idx) {
+            var reached = steps.indexOf(statusUpper) >= idx || (statusUpper === 'COMPLETED' && step !== 'REVOKED' && step !== 'EXPIRED');
+            stepperHtml += '<span class="badge ' + (reached ? 'bg-success' : 'bg-secondary') + '">' + (idx + 1) + '. ' + escHtml(step.charAt(0) + step.slice(1).toLowerCase()) + '</span>';
+            if (idx < steps.length - 1) { stepperHtml += '<span class="text-muted">&rarr;</span>'; }
+        });
+        stepperHtml += '</div>';
+
+        var metaHtml = '<div class="row small text-muted mb-3">'
+            + '<div class="col-md-6">Consent ID: <strong>' + escHtml(consent.consent_id || '-') + '</strong></div>'
+            + '<div class="col-md-6">ABHA: <strong>' + escHtml(consent.abha_address || '-') + '</strong></div>'
+            + '<div class="col-md-6">Purpose: <strong>' + escHtml(consent.purpose || '-') + '</strong></div>'
+            + '<div class="col-md-6">Status: <strong>' + escHtml(consent.status || '-') + '</strong></div>'
+            + '<div class="col-md-6">Valid From: <strong>' + fmtConsentTs(consent.valid_from) + '</strong></div>'
+            + '<div class="col-md-6">Valid To: <strong>' + fmtConsentTs(consent.valid_to) + '</strong></div>'
+            + '<div class="col-md-6">Requested On: <strong>' + fmtConsentTs(consent.requested_on) + '</strong></div>'
+            + '<div class="col-md-6">Erase Date: <strong>' + fmtConsentTs(consent.erase_at) + '</strong></div>'
+            + '</div>';
+
+        var rowsHtml = '';
+        (consent.items || []).forEach(function(item) {
+            var ts = item.status === 'GRANTED' ? item.timestamp
+                : item.status === 'REVOKED' ? item.timestamp
+                : item.status === 'EXPIRED' ? item.timestamp
+                : item.timestamp;
+            rowsHtml += '<tr>'
+                + '<td>' + escHtml(item.document_name || '') + '</td>'
+                + '<td>' + escHtml(item.permission || 'VIEW') + '</td>'
+                + '<td><span class="badge ' + consentItemBadgeClass(item.status) + '">' + escHtml(item.status || '') + '</span></td>'
+                + '<td>' + fmtConsentTs(ts) + '</td>'
+                + '</tr>';
+        });
+        if (rowsHtml === '') {
+            rowsHtml = '<tr><td colspan="4" class="text-muted text-center">No health information types recorded for this request.</td></tr>';
+        }
+
+        var tableHtml = '<div class="table-responsive"><table class="table table-sm table-bordered mb-0">'
+            + '<thead><tr><th>Document Type</th><th>Permission</th><th>Status</th><th>Timestamp</th></tr></thead>'
+            + '<tbody>' + rowsHtml + '</tbody></table></div>';
+
+        return stepperHtml + metaHtml + tableHtml;
+    }
+
+    function loadAbdmConsentDetail() {
+        $('#abdmConsentDetailBody').html('<div class="text-muted small">Loading...</div>');
+        fetch(abdmConsentDetailUrl, { credentials: 'same-origin' })
+            .then(function(resp) { return resp.json(); })
+            .then(function(data) {
+                if (!data || data.ok !== 1) {
+                    throw new Error((data && data.error) || 'Unable to load consent details.');
+                }
+                $('#abdmConsentDetailBody').html(renderAbdmConsentDetail(data.consent));
+            })
+            .catch(function(err) {
+                $('#abdmConsentDetailBody').html('<div class="text-danger small">' + escHtml('Failed to load consent details: ' + (err.message || err)) + '</div>');
+            });
     }
 
     var zoom = 1;
@@ -697,6 +810,7 @@ $(function() {
                 }
 
                 showFetchRecordsButton(lastPhase === 'GRANTED' || lastPhase === 'COMPLETED');
+                showViewConsentLink(lastPhase !== '' && lastPhase !== 'IDLE');
                 updateConsentBadge(lastPhase, autoFlowNeedsFreshRequest);
 
                 var baseMsg = 'Loaded ' + currentAbdmRows.length + ' fetched ABDM record(s).';
@@ -784,6 +898,7 @@ $(function() {
                     setFlowProgress(1);
                 }
                 showFetchRecordsButton(phase === 'GRANTED' || phase === 'COMPLETED');
+                showViewConsentLink(phase !== '' && phase !== 'IDLE');
                 updateConsentBadge(phase, autoFlowNeedsFreshRequest);
 
                 $('#abdmStatusBox').removeClass('text-danger').addClass('text-muted').text(info + (autoFlowRequestId ? (' | Request ID: ' + autoFlowRequestId) : ''));
@@ -858,6 +973,7 @@ $(function() {
 
                 setFlowProgress(3);
                 showFetchRecordsButton(true);
+                showViewConsentLink(true);
                 updateConsentBadge('COMPLETED', false);
 
                 var info = (data.message || 'Records fetched successfully.').toString();
@@ -923,6 +1039,10 @@ $(function() {
         if (!currentAbdmRows.length) {
             loadAbdmDocs();
         }
+    });
+
+    $('#abdmConsentDetailModal').on('show.bs.modal', function() {
+        loadAbdmConsentDetail();
     });
 
     $('[data-bs-toggle="tooltip"]').tooltip();

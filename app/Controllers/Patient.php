@@ -1861,6 +1861,45 @@ class Patient extends BaseController
 		]);
 	}
 
+	/**
+	 * Consent detail breakdown for the "View Consent" modal — shows the requested vs
+	 * granted Health Information Types for the current consent artifact, plus the
+	 * Requested -> Granted -> Revoked/Expired lifecycle timestamps for each type.
+	 */
+	public function abdm_consent_detail(int $pno)
+	{
+		if (! $this->db->tableExists('patient_master')) {
+			return $this->response->setStatusCode(500)->setJSON([
+				'ok' => 0,
+				'error' => 'patient_master table not found',
+			]);
+		}
+
+		$patientRow = $this->db->table('patient_master')->where('id', $pno)->get()->getRowArray();
+		if (! is_array($patientRow)) {
+			return $this->response->setStatusCode(404)->setJSON([
+				'ok' => 0,
+				'error' => 'Patient not found',
+			]);
+		}
+
+		$abhaContext = $this->buildAbhaProfileContext($patientRow);
+		$abhaAddress = trim((string) ($abhaContext['abha_address'] ?? ''));
+		if ($abhaAddress === '') {
+			return $this->response->setStatusCode(422)->setJSON([
+				'ok' => 0,
+				'error' => 'ABHA Address not available for this patient.',
+			]);
+		}
+
+		$detail = $this->getAbdmConsentArtifactDetail($abhaAddress);
+		if ((int) ($detail['ok'] ?? 0) !== 1) {
+			return $this->response->setStatusCode(404)->setJSON($detail);
+		}
+
+		return $this->response->setJSON($detail);
+	}
+
 	public function abdm_timeline(int $pno)
 	{
 		if (! $this->db->tableExists('patient_master')) {
@@ -3373,6 +3412,289 @@ class Patient extends BaseController
 		);
 
 		return $snapshot;
+	}
+
+	/**
+	 * Builds the requested-vs-granted Health Information Type breakdown for a patient's
+	 * current ABDM consent artifact, for the "View Consent" detail modal.
+	 *
+	 * Per ABDM M3 spec (confirmed with bridge team 2026-07-28): revocation is
+	 * whole-artifact only (no partial per-HI-type revoke), so a single overall
+	 * `status` + the granted `hi_types` array is sufficient to compute each
+	 * requested type's effective status:
+	 *   - GRANTED  : type is in the granted hi_types array and artifact status is GRANTED
+	 *   - DENIED   : type was requested but is NOT in the granted hi_types array
+	 *   - REVOKED  : artifact status is REVOKED (applies to the whole artifact)
+	 *   - EXPIRED  : artifact status is EXPIRED
+	 *   - REQUESTED: artifact is still pending (no GRANTED/REVOKED/EXPIRED yet)
+	 */
+	private function getAbdmConsentArtifactDetail(string $abhaAddress): array
+	{
+		$abhaAddress = trim($abhaAddress);
+		if ($abhaAddress === '' || ! $this->db->tableExists('abdm_hiu_workflows')) {
+			return ['ok' => 0, 'error' => 'No ABDM consent activity found for this patient.'];
+		}
+
+		$fields = $this->db->getFieldNames('abdm_hiu_workflows') ?? [];
+		$select = ['id', 'operation', 'workflow_state', 'status', 'request_id', 'consent_id', 'created_at', 'updated_at', 'completed_at', 'expired_at', 'revoked_at', 'last_error', 'http_code', 'request_json', 'response_json'];
+		foreach (['abdm_consent_request_id', 'abdm_consent_artifact_id', 'gateway_request_id'] as $optionalField) {
+			if (in_array($optionalField, $fields, true)) {
+				$select[] = $optionalField;
+			}
+		}
+
+		$rows = $this->db->table('abdm_hiu_workflows')
+			->select(implode(', ', $select))
+			->where('abha_address', $abhaAddress)
+			->whereIn('operation', [
+				'consent_request',
+				'consent_status',
+				'consent_reconcile',
+				'data_fetch',
+				'consent_callback',
+				'hi_on_request_callback',
+				'hi_data_push_callback',
+			])
+			->orderBy('id', 'DESC')
+			->get(60)
+			->getResultArray();
+
+		if ($rows === []) {
+			return ['ok' => 0, 'error' => 'No ABDM consent activity found for this patient.'];
+		}
+
+		$best = null;
+		$bestPriority = -1;
+		$bestDecoded = [];
+
+		foreach ($rows as $row) {
+			$decoded = json_decode((string) ($row['response_json'] ?? ''), true);
+			if (! is_array($decoded)) {
+				$decoded = [];
+			}
+
+			$rawConsentStatus = strtoupper(trim((string) (
+				$decoded['consent']['status']
+				?? $decoded['consent_status']
+				?? $decoded['status']
+				?? $decoded['data']['consent']['status']
+				?? ''
+			)));
+			$operation = strtoupper(trim((string) ($row['operation'] ?? '')));
+			$status = strtoupper(trim((string) ($row['status'] ?? '')));
+			$state = strtoupper(trim((string) ($row['workflow_state'] ?? '')));
+
+			$phase = 'REQUESTED';
+			$priority = 120;
+
+			if (($operation === 'DATA_FETCH' || $operation === 'HI_DATA_PUSH_CALLBACK') && $status === 'SUCCESS') {
+				$phase = 'COMPLETED';
+				$priority = 500;
+			} elseif (in_array($rawConsentStatus, ['GRANTED', 'APPROVED', 'ACTIVE'], true)) {
+				$phase = 'GRANTED';
+				$priority = 430;
+			} elseif ($rawConsentStatus === 'REVOKED') {
+				$phase = 'REVOKED';
+				$priority = 320;
+			} elseif ($rawConsentStatus === 'EXPIRED') {
+				$phase = 'EXPIRED';
+				$priority = 310;
+			} elseif ($rawConsentStatus === 'DENIED') {
+				$phase = 'DENIED';
+				$priority = 300;
+			} elseif ($state === 'DATA_RECEIVED') {
+				$phase = 'COMPLETED';
+				$priority = 480;
+			} elseif ($state === 'GRANTED') {
+				$phase = 'GRANTED';
+				$priority = 420;
+			} elseif ($state === 'REVOKED') {
+				$phase = 'REVOKED';
+				$priority = 300;
+			} elseif ($state === 'EXPIRED') {
+				$phase = 'EXPIRED';
+				$priority = 290;
+			} elseif ($status === 'FAILED' && $operation === 'CONSENT_REQUEST') {
+				$phase = 'FAILED';
+				$priority = 260;
+			} elseif ($status === 'FAILED') {
+				$phase = 'REQUESTED';
+				$priority = 190;
+			} elseif (in_array($state, ['REQUESTED', 'PENDING', 'STATUS_CHECKED'], true)) {
+				$phase = 'REQUESTED';
+				$priority = 180;
+			}
+
+			if ($best === null || $priority > $bestPriority) {
+				$best = $row;
+				$best['_phase'] = $phase;
+				$bestPriority = $priority;
+				$bestDecoded = $decoded;
+			}
+		}
+
+		if ($best === null) {
+			return ['ok' => 0, 'error' => 'No ABDM consent activity found for this patient.'];
+		}
+
+		$phase = (string) $best['_phase'];
+		$consentId = trim((string) ($best['abdm_consent_artifact_id'] ?? $best['consent_id'] ?? $bestDecoded['consent_id'] ?? $bestDecoded['consentId'] ?? ''));
+		$consentRequestId = trim((string) ($best['abdm_consent_request_id'] ?? $bestDecoded['abdm_consent_request_id'] ?? $bestDecoded['consent_request_id'] ?? $bestDecoded['consentRequestId'] ?? ''));
+		$bestRequestId = trim((string) ($best['request_id'] ?? ''));
+
+		// Find the original consent_request row for this same chain, to get the
+		// requested hi_types list + the original requested-on timestamp.
+		$consentRequestRow = null;
+		foreach ($rows as $row) {
+			if (strtoupper((string) ($row['operation'] ?? '')) !== 'CONSENT_REQUEST') {
+				continue;
+			}
+			$rowConsentReqId = trim((string) ($row['abdm_consent_request_id'] ?? ''));
+			$rowRequestId = trim((string) ($row['request_id'] ?? ''));
+			if (($consentRequestId !== '' && $rowConsentReqId === $consentRequestId)
+				|| ($bestRequestId !== '' && $rowRequestId === $bestRequestId)
+			) {
+				$consentRequestRow = $row;
+				break;
+			}
+		}
+		if ($consentRequestRow === null) {
+			foreach ($rows as $row) {
+				if (strtoupper((string) ($row['operation'] ?? '')) === 'CONSENT_REQUEST') {
+					$consentRequestRow = $row;
+					break;
+				}
+			}
+		}
+
+		$requestedHiTypes = [];
+		$requestedOn = '';
+		$purpose = '';
+		$validFrom = '';
+		$validTo = '';
+		$eraseAt = '';
+
+		if (is_array($consentRequestRow)) {
+			$reqPayload = json_decode((string) ($consentRequestRow['request_json'] ?? ''), true);
+			if (! is_array($reqPayload)) {
+				$reqPayload = [];
+			}
+			$consentBlock = (array) ($reqPayload['consent'] ?? []);
+			$requestedHiTypes = $this->normalizeHiTypesList($consentBlock['hiTypes'] ?? $consentBlock['hi_types'] ?? []);
+			$requestedOn = trim((string) ($consentRequestRow['created_at'] ?? ''));
+			$purpose = trim((string) ($consentBlock['purpose']['text'] ?? $consentBlock['purpose']['code'] ?? ''));
+			$validFrom = trim((string) ($consentBlock['permission']['dateRange']['from'] ?? ''));
+			$validTo = trim((string) ($consentBlock['permission']['dateRange']['to'] ?? ''));
+			$eraseAt = trim((string) ($consentBlock['permission']['dataEraseAt'] ?? ''));
+		}
+
+		// Bridge flattens consent.hi_types -> top-level hi_types on consent_status /
+		// consent_reconcile / consent_callback responses (see M3HiuGatewayClient
+		// flatten logic). The "best" row for overall phase can be a data_fetch /
+		// hi_data_push_callback row (once records are COMPLETED) whose response is
+		// a FHIR data bundle with no hi_types field at all — so look separately for
+		// the most recent row that actually carries the granted hi_types payload.
+		$grantedHiTypes = [];
+		$grantedOn = '';
+		foreach ($rows as $row) {
+			$decoded = json_decode((string) ($row['response_json'] ?? ''), true);
+			if (! is_array($decoded)) {
+				continue;
+			}
+			$rowHiTypes = $this->normalizeHiTypesList($decoded['hi_types'] ?? $decoded['consent']['hi_types'] ?? []);
+			if ($rowHiTypes !== []) {
+				$grantedHiTypes = $rowHiTypes;
+				$grantedOn = trim((string) ($decoded['granted_at'] ?? $row['updated_at'] ?? ''));
+				break;
+			}
+		}
+
+		$revokedOn = trim((string) ($best['revoked_at'] ?? ''));
+		$expiredOn = trim((string) ($best['expired_at'] ?? ''));
+		if (in_array($phase, ['GRANTED', 'COMPLETED'], true) && $grantedOn === '') {
+			$grantedOn = trim((string) ($bestDecoded['granted_at'] ?? $best['updated_at'] ?? ''));
+		}
+
+		$items = [];
+		$typesForItems = $requestedHiTypes !== [] ? $requestedHiTypes : $grantedHiTypes;
+		foreach ($typesForItems as $hiType) {
+			$itemStatus = 'REQUESTED';
+			$itemTimestamp = $requestedOn;
+
+			if ($phase === 'REVOKED') {
+				$itemStatus = 'REVOKED';
+				$itemTimestamp = $revokedOn;
+			} elseif ($phase === 'EXPIRED') {
+				$itemStatus = 'EXPIRED';
+				$itemTimestamp = $expiredOn;
+			} elseif (in_array($phase, ['GRANTED', 'COMPLETED'], true)) {
+				if (in_array($hiType, $grantedHiTypes, true)) {
+					$itemStatus = 'GRANTED';
+					$itemTimestamp = $grantedOn;
+				} else {
+					$itemStatus = 'DENIED';
+					$itemTimestamp = $grantedOn;
+				}
+			} elseif ($phase === 'FAILED') {
+				$itemStatus = 'FAILED';
+				$itemTimestamp = trim((string) ($best['updated_at'] ?? ''));
+			}
+
+			$items[] = [
+				'document_name' => $hiType,
+				'permission' => 'VIEW',
+				'status' => $itemStatus,
+				'timestamp' => $itemTimestamp,
+			];
+		}
+
+		return [
+			'ok' => 1,
+			'consent' => [
+				'consent_id' => $consentId,
+				'consent_request_id' => $consentRequestId,
+				'abha_address' => $abhaAddress,
+				'status' => $phase,
+				'purpose' => $purpose !== '' ? $purpose : 'Care Management',
+				'requested_hi_types' => $requestedHiTypes,
+				'granted_hi_types' => $grantedHiTypes,
+				'valid_from' => $validFrom,
+				'valid_to' => $validTo,
+				'erase_at' => $eraseAt,
+				'requested_on' => $requestedOn,
+				'granted_on' => $grantedOn,
+				'revoked_on' => $revokedOn,
+				'expired_on' => $expiredOn,
+				'items' => $items,
+			],
+		];
+	}
+
+	/**
+	 * Normalizes a hiTypes value (JSON string, array, or single string) into a clean,
+	 * de-duplicated string array.
+	 *
+	 * @param mixed $value
+	 */
+	private function normalizeHiTypesList($value): array
+	{
+		if (is_string($value)) {
+			$decoded = json_decode($value, true);
+			$value = is_array($decoded) ? $decoded : [$value];
+		}
+		if (! is_array($value)) {
+			return [];
+		}
+
+		$out = [];
+		foreach ($value as $v) {
+			$v = trim((string) $v);
+			if ($v !== '' && ! in_array($v, $out, true)) {
+				$out[] = $v;
+			}
+		}
+
+		return $out;
 	}
 
 
