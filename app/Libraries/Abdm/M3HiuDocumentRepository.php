@@ -60,18 +60,27 @@ class M3HiuDocumentRepository
                 $resolvedAbha = $abhaAddress !== '' ? $abhaAddress : trim((string) ($summary['abha_address'] ?? ''));
                 $patientMap = $this->mapPatientByAbha($resolvedAbha, (string) ($summary['abha_number'] ?? ''));
 
-                // NOTE: request_id is intentionally excluded from the dedup key.
-                // It is unique per polling/fetch call, so including it here would
-                // create a brand-new duplicate row every time the same document is
-                // re-fetched (e.g. repeated "Fetch ABDM Records" clicks or retries).
-                // transaction_id + consent_ref + care_context_reference + bundle_id
-                // identify the same underlying document across repeated fetches.
-                $docHash = sha1(implode('|', [
-                    $transactionId,
-                    $consentRef,
-                    $careContextRef,
-                    (string) ($summary['bundle_id'] ?? ''),
-                ]));
+                // NOTE: transaction_id and consent_ref are intentionally EXCLUDED
+                // from the dedup key. Confirmed empirically: the SAME clinical
+                // document (identical bundle_id) gets re-delivered by the bridge
+                // under a DIFFERENT transaction_id/consent_ref every time it is
+                // re-fetched (e.g. via the by-ABHA-address historical fetch, which
+                // returns every past consent session), so including them created a
+                // brand-new duplicate row per fetch instead of updating the
+                // existing one. bundle_id is the FHIR Bundle resource's own `id`
+                // (set once by the HIP) and is stable across re-fetches/consents,
+                // so pair it with care_context_reference (the clinical encounter
+                // reference) to uniquely identify a document. request_id is also
+                // excluded since it is unique per polling/fetch call.
+                $bundleId = trim((string) ($summary['bundle_id'] ?? ''));
+                $docHash = $bundleId !== ''
+                    ? sha1('bundle:' . $careContextRef . '|' . $bundleId)
+                    : sha1(implode('|', [
+                        $transactionId,
+                        $consentRef,
+                        $careContextRef,
+                        (string) ($summary['bundle_id'] ?? ''),
+                    ]));
 
                 $row = [
                     'workflow_id' => $workflowId > 0 ? $workflowId : null,
