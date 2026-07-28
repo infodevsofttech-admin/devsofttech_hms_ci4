@@ -1148,15 +1148,22 @@ class M3HiuWorkflowService
             ->modify('-120 seconds');
         $safeNowIso = $safeNowUtc->format('Y-m-d\TH:i:s.000\Z');
 
+        // IMPORTANT: always refresh dateRange.to to the current moment at actual
+        // dispatch time, rather than only clamping it when it looks like it's in
+        // the future. A stale 'to' (e.g. from a re-dispatched/retried payload
+        // that reused an old consent block built hours/days earlier) would
+        // otherwise silently pass this check forever, permanently excluding any
+        // clinical records created after that stale cutoff (confirmed 2026-07-29:
+        // a retried consent_request sent dateRange.to a full day behind the true
+        // request time, per bridge team diagnostics). Always sending the freshest
+        // possible 'to' ensures HMS requests all records up to the exact minute
+        // of the request, per bridge API contract.
         try {
-            $toAt = new \DateTimeImmutable($toRaw);
-            if ($toAt->getTimestamp() > $safeNowUtc->getTimestamp()) {
-                $consent['permission']['dateRange']['to'] = $safeNowIso;
-            }
+            new \DateTimeImmutable($toRaw); // validate shape only
         } catch (\Throwable $e) {
-            // Fall back to current UTC to avoid sending invalid timestamp shapes.
-            $consent['permission']['dateRange']['to'] = $safeNowIso;
+            // Fall through — invalid shape gets replaced below too.
         }
+        $consent['permission']['dateRange']['to'] = $safeNowIso;
 
         return $consent;
     }
