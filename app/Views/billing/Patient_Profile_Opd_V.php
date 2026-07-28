@@ -781,9 +781,14 @@ $(function() {
         }
 
         var html = '';
+        var docIds = [];
         docs.forEach(function(doc, di) {
             var summary = doc.summary || {};
             var sections = Array.isArray(summary.sections) ? summary.sections : [];
+            var docId = doc.id;
+            if (docId) {
+                docIds.push(docId);
+            }
 
             html += '<div class="card mb-3">'
                 + '<div class="card-body">'
@@ -815,9 +820,35 @@ $(function() {
                 html += '<div class="small text-muted">No structured sections available for this record.</div>';
             }
 
+            // Attachments (scanned images/PDFs) are stripped from the list payload
+            // to keep it light -- lazily fetch the full per-document detail (which
+            // includes them) after the modal is rendered, see below.
+            if (docId) {
+                html += '<div class="mt-3"><div class="fw-semibold small mb-2">Attached Files</div>'
+                    + '<div class="abdm-fetch-attachments small text-muted" data-doc-id="' + escHtml(docId) + '">Loading attached files...</div></div>';
+            }
+
             html += '</div></div>';
         });
         $('#abdmFetchResultModalBody').html(html);
+
+        docIds.forEach(function(docId) {
+            fetch(abdmDocDetailBaseUrl + '/' + encodeURIComponent(docId), { credentials: 'same-origin' })
+                .then(function(resp) { return resp.json(); })
+                .then(function(data) {
+                    var item = (data && data.ok === 1) ? (data.item || {}) : null;
+                    var summary = (item && item.summary) || {};
+                    var $target = $('.abdm-fetch-attachments[data-doc-id="' + docId + '"]');
+                    if (!item) {
+                        $target.removeClass('text-muted').addClass('text-danger').text('Unable to load attached files.');
+                        return;
+                    }
+                    $target.removeClass('small text-muted').html(renderAttachmentsHtml(summary.attachments));
+                })
+                .catch(function() {
+                    $('.abdm-fetch-attachments[data-doc-id="' + docId + '"]').removeClass('text-muted').addClass('text-danger').text('Unable to load attached files.');
+                });
+        });
     }
 
     var zoom = 1;
@@ -1017,33 +1048,39 @@ $(function() {
         html += '</ul></div></div>';
         html += '</div>';
 
-        var attachments = Array.isArray(summary.attachments) ? summary.attachments : [];
-        html += '<div class="mt-3"><div class="fw-semibold small mb-2">Attached Files</div>';
-        if (attachments.length) {
-            html += '<div class="row g-2">';
-            attachments.forEach(function(att, idx) {
-                var ct = (att.content_type || '').toString().toLowerCase();
-                var blobUrl = att.data ? base64ToBlobUrl(att.data, att.content_type) : '';
-                html += '<div class="col-md-4"><div class="border rounded p-2 h-100 text-center">';
-                html += '<div class="small fw-semibold mb-1">' + escHtml(att.title || ('Attachment ' + (idx + 1))) + '</div>';
-                if (!blobUrl) {
-                    html += '<div class="small text-muted">Preview unavailable</div>';
-                } else if (ct.indexOf('image/') === 0) {
-                    html += '<img src="' + blobUrl + '" class="img-fluid rounded abdm-attachment-img" style="max-height:160px;cursor:pointer;" data-bs-toggle="modal" data-bs-target="#opdScanModal" data-src="' + blobUrl + '" alt="Attached image">';
-                } else if (ct === 'application/pdf') {
-                    html += '<div class="small text-muted mb-2">PDF Document</div><a href="' + blobUrl + '" target="_blank" rel="noopener" class="btn btn-sm btn-outline-danger">View PDF</a>';
-                } else {
-                    html += '<div class="small text-muted mb-2">' + escHtml(att.content_type || 'Document') + '</div><a href="' + blobUrl + '" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary">Open Document</a>';
-                }
-                html += '</div></div>';
-            });
-            html += '</div>';
-        } else {
-            html += '<div class="small text-muted">No attached images, PDFs, or documents found in this record.</div>';
-        }
-        html += '</div>';
+        html += '<div class="mt-3"><div class="fw-semibold small mb-2">Attached Files</div>' + renderAttachmentsHtml(summary.attachments) + '</div>';
 
         $('#abdmDocDetailBox').html(html);
+    }
+
+    // Builds the "Attached Files" preview grid (images shown inline w/ zoom modal,
+    // PDFs/other docs as an "Open"/"View" link) from a document's summary.attachments
+    // array. Shared by the doc-detail box and the per-consent-request fetch modal.
+    function renderAttachmentsHtml(attachments) {
+        attachments = Array.isArray(attachments) ? attachments : [];
+        if (!attachments.length) {
+            return '<div class="small text-muted">No attached images, PDFs, or documents found in this record.</div>';
+        }
+
+        var html = '<div class="row g-2">';
+        attachments.forEach(function(att, idx) {
+            var ct = (att.content_type || '').toString().toLowerCase();
+            var blobUrl = att.data ? base64ToBlobUrl(att.data, att.content_type) : '';
+            html += '<div class="col-md-4"><div class="border rounded p-2 h-100 text-center">';
+            html += '<div class="small fw-semibold mb-1">' + escHtml(att.title || ('Attachment ' + (idx + 1))) + '</div>';
+            if (!blobUrl) {
+                html += '<div class="small text-muted">Preview unavailable</div>';
+            } else if (ct.indexOf('image/') === 0) {
+                html += '<img src="' + blobUrl + '" class="img-fluid rounded abdm-attachment-img" style="max-height:160px;cursor:pointer;" data-bs-toggle="modal" data-bs-target="#opdScanModal" data-src="' + blobUrl + '" alt="Attached image">';
+            } else if (ct === 'application/pdf') {
+                html += '<div class="small text-muted mb-2">PDF Document</div><a href="' + blobUrl + '" target="_blank" rel="noopener" class="btn btn-sm btn-outline-danger">View PDF</a>';
+            } else {
+                html += '<div class="small text-muted mb-2">' + escHtml(att.content_type || 'Document') + '</div><a href="' + blobUrl + '" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary">Open Document</a>';
+            }
+            html += '</div></div>';
+        });
+        html += '</div>';
+        return html;
     }
 
     function loadAbdmDocs() {
