@@ -5,7 +5,8 @@
  * Run from the CI4 project root on the server. Delete this file after use.
  *
  * Usage:
- *   php83 check_transaction_lookup.php <search_string>
+ *   php83 check_transaction_lookup.php <search_string> [operation_filter] [limit]
+ *   php83 check_transaction_lookup.php 10b01dd7-062b-4fc1-91f1-82b3b1491eb6 consent_reconcile
  */
 
 $envPath = __DIR__ . '/.env';
@@ -46,14 +47,20 @@ if ($needle === '') {
 }
 
 $like = '%' . $mysqli->real_escape_string($needle) . '%';
+$opFilter = trim((string) ($argv[2] ?? ''));
+$limit = (int) ($argv[3] ?? 20);
+if ($limit <= 0) {
+    $limit = 20;
+}
 
-echo "\n=== abdm_hiu_workflows rows matching '{$needle}' (in request_json/response_json) ===\n";
+echo "\n=== abdm_hiu_workflows rows matching '{$needle}'" . ($opFilter !== '' ? " AND operation='{$opFilter}'" : '') . " (in request_json/response_json) ===\n";
+$opClause = $opFilter !== '' ? " AND operation = '" . $mysqli->real_escape_string($opFilter) . "'" : '';
 $sql = "SELECT id, operation, workflow_state, status, http_code, is_retryable, consent_id,
                abha_address, transaction_id, last_error, created_at, updated_at
         FROM abdm_hiu_workflows
-        WHERE request_json LIKE '{$like}' OR response_json LIKE '{$like}'
-           OR transaction_id LIKE '{$like}' OR consent_id LIKE '{$like}'
-        ORDER BY id DESC LIMIT 20";
+        WHERE (request_json LIKE '{$like}' OR response_json LIKE '{$like}'
+           OR transaction_id LIKE '{$like}' OR consent_id LIKE '{$like}'){$opClause}
+        ORDER BY id DESC LIMIT {$limit}";
 $res = $mysqli->query($sql);
 if (! $res) {
     fwrite(STDERR, "Query failed: " . $mysqli->error . "\n");
