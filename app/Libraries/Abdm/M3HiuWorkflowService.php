@@ -976,6 +976,28 @@ class M3HiuWorkflowService
         }
 
         if ($operation === 'data_fetch') {
+            // Method 3 (per bridge gateway team, 2026-07-29): GET /v1/hiu/data/fetch
+            // ?abha_address=... returns ALL historical decrypted records across every
+            // past consent for the patient, instead of only the single consent/request
+            // targeted by Methods 1/2. Callers opt into this broader lookup explicitly
+            // (fetch_by_abha_address=1) since it is not scoped to one consent artifact.
+            $fetchByAbha = (int) ($clean['fetch_by_abha_address'] ?? 0) === 1;
+            if ($fetchByAbha) {
+                $abhaAddress = trim((string) ($clean['abha_address'] ?? ''));
+                if ($abhaAddress === '') {
+                    return [
+                        'ok' => 0,
+                        'http_code' => 422,
+                        'error_text' => 'abha_address is required to fetch all historical records by ABHA address.',
+                    ];
+                }
+
+                return [
+                    'ok' => 1,
+                    'payload' => ['abha_address' => $abhaAddress],
+                ];
+            }
+
             $requestFallback = '';
             if (! $requestIdGenerated) {
                 $requestFallback = trim((string) (

@@ -2070,6 +2070,40 @@ class Patient extends BaseController
 		$documentsPersisted = (int) ($fetchResult['documents_persisted'] ?? 0);
 		$documentsUpdated = (int) ($fetchResult['documents_updated'] ?? 0);
 
+		// The consent-artifact-scoped fetch above (bridge "Method 1/2") only
+		// returns data for the ONE consent/request we targeted. Per the bridge
+		// gateway team, GET /v1/hiu/data/fetch?abha_address=... ("Method 3")
+		// separately returns ALL historical decrypted records already available
+		// at the bridge across every past consent for this patient. If the
+		// consent-scoped call above found nothing new, fall back to this
+		// broader by-ABHA-address lookup before telling the user there is
+		// truly nothing to fetch yet.
+		if ($documentsPersisted + $documentsUpdated === 0) {
+			try {
+				$abhaFetchResult = $service->runOperation('data_fetch', [
+					'abha_address' => $abhaContext['abha_address'],
+					'fetch_by_abha_address' => 1,
+				]);
+			} catch (\Throwable $e) {
+				$abhaFetchResult = null;
+			}
+
+			if (is_array($abhaFetchResult) && (int) ($abhaFetchResult['ok'] ?? 0) === 1) {
+				$abhaDocumentsPersisted = (int) ($abhaFetchResult['documents_persisted'] ?? 0);
+				$abhaDocumentsUpdated = (int) ($abhaFetchResult['documents_updated'] ?? 0);
+				if ($abhaDocumentsPersisted + $abhaDocumentsUpdated > 0) {
+					return $this->response->setJSON([
+						'ok' => 1,
+						'phase' => 'COMPLETED',
+						'message' => 'Records fetched successfully from historical ABDM records for this ABHA address.',
+						'documents_persisted' => $abhaDocumentsPersisted,
+						'documents_updated' => $abhaDocumentsUpdated,
+						'data' => ['data_fetch' => $fetchResult, 'data_fetch_by_abha_address' => $abhaFetchResult],
+					]);
+				}
+			}
+		}
+
 		if ($documentsPersisted + $documentsUpdated === 0) {
 			return $this->response->setJSON([
 				'ok' => 1,
