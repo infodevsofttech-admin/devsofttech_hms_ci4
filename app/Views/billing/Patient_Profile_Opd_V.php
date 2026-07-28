@@ -364,36 +364,6 @@ if ($patientPhotoPath === '') {
                         </div>
                     </div>
 
-                    <div class="row g-3">
-                        <div class="col-lg-6">
-                            <div class="input-group input-group-sm mb-2">
-                                <input id="abdmDocSearch" class="form-control" placeholder="Search title, care context, doctor">
-                                <button class="btn btn-outline-secondary" type="button" id="btnSearchAbdmDocs">Search</button>
-                            </div>
-                            <div class="table-responsive border rounded">
-                                <table class="table table-sm table-hover mb-0" id="abdmDocTable">
-                                    <thead>
-                                        <tr>
-                                            <th>Date</th>
-                                            <th>Title</th>
-                                            <th>Care Context</th>
-                                            <th>Org / Hospital</th>
-                                            <th>Request ID</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr><td colspan="5" class="text-muted text-center">No records loaded.</td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                        <div class="col-lg-6">
-                            <div class="border rounded p-3 bg-light" id="abdmDocDetailBox">
-                                <div class="text-muted">Select a fetched document to view details.</div>
-                            </div>
-                        </div>
-                    </div>
-
                 </div>
             </div>
         </div>
@@ -578,6 +548,7 @@ $(function() {
     var autoFlowMaxAttempts = 15;
     var autoFlowRunning = false;
     var fetchOnlyRunningIdx = -1;
+    var currentAbdmFetchModalIdx = -1;
 
     function consentStatusBadgeClass(status) {
         switch ((status || '').toString().toUpperCase()) {
@@ -745,6 +716,7 @@ $(function() {
             return;
         }
         fetchOnlyRunningIdx = idx;
+        currentAbdmFetchModalIdx = idx;
         applyNewRequestButtonState();
         setAbdmStatus('Fetching latest records using existing granted consent...', false);
         openAbdmFetchResultModal();
@@ -801,7 +773,10 @@ $(function() {
 
     function renderAbdmFetchResultModal(docs) {
         if (!docs || !docs.length) {
-            $('#abdmFetchResultModalBody').html('<div class="text-muted small text-center">No fetched records found for this consent request yet.</div>');
+            var fetchBtnHtml = currentAbdmFetchModalIdx >= 0
+                ? '<div class="text-center mt-2"><button type="button" class="btn btn-sm btn-primary abdm-fetch-again-btn" data-idx="' + currentAbdmFetchModalIdx + '">Fetch Data</button></div>'
+                : '';
+            $('#abdmFetchResultModalBody').html('<div class="text-muted small text-center">No fetched records found for this consent request yet.</div>' + fetchBtnHtml);
             return;
         }
 
@@ -1202,6 +1177,11 @@ $(function() {
     });
 
     $(document).off('click.abdmOpd', '.abdm-fetch-request-btn').on('click.abdmOpd', '.abdm-fetch-request-btn', function() {
+        var idx = Number($(this).data('idx'));
+        runFetchRecordsForRow(idx);
+    });
+
+    $(document).off('click.abdmOpd', '.abdm-fetch-again-btn').on('click.abdmOpd', '.abdm-fetch-again-btn', function() {
         var idx = Number($(this).data('idx'));
         runFetchRecordsForRow(idx);
     });
