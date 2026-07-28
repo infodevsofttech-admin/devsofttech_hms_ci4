@@ -3849,7 +3849,15 @@ class Patient extends BaseController
 			$phase = 'REQUESTED';
 			$priority = 120;
 
-			if (($operation === 'DATA_FETCH' || $operation === 'HI_DATA_PUSH_CALLBACK') && $status === 'SUCCESS') {
+			// NOTE: the `status` column only reflects whether the underlying API
+			// call/poll succeeded (no HTTP/transport error) — it does NOT mean
+			// data was actually received (see M3HiuWorkflowService::runOperation()
+			// / ingestHealthInformationCallback(), which always set status=success
+			// for any error-free response, even one reporting decrypted_data=[]
+			// and consent/session status "requested"). Whether data truly arrived
+			// is tracked separately in workflow_state (DATA_PENDING vs
+			// DATA_RECEIVED), so require that here instead of the generic status.
+			if (($operation === 'DATA_FETCH' || $operation === 'HI_DATA_PUSH_CALLBACK') && $status === 'SUCCESS' && $state === 'DATA_RECEIVED') {
 				$phase = 'COMPLETED';
 				$priority = 500;
 			} elseif (in_array($rawConsentStatus, ['GRANTED', 'APPROVED', 'ACTIVE'], true)) {
