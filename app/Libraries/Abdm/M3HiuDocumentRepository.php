@@ -166,6 +166,13 @@ class M3HiuDocumentRepository
         $row['summary'] = json_decode((string) ($row['summary_json'] ?? ''), true) ?: [];
         $row['bundle'] = json_decode((string) ($row['raw_bundle'] ?? ''), true) ?: [];
 
+        // Documents saved before attachment extraction was added won't have
+        // 'attachments' in their stored summary_json; derive it live from the
+        // raw bundle instead of requiring a brand-new fetch.
+        if (empty($row['summary']['attachments']) && ! empty($row['bundle'])) {
+            $row['summary']['attachments'] = $this->extractAttachments($row['bundle']);
+        }
+
         return $row;
     }
 
@@ -280,7 +287,91 @@ class M3HiuDocumentRepository
             'conditions' => $conditions,
             'vitals' => $vitals,
             'medications' => $medications,
+            'attachments' => $this->extractAttachments($bundle),
         ];
+    }
+
+    /**
+     * Extracts attached scanned images/PDFs/generic documents (DocumentReference
+     * resources, whose content may carry the base64 attachment data inline or
+     * reference a separate Binary resource) from a FHIR bundle.
+     *
+     * @return array<int, array{title: string, content_type: string, data: string}>
+     */
+    public function extractAttachments(array $bundle): array
+    {
+        $entries = is_array($bundle['entry'] ?? null) ? (array) $bundle['entry'] : [];
+        $documentReferences = [];
+
+        // Binary resources are usually referenced by DocumentReference.content[].attachment.url
+        // (e.g. "Binary/xyz" or a matching fullUrl) rather than carrying the base64 data inline,
+        // so index them by both id and fullUrl for lookup in the second pass below.
+        $binariesById = [];
+        foreach ($entries as $entry) {
+            $resource = is_array($entry['resource'] ?? null) ? (array) $entry['resource'] : [];
+            if (trim((string) ($resource['resourceType'] ?? '')) !== 'Binary') {
+                continue;
+            }
+            $data = trim((string) ($resource['data'] ?? ''));
+            $contentType = trim((string) ($resource['contentType'] ?? ''));
+            if ($data === '') {
+                continue;
+            }
+            $binary = ['data' => $data, 'content_type' => $contentType];
+            $id = trim((string) ($resource['id'] ?? ''));
+            if ($id !== '') {
+                $binariesById[$id] = $binary;
+            }
+            $fullUrl = trim((string) ($entry['fullUrl'] ?? ''));
+            if ($fullUrl !== '') {
+                $binariesById[$fullUrl] = $binary;
+            }
+        }
+
+        foreach ($entries as $entry) {
+            $resource = is_array($entry['resource'] ?? null) ? (array) $entry['resource'] : [];
+            if (trim((string) ($resource['resourceType'] ?? '')) !== 'DocumentReference') {
+                continue;
+            }
+
+            foreach ((array) ($resource['content'] ?? []) as $content) {
+                $attachment = is_array($content['attachment'] ?? null) ? (array) $content['attachment'] : [];
+                if ($attachment === []) {
+                    continue;
+                }
+
+                $contentType = trim((string) ($attachment['contentType'] ?? ''));
+                $data = trim((string) ($attachment['data'] ?? ''));
+                if ($data === '') {
+                    $refUrl = trim((string) ($attachment['url'] ?? ''));
+                    $refId = str_replace('Binary/', '', $refUrl);
+                    $binary = $binariesById[$refUrl] ?? $binariesById[$refId] ?? null;
+                    if (is_array($binary)) {
+                        $data = (string) ($binary['data'] ?? '');
+                        if ($contentType === '') {
+                            $contentType = (string) ($binary['content_type'] ?? '');
+                        }
+                    }
+                }
+
+                if ($data === '') {
+                    continue;
+                }
+
+                $documentReferences[] = [
+                    'title' => trim((string) (
+                        ($resource['description'] ?? '')
+                        ?: ($resource['type']['text'] ?? '')
+                        ?: ($resource['type']['coding'][0]['display'] ?? '')
+                        ?: ($attachment['title'] ?? 'Attached Document')
+                    )),
+                    'content_type' => $contentType !== '' ? $contentType : 'application/octet-stream',
+                    'data' => $data,
+                ];
+            }
+        }
+
+        return $documentReferences;
     }
 
     private function mapPatientByAbha(string $abhaAddress, string $abhaNumber): array

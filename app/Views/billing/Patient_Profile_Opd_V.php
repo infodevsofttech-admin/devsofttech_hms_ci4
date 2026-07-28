@@ -853,6 +853,21 @@ $(function() {
         return $('<div>').text(val == null ? '' : String(val)).html();
     }
 
+    function base64ToBlobUrl(base64, contentType) {
+        try {
+            var byteChars = atob(base64);
+            var byteNumbers = new Array(byteChars.length);
+            for (var i = 0; i < byteChars.length; i++) {
+                byteNumbers[i] = byteChars.charCodeAt(i);
+            }
+            var byteArray = new Uint8Array(byteNumbers);
+            var blob = new Blob([byteArray], { type: contentType || 'application/octet-stream' });
+            return URL.createObjectURL(blob);
+        } catch (e) {
+            return '';
+        }
+    }
+
     function fmtDateTime(val) {
         var text = (val || '').toString().trim();
         if (!text) {
@@ -928,6 +943,32 @@ $(function() {
             html += '<li class="text-muted">No medications</li>';
         }
         html += '</ul></div></div>';
+        html += '</div>';
+
+        var attachments = Array.isArray(summary.attachments) ? summary.attachments : [];
+        html += '<div class="mt-3"><div class="fw-semibold small mb-2">Attached Files</div>';
+        if (attachments.length) {
+            html += '<div class="row g-2">';
+            attachments.forEach(function(att, idx) {
+                var ct = (att.content_type || '').toString().toLowerCase();
+                var blobUrl = att.data ? base64ToBlobUrl(att.data, att.content_type) : '';
+                html += '<div class="col-md-4"><div class="border rounded p-2 h-100 text-center">';
+                html += '<div class="small fw-semibold mb-1">' + escHtml(att.title || ('Attachment ' + (idx + 1))) + '</div>';
+                if (!blobUrl) {
+                    html += '<div class="small text-muted">Preview unavailable</div>';
+                } else if (ct.indexOf('image/') === 0) {
+                    html += '<img src="' + blobUrl + '" class="img-fluid rounded abdm-attachment-img" style="max-height:160px;cursor:pointer;" data-bs-toggle="modal" data-bs-target="#opdScanModal" data-src="' + blobUrl + '" alt="Attached image">';
+                } else if (ct === 'application/pdf') {
+                    html += '<div class="small text-muted mb-2">PDF Document</div><a href="' + blobUrl + '" target="_blank" rel="noopener" class="btn btn-sm btn-outline-danger">View PDF</a>';
+                } else {
+                    html += '<div class="small text-muted mb-2">' + escHtml(att.content_type || 'Document') + '</div><a href="' + blobUrl + '" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary">Open Document</a>';
+                }
+                html += '</div></div>';
+            });
+            html += '</div>';
+        } else {
+            html += '<div class="small text-muted">No attached images, PDFs, or documents found in this record.</div>';
+        }
         html += '</div>';
 
         $('#abdmDocDetailBox').html(html);
