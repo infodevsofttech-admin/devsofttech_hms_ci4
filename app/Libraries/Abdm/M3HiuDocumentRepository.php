@@ -24,8 +24,21 @@ class M3HiuDocumentRepository
             return ['saved' => 0, 'updated' => 0, 'skipped' => 0];
         }
 
+        $this->ensureConsentRequestIdColumn();
+
         $requestId = trim((string) ($result['request_id'] ?? $payload['request_id'] ?? $payload['requestId'] ?? ''));
         $abhaAddress = trim((string) ($payload['abha_address'] ?? $result['abha_address'] ?? ''));
+        // The specific consent request (e.g. Method 1/2's targeted request) that
+        // triggered this fetch, when known. Method 3 (fetch-all-by-abha-address)
+        // spans many past consent requests at once, so this is intentionally left
+        // blank for that broad fetch rather than mis-attributing every document to
+        // whichever single request happened to be passed in.
+        $consentRequestId = trim((string) (
+            $payload['abdm_consent_request_id']
+            ?? $payload['consent_request_id']
+            ?? $payload['consentRequestId']
+            ?? ''
+        ));
 
         $saved = 0;
         $updated = 0;
@@ -104,6 +117,12 @@ class M3HiuDocumentRepository
                     'updated_at' => $now,
                 ];
 
+                // Only set (and never blank out on update) when this specific fetch
+                // actually knew which consent request it belonged to.
+                if ($consentRequestId !== '') {
+                    $row['consent_request_id'] = $consentRequestId;
+                }
+
                 $existing = $this->db->table('abdm_hiu_documents')
                     ->select('id')
                     ->where('doc_hash', $docHash)
@@ -124,6 +143,26 @@ class M3HiuDocumentRepository
         }
 
         return ['saved' => $saved, 'updated' => $updated, 'skipped' => $skipped];
+    }
+
+    /**
+     * Idempotent backfill so deployments that predate the Consent Request ID
+     * enrichment (added 2026-07-29) don't fail with "Unknown column" on save.
+     */
+    private function ensureConsentRequestIdColumn(): void
+    {
+        $fields = $this->db->getFieldNames('abdm_hiu_documents') ?? [];
+        if (in_array('consent_request_id', $fields, true)) {
+            return;
+        }
+
+        try {
+            $this->db->query('ALTER TABLE abdm_hiu_documents ADD COLUMN consent_request_id VARCHAR(190) NULL AFTER consent_artifact_id');
+        } catch (\Throwable $e) {
+            // Best-effort; if the ALTER fails (e.g. concurrent request already
+            // added it, or insufficient DB privileges) just skip enrichment for
+            // this call rather than breaking the fetch.
+        }
     }
 
     public function listDocuments(array $filters, int $limit = 100): array

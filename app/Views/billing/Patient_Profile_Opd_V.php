@@ -348,6 +348,7 @@ if ($patientPhotoPath === '') {
                                     <thead>
                                         <tr>
                                             <th>Status</th>
+                                            <th>Request ID</th>
                                             <th>HI Types</th>
                                             <th>Requested By</th>
                                             <th>Requested On</th>
@@ -356,7 +357,7 @@ if ($patientPhotoPath === '') {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <tr><td colspan="6" class="text-muted text-center">No consent requests yet.</td></tr>
+                                        <tr><td colspan="7" class="text-muted text-center">No consent requests yet.</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -364,7 +365,7 @@ if ($patientPhotoPath === '') {
                     </div>
 
                     <div class="row g-3">
-                        <div class="col-lg-5">
+                        <div class="col-lg-6">
                             <div class="input-group input-group-sm mb-2">
                                 <input id="abdmDocSearch" class="form-control" placeholder="Search title, care context, doctor">
                                 <button class="btn btn-outline-secondary" type="button" id="btnSearchAbdmDocs">Search</button>
@@ -376,15 +377,17 @@ if ($patientPhotoPath === '') {
                                             <th>Date</th>
                                             <th>Title</th>
                                             <th>Care Context</th>
+                                            <th>Org / Hospital</th>
+                                            <th>Request ID</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <tr><td colspan="3" class="text-muted text-center">No records loaded.</td></tr>
+                                        <tr><td colspan="5" class="text-muted text-center">No records loaded.</td></tr>
                                     </tbody>
                                 </table>
                             </div>
                         </div>
-                        <div class="col-lg-7">
+                        <div class="col-lg-6">
                             <div class="border rounded p-3 bg-light" id="abdmDocDetailBox">
                                 <div class="text-muted">Select a fetched document to view details.</div>
                             </div>
@@ -677,7 +680,7 @@ $(function() {
 
     function renderAbdmRequestsTable(requests) {
         if (!requests || !requests.length) {
-            $('#abdmRequestsTable tbody').html('<tr><td colspan="6" class="text-muted text-center">No consent requests yet.</td></tr>');
+            $('#abdmRequestsTable tbody').html('<tr><td colspan="7" class="text-muted text-center">No consent requests yet.</td></tr>');
             return;
         }
 
@@ -687,9 +690,11 @@ $(function() {
             var hiTypes = (consent.requested_hi_types && consent.requested_hi_types.length) ? consent.requested_hi_types : (consent.granted_hi_types || []);
             var hiTypesText = hiTypes.length ? hiTypes.join(', ') : '-';
             var canFetch = (status === 'GRANTED' || status === 'COMPLETED');
+            var requestId = consent.consent_request_id || '-';
 
             html += '<tr>'
                 + '<td><span class="badge ' + consentStatusBadgeClass(status) + '">' + escHtml(status || 'UNKNOWN') + '</span></td>'
+                + '<td class="small text-truncate" style="max-width:160px;" title="' + escHtml(requestId) + '">' + escHtml(requestId) + '</td>'
                 + '<td class="small">' + escHtml(hiTypesText) + '</td>'
                 + '<td class="small">' + escHtml(consent.requested_by || 'HMS') + '</td>'
                 + '<td class="small">' + fmtConsentTs(consent.requested_on) + '</td>'
@@ -714,7 +719,7 @@ $(function() {
                 renderAbdmRequestsTable(currentAbdmRequests);
             })
             .catch(function(err) {
-                $('#abdmRequestsTable tbody').html('<tr><td colspan="6" class="text-danger text-center">' + escHtml('Failed to load consent request history: ' + (err.message || err)) + '</td></tr>');
+                $('#abdmRequestsTable tbody').html('<tr><td colspan="7" class="text-danger text-center">' + escHtml('Failed to load consent request history: ' + (err.message || err)) + '</td></tr>');
             });
     }
 
@@ -879,17 +884,20 @@ $(function() {
     function renderAbdmRows(rows) {
         var html = '';
         if (!rows || !rows.length) {
-            html = '<tr><td colspan="3" class="text-muted text-center">No ABDM fetched records found.</td></tr>';
+            html = '<tr><td colspan="5" class="text-muted text-center">No ABDM fetched records found.</td></tr>';
             $('#abdmDocTable tbody').html(html);
             $('#abdmDocDetailBox').html('<div class="text-muted">No records available for this patient.</div>');
             return;
         }
 
         rows.forEach(function(row) {
+            var reqId = row.consent_request_id || '-';
             html += '<tr class="abdm-doc-row" data-id="' + escHtml(row.id) + '">' +
                 '<td>' + escHtml(fmtDateTime(row.document_date || row.created_at)) + '</td>' +
                 '<td>' + escHtml(row.document_title || '-') + '</td>' +
                 '<td>' + escHtml(row.care_context_reference || '-') + '</td>' +
+                '<td class="small text-truncate" style="max-width:140px;" title="' + escHtml(row.organization_name || '-') + '">' + escHtml(row.organization_name || '-') + '</td>' +
+                '<td class="small text-truncate" style="max-width:140px;" title="' + escHtml(reqId) + '">' + escHtml(reqId) + '</td>' +
             '</tr>';
         });
         $('#abdmDocTable tbody').html(html);
@@ -911,7 +919,8 @@ $(function() {
         html += '<div class="small text-muted mb-2">Date: ' + escHtml(fmtDateTime(item.document_date || item.created_at)) + '</div>';
         html += '<div class="small mb-2">Care Context: <strong>' + escHtml(item.care_context_reference || '-') + '</strong></div>';
         html += '<div class="small mb-2">Doctor: <strong>' + escHtml(item.practitioner_name || '-') + '</strong></div>';
-        html += '<div class="small mb-3">Organization: <strong>' + escHtml(item.organization_name || '-') + '</strong></div>';
+        html += '<div class="small mb-2">Organization: <strong>' + escHtml(item.organization_name || '-') + '</strong></div>';
+        html += '<div class="small mb-3">Consent Request ID: <strong>' + escHtml(item.consent_request_id || '-') + '</strong></div>';
 
         html += '<div class="row g-2">';
         html += '<div class="col-md-4"><div class="border rounded p-2 h-100"><div class="fw-semibold small mb-1">Diagnoses</div><ul class="mb-0 small abdm-doc-detail-list">';

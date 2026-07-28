@@ -1169,8 +1169,14 @@ class Patient extends BaseController
 
 		$q = trim((string) ($this->request->getGet('q') ?? ''));
 
+		$docFields = $this->db->getFieldNames('abdm_hiu_documents') ?? [];
+		$selectCols = ['d.id', 'd.patient_id', 'd.abha_address', 'd.document_title', 'd.document_date', 'd.care_context_reference', 'd.practitioner_name', 'd.organization_name', 'd.bundle_type', 'd.created_at'];
+		if (in_array('consent_request_id', $docFields, true)) {
+			$selectCols[] = 'd.consent_request_id';
+		}
+
 		$builder = $this->db->table('abdm_hiu_documents d')
-			->select('d.id, d.patient_id, d.abha_address, d.document_title, d.document_date, d.care_context_reference, d.practitioner_name, d.organization_name, d.bundle_type, d.created_at')
+			->select(implode(', ', $selectCols))
 			->orderBy('d.document_date', 'DESC')
 			->orderBy('d.id', 'DESC')
 			->limit($limit);
@@ -2033,7 +2039,12 @@ class Patient extends BaseController
 		];
 		if ($consentArtifactRef !== '') {
 			$fetchPayload['consentId'] = $consentArtifactRef;
-		} else {
+		}
+		// Always include the request id too (when known), purely so any documents
+		// persisted from this fetch can record which consent request they came
+		// from. This does not change the actual bridge query for Method 2, which
+		// is driven only by consentId when both are present.
+		if ($consentRequestRef !== '') {
 			$fetchPayload['consentRequestId'] = $consentRequestRef;
 		}
 
