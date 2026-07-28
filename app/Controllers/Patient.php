@@ -2061,12 +2061,32 @@ class Patient extends BaseController
 			]);
 		}
 
+		// `$fetchResult['ok'] === 1` only means the API call to the bridge
+		// succeeded (no HTTP/transport error) — it does NOT mean the HIP has
+		// actually sent any health records yet (the bridge may legitimately
+		// respond with an empty decrypted_data set while still processing).
+		// Only report success to the user once documents were actually saved;
+		// otherwise say plainly that the fetch is still pending.
+		$documentsPersisted = (int) ($fetchResult['documents_persisted'] ?? 0);
+		$documentsUpdated = (int) ($fetchResult['documents_updated'] ?? 0);
+
+		if ($documentsPersisted + $documentsUpdated === 0) {
+			return $this->response->setJSON([
+				'ok' => 1,
+				'phase' => 'GRANTED',
+				'message' => 'Consent is granted, but the health information provider has not sent any records yet. Please try again in a few minutes.',
+				'documents_persisted' => 0,
+				'documents_updated' => 0,
+				'data' => ['data_fetch' => $fetchResult],
+			]);
+		}
+
 		return $this->response->setJSON([
 			'ok' => 1,
 			'phase' => 'COMPLETED',
 			'message' => 'Records fetched successfully using existing granted consent.',
-			'documents_persisted' => (int) ($fetchResult['documents_persisted'] ?? 0),
-			'documents_updated' => (int) ($fetchResult['documents_updated'] ?? 0),
+			'documents_persisted' => $documentsPersisted,
+			'documents_updated' => $documentsUpdated,
 			'data' => ['data_fetch' => $fetchResult],
 		]);
 	}
