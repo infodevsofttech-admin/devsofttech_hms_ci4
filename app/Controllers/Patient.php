@@ -3961,6 +3961,17 @@ class Patient extends BaseController
 			}
 		}
 
+		// If this session's overall phase is GRANTED/COMPLETED but no row ever
+		// recorded WHICH hi_types were granted (e.g. data arrived via an async
+		// hi_data_push_callback before any consent_reconcile/consent_status poll
+		// ran and stored a hi_types-bearing response), do not mark every
+		// requested type as DENIED for lack of evidence — a COMPLETED/GRANTED
+		// phase is itself proof the consent covers at least the requested
+		// types, so fall back to treating the full requested set as granted.
+		if ($grantedHiTypes === [] && $requestedHiTypes !== [] && in_array($phase, ['GRANTED', 'COMPLETED'], true)) {
+			$grantedHiTypes = $requestedHiTypes;
+		}
+
 		$revokedOn = trim((string) ($best['revoked_at'] ?? ''));
 		$expiredOn = trim((string) ($best['expired_at'] ?? ''));
 		if (in_array($phase, ['GRANTED', 'COMPLETED'], true) && $grantedOn === '') {
