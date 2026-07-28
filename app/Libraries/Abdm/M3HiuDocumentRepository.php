@@ -389,9 +389,10 @@ class M3HiuDocumentRepository
                 if ($refStr === '' || ! isset($resourcesByRef[$refStr])) {
                     continue;
                 }
-                $label = $this->describeResourceForSection((array) $resourcesByRef[$refStr]);
-                if ($label !== '') {
-                    $items[] = $label;
+                foreach ($this->describeResourceForSection((array) $resourcesByRef[$refStr], $resourcesByRef) as $label) {
+                    if ($label !== '') {
+                        $items[] = $label;
+                    }
                 }
             }
 
@@ -416,10 +417,15 @@ class M3HiuDocumentRepository
     }
 
     /**
-     * Produces a short, human-readable one-line label for a FHIR resource, for
-     * display inside a Composition section's accordion body.
+     * Produces one or more short, human-readable one-line labels for a FHIR
+     * resource, for display inside a Composition section's item list. Most
+     * resource types resolve to a single line; DiagnosticReport expands into
+     * one line per linked Observation result (e.g. individual lab test
+     * values) since that's where the actual pathology/lab values live.
+     *
+     * @return array<int, string>
      */
-    private function describeResourceForSection(array $resource): string
+    private function describeResourceForSection(array $resource, array $resourcesByRef = []): array
     {
         $type = trim((string) ($resource['resourceType'] ?? ''));
 
@@ -428,40 +434,128 @@ class M3HiuDocumentRepository
             case 'AllergyIntolerance':
             case 'Procedure':
             case 'ServiceRequest':
-                return trim((string) (($resource['code']['text'] ?? '') ?: ($resource['code']['coding'][0]['display'] ?? '')));
+                $label = trim((string) (($resource['code']['text'] ?? '') ?: ($resource['code']['coding'][0]['display'] ?? '')));
+                return $label !== '' ? [$label] : [];
 
             case 'Observation':
-                $name = trim((string) (($resource['code']['text'] ?? '') ?: ($resource['code']['coding'][0]['display'] ?? '')));
-                $val = '';
-                if (isset($resource['valueQuantity']) && is_array($resource['valueQuantity'])) {
-                    $val = trim((string) (($resource['valueQuantity']['value'] ?? '') . ' ' . ($resource['valueQuantity']['unit'] ?? '')));
-                } elseif (isset($resource['valueString'])) {
-                    $val = trim((string) $resource['valueString']);
-                } elseif (isset($resource['valueCodeableConcept'])) {
-                    $val = trim((string) (($resource['valueCodeableConcept']['text'] ?? '') ?: ($resource['valueCodeableConcept']['coding'][0]['display'] ?? '')));
-                }
-                return $val !== '' ? ($name . ': ' . $val) : $name;
+                $label = $this->describeObservation($resource);
+                return $label !== '' ? [$label] : [];
 
             case 'MedicationRequest':
             case 'MedicationStatement':
                 $med = trim((string) (($resource['medicationCodeableConcept']['text'] ?? '') ?: ($resource['medicationCodeableConcept']['coding'][0]['display'] ?? '')));
                 $dose = trim((string) ($resource['dosageInstruction'][0]['text'] ?? ($resource['dosage'][0]['text'] ?? '')));
-                return $dose !== '' ? ($med . ' — ' . $dose) : $med;
+                $label = $dose !== '' ? ($med . ' — ' . $dose) : $med;
+                return $label !== '' ? [$label] : [];
 
             case 'DiagnosticReport':
                 $name = trim((string) (($resource['code']['text'] ?? '') ?: ($resource['code']['coding'][0]['display'] ?? '')));
                 $conclusion = trim((string) ($resource['conclusion'] ?? ''));
-                return $conclusion !== '' ? ($name . ' — ' . $conclusion) : $name;
+                $header = $conclusion !== '' ? ($name . ' — ' . $conclusion) : $name;
+
+                $lines = $header !== '' ? [$header] : [];
+                foreach ((array) ($resource['result'] ?? []) as $resultRef) {
+                    if (! is_array($resultRef)) {
+                        continue;
+                    }
+                    $refStr = trim((string) ($resultRef['reference'] ?? ''));
+                    if ($refStr === '' || ! isset($resourcesByRef[$refStr])) {
+                        continue;
+                    }
+                    $obsResource = (array) $resourcesByRef[$refStr];
+                    if (trim((string) ($obsResource['resourceType'] ?? '')) !== 'Observation') {
+                        continue;
+                    }
+                    $obsLine = $this->describeObservation($obsResource);
+                    if ($obsLine !== '') {
+                        $lines[] = '– ' . $obsLine;
+                    }
+                }
+
+                return $lines;
 
             case 'CarePlan':
-                return trim((string) (($resource['description'] ?? '') ?: ($resource['title'] ?? '')));
+                $label = trim((string) (($resource['description'] ?? '') ?: ($resource['title'] ?? '')));
+                return $label !== '' ? [$label] : [];
 
             case 'DocumentReference':
-                return trim((string) (($resource['description'] ?? '') ?: ($resource['type']['text'] ?? '') ?: ($resource['type']['coding'][0]['display'] ?? '')));
+                $label = trim((string) (($resource['description'] ?? '') ?: ($resource['type']['text'] ?? '') ?: ($resource['type']['coding'][0]['display'] ?? '')));
+                return $label !== '' ? [$label] : [];
 
             default:
-                return '';
+                return [];
         }
+    }
+
+    /**
+     * Builds a single "Test name: value unit (Flag)" style line for an
+     * Observation resource, covering the common FHIR value shapes used by
+     * lab/pathology reports (valueQuantity, valueString, valueCodeableConcept,
+     * valueInteger/valueBoolean, and multi-component observations like Blood
+     * Pressure which report systolic/diastolic as separate `component` entries
+     * instead of a single top-level value).
+     */
+    private function describeObservation(array $resource): string
+    {
+        $name = trim((string) (($resource['code']['text'] ?? '') ?: ($resource['code']['coding'][0]['display'] ?? '')));
+
+        $formatValue = static function (array $obs): string {
+            if (isset($obs['valueQuantity']) && is_array($obs['valueQuantity'])) {
+                return trim((string) (($obs['valueQuantity']['value'] ?? '') . ' ' . ($obs['valueQuantity']['unit'] ?? ($obs['valueQuantity']['code'] ?? ''))));
+            }
+            if (isset($obs['valueString'])) {
+                return trim((string) $obs['valueString']);
+            }
+            if (isset($obs['valueCodeableConcept'])) {
+                return trim((string) (($obs['valueCodeableConcept']['text'] ?? '') ?: ($obs['valueCodeableConcept']['coding'][0]['display'] ?? '')));
+            }
+            if (isset($obs['valueInteger'])) {
+                return trim((string) $obs['valueInteger']);
+            }
+            if (isset($obs['valueBoolean'])) {
+                return $obs['valueBoolean'] ? 'Yes' : 'No';
+            }
+            if (isset($obs['valueDateTime'])) {
+                return trim((string) $obs['valueDateTime']);
+            }
+            if (isset($obs['valueRange']) && is_array($obs['valueRange'])) {
+                $low  = $obs['valueRange']['low']['value'] ?? '';
+                $high = $obs['valueRange']['high']['value'] ?? '';
+                return trim($low . ' - ' . $high);
+            }
+
+            return '';
+        };
+
+        $val = $formatValue($resource);
+
+        // Multi-component observations (e.g. Blood Pressure: systolic + diastolic)
+        // carry no top-level value, only a `component[]` array each with its
+        // own code + value.
+        if ($val === '' && isset($resource['component']) && is_array($resource['component'])) {
+            $parts = [];
+            foreach ((array) $resource['component'] as $component) {
+                if (! is_array($component)) {
+                    continue;
+                }
+                $compName = trim((string) (($component['code']['text'] ?? '') ?: ($component['code']['coding'][0]['display'] ?? '')));
+                $compVal  = $formatValue($component);
+                if ($compVal === '') {
+                    continue;
+                }
+                $parts[] = $compName !== '' ? ($compName . ': ' . $compVal) : $compVal;
+            }
+            $val = implode(', ', $parts);
+        }
+
+        $flag = trim((string) (($resource['interpretation'][0]['text'] ?? '') ?: ($resource['interpretation'][0]['coding'][0]['display'] ?? '')));
+
+        $label = $val !== '' ? ($name . ': ' . $val) : $name;
+        if ($flag !== '') {
+            $label .= ' (' . $flag . ')';
+        }
+
+        return trim($label, ' :');
     }
 
     /**

@@ -809,7 +809,6 @@ $(function() {
         docs.forEach(function(doc, di) {
             var summary = doc.summary || {};
             var sections = Array.isArray(summary.sections) ? summary.sections : [];
-            var accId = 'abdmFetchAcc' + di;
 
             html += '<div class="card mb-3">'
                 + '<div class="card-body">'
@@ -821,9 +820,8 @@ $(function() {
                 + '</div>';
 
             if (sections.length) {
-                html += '<div class="accordion" id="' + accId + '">';
+                html += '<div class="abdm-fetch-sections">';
                 sections.forEach(function(sec, si) {
-                    var itemId = accId + '_' + si;
                     var body = '';
                     if (sec.items && sec.items.length) {
                         body = '<ul class="mb-0 small">' + sec.items.map(function(it) { return '<li>' + escHtml(it) + '</li>'; }).join('') + '</ul>';
@@ -832,13 +830,9 @@ $(function() {
                     } else {
                         body = '<div class="small text-muted">No details recorded.</div>';
                     }
-                    html += '<div class="accordion-item">'
-                        + '<h2 class="accordion-header">'
-                        + '<button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#' + itemId + '">' + escHtml(sec.title || 'Section') + '</button>'
-                        + '</h2>'
-                        + '<div id="' + itemId + '" class="accordion-collapse collapse" data-bs-parent="#' + accId + '">'
-                        + '<div class="accordion-body">' + body + '</div>'
-                        + '</div>'
+                    html += '<div class="mb-2">'
+                        + '<div class="fw-bold">' + escHtml(sec.title || 'Section') + '</div>'
+                        + body
                         + '</div>';
                 });
                 html += '</div>';
