@@ -480,7 +480,7 @@ if ($patientPhotoPath === '') {
                             </div>
                             <div class="col">
                                 <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" value="HealthDocument" id="hiHealthDocument">
+                                    <input class="form-check-input" type="checkbox" value="HealthDocumentRecord" id="hiHealthDocument">
                                     <label class="form-check-label" for="hiHealthDocument">Health Document</label>
                                 </div>
                             </div>
@@ -492,7 +492,7 @@ if ($patientPhotoPath === '') {
                             </div>
                             <div class="col">
                                 <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" value="Wellness" id="hiWellness">
+                                    <input class="form-check-input" type="checkbox" value="WellnessRecord" id="hiWellness">
                                     <label class="form-check-label" for="hiWellness">Wellness</label>
                                 </div>
                             </div>

@@ -516,14 +516,22 @@ class M3HiuGatewayClient
             return 'HTTP ' . $httpCode . ' non-JSON response';
         }
 
-        $code = trim((string) (
-            $decoded['data']['error']['code']
-            ?? $decoded['error']['code']
-            ?? ''
-        ));
+        // Some bridge error responses wrap the error object in a list, e.g.
+        // {"data": [{"error": {"code": "...", "message": "..."}}]}, instead of
+        // a single {"data": {"error": {...}}} object. Normalize both shapes.
+        $errorNode = $decoded['data']['error'] ?? $decoded['error'] ?? null;
+        if (! is_array($errorNode) && isset($decoded['data']) && is_array($decoded['data'])) {
+            foreach ($decoded['data'] as $item) {
+                if (is_array($item) && isset($item['error']) && is_array($item['error'])) {
+                    $errorNode = $item['error'];
+                    break;
+                }
+            }
+        }
+
+        $code = trim((string) ($errorNode['code'] ?? ''));
         $message = trim((string) (
-            $decoded['data']['error']['message']
-            ?? $decoded['error']['message']
+            $errorNode['message']
             ?? $decoded['message']
             ?? $decoded['error_text']
             ?? (is_string($decoded['error'] ?? null) ? $decoded['error'] : '')

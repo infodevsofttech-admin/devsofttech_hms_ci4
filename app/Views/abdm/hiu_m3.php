@@ -1199,12 +1199,12 @@
             dischargesummary: 'DischargeSummary',
             invoice: 'Invoice',
             invoicerecord: 'Invoice',
-            healthdocumentrecord: 'HealthDocument',
-            healthdocument: 'HealthDocument',
+            healthdocumentrecord: 'HealthDocumentRecord',
+            healthdocument: 'HealthDocumentRecord',
             immunization: 'ImmunizationRecord',
             immunizationrecord: 'ImmunizationRecord',
-            wellness: 'Wellness',
-            wellnessrecord: 'Wellness'
+            wellness: 'WellnessRecord',
+            wellnessrecord: 'WellnessRecord'
         };
 
         var out = [];

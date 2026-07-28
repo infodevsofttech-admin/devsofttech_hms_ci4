@@ -1285,7 +1285,7 @@ class Patient extends BaseController
 		$payload = [
 			'patient_id' => $pno,
 			'abha_address' => $abhaContext['abha_address'],
-			'hiTypes' => ['OPConsultation', 'Prescription', 'DiagnosticReport', 'HealthDocument'],
+			'hiTypes' => ['OPConsultation', 'Prescription', 'DiagnosticReport', 'HealthDocumentRecord'],
 		];
 
 		try {
@@ -1584,7 +1584,7 @@ class Patient extends BaseController
 			$consentPayload = [
 				'patient_id' => $pno,
 				'abha_address' => $abhaContext['abha_address'],
-				'hiTypes' => ['OPConsultation', 'Prescription', 'DiagnosticReport', 'HealthDocument'],
+				'hiTypes' => ['OPConsultation', 'Prescription', 'DiagnosticReport', 'HealthDocumentRecord'],
 			];
 
 			try {
