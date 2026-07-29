@@ -5512,6 +5512,14 @@ class Opd_prescription extends BaseController
                 'timeout' => $handoffTimeoutSec,
                 'connect_timeout' => 10,
                 'http_errors' => false,
+                // This is a same-server loopback handoff (self-call to our own
+                // AbdmGateway endpoint), not a call to an external/public party.
+                // HMS deployments behind NAT with no live public IP often have
+                // no valid/current TLS cert reachable for base_url(), so skip
+                // peer verification here. Can be forced back on via
+                // FHIR_HANDOFF_SSL_VERIFY=true in .env if the deployment does
+                // have a properly maintained public cert.
+                'verify' => $this->fhirGatewayHandoffSslVerify(),
             ]);
 
             $response = $client->post($gatewayUrl, [
@@ -5646,6 +5654,31 @@ class Opd_prescription extends BaseController
         }
 
         return false;
+    }
+
+    /**
+     * Whether to enforce TLS peer verification on the self-loopback handoff
+     * call to our own AbdmGateway::share_prescription_bundle endpoint.
+     *
+     * Defaults to OFF: HMS instances are frequently deployed behind NAT with
+     * no live public IP, so base_url() can point at a hostname without a
+     * currently-valid/reachable TLS cert even though the box is otherwise
+     * healthy. Since this call never leaves the local server, skipping peer
+     * verification here does not weaken the actual ABDM bridge submission
+     * (that outbound call to the bridge keeps its own independent SSL
+     * verification/toggle in EAtriaBridgeConnector).
+     *
+     * Set FHIR_HANDOFF_SSL_VERIFY=true in .env to re-enable strict
+     * verification for deployments that do have a valid public cert.
+     */
+    private function fhirGatewayHandoffSslVerify(): bool
+    {
+        $raw = strtolower(trim((string) (getenv('FHIR_HANDOFF_SSL_VERIFY') ?: '')));
+        if ($raw === '') {
+            return false;
+        }
+
+        return ! in_array($raw, ['0', 'false', 'no', 'off'], true);
     }
 
     private function resolveRecentFhirGatewaySubmissionState(int $opdId, int $sessionId): ?array
