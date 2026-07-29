@@ -40,6 +40,7 @@
     .abha-node.done   .abha-node-label { color:#28a745; }
     .abha-panel { border-left:3px solid #007bff; padding-left:16px; }
 </style>
+<?= view('partials/abha_patient_match_modal') ?>
 <section class="content">
     <div class="row">
         <div class="col-md-12">
@@ -891,6 +892,33 @@
                 $('#abha_get_otp_btn').trigger('click');
             });
 
+            function renderWizardStep4Result(resp) {
+                var abhaNum  = resp.abha_number || '';
+                var abhaDisp = abhaNum.replace(/(\d{2})(\d{4})(\d{4})(\d{4})/, '$1-$2-$3-$4');
+                var abhaRaw  = abhaNum.replace(/\D/g, '');
+                var patMsg   = '';
+                if (resp.patient_id > 0) {
+                    patMsg = resp.is_new_patient
+                        ? '<span class="badge bg-success ms-1">New Patient Registered</span>'
+                        : '<span class="badge bg-info ms-1">Patient Found</span>';
+                    patMsg += ' <small class="text-muted">HMS ID: <strong>' + (resp.p_code || '') + '</strong></small>';
+                }
+                var cardBtn = abhaRaw.length === 14
+                    ? ' <a href="<?= base_url('abha/card/') ?>' + abhaRaw + '" target="_blank" class="btn btn-sm btn-outline-primary mt-1"><i class="bi bi-card-image me-1"></i>View/Print ABHA Card</a>'
+                    : '';
+                $('#abha_created_result').html(
+                    '<div class="alert alert-success">' +
+                    '<i class="bi bi-check-circle-fill me-2"></i>' +
+                    '<strong>ABHA Number Created!</strong><br>' +
+                    (abhaDisp ? 'ABHA: <strong>' + abhaDisp + '</strong><br>' : '') +
+                    (resp.name ? 'Name: ' + resp.name + '<br>' : '') +
+                    patMsg +
+                    cardBtn +
+                    '</div>'
+                );
+                abhaStep(4);
+            }
+
             // Step 2 → Verify OTP
             $('#abha_verify_otp_btn').on('click', function() {
                 var otp = $('#abha_otp_input').val().trim();
@@ -912,30 +940,13 @@
                     $('#abha_verify_otp_btn').prop('disabled', false);
                     if (resp && resp.ok == 1) {
                         txnId = resp.txn_id || txnId;
-                        var abhaNum  = resp.abha_number || '';
-                        var abhaDisp = abhaNum.replace(/(\d{2})(\d{4})(\d{4})(\d{4})/, '$1-$2-$3-$4');
-                        var abhaRaw  = abhaNum.replace(/\D/g, '');
-                        var patMsg   = '';
-                        if (resp.patient_id > 0) {
-                            patMsg = resp.is_new_patient
-                                ? '<span class="badge bg-success ms-1">New Patient Registered</span>'
-                                : '<span class="badge bg-info ms-1">Patient Found</span>';
-                            patMsg += ' <small class="text-muted">HMS ID: <strong>' + (resp.p_code || '') + '</strong></small>';
+                        if (resp.need_confirmation) {
+                            window.AbhaPatientMatchModal.open(resp, resp.candidates || [], function(finalResp) {
+                                renderWizardStep4Result(finalResp);
+                            });
+                        } else {
+                            renderWizardStep4Result(resp);
                         }
-                        var cardBtn = abhaRaw.length === 14
-                            ? ' <a href="<?= base_url('abha/card/') ?>' + abhaRaw + '" target="_blank" class="btn btn-sm btn-outline-primary mt-1"><i class="bi bi-card-image me-1"></i>View/Print ABHA Card</a>'
-                            : '';
-                        $('#abha_created_result').html(
-                            '<div class="alert alert-success">' +
-                            '<i class="bi bi-check-circle-fill me-2"></i>' +
-                            '<strong>ABHA Number Created!</strong><br>' +
-                            (abhaDisp ? 'ABHA: <strong>' + abhaDisp + '</strong><br>' : '') +
-                            (resp.name ? 'Name: ' + resp.name + '<br>' : '') +
-                            patMsg +
-                            cardBtn +
-                            '</div>'
-                        );
-                        abhaStep(4);
                     } else {
                         showAlert('abha_step2_alert', 'danger', pickApiMessage(resp, 'Invalid OTP. Please try again.'));
                     }
@@ -994,6 +1005,33 @@
                 $('#abha_link_send_otp_btn').trigger('click');
             });
 
+            function renderLinkResult(resp) {
+                var abhaNum  = resp.abha_number || '';
+                var abhaDisp = abhaNum.replace(/(\d{2})(\d{4})(\d{4})(\d{4})/, '$1-$2-$3-$4');
+                var abhaRaw  = abhaNum.replace(/\D/g, '');
+                var patMsg   = '';
+                if (resp.patient_id > 0) {
+                    patMsg = resp.is_new_patient
+                        ? '<span class="badge bg-success ms-1">New Patient Registered</span>'
+                        : '<span class="badge bg-info ms-1">Patient Found</span>';
+                    patMsg += ' <small class="text-muted">HMS ID: <strong>' + (resp.p_code || '') + '</strong></small>';
+                }
+                var cardBtn = abhaRaw.length === 14
+                    ? '<br><a href="<?= base_url('abha/card/') ?>' + abhaRaw + '" target="_blank" class="btn btn-sm btn-outline-primary mt-2"><i class="bi bi-card-image me-1"></i>View/Print ABHA Card</a>'
+                    : '';
+                $('#link_result').html(
+                    '<div class="alert alert-success">' +
+                    '<i class="bi bi-check-circle-fill me-2"></i>' +
+                    '<strong>ABHA Found!</strong><br>' +
+                    (abhaDisp ? 'ABHA: <strong>' + abhaDisp + '</strong><br>' : '') +
+                    (resp.name   ? 'Name: '   + resp.name   + '<br>' : '') +
+                    (resp.gender ? 'Gender: ' + resp.gender + '<br>' : '') +
+                    (resp.dob    ? 'DOB: '    + resp.dob    + '<br>' : '') +
+                    patMsg + cardBtn +
+                    '</div>'
+                );
+            }
+
             $('#abha_link_verify_otp_btn').on('click', function() {
                 var otp = $('#abha_link_otp_input').val().trim();
                 if (!/^\d{6}$/.test(otp)) {
@@ -1013,30 +1051,13 @@
                     $('#abha_link_verify_spinner').addClass('d-none');
                     $('#abha_link_verify_otp_btn').prop('disabled', false);
                     if (resp && resp.ok == 1) {
-                        var abhaNum  = resp.abha_number || '';
-                        var abhaDisp = abhaNum.replace(/(\d{2})(\d{4})(\d{4})(\d{4})/, '$1-$2-$3-$4');
-                        var abhaRaw  = abhaNum.replace(/\D/g, '');
-                        var patMsg   = '';
-                        if (resp.patient_id > 0) {
-                            patMsg = resp.is_new_patient
-                                ? '<span class="badge bg-success ms-1">New Patient Registered</span>'
-                                : '<span class="badge bg-info ms-1">Patient Found</span>';
-                            patMsg += ' <small class="text-muted">HMS ID: <strong>' + (resp.p_code || '') + '</strong></small>';
+                        if (resp.need_confirmation) {
+                            window.AbhaPatientMatchModal.open(resp, resp.candidates || [], function(finalResp) {
+                                renderLinkResult(finalResp);
+                            });
+                        } else {
+                            renderLinkResult(resp);
                         }
-                        var cardBtn = abhaRaw.length === 14
-                            ? '<br><a href="<?= base_url('abha/card/') ?>' + abhaRaw + '" target="_blank" class="btn btn-sm btn-outline-primary mt-2"><i class="bi bi-card-image me-1"></i>View/Print ABHA Card</a>'
-                            : '';
-                        $('#link_result').html(
-                            '<div class="alert alert-success">' +
-                            '<i class="bi bi-check-circle-fill me-2"></i>' +
-                            '<strong>ABHA Found!</strong><br>' +
-                            (abhaDisp ? 'ABHA: <strong>' + abhaDisp + '</strong><br>' : '') +
-                            (resp.name   ? 'Name: '   + resp.name   + '<br>' : '') +
-                            (resp.gender ? 'Gender: ' + resp.gender + '<br>' : '') +
-                            (resp.dob    ? 'DOB: '    + resp.dob    + '<br>' : '') +
-                            patMsg + cardBtn +
-                            '</div>'
-                        );
                     } else {
                         linkAlert('link_step2_alert', 'danger', pickApiMessage(resp, 'OTP verification failed.'));
                     }
@@ -1462,7 +1483,13 @@
                     $('#' + spinId).addClass('d-none');
                     $('#' + btnId).prop('disabled', false);
                     if (resp && resp.ok == 1) {
-                        showRegResult(resp);
+                        if (resp.need_confirmation) {
+                            window.AbhaPatientMatchModal.open(resp, resp.candidates || [], function(finalResp) {
+                                showRegResult(finalResp);
+                            });
+                        } else {
+                            showRegResult(resp);
+                        }
                     } else {
                         regAlert(alertId, 'danger', pickApiMessage(resp, 'OTP verification failed.'));
                     }

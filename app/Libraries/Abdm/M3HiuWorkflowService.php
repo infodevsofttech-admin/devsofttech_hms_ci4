@@ -231,91 +231,11 @@ class M3HiuWorkflowService
             if ((int) ($consentResult['ok'] ?? 0) === 1) {
                 $summary['consent_updates']++;
 
-                $consentState = strtolower(trim((string) (
-                    $consentResult['workflow_state']
-                    ?? $consentResult['status']
-                    ?? $consentResult['consent_status']
-                    ?? ''
-                )));
-                if ($consentState !== 'granted') {
+                $cascade = $this->fetchAllArtifactsAfterGrant($payload, $consentResult);
+                $summary['data_updates'] += $cascade['data_updates'];
+                $summary['failed'] += $cascade['failed'];
+                if (! $cascade['granted']) {
                     $summary['skipped']++;
-                    continue;
-                }
-
-                // IMPORTANT: use the UMBRELLA consent_request_id here, not a single
-                // resolved consent artifact id. Multi-facility ABDM M3 consents
-                // produce ONE consent artifact PER linked HIP facility under the
-                // same consent_request_id. Per the bridge's own contract, calling
-                // GET /v1/hiu/data/fetch with the consent_request_id (instead of
-                // one specific artifact id) returns ALL sessions/artifacts merged
-                // in a single response (verified 2026-07-28: querying by
-                // consent_request_id surfaced a sibling artifact that had NEVER
-                // been seen by HMS before, alongside the originally-tracked one).
-                // Falls back to a single artifact id only if no request id is
-                // available (should not normally happen for a granted consent).
-                $resolvedConsentId = trim((string) (
-                    $consentResult['abdm_consent_request_id']
-                    ?? $consentResult['consent_request_id']
-                    ?? $consentResult['abdm_consent_artifact_id']
-                    ?? $consentResult['consent_id']
-                    ?? ''
-                ));
-                if ($resolvedConsentId === '' || $this->isGatewayRequestIdPattern($resolvedConsentId)) {
-                    $summary['skipped']++;
-                    continue;
-                }
-
-                $dataPayload = $payload;
-                $dataPayload['consent_id'] = $resolvedConsentId;
-                $dataPayload['consent_request_id'] = $resolvedConsentId;
-                $dataPayload['abdm_consent_artifact_id'] = $resolvedConsentId;
-                $dataPayload['abdm_consent_request_id'] = $resolvedConsentId;
-
-                $dataResult = $this->runOperation('data_fetch', $dataPayload);
-                if ((int) ($dataResult['ok'] ?? 0) === 1) {
-                    $summary['data_updates']++;
-                } else {
-                    $summary['failed']++;
-                }
-
-                // Merged-by-request-id fetch discovers NEW sibling artifacts, but
-                // does not reliably keep returning sessions for artifacts already
-                // established earlier (verified: an already-"received" artifact
-                // stopped appearing in the merged list while still returning real
-                // data when queried by its own artifact id). So remember every
-                // artifact id ever seen for this consent request, and re-poll each
-                // one individually every cycle too, for full coverage.
-                $singleArtifactId = trim((string) (
-                    $consentResult['abdm_consent_artifact_id'] ?? ''
-                ));
-                $fetchSessions = is_array($dataResult['sessions'] ?? null) ? $dataResult['sessions'] : [];
-                $this->recordDiscoveredArtifacts(
-                    $resolvedConsentId,
-                    $fetchSessions,
-                    $payload['abha_address'],
-                    $payload['hfr_id']
-                );
-                if ($singleArtifactId !== '' && ! $this->isGatewayRequestIdPattern($singleArtifactId)) {
-                    $this->rememberArtifact($resolvedConsentId, $singleArtifactId, $payload['abha_address'], $payload['hfr_id']);
-                }
-
-                foreach ($this->getKnownArtifactIds($resolvedConsentId) as $artifactId) {
-                    if ($artifactId === '' || $artifactId === $resolvedConsentId) {
-                        continue;
-                    }
-                    $artifactPayload = $payload;
-                    $artifactPayload['consent_id'] = $artifactId;
-                    $artifactPayload['consent_request_id'] = $artifactId;
-                    $artifactPayload['abdm_consent_artifact_id'] = $artifactId;
-                    $artifactPayload['abdm_consent_request_id'] = $artifactId;
-
-                    $artifactResult = $this->runOperation('data_fetch', $artifactPayload);
-                    if ((int) ($artifactResult['ok'] ?? 0) === 1) {
-                        $summary['data_updates']++;
-                        $this->markArtifactPolled($resolvedConsentId, $artifactId, (string) ($artifactResult['consent_status'] ?? ''));
-                    } else {
-                        $summary['failed']++;
-                    }
                 }
             } else {
                 $summary['failed']++;
@@ -324,6 +244,120 @@ class M3HiuWorkflowService
 
         return $summary;
     }
+
+    /**
+     * Shared GRANTED-consent cascade: once a consent_reconcile call confirms
+     * GRANTED, this fetches decrypted data for EVERY known consent artifact
+     * under the umbrella consent_request_id -- not just one facility/HIP --
+     * since a single M3 HIU consent can produce one artifact PER linked HIP
+     * facility (verified 2026-07-30: a 4-facility consent only surfaced one
+     * facility's records when data_fetch was called for a single artifact id).
+     * Used by both the `abdm:hiu-poll` cron (pollNatGateway) and the
+     * patient-facing "Check Live Status" action so a manual click gets the
+     * same full multi-facility fetch the cron would eventually perform.
+     *
+     * @param array $payload       Same shape as the consent_reconcile payload
+     *                              (request_id, transaction_id, consent_id,
+     *                              abdm_consent_request_id,
+     *                              abdm_consent_artifact_id, abha_address, hfr_id).
+     * @param array $consentResult The result already returned by
+     *                              runOperation('consent_reconcile', $payload).
+     */
+    public function fetchAllArtifactsAfterGrant(array $payload, array $consentResult): array
+    {
+        $result = ['granted' => false, 'data_updates' => 0, 'failed' => 0, 'artifact_ids' => []];
+
+        $consentState = strtolower(trim((string) (
+            $consentResult['workflow_state']
+            ?? $consentResult['status']
+            ?? $consentResult['consent_status']
+            ?? ''
+        )));
+        if ($consentState !== 'granted') {
+            return $result;
+        }
+        $result['granted'] = true;
+
+        // IMPORTANT: use the UMBRELLA consent_request_id here, not a single
+        // resolved consent artifact id. Multi-facility ABDM M3 consents
+        // produce ONE consent artifact PER linked HIP facility under the
+        // same consent_request_id. Per the bridge's own contract, calling
+        // GET /v1/hiu/data/fetch with the consent_request_id (instead of
+        // one specific artifact id) returns ALL sessions/artifacts merged
+        // in a single response (verified 2026-07-28: querying by
+        // consent_request_id surfaced a sibling artifact that had NEVER
+        // been seen by HMS before, alongside the originally-tracked one).
+        // Falls back to a single artifact id only if no request id is
+        // available (should not normally happen for a granted consent).
+        $resolvedConsentId = trim((string) (
+            $consentResult['abdm_consent_request_id']
+            ?? $consentResult['consent_request_id']
+            ?? $consentResult['abdm_consent_artifact_id']
+            ?? $consentResult['consent_id']
+            ?? ''
+        ));
+        if ($resolvedConsentId === '' || $this->isGatewayRequestIdPattern($resolvedConsentId)) {
+            return $result;
+        }
+
+        $dataPayload = $payload;
+        $dataPayload['consent_id'] = $resolvedConsentId;
+        $dataPayload['consent_request_id'] = $resolvedConsentId;
+        $dataPayload['abdm_consent_artifact_id'] = $resolvedConsentId;
+        $dataPayload['abdm_consent_request_id'] = $resolvedConsentId;
+
+        $dataResult = $this->runOperation('data_fetch', $dataPayload);
+        if ((int) ($dataResult['ok'] ?? 0) === 1) {
+            $result['data_updates']++;
+        } else {
+            $result['failed']++;
+        }
+
+        // Merged-by-request-id fetch discovers NEW sibling artifacts, but
+        // does not reliably keep returning sessions for artifacts already
+        // established earlier (verified: an already-"received" artifact
+        // stopped appearing in the merged list while still returning real
+        // data when queried by its own artifact id). So remember every
+        // artifact id ever seen for this consent request, and re-poll each
+        // one individually every cycle too, for full coverage.
+        $singleArtifactId = trim((string) (
+            $consentResult['abdm_consent_artifact_id'] ?? ''
+        ));
+        $fetchSessions = is_array($dataResult['sessions'] ?? null) ? $dataResult['sessions'] : [];
+        $this->recordDiscoveredArtifacts(
+            $resolvedConsentId,
+            $fetchSessions,
+            $payload['abha_address'] ?? '',
+            $payload['hfr_id'] ?? ''
+        );
+        if ($singleArtifactId !== '' && ! $this->isGatewayRequestIdPattern($singleArtifactId)) {
+            $this->rememberArtifact($resolvedConsentId, $singleArtifactId, $payload['abha_address'] ?? '', $payload['hfr_id'] ?? '');
+        }
+
+        foreach ($this->getKnownArtifactIds($resolvedConsentId) as $artifactId) {
+            if ($artifactId === '' || $artifactId === $resolvedConsentId) {
+                continue;
+            }
+            $result['artifact_ids'][] = $artifactId;
+
+            $artifactPayload = $payload;
+            $artifactPayload['consent_id'] = $artifactId;
+            $artifactPayload['consent_request_id'] = $artifactId;
+            $artifactPayload['abdm_consent_artifact_id'] = $artifactId;
+            $artifactPayload['abdm_consent_request_id'] = $artifactId;
+
+            $artifactResult = $this->runOperation('data_fetch', $artifactPayload);
+            if ((int) ($artifactResult['ok'] ?? 0) === 1) {
+                $result['data_updates']++;
+                $this->markArtifactPolled($resolvedConsentId, $artifactId, (string) ($artifactResult['consent_status'] ?? ''));
+            } else {
+                $result['failed']++;
+            }
+        }
+
+        return $result;
+    }
+
 
     /**
      * Extracts and upserts every distinct artifact id found in a data_fetch

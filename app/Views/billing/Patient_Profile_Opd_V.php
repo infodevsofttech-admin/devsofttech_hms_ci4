@@ -341,7 +341,13 @@ if ($patientPhotoPath === '') {
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <div class="fw-semibold">Consent Request History</div>
-                                <button type="button" class="btn btn-link btn-sm p-0" id="btnRefreshAbdmRequests">Refresh</button>
+                                <div>
+                                    <button type="button" class="btn btn-link btn-sm p-0 me-3" id="btnCheckLiveAbdmStatus">
+                                        <span class="spinner-border spinner-border-sm d-none" id="abdmLiveStatusSpinner"></span>
+                                        Check Live Status
+                                    </button>
+                                    <button type="button" class="btn btn-link btn-sm p-0" id="btnRefreshAbdmRequests">Refresh</button>
+                                </div>
                             </div>
                             <div class="table-responsive border rounded">
                                 <table class="table table-sm table-hover mb-0" id="abdmRequestsTable">
@@ -538,6 +544,7 @@ $(function() {
     var abdmFetchOnlyUrl = '<?= base_url('billing/patient/abdm_content_fetch_only/' . (int) ($patient->id ?? 0)) ?>';
     var abdmConsentDetailUrl = '<?= base_url('billing/patient/abdm_consent_detail/' . (int) ($patient->id ?? 0)) ?>';
     var abdmConsentRequestsUrl = '<?= base_url('billing/patient/abdm_consent_requests/' . (int) ($patient->id ?? 0)) ?>';
+    var abdmCheckLiveStatusUrl = '<?= base_url('billing/patient/abdm_check_live_status/' . (int) ($patient->id ?? 0)) ?>';
     var abdmCustomRequestUrl = '<?= base_url('billing/patient/abdm_content_request_custom/' . (int) ($patient->id ?? 0)) ?>';
     var abdmDocDetailBaseUrl = '<?= base_url('billing/patient/abdm_document_detail/' . (int) ($patient->id ?? 0)) ?>';
     var currentAbdmRows = [];
@@ -1188,6 +1195,40 @@ $(function() {
 
     $(document).off('click.abdmOpd', '#btnRefreshAbdmRequests').on('click.abdmOpd', '#btnRefreshAbdmRequests', function() {
         loadAbdmConsentRequests();
+    });
+
+    $(document).off('click.abdmOpd', '#btnCheckLiveAbdmStatus').on('click.abdmOpd', '#btnCheckLiveAbdmStatus', function() {
+        var $btn = $(this);
+        if ($btn.prop('disabled')) {
+            return;
+        }
+        $btn.prop('disabled', true);
+        $('#abdmLiveStatusSpinner').removeClass('d-none');
+        setAbdmStatus('Checking live status with ABDM bridge…');
+
+        fetch(abdmCheckLiveStatusUrl, { credentials: 'same-origin' })
+            .then(function(resp) { return resp.json(); })
+            .then(function(data) {
+                if (!data || data.ok !== 1) {
+                    throw new Error((data && data.error) || 'Live status check failed.');
+                }
+                currentAbdmRequests = Array.isArray(data.requests) ? data.requests : [];
+                renderAbdmRequestsTable(currentAbdmRequests);
+                if (!data.reconcile_ok) {
+                    setAbdmStatus('Refreshed from last saved status (bridge check failed: ' + (data.reconcile_error || 'unknown error') + ').', true);
+                } else if (data.granted) {
+                    setAbdmStatus('Live status: GRANTED. Fetched data for ' + (data.artifacts_fetched || 0) + ' facility artifact(s)' + (data.data_fetch_failed ? (', ' + data.data_fetch_failed + ' failed') : '') + '.');
+                } else {
+                    setAbdmStatus('Live status refreshed from ABDM bridge.');
+                }
+            })
+            .catch(function(err) {
+                setAbdmStatus('Live status check failed: ' + (err.message || err), true);
+            })
+            .then(function() {
+                $btn.prop('disabled', false);
+                $('#abdmLiveStatusSpinner').addClass('d-none');
+            });
     });
 
     $(document).off('click.abdmOpd', '#btnSearchAbdmDocs').on('click.abdmOpd', '#btnSearchAbdmDocs', function() {

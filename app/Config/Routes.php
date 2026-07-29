@@ -503,6 +503,7 @@ $routes->group('billing', function($routes) {
     $routes->get('patient/abdm_content_fetch_only/(:num)', 'Patient::abdm_content_fetch_only/$1');
 $routes->get('patient/abdm_consent_detail/(:num)', 'Patient::abdm_consent_detail/$1');
 $routes->get('patient/abdm_consent_requests/(:num)', 'Patient::abdm_consent_requests/$1');
+$routes->get('patient/abdm_check_live_status/(:num)', 'Patient::abdm_check_live_status/$1');
 $routes->post('patient/abdm_content_request_custom/(:num)', 'Patient::abdm_content_request_custom/$1');
     $routes->get('patient/abdm_timeline/(:num)', 'Patient::abdm_timeline/$1');
     $routes->post('patient/save_profile_image/(:num)', 'Patient::save_profile_image/$1');
@@ -728,6 +729,7 @@ $routes->post('abha/create/initiate', 'Abha::initiate');
 $routes->post('abha/create/verify_otp', 'Abha::verifyOtp');
 $routes->post('abha/create/communication', 'Abha::communication');
 $routes->post('abha/create/verify_comm_otp', 'Abha::verifyCommOtp');
+$routes->post('abha/create/confirm_patient', 'Abha::confirmPatient');
 $routes->post('abha/create/address', 'Abha::address');
 $routes->get('abha/card/(:segment)', 'Abha::card/$1');
 $routes->post('abha/register/validate', 'Abha::validateAbha');

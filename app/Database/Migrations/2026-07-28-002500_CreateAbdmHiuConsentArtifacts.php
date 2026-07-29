@@ -29,11 +29,11 @@ class CreateAbdmHiuConsentArtifacts extends Migration
             ],
             'consent_request_id' => [
                 'type' => 'VARCHAR',
-                'constraint' => 180,
+                'constraint' => 100,
             ],
             'artifact_id' => [
                 'type' => 'VARCHAR',
-                'constraint' => 180,
+                'constraint' => 100,
             ],
             'abha_address' => [
                 'type' => 'VARCHAR',

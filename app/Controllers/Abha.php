@@ -38,6 +38,11 @@ class Abha extends BaseController
         // Normalise for the wizard: expose txn_id at top level
         if (! empty($result['ok']) && $result['ok'] == 1) {
             $txnId = $result['txn_id'] ?? $result['data']['txnId'] ?? $result['data']['txn_id'] ?? null;
+            // Cache the Aadhaar number against this txn_id so verifyOtp() can use it
+            // later for local-patient name/age/gender/aadhaar matching (never sent to browser).
+            if ($txnId) {
+                session()->set('abha_aadhaar_txn_' . $txnId, $aadhaar);
+            }
             return $this->response->setJSON(['ok' => 1, 'txn_id' => $txnId]);
         }
 
@@ -112,38 +117,70 @@ class Abha extends BaseController
         $districtName     = (string) (($profile['districtName'] ?? '') ?: ($profile['district_name'] ?? '') ?: ($payload['districtName'] ?? '') ?: ($payload['district_name'] ?? '') ?: ($payload['gateway_abha_profile']['district_name'] ?? '') ?: ($payload['gateway_patient']['district'] ?? ''));
         $email            = (string) (($profile['email'] ?? '') ?: ($payload['email'] ?? '') ?: ($payload['gateway_abha_profile']['email'] ?? '') ?: ($payload['gateway_patient']['email'] ?? ''));
 
-        $patientInfo = $this->autoCreateOrFindPatient(
-            $abhaNum,
-            $name,
-            $mobile,
-            $profileGender,
-            $profileDob,
-            [
-                'abha_address' => $abhaAddress,
-                'profile_photo' => $photo,
-                'verified_status' => $verifiedStatus,
-                'verification_type' => $verificationType,
-                'kyc_verified' => $kycVerified,
-                'mobile_verified' => $mobileVerified,
-                'address' => $address,
-                'district' => $districtName,
-                'state' => $stateName,
-                'zip' => $zip,
-                'email' => $email,
-            ]
-        );
+        $abhaMeta = [
+            'abha_address' => $abhaAddress,
+            'profile_photo' => $photo,
+            'verified_status' => $verifiedStatus,
+            'verification_type' => $verificationType,
+            'kyc_verified' => $kycVerified,
+            'mobile_verified' => $mobileVerified,
+            'address' => $address,
+            'district' => $districtName,
+            'state' => $stateName,
+            'zip' => $zip,
+            'email' => $email,
+        ];
 
-        return $this->response->setJSON([
-            'ok'             => 1,
-            'txn_id'         => $newTxnId,
-            'skip_mobile'    => true,
-            'abha_number'    => $abhaNum,
-            'name'           => $name,
-            'photo'          => $photo,
-            'mobile'         => $mobile,
-            'patient_id'     => $patientInfo['patient_id'],
-            'p_code'         => $patientInfo['p_code'],
-            'is_new_patient' => $patientInfo['is_new'],
+        // Aadhaar cached against this txn_id in initiate(), used only for local
+        // duplicate-patient matching below (never persisted/echoed to the browser).
+        $aadhaarForMatch = trim((string) (session()->get('abha_aadhaar_txn_' . $txnId) ?? ''));
+        session()->remove('abha_aadhaar_txn_' . $txnId);
+
+        $patientInfo = $this->tryAutoLinkByDirectMatch($abhaNum, $name, $mobile, $profileGender, $profileDob, $abhaMeta);
+
+        $responseBase = [
+            'ok'                => 1,
+            'txn_id'            => $newTxnId,
+            'skip_mobile'       => true,
+            'abha_number'       => $abhaNum,
+            'name'              => $name,
+            'photo'             => $photo,
+            'mobile'            => $mobile,
+            'gender'            => $profileGender,
+            'dob'               => $profileDob,
+            'abha_address'      => $abhaAddress,
+            'verified_status'   => $verifiedStatus,
+            'verification_type' => $verificationType,
+            'kyc_verified'      => $kycVerified,
+            'mobile_verified'   => $mobileVerified,
+            'address'           => $address,
+            'district'          => $districtName,
+            'state'             => $stateName,
+            'zip'               => $zip,
+            'email'             => $email,
+        ];
+
+        if ($patientInfo !== null) {
+            return $this->response->setJSON($responseBase + [
+                'need_confirmation' => false,
+                'patient_id'     => $patientInfo['patient_id'],
+                'p_code'         => $patientInfo['p_code'],
+                'is_new_patient' => $patientInfo['is_new'],
+            ]);
+        }
+
+        $db = \Config\Database::connect();
+        $fields = $db->getFieldNames('patient_master') ?? [];
+        $abhaField = $this->resolveAbhaFieldName($fields);
+        $abhaNumClean = preg_replace('/\D/', '', $abhaNum);
+        $candidates = $this->findMatchingCandidates($db, $fields, $name, $mobile, $profileGender, $profileDob, $aadhaarForMatch, $abhaField, $abhaNumClean);
+
+        return $this->response->setJSON($responseBase + [
+            'need_confirmation' => true,
+            'patient_id'        => 0,
+            'p_code'            => '',
+            'is_new_patient'    => null,
+            'candidates'        => $candidates,
         ]);
     }
 
@@ -248,37 +285,64 @@ class Abha extends BaseController
         $districtName     = (string) (($profile['districtName'] ?? '') ?: ($profile['district_name'] ?? '') ?: ($payload['districtName'] ?? '') ?: ($payload['district_name'] ?? '') ?: ($payload['gateway_abha_profile']['district_name'] ?? '') ?: ($payload['gateway_patient']['district'] ?? ''));
         $email            = (string) (($profile['email'] ?? '') ?: ($payload['email'] ?? '') ?: ($payload['gateway_abha_profile']['email'] ?? '') ?: ($payload['gateway_patient']['email'] ?? ''));
 
-        $patientInfo = $this->autoCreateOrFindPatient(
-            $abhaNum,
-            $name,
-            $mobile,
-            $gender,
-            $dob,
-            [
-                'abha_address' => $abhaAddress,
-                'profile_photo' => $photo,
-                'verified_status' => $verifiedStatus,
-                'verification_type' => $verificationType,
-                'kyc_verified' => $kycVerified,
-                'mobile_verified' => $mobileVerified,
-                'address' => $address,
-                'district' => $districtName,
-                'state' => $stateName,
-                'zip' => $zip,
-                'email' => $email,
-            ]
-        );
+        $abhaMeta = [
+            'abha_address' => $abhaAddress,
+            'profile_photo' => $photo,
+            'verified_status' => $verifiedStatus,
+            'verification_type' => $verificationType,
+            'kyc_verified' => $kycVerified,
+            'mobile_verified' => $mobileVerified,
+            'address' => $address,
+            'district' => $districtName,
+            'state' => $stateName,
+            'zip' => $zip,
+            'email' => $email,
+        ];
 
-        return $this->response->setJSON([
-            'ok'             => 1,
-            'abha_number'    => $abhaNum,
-            'name'           => $name,
-            'photo'          => $photo,
-            'gender'         => $gender,
-            'dob'            => $dob,
-            'patient_id'     => $patientInfo['patient_id'],
-            'p_code'         => $patientInfo['p_code'],
-            'is_new_patient' => $patientInfo['is_new'],
+        $patientInfo = $this->tryAutoLinkByDirectMatch($abhaNum, $name, $mobile, $gender, $dob, $abhaMeta);
+
+        $responseBase = [
+            'ok'                => 1,
+            'abha_number'       => $abhaNum,
+            'name'              => $name,
+            'photo'             => $photo,
+            'mobile'            => $mobile,
+            'gender'            => $gender,
+            'dob'               => $dob,
+            'abha_address'      => $abhaAddress,
+            'verified_status'   => $verifiedStatus,
+            'verification_type' => $verificationType,
+            'kyc_verified'      => $kycVerified,
+            'mobile_verified'   => $mobileVerified,
+            'address'           => $address,
+            'district'          => $districtName,
+            'state'             => $stateName,
+            'zip'               => $zip,
+            'email'             => $email,
+        ];
+
+        if ($patientInfo !== null) {
+            return $this->response->setJSON($responseBase + [
+                'need_confirmation' => false,
+                'patient_id'     => $patientInfo['patient_id'],
+                'p_code'         => $patientInfo['p_code'],
+                'is_new_patient' => $patientInfo['is_new'],
+            ]);
+        }
+
+        $db = \Config\Database::connect();
+        $fields = $db->getFieldNames('patient_master') ?? [];
+        $abhaField = $this->resolveAbhaFieldName($fields);
+        $abhaNumClean = preg_replace('/\D/', '', $abhaNum);
+        // No Aadhaar available on the pure mobile-OTP path.
+        $candidates = $this->findMatchingCandidates($db, $fields, $name, $mobile, $gender, $dob, '', $abhaField, $abhaNumClean);
+
+        return $this->response->setJSON($responseBase + [
+            'need_confirmation' => true,
+            'patient_id'        => 0,
+            'p_code'            => '',
+            'is_new_patient'    => null,
+            'candidates'        => $candidates,
         ]);
     }
 
@@ -622,32 +686,148 @@ class Abha extends BaseController
     }
 
     // -------------------------------------------------------------------------
-    // Private helper — find or auto-create patient from ABHA profile data
+    // Step 5 — Confirm patient link/create after a "matching patients found"
+    // review by the operator (see findMatchingCandidates()).
+    // POST abha/create/confirm_patient
     // -------------------------------------------------------------------------
-    private function autoCreateOrFindPatient(
+    public function confirmPatient()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $action    = trim((string) ($this->request->getPost('action') ?? ''));
+        $patientId = (int) ($this->request->getPost('patient_id') ?? 0);
+        $abhaNum   = (string) ($this->request->getPost('abha_number') ?? '');
+        $name      = trim((string) ($this->request->getPost('name') ?? ''));
+        $mobile    = preg_replace('/\D/', '', (string) ($this->request->getPost('mobile') ?? ''));
+        $gender    = (string) ($this->request->getPost('gender') ?? '');
+        $dob       = (string) ($this->request->getPost('dob') ?? '');
+
+        if (! in_array($action, ['new', 'existing'], true)) {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'Invalid action. Must be "new" or "existing".']);
+        }
+
+        $abhaMeta = [
+            'abha_address'      => (string) ($this->request->getPost('abha_address') ?? ''),
+            'profile_photo'     => (string) ($this->request->getPost('photo') ?? ''),
+            'verified_status'   => (string) ($this->request->getPost('verified_status') ?? ''),
+            'verification_type' => (string) ($this->request->getPost('verification_type') ?? ''),
+            'kyc_verified'      => $this->request->getPost('kyc_verified'),
+            'mobile_verified'   => $this->request->getPost('mobile_verified'),
+            'address'           => (string) ($this->request->getPost('address') ?? ''),
+            'district'          => (string) ($this->request->getPost('district') ?? ''),
+            'state'             => (string) ($this->request->getPost('state') ?? ''),
+            'zip'               => (string) ($this->request->getPost('zip') ?? ''),
+            'email'             => (string) ($this->request->getPost('email') ?? ''),
+        ];
+
+        $db     = \Config\Database::connect();
+        $fields = $db->getFieldNames('patient_master') ?? [];
+        $abhaField    = $this->resolveAbhaFieldName($fields);
+        $abhaNumClean = preg_replace('/\D/', '', $abhaNum);
+        $abhaAddress  = trim((string) ($abhaMeta['abha_address'] ?? ''));
+
+        if ($abhaNumClean === '' && $abhaAddress === '') {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'Missing ABHA identifier.']);
+        }
+
+        // ABHA number must be unique across patient_master — never let two
+        // patient rows carry the same ABHA.
+        if ($abhaField && $abhaNumClean !== '') {
+            $conflict = $db->table('patient_master')
+                ->select('id,p_code,p_fname')
+                ->where($abhaField, $abhaNumClean)
+                ->get()->getRowArray();
+            if ($conflict) {
+                $conflictId = (int) ($conflict['id'] ?? 0);
+                if ($action === 'new' || $conflictId !== $patientId) {
+                    return $this->response->setJSON([
+                        'ok' => 0,
+                        'error_text' => 'This ABHA number is already linked to patient '
+                            . ($conflict['p_code'] ?? '') . ' (' . ($conflict['p_fname'] ?? '') . '). '
+                            . 'Please select that patient instead.',
+                        'conflict_patient_id' => $conflictId,
+                        'conflict_p_code' => (string) ($conflict['p_code'] ?? ''),
+                    ]);
+                }
+            }
+        }
+
+        if ($action === 'existing') {
+            if ($patientId <= 0) {
+                return $this->response->setJSON(['ok' => 0, 'error_text' => 'patient_id is required to link an existing patient.']);
+            }
+            $row = $db->table('patient_master')->where('id', $patientId)->get()->getRowArray();
+            if (! $row) {
+                return $this->response->setJSON(['ok' => 0, 'error_text' => 'Selected patient not found.']);
+            }
+
+            // Guard: this patient must not already carry a *different* ABHA number.
+            if ($abhaField && ! empty($row[$abhaField]) && $abhaNumClean !== ''
+                && preg_replace('/\D/', '', (string) $row[$abhaField]) !== $abhaNumClean) {
+                return $this->response->setJSON([
+                    'ok' => 0,
+                    'error_text' => 'Selected patient already has a different ABHA linked (' . $row[$abhaField] . '). Cannot link a second ABHA to the same patient.',
+                ]);
+            }
+
+            $patientInfo = $this->linkAbhaToPatient($db, $patientId, $name, $mobile, $gender, $dob, $abhaMeta, $abhaNumClean, $abhaAddress, $fields, $abhaField);
+        } else {
+            $patientInfo = $this->createPatientFromAbha($db, $name, $mobile, $gender, $dob, $abhaMeta, $abhaNumClean, $abhaAddress, $fields, $abhaField);
+        }
+
+        return $this->response->setJSON([
+            'ok'             => 1,
+            'patient_id'     => $patientInfo['patient_id'],
+            'p_code'         => $patientInfo['p_code'],
+            'is_new_patient' => $patientInfo['is_new'],
+        ]);
+    }
+
+    // -------------------------------------------------------------------------
+    // Private helper — resolve the column name used to store the ABHA number
+    // in patient_master (varies by installation/migration history).
+    // -------------------------------------------------------------------------
+    private function resolveAbhaFieldName(array $fields): ?string
+    {
+        foreach (['abha_id', 'abha_no', 'abha'] as $f) {
+            if (in_array($f, $fields, true)) {
+                return $f;
+            }
+        }
+        if (in_array('abha_address', $fields, true)) {
+            return 'abha_address';
+        }
+
+        return null;
+    }
+
+    /**
+     * Try to safely auto-resolve the local patient WITHOUT operator confirmation.
+     * Only used when there's no real ambiguity:
+     *  - exact ABHA-number match (this exact digital identity was already linked here before), or
+     *  - an unambiguous orphan "ABHA PATIENT" placeholder row (HMS's own incomplete record, not a
+     *    different real patient).
+     * Returns null when neither applies — caller should then run findMatchingCandidates()
+     * and ask the operator to confirm "Create New" vs "Update Existing".
+     *
+     * @return array{patient_id:int,p_code:string,is_new:bool}|null
+     */
+    private function tryAutoLinkByDirectMatch(
         string $abhaNum,
         string $name,
         string $mobile,
         string $gender,
         string $dob,
         array $abhaMeta = []
-    ): array {
+    ): ?array {
         $db     = \Config\Database::connect();
         $fields = $db->getFieldNames('patient_master') ?? [];
-
-        // Detect ABHA column name
-        $abhaField = null;
-        foreach (['abha_id', 'abha_no', 'abha'] as $f) {
-            if (in_array($f, $fields, true)) { $abhaField = $f; break; }
-        }
-        if ($abhaField === null && in_array('abha_address', $fields, true)) {
-            $abhaField = 'abha_address';
-        }
-
-        $abhaNumClean = preg_replace('/\D/', '', $abhaNum); // strip dashes -> 14 digits
+        $abhaField    = $this->resolveAbhaFieldName($fields);
+        $abhaNumClean = preg_replace('/\D/', '', $abhaNum);
         $abhaAddress  = trim((string) ($abhaMeta['abha_address'] ?? ''));
 
-        // 1. Search by ABHA number
         $existing = null;
         if ($abhaField && $abhaNumClean !== '') {
             $existing = $db->table('patient_master')
@@ -658,82 +838,319 @@ class Abha extends BaseController
             }
         }
 
-        // 2. Fallback: search by mobile
-        if (! $existing && $mobile !== '') {
-            $existing = $db->table('patient_master')
-                ->where('mphone1', $mobile)->get()->getRowArray();
-        }
-
         if ($existing) {
             $patientId = (int) ($existing['id'] ?? 0);
-            $pCode     = (string) ($existing['p_code'] ?? '');
-            $existingUpdates = [];
-
-            $existingName = strtoupper(trim((string) ($existing['p_fname'] ?? '')));
-            if ($name !== '' && ($existingName === '' || $existingName === 'ABHA PATIENT')) {
-                $existingUpdates['p_fname'] = strtoupper($name);
-            }
-
-            // Backfill ABHA field if it was empty
-            if ($abhaField && empty($existing[$abhaField]) && $abhaNumClean !== '') {
-                $existingUpdates[$abhaField] = $abhaNumClean;
-            }
-
-            if ($existingUpdates !== []) {
-                $db->table('patient_master')->where('id', $patientId)->update($existingUpdates);
-            }
-
-            $this->syncAbhaMetaToPatient($patientId, $abhaMeta, $abhaNumClean, $abhaAddress, $fields);
-            return ['patient_id' => $patientId, 'p_code' => $pCode, 'is_new' => false];
+            return $this->linkAbhaToPatient($db, $patientId, $name, $mobile, $gender, $dob, $abhaMeta, $abhaNumClean, $abhaAddress, $fields, $abhaField);
         }
 
-        // 2b. Safe repair path for orphan placeholder rows created during prior failed mapping.
+        // Safe repair path for orphan placeholder rows created during prior failed mapping.
         // Reuse only when there is exactly one unambiguous candidate with no clinical linkage.
         $placeholder = $this->findRepairablePlaceholderPatient($db, $fields);
         if ($placeholder !== null) {
             $patientId = (int) ($placeholder['id'] ?? 0);
             if ($patientId > 0) {
-                $repairData = [
-                    'p_fname'      => strtoupper($name !== '' ? $name : 'ABHA PATIENT'),
-                    'mphone1'      => $mobile,
-                    'gender'       => $this->toPatientGenderValue($gender),
-                    'estimate_dob' => 1,
-                ];
-
-                $dobDb = $this->normalizeDobToDb($dob);
-                if ($dobDb !== '') {
-                    $repairData['dob'] = $dobDb;
-                    $repairData['estimate_dob'] = 0;
-                }
-
-                if ($abhaField && $abhaNumClean !== '') {
-                    $repairData[$abhaField] = $abhaNumClean;
-                }
-                if ($abhaAddress !== '' && in_array('abha_address', $fields, true)) {
-                    $repairData['abha_address'] = $abhaAddress;
-                }
-
-                $this->applyAbhaMetaColumns($repairData, $abhaMeta, $fields);
-                if (($abhaNumClean !== '' || $abhaAddress !== '') && in_array('abdm_linked_at', $fields, true)) {
-                    $repairData['abdm_linked_at'] = date('Y-m-d H:i:s');
-                }
-
-                $db->table('patient_master')->where('id', $patientId)->update($repairData);
-
-                $row   = $db->table('patient_master')->select('p_code')->where('id', $patientId)->get()->getRowArray();
-                $pCode = (string) ($row['p_code'] ?? '');
-
-                $this->syncAbhaMetaToPatient($patientId, $abhaMeta, $abhaNumClean, $abhaAddress, $fields);
-
-                return ['patient_id' => $patientId, 'p_code' => $pCode, 'is_new' => false];
+                return $this->repairPlaceholderPatient($db, $patientId, $name, $mobile, $gender, $dob, $abhaMeta, $abhaNumClean, $abhaAddress, $fields, $abhaField);
             }
         }
 
-        // 3. Create new patient row from ABHA profile data
-        $genderDb  = $this->toPatientGenderValue($gender);
+        return null;
+    }
 
-        // Convert DOB to MySQL YYYY-MM-DD
+    /**
+     * Compute whole-years age from a dob string ('DD-MM-YYYY' or 'YYYY-MM-DD').
+     */
+    private function computeAgeYears(string $dob): ?int
+    {
         $dobDb = $this->normalizeDobToDb($dob);
+        if ($dobDb === '') {
+            return null;
+        }
+        try {
+            return (int) (new \DateTime($dobDb))->diff(new \DateTime())->y;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    private function genderLabel(int $g): string
+    {
+        if ($g === 2) {
+            return 'Female';
+        }
+        if ($g === 3) {
+            return 'Other';
+        }
+        if ($g === 1) {
+            return 'Male';
+        }
+
+        return '';
+    }
+
+    /**
+     * Search patient_master for possible existing local records matching the
+     * ABHA profile by name/age/gender (and mobile/aadhaar when available), so
+     * the operator can confirm "this is the same person" before linking, or
+     * choose to register as a brand-new patient. HMS never auto-creates a new
+     * patient record on its own once this search has run — the operator always
+     * makes the final call.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function findMatchingCandidates(
+        $db,
+        array $fields,
+        string $name,
+        string $mobile,
+        string $genderRaw,
+        string $dob,
+        string $aadhaar,
+        ?string $abhaField,
+        string $abhaNumClean
+    ): array {
+        $genderDb   = $this->toPatientGenderValue($genderRaw);
+        $ageYears   = $this->computeAgeYears($dob);
+        $nameUp     = strtoupper(trim($name));
+        $nameTokens = array_values(array_filter(preg_split('/\s+/', $nameUp) ?: [], fn ($t) => strlen($t) >= 3));
+        $aadhaar    = preg_replace('/\D/', '', $aadhaar);
+
+        if ($nameTokens === [] && $mobile === '' && $aadhaar === '' && $ageYears === null) {
+            return [];
+        }
+
+        $select = 'id,p_code,p_fname,p_lname,gender,dob,age,mphone1,udai';
+        if ($abhaField !== null && ! in_array($abhaField, ['id', 'p_code', 'p_fname', 'p_lname', 'gender', 'dob', 'age', 'mphone1', 'udai'], true)) {
+            $select .= ',' . $abhaField;
+        }
+
+        $builder = $db->table('patient_master')->select($select);
+        $builder->groupStart();
+        $any = false;
+        foreach ($nameTokens as $tok) {
+            $builder->orLike('p_fname', $tok);
+            $any = true;
+        }
+        if ($mobile !== '') {
+            $builder->orWhere('mphone1', $mobile);
+            $any = true;
+        }
+        if ($aadhaar !== '') {
+            $builder->orWhere('udai', $aadhaar);
+            $any = true;
+        }
+        if ($ageYears !== null && $genderDb > 0) {
+            $builder->orWhere('gender', $genderDb);
+            $any = true;
+        }
+        $builder->groupEnd();
+
+        if (! $any) {
+            return [];
+        }
+
+        $rows = $builder->orderBy('insert_date', 'DESC')->limit(40)->get()->getResultArray();
+
+        $candidates = [];
+        foreach ($rows as $row) {
+            $rowName    = strtoupper(trim((string) ($row['p_fname'] ?? '')));
+            $rowTokens  = array_filter(preg_split('/\s+/', $rowName) ?: []);
+            $nameOverlap = $nameTokens !== [] && count(array_intersect($nameTokens, $rowTokens)) > 0;
+
+            $rowAgeYears = null;
+            $rowDob = trim((string) ($row['dob'] ?? ''));
+            if ($rowDob !== '' && $rowDob !== '0000-00-00') {
+                try {
+                    $rowAgeYears = (int) (new \DateTime($rowDob))->diff(new \DateTime())->y;
+                } catch (\Throwable $e) {
+                    $rowAgeYears = null;
+                }
+            }
+            if ($rowAgeYears === null && (int) ($row['age'] ?? 0) > 0) {
+                $rowAgeYears = (int) $row['age'];
+            }
+
+            $ageMatch     = $ageYears !== null && $rowAgeYears !== null && abs($rowAgeYears - $ageYears) <= 1;
+            $genderMatch  = $genderDb > 0 && (int) ($row['gender'] ?? 0) === $genderDb;
+            $mobileMatch  = $mobile !== '' && preg_replace('/\D/', '', (string) ($row['mphone1'] ?? '')) === $mobile;
+            $aadhaarMatch = $aadhaar !== '' && preg_replace('/\D/', '', (string) ($row['udai'] ?? '')) === $aadhaar;
+
+            $rowAbha      = $abhaField !== null ? trim((string) ($row[$abhaField] ?? '')) : '';
+            $abhaConflict = $rowAbha !== '' && preg_replace('/\D/', '', $rowAbha) !== $abhaNumClean;
+
+            $score = ($nameOverlap ? 2 : 0) + ($ageMatch ? 1 : 0) + ($genderMatch ? 1 : 0) + ($mobileMatch ? 2 : 0) + ($aadhaarMatch ? 3 : 0);
+            if ($score <= 0) {
+                continue;
+            }
+
+            $candidates[] = [
+                'id'            => (int) ($row['id'] ?? 0),
+                'p_code'        => (string) ($row['p_code'] ?? ''),
+                'name'          => trim((string) ($row['p_fname'] ?? '') . ' ' . (string) ($row['p_lname'] ?? '')),
+                'gender'        => (int) ($row['gender'] ?? 0),
+                'gender_label'  => $this->genderLabel((int) ($row['gender'] ?? 0)),
+                'dob'           => $rowDob,
+                'age'           => $rowAgeYears,
+                'mobile'        => (string) ($row['mphone1'] ?? ''),
+                'aadhaar'       => (string) ($row['udai'] ?? ''),
+                'abha'          => $rowAbha,
+                'abha_conflict' => $abhaConflict,
+                'match'         => [
+                    'name'    => $nameOverlap,
+                    'age'     => $ageMatch,
+                    'gender'  => $genderMatch,
+                    'mobile'  => $mobileMatch,
+                    'aadhaar' => $aadhaarMatch,
+                ],
+                'score' => $score,
+            ];
+        }
+
+        usort($candidates, fn ($a, $b) => $b['score'] <=> $a['score']);
+
+        return array_slice($candidates, 0, 8);
+    }
+
+    /**
+     * Link an ABHA profile to an already-identified existing patient row
+     * (either auto-matched by exact ABHA number, or explicitly chosen by the
+     * operator from the "matching patients" confirmation modal). Only
+     * backfills fields that are currently blank so verified/manually-entered
+     * HMS data is never clobbered.
+     *
+     * @return array{patient_id:int,p_code:string,is_new:bool}
+     */
+    private function linkAbhaToPatient(
+        $db,
+        int $patientId,
+        string $name,
+        string $mobile,
+        string $gender,
+        string $dob,
+        array $abhaMeta,
+        string $abhaNumClean,
+        string $abhaAddress,
+        array $fields,
+        ?string $abhaField
+    ): array {
+        $existing = $db->table('patient_master')->where('id', $patientId)->get()->getRowArray() ?? [];
+        $pCode    = (string) ($existing['p_code'] ?? '');
+        $existingUpdates = [];
+
+        $existingName = strtoupper(trim((string) ($existing['p_fname'] ?? '')));
+        if ($name !== '' && ($existingName === '' || $existingName === 'ABHA PATIENT')) {
+            $existingUpdates['p_fname'] = strtoupper($name);
+        }
+
+        // Backfill DOB/gender/mobile from ABHA profile only if not already recorded,
+        // so we never clobber a manually-corrected value.
+        $existingDob = trim((string) ($existing['dob'] ?? ''));
+        if (($existingDob === '' || $existingDob === '0000-00-00') && $dob !== '') {
+            $dobDb = $this->normalizeDobToDb($dob);
+            if ($dobDb !== '') {
+                $existingUpdates['dob'] = $dobDb;
+                if (in_array('estimate_dob', $fields, true)) {
+                    $existingUpdates['estimate_dob'] = 0;
+                }
+            }
+        }
+        $existingGenderRaw = (int) ($existing['gender'] ?? 0);
+        if ($existingGenderRaw <= 0 && $gender !== '') {
+            $existingUpdates['gender'] = $this->toPatientGenderValue($gender);
+        }
+        if ($mobile !== '' && empty($existing['mphone1'])) {
+            $existingUpdates['mphone1'] = $mobile;
+        }
+
+        // Backfill ABHA field if it was empty
+        if ($abhaField && empty($existing[$abhaField]) && $abhaNumClean !== '') {
+            $existingUpdates[$abhaField] = $abhaNumClean;
+        }
+
+        if ($existingUpdates !== []) {
+            $db->table('patient_master')->where('id', $patientId)->update($existingUpdates);
+        }
+
+        $this->syncAbhaMetaToPatient($patientId, $abhaMeta, $abhaNumClean, $abhaAddress, $fields);
+
+        return ['patient_id' => $patientId, 'p_code' => $pCode, 'is_new' => false];
+    }
+
+    /**
+     * Repair a single unambiguous orphan "ABHA PATIENT" placeholder row created
+     * during a prior failed mapping. Not a "new patient" from the operator's
+     * perspective — this is HMS fixing its own incomplete record.
+     *
+     * @return array{patient_id:int,p_code:string,is_new:bool}
+     */
+    private function repairPlaceholderPatient(
+        $db,
+        int $patientId,
+        string $name,
+        string $mobile,
+        string $gender,
+        string $dob,
+        array $abhaMeta,
+        string $abhaNumClean,
+        string $abhaAddress,
+        array $fields,
+        ?string $abhaField
+    ): array {
+        $repairData = [
+            'p_fname'      => strtoupper($name !== '' ? $name : 'ABHA PATIENT'),
+            'mphone1'      => $mobile,
+            'gender'       => $this->toPatientGenderValue($gender),
+            'estimate_dob' => 1,
+        ];
+
+        $dobDb = $this->normalizeDobToDb($dob);
+        if ($dobDb !== '') {
+            $repairData['dob'] = $dobDb;
+            $repairData['estimate_dob'] = 0;
+        }
+
+        if ($abhaField && $abhaNumClean !== '') {
+            $repairData[$abhaField] = $abhaNumClean;
+        }
+        if ($abhaAddress !== '' && in_array('abha_address', $fields, true)) {
+            $repairData['abha_address'] = $abhaAddress;
+        }
+
+        $this->applyAbhaMetaColumns($repairData, $abhaMeta, $fields);
+        if (($abhaNumClean !== '' || $abhaAddress !== '') && in_array('abdm_linked_at', $fields, true)) {
+            $repairData['abdm_linked_at'] = date('Y-m-d H:i:s');
+        }
+
+        $db->table('patient_master')->where('id', $patientId)->update($repairData);
+
+        $row   = $db->table('patient_master')->select('p_code')->where('id', $patientId)->get()->getRowArray();
+        $pCode = (string) ($row['p_code'] ?? '');
+
+        $this->syncAbhaMetaToPatient($patientId, $abhaMeta, $abhaNumClean, $abhaAddress, $fields);
+
+        return ['patient_id' => $patientId, 'p_code' => $pCode, 'is_new' => false];
+    }
+
+    /**
+     * Create a brand-new patient_master row from an ABHA profile. Only ever
+     * called when the operator has explicitly chosen "Create New" from the
+     * matching-patients confirmation modal (or there was nothing to match).
+     *
+     * @return array{patient_id:int,p_code:string,is_new:bool}
+     */
+    private function createPatientFromAbha(
+        $db,
+        string $name,
+        string $mobile,
+        string $gender,
+        string $dob,
+        array $abhaMeta,
+        string $abhaNumClean,
+        string $abhaAddress,
+        array $fields,
+        ?string $abhaField
+    ): array {
+        $genderDb = $this->toPatientGenderValue($gender);
+        $dobDb    = $this->normalizeDobToDb($dob);
 
         $insertData = [
             'p_fname'      => strtoupper($name !== '' ? $name : 'ABHA PATIENT'),
