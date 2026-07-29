@@ -1007,6 +1007,7 @@
                 $.post('<?= base_url('abha/create/verify_comm_otp') ?>', {
                     otp: otp,
                     txn_id: linkTxnId,
+                    mobile: $('#abha_link_mobile').val().trim(),
                     '<?= csrf_token() ?>': csrfToken()
                 }, function(resp) {
                     $('#abha_link_verify_spinner').addClass('d-none');
@@ -1450,13 +1451,13 @@
                 });
             }
 
-            function verifyOtpFromMobile(otp, alertId, spinId, btnId) {
+            function verifyOtpFromMobile(otp, alertId, spinId, btnId, mobile) {
                 if (!/^\d{6}$/.test(otp)) { regAlert(alertId, 'warning', 'Please enter the 6-digit OTP.'); return; }
                 regAlert(alertId, '', '');
                 $('#' + spinId).removeClass('d-none');
                 $('#' + btnId).prop('disabled', true);
                 $.post('<?= base_url('abha/create/verify_comm_otp') ?>', {
-                    otp: otp, txn_id: regTxnId, '<?= csrf_token() ?>': csrf()
+                    otp: otp, txn_id: regTxnId, mobile: mobile || '', '<?= csrf_token() ?>': csrf()
                 }, function(resp) {
                     $('#' + spinId).addClass('d-none');
                     $('#' + btnId).prop('disabled', false);
@@ -1481,7 +1482,7 @@
                 });
             });
             $('#abhareg_num_verify_otp_btn').on('click', function() {
-                verifyOtpFromMobile($('#abhareg_num_otp_input').val().trim(), 'abhareg_num_stepC_alert', 'abhareg_num_verify_spinner', 'abhareg_num_verify_otp_btn');
+                verifyOtpFromMobile($('#abhareg_num_otp_input').val().trim(), 'abhareg_num_stepC_alert', 'abhareg_num_verify_spinner', 'abhareg_num_verify_otp_btn', $('#abhareg_num_mobile').val().trim());
             });
             $('#abhareg_num_resend_btn').on('click', function() {
                 $('#abhareg_num_stepC').addClass('d-none');
@@ -1498,7 +1499,7 @@
                 });
             });
             $('#abhareg_mob_verify_btn').on('click', function() {
-                verifyOtpFromMobile($('#abhareg_mob_otp_input').val().trim(), 'abhareg_mob_step2_alert', 'abhareg_mob_verify_spinner', 'abhareg_mob_verify_btn');
+                verifyOtpFromMobile($('#abhareg_mob_otp_input').val().trim(), 'abhareg_mob_step2_alert', 'abhareg_mob_verify_spinner', 'abhareg_mob_verify_btn', $('#abhareg_mob_mobile').val().trim());
             });
             $('#abhareg_mob_resend_btn').on('click', function() {
                 $('#abhareg_mob_step2').addClass('d-none');

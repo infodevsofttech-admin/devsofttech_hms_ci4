@@ -61,14 +61,14 @@ class Abha extends BaseController
 
         $txnId  = trim((string) ($this->request->getPost('txn_id') ?? $this->request->getPost('txnId') ?? ''));
         $otp    = trim((string) ($this->request->getPost('otp') ?? ''));
-        $mobile = trim((string) ($this->request->getPost('mobile') ?? ''));
+        $requestMobile = trim((string) ($this->request->getPost('mobile') ?? ''));
 
         if ($txnId === '' || $otp === '') {
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'txn_id and otp are required']);
         }
 
         try {
-            $result = AbdmConnectorFactory::make()->abhaAadhaarVerifyOtp(['txnId' => $txnId, 'otp' => $otp, 'mobile' => $mobile]);
+            $result = AbdmConnectorFactory::make()->abhaAadhaarVerifyOtp(['txnId' => $txnId, 'otp' => $otp, 'mobile' => $requestMobile]);
         } catch (\Throwable $e) {
             return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => $e->getMessage()]);
         }
@@ -97,7 +97,9 @@ class Abha extends BaseController
         );
         $name             = $this->extractAbhaProfileName($profile, $payload);
         $photo            = (string) ($profile['profilePhoto'] ?? $profile['profile_photo'] ?? $payload['profilePhoto'] ?? $payload['profile_photo'] ?? '');
-        $mobile           = (string) ($profile['mobile'] ?? $payload['mobile'] ?? $payload['mobileNumber'] ?? '');
+        // Bridge/gateway verify-otp responses don't always echo the mobile back;
+        // fall back to the mobile the user actually typed and OTP-verified.
+        $mobile           = (string) ($profile['mobile'] ?? $payload['mobile'] ?? $payload['mobileNumber'] ?? $requestMobile ?? '');
         $profileGender    = (string) ($profile['gender'] ?? $payload['gender'] ?? '');
         $profileDob       = (string) ($profile['dob'] ?? $profile['date_of_birth'] ?? $payload['dob'] ?? $payload['date_of_birth'] ?? '');
         $verifiedStatus   = (string) (($payload['gateway_abha_profile']['status'] ?? '') ?: ($profile['verifiedStatus'] ?? '') ?: ($profile['status'] ?? '') ?: ($payload['verifiedStatus'] ?? '') ?: ($payload['status'] ?? ''));
@@ -192,6 +194,10 @@ class Abha extends BaseController
 
         $txnId = trim((string) ($this->request->getPost('txn_id') ?? $this->request->getPost('txnId') ?? ''));
         $otp   = trim((string) ($this->request->getPost('otp') ?? ''));
+        // The mobile itself isn't part of the OTP-verify payload (it's tied to txn_id
+        // on the bridge side), but the caller may resend it so we can persist it even
+        // if the gateway response doesn't echo it back.
+        $requestMobile = trim((string) ($this->request->getPost('mobile') ?? ''));
 
         if ($txnId === '' || $otp === '') {
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'txn_id and otp are required']);
@@ -229,7 +235,9 @@ class Abha extends BaseController
         $photo            = (string) ($profile['profilePhoto'] ?? $profile['profile_photo'] ?? $payload['profilePhoto'] ?? $payload['profile_photo'] ?? '');
         $gender           = (string) ($profile['gender'] ?? $payload['gender'] ?? '');
         $dob              = (string) ($profile['dob'] ?? $profile['date_of_birth'] ?? $payload['dob'] ?? $payload['date_of_birth'] ?? '');
-        $mobile           = (string) ($profile['mobile'] ?? $payload['mobile'] ?? $payload['mobileNumber'] ?? '');
+        // Bridge/gateway verify-otp responses don't always echo the mobile back;
+        // fall back to the mobile the user actually typed and OTP-verified.
+        $mobile           = (string) ($profile['mobile'] ?? $payload['mobile'] ?? $payload['mobileNumber'] ?? $requestMobile ?? '');
         $verifiedStatus   = (string) (($payload['gateway_abha_profile']['status'] ?? '') ?: ($profile['verifiedStatus'] ?? '') ?: ($profile['status'] ?? '') ?: ($payload['verifiedStatus'] ?? '') ?: ($payload['status'] ?? ''));
         $verificationType = (string) (($payload['gateway_abha_profile']['abha_type'] ?? '') ?: ($profile['verificationType'] ?? '') ?: ($profile['abhaType'] ?? '') ?: ($payload['verificationType'] ?? '') ?: ($payload['abhaType'] ?? ''));
         $kycVerified      = $profile['kycVerified'] ?? $payload['kycVerified'] ?? null;
