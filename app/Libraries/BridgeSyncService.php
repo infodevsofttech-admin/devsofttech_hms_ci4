@@ -378,11 +378,16 @@ class BridgeSyncService
             return $summary;
         }
 
+        $queuePk = $this->resolveBridgeQueueIdColumn();
+        if ($queuePk === null) {
+            return $summary;
+        }
+
         $rows = $this->db->table('bridge_sync_queue')
-            ->select('id,event_type,payload_json,status')
+            ->select($queuePk . ' AS queue_pk,event_type,payload_json,status')
             ->whereIn('event_type', self::ABHA_VERIFIED_ONLY_EVENT_TYPES)
             ->whereIn('status', ['pending', 'retry', 'failed'])
-            ->orderBy('id', 'ASC')
+            ->orderBy($queuePk, 'ASC')
             ->limit(max(1, $limit))
             ->get()
             ->getResultArray();
@@ -403,7 +408,7 @@ class BridgeSyncService
 
             if (! $dryRun) {
                 $this->db->table('bridge_sync_queue')
-                    ->where('id', (int) ($row['id'] ?? 0))
+                    ->where($queuePk, (int) ($row['queue_pk'] ?? 0))
                     ->update([
                         'status' => 'skipped',
                         'next_attempt_at' => null,
@@ -416,6 +421,22 @@ class BridgeSyncService
         }
 
         return $summary;
+    }
+
+    private function resolveBridgeQueueIdColumn(): ?string
+    {
+        if (! $this->db->tableExists('bridge_sync_queue')) {
+            return null;
+        }
+
+        $fields = $this->db->getFieldNames('bridge_sync_queue') ?? [];
+        foreach (['id', 'queue_id', 'q_id'] as $candidate) {
+            if (in_array($candidate, $fields, true)) {
+                return $candidate;
+            }
+        }
+
+        return null;
     }
 
     /**
