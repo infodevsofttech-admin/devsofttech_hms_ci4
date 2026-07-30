@@ -92,13 +92,19 @@ class BridgeSyncService
                 $opdId = (int) ($payload['bundle_json']['opd_id'] ?? 0);
             }
             if ($opdId > 0 && $this->db->tableExists('opd_master')) {
+                $opdPk = $this->resolveTableIdColumn('opd_master', ['id', 'opd_id']);
+                $opdPatientFk = $this->resolveTableIdColumn('opd_master', ['p_id', 'patient_id', 'pid']);
+                if ($opdPk === null || $opdPatientFk === null) {
+                    return 0;
+                }
+
                 $row = $this->db->table('opd_master')
-                    ->select('p_id')
-                    ->where('id', $opdId)
+                    ->select($opdPatientFk)
+                    ->where($opdPk, $opdId)
                     ->get(1)
                     ->getRowArray();
 
-                return (int) ($row['p_id'] ?? 0);
+                return (int) ($row[$opdPatientFk] ?? 0);
             }
         }
 
@@ -108,6 +114,11 @@ class BridgeSyncService
     private function isPatientAbhaVerified(int $patientId): bool
     {
         if ($patientId <= 0 || ! $this->db->tableExists('patient_master')) {
+            return false;
+        }
+
+        $patientPk = $this->resolveTableIdColumn('patient_master', ['id', 'p_id', 'patient_id', 'pid']);
+        if ($patientPk === null) {
             return false;
         }
 
@@ -125,7 +136,7 @@ class BridgeSyncService
 
         $row = $this->db->table('patient_master')
             ->select(implode(',', $selectFields))
-            ->where('id', $patientId)
+            ->where($patientPk, $patientId)
             ->get(1)
             ->getRowArray();
 
@@ -431,6 +442,25 @@ class BridgeSyncService
 
         $fields = $this->db->getFieldNames('bridge_sync_queue') ?? [];
         foreach (['id', 'queue_id', 'q_id'] as $candidate) {
+            if (in_array($candidate, $fields, true)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param list<string> $candidates
+     */
+    private function resolveTableIdColumn(string $table, array $candidates): ?string
+    {
+        if (! $this->db->tableExists($table)) {
+            return null;
+        }
+
+        $fields = $this->db->getFieldNames($table) ?? [];
+        foreach ($candidates as $candidate) {
             if (in_array($candidate, $fields, true)) {
                 return $candidate;
             }
