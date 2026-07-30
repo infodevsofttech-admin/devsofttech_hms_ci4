@@ -8,6 +8,13 @@ use CodeIgniter\I18n\Time;
 
 class BridgeSyncService
 {
+    private const ABHA_VERIFIED_ONLY_EVENT_TYPES = [
+        'opd.fhir.generated',
+        'patient.created',
+        'patient.updated',
+        'ipd.discharge.updated',
+    ];
+
     private BaseConnection $db;
     private BridgeSyncQueueModel $queueModel;
 
@@ -23,6 +30,10 @@ class BridgeSyncService
     public function enqueue(string $eventType, array $payload, string $entityType = '', string $entityId = '', int $maxAttempts = 10): ?int
     {
         if (! $this->db->tableExists('bridge_sync_queue')) {
+            return null;
+        }
+
+        if (! $this->canEnqueueEventForPatient($eventType, $payload)) {
             return null;
         }
 
@@ -46,6 +57,111 @@ class BridgeSyncService
 
         $insertId = $this->queueModel->getInsertID();
         return $insertId > 0 ? (int) $insertId : null;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function canEnqueueEventForPatient(string $eventType, array $payload): bool
+    {
+        if (! in_array($eventType, self::ABHA_VERIFIED_ONLY_EVENT_TYPES, true)) {
+            return true;
+        }
+
+        $patientId = $this->resolvePatientIdForVerifiedOnlyEvent($eventType, $payload);
+        if ($patientId <= 0) {
+            return false;
+        }
+
+        return $this->isPatientAbhaVerified($patientId);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function resolvePatientIdForVerifiedOnlyEvent(string $eventType, array $payload): int
+    {
+        $patientId = (int) ($payload['patient_id'] ?? 0);
+        if ($patientId > 0) {
+            return $patientId;
+        }
+
+        if ($eventType === 'opd.fhir.generated') {
+            $opdId = (int) ($payload['opd_id'] ?? 0);
+            if ($opdId <= 0 && isset($payload['bundle_json']) && is_array($payload['bundle_json'])) {
+                $opdId = (int) ($payload['bundle_json']['opd_id'] ?? 0);
+            }
+            if ($opdId > 0 && $this->db->tableExists('opd_master')) {
+                $row = $this->db->table('opd_master')
+                    ->select('p_id')
+                    ->where('id', $opdId)
+                    ->get(1)
+                    ->getRowArray();
+
+                return (int) ($row['p_id'] ?? 0);
+            }
+        }
+
+        return 0;
+    }
+
+    private function isPatientAbhaVerified(int $patientId): bool
+    {
+        if ($patientId <= 0 || ! $this->db->tableExists('patient_master')) {
+            return false;
+        }
+
+        $allFields = $this->db->getFieldNames('patient_master') ?? [];
+        $selectFields = [];
+        foreach (['abha_verified_status', 'abha_kyc_verified', 'abha_mobile_verified', 'abha_id', 'abha_no', 'abha', 'abha_address'] as $field) {
+            if (in_array($field, $allFields, true)) {
+                $selectFields[] = $field;
+            }
+        }
+
+        if (empty($selectFields)) {
+            return false;
+        }
+
+        $row = $this->db->table('patient_master')
+            ->select(implode(',', $selectFields))
+            ->where('id', $patientId)
+            ->get(1)
+            ->getRowArray();
+
+        if (! is_array($row) || $row === []) {
+            return false;
+        }
+
+        $abhaLinked = false;
+        foreach (['abha_id', 'abha_no', 'abha', 'abha_address'] as $field) {
+            if (array_key_exists($field, $row) && trim((string) $row[$field]) !== '') {
+                $abhaLinked = true;
+                break;
+            }
+        }
+
+        if (! $abhaLinked) {
+            return false;
+        }
+
+        $verifiedStatus = strtoupper(trim((string) ($row['abha_verified_status'] ?? '')));
+        if (in_array($verifiedStatus, ['1', 'VERIFIED', 'YES', 'Y', 'TRUE'], true)) {
+            return true;
+        }
+
+        $kycVerified = (int) ($row['abha_kyc_verified'] ?? 0) === 1;
+        $mobileVerified = (int) ($row['abha_mobile_verified'] ?? 0) === 1;
+        if ($kycVerified && $mobileVerified) {
+            return true;
+        }
+
+        // Backward-compat fallback for legacy schemas without verification meta columns.
+        $hasVerificationMeta = in_array('abha_verified_status', $allFields, true)
+            || in_array('abha_kyc_verified', $allFields, true)
+            || in_array('abha_mobile_verified', $allFields, true);
+
+        return ! $hasVerificationMeta && $abhaLinked;
     }
 
     /**
@@ -124,10 +240,24 @@ class BridgeSyncService
 
             $dispatch = $this->buildDispatchContext($row, $payload);
             if (($dispatch['ok'] ?? false) !== true) {
+                $reason = trim((string) ($dispatch['error'] ?? 'No dispatch configuration'));
+
+                if ($dispatch['terminal'] ?? false) {
+                    // No real destination for this event type — skip permanently, don't retry/error.
+                    $this->db->table('bridge_sync_queue')->where('id', $queueId)->update([
+                        'status' => 'skipped',
+                        'next_attempt_at' => null,
+                        'last_error' => mb_substr($reason, 0, 500),
+                        'locked_at' => null,
+                        'locked_by' => null,
+                    ]);
+                    $summary['skipped']++;
+                    continue;
+                }
+
                 $nextAttempts = $attempts + 1;
                 $isFinalFailure = $nextAttempts >= $maxAttempts;
                 $delaySeconds = min(3600, (int) pow(2, min(10, $nextAttempts)) * 30);
-                $reason = trim((string) ($dispatch['error'] ?? 'No dispatch configuration'));
 
                 $this->db->table('bridge_sync_queue')->where('id', $queueId)->update([
                     'status' => $isFinalFailure ? 'failed' : 'retry',
@@ -227,6 +357,64 @@ class BridgeSyncService
         }
 
         $summary['message'] = 'queue processing completed';
+        return $summary;
+    }
+
+    /**
+     * Cleanup helper for historical rows created before ABHA verification gating.
+     *
+     * @return array<string, int>
+     */
+    public function cleanupAbhaVerifiedOnlyQueue(int $limit = 500, bool $dryRun = false): array
+    {
+        $summary = [
+            'scanned' => 0,
+            'marked_skipped' => 0,
+            'kept' => 0,
+            'decode_errors' => 0,
+        ];
+
+        if (! $this->db->tableExists('bridge_sync_queue')) {
+            return $summary;
+        }
+
+        $rows = $this->db->table('bridge_sync_queue')
+            ->select('id,event_type,payload_json,status')
+            ->whereIn('event_type', self::ABHA_VERIFIED_ONLY_EVENT_TYPES)
+            ->whereIn('status', ['pending', 'retry', 'failed'])
+            ->orderBy('id', 'ASC')
+            ->limit(max(1, $limit))
+            ->get()
+            ->getResultArray();
+
+        foreach ($rows as $row) {
+            $summary['scanned']++;
+            $eventType = (string) ($row['event_type'] ?? '');
+            $payload = json_decode((string) ($row['payload_json'] ?? ''), true);
+            if (! is_array($payload)) {
+                $summary['decode_errors']++;
+                continue;
+            }
+
+            if ($this->canEnqueueEventForPatient($eventType, $payload)) {
+                $summary['kept']++;
+                continue;
+            }
+
+            if (! $dryRun) {
+                $this->db->table('bridge_sync_queue')
+                    ->where('id', (int) ($row['id'] ?? 0))
+                    ->update([
+                        'status' => 'skipped',
+                        'next_attempt_at' => null,
+                        'locked_at' => null,
+                        'locked_by' => null,
+                        'last_error' => 'Skipped by ABHA verified-only cleanup',
+                    ]);
+            }
+            $summary['marked_skipped']++;
+        }
+
         return $summary;
     }
 
@@ -358,7 +546,15 @@ class BridgeSyncService
             return $this->buildAbdmBridgeDispatchContext($row, $payload);
         }
 
-        return $this->buildBridgeDispatchContext($row, $payload, 'bridge');
+        // Only snomed.*/abdm.*/nhcx. events have a real bridge destination configured
+        // (CSNOtk only implements the SNOMED terminology endpoint on /api/bridge and
+        // 404s on generic app events like ipd.*/patient.*/lab.* — see bridge debug logs).
+        // Mark these as a terminal skip instead of retrying/erroring forever.
+        return [
+            'ok' => false,
+            'terminal' => true,
+            'error' => 'No bridge destination configured for event type "' . $eventType . '" (only snomed.*, abdm.*, nhcx.* events are routed)',
+        ];
     }
 
     /**
