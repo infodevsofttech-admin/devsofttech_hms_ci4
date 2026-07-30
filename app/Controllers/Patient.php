@@ -1817,9 +1817,22 @@ class Patient extends BaseController
 		if ((int) ($reconcileResult['ok'] ?? 0) !== 1) {
 			$errorText = trim((string) ($reconcileResult['error_text'] ?? 'Consent status check failed.'));
 			$httpCode = (int) ($reconcileResult['http_code'] ?? 422);
-			$isNonFatalPending = $httpCode === 404
+			// Bridge uses several different wordings for "this reference doesn't
+			// resolve to a session yet" depending on which lookup key was sent
+			// (request_id vs consentRequestId vs consentId) -- e.g. "Consent
+			// record not found", "NOT_FOUND", or "No HIU sessions found matching
+			// the criteria". Treat all of these as non-fatal/still-pending
+			// (bridge just hasn't indexed the session under that key yet) rather
+			// than surfacing a hard "Auto flow failed" error to the user, which
+			// was happening repeatedly because only the first two wordings were
+			// recognized. Also accept 400 alongside 404 since the bridge doesn't
+			// consistently use 404 for this class of response.
+			$isNonFatalPending = in_array($httpCode, [400, 404], true)
 				&& (stripos($errorText, 'Consent record not found') !== false
-					|| stripos($errorText, 'NOT_FOUND') !== false);
+					|| stripos($errorText, 'NOT_FOUND') !== false
+					|| stripos($errorText, 'No HIU sessions found') !== false
+					|| stripos($errorText, 'no sessions found') !== false
+					|| stripos($errorText, 'matching the criteria') !== false);
 
 			if ($isNonFatalPending) {
 				$fallbackLookup = [

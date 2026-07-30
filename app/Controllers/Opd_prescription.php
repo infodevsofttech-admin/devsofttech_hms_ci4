@@ -4,7 +4,6 @@ namespace App\Controllers;
 
 use App\Controllers\BaseController;
 use App\Libraries\AbdmWorkTaskService;
-use App\Libraries\BridgeSyncService;
 use App\Libraries\CsnotkTerminologyService;
 use App\Models\OpdMedicineModel;
 use CodeIgniter\I18n\Time;
@@ -11490,25 +11489,13 @@ class Opd_prescription extends BaseController
             return false;
         }
 
-        try {
-            $documentId = (int) $this->db->insertID();
-            $bridgeSync = new BridgeSyncService();
-            $bridgeSync->enqueue(
-                'opd.fhir.generated',
-                [
-                    'opd_fhir_document_id' => $documentId,
-                    'opd_id' => $opdId,
-                    'opd_session_id' => $sessionId,
-                    'bundle_type' => 'OPConsultRecord',
-                    'generated_by' => $generatedBy,
-                    'generated_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
-                    'bundle_json' => $bundle,
-                ],
-                'opd_fhir_document',
-                (string) $documentId
-            );
-        } catch (\Throwable $e) {
-        }
+        // NOTE: Do NOT also enqueue an 'opd.fhir.generated' bridge_sync_queue event here.
+        // That event type has no 'abdm.'/'snomed.'/'nhcx.' prefix, so BridgeSyncService
+        // routes it to the generic CSNOtk terminology bridge (BRIDGE_SYNC_URL), which has
+        // no handler for it and always returns HTTP 404 -- it has no consumer anywhere in
+        // this codebase. The bundle is already persisted to opd_fhir_documents above; actual
+        // ABDM sharing is triggered separately via DreamsoftConnector::sharePrescriptionBundle()
+        // (event 'abdm.fhir.share.requested'), which correctly routes to ABDM_BRIDGE_URL.
 
         return true;
     }
