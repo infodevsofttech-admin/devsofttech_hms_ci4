@@ -349,7 +349,7 @@ $mergedGroups = [
             info: true,
             autoWidth: false,
             responsive: false,
-            pageLength: 25,
+            pageLength: 100,
             order: [[1, 'asc']],
             columnDefs: [
                 { targets: [0], searchable: false },
