@@ -592,7 +592,8 @@ class Ipd_discharge extends BaseController
         $courseInHospital = $section(['Course in the hospital']);
         $examOnDischarge = $section(['Examination on Discharge']);
         $dischargeMedications = $section(['Discharge Medications']);
-        $dietaryAdvice = $section(['Dietary Advice']);
+        $dietaryAdvice = $section(['Dietary Advice'], ['Review after', 'Review After']);
+        $dietaryAdvice = $this->trimDietaryAdviceTail($dietaryAdvice);
         $drugAllergyAdr = $section(['Drug Allergy / ADR']);
         $coMorbidities = $section(['Co-Morbidities']);
         // Extract entire signature table - no end markers (it's the last section)
@@ -907,6 +908,21 @@ class Ipd_discharge extends BaseController
         }
 
         return $html;
+    }
+
+    private function trimDietaryAdviceTail(string $html): string
+    {
+        $out = trim($html);
+        if ($out === '') {
+            return '';
+        }
+
+        // In many legacy cached discharge contents, "Review after ..." and
+        // a trailing signature box appear immediately after dietary advice
+        // without a dedicated section marker. Trim that tail from this token.
+        $out = (string) preg_replace('/Review\s+after[\s\S]*$/iu', '', $out);
+
+        return trim($out);
     }
 
     private function normalizeLegacyDischargeTemplate(string $html): string
