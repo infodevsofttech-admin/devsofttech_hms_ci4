@@ -925,6 +925,8 @@ $historyFields = [
 
                                 <input type="hidden" name="lab_investigation_list" id="lab_investigation_list" value="<?= esc($labInvestigationList) ?>">
                                 <input type="hidden" name="non_path_investigation_list" id="non_path_investigation_list" value="<?= esc($nonPathInvestigationList) ?>">
+                                <input type="hidden" name="clinical_lab_selection_mode" value="checkbox">
+                                <input type="hidden" name="clinical_nonpath_selection_mode" value="checkbox">
 
                                 <div class="mt-3 d-flex justify-content-end">
                                     <button type="submit" class="btn btn-outline-success btn-sm" name="action" value="save_main" data-reload-section="section-investigation">Save Clinical Investigation</button>

@@ -2509,7 +2509,29 @@ class Ipd_discharge extends BaseController
             }
         }
 
-        if (! empty($pathologyMatrix['rows']) || ! empty($selectedLabRows) || ! empty($selectedNonPathRows) || trim((string) ($otherExamParsed['text'] ?? '')) !== '') {
+        $manualInvestRows = $this->getMappedColRows('ipd_discharge_investigation_during_admit', 'ipd_discharge_1_d', $ipdId, 'Manual Exam', 1);
+        $selectedManualInvestRows = [];
+        foreach ($manualInvestRows as $row) {
+            $label = trim((string) ($row['label'] ?? ''));
+            $value = trim((string) ($row['value'] ?? ''));
+            if ($label === '' || $value === '') {
+                continue;
+            }
+            $selectedManualInvestRows[] = ['label' => $label, 'value' => $value];
+        }
+
+        $specialInvestRows = $this->getMappedColRows('ipd_discharge_special_investigation', 'ipd_discharge_1_e', $ipdId, 'Special Exam', 1);
+        $selectedSpecialInvestRows = [];
+        foreach ($specialInvestRows as $row) {
+            $label = trim((string) ($row['label'] ?? ''));
+            $value = trim((string) ($row['value'] ?? ''));
+            if ($label === '' || $value === '') {
+                continue;
+            }
+            $selectedSpecialInvestRows[] = ['label' => $label, 'value' => $value];
+        }
+
+        if (! empty($pathologyMatrix['rows']) || ! empty($selectedLabRows) || ! empty($selectedNonPathRows) || ! empty($selectedManualInvestRows) || ! empty($selectedSpecialInvestRows) || trim((string) ($otherExamParsed['text'] ?? '')) !== '') {
             $html = '<h4 class="discharge-section-heading">Clinical Investigation Reports</h4>';
 
             if (! empty($pathologyMatrix['rows'])) {
@@ -2560,6 +2582,22 @@ class Ipd_discharge extends BaseController
                     }
 
                     $html .= '</li>';
+                }
+                $html .= '</ul>';
+            }
+
+            if (! empty($selectedManualInvestRows)) {
+                $html .= '<div><b>Manual Clinical Investigations:</b></div><ul class="discharge-sublist">';
+                foreach ($selectedManualInvestRows as $row) {
+                    $html .= '<li><b>' . esc((string) ($row['label'] ?? '')) . ':</b> ' . esc((string) ($row['value'] ?? '')) . '</li>';
+                }
+                $html .= '</ul>';
+            }
+
+            if (! empty($selectedSpecialInvestRows)) {
+                $html .= '<div><b>Special Investigations:</b></div><ul class="discharge-sublist">';
+                foreach ($selectedSpecialInvestRows as $row) {
+                    $html .= '<li><b>' . esc((string) ($row['label'] ?? '')) . ':</b> ' . esc((string) ($row['value'] ?? '')) . '</li>';
                 }
                 $html .= '</ul>';
             }
@@ -6593,9 +6631,20 @@ class Ipd_discharge extends BaseController
                 $otherExamText = trim((string) ($this->request->getPost('other_exam_text') ?? ''));
                 $postedClinicalDates = $this->request->getPost('lab_investigation_dates');
                 $postedNonPathIds = $this->request->getPost('non_path_investigation_ids');
+                $clinicalLabSelectionMode = trim((string) ($this->request->getPost('clinical_lab_selection_mode') ?? ''));
+                $clinicalNonPathSelectionMode = trim((string) ($this->request->getPost('clinical_nonpath_selection_mode') ?? ''));
                 $normalizedClinicalDates = [];
                 $normalizedNonPathIds = [];
-                if (is_array($postedClinicalDates)) {
+                if ($clinicalLabSelectionMode === 'checkbox') {
+                    if (is_array($postedClinicalDates)) {
+                        foreach ($postedClinicalDates as $dt) {
+                            $parsed = $this->normalizeDateValue((string) $dt);
+                            if ($parsed !== null) {
+                                $normalizedClinicalDates[$parsed] = $parsed;
+                            }
+                        }
+                    }
+                } elseif (is_array($postedClinicalDates)) {
                     foreach ($postedClinicalDates as $dt) {
                         $parsed = $this->normalizeDateValue((string) $dt);
                         if ($parsed !== null) {
@@ -6609,7 +6658,16 @@ class Ipd_discharge extends BaseController
                     }
                 }
 
-                if (is_array($postedNonPathIds)) {
+                if ($clinicalNonPathSelectionMode === 'checkbox') {
+                    if (is_array($postedNonPathIds)) {
+                        foreach ($postedNonPathIds as $id) {
+                            $id = (int) $id;
+                            if ($id > 0) {
+                                $normalizedNonPathIds[$id] = $id;
+                            }
+                        }
+                    }
+                } elseif (is_array($postedNonPathIds)) {
                     foreach ($postedNonPathIds as $id) {
                         $id = (int) $id;
                         if ($id > 0) {
