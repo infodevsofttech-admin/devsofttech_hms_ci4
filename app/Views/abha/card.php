@@ -34,129 +34,39 @@
     margin-bottom: 12px;
     gap: 10px;
   }
-  .header-left {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 0;
-    flex: 1 1 50%;
-  }
+  .header-left,
   .header-right {
-    display: flex;
-    justify-content: flex-end;
     flex: 1 1 50%;
+    min-width: 0;
   }
-  .header-text {
-    font-size: 12px;
-    line-height: 1.2;
-    color: #123a73;
-    font-weight: 700;
-  }
-  .header-text span {
-    display: block;
-    font-size: 11px;
-    color: #5b6f8b;
-    font-weight: 600;
-  }
-  .logo-wrap {
-    width: 162px;
-    height: 54px;
-    border-radius: 10px;
-    border: 1px solid #d5e4f7;
-    background: #ffffff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    flex: 0 0 auto;
-  }
-  .logo-wrap img {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-  }
-  .abdm-logo {
-    object-fit: cover;
-    object-position: center;
-    transform: scale(1.16);
-  }
+  .header-right { display: flex; justify-content: flex-end; }
   .brand-wrap {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 8px;
+    gap: 10px;
+    padding: 6px 10px;
     border: 1px solid #d5e4f7;
     border-radius: 10px;
     background: #f7fbff;
-  }
-  .brand-logo {
-    width: 38px;
-    height: 38px;
-    object-fit: contain;
-    border-radius: 7px;
-    background: #fff;
-    border: 1px solid #d7e5f8;
-  }
-  .brand-text {
-    line-height: 1.1;
-    gap: 10px;
-    padding: 5px 10px;
-    background: #ffffff;
-    font-weight: 800;
-  .hospital-brand-wrap {
     min-width: 0;
-    flex-wrap: nowrap;
   }
-  .hospital-brand-logo {
+  .brand-wrap.right { background: #ffffff; }
+  .brand-wrap.left { justify-content: flex-start; }
+  .brand-logo {
     width: 48px;
     height: 48px;
+    object-fit: contain;
     border-radius: 8px;
     background: #fff;
     border: 1px solid #d7e5f8;
-    object-fit: contain;
+    flex: 0 0 auto;
   }
-  .hospital-brand-name {
+  .brand-text { min-width: 0; line-height: 1.05; }
+  .brand-name {
     font-size: 16px;
     font-weight: 800;
     color: #123f7d;
     line-height: 1.1;
-  }
-  .hospital-brand-sub {
-    font-size: 10px;
-    color: #6a7d97;
-    font-weight: 600;
-    margin-top: 1px;
-  }
-    color: #0f3f7f;
-  }
-  .brand-sub {
-    font-size: 10px;
-    color: #4c6485;
-    font-weight: 600;
-  }
-  .app-brand-wrap {
-    gap: 10px;
-    padding: 5px 10px;
-    background: #ffffff;
-  }
-  .app-brand-logo {
-    width: 48px;
-    height: 48px;
-    border-radius: 8px;
-    background: #ffffff;
-    border: none;
-  }
-  .app-brand-name {
-    font-size: 18px;
-    font-weight: 800;
-    color: #123f7d;
-    letter-spacing: 0.2px;
-  }
-  .app-brand-sub {
-    font-size: 10px;
-    color: #6a7d97;
-    font-weight: 600;
-    margin-top: 1px;
   }
   .hospital-strip {
     border: 1px solid #d5e4f8;
@@ -189,7 +99,7 @@
     color: #1e4a82;
     min-width: 0;
   }
-  .hospital-name strong { color: #0f3f7f; }
+  .hospital-name strong { color: #0f3f7d; }
   .patient-id-strip {
     width: 180px;
     background: #fff;
@@ -199,10 +109,7 @@
     text-align: center;
     flex: 0 0 auto;
   }
-  .patient-id-strip svg {
-    width: 100%;
-    height: 28px;
-  }
+  .patient-id-strip svg { width: 100%; height: 28px; }
   .patient-id-label {
     font-size: 9px;
     color: #5f7291;
@@ -221,10 +128,7 @@
     gap: 12px;
     align-items: start;
   }
-  .patient-main {
-    display: flex;
-    gap: 10px;
-  }
+  .patient-main { display: flex; gap: 10px; }
   .photo {
     width: 82px;
     height: 82px;
@@ -247,11 +151,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .meta {
-    font-size: 13px;
-    color: #3d5778;
-    margin-bottom: 2px;
-  }
+  .meta { font-size: 13px; color: #3d5778; margin-bottom: 2px; }
   .badge-phone {
     margin-top: 5px;
     display: inline-block;
@@ -260,16 +160,8 @@
     font-weight: 700;
     padding: 4px 8px;
   }
-  .verified {
-    background: #ddfce8;
-    color: #145c2f;
-    border: 1px solid #a9efc4;
-  }
-  .registered {
-    background: #eef4ff;
-    color: #1f4e95;
-    border: 1px solid #c6daf8;
-  }
+  .verified { background: #ddfce8; color: #145c2f; border: 1px solid #a9efc4; }
+  .registered { background: #eef4ff; color: #1f4e95; border: 1px solid #c6daf8; }
   .qr-card {
     border: 1px solid #d8e6fb;
     background: #fbfdff;
@@ -291,12 +183,7 @@
     border: 1px solid #e0e8f5;
     background: #fff;
   }
-  .qr-value {
-    margin-top: 5px;
-    font-size: 10px;
-    color: #3b5474;
-    word-break: break-word;
-  }
+  .qr-value { margin-top: 5px; font-size: 10px; color: #3b5474; word-break: break-word; }
   .abha-number-wrap {
     margin-top: 12px;
     border: 1px solid #d3e3f9;
@@ -321,17 +208,8 @@
     overflow: hidden;
     text-overflow: clip;
   }
-  .footer {
-    margin-top: 10px;
-    text-align: right;
-    font-size: 10px;
-    color: #5f7291;
-  }
-  .actions {
-    margin-top: 18px;
-    display: flex;
-    justify-content: center;
-  }
+  .footer { margin-top: 10px; text-align: right; font-size: 10px; color: #5f7291; }
+  .actions { margin-top: 18px; display: flex; justify-content: center; }
   .btn-print {
     background: #104998;
     color: #fff;
@@ -345,57 +223,19 @@
   .btn-print:hover { background: #0b3f82; }
 
   @media (max-width: 520px) {
-    .logo-wrap {
-      width: 132px;
-      height: 46px;
-    }
-    .brand-name {
-      font-size: 14px;
-    }
-    .brand-sub {
-      font-size: 9px;
-    }
-    .header-text {
-      font-size: 11px;
-    }
-    .header-text span {
-      font-size: 10px;
-    }
-    .hospital-strip {
-      flex-direction: column;
-      align-items: stretch;
-    }
-    .patient-id-strip {
-      width: 100%;
-    }
-    .patient-area {
-      grid-template-columns: 1fr;
-    }
-    .qr-card {
-      display: inline-block;
-      width: 100%;
-    }
-    .patient-name {
-      font-size: 20px;
-    }
-    .abha-number {
-      font-size: 20px;
-      letter-spacing: 1px;
-    }
+    .header { flex-direction: column; align-items: stretch; }
+    .header-right { justify-content: flex-start; }
+    .patient-area { grid-template-columns: 1fr; }
+    .patient-id-strip { width: 100%; }
+    .qr-card { display: inline-block; width: 100%; }
+    .patient-name { font-size: 20px; }
+    .abha-number { font-size: 20px; letter-spacing: 1px; }
   }
 
   @media print {
-    @page {
-      size: A5 portrait;
-      margin: 8mm;
-    }
+    @page { size: A5 portrait; margin: 8mm; }
     body { background: #fff; padding: 0; }
-    .abha-shell {
-      width: 100%;
-      max-width: 148mm;
-      box-shadow: none;
-      border-color: #d7e5f8;
-    }
+    .abha-shell { width: 100%; max-width: 148mm; box-shadow: none; border-color: #d7e5f8; }
     .actions { display: none; }
   }
 </style>
@@ -409,9 +249,7 @@ $genderDisp = esc($gender ?? '');
 $dobDisp = esc($dob ?? '');
 $hospitalName = esc($hospital_name ?? 'Hospital');
 $hospitalLogo = esc($hospital_logo_url ?? base_url('assets/img/logo.png'));
-$brandName = esc($brand_name ?? 'E-Atria');
 $appLogo = esc(base_url('assets/img/logo.png'));
-$nhaOfficialLogo = esc(base_url('assets/img/abdm_official_logo.svg'));
 $profilePhotoUrl = (string) ($profile_photo_url ?? '/assets/images/no_image.svg');
 $profilePhotoUrlEsc = esc($profilePhotoUrl);
 $hmsId = esc($hms_id ?? '');
@@ -424,18 +262,18 @@ $mobileVerified = (bool) ($mobile_verified ?? false);
 <div class="abha-shell">
   <div class="header">
     <div class="header-left">
-      <div class="logo-wrap">
-        <img class="abdm-logo" src="<?= $nhaOfficialLogo ?>" alt="ABDM NHA Official Logo">
-      </div>
-      <div class="header-text">
-        <div class="brand-wrap app-brand-wrap">
-          <img class="brand-logo app-brand-logo" src="<?= $appLogo ?>" alt="E-Atria Logo">
-      </div>
-            <div class="brand-name app-brand-name">E-Atria HMS</div>
-            <div class="brand-sub app-brand-sub">Manage with Ease, Care with Love</div>
+      <div class="brand-wrap left">
+        <img class="brand-logo" src="<?= $hospitalLogo ?>" alt="Hospital Logo">
         <div class="brand-text">
-          <div class="brand-name"><?= $brandName !== '' ? $brandName : 'E-Atria' ?></div>
-          <div class="brand-sub">Digital Health Platform</div>
+          <div class="brand-name"><?= $hospitalName !== '' ? $hospitalName : 'Hospital' ?></div>
+        </div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="brand-wrap right">
+        <img class="brand-logo" src="<?= $appLogo ?>" alt="E-Atria Logo">
+        <div class="brand-text">
+          <div class="brand-name">E-Atria HMS</div>
         </div>
       </div>
     </div>
@@ -461,15 +299,9 @@ $mobileVerified = (bool) ($mobile_verified ?? false);
         <img class="photo" src="<?= $profilePhotoUrlEsc ?>" alt="Patient Photo">
         <div class="patient-details">
           <div class="patient-name"><?= $name !== '' ? $name : 'PATIENT' ?></div>
-          <?php if ($genderDisp !== ''): ?>
-            <div class="meta">Gender: <?= $genderDisp ?></div>
-          <?php endif; ?>
-          <?php if ($dobDisp !== ''): ?>
-            <div class="meta">DOB: <?= $dobDisp ?></div>
-          <?php endif; ?>
-          <?php if ($hmsId !== ''): ?>
-            <div class="meta">HMS ID: <?= $hmsId ?></div>
-          <?php endif; ?>
+          <?php if ($genderDisp !== ''): ?><div class="meta">Gender: <?= $genderDisp ?></div><?php endif; ?>
+          <?php if ($dobDisp !== ''): ?><div class="meta">DOB: <?= $dobDisp ?></div><?php endif; ?>
+          <?php if ($hmsId !== ''): ?><div class="meta">HMS ID: <?= $hmsId ?></div><?php endif; ?>
           <?php if ($patientMobile !== ''): ?>
             <div class="badge-phone <?= $mobileVerified ? 'verified' : 'registered' ?>">
               <?= $mobileVerified ? 'ABHA Verified Mobile' : 'ABHA Registered Mobile' ?>: <?= $patientMobile ?>
@@ -486,12 +318,12 @@ $mobileVerified = (bool) ($mobile_verified ?? false);
 
     <div class="qr-card">
       <div class="qr-title">ABHA ID QR</div>
-        <div class="brand-wrap hospital-brand-wrap">
-          <img class="brand-logo hospital-brand-logo" src="<?= $hospitalLogo ?>" alt="Hospital Logo">
-          <div class="brand-text">
-            <div class="hospital-brand-name"><?= $hospitalName !== '' ? $hospitalName : 'Hospital' ?></div>
-            <div class="hospital-brand-sub">Digital Health Platform</div>
-          </div>
+      <?php if ($abhaQrUrl !== ''): ?>
+        <img class="qr-image" src="<?= $abhaQrUrl ?>" alt="ABHA QR Code">
+      <?php else: ?>
+        <div class="meta">QR unavailable</div>
+      <?php endif; ?>
+      <div class="qr-value"><?= $abhaNumDisp ?></div>
     </div>
   </div>
 
