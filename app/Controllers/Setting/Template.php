@@ -2836,6 +2836,24 @@ HTML;
             $isDefault = (int) ($this->request->getPost('is_default') ?? 0) === 1 ? 1 : 0;
             $status = (int) ($this->request->getPost('status') ?? 1) === 1 ? 1 : 0;
 
+            // In SPA/AJAX reload scenarios, CKEditor can occasionally post an empty
+            // template field even when editing an existing row. Preserve existing
+            // values for update requests instead of hard-failing.
+            if ($id > 0 && ($templateName === '' || trim($templateHtml) === '')) {
+                $existing = $this->db->table('ipd_discharge_templates')
+                    ->select('template_name, template_html')
+                    ->where('id', $id)
+                    ->get(1)
+                    ->getRowArray() ?? [];
+
+                if ($templateName === '') {
+                    $templateName = trim((string) ($existing['template_name'] ?? ''));
+                }
+                if (trim($templateHtml) === '') {
+                    $templateHtml = (string) ($existing['template_html'] ?? '');
+                }
+            }
+
             if ($templateName === '' || trim($templateHtml) === '') {
                 $notice = 'Template name and template HTML are required.';
                 $noticeType = 'danger';

@@ -519,11 +519,38 @@ $status = (int) ($edit['status'] ?? 1);
 
         if (CKEDITOR.instances && CKEDITOR.instances[editorFieldId]) {
             try {
-                CKEDITOR.instances[editorFieldId].updateElement();
+                var instance = CKEDITOR.instances[editorFieldId];
+                var htmlFromEditor = String(instance.getData ? instance.getData() : '');
+                var templateHtmlEl = document.getElementById(editorFieldId);
+                if (templateHtmlEl && htmlFromEditor !== '') {
+                    templateHtmlEl.value = htmlFromEditor;
+                }
+                instance.updateElement();
             } catch (e) {
                 console.warn('CKEditor updateElement failed:', e);
             }
         }
+    }
+
+    function getTemplateHtmlValue() {
+        var html = '';
+
+        if (typeof CKEDITOR !== 'undefined' && CKEDITOR.instances && CKEDITOR.instances[editorFieldId]) {
+            try {
+                html = String(CKEDITOR.instances[editorFieldId].getData() || '');
+            } catch (e) {
+                console.warn('CKEditor getData failed:', e);
+            }
+        }
+
+        if (html === '') {
+            var templateHtmlEl = document.getElementById(editorFieldId);
+            if (templateHtmlEl) {
+                html = String(templateHtmlEl.value || '');
+            }
+        }
+
+        return html;
     }
 
     // Initialize editor after a short delay to ensure DOM is ready
@@ -547,7 +574,21 @@ $status = (int) ($edit['status'] ?? 1);
             e.preventDefault();
             syncTemplateEditor();
 
+            var htmlValue = getTemplateHtmlValue();
+            var nameValue = fieldTemplateName ? String(fieldTemplateName.value || '').trim() : '';
+            if (nameValue === '' || htmlValue.trim() === '') {
+                setNotice('danger', 'Template name and template HTML are required.');
+                return;
+            }
+
+            var templateHtmlEl = document.getElementById(editorFieldId);
+            if (templateHtmlEl) {
+                templateHtmlEl.value = htmlValue;
+            }
+
             var formData = new FormData(form);
+            formData.set('template_name', nameValue);
+            formData.set('template_html', htmlValue);
             fetch(form.getAttribute('action'), {
                 method: 'POST',
                 body: formData,
