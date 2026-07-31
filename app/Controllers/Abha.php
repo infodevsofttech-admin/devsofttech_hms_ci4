@@ -454,6 +454,7 @@ class Abha extends BaseController
         $mobileVerified = (int) ($patient['abha_mobile_verified'] ?? 0) === 1;
         $abhaQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' . urlencode($abhaNumClean);
         $barcodeSvg = $this->buildCode39Svg($hmsId);
+        $barcodeImage = $this->buildCode39ImageDataUri($hmsId, $barcodeSvg);
 
         return view('abha/card', [
             'patient'    => $patient,
@@ -468,6 +469,7 @@ class Abha extends BaseController
             'brand_name' => (string) ($hospitalBrand['brand_name'] ?? 'HMS'),
             'hms_id' => $hmsId,
             'hms_barcode_svg' => $barcodeSvg,
+            'hms_barcode_image' => $barcodeImage,
             'profile_photo_url' => $profilePhotoUrl,
             'abha_qr_url' => $abhaQrUrl,
             'patient_mobile' => $mobileNo,
@@ -592,9 +594,75 @@ class Abha extends BaseController
 
     private function buildCode39Svg(string $value): string
     {
+        $layout = $this->buildCode39Layout($value);
+        if ($layout === null) {
+            return '';
+        }
+
+        $rects = [];
+        foreach ($layout['bars'] as $bar) {
+            $rects[] = '<rect x="' . $bar['x'] . '" y="0" width="' . $bar['w'] . '" height="' . $layout['height'] . '" fill="#111" />';
+        }
+
+        return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' . $layout['width'] . ' ' . $layout['height'] . '" role="img" aria-label="HMS Barcode">'
+            . implode('', $rects)
+            . '</svg>';
+    }
+
+    private function buildCode39ImageDataUri(string $value, string $svgFallback = ''): string
+    {
+        $layout = $this->buildCode39Layout($value);
+        if ($layout === null) {
+            return '';
+        }
+
+        if (! function_exists('imagecreatetruecolor') || ! function_exists('imagepng')) {
+            $svg = $svgFallback !== '' ? $svgFallback : $this->buildCode39Svg($value);
+            return $svg !== '' ? 'data:image/svg+xml;base64,' . base64_encode($svg) : '';
+        }
+
+        $img = imagecreatetruecolor($layout['width'], $layout['height']);
+        if ($img === false) {
+            $svg = $svgFallback !== '' ? $svgFallback : $this->buildCode39Svg($value);
+            return $svg !== '' ? 'data:image/svg+xml;base64,' . base64_encode($svg) : '';
+        }
+
+        $white = imagecolorallocate($img, 255, 255, 255);
+        $black = imagecolorallocate($img, 17, 17, 17);
+        imagefilledrectangle($img, 0, 0, $layout['width'], $layout['height'], $white);
+
+        foreach ($layout['bars'] as $bar) {
+            imagefilledrectangle(
+                $img,
+                $bar['x'],
+                0,
+                $bar['x'] + $bar['w'] - 1,
+                $layout['height'],
+                $black
+            );
+        }
+
+        ob_start();
+        imagepng($img);
+        $pngBinary = ob_get_clean();
+        imagedestroy($img);
+
+        if (! is_string($pngBinary) || $pngBinary === '') {
+            $svg = $svgFallback !== '' ? $svgFallback : $this->buildCode39Svg($value);
+            return $svg !== '' ? 'data:image/svg+xml;base64,' . base64_encode($svg) : '';
+        }
+
+        return 'data:image/png;base64,' . base64_encode($pngBinary);
+    }
+
+    /**
+     * @return array{bars: list<array{x:int,w:int}>, width:int, height:int}|null
+     */
+    private function buildCode39Layout(string $value): ?array
+    {
         $normalized = strtoupper(trim($value));
         if ($normalized === '') {
-            return '';
+            return null;
         }
 
         $supported = [
@@ -623,7 +691,7 @@ class Abha extends BaseController
         }
 
         if ($clean === '') {
-            return '';
+            return null;
         }
 
         $narrow = 2;
@@ -633,14 +701,14 @@ class Abha extends BaseController
         $gap = 2;
 
         $x = $quiet;
-        $rects = [];
+        $bars = [];
         $cleanLen = strlen($clean);
         for ($i = 0; $i < $cleanLen; $i++) {
             $pattern = $supported[$clean[$i]];
             for ($j = 0; $j < 9; $j++) {
                 $w = ($pattern[$j] === 'w') ? $wide : $narrow;
                 if ($j % 2 === 0) {
-                    $rects[] = '<rect x="' . $x . '" y="0" width="' . $w . '" height="' . $height . '" fill="#111" />';
+                    $bars[] = ['x' => $x, 'w' => $w];
                 }
                 $x += $w;
             }
@@ -649,10 +717,11 @@ class Abha extends BaseController
             }
         }
 
-        $width = $x + $quiet;
-        return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' . $width . ' ' . $height . '" role="img" aria-label="HMS Barcode">'
-            . implode('', $rects)
-            . '</svg>';
+        return [
+            'bars' => $bars,
+            'width' => $x + $quiet,
+            'height' => $height,
+        ];
     }
 
     /**

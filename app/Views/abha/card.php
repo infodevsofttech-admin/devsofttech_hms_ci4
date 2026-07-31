@@ -44,21 +44,20 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 6px 10px;
-    border: 1px solid #d5e4f7;
-    border-radius: 10px;
-    background: #f7fbff;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
     min-width: 0;
   }
-  .brand-wrap.right { background: #ffffff; }
   .brand-wrap.left { justify-content: flex-start; }
   .brand-logo {
     width: 48px;
     height: 48px;
     object-fit: contain;
     border-radius: 8px;
-    background: #fff;
-    border: 1px solid #d7e5f8;
+    background: transparent;
+    border: none;
     flex: 0 0 auto;
   }
   .brand-text { min-width: 0; line-height: 1.05; }
@@ -76,40 +75,25 @@
     margin-bottom: 12px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
     gap: 8px;
   }
-  .hospital-info {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-  }
-  .hospital-mini-logo {
-    width: 32px;
-    height: 32px;
-    object-fit: contain;
-    border-radius: 6px;
-    border: 1px solid #cfe0f8;
-    background: #fff;
-    flex: 0 0 auto;
-  }
-  .hospital-name {
-    font-size: 13px;
-    color: #1e4a82;
-    min-width: 0;
-  }
-  .hospital-name strong { color: #0f3f7d; }
   .patient-id-strip {
-    width: 180px;
+    width: 100%;
     background: #fff;
     border: 1px solid #d4e3f8;
     border-radius: 8px;
-    padding: 4px 6px;
+    padding: 6px 8px;
     text-align: center;
-    flex: 0 0 auto;
+    flex: 1 1 auto;
+    min-width: 0;
   }
-  .patient-id-strip svg { width: 100%; height: 28px; }
+  .patient-id-barcode {
+    display: block;
+    width: 100%;
+    height: 28px;
+    object-fit: contain;
+  }
   .patient-id-label {
     font-size: 9px;
     color: #5f7291;
@@ -254,7 +238,7 @@ $profilePhotoUrl = (string) ($profile_photo_url ?? '/assets/images/no_image.svg'
 $profilePhotoUrlEsc = esc($profilePhotoUrl);
 $hmsId = esc($hms_id ?? '');
 $abhaQrUrl = esc($abha_qr_url ?? '');
-$barcodeSvg = (string) ($hms_barcode_svg ?? '');
+$barcodeImage = esc($hms_barcode_image ?? '');
 $patientMobile = esc($patient_mobile ?? '');
 $mobileVerified = (bool) ($mobile_verified ?? false);
 ?>
@@ -279,19 +263,17 @@ $mobileVerified = (bool) ($mobile_verified ?? false);
     </div>
   </div>
 
-  <div class="hospital-strip">
-    <div class="hospital-info">
-      <img class="hospital-mini-logo" src="<?= $hospitalLogo ?>" alt="Hospital Logo">
-      <div class="hospital-name">Hospital: <strong><?= $hospitalName ?></strong></div>
-    </div>
-    <?php if ($barcodeSvg !== '' && $hmsId !== ''): ?>
+  <?php if ($barcodeImage !== '' && $hmsId !== ''): ?>
+    <div class="hospital-strip">
       <div class="patient-id-strip">
         <div class="patient-id-label">Patient ID Barcode</div>
-        <div><?= $barcodeSvg ?></div>
+        <?php if ($barcodeImage !== ''): ?>
+          <img class="patient-id-barcode" src="<?= $barcodeImage ?>" alt="Patient ID Barcode">
+        <?php endif; ?>
         <div class="patient-id-value"><?= $hmsId ?></div>
       </div>
-    <?php endif; ?>
-  </div>
+    </div>
+  <?php endif; ?>
 
   <div class="patient-area">
     <div>
