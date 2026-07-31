@@ -2466,30 +2466,17 @@ class Ipd_discharge extends BaseController
         $savedClinicalDates = $this->getSavedClinicalLabDates($ipdId);
         $clinicalLabRows = $this->getClinicalInvestigationLabRows($patientId, $admitDate, $dischargeDate, $savedClinicalDates);
 
+        // Strict selection mode: in-hospital lab should print only when user
+        // explicitly selected one or more investigation dates.
         $effectiveClinicalDates = $savedClinicalDates;
-        if (empty($effectiveClinicalDates)) {
-            foreach ($clinicalLabRows as $row) {
-                $dt = $this->normalizeDateValue((string) ($row['inv_date'] ?? ''));
-                if ($dt !== null) {
-                    $effectiveClinicalDates[$dt] = $dt;
-                }
-            }
-            $effectiveClinicalDates = array_values($effectiveClinicalDates);
-        }
 
         $pathologyMatrix = $this->getClinicalPathologyMatrixRows($patientId, $effectiveClinicalDates);
 
         $selectedLabRows = [];
         foreach ($clinicalLabRows as $row) {
-            if (! empty($savedClinicalDates)) {
-                if (! empty($row['checked'])) {
-                    $selectedLabRows[] = $row;
-                }
-                continue;
+            if (! empty($row['checked'])) {
+                $selectedLabRows[] = $row;
             }
-
-            // No saved selection yet: include all available pathology dates as fallback.
-            $selectedLabRows[] = $row;
         }
 
         $otherExamRow = [];
