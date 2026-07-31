@@ -39,9 +39,12 @@
     align-items: center;
     gap: 10px;
     min-width: 0;
+    flex: 1 1 50%;
   }
   .header-right {
-    flex: 0 0 auto;
+    display: flex;
+    justify-content: flex-end;
+    flex: 1 1 50%;
   }
   .header-text {
     font-size: 12px;
@@ -96,10 +99,34 @@
   }
   .brand-text {
     line-height: 1.1;
+    gap: 10px;
+    padding: 5px 10px;
+    background: #ffffff;
+    font-weight: 800;
+  .hospital-brand-wrap {
+    min-width: 0;
+    flex-wrap: nowrap;
   }
-  .brand-name {
+  .hospital-brand-logo {
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    background: #fff;
+    border: 1px solid #d7e5f8;
+    object-fit: contain;
+  }
+  .hospital-brand-name {
     font-size: 16px;
     font-weight: 800;
+    color: #123f7d;
+    line-height: 1.1;
+  }
+  .hospital-brand-sub {
+    font-size: 10px;
+    color: #6a7d97;
+    font-weight: 600;
+    margin-top: 1px;
+  }
     color: #0f3f7f;
   }
   .brand-sub {
@@ -459,12 +486,12 @@ $mobileVerified = (bool) ($mobile_verified ?? false);
 
     <div class="qr-card">
       <div class="qr-title">ABHA ID QR</div>
-      <?php if ($abhaQrUrl !== ''): ?>
-        <img class="qr-image" src="<?= $abhaQrUrl ?>" alt="ABHA QR Code">
-      <?php else: ?>
-        <div class="meta">QR unavailable</div>
-      <?php endif; ?>
-      <div class="qr-value"><?= $abhaNumDisp ?></div>
+        <div class="brand-wrap hospital-brand-wrap">
+          <img class="brand-logo hospital-brand-logo" src="<?= $hospitalLogo ?>" alt="Hospital Logo">
+          <div class="brand-text">
+            <div class="hospital-brand-name"><?= $hospitalName !== '' ? $hospitalName : 'Hospital' ?></div>
+            <div class="hospital-brand-sub">Digital Health Platform</div>
+          </div>
     </div>
   </div>
 
