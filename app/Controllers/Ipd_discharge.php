@@ -1167,6 +1167,16 @@ class Ipd_discharge extends BaseController
             return false;
         }
 
+        // Respect configured DB templates. Only fall back to content-only mode
+        // when the template is effectively a plain CONTENT wrapper.
+        $normalizedTemplate = $this->normalizeLegacyDischargeTemplate($templateHtml);
+        $normalizedTemplate = $this->normalizeDischargeTemplatePlaceholders($normalizedTemplate);
+        $templateWithoutContent = (string) preg_replace('/\{\{\s*CONTENT\s*\}\}|\{\s*CONTENT\s*\}/i', '', $normalizedTemplate);
+        $templateWithoutContent = trim(strip_tags($templateWithoutContent));
+        if ($templateWithoutContent !== '') {
+            return false;
+        }
+
         // If the template explicitly places section placeholders, preserve that order.
         if ($this->templateHasDischargeSectionPlaceholders($templateHtml)) {
             return false;
