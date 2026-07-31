@@ -107,6 +107,30 @@
     color: #4c6485;
     font-weight: 600;
   }
+  .app-brand-wrap {
+    gap: 10px;
+    padding: 5px 10px;
+    background: #ffffff;
+  }
+  .app-brand-logo {
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    background: #ffffff;
+    border: none;
+  }
+  .app-brand-name {
+    font-size: 18px;
+    font-weight: 800;
+    color: #123f7d;
+    letter-spacing: 0.2px;
+  }
+  .app-brand-sub {
+    font-size: 10px;
+    color: #6a7d97;
+    font-weight: 600;
+    margin-top: 1px;
+  }
   .hospital-strip {
     border: 1px solid #d5e4f8;
     background: #f4f9ff;
@@ -359,6 +383,7 @@ $dobDisp = esc($dob ?? '');
 $hospitalName = esc($hospital_name ?? 'Hospital');
 $hospitalLogo = esc($hospital_logo_url ?? base_url('assets/img/logo.png'));
 $brandName = esc($brand_name ?? 'E-Atria');
+$appLogo = esc(base_url('assets/img/logo.png'));
 $nhaOfficialLogo = esc(base_url('assets/img/abdm_official_logo.svg'));
 $profilePhotoUrl = (string) ($profile_photo_url ?? '/assets/images/no_image.svg');
 $profilePhotoUrlEsc = esc($profilePhotoUrl);
@@ -376,13 +401,11 @@ $mobileVerified = (bool) ($mobile_verified ?? false);
         <img class="abdm-logo" src="<?= $nhaOfficialLogo ?>" alt="ABDM NHA Official Logo">
       </div>
       <div class="header-text">
-        Ayushman Bharat Digital Mission
-        <span>NHA | ABHA Health Account Card</span>
+        <div class="brand-wrap app-brand-wrap">
+          <img class="brand-logo app-brand-logo" src="<?= $appLogo ?>" alt="E-Atria Logo">
       </div>
-    </div>
-    <div class="header-right">
-      <div class="brand-wrap">
-        <img class="brand-logo" src="<?= $hospitalLogo ?>" alt="Brand Logo">
+            <div class="brand-name app-brand-name">E-Atria HMS</div>
+            <div class="brand-sub app-brand-sub">Manage with Ease, Care with Love</div>
         <div class="brand-text">
           <div class="brand-name"><?= $brandName !== '' ? $brandName : 'E-Atria' ?></div>
           <div class="brand-sub">Digital Health Platform</div>
