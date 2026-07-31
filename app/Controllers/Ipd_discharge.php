@@ -942,13 +942,34 @@ class Ipd_discharge extends BaseController
         $templateHtml = $this->normalizeLegacyDischargeTemplate($templateHtml);
         $templateHtml = $this->normalizeDischargeTemplatePlaceholders($templateHtml);
 
-        $replace = [];
-        foreach ($vars as $key => $value) {
-            $replace['{{' . $key . '}}'] = (string) $value;
-            $replace['{' . $key . '}'] = (string) $value;
-        }
+        $rendered = (string) preg_replace_callback(
+            '/\{\{\s*([A-Za-z0-9_]+)\s*\}\}|\{\s*([A-Za-z0-9_]+)\s*\}/',
+            static function (array $m) use ($vars): string {
+                $token = (string) (($m[1] ?? '') !== '' ? $m[1] : ($m[2] ?? ''));
+                if ($token === '') {
+                    return (string) ($m[0] ?? '');
+                }
 
-        return strtr($templateHtml, $replace);
+                $lower = strtolower($token);
+                $candidates = [
+                    $token,
+                    strtoupper($token),
+                    $lower,
+                    ucfirst($lower),
+                ];
+
+                foreach ($candidates as $candidate) {
+                    if (array_key_exists($candidate, $vars)) {
+                        return (string) ($vars[$candidate] ?? '');
+                    }
+                }
+
+                return (string) ($m[0] ?? '');
+            },
+            $templateHtml
+        );
+
+        return $rendered;
     }
 
     private function normalizeDischargeTemplatePlaceholders(string $templateHtml): string
@@ -1146,14 +1167,30 @@ class Ipd_discharge extends BaseController
             return false;
         }
 
-        foreach (array_keys($tokenVars) as $tokenName) {
-            $tokenName = (string) $tokenName;
+        $matches = [];
+        $matchCount = preg_match_all('/\{\{\s*([A-Za-z0-9_]+)\s*\}\}|\{\s*([A-Za-z0-9_]+)\s*\}/', $templateHtml, $matches, PREG_SET_ORDER);
+        if ($matchCount === false || $matchCount === 0) {
+            return false;
+        }
+
+        foreach ($matches as $match) {
+            $tokenName = (string) (($match[1] ?? '') !== '' ? $match[1] : ($match[2] ?? ''));
             if ($tokenName === '') {
                 continue;
             }
 
-            if (strpos($templateHtml, '{{' . $tokenName . '}}') !== false || strpos($templateHtml, '{' . $tokenName . '}') !== false) {
-                return true;
+            $lower = strtolower($tokenName);
+            $candidates = [
+                $tokenName,
+                strtoupper($tokenName),
+                $lower,
+                ucfirst($lower),
+            ];
+
+            foreach ($candidates as $candidate) {
+                if (array_key_exists($candidate, $tokenVars)) {
+                    return true;
+                }
             }
         }
 
@@ -1182,11 +1219,7 @@ class Ipd_discharge extends BaseController
             return false;
         }
 
-        $templateHasMeta = strpos($templateHtml, '{{PATIENT_NAME}}') !== false
-            || strpos($templateHtml, '{{UHID}}') !== false
-            || strpos($templateHtml, '{{IPD_CODE}}') !== false
-            || strpos($templateHtml, '{{ADMIT_DATE}}') !== false
-            || strpos($templateHtml, '{{DISCHARGE_DATE}}') !== false;
+        $templateHasMeta = preg_match('/\{\{\s*(PATIENT_NAME|UHID|IPD_CODE|ADMIT_DATE|DISCHARGE_DATE)\s*\}\}|\{\s*(PATIENT_NAME|UHID|IPD_CODE|ADMIT_DATE|DISCHARGE_DATE)\s*\}/i', $templateHtml) === 1;
 
         if (! $templateHasMeta) {
             return false;
