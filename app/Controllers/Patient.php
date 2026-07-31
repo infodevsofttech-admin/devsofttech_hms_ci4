@@ -1147,7 +1147,7 @@ class Patient extends BaseController
 		return view('billing/Patient_Profile_Opd_V', [
 			'patient' => $patient,
 			'profileFilePath' => $profileFilePath,
-			'allow_image_preupload_edit' => ($hospitalEnabled && $userAllowed) ? 1 : 0,
+			'allow_image_preupload_edit' => 1,
 			'opdGroups' => $opdGroups,
 			'totalOpdVisits' => $totalOpdVisits,
 			'lastVisitDate' => $lastVisitDate,
