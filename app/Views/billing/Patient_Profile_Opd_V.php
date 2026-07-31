@@ -3,6 +3,7 @@ $patient = $patient ?? (object) [];
 $opdGroups = (isset($opdGroups) && is_array($opdGroups)) ? $opdGroups : [];
 $backUrl = trim((string) ($backUrl ?? ''));
 $backTitle = trim((string) ($backTitle ?? 'Profile'));
+$allowImagePreuploadEdit = !empty($allow_image_preupload_edit);
 if ($backUrl === '') {
     $backUrl = base_url('billing/patient/person_record') . '/' . (int) ($patient->id ?? 0) . '/0';
 }
@@ -18,6 +19,7 @@ $abhaVerifiedStatus = strtoupper(trim((string) ($patient->abha_verified_status ?
 $abhaKycVerified = (int) ($patient->abha_kyc_verified ?? 0) === 1;
 $abhaMobileVerified = (int) ($patient->abha_mobile_verified ?? 0) === 1;
 $abhaIsVerified = $abhaVerifiedStatus === 'VERIFIED' || ($abhaKycVerified && $abhaMobileVerified);
+$hasAbhaIdentity = $patientAbhaAddress !== '' || $patientAbhaId !== '' || $abhaIsVerified;
 $totalOpdVisits = (int) ($totalOpdVisits ?? 0);
 $lastVisitDateRaw = trim((string) ($lastVisitDate ?? ''));
 $lastVisitDateLabel = $lastVisitDateRaw !== '' ? date('d-m-Y', strtotime($lastVisitDateRaw)) : 'Not available';
@@ -75,7 +77,7 @@ if ($patientPhotoPath === '') {
         <div class="card-body">
             <div class="opd-patient-meta-card" style="border:1px solid #dee2e6;border-radius:.5rem;padding:.75rem;margin-bottom:1rem;background:#fff;">
                 <div class="d-flex align-items-center gap-3 flex-wrap">
-                    <img src="<?= esc($patientPhotoPath) ?>" alt="Patient Photo" class="opd-patient-photo" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:1px solid #dee2e6;background:#f8f9fa;cursor:zoom-in;" data-bs-toggle="modal" data-bs-target="#patientPhotoModal">
+                    <img id="opdPatientPhoto" src="<?= esc($patientPhotoPath) ?>" alt="Patient Photo" class="opd-patient-photo" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:1px solid #dee2e6;background:#f8f9fa;cursor:zoom-in;" data-bs-toggle="modal" data-bs-target="#patientPhotoModal">
                     <div class="opd-patient-meta-row d-flex flex-wrap align-items-center gap-3">
                         <span>Patient: <strong><?= esc($patient->p_fname ?? '') ?></strong></span>
                         <span><strong>Age:</strong> <?= $patientAge !== '' ? esc($patientAge) : 'Not available' ?></span>
@@ -84,6 +86,11 @@ if ($patientPhotoPath === '') {
                         <span><strong>OPD No.:</strong> <?= $lastVisitOpdNo !== '' ? esc($lastVisitOpdNo) : 'Not available' ?></span>
                         <span><strong>No. of Visit:</strong> <?= esc((string) $totalOpdVisits) ?></span>
                     </div>
+                    <?php if ($allowImagePreuploadEdit): ?>
+                        <div class="ms-auto">
+                            <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#opdProfilePictureModal">Take Picture</button>
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
 
@@ -91,9 +98,11 @@ if ($patientPhotoPath === '') {
                 <li class="nav-item" role="presentation">
                     <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#opd-history-tab" type="button" role="tab">OPD History</button>
                 </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#opd-abdm-tab" type="button" role="tab">ABDM Fetched Data</button>
-                </li>
+                <?php if ($hasAbhaIdentity): ?>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#opd-abdm-tab" type="button" role="tab">ABDM Fetched Data</button>
+                    </li>
+                <?php endif; ?>
             </ul>
 
             <div class="tab-content pt-2">
@@ -294,83 +303,85 @@ if ($patientPhotoPath === '') {
 
                 </div>
 
-                <div class="tab-pane fade" id="opd-abdm-tab" role="tabpanel">
-                    <div class="card border mt-2 mb-3">
-                        <div class="card-body">
-                            <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
-                                <div>
-                                    <div class="fw-semibold mb-1">ABDM M3 — Fetch Patient Health Records</div>
-                                    <div class="small text-muted">
-                                        ABHA Address: <strong><?= $patientAbhaAddress !== '' ? esc($patientAbhaAddress) : 'Not available' ?></strong>
-                                        &nbsp;|&nbsp;
-                                        ABHA Status:
-                                        <?php if ($abhaIsVerified) { ?>
-                                            <span class="badge bg-success-subtle text-success border border-success-subtle">VERIFIED</span>
-                                        <?php } else { ?>
-                                            <span class="badge bg-warning-subtle text-warning border border-warning-subtle"><?= $abhaVerifiedStatus !== '' ? esc($abhaVerifiedStatus) : 'UNVERIFIED' ?></span>
-                                        <?php } ?>
-                                    </div>
-                                </div>
-                                <div class="text-end">
-                                    <button type="button" class="btn btn-primary" id="btnNewAbdmRequest" data-bs-toggle="modal" data-bs-target="#abdmCustomConsentModal" <?= ($abhaIsVerified && $patientAbhaAddress !== '') ? '' : 'disabled' ?>>
-                                        + New Request
-                                    </button>
+                <?php if ($hasAbhaIdentity): ?>
+                    <div class="tab-pane fade" id="opd-abdm-tab" role="tabpanel">
+                        <div class="card border mt-2 mb-3">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
                                     <div>
-                                        <button type="button" class="btn btn-link btn-sm p-0 mt-1" id="btnLoadAbdmDocs">Refresh list</button>
+                                        <div class="fw-semibold mb-1">ABDM M3 — Fetch Patient Health Records</div>
+                                        <div class="small text-muted">
+                                            ABHA Address: <strong><?= $patientAbhaAddress !== '' ? esc($patientAbhaAddress) : 'Not available' ?></strong>
+                                            &nbsp;|&nbsp;
+                                            ABHA Status:
+                                            <?php if ($abhaIsVerified) { ?>
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle">VERIFIED</span>
+                                            <?php } else { ?>
+                                                <span class="badge bg-warning-subtle text-warning border border-warning-subtle"><?= $abhaVerifiedStatus !== '' ? esc($abhaVerifiedStatus) : 'UNVERIFIED' ?></span>
+                                            <?php } ?>
+                                        </div>
+                                    </div>
+                                    <div class="text-end">
+                                        <button type="button" class="btn btn-primary" id="btnNewAbdmRequest" data-bs-toggle="modal" data-bs-target="#abdmCustomConsentModal" <?= ($abhaIsVerified && $patientAbhaAddress !== '') ? '' : 'disabled' ?>>
+                                            + New Request
+                                        </button>
+                                        <div>
+                                            <button type="button" class="btn btn-link btn-sm p-0 mt-1" id="btnLoadAbdmDocs">Refresh list</button>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
 
-                            <?php if (! $abhaIsVerified || $patientAbhaAddress === '') { ?>
-                                <div class="alert alert-warning mt-3 mb-0 small">
-                                    ABHA must be linked and verified for this patient before ABDM records can be requested. Verify ABHA from the patient's profile first.
-                                </div>
-                            <?php } else { ?>
-                                <div class="small text-muted mt-2 mb-0">
-                                    Send a consent request to the patient's ABHA (PHR) app. Once the patient approves it there, HMS automatically fetches their health records — no need to click again.
-                                </div>
-                            <?php } ?>
+                                <?php if (! $abhaIsVerified || $patientAbhaAddress === '') { ?>
+                                    <div class="alert alert-warning mt-3 mb-0 small">
+                                        ABHA must be linked and verified for this patient before ABDM records can be requested. Verify ABHA from the patient's profile first.
+                                    </div>
+                                <?php } else { ?>
+                                    <div class="small text-muted mt-2 mb-0">
+                                        Send a consent request to the patient's ABHA (PHR) app. Once the patient approves it there, HMS automatically fetches their health records — no need to click again.
+                                    </div>
+                                <?php } ?>
 
-                            <div id="abdmStatusBoxWrap" class="border rounded p-3 mt-3 bg-light d-none">
-                                <span id="abdmStatusBox" class="small text-muted"></span>
+                                <div id="abdmStatusBoxWrap" class="border rounded p-3 mt-3 bg-light d-none">
+                                    <span id="abdmStatusBox" class="small text-muted"></span>
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    <div class="card border mt-2 mb-3">
-                        <div class="card-body">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <div class="fw-semibold">Consent Request History</div>
-                                <div>
-                                    <button type="button" class="btn btn-link btn-sm p-0 me-3" id="btnCheckLiveAbdmStatus">
-                                        <span class="spinner-border spinner-border-sm d-none" id="abdmLiveStatusSpinner"></span>
-                                        Check Live Status
-                                    </button>
-                                    <button type="button" class="btn btn-link btn-sm p-0" id="btnRefreshAbdmRequests">Refresh</button>
+                        <div class="card border mt-2 mb-3">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <div class="fw-semibold">Consent Request History</div>
+                                    <div>
+                                        <button type="button" class="btn btn-link btn-sm p-0 me-3" id="btnCheckLiveAbdmStatus">
+                                            <span class="spinner-border spinner-border-sm d-none" id="abdmLiveStatusSpinner"></span>
+                                            Check Live Status
+                                        </button>
+                                        <button type="button" class="btn btn-link btn-sm p-0" id="btnRefreshAbdmRequests">Refresh</button>
+                                    </div>
+                                </div>
+                                <div class="table-responsive border rounded">
+                                    <table class="table table-sm table-hover mb-0" id="abdmRequestsTable">
+                                        <thead>
+                                            <tr>
+                                                <th>ID</th>
+                                                <th>Status</th>
+                                                <th>Expiry Date</th>
+                                                <th>Date From</th>
+                                                <th>Date To</th>
+                                                <th>View</th>
+                                                <th class="text-end">Show Data</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr><td colspan="7" class="text-muted text-center">No consent requests yet.</td></tr>
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
-                            <div class="table-responsive border rounded">
-                                <table class="table table-sm table-hover mb-0" id="abdmRequestsTable">
-                                    <thead>
-                                        <tr>
-                                            <th>ID</th>
-                                            <th>Status</th>
-                                            <th>Expiry Date</th>
-                                            <th>Date From</th>
-                                            <th>Date To</th>
-                                            <th>View</th>
-                                            <th class="text-end">Show Data</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr><td colspan="7" class="text-muted text-center">No consent requests yet.</td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
                         </div>
-                    </div>
 
-                </div>
+                    </div>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -383,11 +394,77 @@ if ($patientPhotoPath === '') {
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body text-center bg-light">
-                    <img src="<?= esc($patientPhotoPath) ?>" alt="Patient Photo" style="max-width:100%;max-height:75vh;width:auto;height:auto;border-radius:.5rem;">
+                    <img id="opdPatientPhotoModalImg" src="<?= esc($patientPhotoPath) ?>" alt="Patient Photo" style="max-width:100%;max-height:75vh;width:auto;height:auto;border-radius:.5rem;">
                 </div>
             </div>
         </div>
     </div>
+
+    <?php if ($allowImagePreuploadEdit): ?>
+        <div class="modal fade" id="opdProfilePictureModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Take Profile Picture</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row g-3 align-items-start">
+                            <div class="col-md-6 text-center">
+                                <video id="opdProfileCameraVideo" autoplay muted playsinline style="width:100%;max-width:320px;border:1px solid #ced4da;border-radius:6px;"></video>
+                                <canvas id="opdProfileCameraCanvas" style="display:none;"></canvas>
+                                <div class="mt-2 d-flex gap-2 justify-content-center flex-wrap">
+                                    <button type="button" id="opdProfileCameraStart" class="btn btn-outline-primary btn-sm">Start Camera</button>
+                                    <button type="button" id="opdProfileCameraCapture" class="btn btn-warning btn-sm">Capture</button>
+                                    <button type="button" id="opdProfileCameraStop" class="btn btn-outline-secondary btn-sm">Stop</button>
+                                </div>
+                                <div id="opdProfileCameraStatus" class="small text-muted mt-2">Camera is idle.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="border rounded p-2 bg-light text-center">
+                                    <img id="opdProfileCapturedPreview" src="<?= esc($patientPhotoPath) ?>" alt="Profile preview" class="img-fluid rounded" style="max-height:320px;object-fit:contain;">
+                                </div>
+                                <div class="small text-muted mt-2">Captured image will be uploaded to the patient profile.</div>
+                                <div id="opdProfileUploadStatus" class="small mt-2"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                        <button type="button" id="opdProfileSaveCapture" class="btn btn-primary btn-sm" disabled>Save Profile Picture</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="opdProfileEditModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-xl modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Edit Capture</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="d-flex gap-2 flex-wrap mb-2">
+                            <button type="button" id="opdProfileRotateLeft" class="btn btn-outline-secondary btn-sm">Rotate Left</button>
+                            <button type="button" id="opdProfileRotateRight" class="btn btn-outline-secondary btn-sm">Rotate Right</button>
+                            <button type="button" id="opdProfileCropBtn" class="btn btn-outline-primary btn-sm">Crop Selection</button>
+                            <button type="button" id="opdProfileResetEdit" class="btn btn-outline-warning btn-sm">Reset</button>
+                        </div>
+                        <div class="small text-muted mb-2">Drag on the image to select crop area. Rotate if needed, then save.</div>
+                        <div class="border rounded p-2 text-center bg-light">
+                            <canvas id="opdProfileEditCanvas" style="max-width:100%;cursor:crosshair;"></canvas>
+                        </div>
+                        <div id="opdProfileEditStatus" class="small text-muted mt-2">No crop selected.</div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" id="opdProfileSaveEdit" class="btn btn-primary btn-sm">Save and Upload</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    <?php endif; ?>
 
     <div class="modal fade" id="opdScanModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog opd-scan-modal-dialog modal-dialog-centered">
@@ -435,6 +512,372 @@ if ($patientPhotoPath === '') {
             </div>
         </div>
     </div>
+
+    <?php if ($allowImagePreuploadEdit): ?>
+        <script>
+        (function() {
+            var patientId = <?= (int) ($patient->id ?? 0) ?>;
+            var saveUrl = '<?= base_url('billing/patient/save_profile_image') ?>/' + patientId;
+            var $modal = $('#opdProfilePictureModal');
+            var editModalEl = document.getElementById('opdProfileEditModal');
+            var editModal = editModalEl && window.bootstrap ? new bootstrap.Modal(editModalEl) : null;
+            if (!$modal.length) {
+                return;
+            }
+
+            var $video = $('#opdProfileCameraVideo');
+            var $canvas = $('#opdProfileCameraCanvas');
+            var $status = $('#opdProfileCameraStatus');
+            var $preview = $('#opdProfileCapturedPreview');
+            var $uploadStatus = $('#opdProfileUploadStatus');
+            var $saveBtn = $('#opdProfileSaveCapture');
+            var editCanvas = document.getElementById('opdProfileEditCanvas');
+            var editCtx = editCanvas ? editCanvas.getContext('2d') : null;
+            var $editStatus = $('#opdProfileEditStatus');
+            var stream = null;
+            var editState = {
+                originalDataUrl: '',
+                currentDataUrl: '',
+                image: null,
+                imageRect: null,
+                selection: null,
+                dragging: false,
+                dragStart: null
+            };
+
+            function clamp(value, min, max) {
+                return Math.max(min, Math.min(max, value));
+            }
+
+            function getCanvasPoint(evt) {
+                var rect = editCanvas.getBoundingClientRect();
+                return {
+                    x: (evt.clientX || 0) - rect.left,
+                    y: (evt.clientY || 0) - rect.top
+                };
+            }
+
+            function normalizeSelection(start, end, bounds) {
+                var x1 = clamp(Math.min(start.x, end.x), bounds.x, bounds.x + bounds.width);
+                var y1 = clamp(Math.min(start.y, end.y), bounds.y, bounds.y + bounds.height);
+                var x2 = clamp(Math.max(start.x, end.x), bounds.x, bounds.x + bounds.width);
+                var y2 = clamp(Math.max(start.y, end.y), bounds.y, bounds.y + bounds.height);
+                return {
+                    x: x1,
+                    y: y1,
+                    width: Math.max(0, x2 - x1),
+                    height: Math.max(0, y2 - y1)
+                };
+            }
+
+            function dataUrlToBlob(dataUrl) {
+                var parts = (dataUrl || '').split(',');
+                if (parts.length < 2) {
+                    return null;
+                }
+                var mimeMatch = parts[0].match(/data:(.*?);base64/);
+                var mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+                var binary = window.atob(parts[1]);
+                var len = binary.length;
+                var bytes = new window.Uint8Array(len);
+                for (var i = 0; i < len; i++) {
+                    bytes[i] = binary.charCodeAt(i);
+                }
+                return new window.Blob([bytes], { type: mime });
+            }
+
+            function drawEditorCanvas() {
+                if (!editCanvas || !editCtx || !editState.image) {
+                    return;
+                }
+
+                var maxWidth = Math.min(900, Math.max(320, window.innerWidth - 140));
+                var maxHeight = Math.min(560, Math.max(240, window.innerHeight - 260));
+                var imageWidth = editState.image.width || 1;
+                var imageHeight = editState.image.height || 1;
+                var scale = Math.min(maxWidth / imageWidth, maxHeight / imageHeight, 1);
+                var drawWidth = Math.max(1, Math.round(imageWidth * scale));
+                var drawHeight = Math.max(1, Math.round(imageHeight * scale));
+
+                editCanvas.width = drawWidth;
+                editCanvas.height = drawHeight;
+                editCtx.clearRect(0, 0, drawWidth, drawHeight);
+                editCtx.drawImage(editState.image, 0, 0, drawWidth, drawHeight);
+                editState.imageRect = { x: 0, y: 0, width: drawWidth, height: drawHeight };
+
+                if (editState.selection && editState.selection.width > 2 && editState.selection.height > 2) {
+                    editCtx.save();
+                    editCtx.strokeStyle = '#0d6efd';
+                    editCtx.lineWidth = 2;
+                    editCtx.setLineDash([6, 4]);
+                    editCtx.strokeRect(editState.selection.x, editState.selection.y, editState.selection.width, editState.selection.height);
+                    editCtx.fillStyle = 'rgba(13, 110, 253, 0.12)';
+                    editCtx.fillRect(editState.selection.x, editState.selection.y, editState.selection.width, editState.selection.height);
+                    editCtx.restore();
+                    $editStatus.text('Crop area: ' + Math.round(editState.selection.width) + ' x ' + Math.round(editState.selection.height));
+                } else {
+                    $editStatus.text('No crop selected.');
+                }
+            }
+
+            function loadEditorImage(dataUrl) {
+                if (!dataUrl) {
+                    return;
+                }
+                var img = new window.Image();
+                img.onload = function() {
+                    editState.currentDataUrl = dataUrl;
+                    editState.image = img;
+                    editState.selection = null;
+                    drawEditorCanvas();
+                };
+                img.src = dataUrl;
+            }
+
+            function rotateEditorImage(direction) {
+                if (!editState.image) {
+                    return;
+                }
+                var source = document.createElement('canvas');
+                var sourceCtx = source.getContext('2d');
+                var srcWidth = editState.image.width;
+                var srcHeight = editState.image.height;
+                var clockwise = direction === 'right';
+
+                source.width = srcHeight;
+                source.height = srcWidth;
+                sourceCtx.save();
+                if (clockwise) {
+                    sourceCtx.translate(source.width, 0);
+                    sourceCtx.rotate(Math.PI / 2);
+                } else {
+                    sourceCtx.translate(0, source.height);
+                    sourceCtx.rotate(-Math.PI / 2);
+                }
+                sourceCtx.drawImage(editState.image, 0, 0);
+                sourceCtx.restore();
+                loadEditorImage(source.toDataURL('image/jpeg', 0.95));
+            }
+
+            function cropEditorImage() {
+                if (!editState.image || !editState.selection || !editState.imageRect) {
+                    $editStatus.text('Select a crop area first.');
+                    return;
+                }
+                var selection = editState.selection;
+                if (selection.width < 8 || selection.height < 8) {
+                    $editStatus.text('Crop area is too small.');
+                    return;
+                }
+
+                var scaleX = editState.image.width / editState.imageRect.width;
+                var scaleY = editState.image.height / editState.imageRect.height;
+                var srcX = Math.round(selection.x * scaleX);
+                var srcY = Math.round(selection.y * scaleY);
+                var srcW = Math.round(selection.width * scaleX);
+                var srcH = Math.round(selection.height * scaleY);
+
+                var cropCanvas = document.createElement('canvas');
+                var cropCtx = cropCanvas.getContext('2d');
+                cropCanvas.width = Math.max(1, srcW);
+                cropCanvas.height = Math.max(1, srcH);
+                cropCtx.drawImage(editState.image, srcX, srcY, srcW, srcH, 0, 0, cropCanvas.width, cropCanvas.height);
+                loadEditorImage(cropCanvas.toDataURL('image/jpeg', 0.95));
+            }
+
+            function openCaptureEditor(dataUrl) {
+                editState.originalDataUrl = dataUrl;
+                editState.currentDataUrl = dataUrl;
+                editState.selection = null;
+                loadEditorImage(dataUrl);
+                if (editModal) {
+                    editModal.show();
+                }
+            }
+
+            function saveEditedCapture() {
+                var dataUri = editState.currentDataUrl || '';
+                if (!dataUri) {
+                    $editStatus.text('No edited image available.');
+                    return;
+                }
+                saveCaptureDataUri(dataUri);
+                if (editModal) {
+                    editModal.hide();
+                }
+            }
+
+            function saveCaptureDataUri(dataUri) {
+                if (!dataUri) {
+                    $uploadStatus.html('<span class="text-danger">No captured image to save.</span>');
+                    return;
+                }
+                $saveBtn.prop('disabled', true);
+                $.post(saveUrl, { image: dataUri, '<?= csrf_token() ?>': '<?= csrf_hash() ?>' }, function(resp) {
+                    if (resp && resp.success) {
+                        if (resp.path) {
+                            $('#opdPatientPhoto, #opdPatientPhotoModalImg, #opdProfileCapturedPreview').attr('src', resp.path);
+                        }
+                        $uploadStatus.html('<span class="text-success">Profile image saved.</span>');
+                        stopCamera();
+                        $saveBtn.removeData('data-uri');
+                        return;
+                    }
+                    $uploadStatus.html('<span class="text-danger">' + ((resp && resp.message) ? resp.message : 'Upload failed') + '</span>');
+                    $saveBtn.prop('disabled', false);
+                }, 'json').fail(function() {
+                    $uploadStatus.html('<span class="text-danger">Upload failed.</span>');
+                    $saveBtn.prop('disabled', false);
+                });
+            }
+
+            function setStatus(text, isError) {
+                $status.toggleClass('text-danger', !!isError).toggleClass('text-muted', !isError).text(text);
+            }
+
+            function stopCamera() {
+                if (stream) {
+                    stream.getTracks().forEach(function(track) { track.stop(); });
+                    stream = null;
+                }
+                if ($video.length) {
+                    $video[0].srcObject = null;
+                }
+                setStatus('Camera is idle.', false);
+            }
+
+            function startCamera() {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    setStatus('Camera not supported in this browser.', true);
+                    return;
+                }
+                navigator.mediaDevices.getUserMedia({ video: true, audio: false }).then(function(s) {
+                    stream = s;
+                    $video[0].srcObject = s;
+                    $video[0].play().catch(function() {});
+                    setStatus('Camera is active.', false);
+                }).catch(function() {
+                    setStatus('Camera access denied or unavailable.', true);
+                });
+            }
+
+            function captureImage() {
+                if (!stream || !$video.length || !$canvas.length) {
+                    setStatus('Start the camera first.', true);
+                    return;
+                }
+                var width = $video[0].videoWidth || 640;
+                var height = $video[0].videoHeight || 480;
+                $canvas[0].width = width;
+                $canvas[0].height = height;
+                var ctx = $canvas[0].getContext('2d');
+                ctx.drawImage($video[0], 0, 0, width, height);
+                var dataUri = $canvas[0].toDataURL('image/jpeg', 0.95);
+                if (<?= $allowImagePreuploadEdit ? 'true' : 'false' ?>) {
+                    openCaptureEditor(dataUri);
+                    $uploadStatus.html('<span class="text-success">Preview ready. Edit if needed, then save.</span>');
+                    return;
+                }
+                $preview.attr('src', dataUri);
+                $saveBtn.data('data-uri', dataUri).prop('disabled', false);
+                $uploadStatus.html('<span class="text-success">Preview ready. Save to upload.</span>');
+            }
+
+            function saveCapture() {
+                var dataUri = String($saveBtn.data('data-uri') || '');
+                if (!dataUri) {
+                    $uploadStatus.html('<span class="text-danger">No captured image to save.</span>');
+                    return;
+                }
+                $saveBtn.prop('disabled', true);
+                $.post(saveUrl, { image: dataUri, '<?= csrf_token() ?>': '<?= csrf_hash() ?>' }, function(resp) {
+                    if (resp && resp.success) {
+                        if (resp.path) {
+                            $('#opdPatientPhoto, #opdPatientPhotoModalImg, #opdProfileCapturedPreview').attr('src', resp.path);
+                        }
+                        $uploadStatus.html('<span class="text-success">Profile image saved.</span>');
+                        stopCamera();
+                        $saveBtn.removeData('data-uri');
+                        return;
+                    }
+                    $uploadStatus.html('<span class="text-danger">' + ((resp && resp.message) ? resp.message : 'Upload failed') + '</span>');
+                    $saveBtn.prop('disabled', false);
+                }, 'json').fail(function() {
+                    $uploadStatus.html('<span class="text-danger">Upload failed.</span>');
+                    $saveBtn.prop('disabled', false);
+                });
+            }
+
+            $modal.on('shown.bs.modal', function() {
+                startCamera();
+            });
+            $modal.on('hidden.bs.modal', function() {
+                stopCamera();
+                $saveBtn.prop('disabled', true).removeData('data-uri');
+                $uploadStatus.empty();
+            });
+            if (editModalEl) {
+                editModalEl.addEventListener('hidden.bs.modal', function() {
+                    editState.selection = null;
+                });
+            }
+            $('#opdProfileCameraStart').on('click', startCamera);
+            $('#opdProfileCameraStop').on('click', stopCamera);
+            $('#opdProfileCameraCapture').on('click', captureImage);
+            $('#opdProfileSaveCapture').on('click', saveCapture);
+
+            $('#opdProfileRotateLeft').on('click', function() {
+                rotateEditorImage('left');
+            });
+            $('#opdProfileRotateRight').on('click', function() {
+                rotateEditorImage('right');
+            });
+            $('#opdProfileCropBtn').on('click', function() {
+                cropEditorImage();
+            });
+            $('#opdProfileResetEdit').on('click', function() {
+                loadEditorImage(editState.originalDataUrl);
+            });
+            $('#opdProfileSaveEdit').on('click', function() {
+                saveEditedCapture();
+            });
+
+            if (editCanvas) {
+                editCanvas.addEventListener('mousedown', function(evt) {
+                    if (!editState.imageRect) {
+                        return;
+                    }
+                    editState.dragging = true;
+                    editState.dragStart = getCanvasPoint(evt);
+                    editState.selection = normalizeSelection(editState.dragStart, editState.dragStart, editState.imageRect);
+                    drawEditorCanvas();
+                });
+                editCanvas.addEventListener('mousemove', function(evt) {
+                    if (!editState.dragging || !editState.dragStart || !editState.imageRect) {
+                        return;
+                    }
+                    editState.selection = normalizeSelection(editState.dragStart, getCanvasPoint(evt), editState.imageRect);
+                    drawEditorCanvas();
+                });
+                editCanvas.addEventListener('mouseup', function(evt) {
+                    if (!editState.dragging || !editState.dragStart || !editState.imageRect) {
+                        return;
+                    }
+                    editState.selection = normalizeSelection(editState.dragStart, getCanvasPoint(evt), editState.imageRect);
+                    editState.dragging = false;
+                    editState.dragStart = null;
+                    drawEditorCanvas();
+                });
+                editCanvas.addEventListener('mouseleave', function() {
+                    if (editState.dragging) {
+                        editState.dragging = false;
+                        editState.dragStart = null;
+                    }
+                });
+            }
+        })();
+        </script>
+    <?php endif; ?>
 
     <div class="modal fade" id="abdmCustomConsentModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-lg">

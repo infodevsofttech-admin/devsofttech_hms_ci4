@@ -998,6 +998,9 @@ class Patient extends BaseController
 		}
 
 		$profileFilePath = $this->getProfileFilePath((int) ($patient->profile_file_id ?? 0));
+		$hospitalEnabled = hospital_setting_value('ALLOW_IMAGE_PREUPLOAD_EDIT', '0') === '1';
+		$user = function_exists('auth') ? auth()->user() : null;
+		$userAllowed = $user && method_exists($user, 'can') && $user->can('media.image.preupload-edit');
 
 		$request = service('request');
 		$backUrl = trim((string) $request->getGet('back_url'));
@@ -1144,6 +1147,7 @@ class Patient extends BaseController
 		return view('billing/Patient_Profile_Opd_V', [
 			'patient' => $patient,
 			'profileFilePath' => $profileFilePath,
+			'allow_image_preupload_edit' => ($hospitalEnabled && $userAllowed) ? 1 : 0,
 			'opdGroups' => $opdGroups,
 			'totalOpdVisits' => $totalOpdVisits,
 			'lastVisitDate' => $lastVisitDate,
