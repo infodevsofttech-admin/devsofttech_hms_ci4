@@ -24,10 +24,11 @@
 
 ```
 {{PATIENT_NAME}}        - Full patient name
+{{PATIENT_TITLE}}       - Patient title/prefix (e.g., "Mr.", "Mrs.", "Miss")
 {{UHID}}                - Patient UHID/registration code
 {{AGE_GENDER}}          - Age and gender combined (e.g., "26 Year / Female")
-{{GUARDIAN}}            - Guardian relation and name (e.g., "W/O of RAM SINGH")
-{{GUARDIAN_RELATION}}   - Guardian relation only (e.g., "W/O of")
+{{GUARDIAN}}            - Guardian relation and name (e.g., "W/O RAM SINGH")
+{{GUARDIAN_RELATION}}   - Guardian relation only (e.g., "W/O")
 {{GUARDIAN_NAME}}       - Guardian name only (e.g., "RAM SINGH")
 {{PATIENT_ADDRESS}}     - Full patient address
 {{PATIENT_PHONE}}       - Patient phone number ✨ NEW

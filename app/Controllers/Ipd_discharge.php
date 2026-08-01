@@ -311,6 +311,12 @@ class Ipd_discharge extends BaseController
         $ipd = $panelData['ipd_info'] ?? null;
         $person = $panelData['person_info'] ?? null;
 
+        $patientTitle = trim((string) (
+            $person->title
+            ?? $person->p_title
+            ?? $person->prefix
+            ?? ''
+        ));
         $patientName = trim((string) ($person->p_fname ?? ''));
         $patientCode = trim((string) (
             $person->uhid
@@ -355,6 +361,7 @@ class Ipd_discharge extends BaseController
 
         $tokens = [
             'CONTENT' => $content,
+            'PATIENT_TITLE' => esc($patientTitle),
             'PATIENT_NAME' => esc($patientName),
             'UHID' => esc($patientCode),
             'IPD_CODE' => esc($ipdCode),
@@ -444,7 +451,7 @@ class Ipd_discharge extends BaseController
             $address = trim((string) ($ipd->address ?? $ipd->patient_address ?? $ipd->contact_address ?? ''));
         }
 
-        $guardianCombined = trim($guardianRelation . ($guardianName !== '' ? ' of ' . $guardianName : ''));
+        $guardianCombined = trim($guardianRelation . ($guardianName !== '' ? ' ' . $guardianName : ''));
         if ($guardianCombined === '') {
             $guardianCombined = $guardianName !== '' ? $guardianName : $guardianRelation;
         }
@@ -471,7 +478,7 @@ class Ipd_discharge extends BaseController
         $doctorNames = $this->getDischargeDoctorNames($ipd);
 
         return [
-            'GUARDIAN_RELATION' => esc($guardianRelation !== '' ? $guardianRelation . ' of ' : ''),
+            'GUARDIAN_RELATION' => esc($guardianRelation !== '' ? $guardianRelation . ' ' : ''),
             'GUARDIAN_NAME' => esc($guardianName),
             'GUARDIAN' => esc($guardianCombined),
             'PATIENT_ADDRESS' => esc($address),
@@ -5406,6 +5413,7 @@ class Ipd_discharge extends BaseController
             'hospital_address' => 'Hospital Full Address',
             'hospital_phone' => 'Hospital Phone',
             'hospital_email' => 'Hospital Email',
+            'PATIENT_TITLE' => 'Patient Title (Mr./Mrs./Miss etc.)',
             'PATIENT_NAME' => 'Patient Name',
             'UHID' => 'Patient UHID',
             'IPD_CODE' => 'IPD Number/Code',

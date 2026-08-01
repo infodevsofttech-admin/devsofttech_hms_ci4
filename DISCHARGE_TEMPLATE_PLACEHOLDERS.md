@@ -35,6 +35,7 @@ Example:
 
 | Placeholder | Description | Example |
 |------------|-------------|---------|
+| `{{PATIENT_TITLE}}` | Patient title/prefix | "Mr." / "Mrs." / "Miss" |
 | `{{PATIENT_NAME}}` | Patient full name | "John Doe" |
 | `{{UHID}}` | Patient UHID/Registration number | "UHID123456" |
 | `{{IPD_CODE}}` | IPD admission code | "IPD001234" |
