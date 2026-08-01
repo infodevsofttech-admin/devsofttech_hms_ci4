@@ -120,6 +120,10 @@ foreach ([1, 2] as $slot) {
 
 $patientAddress = trim((string) (($person->add1 ?? '') . ' ' . ($person->add2 ?? '') . ' ' . ($person->city ?? '') . ' ' . ($person->state ?? '')));
 $patientAddress = preg_replace('/\s+/', ' ', $patientAddress ?? '');
+$relativeLabel = trim((string) ($person->p_relative ?? ''));
+if ($relativeLabel === '') {
+    $relativeLabel = 'SON OF';
+}
 
 $mode3ShowAmountAfterDiscount = $printMode === 3;
 $isDischargeFinal = (int) ($ipd->discarge_patient_status ?? 0) > 0;
@@ -202,7 +206,7 @@ $cleanNursingMarker = static function (string $text): string {
         <tr>
             <td>
                 <div><span class="label">Patient Name :</span> <?= esc((string) ($person->p_fname ?? '')) ?></div>
-                <div><span class="label">SON OF :</span> <?= esc((string) ($person->p_rname ?? '')) ?></div>
+                <div><span class="label"><?= esc($relativeLabel) ?> :</span> <?= esc((string) ($person->p_rname ?? '')) ?></div>
                 <div><span class="label">Patient-ID/UHID :</span> <?= esc((string) ($person->p_code ?? '')) ?></div>
                 <div><span class="label">Gender :</span> <?= esc((string) ($person->xgender ?? '')) ?></div>
                 <div><span class="label">Age :</span> <?= esc((string) $age) ?></div>
@@ -278,6 +282,9 @@ $cleanNursingMarker = static function (string $text): string {
                 $docLine = trim((string) ($row->doctor_display_name ?? ''));
                 if ($docLine === '') {
                     $docLine = trim((string) ($row->doc_name ?? ''));
+                }
+                if (strcasecmp($docLine, 'Dr.') === 0) {
+                    $docLine = '';
                 }
                 $docSpec = trim((string) ($row->doctor_specialization ?? ''));
                 if ($docSpec !== '' && $docLine !== '') {

@@ -228,7 +228,7 @@ class IpdBillingModel extends Model
     {
         $builder = $this->db->table('ipd_invoice_item i')
             ->select('t.group_desc, i.*, sum(i.item_amount) as xAmount')
-            ->select("trim(concat_ws(' ', 'Dr.', d.p_fname, d.p_mname, d.p_lname)) as doctor_display_name", false)
+            ->select("case when trim(concat_ws('', d.p_fname, d.p_mname, d.p_lname)) = '' then '' else trim(concat_ws(' ', 'Dr.', d.p_fname, d.p_mname, d.p_lname)) end as doctor_display_name", false)
             ->select('ds.spec_names as doctor_specialization', false)
             ->join('ipd_item_type t', 'i.item_type = t.itype_id', 'left')
             ->join('doctor_master d', 'd.id = i.doc_id', 'left')
@@ -415,7 +415,7 @@ class IpdBillingModel extends Model
 
         $builder = $this->db->table('ipd_invoice_item i')
             ->select('t.group_desc,i.*')
-            ->select("trim(concat_ws(' ', 'Dr.', d.p_fname, d.p_mname, d.p_lname)) as doctor_display_name", false)
+            ->select("case when trim(concat_ws('', d.p_fname, d.p_mname, d.p_lname)) = '' then '' else trim(concat_ws(' ', 'Dr.', d.p_fname, d.p_mname, d.p_lname)) end as doctor_display_name", false)
             ->select('ds.spec_names as doctor_specialization', false)
             ->join('ipd_item_type t', 'i.item_type = t.itype_id', 'left')
             ->join('doctor_master d', 'd.id = i.doc_id', 'left')

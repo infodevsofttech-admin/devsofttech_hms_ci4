@@ -112,6 +112,9 @@ $cleanNursingMarker = static function (string $text): string {
                                     if ($docName === '') {
                                         $docName = trim((string) ($row->doc_name ?? ''));
                                     }
+                                    if (strcasecmp($docName, 'Dr.') === 0) {
+                                        $docName = '';
+                                    }
                                     $docSpec = trim((string) ($row->doctor_specialization ?? ''));
                                     $comment = $cleanNursingMarker((string) ($row->comment ?? ''));
                                     $packageChecked = (int) ($row->package_id ?? 0) > 0 ? 'checked' : '';

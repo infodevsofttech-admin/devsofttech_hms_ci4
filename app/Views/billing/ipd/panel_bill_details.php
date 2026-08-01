@@ -170,6 +170,9 @@ $cleanNursingMarker = static function (string $text): string {
                         if ($docLine === '') {
                             $docLine = trim((string) ($row->doc_name ?? ''));
                         }
+                        if (strcasecmp($docLine, 'Dr.') === 0) {
+                            $docLine = '';
+                        }
                         $docSpec = trim((string) ($row->doctor_specialization ?? ''));
                         if ($docSpec !== '' && $docLine !== '') {
                             $docLine .= ' [' . $docSpec . ']';
