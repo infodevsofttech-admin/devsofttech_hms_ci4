@@ -160,9 +160,17 @@ $cleanNursingMarker = static function (string $text): string {
         .bill-table th { background: #f2f2f2; font-size: 10.2px; }
         .center { text-align: center; }
         .right { text-align: right; }
-        .group { font-weight: 700; font-size: 10.2px; }
-        .group-row td { background: #f4f4f4; }
-        .group-subtotal td { background: #fafafa; }
+        .group { font-weight: 800; font-size: 10.4px; letter-spacing: 0.2px; }
+        .group-row td {
+            background: #e9eef6;
+            border-top: 1.4px solid #4b5563;
+            border-bottom: 1.2px solid #6b7280;
+        }
+        .group-subtotal td {
+            background: #f3f6fb;
+            font-weight: 700;
+            border-top: 1px dashed #64748b;
+        }
         .totalline { font-weight: 700; }
         .footer-sign { margin-top: 48px; width: 100%; }
         .footer-sign td { border: none; width: 50%; font-weight: 700; font-size: 10.4px; }
