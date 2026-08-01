@@ -126,6 +126,10 @@ $isDischargeFinal = (int) ($ipd->discarge_patient_status ?? 0) > 0;
 $billHeadingText = $isDischargeFinal
     ? 'Bill No. : ' . (string) ($ipd->ipd_code ?? '')
     : $billTitle;
+
+$cleanNursingMarker = static function (string $text): string {
+    return trim((string) preg_replace('/\s*\[NURSING_CHARGE_ID:\d+\]\s*/', ' ', $text));
+};
 ?>
 <!doctype html>
 <html lang="en">
@@ -266,9 +270,27 @@ $billHeadingText = $isDischargeFinal
                 }
 
                 $amt = (float) ($row->item_amount ?? 0);
+                $desc = trim((string) ($row->item_name ?? ''));
+                $cleanComment = $cleanNursingMarker((string) ($row->comment ?? ''));
+                if ($cleanComment !== '') {
+                    $desc = trim($desc . ' ' . $cleanComment);
+                }
+                $docLine = trim((string) ($row->doctor_display_name ?? ''));
+                if ($docLine === '') {
+                    $docLine = trim((string) ($row->doc_name ?? ''));
+                }
+                $docSpec = trim((string) ($row->doctor_specialization ?? ''));
+                if ($docSpec !== '' && $docLine !== '') {
+                    $docLine .= ' [' . $docSpec . ']';
+                }
+
                 echo '<tr>';
                 echo '<td class="center">' . $srNo . '</td>';
-                echo '<td>' . esc(trim((string) (($row->item_name ?? '') . ' ' . ($row->comment ?? '')))) . '</td>';
+                echo '<td>' . esc($desc);
+                if ($docLine !== '') {
+                    echo '<br><small><em>' . esc($docLine) . '</em></small>';
+                }
+                echo '</td>';
                 echo '<td class="center">' . esc((string) ($row->org_code ?? '')) . '</td>';
                 echo '<td class="center">' . esc((string) ($row->item_qty ?? '')) . '</td>';
                 echo '<td class="right">' . esc(number_format((float) ($row->item_rate ?? 0), 2)) . '</td>';

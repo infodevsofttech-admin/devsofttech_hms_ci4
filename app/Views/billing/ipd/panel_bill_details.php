@@ -43,6 +43,10 @@ $hasFinalAdjustments = $payableByTpa > 0 || $discountForTpa > 0 || $discountByHo
 $finalBalanceAmount = $hasFinalAdjustments ? (float) ($ipd->balance_discount_after ?? $balanceAmount) : $balanceAmount;
 $isDischargeFinal = (int) ($ipd->discarge_patient_status ?? 0) > 0;
 $billHeaderTitle = $isDischargeFinal ? 'Bill No. : ' . (string) ($ipd->ipd_code ?? '') : 'IPD Invoice';
+
+$cleanNursingMarker = static function (string $text): string {
+    return trim((string) preg_replace('/\s*\[NURSING_CHARGE_ID:\d+\]\s*/', ' ', $text));
+};
 ?>
 
 <div class="card border-top border-3 border-danger">
@@ -157,9 +161,27 @@ $billHeaderTitle = $isDischargeFinal ? 'Bill No. : ' . (string) ($ipd->ipd_code 
                             $headTotal = 0.0;
                         }
 
+                        $desc = trim((string) ($row->item_name ?? ''));
+                        $cleanComment = $cleanNursingMarker((string) ($row->comment ?? ''));
+                        if ($cleanComment !== '') {
+                            $desc = trim($desc . ' ' . $cleanComment);
+                        }
+                        $docLine = trim((string) ($row->doctor_display_name ?? ''));
+                        if ($docLine === '') {
+                            $docLine = trim((string) ($row->doc_name ?? ''));
+                        }
+                        $docSpec = trim((string) ($row->doctor_specialization ?? ''));
+                        if ($docSpec !== '' && $docLine !== '') {
+                            $docLine .= ' [' . $docSpec . ']';
+                        }
+
                         echo '<tr>';
                         echo '<td>' . $srNo . '</td>';
-                        echo '<td>' . esc(($row->item_name ?? '') . ' ' . ($row->comment ?? '')) . '</td>';
+                        echo '<td>' . esc($desc);
+                        if ($docLine !== '') {
+                            echo '<br><small><em>' . esc($docLine) . '</em></small>';
+                        }
+                        echo '</td>';
                         echo '<td>' . esc($row->org_code ?? '') . '</td>';
                         echo '<td>' . esc($row->item_qty ?? '') . '</td>';
                         echo '<td class="text-end">' . esc(number_format((float) ($row->item_rate ?? 0), 2)) . '</td>';

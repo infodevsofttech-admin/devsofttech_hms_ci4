@@ -10,6 +10,18 @@ class IpdBillingModel extends Model
 
     private ?bool $ipdItemTypeHasSortOrder = null;
 
+    private function ipdGroupOrderExpr(string $column): string
+    {
+        return "CASE "
+            . "WHEN UPPER(" . $column . ") LIKE '%REGISTRATION%' THEN 10 "
+            . "WHEN UPPER(" . $column . ") LIKE '%ACCOMMOD%' OR UPPER(" . $column . ") LIKE '%ACCOMOD%' OR UPPER(" . $column . ") LIKE '%BEDSIDE%' THEN 20 "
+            . "WHEN UPPER(" . $column . ") LIKE '%SURGERY%' OR UPPER(" . $column . ") LIKE '%OPERATION%' THEN 30 "
+            . "WHEN UPPER(" . $column . ") LIKE '%PROCEDURE%' THEN 40 "
+            . "WHEN UPPER(" . $column . ") LIKE '%PROFESSIONAL%' OR UPPER(" . $column . ") LIKE '%DOCTOR VISIT%' THEN 50 "
+            . "WHEN UPPER(" . $column . ") LIKE '%LAB%' OR UPPER(" . $column . ") LIKE '%PATHO%' OR UPPER(" . $column . ") LIKE '%RADIO%' THEN 90 "
+            . "ELSE 70 END";
+    }
+
     private function ipdItemTypeHasSortOrder(): bool
     {
         if ($this->ipdItemTypeHasSortOrder === null) {
@@ -216,16 +228,22 @@ class IpdBillingModel extends Model
     {
         $builder = $this->db->table('ipd_invoice_item i')
             ->select('t.group_desc, i.*, sum(i.item_amount) as xAmount')
+            ->select("trim(concat_ws(' ', 'Dr.', d.p_fname, d.p_mname, d.p_lname)) as doctor_display_name", false)
+            ->select('ds.spec_names as doctor_specialization', false)
             ->join('ipd_item_type t', 'i.item_type = t.itype_id', 'left')
+            ->join('doctor_master d', 'd.id = i.doc_id', 'left')
+            ->join(
+                '(select s.doc_id, group_concat(distinct m.SpecName separator ", ") as spec_names from doc_spec s join med_spec m on m.id = s.med_spec_id group by s.doc_id) ds',
+                'ds.doc_id = i.doc_id',
+                'left',
+                false
+            )
             ->where('i.ipd_id', $ipdId)
             ->groupBy('i.item_type,i.id');
 
-        if ($this->ipdItemTypeHasSortOrder()) {
-            $builder->orderBy('COALESCE(t.sort_order, 0)', 'ASC', false);
-        }
-
         return $builder
-            ->orderBy('i.item_type', 'ASC')
+            ->orderBy($this->ipdGroupOrderExpr('t.group_desc'), 'ASC', false)
+            ->orderBy('t.group_desc', 'ASC')
             ->orderBy('i.id', 'ASC')
             ->get()
             ->getResult();
@@ -393,20 +411,23 @@ class IpdBillingModel extends Model
 
     public function getIpdInvoiceItems(int $ipdId, bool $excludePackage = false): array
     {
+        $docSpecSubquery = '(select s.doc_id, group_concat(distinct m.SpecName separator ", ") as spec_names from doc_spec s join med_spec m on m.id = s.med_spec_id group by s.doc_id) ds';
+
         $builder = $this->db->table('ipd_invoice_item i')
             ->select('t.group_desc,i.*')
+            ->select("trim(concat_ws(' ', 'Dr.', d.p_fname, d.p_mname, d.p_lname)) as doctor_display_name", false)
+            ->select('ds.spec_names as doctor_specialization', false)
             ->join('ipd_item_type t', 'i.item_type = t.itype_id', 'left')
+            ->join('doctor_master d', 'd.id = i.doc_id', 'left')
+            ->join($docSpecSubquery, 'ds.doc_id = i.doc_id', 'left', false)
             ->where('i.ipd_id', $ipdId);
 
         if ($excludePackage) {
             $builder->where('i.package_id', 0);
         }
 
-        if ($this->ipdItemTypeHasSortOrder()) {
-            $builder->orderBy('COALESCE(t.sort_order, 0)', 'ASC', false);
-        }
-
         return $builder
+            ->orderBy($this->ipdGroupOrderExpr('t.group_desc'), 'ASC', false)
             ->orderBy('t.group_desc', 'ASC')
             ->orderBy('i.id', 'ASC')
             ->get()
@@ -423,6 +444,7 @@ class IpdBillingModel extends Model
             ->where('i.ipd_id', $ipdId)
             ->where('i.ipd_include', 1)
             ->groupBy('i.ipd_id,t.item_id,t.item_rate,l.group_desc,t.org_code,t.item_name')
+                ->orderBy($this->ipdGroupOrderExpr('l.group_desc'), 'ASC', false)
             ->orderBy('Charge_type', 'ASC')
             ->get()
             ->getResult();

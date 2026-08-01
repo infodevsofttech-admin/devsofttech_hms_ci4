@@ -10,6 +10,10 @@ $today = date('Y-m-d');
 $bedsideItemsByCategory = $bedside_items_by_category ?? [];
 $doctorVisitFeeTypes = $doctor_visit_fee_types ?? [];
 $doctorVisitFeeMap = $doctor_visit_fee_map ?? [];
+
+$cleanNursingMarker = static function (string $text): string {
+    return trim((string) preg_replace('/\s*\[NURSING_CHARGE_ID:\d+\]\s*/', ' ', $text));
+};
 ?>
 
 <style>
@@ -104,8 +108,12 @@ $doctorVisitFeeMap = $doctor_visit_fee_map ?? [];
                                     $itemId = (int) ($row->id ?? 0);
                                     $qty = (float) ($row->item_qty ?? 0);
                                     $rate = (float) ($row->item_rate ?? 0);
-                                    $docName = (string) ($row->doc_name ?? '');
-                                    $comment = (string) ($row->comment ?? '');
+                                    $docName = trim((string) ($row->doctor_display_name ?? ''));
+                                    if ($docName === '') {
+                                        $docName = trim((string) ($row->doc_name ?? ''));
+                                    }
+                                    $docSpec = trim((string) ($row->doctor_specialization ?? ''));
+                                    $comment = $cleanNursingMarker((string) ($row->comment ?? ''));
                                     $packageChecked = (int) ($row->package_id ?? 0) > 0 ? 'checked' : '';
                                     ?>
                                     <tr>
@@ -125,7 +133,7 @@ $doctorVisitFeeMap = $doctor_visit_fee_map ?? [];
                                         <td>#</td>
                                         <td colspan="3">
                                             <?php if ($docName !== '') : ?>
-                                                <div>Dr. <?= esc($docName) ?></div>
+                                                <div><?= esc($docName) ?><?= $docSpec !== '' ? ' [' . esc($docSpec) . ']' : '' ?></div>
                                             <?php endif; ?>
                                             <?php if ($comment !== '') : ?>
                                                 <div><em><?= esc($comment) ?></em></div>

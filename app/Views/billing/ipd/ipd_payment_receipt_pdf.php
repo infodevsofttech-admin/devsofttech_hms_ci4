@@ -105,7 +105,7 @@ $cardRemark = trim((string) ($payment->card_remark ?? ''));
             <b>Bank Remark : </b><?= htmlspecialchars($cardRemark) ?><br/>
         <?php endif; ?>
     <?php endif; ?>
-    <b>Amount In Words : </b>Rs.<?= htmlspecialchars(number_to_word((float)($payment->amount ?? 0))) ?> Only
+    <b>Amount In Words : </b>Rs.<?= htmlspecialchars(number_to_word((float)($payment->amount ?? 0))) ?>
 </p>
 <p>
     <b>Prepared By :</b><?= htmlspecialchars($payment->update_by ?? '') ?>
