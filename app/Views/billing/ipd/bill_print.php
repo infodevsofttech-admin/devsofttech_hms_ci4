@@ -161,6 +161,8 @@ $cleanNursingMarker = static function (string $text): string {
         .center { text-align: center; }
         .right { text-align: right; }
         .group { font-weight: 700; font-size: 10.2px; }
+        .group-row td { background: #f4f4f4; }
+        .group-subtotal td { background: #fafafa; }
         .totalline { font-weight: 700; }
         .footer-sign { margin-top: 48px; width: 100%; }
         .footer-sign td { border: none; width: 50%; font-weight: 700; font-size: 10.4px; }
@@ -247,8 +249,20 @@ $cleanNursingMarker = static function (string $text): string {
             $headDesc = '';
             $headTotal = 0.0;
 
+            $printGroupSubtotal = static function (float $total, bool $mode3) {
+                echo '<tr class="group-subtotal">';
+                echo '<td></td><td></td><td></td><td></td>';
+                echo '<td class="right">Sub Total</td>';
+                echo '<td class="right">' . esc(number_format($total, 2)) . '</td>';
+                if ($mode3) {
+                    echo '<td class="right"></td>';
+                }
+                echo '</tr>';
+            };
+
             if (! empty($packages)) {
-                echo '<tr><td></td><td class="group">Package</td><td></td><td></td><td></td><td></td>' . ($mode3ShowAmountAfterDiscount ? '<td></td>' : '') . '</tr>';
+                echo '<tr class="group-row"><td></td><td class="group">Package</td><td></td><td></td><td></td><td></td>' . ($mode3ShowAmountAfterDiscount ? '<td></td>' : '') . '</tr>';
+                $packageTotal = 0.0;
                 foreach ($packages as $row) {
                     $amt = (float) ($row->package_Amount ?? 0);
                     echo '<tr>';
@@ -263,14 +277,20 @@ $cleanNursingMarker = static function (string $text): string {
                     }
                     echo '</tr>';
                     $srNo++;
+                    $packageTotal += $amt;
                 }
+                $printGroupSubtotal($packageTotal, $mode3ShowAmountAfterDiscount);
             }
 
             for ($i = 0, $n = count($ipdItems); $i < $n; $i++) {
                 $row = $ipdItems[$i];
                 if ($headDesc !== (string) ($row->group_desc ?? '')) {
+                    if ($headDesc !== '') {
+                        $printGroupSubtotal($headTotal, $mode3ShowAmountAfterDiscount);
+                    }
                     $headDesc = (string) ($row->group_desc ?? '');
-                    echo '<tr><td></td><td class="group">' . esc($headDesc) . '</td><td></td><td></td><td></td><td></td>' . ($mode3ShowAmountAfterDiscount ? '<td></td>' : '') . '</tr>';
+                    $headTotal = 0.0;
+                    echo '<tr class="group-row"><td></td><td class="group">' . esc($headDesc) . '</td><td></td><td></td><td></td><td></td>' . ($mode3ShowAmountAfterDiscount ? '<td></td>' : '') . '</tr>';
                 }
 
                 $amt = (float) ($row->item_amount ?? 0);
@@ -313,8 +333,12 @@ $cleanNursingMarker = static function (string $text): string {
             for ($i = 0, $n = count($showItems); $i < $n; $i++) {
                 $row = $showItems[$i];
                 if ($headDesc !== (string) ($row->Charge_type ?? '')) {
+                    if ($headDesc !== '') {
+                        $printGroupSubtotal($headTotal, $mode3ShowAmountAfterDiscount);
+                    }
                     $headDesc = (string) ($row->Charge_type ?? '');
-                    echo '<tr><td></td><td class="group">' . esc($headDesc) . '</td><td></td><td></td><td></td><td></td>' . ($mode3ShowAmountAfterDiscount ? '<td></td>' : '') . '</tr>';
+                    $headTotal = 0.0;
+                    echo '<tr class="group-row"><td></td><td class="group">' . esc($headDesc) . '</td><td></td><td></td><td></td><td></td>' . ($mode3ShowAmountAfterDiscount ? '<td></td>' : '') . '</tr>';
                 }
 
                 $amt = (float) ($row->amount ?? 0);
@@ -330,10 +354,21 @@ $cleanNursingMarker = static function (string $text): string {
                 }
                 echo '</tr>';
                 $srNo++;
+                $headTotal += $amt;
+            }
+
+            if ($headDesc !== '') {
+                $printGroupSubtotal($headTotal, $mode3ShowAmountAfterDiscount);
+                $headDesc = '';
+                $headTotal = 0.0;
             }
 
             foreach ($medicalItems as $row) {
                 $amt = (float) ($row->net_amount ?? 0);
+                if ($headDesc === '') {
+                    $headDesc = 'Medical';
+                    echo '<tr class="group-row"><td></td><td class="group">Medical</td><td></td><td></td><td></td><td></td>' . ($mode3ShowAmountAfterDiscount ? '<td></td>' : '') . '</tr>';
+                }
                 echo '<tr>';
                 echo '<td class="center">' . $srNo . '</td>';
                 echo '<td>' . esc((string) ($row->inv_med_code ?? 'Medicine')) . '</td>';
@@ -344,6 +379,11 @@ $cleanNursingMarker = static function (string $text): string {
                 }
                 echo '</tr>';
                 $srNo++;
+                $headTotal += $amt;
+            }
+
+            if ($headDesc !== '' && $headTotal > 0) {
+                $printGroupSubtotal($headTotal, $mode3ShowAmountAfterDiscount);
             }
             ?>
 
