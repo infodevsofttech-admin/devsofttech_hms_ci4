@@ -160,15 +160,16 @@ $cleanNursingMarker = static function (string $text): string {
         .bill-table th { background: #f2f2f2; font-size: 10.2px; }
         .center { text-align: center; }
         .right { text-align: right; }
-        .group { font-weight: 800; font-size: 10.4px; letter-spacing: 0.2px; }
+        .group { font-weight: 900; font-size: 10.4px; letter-spacing: 0.2px; }
         .group-row td {
             background: #e9eef6;
             border-top: 1.4px solid #4b5563;
             border-bottom: 1.2px solid #6b7280;
+            font-weight: 800;
         }
         .group-subtotal td {
             background: #f3f6fb;
-            font-weight: 700;
+            font-weight: 800;
             border-top: 1px dashed #64748b;
         }
         .totalline { font-weight: 700; }
@@ -259,9 +260,9 @@ $cleanNursingMarker = static function (string $text): string {
 
             $printGroupSubtotal = static function (float $total, bool $mode3) {
                 echo '<tr class="group-subtotal">';
-                echo '<td></td><td></td><td></td><td></td>';
-                echo '<td class="right">Sub Total</td>';
-                echo '<td class="right">' . esc(number_format($total, 2)) . '</td>';
+                echo '<td colspan="4"></td>';
+                echo '<td class="right"><strong>Sub Total</strong></td>';
+                echo '<td class="right"><strong>' . esc(number_format($total, 2)) . '</strong></td>';
                 if ($mode3) {
                     echo '<td class="right"></td>';
                 }
@@ -269,7 +270,7 @@ $cleanNursingMarker = static function (string $text): string {
             };
 
             if (! empty($packages)) {
-                echo '<tr class="group-row"><td></td><td class="group">Package</td><td></td><td></td><td></td><td></td>' . ($mode3ShowAmountAfterDiscount ? '<td></td>' : '') . '</tr>';
+                echo '<tr class="group-row"><td colspan="2" class="group"><strong>Package</strong></td><td></td><td></td><td></td><td></td>' . ($mode3ShowAmountAfterDiscount ? '<td></td>' : '') . '</tr>';
                 $packageTotal = 0.0;
                 foreach ($packages as $row) {
                     $amt = (float) ($row->package_Amount ?? 0);
@@ -298,7 +299,7 @@ $cleanNursingMarker = static function (string $text): string {
                     }
                     $headDesc = (string) ($row->group_desc ?? '');
                     $headTotal = 0.0;
-                    echo '<tr class="group-row"><td></td><td class="group">' . esc($headDesc) . '</td><td></td><td></td><td></td><td></td>' . ($mode3ShowAmountAfterDiscount ? '<td></td>' : '') . '</tr>';
+                    echo '<tr class="group-row"><td colspan="2" class="group"><strong>' . esc($headDesc) . '</strong></td><td></td><td></td><td></td><td></td>' . ($mode3ShowAmountAfterDiscount ? '<td></td>' : '') . '</tr>';
                 }
 
                 $amt = (float) ($row->item_amount ?? 0);
@@ -346,7 +347,7 @@ $cleanNursingMarker = static function (string $text): string {
                     }
                     $headDesc = (string) ($row->Charge_type ?? '');
                     $headTotal = 0.0;
-                    echo '<tr class="group-row"><td></td><td class="group">' . esc($headDesc) . '</td><td></td><td></td><td></td><td></td>' . ($mode3ShowAmountAfterDiscount ? '<td></td>' : '') . '</tr>';
+                    echo '<tr class="group-row"><td colspan="2" class="group"><strong>' . esc($headDesc) . '</strong></td><td></td><td></td><td></td><td></td>' . ($mode3ShowAmountAfterDiscount ? '<td></td>' : '') . '</tr>';
                 }
 
                 $amt = (float) ($row->amount ?? 0);
@@ -375,7 +376,7 @@ $cleanNursingMarker = static function (string $text): string {
                 $amt = (float) ($row->net_amount ?? 0);
                 if ($headDesc === '') {
                     $headDesc = 'Medical';
-                    echo '<tr class="group-row"><td></td><td class="group">Medical</td><td></td><td></td><td></td><td></td>' . ($mode3ShowAmountAfterDiscount ? '<td></td>' : '') . '</tr>';
+                    echo '<tr class="group-row"><td colspan="2" class="group"><strong>Medical</strong></td><td></td><td></td><td></td><td></td>' . ($mode3ShowAmountAfterDiscount ? '<td></td>' : '') . '</tr>';
                 }
                 echo '<tr>';
                 echo '<td class="center">' . $srNo . '</td>';
