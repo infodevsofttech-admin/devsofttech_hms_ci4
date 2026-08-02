@@ -205,6 +205,7 @@ if ($ageLabel === '') {
                                 </button>
                             </div>
                         </div>
+                        <div class="mt-2" id="compiledPdfButtons" style="display:none;"></div>
                     </div>
                 </div>
             <?php endif; ?>
@@ -1252,6 +1253,7 @@ function compileReport() {
     .then(result => {
         if (result.status === 'success') {
             alert(result.message || 'Data Compile');
+            renderCompiledPdfButtons(result);
             refreshTestList();
             refreshLabDateShow();
         } else {
@@ -1261,6 +1263,75 @@ function compileReport() {
     .catch(error => {
         console.error('compileReport error:', error);
         alert('Error compiling report: ' + error);
+    });
+}
+
+function renderCompiledPdfButtons(result) {
+    const container = document.getElementById('compiledPdfButtons');
+    if (!container) {
+        return;
+    }
+
+    const urls = (result && result.pdf_file_urls && typeof result.pdf_file_urls === 'object') ? result.pdf_file_urls : {};
+    const labels = (result && result.pdf_file_labels && typeof result.pdf_file_labels === 'object') ? result.pdf_file_labels : {};
+    const letterUrl = urls.letterhead || '';
+    const plainUrl = urls.plain || '';
+    const letterLabel = labels.letterhead || 'Default Template';
+    const plainLabel = labels.plain || 'Default Template';
+
+    if (!letterUrl && !plainUrl) {
+        container.style.display = 'none';
+        container.innerHTML = '';
+        return;
+    }
+
+    let html = '<div class="alert alert-success py-2 mb-0"><strong>Compiled PDFs:</strong> ';
+    if (letterUrl) {
+        html += '<a class="btn btn-sm btn-outline-primary ms-2" href="' + letterUrl + '" target="_blank" rel="noopener"><i class="bi bi-file-earmark-pdf"></i> Letter Head - ' + escapeHtml(letterLabel) + '</a>';
+    }
+    if (plainUrl) {
+        html += '<a class="btn btn-sm btn-outline-secondary ms-2" href="' + plainUrl + '" target="_blank" rel="noopener"><i class="bi bi-file-earmark-pdf"></i> Plain Paper - ' + escapeHtml(plainLabel) + '</a>';
+    }
+    html += '</div>';
+
+    container.innerHTML = html;
+    container.style.display = '';
+}
+
+function escapeHtml(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function loadCompiledPdfButtons() {
+    const invoiceInput = document.getElementById('invoiceId');
+    if (!invoiceInput) {
+        return;
+    }
+
+    const invoiceId = Number(invoiceInput.value || 0);
+    if (!invoiceId || !labType) {
+        return;
+    }
+
+    fetch(baseUrl + 'diagnosis/compiled-pdf-links/' + invoiceId + '/' + labType, {
+        method: 'GET',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result && result.status === 'success') {
+            renderCompiledPdfButtons(result);
+        }
+    })
+    .catch(error => {
+        console.error('loadCompiledPdfButtons error:', error);
     });
 }
 
@@ -1292,4 +1363,5 @@ function showReports() {
 console.log('Loading data for invoice:', invoiceId, 'labType:', labType);
 refreshTestList();
 refreshLabDateShow();
+loadCompiledPdfButtons();
 </script>

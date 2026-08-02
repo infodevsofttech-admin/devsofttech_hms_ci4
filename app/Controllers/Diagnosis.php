@@ -1428,6 +1428,8 @@ class Diagnosis extends BaseController
             ->get(1)
             ->getRow();
 
+        $doctorTokenData = $this->resolveMappedReportDoctorTokenData((int) ($row->lab_type ?? 0), $headRow);
+
         $tokens = $this->buildPdfTokens([
             'invoice_code'   => $row->invoice_code ?? '',
             'patient_name'   => $patientName,
@@ -1439,9 +1441,9 @@ class Diagnosis extends BaseController
             'collected_time' => $row->collected_time ?? '',
             'reported_time'  => $row->reported_time ?? '',
             'report_title'   => $repoTitle,
-            'doctor_name'    => $headRow->doc_name ?? '',
-            'doctor_education' => $headRow->doc_edu ?? '',
-            'technician_name' => $headRow->tech_name ?? '',
+            'doctor_name'    => $doctorTokenData['doctor_name'] ?? '',
+            'doctor_education' => $doctorTokenData['doctor_education'] ?? '',
+            'technician_name' => $doctorTokenData['technician_name'] ?? '',
             'signature_image_url' => (string) ($printSetting['signature_image'] ?? ''),
         ]);
 
@@ -1655,17 +1657,37 @@ class Diagnosis extends BaseController
             return $defaults;
         }
 
-        $builder = $this->db->table('diagnosis_print_templates')
-            ->where('modality', $labType)
-            ->where('status', 1);
+        $row = null;
 
+        // When template_id is explicitly requested, honor it first.
+        // Some legacy flows may save/select template IDs across modality switches.
         if ($templateId > 0) {
-            $builder->where('id', $templateId);
-        } else {
-            $builder->orderBy('is_default', 'DESC')->orderBy('id', 'ASC');
+            $row = $this->db->table('diagnosis_print_templates')
+                ->where('modality', $labType)
+                ->where('status', 1)
+                ->where('id', $templateId)
+                ->get(1)
+                ->getRowArray();
+
+            if (! is_array($row)) {
+                $row = $this->db->table('diagnosis_print_templates')
+                    ->where('status', 1)
+                    ->where('id', $templateId)
+                    ->get(1)
+                    ->getRowArray();
+            }
         }
 
-        $row = $builder->get(1)->getRowArray();
+        if (! is_array($row)) {
+            $row = $this->db->table('diagnosis_print_templates')
+                ->where('modality', $labType)
+                ->where('status', 1)
+                ->orderBy('is_default', 'DESC')
+                ->orderBy('id', 'ASC')
+                ->get(1)
+                ->getRowArray();
+        }
+
         if (! is_array($row)) {
             return $defaults;
         }
@@ -1734,6 +1756,146 @@ class Diagnosis extends BaseController
         }
 
         return $defaults;
+    }
+
+    /**
+     * Resolve report doctor token values using ABDM mapping first, with legacy fallback.
+     *
+     * @param object|array<string,mixed>|null $legacyHeadRow
+     * @return array<string,string>
+     */
+    private function resolveMappedReportDoctorTokenData(int $labType, $legacyHeadRow = null): array
+    {
+        $legacyDoctorName = '';
+        $legacyDoctorEducation = '';
+        $legacyTechnicianName = '';
+
+        if (is_object($legacyHeadRow)) {
+            $legacyDoctorName = trim((string) ($legacyHeadRow->doc_name ?? ''));
+            $legacyDoctorEducation = trim((string) ($legacyHeadRow->doc_edu ?? ''));
+            $legacyTechnicianName = trim((string) ($legacyHeadRow->tech_name ?? ''));
+        } elseif (is_array($legacyHeadRow)) {
+            $legacyDoctorName = trim((string) ($legacyHeadRow['doc_name'] ?? ''));
+            $legacyDoctorEducation = trim((string) ($legacyHeadRow['doc_edu'] ?? ''));
+            $legacyTechnicianName = trim((string) ($legacyHeadRow['tech_name'] ?? ''));
+        }
+
+        $out = [
+            'doctor_name' => $legacyDoctorName,
+            'doctor_education' => $legacyDoctorEducation,
+            'technician_name' => $legacyTechnicianName,
+        ];
+
+        $mappedDoctorId = $this->resolveMappedDoctorIdForLabType($labType);
+        if ($mappedDoctorId <= 0) {
+            return $out;
+        }
+
+        $mappedDoctor = $this->loadMappedDoctorById($mappedDoctorId);
+        if (! is_array($mappedDoctor)) {
+            return $out;
+        }
+
+        $mappedName = trim((string) ($mappedDoctor['name'] ?? ''));
+        $mappedEducation = trim((string) ($mappedDoctor['education'] ?? ''));
+
+        if ($mappedName !== '') {
+            $out['doctor_name'] = $mappedName;
+        }
+        if ($mappedEducation !== '') {
+            $out['doctor_education'] = $mappedEducation;
+        }
+
+        return $out;
+    }
+
+    private function resolveMappedDoctorIdForLabType(int $labType): int
+    {
+        $keys = [];
+
+        switch ($labType) {
+            case 5:
+                $keys = ['ABDM_DOC_PATHOLOGY'];
+                break;
+            case 3:
+                $keys = ['ABDM_DOC_XRAY', 'ABDM_DOC_RADIOLOGY'];
+                break;
+            case 4:
+                $keys = ['ABDM_DOC_CTSCAN', 'ABDM_DOC_RADIOLOGY'];
+                break;
+            case 1:
+                $keys = ['ABDM_DOC_ULTRASOUND', 'ABDM_DOC_RADIOLOGY'];
+                break;
+            case 2:
+                $keys = ['ABDM_DOC_MRI', 'ABDM_DOC_RADIOLOGY'];
+                break;
+            case 6:
+                $keys = ['ABDM_DOC_RADIOLOGY'];
+                break;
+            default:
+                $keys = ['ABDM_DOC_PATHOLOGY', 'ABDM_DOC_RADIOLOGY'];
+                break;
+        }
+
+        foreach ($keys as $key) {
+            $id = (int) $this->readSetting($key);
+            if ($id > 0) {
+                return $id;
+            }
+        }
+
+        return 0;
+    }
+
+    /**
+     * @return array<string,string>|null
+     */
+    private function loadMappedDoctorById(int $doctorId): ?array
+    {
+        if ($doctorId <= 0 || ! $this->db->tableExists('doctor_master')) {
+            return null;
+        }
+
+        $fields = $this->db->getFieldNames('doctor_master') ?? [];
+        $select = ['id'];
+        foreach (['p_title', 'p_fname', 'p_lname', 'education', 'qualification', 'degree', 'speciality', 'specialty', 'designation'] as $field) {
+            if (in_array($field, $fields, true)) {
+                $select[] = $field;
+            }
+        }
+
+        $row = $this->db->table('doctor_master')
+            ->select(implode(',', array_unique($select)))
+            ->where('id', $doctorId)
+            ->get(1)
+            ->getRowArray() ?? [];
+
+        if (empty($row)) {
+            return null;
+        }
+
+        $title = trim((string) ($row['p_title'] ?? ''));
+        $first = trim((string) ($row['p_fname'] ?? ''));
+        $last = trim((string) ($row['p_lname'] ?? ''));
+
+        $name = trim($title . ' ' . $first . ' ' . $last);
+        if ($name === '') {
+            $name = trim($first . ' ' . $last);
+        }
+
+        $education = '';
+        foreach (['education', 'qualification', 'degree', 'speciality', 'specialty', 'designation'] as $field) {
+            $value = trim((string) ($row[$field] ?? ''));
+            if ($value !== '') {
+                $education = $value;
+                break;
+            }
+        }
+
+        return [
+            'name' => $name,
+            'education' => $education,
+        ];
     }
 
     /**
@@ -2150,19 +2312,29 @@ class Diagnosis extends BaseController
                     'report_compile' => $compiledBy,
                 ]);
 
-            $pdfStore = $this->autoStoreCompiledPdfAttachment($invoiceId, $labType, $rawData, $header);
+            $pdfStore = $this->autoStoreCompiledPdfAttachments($invoiceId, $labType, $rawData, $header);
 
             $message = 'Data Compile';
-            if (($pdfStore['ok'] ?? false) && ! empty($pdfStore['file_id'])) {
-                $message .= ' + PDF stored';
-            } elseif (! empty($pdfStore['error'])) {
-                $message .= ' (PDF store skipped: ' . (string) $pdfStore['error'] . ')';
+            $storedCount = (int) count((array) ($pdfStore['file_ids'] ?? []));
+            if ($storedCount > 0) {
+                $message .= ' + ' . $storedCount . ' PDF stored (Letter Head + Plain Paper)';
             }
+            if (! empty($pdfStore['errors']) && is_array($pdfStore['errors'])) {
+                $message .= ' (some skipped: ' . implode(' | ', array_values($pdfStore['errors'])) . ')';
+            }
+
+            $compileTemplateIds = $this->resolveCompileTemplateIds($labType);
+            $compilePrintUrls = $this->buildCompilePrintUrls($invoiceId, $labType, $compileTemplateIds);
+            $compilePrintLabels = $this->buildCompileTemplateLabels($compileTemplateIds);
 
             return $this->response->setJSON([
                 'status' => 'success',
                 'message' => $message,
                 'pdf_file_id' => (int) ($pdfStore['file_id'] ?? 0),
+                'pdf_file_ids' => (array) ($pdfStore['file_ids'] ?? []),
+                'pdf_file_urls' => $compilePrintUrls,
+                'pdf_file_labels' => $compilePrintLabels,
+                'pdf_file_urls_saved' => (array) ($pdfStore['file_urls'] ?? []),
             ]);
         } catch (\Throwable $e) {
             return $this->response->setJSON([
@@ -2173,13 +2345,77 @@ class Diagnosis extends BaseController
     }
 
     /**
-     * Generate compiled report PDF and persist metadata in file_upload_data.
+     * Generate two compiled report PDFs (letterhead + plain) and persist metadata.
      * Fail-open: returns error details without throwing so compile flow stays successful.
      *
-     * @return array{ok: bool, file_id?: int, error?: string}
+    * @return array{ok: bool, file_id?: int, file_ids?: array<string,int>, file_urls?: array<string,string>, errors?: array<string,string>}
      */
-    private function autoStoreCompiledPdfAttachment(int $invoiceId, int $labType, string $reportHtml, string $reportHeader = ''): array
+    private function autoStoreCompiledPdfAttachments(int $invoiceId, int $labType, string $reportHtml, string $reportHeader = ''): array
     {
+        $variants = [
+            'letterhead' => [
+                'label' => 'Letter Head',
+                // On pre-printed letter head paper, avoid injecting extra top patient block.
+                'include_header' => false,
+            ],
+            'plain' => [
+                'label' => 'Plain Paper',
+                // Plain paper needs generated report header details.
+                'include_header' => true,
+            ],
+        ];
+
+        $fileIds = [];
+        $fileUrls = [];
+        $errors = [];
+        $firstFileId = 0;
+
+        foreach ($variants as $variantKey => $cfg) {
+            $single = $this->autoStoreCompiledPdfAttachmentVariant(
+                $invoiceId,
+                $labType,
+                $reportHtml,
+                $reportHeader,
+                (string) $variantKey,
+                (string) ($cfg['label'] ?? $variantKey),
+                (bool) ($cfg['include_header'] ?? false)
+            );
+
+            if (($single['ok'] ?? false) && ! empty($single['file_id'])) {
+                $fileId = (int) $single['file_id'];
+                $fileIds[$variantKey] = $fileId;
+                if (! empty($single['file_url'])) {
+                    $fileUrls[$variantKey] = (string) $single['file_url'];
+                }
+                if ($firstFileId <= 0) {
+                    $firstFileId = $fileId;
+                }
+            } else {
+                $errors[$variantKey] = (string) ($single['error'] ?? 'store_failed');
+            }
+        }
+
+        return [
+            'ok' => ! empty($fileIds),
+            'file_id' => $firstFileId,
+            'file_ids' => $fileIds,
+            'file_urls' => $fileUrls,
+            'errors' => $errors,
+        ];
+    }
+
+    /**
+    * @return array{ok: bool, file_id?: int, file_url?: string, error?: string}
+     */
+    private function autoStoreCompiledPdfAttachmentVariant(
+        int $invoiceId,
+        int $labType,
+        string $reportHtml,
+        string $reportHeader,
+        string $variantKey,
+        string $variantLabel,
+        bool $includeHeader
+    ): array {
         if ($invoiceId <= 0 || $labType <= 0) {
             return ['ok' => false, 'error' => 'invalid_context'];
         }
@@ -2189,8 +2425,13 @@ class Diagnosis extends BaseController
         }
 
         try {
-            $compiledHtml = trim($reportHeader) . "\n" . trim($reportHtml);
-            if ($compiledHtml === '') {
+            $compiledHtml = '';
+            if ($includeHeader) {
+                $compiledHtml .= trim($reportHeader) . "\n";
+            }
+            $compiledHtml .= trim($reportHtml);
+
+            if (trim($compiledHtml) === '') {
                 return ['ok' => false, 'error' => 'empty_compiled_report'];
             }
 
@@ -2220,7 +2461,7 @@ class Diagnosis extends BaseController
                 $invoiceCode = trim((string) ($inv['invoice_code'] ?? ''));
             }
             $invoiceCodeSafe = preg_replace('/[^A-Za-z0-9\-_]/', '_', $invoiceCode !== '' ? $invoiceCode : ('INV_' . $invoiceId));
-            $storedName = 'compiled_' . $invoiceCodeSafe . '_L' . $labType . '_' . date('Ymd_His') . '.pdf';
+            $storedName = 'compiled_' . $invoiceCodeSafe . '_L' . $labType . '_' . $variantKey . '_' . date('Ymd_His') . '.pdf';
 
             $targetDir = ROOTPATH . 'public' . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'diagnosis' . DIRECTORY_SEPARATOR . date('Y') . DIRECTORY_SEPARATOR . date('m');
             if (! is_dir($targetDir) && ! @mkdir($targetDir, 0775, true) && ! is_dir($targetDir)) {
@@ -2236,12 +2477,12 @@ class Diagnosis extends BaseController
 
             $fields = $this->db->getFieldNames('file_upload_data');
 
-            // Keep only one latest auto-compiled PDF per invoice/lab context.
+            // Keep only one latest auto-compiled PDF per invoice/lab context + variant.
             if (in_array('scan_type', $fields, true) && in_array('isdelete', $fields, true)) {
                 $this->db->table('file_upload_data')
                     ->where('charge_id', $invoiceId)
                     ->where('charge_type', $labType)
-                    ->where('scan_type', 'compiled_pdf_auto')
+                    ->where('scan_type', 'compiled_pdf_auto_' . $variantKey)
                     ->where('isdelete', 0)
                     ->update(['isdelete' => 1]);
             }
@@ -2254,8 +2495,8 @@ class Diagnosis extends BaseController
             $fieldMap = [
                 'name' => $storedName,
                 'file_name' => $storedName,
-                'orig_name' => 'Compiled_Report_' . ($invoiceCode !== '' ? $invoiceCode : $invoiceId) . '_' . $labType . '.pdf',
-                'client_name' => 'Compiled_Report_' . ($invoiceCode !== '' ? $invoiceCode : $invoiceId) . '_' . $labType . '.pdf',
+                'orig_name' => 'Compiled_Report_' . ($invoiceCode !== '' ? $invoiceCode : $invoiceId) . '_' . $labType . '_' . $variantKey . '.pdf',
+                'client_name' => 'Compiled_Report_' . ($invoiceCode !== '' ? $invoiceCode : $invoiceId) . '_' . $labType . '_' . $variantKey . '.pdf',
                 'file_ext' => '.pdf',
                 'file_type' => 'application/pdf',
                 'full_path' => str_replace('\\', '/', $absolutePath),
@@ -2267,17 +2508,17 @@ class Diagnosis extends BaseController
                 'image_type' => 'pdf',
                 'insert_date' => Time::now('Asia/Kolkata')->toDateTimeString(),
                 'insert_time' => Time::now('Asia/Kolkata')->toDateTimeString(),
-                'file_desc' => 'Auto compiled report PDF',
+                'file_desc' => 'Auto compiled report PDF (' . $variantLabel . ')',
                 'repo_id' => 0,
                 'charge_id' => $invoiceId,
                 'charge_type' => $labType,
                 'upload_by' => $uploadBy,
                 'upload_by_id' => $uploadById,
-                'scan_type' => 'compiled_pdf_auto',
+                'scan_type' => 'compiled_pdf_auto_' . $variantKey,
                 'show_type' => 0,
                 'isdelete' => 0,
-                'document_type' => 'diagnosis-compiled-report',
-                'content_description' => 'Auto-generated from diagnosis/report-compile',
+                'document_type' => 'diagnosis-compiled-report-' . $variantKey,
+                'content_description' => 'Auto-generated from diagnosis/report-compile (' . $variantLabel . ')',
             ];
 
             foreach ($fieldMap as $key => $value) {
@@ -2291,7 +2532,18 @@ class Diagnosis extends BaseController
                 return ['ok' => false, 'error' => 'Unable to save compiled PDF metadata'];
             }
 
-            return ['ok' => true, 'file_id' => (int) $this->db->insertID()];
+            $publicRoot = rtrim(str_replace('\\', '/', ROOTPATH . 'public'), '/');
+            $absoluteNormalized = str_replace('\\', '/', $absolutePath);
+            $relativePublicPath = str_starts_with($absoluteNormalized, $publicRoot)
+                ? ltrim(substr($absoluteNormalized, strlen($publicRoot)), '/')
+                : '';
+            $fileUrl = $relativePublicPath !== '' ? base_url($relativePublicPath) : '';
+
+            return [
+                'ok' => true,
+                'file_id' => (int) $this->db->insertID(),
+                'file_url' => $fileUrl,
+            ];
         } catch (\Throwable $e) {
             return ['ok' => false, 'error' => $e->getMessage()];
         }
@@ -2367,6 +2619,8 @@ class Diagnosis extends BaseController
         $relativeText = trim((string) ($patient->p_rname ?? ''));
         $repoTitle    = trim((string) ($itemType->group_desc ?? 'Lab Report'));
 
+        $doctorTokenData = $this->resolveMappedReportDoctorTokenData($labType, $head);
+
         $tokens = $this->buildPdfTokens([
             'invoice_code'   => $invoice->invoice_code ?? '',
             'patient_name'   => $patientName,
@@ -2378,9 +2632,9 @@ class Diagnosis extends BaseController
             'collected_time' => $invoiceRequest->collected_time ?? '',
             'reported_time'  => $invoiceRequest->reported_time ?? '',
             'report_title'   => $repoTitle,
-            'doctor_name'    => $head->doc_name ?? '',
-            'doctor_education' => $head->doc_edu ?? '',
-            'technician_name' => $head->tech_name ?? '',
+            'doctor_name'    => $doctorTokenData['doctor_name'] ?? '',
+            'doctor_education' => $doctorTokenData['doctor_education'] ?? '',
+            'technician_name' => $doctorTokenData['technician_name'] ?? '',
             'signature_image_url' => (string) ($printSetting['signature_image'] ?? ''),
         ]);
 
@@ -2600,6 +2854,137 @@ class Diagnosis extends BaseController
             'invoice_id' => $invoiceId,
             'lab_type' => $labType,
         ]);
+    }
+
+    public function compiledPdfLinks($invoiceId, $labType)
+    {
+        $invoiceId = (int) $invoiceId;
+        $labType = (int) $labType;
+
+        if ($invoiceId <= 0 || $labType <= 0) {
+            return $this->response->setJSON([
+                'status' => 'error',
+                'message' => 'Invalid parameters',
+                'pdf_file_urls' => [],
+            ]);
+        }
+
+        $templateIds = $this->resolveCompileTemplateIds($labType);
+        $urls = $this->buildCompilePrintUrls($invoiceId, $labType, $templateIds);
+        $labels = $this->buildCompileTemplateLabels($templateIds);
+
+        return $this->response->setJSON([
+            'status' => 'success',
+            'pdf_file_urls' => $urls,
+            'pdf_file_labels' => $labels,
+        ]);
+    }
+
+    /**
+     * @return array{letterhead:string, plain:string}
+     */
+    private function buildCompilePrintUrls(int $invoiceId, int $labType, array $templateIds = []): array
+    {
+        if (empty($templateIds)) {
+            $templateIds = $this->resolveCompileTemplateIds($labType);
+        }
+
+        $base = base_url('Lab_Admin/print_pdf_create/' . $invoiceId . '/' . $labType . '/1');
+        $letterheadUrl = $base;
+        if (($templateIds['letterhead'] ?? 0) > 0) {
+            $letterheadUrl .= '?template_id=' . (int) $templateIds['letterhead'];
+        }
+
+        $plainUrl = $base;
+        if (($templateIds['plain'] ?? 0) > 0) {
+            $plainUrl .= '?template_id=' . (int) $templateIds['plain'];
+        }
+
+        return [
+            'letterhead' => $letterheadUrl,
+            'plain' => $plainUrl,
+        ];
+    }
+
+    /**
+     * @param array{letterhead:int, plain:int} $templateIds
+     * @return array{letterhead:string, plain:string}
+     */
+    private function buildCompileTemplateLabels(array $templateIds): array
+    {
+        $letterheadName = $this->getDiagnosisTemplateNameById((int) ($templateIds['letterhead'] ?? 0));
+        $plainName = $this->getDiagnosisTemplateNameById((int) ($templateIds['plain'] ?? 0));
+
+        return [
+            'letterhead' => $letterheadName !== '' ? $letterheadName : 'Default Template',
+            'plain' => $plainName !== '' ? $plainName : 'Default Template',
+        ];
+    }
+
+    private function getDiagnosisTemplateNameById(int $templateId): string
+    {
+        if ($templateId <= 0 || ! $this->db->tableExists('diagnosis_print_templates')) {
+            return '';
+        }
+
+        $row = $this->db->table('diagnosis_print_templates')
+            ->select('template_name')
+            ->where('id', $templateId)
+            ->where('status', 1)
+            ->get(1)
+            ->getRowArray();
+
+        return trim((string) ($row['template_name'] ?? ''));
+    }
+
+    /**
+     * @return array{letterhead:int, plain:int}
+     */
+    private function resolveCompileTemplateIds(int $labType): array
+    {
+        $letterhead = (int) $this->readSetting('DIAG_COMPILE_TPL_LETTERHEAD_' . $labType);
+        $plain = (int) $this->readSetting('DIAG_COMPILE_TPL_PLAIN_' . $labType);
+
+        if ($this->db->tableExists('diagnosis_print_templates')) {
+            if ($letterhead <= 0) {
+                $defaultRow = $this->db->table('diagnosis_print_templates')
+                    ->select('id')
+                    ->where('modality', $labType)
+                    ->where('status', 1)
+                    ->orderBy('is_default', 'DESC')
+                    ->orderBy('id', 'ASC')
+                    ->get(1)
+                    ->getRowArray();
+                $letterhead = (int) ($defaultRow['id'] ?? 0);
+            }
+
+            if ($plain <= 0) {
+                $plainBuilder = $this->db->table('diagnosis_print_templates')
+                    ->select('id')
+                    ->where('modality', $labType)
+                    ->where('status', 1);
+
+                if ($letterhead > 0) {
+                    $plainBuilder->where('id !=', $letterhead);
+                }
+
+                $plainRow = $plainBuilder
+                    ->orderBy('is_default', 'DESC')
+                    ->orderBy('id', 'ASC')
+                    ->get(1)
+                    ->getRowArray();
+                $plain = (int) ($plainRow['id'] ?? 0);
+
+                if ($plain <= 0) {
+                    $plain = $letterhead;
+                }
+            }
+        }
+
+        return [
+            'letterhead' => $letterhead,
+            'plain' => $plain,
+        ];
     }
 
     public function imagingUploadGallery($invoiceId, $labType, $labReqId = 0)

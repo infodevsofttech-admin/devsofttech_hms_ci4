@@ -7,9 +7,22 @@ $columnsReady = (bool) ($columns_ready ?? false);
 $modalityList = $modality_list ?? [];
 $templates = $templates ?? [];
 $selectedTemplateId = (int) ($selected_template_id ?? 0);
+$compileLetterheadTemplateId = (int) ($compile_letterhead_template_id ?? 0);
+$compilePlainTemplateId = (int) ($compile_plain_template_id ?? 0);
+$currentTemplateType = (string) ($current_template_type ?? 'letterhead');
 $hasSignatureImageColumn = (bool) ($has_signature_image_column ?? false);
 $modalityLabel = (string) ($modalityList[$modality] ?? 'Diagnosis');
 $panelTitle = $modalityLabel . ' Print Template';
+
+$templateNameById = [];
+foreach ($templates as $tpl) {
+    $tplId = (int) ($tpl['id'] ?? 0);
+    if ($tplId > 0) {
+        $templateNameById[$tplId] = (string) ($tpl['template_name'] ?? ('Template ' . $tplId));
+    }
+}
+$compileLetterheadTemplateName = (string) ($templateNameById[$compileLetterheadTemplateId] ?? ($compileLetterheadTemplateId > 0 ? 'Template ' . $compileLetterheadTemplateId : 'Use modality default template'));
+$compilePlainTemplateName = (string) ($templateNameById[$compilePlainTemplateId] ?? ($compilePlainTemplateId > 0 ? 'Template ' . $compilePlainTemplateId : 'Use modality default template'));
 ?>
 
 <section class="content">
@@ -35,6 +48,10 @@ $panelTitle = $modalityLabel . ' Print Template';
             <form method="post" action="<?= base_url('setting/template/diagnosis_print_settings/' . $modality) ?>" enctype="multipart/form-data" id="diag_print_setting_form">
                 <?= csrf_field() ?>
                 <input type="hidden" name="template_id" value="<?= (int) ($row['id'] ?? $selectedTemplateId) ?>">
+                <input type="hidden" name="template_type" id="template_type_input" value="<?= esc($currentTemplateType) ?>">
+                <input type="hidden" name="compile_letterhead_template_id" id="compile_letterhead_template_id" value="<?= (int) $compileLetterheadTemplateId ?>">
+                <input type="hidden" name="compile_plain_template_id" id="compile_plain_template_id" value="<?= (int) $compilePlainTemplateId ?>">
+                <input type="hidden" name="template_name" id="template_name_input" value="<?= esc($currentTemplateType === 'plain' ? 'Plain Paper' : 'Letter Head') ?>">
                 <div class="row g-2">
                     <div class="col-md-3">
                         <label class="form-label small">Modality</label>
@@ -44,30 +61,19 @@ $panelTitle = $modalityLabel . ' Print Template';
                             <?php endforeach; ?>
                         </select>
                     </div>
-                    <div class="col-md-5">
-                        <label class="form-label small">Template Name</label>
-                        <input type="text" class="form-control form-control-sm" name="template_name" value="<?= esc((string) ($row['template_name'] ?? '')) ?>" placeholder="e.g. Standard <?= esc($modalityLabel) ?> Template" required>
-                    </div>
-                    <div class="col-md-4 d-flex align-items-end">
-                        <div class="form-check mb-1">
-                            <input class="form-check-input" type="checkbox" name="is_default" id="is_default" value="1" <?= ((int) ($row['is_default'] ?? 0) === 1) ? 'checked' : '' ?>>
-                            <label class="form-check-label" for="is_default">Set as default template for this modality</label>
-                        </div>
-                    </div>
+                    <div class="col-md-9"></div>
                 </div>
 
-                <div class="mt-2 mb-2">
-                    <label class="form-label small mb-1">Template List</label>
-                    <div class="d-flex flex-wrap gap-2">
-                        <?php foreach ($templates as $tpl): ?>
-                            <?php
-                            $tplId = (int) ($tpl['id'] ?? 0);
-                            $tplName = (string) ($tpl['template_name'] ?? ('Template ' . $tplId));
-                            $activeClass = ($tplId === (int) ($row['id'] ?? $selectedTemplateId)) ? 'btn-primary' : 'btn-outline-primary';
-                            ?>
-                            <a class="btn btn-sm <?= $activeClass ?>" href="javascript:load_form_div('<?= base_url('setting/template/diagnosis_print_settings/' . $modality . '?template_id=' . $tplId) ?>','maindiv','<?= esc($panelTitle) ?>');"><?= esc($tplName) ?></a>
-                        <?php endforeach; ?>
-                        <a class="btn btn-sm btn-outline-success" href="javascript:load_form_div('<?= base_url('setting/template/diagnosis_print_settings/' . $modality . '?new=1') ?>','maindiv','<?= esc($panelTitle) ?>');">+ New Template</a>
+                <div class="row g-2 mt-2 mb-2">
+                    <div class="col-md-6">
+                        <label class="form-label small mb-1">Template Type</label>
+                        <select class="form-select form-select-sm" id="template_type_selector" onchange="loadDiagnosisTemplateType(this.value)">
+                            <option value="letterhead" <?= $currentTemplateType === 'letterhead' ? 'selected' : '' ?>>Letter Head</option>
+                            <option value="plain" <?= $currentTemplateType === 'plain' ? 'selected' : '' ?>>Plain Paper</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 d-flex align-items-end">
+                        <button type="button" class="btn btn-sm btn-outline-success" onclick="loadDiagnosisTemplateType(document.getElementById('template_type_selector') ? document.getElementById('template_type_selector').value : 'letterhead')">Load Template</button>
                     </div>
                 </div>
 
@@ -136,7 +142,7 @@ $panelTitle = $modalityLabel . ' Print Template';
                     </div>
                     <div class="col-md-2">
                         <label class="form-label small">Watermark Alpha</label>
-                        <input type="number" $11" min="0.01" max="1" class="form-control form-control-sm" name="watermark_alpha" value="<?= esc((string) ($row['watermark_alpha'] ?? '0.12')) ?>">
+                        <input type="number" step="0.01" min="0.01" max="1" class="form-control form-control-sm" name="watermark_alpha" value="<?= esc((string) ($row['watermark_alpha'] ?? '0.12')) ?>">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label small">Watermark Text</label>
@@ -317,9 +323,65 @@ $panelTitle = $modalityLabel . ' Print Template';
         }
     };
 
+    window.loadDiagnosisTemplateType = function (value) {
+        var type = String(value || 'letterhead');
+        var templateId = 0;
+        var letterInput = document.getElementById('compile_letterhead_template_id');
+        var plainInput = document.getElementById('compile_plain_template_id');
+        var typeInput = document.getElementById('template_type_input');
+        var templateNameInput = document.getElementById('template_name_input');
+
+        if (typeInput) {
+            typeInput.value = type;
+        }
+        if (templateNameInput) {
+            templateNameInput.value = type === 'plain' ? 'Plain Paper' : 'Letter Head';
+        }
+
+        if (type === 'plain') {
+            templateId = plainInput ? parseInt(plainInput.value || '0', 10) : 0;
+        } else {
+            templateId = letterInput ? parseInt(letterInput.value || '0', 10) : 0;
+        }
+
+        var url = '<?= base_url('setting/template/diagnosis_print_settings/' . $modality) ?>';
+        var query = ['template_type=' + encodeURIComponent(type)];
+        if (templateId > 0) {
+            query.push('template_id=' + encodeURIComponent(String(templateId)));
+        } else {
+            query.push('new=1');
+        }
+        url += '?' + query.join('&');
+
+        if (typeof load_form_div === 'function') {
+            load_form_div(url, 'maindiv', '<?= esc($panelTitle) ?>');
+        } else {
+            window.location.href = url;
+        }
+    };
+
     if (form) {
         form.addEventListener('submit', function (event) {
             event.preventDefault();
+
+            var typeInput = document.getElementById('template_type_input');
+            var currentType = typeInput ? String(typeInput.value || 'letterhead') : 'letterhead';
+            var templateNameInput = document.getElementById('template_name_input');
+            var templateIdInput = form.querySelector('input[name="template_id"]');
+            var letterInput = document.getElementById('compile_letterhead_template_id');
+            var plainInput = document.getElementById('compile_plain_template_id');
+
+            if (templateNameInput) {
+                templateNameInput.value = currentType === 'plain' ? 'Plain Paper' : 'Letter Head';
+            }
+
+            if (templateIdInput) {
+                if (currentType === 'plain') {
+                    templateIdInput.value = plainInput ? String(parseInt(plainInput.value || '0', 10) || 0) : '0';
+                } else {
+                    templateIdInput.value = letterInput ? String(parseInt(letterInput.value || '0', 10) || 0) : '0';
+                }
+            }
 
             var submitBtn = form.querySelector('button[type="submit"]');
             if (submitBtn) {
@@ -341,6 +403,32 @@ $panelTitle = $modalityLabel . ' Print Template';
                 var message = (result && result.notice) ? result.notice : 'Unable to save settings.';
                 showNotice(status, message);
 
+                if (result && result.selected_template_id) {
+                    var tplInput = form.querySelector('input[name="template_id"]');
+                    if (tplInput) {
+                        tplInput.value = String(result.selected_template_id);
+                    }
+
+                    var typeInput = document.getElementById('template_type_input');
+                    var currentType = typeInput ? String(typeInput.value || 'letterhead') : 'letterhead';
+                    if (currentType === 'plain') {
+                        var plainInput = document.getElementById('compile_plain_template_id');
+                        if (plainInput) {
+                            plainInput.value = String(result.selected_template_id);
+                        }
+                    } else {
+                        var letterInput = document.getElementById('compile_letterhead_template_id');
+                        if (letterInput) {
+                            letterInput.value = String(result.selected_template_id);
+                        }
+                    }
+
+                    var templateTypeSelector = document.getElementById('template_type_selector');
+                    if (templateTypeSelector) {
+                        templateTypeSelector.value = currentType;
+                    }
+                }
+
                 if (result && result.csrfName && result.csrfHash) {
                     var csrfInput = form.querySelector('input[name="' + result.csrfName + '"]');
                     if (csrfInput) {
@@ -356,6 +444,17 @@ $panelTitle = $modalityLabel . ' Print Template';
                     submitBtn.disabled = false;
                 }
             });
+        });
+    }
+
+    var templateTypeSelector = document.getElementById('template_type_selector');
+    if (templateTypeSelector) {
+        templateTypeSelector.addEventListener('change', function () {
+            var typeInput = document.getElementById('template_type_input');
+            if (typeInput) {
+                typeInput.value = this.value;
+            }
+            window.loadDiagnosisTemplateType(this.value);
         });
     }
 })();

@@ -2256,6 +2256,24 @@ HTML;
 
         $selectedTemplateId = (int) ($this->request->getGet('template_id') ?? 0);
         $isNewTemplate = (int) ($this->request->getGet('new') ?? 0) === 1;
+        $compileLetterheadTemplateId = (int) $this->readHospitalSettingValue('DIAG_COMPILE_TPL_LETTERHEAD_' . $modality);
+        $compilePlainTemplateId = (int) $this->readHospitalSettingValue('DIAG_COMPILE_TPL_PLAIN_' . $modality);
+        $currentTemplateType = strtolower(trim((string) ($this->request->getGet('template_type') ?? 'letterhead')));
+        if (! in_array($currentTemplateType, ['letterhead', 'plain'], true)) {
+            $currentTemplateType = 'letterhead';
+        }
+
+        $mappedTemplateIdForType = $currentTemplateType === 'plain'
+            ? $compilePlainTemplateId
+            : $compileLetterheadTemplateId;
+
+        if ($selectedTemplateId <= 0) {
+            if ($mappedTemplateIdForType > 0) {
+                $selectedTemplateId = $mappedTemplateIdForType;
+            } else {
+                $isNewTemplate = true;
+            }
+        }
 
         if (strtolower($this->request->getMethod()) === 'post') {
             $modality = (int) ($this->request->getPost('modality') ?? $modality);
@@ -2263,7 +2281,27 @@ HTML;
                 $modality = 3;
             }
 
+            $currentTemplateType = strtolower(trim((string) ($this->request->getPost('template_type') ?? $currentTemplateType)));
+            if (! in_array($currentTemplateType, ['letterhead', 'plain'], true)) {
+                $currentTemplateType = 'letterhead';
+            }
+
+            $compileLetterheadTemplateId = (int) ($this->request->getPost('compile_letterhead_template_id') ?? 0);
+            $compilePlainTemplateId = (int) ($this->request->getPost('compile_plain_template_id') ?? 0);
+
             $selectedTemplateId = (int) ($this->request->getPost('template_id') ?? 0);
+
+            $mappedTemplateIdForType = $currentTemplateType === 'plain'
+                ? $compilePlainTemplateId
+                : $compileLetterheadTemplateId;
+
+            if ($mappedTemplateIdForType > 0) {
+                $selectedTemplateId = $mappedTemplateIdForType;
+            } elseif ($currentTemplateType === 'plain' && $compileLetterheadTemplateId > 0 && $selectedTemplateId === $compileLetterheadTemplateId) {
+                $selectedTemplateId = 0;
+            } elseif ($currentTemplateType === 'letterhead' && $compilePlainTemplateId > 0 && $selectedTemplateId === $compilePlainTemplateId) {
+                $selectedTemplateId = 0;
+            }
 
             if (! $columnsReady) {
                 $notice = 'Print settings columns are missing. Please run migration first.';
@@ -2278,10 +2316,7 @@ HTML;
                         ->getRowArray() ?? [];
                 }
 
-                $templateName = trim((string) ($this->request->getPost('template_name') ?? ''));
-                if ($templateName === '') {
-                    $templateName = 'Template ' . date('d-m-Y H:i');
-                }
+                $templateName = $currentTemplateType === 'plain' ? 'Plain Paper' : 'Letter Head';
 
                 $removeBackground = (int) ($this->request->getPost('remove_background') ?? 0) === 1;
                 $removeWatermarkImage = (int) ($this->request->getPost('remove_watermark_image') ?? 0) === 1;
@@ -2384,7 +2419,7 @@ HTML;
                     'patient_info_html' => (string) ($this->request->getPost('patient_info_html') ?? ''),
                     'mpdf_prefix_html' => (string) ($this->request->getPost('mpdf_prefix_html') ?? ''),
                     'mpdf_suffix_html' => (string) ($this->request->getPost('mpdf_suffix_html') ?? ''),
-                    'is_default' => (int) ($this->request->getPost('is_default') ?? 0) === 1 ? 1 : 0,
+                    'is_default' => ! empty($existing) ? (int) ($existing['is_default'] ?? 0) : 0,
                     'status' => 1,
                 ];
 
@@ -2393,11 +2428,18 @@ HTML;
                 }
 
                 if ($noticeType !== 'danger') {
-                    if ($data['is_default'] === 1) {
-                        $templateTable
+                    if (empty($existing)) {
+                        $hasDefaultTemplate = (bool) ($templateTable
+                            ->select('id')
                             ->where('modality', $modality)
-                            ->set('is_default', 0)
-                            ->update();
+                            ->where('status', 1)
+                            ->where('is_default', 1)
+                            ->get(1)
+                            ->getRowArray());
+
+                        if (! $hasDefaultTemplate && $currentTemplateType === 'letterhead') {
+                            $data['is_default'] = 1;
+                        }
                     }
 
                     if (! empty($existing) && $selectedTemplateId > 0) {
@@ -2412,6 +2454,27 @@ HTML;
 
                     $notice = (($modalityList[$modality] ?? 'Diagnosis') . ' print template saved.');
                     $noticeType = 'success';
+
+                    if ($currentTemplateType === 'plain') {
+                        $compilePlainTemplateId = $selectedTemplateId;
+                    } else {
+                        $compileLetterheadTemplateId = $selectedTemplateId;
+                    }
+
+                    $letterheadSettingKey = 'DIAG_COMPILE_TPL_LETTERHEAD_' . $modality;
+                    $plainSettingKey = 'DIAG_COMPILE_TPL_PLAIN_' . $modality;
+
+                    if ($compileLetterheadTemplateId > 0) {
+                        $this->upsertHospitalSettingValue($letterheadSettingKey, (string) $compileLetterheadTemplateId);
+                    } else {
+                        $this->deleteHospitalSettingValue($letterheadSettingKey);
+                    }
+
+                    if ($compilePlainTemplateId > 0) {
+                        $this->upsertHospitalSettingValue($plainSettingKey, (string) $compilePlainTemplateId);
+                    } else {
+                        $this->deleteHospitalSettingValue($plainSettingKey);
+                    }
                 }
             }
 
@@ -2455,6 +2518,9 @@ HTML;
             'row' => $row,
             'templates' => $templates,
             'selected_template_id' => $selectedTemplateId,
+            'compile_letterhead_template_id' => $compileLetterheadTemplateId,
+            'compile_plain_template_id' => $compilePlainTemplateId,
+            'current_template_type' => $currentTemplateType,
             'notice' => $notice,
             'notice_type' => $noticeType,
             'columns_ready' => $columnsReady,
@@ -2462,6 +2528,49 @@ HTML;
                 'has_signature_image_column' => $hasSignatureImageColumn,
             'has_signature_image_column' => $hasSignatureImageColumn,
         ]);
+    }
+
+    private function readHospitalSettingValue(string $name): string
+    {
+        if ($name === '' || ! $this->db->tableExists('hospital_setting')) {
+            return '';
+        }
+
+        $row = $this->db->table('hospital_setting')
+            ->select('s_value')
+            ->where('s_name', $name)
+            ->get(1)
+            ->getRowArray();
+
+        return trim((string) ($row['s_value'] ?? ''));
+    }
+
+    private function upsertHospitalSettingValue(string $name, string $value): bool
+    {
+        if ($name === '' || ! $this->db->tableExists('hospital_setting')) {
+            return false;
+        }
+
+        $table = $this->db->table('hospital_setting');
+        $existing = $table->select('id')->where('s_name', $name)->get(1)->getRowArray();
+
+        if ($existing) {
+            return (bool) $table->where('id', (int) ($existing['id'] ?? 0))->update(['s_value' => $value]);
+        }
+
+        return (bool) $table->insert([
+            's_name' => $name,
+            's_value' => $value,
+        ]);
+    }
+
+    private function deleteHospitalSettingValue(string $name): bool
+    {
+        if ($name === '' || ! $this->db->tableExists('hospital_setting')) {
+            return false;
+        }
+
+        return (bool) $this->db->table('hospital_setting')->where('s_name', $name)->delete();
     }
 
     public function document_print_settings()

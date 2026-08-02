@@ -202,7 +202,7 @@ $hasTemplateAccess = $canPathology || $canUltrasound || $canXray || $canCt || $c
 
         <?php if ($canOpdPrintTemplate) { ?>
             <div class="col-6 col-md-2 col-lg-2">
-                <a class="admin-tile" href="javascript:load_form('<?= base_url('Opd/print_template_builder') ?>','maindiv','OPD Print Template');">
+                <a class="admin-tile" href="javascript:load_form_div('<?= base_url('Opd/print_template_builder') ?>','maindiv','OPD Print Template');">
                     <span class="tile-icon"><i class="bi bi-printer"></i></span>
                     <span>OPD Print Template</span>
                 </a>
@@ -211,7 +211,7 @@ $hasTemplateAccess = $canPathology || $canUltrasound || $canXray || $canCt || $c
 
         <?php if ($canDischarge) { ?>
             <div class="col-6 col-md-2 col-lg-2">
-                <a class="admin-tile" href="javascript:load_form('<?= base_url('setting/template/discharge_templates') ?>','maindiv','IPD Discharge Template');">
+                <a class="admin-tile" href="javascript:load_form_div('<?= base_url('setting/template/discharge_templates') ?>','maindiv','IPD Discharge Template');">
                     <span class="tile-icon"><i class="bi bi-file-earmark-medical"></i></span>
                     <span>IPD Discharge Template</span>
                 </a>
@@ -220,7 +220,7 @@ $hasTemplateAccess = $canPathology || $canUltrasound || $canXray || $canCt || $c
 
         <?php if ($canIpdDocumentMaster) { ?>
             <div class="col-6 col-md-2 col-lg-2">
-                <a class="admin-tile" href="javascript:load_form('<?= base_url('setting/template/ipd_document_templates') ?>','maindiv','IPD Document Master');">
+                <a class="admin-tile" href="javascript:load_form_div('<?= base_url('setting/template/ipd_document_templates') ?>','maindiv','IPD Document Master');">
                     <span class="tile-icon"><i class="bi bi-file-earmark-richtext"></i></span>
                     <span>IPD Document Master</span>
                 </a>
@@ -230,7 +230,7 @@ $hasTemplateAccess = $canPathology || $canUltrasound || $canXray || $canCt || $c
         <?php if ($canDiagnosisPrintTemplate) { ?>
             <?php if ($canPathologyPrintTemplate) { ?>
                 <div class="col-6 col-md-2 col-lg-2">
-                    <a class="admin-tile" href="javascript:load_form('<?= base_url('setting/template/diagnosis_print_settings/5') ?>','maindiv','Pathology Print Template');">
+                    <a class="admin-tile" href="javascript:load_form_div('<?= base_url('setting/template/diagnosis_print_settings/5') ?>','maindiv','Pathology Print Template');">
                         <span class="tile-icon"><i class="bi bi-printer"></i></span>
                         <span>Pathology Print Template</span>
                     </a>
@@ -238,7 +238,7 @@ $hasTemplateAccess = $canPathology || $canUltrasound || $canXray || $canCt || $c
             <?php } ?>
 
             <div class="col-6 col-md-2 col-lg-2">
-                <a class="admin-tile" href="javascript:load_form('<?= base_url('setting/template/diagnosis_print_settings/3') ?>','maindiv','Diagnosis Print Template');">
+                <a class="admin-tile" href="javascript:load_form_div('<?= base_url('setting/template/diagnosis_print_settings/3') ?>','maindiv','Diagnosis Print Template');">
                     <span class="tile-icon"><i class="bi bi-printer-fill"></i></span>
                     <span>Diagnosis Print Template</span>
                 </a>
@@ -247,7 +247,7 @@ $hasTemplateAccess = $canPathology || $canUltrasound || $canXray || $canCt || $c
 
         <?php if ($canDoctorDocumentPrintTemplate) { ?>
             <div class="col-6 col-md-2 col-lg-2">
-                <a class="admin-tile" href="javascript:load_form('<?= base_url('setting/template/document_print_settings') ?>','maindiv','Document Print Template');">
+                <a class="admin-tile" href="javascript:load_form_div('<?= base_url('setting/template/document_print_settings') ?>','maindiv','Document Print Template');">
                     <span class="tile-icon"><i class="bi bi-file-earmark-pdf"></i></span>
                     <span>Document Print Template</span>
                 </a>

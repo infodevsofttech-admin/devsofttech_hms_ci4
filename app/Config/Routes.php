@@ -1102,6 +1102,7 @@ $routes->match(['GET', 'POST'], 'diagnosis/get-template-xray/(:num)', 'Diagnosis
 $routes->post('diagnosis/remove-test/(:num)', 'Diagnosis::removeTest/$1');
 $routes->post('diagnosis/update-combine-report', 'Diagnosis::updateCombineReport');
 $routes->post('diagnosis/report-compile/(:num)/(:num)', 'Diagnosis::reportCompile/$1/$2');
+$routes->get('diagnosis/compiled-pdf-links/(:num)/(:num)', 'Diagnosis::compiledPdfLinks/$1/$2');
 $routes->post('diagnosis/upload-report-file', 'Diagnosis::uploadReportFile');
 $routes->get('diagnosis/report-file-list/(:num)/(:num)', 'Diagnosis::reportFileList/$1/$2');
 $routes->get('diagnosis/report-file-list/(:num)/(:num)/(:num)', 'Diagnosis::reportFileList/$1/$2/$3');
