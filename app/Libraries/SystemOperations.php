@@ -229,16 +229,89 @@ class SystemOperations
 
     private function readCpuUsage(): ?float
     {
+        // Try shell command first (if available)
         $result = $this->safeCommand('top -bn1 | grep "Cpu(s)" | tail -n 1');
-        if ($result === 'Unavailable') {
-            return null;
+        if ($result !== 'Unavailable' && trim($result) !== '') {
+            if (preg_match('/(\d+(?:\.\d+)?)%us/', $result, $matches)) {
+                return (float) $matches[1];
+            }
         }
 
-        if (preg_match('/(\d+(?:\.\d+)?)%us/', $result, $matches)) {
-            return (float) $matches[1];
+        // Fallback: read from /proc/stat if on Linux
+        if (file_exists('/proc/stat')) {
+            return $this->readCpuUsageFromProcStat();
+        }
+
+        // Fallback: use PHP getrusage if available
+        if (function_exists('getrusage')) {
+            return $this->readCpuUsageFromRusage();
         }
 
         return null;
+    }
+
+    private function readCpuUsageFromProcStat(): ?float
+    {
+        static $lastStat = null;
+        static $lastTime = null;
+
+        $statFile = @file_get_contents('/proc/stat');
+        if ($statFile === false) {
+            return null;
+        }
+
+        $lines = explode("\n", $statFile);
+        $cpuLine = $lines[0];
+        if (! str_starts_with($cpuLine, 'cpu ')) {
+            return null;
+        }
+
+        $parts = preg_split('/\s+/', trim($cpuLine));
+        if (count($parts) < 5) {
+            return null;
+        }
+
+        $user = (int) $parts[1];
+        $nice = (int) $parts[2];
+        $system = (int) $parts[3];
+        $idle = (int) $parts[4];
+        $iowait = isset($parts[5]) ? (int) $parts[5] : 0;
+
+        $totalTime = microtime(true);
+        $total = $user + $nice + $system + $idle + $iowait;
+        $work = $user + $nice + $system;
+
+        if ($lastStat === null || $lastTime === null) {
+            $lastStat = ['total' => $total, 'work' => $work];
+            $lastTime = $totalTime;
+            return 0.0;
+        }
+
+        $diffTotal = $total - $lastStat['total'];
+        $diffWork = $work - $lastStat['work'];
+
+        $lastStat = ['total' => $total, 'work' => $work];
+        $lastTime = $totalTime;
+
+        if ($diffTotal <= 0) {
+            return 0.0;
+        }
+
+        return min(100.0, round(($diffWork / $diffTotal) * 100, 2));
+    }
+
+    private function readCpuUsageFromRusage(): ?float
+    {
+        $rusage = getrusage();
+        if (! is_array($rusage)) {
+            return null;
+        }
+
+        $userTime = ($rusage['ru_utime.tv_sec'] ?? 0) + (($rusage['ru_utime.tv_usec'] ?? 0) / 1000000);
+        $systemTime = ($rusage['ru_stime.tv_sec'] ?? 0) + (($rusage['ru_stime.tv_usec'] ?? 0) / 1000000);
+        $totalTime = $userTime + $systemTime;
+
+        return min(100.0, (float) ($totalTime * 100));
     }
 
     private function readMemoryUsage(): array

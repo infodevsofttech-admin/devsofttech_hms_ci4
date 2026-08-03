@@ -57,14 +57,43 @@
         <div class="card ops-card">
             <div class="card-header"><h5 class="mb-0">Resource Usage</h5></div>
             <div class="card-body">
-                <div class="mb-3">
-                    <div class="d-flex justify-content-between small text-muted"><span>CPU</span><span><?= esc((string) ($status['cpu']['used_percent'] ?? 'N/A')) ?>%</span></div>
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between small text-muted mb-1"><span>CPU</span><span id="cpuPercent"><?= esc((string) ($status['cpu']['used_percent'] ?? 'N/A')) ?>%</span></div>
+                    <div class="progress" style="height: 20px; border-radius: 4px; overflow: hidden;">
+                        <div class="progress-bar bg-success" id="cpuBar" role="progressbar" style="width: <?= (float) ($status['cpu']['used_percent'] ?? 0) ?>%; transition: width 0.3s ease;" aria-valuenow="<?= (float) ($status['cpu']['used_percent'] ?? 0) ?>" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
                 </div>
-                <div class="mb-3">
-                    <div class="d-flex justify-content-between small text-muted"><span>RAM</span><span><?= esc((string) ($status['memory']['used_mb'] ?? 'N/A')) ?> / <?= esc((string) ($status['memory']['total_mb'] ?? 'N/A')) ?> MB</span></div>
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between small text-muted mb-1">
+                        <span>RAM</span>
+                        <span id="ramPercent">
+                            <?php 
+                            $ramTotal = (int) ($status['memory']['total_mb'] ?? 0);
+                            $ramUsed = (int) ($status['memory']['used_mb'] ?? 0);
+                            $ramPercent = $ramTotal > 0 ? round(($ramUsed / $ramTotal) * 100) : 0;
+                            echo esc((string) $ramUsed) . ' / ' . esc((string) $ramTotal) . ' MB (' . $ramPercent . '%)';
+                            ?>
+                        </span>
+                    </div>
+                    <div class="progress" style="height: 20px; border-radius: 4px; overflow: hidden;">
+                        <div class="progress-bar bg-info" id="ramBar" role="progressbar" style="width: <?= $ramPercent ?>%; transition: width 0.3s ease;" aria-valuenow="<?= $ramPercent ?>" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
                 </div>
                 <div>
-                    <div class="d-flex justify-content-between small text-muted"><span>Disk</span><span><?= esc((string) ($status['disk']['used_gb'] ?? 'N/A')) ?> / <?= esc((string) ($status['disk']['total_gb'] ?? 'N/A')) ?> GB</span></div>
+                    <div class="d-flex justify-content-between small text-muted mb-1">
+                        <span>Disk</span>
+                        <span id="diskPercent">
+                            <?php 
+                            $diskTotal = (float) ($status['disk']['total_gb'] ?? 0);
+                            $diskUsed = (float) ($status['disk']['used_gb'] ?? 0);
+                            $diskPercent = $diskTotal > 0 ? round(($diskUsed / $diskTotal) * 100) : 0;
+                            echo esc((string) $diskUsed) . ' / ' . esc((string) $diskTotal) . ' GB (' . $diskPercent . '%)';
+                            ?>
+                        </span>
+                    </div>
+                    <div class="progress" style="height: 20px; border-radius: 4px; overflow: hidden;">
+                        <div class="progress-bar bg-warning" id="diskBar" role="progressbar" style="width: <?= $diskPercent ?>%; transition: width 0.3s ease;" aria-valuenow="<?= $diskPercent ?>" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
                 </div>
             </div>
         </div>
