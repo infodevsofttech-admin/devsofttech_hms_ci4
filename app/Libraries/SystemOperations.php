@@ -16,9 +16,9 @@ class SystemOperations
     public function collectStatus(): array
     {
         $status = [
-            'hostname' => $this->safeCommand('hostname'),
-            'os' => $this->safeCommand('uname -a'),
-            'uptime' => $this->safeCommand('uptime'),
+            'hostname' => $this->getHostname(),
+            'os' => $this->getOsInfo(),
+            'uptime' => $this->getUptime(),
             'cpu' => ['used_percent' => null],
             'memory' => ['total_mb' => null, 'used_mb' => null, 'free_mb' => null],
             'disk' => ['total_gb' => null, 'used_gb' => null, 'free_gb' => null],
@@ -158,7 +158,7 @@ class SystemOperations
     private function runCommand(string $command): array
     {
         if (! function_exists('shell_exec')) {
-            return ['exit_code' => 1, 'output' => 'shell_exec is not available'];
+            return ['exit_code' => 1, 'output' => ''];
         }
 
         $output = shell_exec($command) ?: '';
@@ -171,6 +171,51 @@ class SystemOperations
             'exit_code' => $exitCode,
             'output' => trim((string) $output),
         ];
+    }
+
+    private function getHostname(): string
+    {
+        if (function_exists('gethostname')) {
+            $hostname = gethostname();
+            if ($hostname !== false) {
+                return $hostname;
+            }
+        }
+
+        $result = $this->safeCommand('hostname');
+        return $result !== 'Unavailable' ? $result : 'Unknown';
+    }
+
+    private function getOsInfo(): string
+    {
+        if (function_exists('php_uname')) {
+            return php_uname();
+        }
+
+        $result = $this->safeCommand('uname -a');
+        return $result !== 'Unavailable' ? $result : 'Unknown';
+    }
+
+    private function getUptime(): string
+    {
+        $result = $this->safeCommand('uptime');
+        if ($result !== 'Unavailable') {
+            return $result;
+        }
+
+        // Fallback: read from /proc/uptime if available via PHP
+        if (file_exists('/proc/uptime')) {
+            $uptimeStr = @file_get_contents('/proc/uptime');
+            if ($uptimeStr !== false) {
+                $uptimeSeconds = (int) explode(' ', $uptimeStr)[0];
+                $days = intdiv($uptimeSeconds, 86400);
+                $hours = intdiv($uptimeSeconds % 86400, 3600);
+                $minutes = intdiv($uptimeSeconds % 3600, 60);
+                return "{$days} days, {$hours} hours, {$minutes} minutes";
+            }
+        }
+
+        return 'Unavailable';
     }
 
     private function commandExists(string $command): bool
@@ -199,49 +244,85 @@ class SystemOperations
     private function readMemoryUsage(): array
     {
         $result = $this->safeCommand('free -m');
-        if ($result === 'Unavailable') {
-            return ['total_mb' => null, 'used_mb' => null, 'free_mb' => null];
+        if ($result !== 'Unavailable' && trim($result) !== '') {
+            $lines = preg_split('/\r\n|\n|\r/', $result);
+            if (count($lines) >= 2) {
+                $parts = preg_split('/\s+/', trim($lines[1]));
+                if (count($parts) >= 3) {
+                    return [
+                        'total_mb' => (int) ($parts[1] ?? 0),
+                        'used_mb' => (int) ($parts[2] ?? 0),
+                        'free_mb' => (int) ($parts[3] ?? 0),
+                    ];
+                }
+            }
         }
 
-        $lines = preg_split('/\r\n|\n|\r/', $result);
-        if (count($lines) < 2) {
-            return ['total_mb' => null, 'used_mb' => null, 'free_mb' => null];
+        // Fallback: use PHP memory functions
+        if (function_exists('memory_get_usage') && function_exists('memory_get_peak_usage')) {
+            $usage = memory_get_usage(true);
+            $peak = memory_get_peak_usage(true);
+            $limit = $this->parsePhpMemoryLimit();
+            return [
+                'total_mb' => (int) ($limit / 1024 / 1024),
+                'used_mb' => (int) ($usage / 1024 / 1024),
+                'free_mb' => (int) (($limit - $usage) / 1024 / 1024),
+            ];
         }
 
-        $parts = preg_split('/\s+/', trim($lines[1]));
-        if (count($parts) < 3) {
-            return ['total_mb' => null, 'used_mb' => null, 'free_mb' => null];
+        return ['total_mb' => null, 'used_mb' => null, 'free_mb' => null];
+    }
+
+    private function parsePhpMemoryLimit(): int
+    {
+        $limit = ini_get('memory_limit');
+        if ($limit === '-1') {
+            return 2147483648; // Default 2GB
         }
 
-        return [
-            'total_mb' => (int) ($parts[1] ?? 0),
-            'used_mb' => (int) ($parts[2] ?? 0),
-            'free_mb' => (int) ($parts[3] ?? 0),
-        ];
+        $unit = strtoupper(substr($limit, -1));
+        $numeric = (int) rtrim($limit, 'KMGTP');
+
+        return match ($unit) {
+            'G' => $numeric * 1024 * 1024 * 1024,
+            'M' => $numeric * 1024 * 1024,
+            'K' => $numeric * 1024,
+            default => $numeric,
+        };
     }
 
     private function readDiskUsage(): array
     {
         $result = $this->safeCommand('df -h /');
-        if ($result === 'Unavailable') {
-            return ['total_gb' => null, 'used_gb' => null, 'free_gb' => null];
+        if ($result !== 'Unavailable' && trim($result) !== '') {
+            $lines = preg_split('/\r\n|\n|\r/', $result);
+            if (count($lines) >= 2) {
+                $parts = preg_split('/\s+/', trim($lines[1]));
+                if (count($parts) >= 6) {
+                    return [
+                        'total_gb' => $this->humanToGb((string) ($parts[1] ?? '0')),
+                        'used_gb' => $this->humanToGb((string) ($parts[2] ?? '0')),
+                        'free_gb' => $this->humanToGb((string) ($parts[3] ?? '0')),
+                    ];
+                }
+            }
         }
 
-        $lines = preg_split('/\r\n|\n|\r/', $result);
-        if (count($lines) < 2) {
-            return ['total_gb' => null, 'used_gb' => null, 'free_gb' => null];
+        // Fallback: use PHP disk functions
+        $rootPath = ROOTPATH;
+        if (function_exists('disk_free_space') && function_exists('disk_total_space')) {
+            $total = disk_total_space($rootPath);
+            $free = disk_free_space($rootPath);
+            if ($total !== false && $free !== false) {
+                return [
+                    'total_gb' => round($total / 1024 / 1024 / 1024, 2),
+                    'used_gb' => round(($total - $free) / 1024 / 1024 / 1024, 2),
+                    'free_gb' => round($free / 1024 / 1024 / 1024, 2),
+                ];
+            }
         }
 
-        $parts = preg_split('/\s+/', trim($lines[1]));
-        if (count($parts) < 6) {
-            return ['total_gb' => null, 'used_gb' => null, 'free_gb' => null];
-        }
-
-        return [
-            'total_gb' => $this->humanToGb((string) ($parts[1] ?? '0')),
-            'used_gb' => $this->humanToGb((string) ($parts[2] ?? '0')),
-            'free_gb' => $this->humanToGb((string) ($parts[3] ?? '0')),
-        ];
+        return ['total_gb' => null, 'used_gb' => null, 'free_gb' => null];
     }
 
     private function humanToGb(string $value): ?float
