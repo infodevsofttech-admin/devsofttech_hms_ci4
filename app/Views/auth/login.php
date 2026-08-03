@@ -125,6 +125,13 @@
                                 </div>
                             </div>
 
+                            <div class="text-center mt-1">
+                                <a href="<?= base_url('HMS_FEATURES_PRESENTATION.html') ?>" target="_blank" rel="noopener"
+                                   class="text-muted small d-inline-flex align-items-center gap-1" style="text-decoration:none;">
+                                    <i class="bi bi-file-earmark-text"></i> View HMS Features &amp; Capabilities
+                                </a>
+                            </div>
+
                         </div>
                     </div>
                 </div>
