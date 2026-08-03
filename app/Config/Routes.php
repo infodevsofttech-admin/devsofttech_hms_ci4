@@ -1216,7 +1216,9 @@ $routes->group('setting', static function($routes) {
     $routes->get('admin/hospital-profile', 'Setting\\HospitalProfile::index');
     $routes->get('admin/system-ops', 'SystemOps::index', ['filter' => $settingsAdminFilter]);
     $routes->get('admin/system-ops/panel', 'SystemOps::panel', ['filter' => $settingsAdminFilter]);
+    $routes->get('admin/system-ops/diagnose', 'SystemOps::diagnose', ['filter' => $settingsAdminFilter]);
     $routes->post('admin/system-ops/update', 'SystemOps::update', ['filter' => $settingsAdminFilter]);
+    $routes->post('admin/system-ops/updateDirect', 'SystemOps::updateDirect', ['filter' => $settingsAdminFilter]);
     $routes->post('admin/system-ops/action', 'SystemOps::action', ['filter' => $settingsAdminFilter]);
     $routes->post('admin/hospital-profile/save', 'Setting\\HospitalProfile::save');
     $routes->post('admin/hospital-profile/delete-logo', 'Setting\\HospitalProfile::deleteLogo');
