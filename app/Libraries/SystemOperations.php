@@ -430,29 +430,38 @@ class SystemOperations
 
     private function readNetworkStatus(): string
     {
-        // Try PHP built-in first — works on Linux and Windows without shell
+        // Primary: get first non-loopback IPv4 from Linux ip command (scope global)
+        $result = $this->safeCommand("ip -4 addr show scope global 2>/dev/null | grep -oP 'inet \K[0-9.]+' | head -1");
+        if ($result !== 'Unavailable' && trim($result) !== '' && filter_var(trim($result), FILTER_VALIDATE_IP)) {
+            return trim($result);
+        }
+
+        // Fallback: hostname -I and take first non-loopback IP
+        $result = $this->safeCommand('hostname -I 2>/dev/null');
+        if ($result !== 'Unavailable' && trim($result) !== '') {
+            $ips = preg_split('/\s+/', trim($result));
+            foreach ($ips as $ip) {
+                if (filter_var($ip, FILTER_VALIDATE_IP) && !$this->isLoopbackIp($ip)) {
+                    return $ip;
+                }
+            }
+        }
+
+        // Last resort: try gethostbyname but filter out loopback
         $hostname = gethostname();
         if ($hostname !== false) {
             $ip = gethostbyname($hostname);
-            // gethostbyname returns the hostname unchanged if resolution fails
-            if ($ip !== $hostname && filter_var($ip, FILTER_VALIDATE_IP)) {
+            if ($ip !== $hostname && filter_var($ip, FILTER_VALIDATE_IP) && !$this->isLoopbackIp($ip)) {
                 return $ip;
             }
         }
 
-        // Fallback: parse first non-loopback IPv4 from ip addr output
-        $result = $this->safeCommand("ip -4 addr show scope global | grep inet | awk '{print $2}' | cut -d/ -f1 | head -1 2>/dev/null");
-        if ($result !== 'Unavailable' && trim($result) !== '' && filter_var(trim($result), FILTER_VALIDATE_IP)) {
-            return trim($result);
-        }
-
-        // Fallback: hostname -I
-        $result = $this->safeCommand('hostname -I 2>/dev/null | awk \'{print $1}\'');
-        if ($result !== 'Unavailable' && trim($result) !== '' && filter_var(trim($result), FILTER_VALIDATE_IP)) {
-            return trim($result);
-        }
-
         return 'Unavailable';
+    }
+
+    private function isLoopbackIp(string $ip): bool
+    {
+        return strpos($ip, '127.') === 0 || $ip === '::1';
     }
 
     private function readInternetStatus(): string
