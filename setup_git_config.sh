@@ -38,50 +38,31 @@ echo "  HMS dir: $HMS_DIR"
 echo "  Repo type: PUBLIC (no authentication needed)"
 echo ""
 
-# 1. Fix global git config file permissions
-echo "[1/5] Fixing .gitconfig file..."
-
-# Make sure /var/www is writable by www-data
-chmod 755 /var/www
-
-# Remove corrupted .gitconfig if it exists
-[ -f /var/www/.gitconfig ] && rm -f /var/www/.gitconfig
-
-# Create fresh .gitconfig file and set permissions BEFORE writing
-sudo -u "$WEB_USER" touch /var/www/.gitconfig
-sudo -u "$WEB_USER" chmod 600 /var/www/.gitconfig
-
-echo "  Fresh .gitconfig created with www-data ownership"
-
-# 2. Set minimal git config (name and email required for git)
-echo "[2/5] Setting git user name..."
-if ! sudo -u "$WEB_USER" git config --global user.name "www-data" 2>/dev/null; then
-  echo "  Warning: Could not set global config, using local repo config instead"
-  cd "$HMS_DIR"
-  sudo -u "$WEB_USER" git config user.name "www-data"
-fi
-
-# 3. Set git email
-echo "[3/5] Setting git email..."
-if ! sudo -u "$WEB_USER" git config --global user.email "deploy@localhost" 2>/dev/null; then
-  echo "  Warning: Could not set global config, using local repo config instead"
-  cd "$HMS_DIR"
-  sudo -u "$WEB_USER" git config user.email "deploy@localhost"
-fi
-
-# 4. Fix directory permissions
-echo "[4/5] Fixing directory permissions..."
+# 1. Fix directory permissions
+echo "[1/4] Fixing directory permissions..."
 chown -R "$WEB_USER:$WEB_USER" "$HMS_DIR"
 chmod -R 755 "$HMS_DIR"
 chmod -R 755 "$HMS_DIR/.git"
+echo "  Directory ownership set to $WEB_USER"
 
-# 5. Test git status
-echo "[5/5] Testing git pull..."
+# 2. Set local git config (repository-specific, avoids /var/www/.gitconfig permission issues)
+echo "[2/4] Setting git user name (local repository config)..."
+cd "$HMS_DIR"
+sudo -u "$WEB_USER" git config user.name "www-data"
+
+# 3. Set git email (local repository config)
+echo "[3/4] Setting git email (local repository config)..."
+cd "$HMS_DIR"
+sudo -u "$WEB_USER" git config user.email "deploy@localhost"
+
+# 4. Test git status
+echo "[4/4] Testing git status..."
 cd "$HMS_DIR"
 if sudo -u "$WEB_USER" git status >/dev/null 2>&1; then
   echo "✓ Git status check PASSED"
 else
   echo "✗ Git status check FAILED"
+  echo "  Output:"
   sudo -u "$WEB_USER" git status
   exit 1
 fi
@@ -91,15 +72,15 @@ echo "========================================="
 echo "✓ Git setup completed successfully!"
 echo "========================================="
 echo ""
+echo "Configuration stored in: $HMS_DIR/.git/config"
+echo "Remote: $(cd $HMS_DIR && sudo -u $WEB_USER git config --get remote.origin.url)"
+echo "Branch: main"
+echo ""
 echo "Next steps:"
 echo "  1. Go to System Operations panel"
 echo "  2. Click 'Update HMS' button"
 echo "  3. Confirm the git pull action"
 echo ""
-echo "Git configuration:"
-echo "  Global: /var/www/.gitconfig"
-echo "  Remote: $(cd $HMS_DIR && sudo -u $WEB_USER git config --get remote.origin.url)"
-echo "  Branch: main"
-echo ""
+
 
 
