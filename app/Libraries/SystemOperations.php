@@ -689,67 +689,101 @@ class SystemOperations
         };
     }
 
-    private function readNetworkStatus(): string
+    private function readNetworkStatus(): array
     {
-        // Method 1: $_SERVER['SERVER_ADDR'] — set by Apache/Nginx when available
-        if (!empty($_SERVER['SERVER_ADDR'])) {
+        $interfaces = [];
+
+        // Parse /proc/net/fib_trie (most reliable on Linux — no shell needed)
+        if (file_exists('/proc/net/fib_trie')) {
+            $this->parseInterfacesFromIp($interfaces);
+        }
+
+        // Fallback: ifconfig
+        if (empty($interfaces)) {
+            $this->parseInterfacesFromIfconfig($interfaces);
+        }
+
+        // Fallback: hostname -I (no interface names available)
+        if (empty($interfaces)) {
+            $result = $this->safeCommand('hostname -I');
+            if ($result !== 'Unavailable') {
+                foreach (preg_split('/\s+/', trim($result)) as $ip) {
+                    $ip = trim($ip);
+                    if (filter_var($ip, FILTER_VALIDATE_IP) && !$this->isLoopbackIp($ip)) {
+                        $interfaces[] = ['name' => '?', 'ip' => $ip, 'type' => $this->guessIfaceType('?', $ip)];
+                    }
+                }
+            }
+        }
+
+        // Ultimate fallback: SERVER_ADDR
+        if (empty($interfaces) && !empty($_SERVER['SERVER_ADDR'])) {
             $ip = $_SERVER['SERVER_ADDR'];
             if (filter_var($ip, FILTER_VALIDATE_IP) && !$this->isLoopbackIp($ip)) {
-                return $ip;
+                $interfaces[] = ['name' => 'server', 'ip' => $ip, 'type' => 'lan'];
             }
         }
 
-        // Method 2: Try /sbin/ip with absolute path (may not be in PATH)
-        $result = $this->safeCommand('/sbin/ip -4 addr show scope global 2>/dev/null | grep -oP "inet \K[0-9.]+"');
-        if ($result !== 'Unavailable' && trim($result) !== '') {
-            $ips = preg_split('/\s+/', trim($result));
-            foreach ($ips as $ip) {
-                $ip = trim($ip);
-                if (filter_var($ip, FILTER_VALIDATE_IP) && !$this->isLoopbackIp($ip)) {
-                    return $ip;
-                }
+        return $interfaces;
+    }
+
+    private function parseInterfacesFromIp(array &$interfaces): void
+    {
+        $result = $this->safeCommand('/sbin/ip -4 addr show 2>/dev/null');
+        if ($result === 'Unavailable' || trim($result) === '') {
+            $result = $this->safeCommand('ip -4 addr show 2>/dev/null');
+        }
+        if ($result === 'Unavailable') return;
+
+        $currentIface = null;
+        foreach (explode("\n", $result) as $line) {
+            if (preg_match('/^\d+:\s+(\S+):/', $line, $m)) {
+                $currentIface = rtrim($m[1], ':');
+            } elseif ($currentIface && preg_match('/inet\s+(\d+\.\d+\.\d+\.\d+)/', $line, $m)) {
+                $ip = $m[1];
+                if (!filter_var($ip, FILTER_VALIDATE_IP) || $this->isLoopbackIp($ip)) continue;
+                $interfaces[] = [
+                    'name' => $currentIface,
+                    'ip'   => $ip,
+                    'type' => $this->guessIfaceType($currentIface, $ip),
+                ];
             }
         }
+    }
 
-        // Method 3: Parse /proc/net/route to get gateway interface and its IP
-        if (file_exists('/proc/net/route')) {
-            $defaultIp = $this->getIpFromProcRoute();
-            if ($defaultIp && filter_var($defaultIp, FILTER_VALIDATE_IP) && !$this->isLoopbackIp($defaultIp)) {
-                return $defaultIp;
+    private function parseInterfacesFromIfconfig(array &$interfaces): void
+    {
+        $result = $this->safeCommand('ifconfig 2>/dev/null');
+        if ($result === 'Unavailable') return;
+
+        $currentIface = null;
+        foreach (explode("\n", $result) as $line) {
+            if (preg_match('/^(\S+):?\s/', $line, $m)) {
+                $currentIface = rtrim($m[1], ':');
+            } elseif ($currentIface && preg_match('/inet\s+(?:addr:)?(\d+\.\d+\.\d+\.\d+)/', $line, $m)) {
+                $ip = $m[1];
+                if (!filter_var($ip, FILTER_VALIDATE_IP) || $this->isLoopbackIp($ip)) continue;
+                $interfaces[] = [
+                    'name' => $currentIface,
+                    'ip'   => $ip,
+                    'type' => $this->guessIfaceType($currentIface, $ip),
+                ];
             }
         }
+    }
 
-        // Method 4: hostname -I (simple space-separated list)
-        $result = $this->safeCommand('hostname -I');
-        if ($result !== 'Unavailable' && trim($result) !== '') {
-            $ips = preg_split('/\s+/', trim($result));
-            foreach ($ips as $ip) {
-                $ip = trim($ip);
-                if (filter_var($ip, FILTER_VALIDATE_IP) && !$this->isLoopbackIp($ip)) {
-                    return $ip;
-                }
-            }
+    // Classify interface as lan/vpn/public based on name and IP range
+    private function guessIfaceType(string $name, string $ip): string
+    {
+        $name = strtolower($name);
+        if (str_starts_with($name, 'wg') || str_starts_with($name, 'tun') || str_starts_with($name, 'tap') || str_starts_with($name, 'vpn')) {
+            return 'vpn';
         }
-
-        // Method 5: Try ifconfig output (older systems)
-        $result = $this->safeCommand('ifconfig 2>/dev/null | grep -oP "inet \K[0-9.]+" | grep -v "^127\."');
-        if ($result !== 'Unavailable' && trim($result) !== '') {
-            $ips = preg_split('/\s+/', trim($result));
-            foreach ($ips as $ip) {
-                $ip = trim($ip);
-                if (filter_var($ip, FILTER_VALIDATE_IP)) {
-                    return $ip;
-                }
-            }
+        // RFC1918 private ranges
+        if (str_starts_with($ip, '192.168.') || str_starts_with($ip, '10.') || preg_match('/^172\.(1[6-9]|2\d|3[01])\./', $ip)) {
+            return 'lan';
         }
-
-        // Method 6: Socket-based approach — connect to external host to get local IP
-        $localIp = $this->getLocalIpViaSocket();
-        if ($localIp && filter_var($localIp, FILTER_VALIDATE_IP) && !$this->isLoopbackIp($localIp)) {
-            return $localIp;
-        }
-
-        return 'Unavailable';
+        return 'public';
     }
 
     private function getIpFromProcRoute(): ?string

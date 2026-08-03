@@ -31,7 +31,37 @@
                     <div class="col-md-6">
                         <div class="border rounded p-3 h-100">
                             <div class="text-muted small">Network</div>
-                            <div class="fs-5 fw-semibold"><?= esc($status['network'] ?? 'Unavailable') ?></div>
+                            <?php
+                            $ifaces = $status['network'] ?? [];
+                            if (empty($ifaces)): ?>
+                                <div class="fs-5 fw-semibold text-muted">Unavailable</div>
+                            <?php else: ?>
+                                <?php foreach ($ifaces as $iface): ?>
+                                    <?php
+                                    $typeColor = match($iface['type']) {
+                                        'vpn'    => 'text-info',
+                                        'public' => 'text-success',
+                                        default  => 'text-dark',
+                                    };
+                                    $typeIcon = match($iface['type']) {
+                                        'vpn'    => 'bi-shield-lock',
+                                        'public' => 'bi-globe',
+                                        default  => 'bi-hdd-network',
+                                    };
+                                    $typeBadge = match($iface['type']) {
+                                        'vpn'    => 'bg-info',
+                                        'public' => 'bg-success',
+                                        default  => 'bg-secondary',
+                                    };
+                                    ?>
+                                    <div class="d-flex align-items-center gap-2 mb-1">
+                                        <i class="bi <?= $typeIcon ?> <?= $typeColor ?>"></i>
+                                        <span class="fw-semibold"><?= esc($iface['ip']) ?></span>
+                                        <span class="badge <?= $typeBadge ?> ms-1" style="font-size:10px;"><?= esc($iface['name']) ?></span>
+                                        <span class="text-muted" style="font-size:10px;"><?= esc(strtoupper($iface['type'])) ?></span>
+                                    </div>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
