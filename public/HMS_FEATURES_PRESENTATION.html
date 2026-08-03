@@ -142,14 +142,77 @@
   /* ── Print-a-PDF toolbar ── */
   .print-bar {
     position: fixed; bottom: 24px; right: 24px; z-index: 999;
-    display: flex; gap: 10px;
+    display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
   }
-  .print-bar button {
-    background: var(--blue); color: white; border: none; border-radius: 8px;
-    padding: 10px 20px; font-size: 14px; font-weight: 700; cursor: pointer;
-    box-shadow: 0 4px 12px rgba(13,110,253,.35); display: flex; align-items: center; gap: 6px;
+  .print-bar .pbtn {
+    background: var(--blue); color: white; border: none; border-radius: 10px;
+    padding: 12px 22px; font-size: 14px; font-weight: 700; cursor: pointer;
+    box-shadow: 0 4px 16px rgba(13,110,253,.4); display: flex; align-items: center; gap: 8px;
+    transition: background .15s;
   }
-  .print-bar button:hover { background: #0b5ed7; }
+  .print-bar .pbtn:hover { background: #0b5ed7; }
+  .print-bar .pbtn.secondary {
+    background: white; color: var(--dark); border: 1px solid var(--border);
+    font-size: 13px; padding: 8px 16px; box-shadow: 0 2px 8px rgba(0,0,0,.08);
+  }
+  .print-bar .pbtn.secondary:hover { background: #f8fafc; }
+
+  /* PDF tips modal */
+  #pdfModal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:10000;
+    align-items:center; justify-content:center; padding:20px; }
+  #pdfModal.open { display:flex; }
+  .pdf-modal-box { background:white; border-radius:16px; padding:32px; max-width:480px; width:100%;
+    box-shadow:0 24px 60px rgba(0,0,0,.2); }
+  .pdf-modal-box h3 { font-size:1.1rem; font-weight:800; margin-bottom:16px; }
+  .pdf-steps { list-style:none; padding:0; counter-reset:steps; }
+  .pdf-steps li { counter-increment:steps; padding:10px 0 10px 44px; position:relative;
+    border-bottom:1px solid #f1f5f9; font-size:.9rem; color:var(--mid); }
+  .pdf-steps li:last-child { border-bottom:none; }
+  .pdf-steps li::before { content:counter(steps); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--blue); color:white; border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-weight:700; font-size:12px; }
+  .pdf-steps li strong { color:var(--dark); }
+  .pdf-modal-close { margin-top:20px; width:100%; padding:10px; background:var(--blue); color:white;
+    border:none; border-radius:8px; font-size:14px; font-weight:700; cursor:pointer; }
+
+  @media print {
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    body { background: white !important; font-size: 10.5pt; }
+    .print-bar, #pdfModal, #lightbox { display: none !important; }
+    /* cover fills first page fully */
+    .cover {
+      page-break-after: always;
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 80px 40px;
+    }
+    /* intro on its own page */
+    .intro-section { page-break-after: always; box-shadow: none; border: 1pt solid #e2e8f0; }
+    /* each feature section starts on a new page */
+    .section-title { page-break-before: always; margin-top: 0; }
+    .section-intro { margin-top: 6pt; }
+    /* no shadows, solid borders for print */
+    .card, .mod-strip, .tech-card, .comp-card, .mod-tile, .gallery-item {
+      box-shadow: none !important; border: 1pt solid #e2e8f0 !important;
+      break-inside: avoid;
+    }
+    /* fix grid columns for A4 */
+    .cards.col-3 { grid-template-columns: repeat(3, 1fr); }
+    .cards.col-2 { grid-template-columns: repeat(2, 1fr); }
+    .modality-grid { grid-template-columns: repeat(7, 1fr); }
+    .tech-grid { grid-template-columns: repeat(5, 1fr); }
+    .compliance-grid { grid-template-columns: repeat(4, 1fr); }
+    .gallery-grid { grid-template-columns: repeat(3, 1fr); }
+    /* screenshot images in print */
+    .gallery-item .screen-img { aspect-ratio: 16/9; max-height: 120pt; }
+    /* table headers keep colour */
+    .feat-table th { background: #0d6efd !important; color: white !important; }
+    footer { background: #1e293b !important; color: #94a3b8 !important; page-break-before: always; }
+    .container { max-width: 100%; padding: 20px 24px; }
+    /* running header/footer on every page */
+    @page { size: A4 portrait; margin: 14mm 12mm 18mm; }
+    @page :first { margin: 0; }
+  }
 
   /* ── Screenshots Gallery ── */
   .gallery-grid {
@@ -195,31 +258,6 @@
     .gallery-item { break-inside: avoid; }
     #lightbox { display: none !important; }
   }
-    body { background: white !important; font-size: 11pt; }
-    .print-bar { display: none !important; }
-    .cover {
-      page-break-after: always;
-      padding: 100px 40px 80px;
-      min-height: 100vh;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-    }
-    .intro-section { page-break-after: always; border: 1pt solid #e2e8f0; box-shadow: none; }
-    .section-title { page-break-before: always; margin-top: 0; }
-    .card, .mod-strip, .tech-card, .comp-card, .mod-tile {
-      box-shadow: none !important; border: 1pt solid #e2e8f0 !important;
-      break-inside: avoid;
-    }
-    .cards.col-3 { grid-template-columns: repeat(3, 1fr); }
-    .cards.col-2 { grid-template-columns: repeat(2, 1fr); }
-    .modality-grid { grid-template-columns: repeat(7, 1fr); }
-    .tech-grid { grid-template-columns: repeat(5, 1fr); }
-    .compliance-grid { grid-template-columns: repeat(4, 1fr); }
-    .feat-table th { background: #0d6efd !important; color: white !important; }
-    footer { background: #1e293b !important; color: #94a3b8 !important; }
-    .container { padding: 32px 24px; }
-    @page { size: A4; margin: 15mm 12mm; }
-    @page :first { margin: 0; }
-  }
 </style>
 </head>
 <body>
@@ -239,9 +277,26 @@
   </div>
 </div>
 
-<!-- ── Print toolbar ── -->
+<!-- ── Print / PDF toolbar ── -->
 <div class="print-bar">
-  <button onclick="window.print()">🖨️ Print / Save PDF</button>
+  <button class="pbtn" onclick="window.print()">&#128424; Print / Save PDF</button>
+  <button class="pbtn secondary" onclick="document.getElementById('pdfModal').classList.add('open')">&#8505; How to save as PDF</button>
+</div>
+
+<!-- PDF tips modal -->
+<div id="pdfModal">
+  <div class="pdf-modal-box">
+    <h3>&#128424; How to Save as PDF</h3>
+    <ol class="pdf-steps">
+      <li>Click <strong>Print / Save PDF</strong> button &mdash; the browser print dialog will open.</li>
+      <li>In <strong>Destination / Printer</strong>, select <strong>Save as PDF</strong>.</li>
+      <li>Set <strong>Paper size</strong> to <strong>A4</strong> and <strong>Layout</strong> to <strong>Portrait</strong>.</li>
+      <li>Under <strong>More settings</strong>, enable <strong>Background graphics</strong> so colours &amp; card backgrounds print correctly.</li>
+      <li>Set <strong>Margins</strong> to <strong>None</strong> or <strong>Default</strong>.</li>
+      <li>Click <strong>Save</strong> &mdash; your PDF will be downloaded.</li>
+    </ol>
+    <button class="pdf-modal-close" onclick="document.getElementById('pdfModal').classList.remove('open')">Got it &mdash; Close</button>
+  </div>
 </div>
 
 <div class="container">
