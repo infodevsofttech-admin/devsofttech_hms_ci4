@@ -400,42 +400,6 @@ class SystemOperations
         return $info;
     }
 
-    public function runServerAction(string $action): array
-    {
-        $commands = [
-            'restart_web' => ['systemctl restart nginx', 'systemctl restart apache2', 'service nginx restart', 'service apache2 restart'],
-            'restart_php' => ['systemctl restart php-fpm', 'systemctl restart php8.3-fpm', 'service php-fpm restart', 'service php8.3-fpm restart'],
-            'reboot' => ['systemctl reboot'],
-            'shutdown' => ['systemctl poweroff'],
-        ];
-
-        $options = $commands[$action] ?? [];
-        if ($options === []) {
-            return ['ok' => false, 'message' => 'Unknown action'];
-        }
-
-        $command = $this->findWorkingCommand($options);
-        if ($command === null) {
-            return ['ok' => false, 'message' => 'System control commands are not available on this server.'];
-        }
-
-        $result = $this->runCommand($command);
-        $status = $result['exit_code'] === 0 ? 'success' : 'failed';
-        $this->appendHistory([
-            'timestamp' => date('Y-m-d H:i:s'),
-            'type' => $action,
-            'status' => $status,
-            'message' => ucfirst(str_replace('_', ' ', $action)) . ' completed',
-            'detail' => $result['output'],
-        ]);
-
-        return [
-            'ok' => $result['exit_code'] === 0,
-            'message' => $result['exit_code'] === 0 ? ucfirst(str_replace('_', ' ', $action)) . ' executed.' : 'Action failed.',
-            'output' => $result['output'],
-        ];
-    }
-
     public function getHistory(): array
     {
         if (! file_exists($this->historyPath)) {
@@ -954,16 +918,97 @@ class SystemOperations
         return $result;
     }
 
-    private function readRaidStatus(): string
+    private function readRaidStatus(): array
     {
-        if (file_exists('/proc/mdstat')) {
-            $content = file_get_contents('/proc/mdstat');
-            if (is_string($content) && trim($content) !== '') {
-                return trim($content);
-            }
+        if (!file_exists('/proc/mdstat')) {
+            return [];
         }
 
-        return 'Not detected';
+        $content = @file_get_contents('/proc/mdstat');
+        if (!is_string($content) || trim($content) === '') {
+            return [];
+        }
+
+        $arrays = [];
+        $lines = explode("\n", $content);
+        $i = 0;
+
+        while ($i < count($lines)) {
+            $line = trim($lines[$i]);
+
+            // Match array definition: "md0 : active raid1 sda1[0] sdb1[1]"
+            if (preg_match('/^(md\d+)\s*:\s*(\w+)\s+(\w+)\s+(.+)$/', $line, $m)) {
+                $name   = $m[1];
+                $state  = $m[2]; // active / inactive
+                $level  = $m[3]; // raid1, raid5, etc.
+                $devStr = $m[4];
+
+                // Parse devices: sda1[0], sdb1[1], sdc1[2](F) etc.
+                preg_match_all('/(\w+)\[(\d+)\](\(F\)|\(S\))?/', $devStr, $dm);
+                $devices = [];
+                foreach ($dm[1] as $k => $dev) {
+                    $flag = $dm[3][$k] ?? '';
+                    $devices[] = [
+                        'name'   => $dev,
+                        'index'  => (int) $dm[2][$k],
+                        'failed' => $flag === '(F)',
+                        'spare'  => $flag === '(S)',
+                    ];
+                }
+
+                // Next line has block count and health: "      1953382400 blocks super 1.2 [2/2] [UU]"
+                $health    = 'Unknown';
+                $total     = 0;
+                $active    = 0;
+                $healthStr = '';
+                if (isset($lines[$i + 1])) {
+                    $next = trim($lines[$i + 1]);
+                    // [total/active]
+                    if (preg_match('/\[(\d+)\/(\d+)\]/', $next, $nm)) {
+                        $total  = (int) $nm[1];
+                        $active = (int) $nm[2];
+                    }
+                    // [UU] or [U_UU] style
+                    if (preg_match('/\[([U_]+)\]/', $next, $hm)) {
+                        $healthStr = $hm[1];
+                    }
+                    // Rebuild progress line (line after next)
+                    $rebuildProgress = null;
+                    if (isset($lines[$i + 2]) && preg_match('/(\d+\.\d+)%/', $lines[$i + 2], $pm)) {
+                        $rebuildProgress = (float) $pm[1];
+                    }
+                }
+
+                $failedCount = substr_count($healthStr, '_');
+                if ($state !== 'active') {
+                    $health = 'Inactive';
+                } elseif ($failedCount === 0 && $active === $total && $total > 0) {
+                    $health = 'Healthy';
+                } elseif ($failedCount > 0) {
+                    $health = 'Degraded';
+                } elseif ($total === 0) {
+                    $health = 'Unknown';
+                } else {
+                    $health = 'Rebuilding';
+                }
+
+                $arrays[] = [
+                    'name'             => $name,
+                    'state'            => $state,
+                    'level'            => strtoupper($level),
+                    'health'           => $health,
+                    'health_str'       => $healthStr,
+                    'total_drives'     => $total,
+                    'active_drives'    => $active,
+                    'failed_drives'    => $failedCount,
+                    'devices'          => $devices,
+                    'rebuild_progress' => $rebuildProgress ?? null,
+                ];
+            }
+            $i++;
+        }
+
+        return $arrays;
     }
 
     private function findWorkingCommand(array $options): ?string

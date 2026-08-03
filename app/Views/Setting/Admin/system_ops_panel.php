@@ -45,11 +45,6 @@
             </div>
             <div class="card-body d-grid gap-2">
                 <button class="btn btn-success" id="btnUpdateDirectGithub" title="Download and deploy latest from GitHub">Deploy from GitHub</button>
-                <hr class="my-2">
-                <button class="btn btn-outline-warning" id="btnRestartWeb">Restart Web Server</button>
-                <button class="btn btn-outline-info" id="btnRestartPhp">Restart PHP-FPM</button>
-                <button class="btn btn-outline-danger" id="btnShutdown">Shutdown Server</button>
-                <button class="btn btn-outline-secondary" id="btnReboot">Reboot Server</button>
             </div>
         </div>
     </div>
@@ -106,16 +101,102 @@
             <div class="card-body">
                 <div class="mb-3">
                     <div class="small text-muted">Internet</div>
-                    <div class="fw-semibold"><?= esc($status['internet'] ?? 'Unavailable') ?></div>
+                    <?php $inet = $status['internet'] ?? 'Unavailable'; ?>
+                    <span class="badge <?= $inet === 'Online' ? 'bg-success' : 'bg-danger' ?> fs-6">
+                        <i class="bi <?= $inet === 'Online' ? 'bi-wifi' : 'bi-wifi-off' ?>"></i>
+                        <?= esc($inet) ?>
+                    </span>
                 </div>
                 <div class="mb-3">
-                    <div class="small text-muted">Services</div>
-                    <div class="small"><?= esc(implode(', ', array_keys($status['services'] ?? []))) ?></div>
+                    <div class="small text-muted mb-1">Services</div>
+                    <div class="d-flex flex-wrap gap-1">
+                        <?php foreach ($status['services'] ?? [] as $svc => $state): ?>
+                            <span class="badge <?= $state === 'running' ? 'bg-success' : 'bg-secondary' ?>"><?= esc($svc) ?></span>
+                        <?php endforeach; ?>
+                    </div>
                 </div>
-                <div>
-                    <div class="small text-muted">RAID</div>
-                    <div class="small"><?= esc($status['raid'] ?? 'Unavailable') ?></div>
-                </div>
+
+                <?php
+                $raidArrays = $status['raid'] ?? [];
+                ?>
+                <div class="small text-muted mb-2">RAID Arrays</div>
+                <?php if (empty($raidArrays)): ?>
+                    <div class="d-flex align-items-center gap-2 text-muted">
+                        <i class="bi bi-hdd-stack fs-5"></i>
+                        <span class="small">No RAID detected</span>
+                    </div>
+                <?php else: ?>
+                    <?php foreach ($raidArrays as $arr): ?>
+                        <?php
+                        $health = $arr['health'] ?? 'Unknown';
+                        $healthColor = match($health) {
+                            'Healthy'   => 'success',
+                            'Degraded'  => 'danger',
+                            'Rebuilding'=> 'warning',
+                            default     => 'secondary',
+                        };
+                        $healthIcon = match($health) {
+                            'Healthy'   => 'bi-shield-check',
+                            'Degraded'  => 'bi-shield-exclamation',
+                            'Rebuilding'=> 'bi-arrow-repeat',
+                            default     => 'bi-question-circle',
+                        };
+                        $healthStr  = $arr['health_str'] ?? '';
+                        ?>
+                        <div class="border rounded p-2 mb-2" style="background: #f8f9fa;">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div>
+                                    <span class="fw-bold"><?= esc($arr['name']) ?></span>
+                                    <span class="badge bg-secondary ms-1"><?= esc($arr['level']) ?></span>
+                                    <span class="text-muted small ms-1"><?= esc($arr['state']) ?></span>
+                                </div>
+                                <span class="badge bg-<?= $healthColor ?>">
+                                    <i class="bi <?= $healthIcon ?>"></i> <?= esc($health) ?>
+                                </span>
+                            </div>
+
+                            <!-- Drive visual indicators -->
+                            <div class="d-flex gap-1 flex-wrap mb-1">
+                                <?php
+                                // Build per-slot health from health_str [UU_] etc.
+                                $slots = str_split($healthStr);
+                                foreach ($arr['devices'] ?? [] as $di => $dev):
+                                    $slotOk = ($slots[$dev['index']] ?? '_') === 'U';
+                                    if ($dev['spare']) {
+                                        $driveColor = 'bg-info'; $driveIcon = 'bi-hdd'; $driveTitle = 'Spare';
+                                    } elseif ($dev['failed']) {
+                                        $driveColor = 'bg-danger'; $driveIcon = 'bi-hdd'; $driveTitle = 'Failed';
+                                    } elseif ($slotOk) {
+                                        $driveColor = 'bg-success'; $driveIcon = 'bi-hdd-fill'; $driveTitle = 'Healthy';
+                                    } else {
+                                        $driveColor = 'bg-danger'; $driveIcon = 'bi-hdd'; $driveTitle = 'Failed';
+                                    }
+                                ?>
+                                    <div class="d-flex flex-column align-items-center" title="<?= esc($dev['name']) ?> — <?= $driveTitle ?>">
+                                        <span class="badge <?= $driveColor ?> p-2">
+                                            <i class="bi <?= $driveIcon ?> fs-6"></i>
+                                        </span>
+                                        <span class="text-muted" style="font-size:10px;"><?= esc($dev['name']) ?></span>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+
+                            <!-- Drive count summary -->
+                            <div class="small text-muted">
+                                <?= esc((string)$arr['active_drives']) ?>/<?= esc((string)$arr['total_drives']) ?> drives active
+                                <?php if (($arr['failed_drives'] ?? 0) > 0): ?>
+                                    &mdash; <span class="text-danger fw-semibold"><?= esc((string)$arr['failed_drives']) ?> failed</span>
+                                <?php endif; ?>
+                                <?php if ($arr['rebuild_progress'] !== null): ?>
+                                    &mdash; Rebuilding <?= esc((string)$arr['rebuild_progress']) ?>%
+                                    <div class="progress mt-1" style="height:6px;">
+                                        <div class="progress-bar bg-warning" style="width:<?= esc((string)$arr['rebuild_progress']) ?>%"></div>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
             </div>
         </div>
     </div>

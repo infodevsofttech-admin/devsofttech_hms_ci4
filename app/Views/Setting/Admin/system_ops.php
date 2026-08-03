@@ -88,12 +88,8 @@
             setHealthState('healthy');
             setInterval(function(){ refreshPanel(); }, 30000);
 
-            $(document).off('click', '#btnUpdateDirectGithub, #btnRestartWeb, #btnRestartPhp, #btnReboot, #btnShutdown')
-                .on('click', '#btnUpdateDirectGithub', function(){ if (!confirm('Deploy latest HMS code from GitHub?\n\nThis will download the latest code and update all files.')) return; postAction('<?= base_url('setting/admin/system-ops/updateDirect') ?>', {}, this); })
-                .on('click', '#btnRestartWeb', function(){ if (!confirm('Restart the web server now?')) return; postAction('<?= base_url('setting/admin/system-ops/action') ?>', {action: 'restart_web'}, this); })
-                .on('click', '#btnRestartPhp', function(){ if (!confirm('Restart PHP-FPM now?')) return; postAction('<?= base_url('setting/admin/system-ops/action') ?>', {action: 'restart_php'}, this); })
-                .on('click', '#btnReboot', function(){ if (!confirm('Reboot the server now?')) return; postAction('<?= base_url('setting/admin/system-ops/action') ?>', {action: 'reboot'}, this); })
-                .on('click', '#btnShutdown', function(){ if (!confirm('Shut down the server now?')) return; postAction('<?= base_url('setting/admin/system-ops/action') ?>', {action: 'shutdown'}, this); });
+            $(document).off('click', '#btnUpdateDirectGithub')
+                .on('click', '#btnUpdateDirectGithub', function(){ if (!confirm('Deploy latest HMS code from GitHub?\n\nThis will download the latest code and update all files.')) return; postAction('<?= base_url('setting/admin/system-ops/updateDirect') ?>', {}, this); });
         }
     </script>
 </section>

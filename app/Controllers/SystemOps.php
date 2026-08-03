@@ -37,15 +37,6 @@ class SystemOps extends BaseController
         return $this->response->setJSON($result);
     }
 
-    public function action()
-    {
-        $action = (string) $this->request->getPost('action');
-        $ops = new SystemOperations();
-        $result = $ops->runServerAction($action);
-
-        return $this->response->setJSON($result);
-    }
-
     public function diagnose()
     {
         $ops = new SystemOperations();
