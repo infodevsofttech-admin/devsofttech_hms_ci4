@@ -55,6 +55,58 @@ class SystemOperations
         ];
         $this->appendHistory($entry);
 
+        // Pre-check: Verify .git directory exists
+        if (!is_dir($repoPath . '/.git')) {
+            $errorMsg = 'Git repository not found. .git directory missing.';
+            $this->appendHistory([
+                'timestamp' => date('Y-m-d H:i:s'),
+                'type' => 'update',
+                'status' => 'failed',
+                'message' => 'HMS update failed',
+                'detail' => $errorMsg,
+            ]);
+            file_put_contents($logFile, 'FAILED: ' . $errorMsg . PHP_EOL, FILE_APPEND);
+            return ['ok' => false, 'message' => $errorMsg];
+        }
+
+        // Pre-check: Verify git is accessible
+        $gitCheck = $this->safeCommand('which git 2>/dev/null || command -v git 2>/dev/null');
+        if ($gitCheck === 'Unavailable' || trim($gitCheck) === '') {
+            $errorMsg = 'Git command not found on system. Cannot execute git pull.';
+            $this->appendHistory([
+                'timestamp' => date('Y-m-d H:i:s'),
+                'type' => 'update',
+                'status' => 'failed',
+                'message' => 'HMS update failed',
+                'detail' => $errorMsg,
+            ]);
+            file_put_contents($logFile, 'FAILED: ' . $errorMsg . PHP_EOL, FILE_APPEND);
+            return ['ok' => false, 'message' => $errorMsg];
+        }
+
+        // Run git status first to check connectivity and permissions
+        $statusCmd = 'cd ' . escapeshellarg($repoPath) . ' && git status 2>&1';
+        $statusResult = $this->runCommand($statusCmd);
+        if ($statusResult['exit_code'] !== 0) {
+            $statusError = $statusResult['output'];
+            if (strpos($statusError, 'Permission denied') !== false) {
+                $errorMsg = 'Permission denied. Git directory may not be writable by current user.';
+            } elseif (strpos($statusError, 'fatal') !== false) {
+                $errorMsg = 'Git fatal error: ' . $statusError;
+            } else {
+                $errorMsg = 'Git status check failed: ' . $statusError;
+            }
+            $this->appendHistory([
+                'timestamp' => date('Y-m-d H:i:s'),
+                'type' => 'update',
+                'status' => 'failed',
+                'message' => 'HMS update failed',
+                'detail' => $errorMsg,
+            ]);
+            file_put_contents($logFile, 'FAILED: ' . $errorMsg . PHP_EOL, FILE_APPEND);
+            return ['ok' => false, 'message' => $errorMsg];
+        }
+
         // Run git pull with timeout protection
         $command = 'cd ' . escapeshellarg($repoPath) . ' && timeout 60 git pull origin main 2>&1';
         $result = $this->runCommand($command);
@@ -62,42 +114,51 @@ class SystemOperations
 
         // Check for timeout
         if (str_contains($output, 'Terminated') || $result['exit_code'] === 124) {
-            $entry = [
+            $errorMsg = 'Update timed out after 60 seconds. Network connectivity or server response issue.';
+            $this->appendHistory([
                 'timestamp' => date('Y-m-d H:i:s'),
                 'type' => 'update',
                 'status' => 'timeout',
                 'message' => 'HMS update timed out (60 seconds)',
-                'detail' => 'The git pull operation took too long. Check network connectivity and try again.',
-            ];
-            $this->appendHistory($entry);
+                'detail' => $errorMsg,
+            ]);
             file_put_contents($logFile, 'TIMEOUT: ' . $output . PHP_EOL, FILE_APPEND);
-
-            return ['ok' => false, 'message' => 'Update timed out after 60 seconds. Please check network and try again.', 'output' => $output];
+            return ['ok' => false, 'message' => $errorMsg];
         }
 
         if ($result['exit_code'] !== 0) {
-            $entry = [
+            // Parse error message for user-friendly output
+            $errorMsg = $output;
+            if (strpos($output, 'Permission denied') !== false) {
+                $errorMsg = 'Permission denied. Check SSH key setup and permissions.';
+            } elseif (strpos($output, 'Authentication failed') !== false || strpos($output, 'fatal: could not read') !== false) {
+                $errorMsg = 'Authentication failed. SSH keys may not be configured for www-data user.';
+            } elseif (strpos($output, 'Connection refused') !== false) {
+                $errorMsg = 'Connection refused. GitHub server may be unreachable.';
+            } elseif (strpos($output, 'fatal: remote origin does not appear to be a git repository') !== false) {
+                $errorMsg = 'Remote origin not configured correctly.';
+            }
+            
+            $this->appendHistory([
                 'timestamp' => date('Y-m-d H:i:s'),
                 'type' => 'update',
                 'status' => 'failed',
                 'message' => 'HMS update failed',
-                'detail' => $output,
-            ];
-            $this->appendHistory($entry);
+                'detail' => $errorMsg,
+            ]);
             file_put_contents($logFile, 'FAILED: ' . $output . PHP_EOL, FILE_APPEND);
 
-            return ['ok' => false, 'message' => 'Update failed. Check logs for details.', 'output' => $output];
+            return ['ok' => false, 'message' => $errorMsg, 'output' => $output];
         }
 
         // Success
-        $entry = [
+        $this->appendHistory([
             'timestamp' => date('Y-m-d H:i:s'),
             'type' => 'update',
             'status' => 'success',
             'message' => 'HMS update completed',
             'detail' => $output,
-        ];
-        $this->appendHistory($entry);
+        ]);
         file_put_contents($logFile, 'SUCCESS: ' . $output . PHP_EOL, FILE_APPEND);
 
         return ['ok' => true, 'message' => 'HMS update completed successfully', 'output' => $output];
