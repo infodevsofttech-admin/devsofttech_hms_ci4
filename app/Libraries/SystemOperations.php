@@ -46,49 +46,61 @@ class SystemOperations
         $repoPath = ROOTPATH;
         $logFile = WRITEPATH . 'system_update.log';
         $startedAt = date('Y-m-d H:i:s');
+        
         $entry = [
             'timestamp' => $startedAt,
             'type' => 'update',
             'status' => 'running',
-            'message' => 'Update started',
+            'message' => 'HMS update started (git pull)',
         ];
         $this->appendHistory($entry);
 
-        $commands = [
-            'cd ' . escapeshellarg($repoPath) . ' && git pull origin main 2>&1',
-            'cd ' . escapeshellarg($repoPath) . ' && php spark migrate --namespace App 2>&1',
-        ];
+        // Run git pull with timeout protection
+        $command = 'cd ' . escapeshellarg($repoPath) . ' && timeout 60 git pull origin main 2>&1';
+        $result = $this->runCommand($command);
+        $output = $result['output'];
 
-        $output = [];
-        foreach ($commands as $command) {
-            $result = $this->runCommand($command);
-            $output[] = $result['output'];
-            if ($result['exit_code'] !== 0) {
-                $entry = [
-                    'timestamp' => date('Y-m-d H:i:s'),
-                    'type' => 'update',
-                    'status' => 'failed',
-                    'message' => 'Update failed',
-                    'detail' => trim(implode("\n", $output)),
-                ];
-                $this->appendHistory($entry);
-                file_put_contents($logFile, trim(implode("\n", $output)) . PHP_EOL, FILE_APPEND);
+        // Check for timeout
+        if (str_contains($output, 'Terminated') || $result['exit_code'] === 124) {
+            $entry = [
+                'timestamp' => date('Y-m-d H:i:s'),
+                'type' => 'update',
+                'status' => 'timeout',
+                'message' => 'HMS update timed out (60 seconds)',
+                'detail' => 'The git pull operation took too long. Check network connectivity and try again.',
+            ];
+            $this->appendHistory($entry);
+            file_put_contents($logFile, 'TIMEOUT: ' . $output . PHP_EOL, FILE_APPEND);
 
-                return ['ok' => false, 'message' => 'Update failed', 'output' => trim(implode("\n", $output))];
-            }
+            return ['ok' => false, 'message' => 'Update timed out after 60 seconds. Please check network and try again.', 'output' => $output];
         }
 
+        if ($result['exit_code'] !== 0) {
+            $entry = [
+                'timestamp' => date('Y-m-d H:i:s'),
+                'type' => 'update',
+                'status' => 'failed',
+                'message' => 'HMS update failed',
+                'detail' => $output,
+            ];
+            $this->appendHistory($entry);
+            file_put_contents($logFile, 'FAILED: ' . $output . PHP_EOL, FILE_APPEND);
+
+            return ['ok' => false, 'message' => 'Update failed. Check logs for details.', 'output' => $output];
+        }
+
+        // Success
         $entry = [
             'timestamp' => date('Y-m-d H:i:s'),
             'type' => 'update',
             'status' => 'success',
-            'message' => 'Update completed',
-            'detail' => trim(implode("\n", $output)),
+            'message' => 'HMS update completed',
+            'detail' => $output,
         ];
         $this->appendHistory($entry);
-        file_put_contents($logFile, trim(implode("\n", $output)) . PHP_EOL, FILE_APPEND);
+        file_put_contents($logFile, 'SUCCESS: ' . $output . PHP_EOL, FILE_APPEND);
 
-        return ['ok' => true, 'message' => 'Update completed successfully', 'output' => trim(implode("\n", $output))];
+        return ['ok' => true, 'message' => 'HMS update completed successfully', 'output' => $output];
     }
 
     public function runServerAction(string $action): array

@@ -44,7 +44,7 @@
                 <h5 class="mb-0">Maintenance Actions</h5>
             </div>
             <div class="card-body d-grid gap-2">
-                <button class="btn btn-primary" id="btnUpdateSystem">Update System</button>
+                <button class="btn btn-primary" id="btnUpdateSystem">Update HMS</button>
                 <button class="btn btn-outline-warning" id="btnRestartWeb">Restart Web Server</button>
                 <button class="btn btn-outline-info" id="btnRestartPhp">Restart PHP-FPM</button>
                 <button class="btn btn-outline-danger" id="btnShutdown">Shutdown Server</button>
