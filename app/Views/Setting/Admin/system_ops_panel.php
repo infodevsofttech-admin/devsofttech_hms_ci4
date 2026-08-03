@@ -74,7 +74,33 @@
                 <h5 class="mb-0">Maintenance Actions</h5>
             </div>
             <div class="card-body d-grid gap-2">
-                <button class="btn btn-success" id="btnUpdateDirectGithub" title="Download and deploy latest from GitHub">Deploy from GitHub</button>
+                <?php
+                $uc = $status['update_check'] ?? [];
+                $hasUpdate = !empty($uc['has_update']);
+                $latestMsg = esc($uc['latest_message'] ?? '');
+                $latestSha = substr($uc['latest_sha'] ?? '', 0, 7);
+                $deployedSha = substr($uc['deployed_sha'] ?? '', 0, 7);
+                ?>
+                <?php if ($hasUpdate): ?>
+                    <div class="alert alert-warning py-2 px-3 mb-1 d-flex align-items-center gap-2" style="font-size:13px;">
+                        <i class="bi bi-arrow-up-circle-fill text-warning fs-5"></i>
+                        <div>
+                            <strong>New update available!</strong>
+                            <?php if ($latestMsg): ?><br><span class="text-muted"><?= $latestMsg ?></span><?php endif; ?>
+                            <?php if ($latestSha): ?><br><code><?= esc($deployedSha ?: 'none') ?> → <?= esc($latestSha) ?></code><?php endif; ?>
+                        </div>
+                    </div>
+                <?php elseif (empty($uc['error']) && $deployedSha): ?>
+                    <div class="text-success small mb-1 d-flex align-items-center gap-1">
+                        <i class="bi bi-check-circle-fill"></i> Up to date <code class="ms-1"><?= esc($deployedSha) ?></code>
+                    </div>
+                <?php endif; ?>
+                <button class="btn <?= $hasUpdate ? 'btn-warning' : 'btn-success' ?> position-relative" id="btnUpdateDirectGithub" title="Download and deploy latest from GitHub">
+                    <i class="bi bi-cloud-download me-1"></i>Deploy from GitHub
+                    <?php if ($hasUpdate): ?>
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size:10px;">NEW</span>
+                    <?php endif; ?>
+                </button>
             </div>
         </div>
     </div>

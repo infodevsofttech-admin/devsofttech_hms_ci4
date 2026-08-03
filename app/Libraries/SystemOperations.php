@@ -7,10 +7,19 @@ use RuntimeException;
 class SystemOperations
 {
     private string $historyPath;
+    private string $deployedShaPath;
+    private string $updateCachePath;
+
+    private const GITHUB_OWNER  = 'infodevsofttech-admin';
+    private const GITHUB_REPO   = 'devsofttech_hms_ci4';
+    private const GITHUB_BRANCH = 'main';
+    private const UPDATE_CACHE_TTL = 600; // 10 minutes
 
     public function __construct()
     {
-        $this->historyPath = WRITEPATH . 'system_update_history.json';
+        $this->historyPath    = WRITEPATH . 'system_update_history.json';
+        $this->deployedShaPath = WRITEPATH . 'deployed_commit.txt';
+        $this->updateCachePath = WRITEPATH . 'github_update_cache.json';
     }
 
     public function collectStatus(): array
@@ -35,8 +44,9 @@ class SystemOperations
         $status['network'] = $this->readNetworkStatus();
         $status['internet'] = $this->readInternetStatus();
         $status['services'] = $this->readServiceStatus();
-        $status['raid'] = $this->readRaidStatus();
-        $status['last_update'] = $this->getLatestHistoryEntry();
+        $status['raid']        = $this->readRaidStatus();
+        $status['last_update']  = $this->getLatestHistoryEntry();
+        $status['update_check'] = $this->checkForUpdates();
 
         return $status;
     }
@@ -53,12 +63,12 @@ class SystemOperations
         $this->purgeStaleRunning();
 
         try {
-            $githubOwner = 'infodevsofttech-admin';
-            $githubRepo  = 'devsofttech_hms_ci4';
-            $branch      = 'main';
-            $zipUrl      = "https://github.com/{$githubOwner}/{$githubRepo}/archive/refs/heads/{$branch}.zip";
-            $tempDir     = sys_get_temp_dir();
-            $zipFile     = $tempDir . '/hms_update_' . time() . '.zip';
+            $zipUrl  = "https://github.com/" . self::GITHUB_OWNER . "/" . self::GITHUB_REPO . "/archive/refs/heads/" . self::GITHUB_BRANCH . ".zip";
+            $tempDir = sys_get_temp_dir();
+            $zipFile = $tempDir . '/hms_update_' . time() . '.zip';
+
+            // Fetch latest commit info for tracking (fail-safe, non-blocking)
+            $latestInfo = $this->fetchLatestCommitInfo();
 
             file_put_contents($logFile, '[' . date('Y-m-d H:i:s') . "] Downloading: {$zipUrl}\n", FILE_APPEND);
 
@@ -95,14 +105,21 @@ class SystemOperations
             @unlink($zipFile);
 
             $successMsg = 'HMS updated successfully from GitHub (direct deployment)';
+            $shaLine = !empty($latestInfo['sha']) ? "\nCommit: " . substr($latestInfo['sha'], 0, 7) . ($latestInfo['message'] ? ' — ' . $latestInfo['message'] : '') : '';
             $this->appendHistory([
                 'timestamp' => date('Y-m-d H:i:s'),
                 'type'      => 'update',
                 'status'    => 'success',
                 'message'   => $successMsg,
-                'detail'    => "Downloaded: {$zipSize}\nSource: {$zipUrl}\nCompleted: " . date('Y-m-d H:i:s'),
+                'detail'    => "Downloaded: {$zipSize}\nSource: {$zipUrl}{$shaLine}\nCompleted: " . date('Y-m-d H:i:s'),
             ]);
             file_put_contents($logFile, '[' . date('Y-m-d H:i:s') . "] SUCCESS: {$successMsg}\n", FILE_APPEND);
+
+            // Save deployed SHA so update checker knows what version is live
+            if (!empty($latestInfo['sha'])) {
+                file_put_contents($this->deployedShaPath, $latestInfo['sha']);
+            }
+            @unlink($this->updateCachePath); // invalidate cache so next check is fresh
 
             return ['ok' => true, 'message' => $successMsg];
 
@@ -384,6 +401,85 @@ class SystemOperations
         }
 
         return $info;
+    }
+
+    public function checkForUpdates(): array
+    {
+        $result = [
+            'has_update'      => false,
+            'deployed_sha'    => '',
+            'latest_sha'      => '',
+            'latest_message'  => '',
+            'latest_date'     => '',
+            'error'           => '',
+        ];
+
+        // Read cached result if fresh enough
+        if (file_exists($this->updateCachePath)) {
+            $cached = @json_decode((string) file_get_contents($this->updateCachePath), true);
+            if (is_array($cached) && isset($cached['fetched_at']) && (time() - (int)$cached['fetched_at']) < self::UPDATE_CACHE_TTL) {
+                $result['latest_sha']     = $cached['sha'] ?? '';
+                $result['latest_message'] = $cached['message'] ?? '';
+                $result['latest_date']    = $cached['date'] ?? '';
+                $result['deployed_sha']   = $this->getDeployedSha();
+                $result['has_update']     = $result['latest_sha'] !== '' && $result['latest_sha'] !== $result['deployed_sha'];
+                return $result;
+            }
+        }
+
+        $info = $this->fetchLatestCommitInfo();
+        if (!empty($info['error'])) {
+            $result['error'] = $info['error'];
+            return $result;
+        }
+
+        // Cache the result
+        file_put_contents($this->updateCachePath, json_encode([
+            'fetched_at' => time(),
+            'sha'        => $info['sha'],
+            'message'    => $info['message'],
+            'date'       => $info['date'],
+        ]));
+
+        $result['latest_sha']     = $info['sha'];
+        $result['latest_message'] = $info['message'];
+        $result['latest_date']    = $info['date'];
+        $result['deployed_sha']   = $this->getDeployedSha();
+        $result['has_update']     = $result['latest_sha'] !== '' && $result['latest_sha'] !== $result['deployed_sha'];
+
+        return $result;
+    }
+
+    private function fetchLatestCommitInfo(): array
+    {
+        $apiUrl = "https://api.github.com/repos/" . self::GITHUB_OWNER . "/" . self::GITHUB_REPO . "/commits/" . self::GITHUB_BRANCH;
+        $ctx = stream_context_create(['http' => [
+            'timeout' => 8,
+            'header'  => "User-Agent: HMS-CI4-Updater/1.0\r\nAccept: application/vnd.github.v3+json\r\n",
+            'ignore_errors' => true,
+        ]]);
+        $body = @file_get_contents($apiUrl, false, $ctx);
+        if ($body === false) {
+            return ['sha' => '', 'message' => '', 'date' => '', 'error' => 'Could not reach GitHub API'];
+        }
+        $data = json_decode($body, true);
+        if (!is_array($data) || empty($data['sha'])) {
+            return ['sha' => '', 'message' => '', 'date' => '', 'error' => 'Unexpected GitHub API response'];
+        }
+        $message = substr((string)($data['commit']['message'] ?? ''), 0, 72);
+        $message = strtok($message, "\n"); // first line only
+        return [
+            'sha'     => (string)$data['sha'],
+            'message' => (string)$message,
+            'date'    => (string)($data['commit']['committer']['date'] ?? ''),
+            'error'   => '',
+        ];
+    }
+
+    private function getDeployedSha(): string
+    {
+        if (!file_exists($this->deployedShaPath)) return '';
+        return trim((string)@file_get_contents($this->deployedShaPath));
     }
 
     public function getHistory(): array
