@@ -430,12 +430,29 @@ class SystemOperations
 
     private function readNetworkStatus(): string
     {
-        $result = $this->safeCommand('ip addr 2>/dev/null | head -n 5');
-        if ($result === 'Unavailable' || trim($result) === '') {
-            return 'Unavailable';
+        // Try PHP built-in first — works on Linux and Windows without shell
+        $hostname = gethostname();
+        if ($hostname !== false) {
+            $ip = gethostbyname($hostname);
+            // gethostbyname returns the hostname unchanged if resolution fails
+            if ($ip !== $hostname && filter_var($ip, FILTER_VALIDATE_IP)) {
+                return $ip;
+            }
         }
 
-        return 'Detected';
+        // Fallback: parse first non-loopback IPv4 from ip addr output
+        $result = $this->safeCommand("ip -4 addr show scope global | grep inet | awk '{print $2}' | cut -d/ -f1 | head -1 2>/dev/null");
+        if ($result !== 'Unavailable' && trim($result) !== '' && filter_var(trim($result), FILTER_VALIDATE_IP)) {
+            return trim($result);
+        }
+
+        // Fallback: hostname -I
+        $result = $this->safeCommand('hostname -I 2>/dev/null | awk \'{print $1}\'');
+        if ($result !== 'Unavailable' && trim($result) !== '' && filter_var(trim($result), FILTER_VALIDATE_IP)) {
+            return trim($result);
+        }
+
+        return 'Unavailable';
     }
 
     private function readInternetStatus(): string
