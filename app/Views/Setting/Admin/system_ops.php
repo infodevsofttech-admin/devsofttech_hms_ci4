@@ -88,8 +88,9 @@
             setHealthState('healthy');
             setInterval(function(){ refreshPanel(); }, 30000);
 
-            $(document).off('click', '#btnUpdateSystem, #btnRestartWeb, #btnRestartPhp, #btnReboot, #btnShutdown')
-                .on('click', '#btnUpdateSystem', function(){ if (!confirm('Pull latest HMS code from repository?')) return; postAction('<?= base_url('setting/admin/system-ops/update') ?>', {}, this); })
+            $(document).off('click', '#btnUpdateSystem, #btnUpdateDirectGithub, #btnRestartWeb, #btnRestartPhp, #btnReboot, #btnShutdown')
+                .on('click', '#btnUpdateSystem', function(){ if (!confirm('Pull latest HMS code from repository?\n\nThis method requires git to be configured on the server.')) return; postAction('<?= base_url('setting/admin/system-ops/update') ?>', {}, this); })
+                .on('click', '#btnUpdateDirectGithub', function(){ if (!confirm('Deploy latest HMS code from GitHub?\n\nThis will download the latest code and update files.\nThis method is more reliable if git is not available.')) return; postAction('<?= base_url('setting/admin/system-ops/updateDirect') ?>', {}, this); })
                 .on('click', '#btnRestartWeb', function(){ if (!confirm('Restart the web server now?')) return; postAction('<?= base_url('setting/admin/system-ops/action') ?>', {action: 'restart_web'}, this); })
                 .on('click', '#btnRestartPhp', function(){ if (!confirm('Restart PHP-FPM now?')) return; postAction('<?= base_url('setting/admin/system-ops/action') ?>', {action: 'restart_php'}, this); })
                 .on('click', '#btnReboot', function(){ if (!confirm('Reboot the server now?')) return; postAction('<?= base_url('setting/admin/system-ops/action') ?>', {action: 'reboot'}, this); })

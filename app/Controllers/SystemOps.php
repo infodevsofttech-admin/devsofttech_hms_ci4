@@ -37,6 +37,14 @@ class SystemOps extends BaseController
         return $this->response->setJSON($result);
     }
 
+    public function updateDirect()
+    {
+        $ops = new SystemOperations();
+        $result = $ops->runUpdateDirect();
+
+        return $this->response->setJSON($result);
+    }
+
     public function action()
     {
         $action = (string) $this->request->getPost('action');

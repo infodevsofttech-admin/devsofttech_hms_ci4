@@ -41,6 +41,160 @@ class SystemOperations
         return $status;
     }
 
+    public function runUpdateDirect(): array
+    {
+        $repoPath = ROOTPATH;
+        $logFile = WRITEPATH . 'system_update.log';
+        $startedAt = date('Y-m-d H:i:s');
+        
+        $entry = [
+            'timestamp' => $startedAt,
+            'type' => 'update',
+            'status' => 'running',
+            'message' => 'HMS update started (direct deployment from GitHub)',
+        ];
+        $this->appendHistory($entry);
+
+        try {
+            // GitHub repo details - PUBLIC REPO, no auth needed
+            $githubOwner = 'infodevsofttech-admin';
+            $githubRepo = 'devsofttech_hms_ci4';
+            $branch = 'main';
+            
+            // Download latest ZIP from GitHub
+            $zipUrl = "https://github.com/{$githubOwner}/{$githubRepo}/archive/refs/heads/{$branch}.zip";
+            $tempDir = sys_get_temp_dir();
+            $zipFile = $tempDir . '/hms_update_' . time() . '.zip';
+            
+            file_put_contents($logFile, "Downloading from: {$zipUrl}\n", FILE_APPEND);
+            
+            $zipContent = @file_get_contents($zipUrl);
+            if ($zipContent === false) {
+                throw new \Exception('Failed to download from GitHub. Check network connectivity and GitHub availability.');
+            }
+            
+            if (!file_put_contents($zipFile, $zipContent)) {
+                throw new \Exception('Failed to write downloaded ZIP to temporary directory.');
+            }
+            
+            file_put_contents($logFile, "Downloaded ZIP: {$zipFile} (" . filesize($zipFile) . " bytes)\n", FILE_APPEND);
+            
+            // Extract ZIP
+            $zip = new \ZipArchive();
+            if ($zip->open($zipFile) !== true) {
+                throw new \Exception('Failed to open downloaded ZIP file.');
+            }
+            
+            $extractDir = $tempDir . '/hms_extract_' . time();
+            if (!mkdir($extractDir)) {
+                throw new \Exception('Failed to create extraction directory.');
+            }
+            
+            $zip->extractTo($extractDir);
+            $zip->close();
+            
+            // Find the extracted directory (GitHub creates a folder like "repo-main")
+            $dirs = array_diff(scandir($extractDir), ['.', '..']);
+            if (empty($dirs)) {
+                throw new \Exception('Downloaded ZIP appears to be empty.');
+            }
+            
+            $extractedRepoDir = $extractDir . '/' . reset($dirs);
+            file_put_contents($logFile, "Extracted to: {$extractedRepoDir}\n", FILE_APPEND);
+            
+            // Sync files (skip git, vendor, and certain local files)
+            $this->syncFiles($extractedRepoDir, $repoPath, $logFile);
+            
+            // Cleanup
+            $this->deleteDirectory($extractDir);
+            @unlink($zipFile);
+            
+            $successMsg = 'HMS updated successfully from GitHub (direct deployment)';
+            $this->appendHistory([
+                'timestamp' => date('Y-m-d H:i:s'),
+                'type' => 'update',
+                'status' => 'success',
+                'message' => $successMsg,
+                'detail' => 'Files synced from ' . $zipUrl,
+            ]);
+            file_put_contents($logFile, "SUCCESS: {$successMsg}\n", FILE_APPEND);
+            
+            return ['ok' => true, 'message' => $successMsg];
+        } catch (\Throwable $e) {
+            $errorMsg = 'Update failed: ' . $e->getMessage();
+            $this->appendHistory([
+                'timestamp' => date('Y-m-d H:i:s'),
+                'type' => 'update',
+                'status' => 'failed',
+                'message' => 'HMS update failed',
+                'detail' => $errorMsg,
+            ]);
+            file_put_contents($logFile, "FAILED: {$errorMsg}\n", FILE_APPEND);
+            return ['ok' => false, 'message' => $errorMsg];
+        }
+    }
+
+    private function syncFiles(string $sourceDir, string $destDir, string $logFile): void
+    {
+        $skip = ['.git', '.gitignore', 'vendor', 'node_modules', 'writable', '.env', '.env.example'];
+        
+        $this->copyRecursive($sourceDir, $destDir, $skip, $logFile);
+        file_put_contents($logFile, "File sync completed\n", FILE_APPEND);
+    }
+
+    private function copyRecursive(string $src, string $dest, array $skip, string $logFile): void
+    {
+        $dir = opendir($src);
+        if (!$dir) {
+            throw new \Exception("Cannot open directory: {$src}");
+        }
+        
+        while (false !== ($file = readdir($dir))) {
+            if ($file === '.' || $file === '..') {
+                continue;
+            }
+            
+            if (in_array($file, $skip)) {
+                continue;
+            }
+            
+            $srcPath = $src . '/' . $file;
+            $destPath = $dest . '/' . $file;
+            
+            if (is_dir($srcPath)) {
+                if (!is_dir($destPath)) {
+                    @mkdir($destPath, 0755, true);
+                }
+                $this->copyRecursive($srcPath, $destPath, $skip, $logFile);
+            } else {
+                if (@copy($srcPath, $destPath)) {
+                    file_put_contents($logFile, "  ✓ {$file}\n", FILE_APPEND);
+                } else {
+                    file_put_contents($logFile, "  ✗ {$file} (copy failed)\n", FILE_APPEND);
+                }
+            }
+        }
+        closedir($dir);
+    }
+
+    private function deleteDirectory(string $dir): void
+    {
+        if (!is_dir($dir)) {
+            return;
+        }
+        
+        $files = array_diff(scandir($dir), ['.', '..']);
+        foreach ($files as $file) {
+            $path = $dir . '/' . $file;
+            if (is_dir($path)) {
+                $this->deleteDirectory($path);
+            } else {
+                @unlink($path);
+            }
+        }
+        @rmdir($dir);
+    }
+
     public function runUpdate(): array
     {
         $repoPath = ROOTPATH;
