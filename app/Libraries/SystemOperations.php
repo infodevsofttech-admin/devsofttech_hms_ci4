@@ -88,14 +88,28 @@ class SystemOperations
         $statusCmd = 'cd ' . escapeshellarg($repoPath) . ' && ' . escapeshellarg($gitPath) . ' status 2>&1';
         $statusResult = $this->runCommand($statusCmd);
         if ($statusResult['exit_code'] !== 0) {
-            $statusError = $statusResult['output'];
+            $statusError = trim($statusResult['output']);
+            $errorMsg = '';
+            
+            // Parse error message
             if (strpos($statusError, 'Permission denied') !== false) {
                 $errorMsg = 'Permission denied. Git directory may not be writable by current user.';
+            } elseif (strpos($statusError, 'fatal: Not a git repository') !== false) {
+                $errorMsg = 'Not a git repository. Repository initialization may be corrupted.';
+            } elseif (strpos($statusError, 'user.email') !== false || strpos($statusError, 'user.name') !== false) {
+                $errorMsg = 'Git user configuration missing. Run: git config user.name "name" && git config user.email "email@example.com"';
+            } elseif (strpos($statusError, 'SSL certificate problem') !== false) {
+                $errorMsg = 'SSL certificate verification failed. Run: git config --global http.sslVerify false (if using HTTPS)';
             } elseif (strpos($statusError, 'fatal') !== false) {
-                $errorMsg = 'Git fatal error: ' . $statusError;
+                $errorMsg = 'Git error: ' . $statusError;
             } else {
-                $errorMsg = 'Git status check failed: ' . $statusError;
+                $errorMsg = 'Git status failed: ' . $statusError;
             }
+            
+            // Add diagnostics to help user
+            $diagnostics = $this->getGitDiagnostics($gitPath, $repoPath);
+            $errorMsg .= ' [' . $diagnostics['git_version'] . ', User: ' . $diagnostics['git_config_user_name'] . ', Remote: ' . $diagnostics['remote_url'] . ']';
+            
             $this->appendHistory([
                 'timestamp' => date('Y-m-d H:i:s'),
                 'type' => 'update',
@@ -189,6 +203,48 @@ class SystemOperations
         }
 
         return null;
+    }
+
+    private function getGitDiagnostics(string $gitPath, string $repoPath): array
+    {
+        $diagnostics = [
+            'git_version' => 'Unknown',
+            'git_config_user_name' => 'Not set',
+            'git_config_user_email' => 'Not set',
+            'remote_url' => 'Not configured',
+            'current_branch' => 'Unknown',
+        ];
+
+        // Get git version
+        $result = $this->runCommand(escapeshellarg($gitPath) . ' --version 2>&1');
+        if ($result['exit_code'] === 0) {
+            $diagnostics['git_version'] = trim($result['output']);
+        }
+
+        // Get git config
+        $result = $this->runCommand('cd ' . escapeshellarg($repoPath) . ' && ' . escapeshellarg($gitPath) . ' config user.name 2>&1');
+        if ($result['exit_code'] === 0) {
+            $diagnostics['git_config_user_name'] = trim($result['output']);
+        }
+
+        $result = $this->runCommand('cd ' . escapeshellarg($repoPath) . ' && ' . escapeshellarg($gitPath) . ' config user.email 2>&1');
+        if ($result['exit_code'] === 0) {
+            $diagnostics['git_config_user_email'] = trim($result['output']);
+        }
+
+        // Get remote URL
+        $result = $this->runCommand('cd ' . escapeshellarg($repoPath) . ' && ' . escapeshellarg($gitPath) . ' config --get remote.origin.url 2>&1');
+        if ($result['exit_code'] === 0) {
+            $diagnostics['remote_url'] = trim($result['output']);
+        }
+
+        // Get current branch
+        $result = $this->runCommand('cd ' . escapeshellarg($repoPath) . ' && ' . escapeshellarg($gitPath) . ' rev-parse --abbrev-ref HEAD 2>&1');
+        if ($result['exit_code'] === 0) {
+            $diagnostics['current_branch'] = trim($result['output']);
+        }
+
+        return $diagnostics;
     }
 
     public function runServerAction(string $action): array
