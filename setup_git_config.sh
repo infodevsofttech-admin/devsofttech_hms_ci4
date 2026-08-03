@@ -36,41 +36,56 @@ echo "  Web user: $WEB_USER"
 echo "  HMS dir: $HMS_DIR"
 echo ""
 
-# 1. Create .ssh directory for www-data if it doesn't exist
-echo "[1/7] Creating .ssh directory for $WEB_USER..."
+# 1. Fix global git config file permissions
+echo "[1/8] Fixing .gitconfig file permissions..."
+if [ -f /var/www/.gitconfig ]; then
+  rm -f /var/www/.gitconfig
+  echo "  Removed corrupted .gitconfig file"
+fi
+
+# Create fresh .gitconfig with correct permissions
+touch /var/www/.gitconfig
+chown "$WEB_USER:$WEB_USER" /var/www/.gitconfig
+chmod 600 /var/www/.gitconfig
+echo "  Created fresh .gitconfig with correct permissions"
+
+# 2. Create .ssh directory for www-data if it doesn't exist
+echo "[2/8] Creating .ssh directory for $WEB_USER..."
 sudo -u "$WEB_USER" mkdir -p /var/www/.ssh
 sudo -u "$WEB_USER" chmod 700 /var/www/.ssh
 
-# 2. Configure git user name
-echo "[2/7] Configuring git user name..."
+# 3. Configure git user name
+echo "[3/8] Configuring git user name..."
 sudo -u "$WEB_USER" git config --global user.name "HMS Deploy User"
 
-# 3. Configure git email
-echo "[3/7] Configuring git email..."
+# 4. Configure git email
+echo "[4/8] Configuring git email..."
 sudo -u "$WEB_USER" git config --global user.email "deploy@hms.local"
 
-# 4. Disable SSL verification (for HTTPS repos)
-echo "[4/7] Configuring git SSL settings..."
+# 5. Disable SSL verification (for HTTPS repos)
+echo "[5/8] Configuring git SSL settings..."
 sudo -u "$WEB_USER" git config --global http.sslVerify false
 
-# 5. Set git to use HTTPS instead of SSH (easier for automated deploys)
-echo "[5/7] Configuring git to use HTTPS..."
+# 6. Set git to use HTTPS instead of SSH (easier for automated deploys)
+echo "[6/8] Configuring git to use HTTPS..."
 cd "$HMS_DIR"
 sudo -u "$WEB_USER" git remote set-url origin https://github.com/infodevsofttech-admin/devsofttech_hms_ci4.git
 
-# 6. Fix directory permissions
-echo "[6/7] Fixing directory permissions..."
+# 7. Fix directory permissions
+echo "[7/8] Fixing directory permissions..."
 chown -R "$WEB_USER:$WEB_USER" "$HMS_DIR"
 chmod -R 755 "$HMS_DIR"
 chmod -R 755 "$HMS_DIR/.git"
 
-# 7. Test git status
-echo "[7/7] Testing git status..."
+# 8. Test git status
+echo "[8/8] Testing git status..."
 cd "$HMS_DIR"
 if sudo -u "$WEB_USER" git status &>/dev/null; then
   echo "✓ Git status check PASSED"
 else
   echo "✗ Git status check FAILED"
+  echo "  Running git status with error output:"
+  sudo -u "$WEB_USER" git status
   exit 1
 fi
 
@@ -88,3 +103,4 @@ echo ""
 echo "To verify configuration, run:"
 echo "  sudo -u www-data git config --list"
 echo ""
+
