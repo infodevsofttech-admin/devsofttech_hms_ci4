@@ -69,10 +69,10 @@ class SystemOperations
             return ['ok' => false, 'message' => $errorMsg];
         }
 
-        // Pre-check: Verify git is accessible
-        $gitCheck = $this->safeCommand('which git 2>/dev/null || command -v git 2>/dev/null');
-        if ($gitCheck === 'Unavailable' || trim($gitCheck) === '') {
-            $errorMsg = 'Git command not found on system. Cannot execute git pull.';
+        // Find git command location (try common paths)
+        $gitPath = $this->findGitCommand();
+        if (!$gitPath) {
+            $errorMsg = 'Git command not found. Tried: /usr/bin/git, /bin/git, /usr/local/bin/git. Ensure git is installed on the system.';
             $this->appendHistory([
                 'timestamp' => date('Y-m-d H:i:s'),
                 'type' => 'update',
@@ -85,7 +85,7 @@ class SystemOperations
         }
 
         // Run git status first to check connectivity and permissions
-        $statusCmd = 'cd ' . escapeshellarg($repoPath) . ' && git status 2>&1';
+        $statusCmd = 'cd ' . escapeshellarg($repoPath) . ' && ' . escapeshellarg($gitPath) . ' status 2>&1';
         $statusResult = $this->runCommand($statusCmd);
         if ($statusResult['exit_code'] !== 0) {
             $statusError = $statusResult['output'];
@@ -108,7 +108,7 @@ class SystemOperations
         }
 
         // Run git pull with timeout protection
-        $command = 'cd ' . escapeshellarg($repoPath) . ' && timeout 60 git pull origin main 2>&1';
+        $command = 'cd ' . escapeshellarg($repoPath) . ' && timeout 60 ' . escapeshellarg($gitPath) . ' pull origin main 2>&1';
         $result = $this->runCommand($command);
         $output = $result['output'];
 
@@ -162,6 +162,33 @@ class SystemOperations
         file_put_contents($logFile, 'SUCCESS: ' . $output . PHP_EOL, FILE_APPEND);
 
         return ['ok' => true, 'message' => 'HMS update completed successfully', 'output' => $output];
+    }
+
+    private function findGitCommand(): ?string
+    {
+        // Try common git installation paths
+        $gitPaths = [
+            '/usr/bin/git',
+            '/bin/git',
+            '/usr/local/bin/git',
+        ];
+
+        foreach ($gitPaths as $path) {
+            if (file_exists($path) && is_executable($path)) {
+                return $path;
+            }
+        }
+
+        // Try to find git in PATH using shell
+        $result = $this->runCommand('which git 2>/dev/null || command -v git 2>/dev/null');
+        if ($result['exit_code'] === 0 && trim($result['output']) !== '') {
+            $gitPath = trim($result['output']);
+            if (file_exists($gitPath)) {
+                return $gitPath;
+            }
+        }
+
+        return null;
     }
 
     public function runServerAction(string $action): array
