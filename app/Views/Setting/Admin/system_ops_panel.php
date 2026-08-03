@@ -273,14 +273,17 @@
                                         <td><?= esc((string) ($entry['type'] ?? '')) ?></td>
                                         <td>
                                             <?php $st = (string) ($entry['status'] ?? ''); ?>
-                                            <span class="ops-pill <?= $st === 'success' ? 'success' : ($st === 'failed' ? 'danger' : 'warning') ?>"><?= esc($st) ?></span>
+                                            <span class="ops-pill <?= match($st) { 'success' => 'success', 'failed' => 'danger', 'timeout' => 'danger', default => 'warning' } ?>"><?= esc($st) ?></span>
                                         </td>
                                         <td><?= esc((string) ($entry['message'] ?? '')) ?></td>
                                         <td>
-                                            <?php if (!empty($entry['detail'])) : ?>
-                                                <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#detailModal" data-detail="<?= esc((string) ($entry['detail'] ?? '')) ?>" title="Show details">
+                                            <?php $det = (string)($entry['detail'] ?? ''); ?>
+                                            <?php if ($det !== ''): ?>
+                                                <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#detailModal" data-detail="<?= esc($det) ?>" title="Show details">
                                                     <i class="bi bi-info-circle"></i>
                                                 </button>
+                                            <?php else: ?>
+                                                <span class="text-muted small">—</span>
                                             <?php endif; ?>
                                         </td>
                                     </tr>

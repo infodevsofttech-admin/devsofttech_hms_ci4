@@ -44,92 +44,78 @@ class SystemOperations
     public function runUpdateDirect(): array
     {
         $repoPath = ROOTPATH;
-        $logFile = WRITEPATH . 'system_update.log';
-        $startedAt = date('Y-m-d H:i:s');
-        
-        $entry = [
-            'timestamp' => $startedAt,
-            'type' => 'update',
-            'status' => 'running',
-            'message' => 'HMS update started (direct deployment from GitHub)',
-        ];
-        $this->appendHistory($entry);
+        $logFile  = WRITEPATH . 'system_update.log';
+
+        // Extend PHP time limit for large ZIP download + file sync
+        @set_time_limit(300);
+
+        // Remove any stale 'running' entries from previous failed attempts
+        $this->purgeStaleRunning();
 
         try {
-            // GitHub repo details - PUBLIC REPO, no auth needed
             $githubOwner = 'infodevsofttech-admin';
-            $githubRepo = 'devsofttech_hms_ci4';
-            $branch = 'main';
-            
-            // Download latest ZIP from GitHub
-            $zipUrl = "https://github.com/{$githubOwner}/{$githubRepo}/archive/refs/heads/{$branch}.zip";
-            $tempDir = sys_get_temp_dir();
-            $zipFile = $tempDir . '/hms_update_' . time() . '.zip';
-            
-            file_put_contents($logFile, "Downloading from: {$zipUrl}\n", FILE_APPEND);
-            
+            $githubRepo  = 'devsofttech_hms_ci4';
+            $branch      = 'main';
+            $zipUrl      = "https://github.com/{$githubOwner}/{$githubRepo}/archive/refs/heads/{$branch}.zip";
+            $tempDir     = sys_get_temp_dir();
+            $zipFile     = $tempDir . '/hms_update_' . time() . '.zip';
+
+            file_put_contents($logFile, '[' . date('Y-m-d H:i:s') . "] Downloading: {$zipUrl}\n", FILE_APPEND);
+
             $zipContent = @file_get_contents($zipUrl);
             if ($zipContent === false) {
-                throw new \Exception('Failed to download from GitHub. Check network connectivity and GitHub availability.');
+                throw new \Exception('Failed to download from GitHub. Check network connectivity.');
             }
-            
             if (!file_put_contents($zipFile, $zipContent)) {
-                throw new \Exception('Failed to write downloaded ZIP to temporary directory.');
+                throw new \Exception('Failed to write ZIP to temp directory.');
             }
-            
-            file_put_contents($logFile, "Downloaded ZIP: {$zipFile} (" . filesize($zipFile) . " bytes)\n", FILE_APPEND);
-            
-            // Extract ZIP
+
+            $zipSize = number_format(filesize($zipFile) / 1024, 1) . ' KB';
+            file_put_contents($logFile, '[' . date('Y-m-d H:i:s') . "] Downloaded ZIP: {$zipSize}\n", FILE_APPEND);
+
             $zip = new \ZipArchive();
             if ($zip->open($zipFile) !== true) {
                 throw new \Exception('Failed to open downloaded ZIP file.');
             }
-            
             $extractDir = $tempDir . '/hms_extract_' . time();
             if (!mkdir($extractDir)) {
                 throw new \Exception('Failed to create extraction directory.');
             }
-            
             $zip->extractTo($extractDir);
             $zip->close();
-            
-            // Find the extracted directory (GitHub creates a folder like "repo-main")
+
             $dirs = array_diff(scandir($extractDir), ['.', '..']);
             if (empty($dirs)) {
                 throw new \Exception('Downloaded ZIP appears to be empty.');
             }
-            
             $extractedRepoDir = $extractDir . '/' . reset($dirs);
-            file_put_contents($logFile, "Extracted to: {$extractedRepoDir}\n", FILE_APPEND);
-            
-            // Sync files (skip git, vendor, and certain local files)
+
             $this->syncFiles($extractedRepoDir, $repoPath, $logFile);
-            
-            // Cleanup
             $this->deleteDirectory($extractDir);
             @unlink($zipFile);
-            
+
             $successMsg = 'HMS updated successfully from GitHub (direct deployment)';
             $this->appendHistory([
                 'timestamp' => date('Y-m-d H:i:s'),
-                'type' => 'update',
-                'status' => 'success',
-                'message' => $successMsg,
-                'detail' => 'Files synced from ' . $zipUrl,
+                'type'      => 'update',
+                'status'    => 'success',
+                'message'   => $successMsg,
+                'detail'    => "Downloaded: {$zipSize}\nSource: {$zipUrl}\nCompleted: " . date('Y-m-d H:i:s'),
             ]);
-            file_put_contents($logFile, "SUCCESS: {$successMsg}\n", FILE_APPEND);
-            
+            file_put_contents($logFile, '[' . date('Y-m-d H:i:s') . "] SUCCESS: {$successMsg}\n", FILE_APPEND);
+
             return ['ok' => true, 'message' => $successMsg];
+
         } catch (\Throwable $e) {
-            $errorMsg = 'Update failed: ' . $e->getMessage();
+            $errorMsg = $e->getMessage();
             $this->appendHistory([
                 'timestamp' => date('Y-m-d H:i:s'),
-                'type' => 'update',
-                'status' => 'failed',
-                'message' => 'HMS update failed',
-                'detail' => $errorMsg,
+                'type'      => 'update',
+                'status'    => 'failed',
+                'message'   => 'HMS update failed',
+                'detail'    => $errorMsg,
             ]);
-            file_put_contents($logFile, "FAILED: {$errorMsg}\n", FILE_APPEND);
+            file_put_contents($logFile, '[' . date('Y-m-d H:i:s') . "] FAILED: {$errorMsg}\n", FILE_APPEND);
             return ['ok' => false, 'message' => $errorMsg];
         }
     }
@@ -412,7 +398,28 @@ class SystemOperations
         }
 
         $data = json_decode($json, true);
-        return is_array($data) ? array_slice($data, -12) : [];
+        return is_array($data) ? array_slice($data, -20) : [];
+    }
+
+    private function purgeStaleRunning(): void
+    {
+        if (!file_exists($this->historyPath)) return;
+        $json = @file_get_contents($this->historyPath);
+        $data = is_string($json) ? json_decode($json, true) : [];
+        if (!is_array($data)) return;
+        // Mark any existing 'running' entries as 'timeout' so they don't pile up
+        $changed = false;
+        foreach ($data as &$entry) {
+            if (($entry['status'] ?? '') === 'running') {
+                $entry['status'] = 'timeout';
+                $entry['detail'] = 'Process did not complete (PHP timeout or server error).';
+                $changed = true;
+            }
+        }
+        unset($entry);
+        if ($changed) {
+            file_put_contents($this->historyPath, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        }
     }
 
     private function appendHistory(array $entry): void
