@@ -553,12 +553,91 @@ class SystemOperations
 
     private function readInternetStatus(): string
     {
-        $result = $this->safeCommand('ping -c 2 8.8.8.8 2>/dev/null | tail -n 1');
-        if ($result === 'Unavailable' || trim($result) === '') {
-            return 'Unavailable';
+        // Method 1: Try ping to Google DNS
+        $result = $this->safeCommand('ping -c 1 -W 2 8.8.8.8 2>/dev/null');
+        if ($result !== 'Unavailable' && trim($result) !== '' && strpos($result, '100% packet loss') === false && strpos($result, '100.0%') === false) {
+            return 'Online';
         }
 
-        return strpos($result, '100% packet loss') !== false ? 'Offline' : 'Online';
+        // Method 2: Try DNS resolution using nslookup
+        $result = $this->safeCommand('nslookup google.com 8.8.8.8 2>/dev/null | grep -i "name:"');
+        if ($result !== 'Unavailable' && trim($result) !== '') {
+            return 'Online';
+        }
+
+        // Method 3: Try dig (DNS query)
+        $result = $this->safeCommand('dig @8.8.8.8 google.com +short 2>/dev/null');
+        if ($result !== 'Unavailable' && trim($result) !== '') {
+            return 'Online';
+        }
+
+        // Method 4: Try curl/wget to external site with timeout
+        $result = $this->safeCommand('curl -s -m 3 -o /dev/null -w "%{http_code}" https://www.google.com 2>/dev/null');
+        if ($result !== 'Unavailable' && trim($result) !== '' && intval($result) >= 200 && intval($result) < 400) {
+            return 'Online';
+        }
+
+        // Method 5: Try wget HEAD request
+        $result = $this->safeCommand('wget --spider -q -T 2 https://www.google.com 2>&1');
+        if ($result !== 'Unavailable' && strpos($result, 'HTTP request sent, awaiting response') !== false) {
+            return 'Online';
+        }
+
+        // Method 6: PHP fsockopen to Google DNS port 53
+        $onlineViaSocket = $this->checkInternetViaSocket();
+        if ($onlineViaSocket) {
+            return 'Online';
+        }
+
+        // Method 7: PHP fsockopen to Cloudflare DNS
+        $result = $this->safeCommand('curl -s -m 3 -o /dev/null -w "%{http_code}" https://1.1.1.1 2>/dev/null');
+        if ($result !== 'Unavailable' && trim($result) !== '' && intval($result) >= 200 && intval($result) < 400) {
+            return 'Online';
+        }
+
+        // Method 8: Try to resolve google.com using PHP's gethostbyname
+        try {
+            if (function_exists('gethostbyname')) {
+                $ip = @gethostbyname('google.com');
+                if ($ip !== 'google.com' && filter_var($ip, FILTER_VALIDATE_IP)) {
+                    return 'Online';
+                }
+            }
+        } catch (\Throwable $e) {
+            // Ignore errors
+        }
+
+        return 'Offline';
+    }
+
+    private function checkInternetViaSocket(): bool
+    {
+        try {
+            // Try connecting to Google DNS (8.8.8.8:53)
+            $sock = @fsockopen('8.8.8.8', 53, $errno, $errstr, 3);
+            if ($sock) {
+                @fclose($sock);
+                return true;
+            }
+
+            // Try Cloudflare DNS (1.1.1.1:53)
+            $sock = @fsockopen('1.1.1.1', 53, $errno, $errstr, 3);
+            if ($sock) {
+                @fclose($sock);
+                return true;
+            }
+
+            // Try Quad9 DNS (9.9.9.9:53)
+            $sock = @fsockopen('9.9.9.9', 53, $errno, $errstr, 3);
+            if ($sock) {
+                @fclose($sock);
+                return true;
+            }
+        } catch (\Throwable $e) {
+            // Ignore socket errors
+        }
+
+        return false;
     }
 
     private function readServiceStatus(): array
