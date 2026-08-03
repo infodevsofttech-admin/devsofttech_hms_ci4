@@ -40,21 +40,34 @@ echo ""
 
 # 1. Fix global git config file permissions
 echo "[1/5] Fixing .gitconfig file..."
-if [ -f /var/www/.gitconfig ]; then
-  rm -f /var/www/.gitconfig
-  echo "  Removed corrupted .gitconfig"
-fi
-touch /var/www/.gitconfig
-chown "$WEB_USER:$WEB_USER" /var/www/.gitconfig
-chmod 600 /var/www/.gitconfig
+
+# Make sure /var/www is writable by www-data
+chmod 755 /var/www
+
+# Remove corrupted .gitconfig if it exists
+[ -f /var/www/.gitconfig ] && rm -f /var/www/.gitconfig
+
+# Create fresh .gitconfig file and set permissions BEFORE writing
+sudo -u "$WEB_USER" touch /var/www/.gitconfig
+sudo -u "$WEB_USER" chmod 600 /var/www/.gitconfig
+
+echo "  Fresh .gitconfig created with www-data ownership"
 
 # 2. Set minimal git config (name and email required for git)
 echo "[2/5] Setting git user name..."
-sudo -u "$WEB_USER" git config --global user.name "www-data"
+if ! sudo -u "$WEB_USER" git config --global user.name "www-data" 2>/dev/null; then
+  echo "  Warning: Could not set global config, using local repo config instead"
+  cd "$HMS_DIR"
+  sudo -u "$WEB_USER" git config user.name "www-data"
+fi
 
 # 3. Set git email
 echo "[3/5] Setting git email..."
-sudo -u "$WEB_USER" git config --global user.email "deploy@localhost"
+if ! sudo -u "$WEB_USER" git config --global user.email "deploy@localhost" 2>/dev/null; then
+  echo "  Warning: Could not set global config, using local repo config instead"
+  cd "$HMS_DIR"
+  sudo -u "$WEB_USER" git config user.email "deploy@localhost"
+fi
 
 # 4. Fix directory permissions
 echo "[4/5] Fixing directory permissions..."
