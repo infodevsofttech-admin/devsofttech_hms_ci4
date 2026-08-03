@@ -91,34 +91,47 @@ class SystemOperations
             $statusError = trim($statusResult['output']);
             $errorMsg = '';
             
+            // Get diagnostics first
+            $diagnostics = $this->getGitDiagnostics($gitPath, $repoPath);
+            
+            // Build detailed diagnostic summary
+            $diagSummary = 'DIAGNOSTICS: ' .
+                'Version=' . $diagnostics['git_version'] . '; ' .
+                'User=' . $diagnostics['git_config_user_name'] . '; ' .
+                'Email=' . $diagnostics['git_config_user_email'] . '; ' .
+                'Remote=' . $diagnostics['remote_url'] . '; ' .
+                'Branch=' . $diagnostics['current_branch'] . '; ' .
+                '.git=' . $diagnostics['git_dir_exists'] . '; ' .
+                'Config=' . $diagnostics['git_config_exists'];
+            
             // Parse error message
             if (strpos($statusError, 'Permission denied') !== false) {
-                $errorMsg = 'Permission denied. Git directory may not be writable by current user.';
+                $errorMsg = 'PERMISSION ERROR: Git directory may not be writable by www-data user. Check directory ownership.';
             } elseif (strpos($statusError, 'fatal: Not a git repository') !== false) {
-                $errorMsg = 'Not a git repository. Repository initialization may be corrupted.';
+                $errorMsg = 'REPO ERROR: Not a valid git repository. .git directory corrupted.';
             } elseif (strpos($statusError, 'user.email') !== false || strpos($statusError, 'user.name') !== false) {
-                $errorMsg = 'Git user configuration missing. Run: git config user.name "name" && git config user.email "email@example.com"';
+                $errorMsg = 'CONFIG ERROR: Git user not configured. RUN: git config user.name "www-data" && git config user.email "deploy@example.com"';
             } elseif (strpos($statusError, 'SSL certificate problem') !== false) {
-                $errorMsg = 'SSL certificate verification failed. Run: git config --global http.sslVerify false (if using HTTPS)';
-            } elseif (strpos($statusError, 'fatal') !== false) {
-                $errorMsg = 'Git error: ' . $statusError;
+                $errorMsg = 'SSL ERROR: Certificate verification failed. RUN: git config http.sslVerify false';
+            } elseif (strpos($statusError, 'Could not resolve host') !== false || strpos($statusError, 'Connection refused') !== false) {
+                $errorMsg = 'NETWORK ERROR: Cannot connect to GitHub. Check network/firewall.';
+            } elseif (trim($statusError) === '') {
+                $errorMsg = 'GIT ERROR: Command returned no output. Possible permission or file system issue.';
             } else {
-                $errorMsg = 'Git status failed: ' . $statusError;
+                $errorMsg = 'GIT ERROR: ' . substr($statusError, 0, 150);
             }
             
-            // Add diagnostics to help user
-            $diagnostics = $this->getGitDiagnostics($gitPath, $repoPath);
-            $errorMsg .= ' [' . $diagnostics['git_version'] . ', User: ' . $diagnostics['git_config_user_name'] . ', Remote: ' . $diagnostics['remote_url'] . ']';
+            $fullMsg = $errorMsg . ' | ' . $diagSummary;
             
             $this->appendHistory([
                 'timestamp' => date('Y-m-d H:i:s'),
                 'type' => 'update',
                 'status' => 'failed',
                 'message' => 'HMS update failed',
-                'detail' => $errorMsg,
+                'detail' => $fullMsg,
             ]);
-            file_put_contents($logFile, 'FAILED: ' . $errorMsg . PHP_EOL, FILE_APPEND);
-            return ['ok' => false, 'message' => $errorMsg];
+            file_put_contents($logFile, 'FAILED: ' . $fullMsg . ' (Raw error: ' . $statusError . ')' . PHP_EOL, FILE_APPEND);
+            return ['ok' => false, 'message' => $fullMsg];
         }
 
         // Run git pull with timeout protection
@@ -213,35 +226,66 @@ class SystemOperations
             'git_config_user_email' => 'Not set',
             'remote_url' => 'Not configured',
             'current_branch' => 'Unknown',
+            'git_dir_exists' => 'No',
+            'git_config_exists' => 'No',
+            'repo_is_dirty' => 'Unknown',
         ];
+
+        // Check if .git directory exists
+        if (is_dir($repoPath . '/.git')) {
+            $diagnostics['git_dir_exists'] = 'Yes';
+        }
+
+        // Check if .git/config exists
+        if (file_exists($repoPath . '/.git/config')) {
+            $diagnostics['git_config_exists'] = 'Yes';
+        }
 
         // Get git version
         $result = $this->runCommand(escapeshellarg($gitPath) . ' --version 2>&1');
-        if ($result['exit_code'] === 0) {
+        if ($result['exit_code'] === 0 && trim($result['output']) !== '') {
             $diagnostics['git_version'] = trim($result['output']);
         }
 
-        // Get git config
-        $result = $this->runCommand('cd ' . escapeshellarg($repoPath) . ' && ' . escapeshellarg($gitPath) . ' config user.name 2>&1');
-        if ($result['exit_code'] === 0) {
+        // Get git config using --local flag (repository-specific)
+        $result = $this->runCommand('cd ' . escapeshellarg($repoPath) . ' && ' . escapeshellarg($gitPath) . ' config --local user.name 2>&1');
+        if ($result['exit_code'] === 0 && trim($result['output']) !== '') {
             $diagnostics['git_config_user_name'] = trim($result['output']);
+        } else {
+            // Try global config
+            $result = $this->runCommand(escapeshellarg($gitPath) . ' config --global user.name 2>&1');
+            if ($result['exit_code'] === 0 && trim($result['output']) !== '') {
+                $diagnostics['git_config_user_name'] = trim($result['output']) . ' (global)';
+            }
         }
 
-        $result = $this->runCommand('cd ' . escapeshellarg($repoPath) . ' && ' . escapeshellarg($gitPath) . ' config user.email 2>&1');
-        if ($result['exit_code'] === 0) {
+        $result = $this->runCommand('cd ' . escapeshellarg($repoPath) . ' && ' . escapeshellarg($gitPath) . ' config --local user.email 2>&1');
+        if ($result['exit_code'] === 0 && trim($result['output']) !== '') {
             $diagnostics['git_config_user_email'] = trim($result['output']);
+        } else {
+            // Try global config
+            $result = $this->runCommand(escapeshellarg($gitPath) . ' config --global user.email 2>&1');
+            if ($result['exit_code'] === 0 && trim($result['output']) !== '') {
+                $diagnostics['git_config_user_email'] = trim($result['output']) . ' (global)';
+            }
         }
 
         // Get remote URL
         $result = $this->runCommand('cd ' . escapeshellarg($repoPath) . ' && ' . escapeshellarg($gitPath) . ' config --get remote.origin.url 2>&1');
-        if ($result['exit_code'] === 0) {
+        if ($result['exit_code'] === 0 && trim($result['output']) !== '') {
             $diagnostics['remote_url'] = trim($result['output']);
         }
 
         // Get current branch
         $result = $this->runCommand('cd ' . escapeshellarg($repoPath) . ' && ' . escapeshellarg($gitPath) . ' rev-parse --abbrev-ref HEAD 2>&1');
-        if ($result['exit_code'] === 0) {
+        if ($result['exit_code'] === 0 && trim($result['output']) !== '') {
             $diagnostics['current_branch'] = trim($result['output']);
+        }
+
+        // Check if repo is dirty (has uncommitted changes)
+        $result = $this->runCommand('cd ' . escapeshellarg($repoPath) . ' && ' . escapeshellarg($gitPath) . ' status --porcelain 2>&1');
+        if ($result['exit_code'] === 0) {
+            $diagnostics['repo_is_dirty'] = (trim($result['output']) === '') ? 'No' : 'Yes (has changes)';
         }
 
         return $diagnostics;
