@@ -437,6 +437,28 @@ class Patient extends BaseController
 		return view('billing/Patient_Search_V', $data);
 	}
 
+	protected function buildPatientSearchCondition(string $rowData, ?string $abhaField = null, ?string $oldUhidField = null): string
+	{
+		$escapedValue = $this->db->escape($rowData);
+		$escapedLikeValue = $this->db->escape('%' . $rowData . '%');
+		$escapedSuffixLikeValue = $this->db->escape('%' . $rowData);
+		$clauses = [
+			'p.p_code like ' . $this->db->escape('%' . $rowData),
+			'p.mphone1 = ' . $escapedValue,
+			'p.udai = ' . $escapedValue,
+		];
+
+		if ($abhaField !== null && $abhaField !== '') {
+			$clauses[] = 'p.' . $abhaField . ' = ' . $escapedValue;
+		}
+
+		if ($oldUhidField !== null && $oldUhidField !== '') {
+			$clauses[] = "TRIM(COALESCE(p.{$oldUhidField}, '')) != '' AND (p.{$oldUhidField} = " . $escapedValue . ' OR p.' . $oldUhidField . ' LIKE ' . $escapedLikeValue . ' OR p.' . $oldUhidField . ' LIKE ' . $escapedSuffixLikeValue . ')';
+		}
+
+		return ' and (' . implode(' or ', $clauses) . ')';
+	}
+
 	public function search_ajax()
 	{
 		$request = $this->request->getGet();
@@ -449,11 +471,15 @@ class Patient extends BaseController
 		$sdata = $dtSearch !== '' ? $dtSearch : $initialSearch;
 		$sdata = preg_replace('/[^A-Za-z0-9 _.@\-]/', '', $sdata);
 
-		// Detect ABHA column name in patient_master
+// Detect ABHA and legacy UHID columns in patient_master
 		$abhaField = null;
+		$oldUhidField = null;
 		$pmFields  = $this->db->getFieldNames('patient_master') ?? [];
 		foreach (['abha_id', 'abha_no', 'abha', 'abha_address'] as $f) {
 			if (in_array($f, $pmFields, true)) { $abhaField = $f; break; }
+		}
+		foreach (['old_uhid', 'legacy_uhid', 'old_patient_code'] as $f) {
+			if (in_array($f, $pmFields, true)) { $oldUhidField = $f; break; }
 		}
 
 		// Build WHERE clause based on search query
@@ -467,22 +493,33 @@ class Patient extends BaseController
 				}
 
 				if (is_numeric($rowData)) {
-					$abhaClause = $abhaField ? " or p.{$abhaField} = " . $this->db->escape($rowData) : '';
-					$searchString .= " and (p.p_code like " . $this->db->escape('%' . $rowData) . " 
-									or p.mphone1 = " . $this->db->escape($rowData) . " 
-									or p.udai=" . $this->db->escape($rowData) . $abhaClause . ")";
+					$searchString .= $this->buildPatientSearchCondition($rowData, $abhaField, $oldUhidField);
 				} elseif (ctype_alpha($rowData)) {
+					$escapedValue = $this->db->escape($rowData);
+					$escapedLikeValue = $this->db->escape('%' . $rowData . '%');
+					$escapedSuffixLikeValue = $this->db->escape('%' . $rowData);
+					$legacyUhidClause = '';
+					if ($oldUhidField !== null && $oldUhidField !== '') {
+						$legacyUhidClause = " or (TRIM(COALESCE(p.{$oldUhidField}, '')) != '' AND (p.{$oldUhidField} = " . $escapedValue . ' OR p.' . $oldUhidField . ' LIKE ' . $escapedLikeValue . ' OR p.' . $oldUhidField . ' LIKE ' . $escapedSuffixLikeValue . '))';
+					}
 					$searchString .= " and (p.p_fname like " . $this->db->escape('%' . $rowData . '%') . " 
 						or p.email1 = " . $this->db->escape($rowData) . " 
-						or SUBSTRING_INDEX(p.p_fname,' ',1) sounds like " . $this->db->escape($rowData) . ")";
+						or SUBSTRING_INDEX(p.p_fname,' ',1) sounds like " . $this->db->escape($rowData) . $legacyUhidClause . ")";
 				} else {
 					// Handle dashed ABHA format: XX-XXXX-XXXX-XXXX
 					$rawDigits = preg_replace('/\D/', '', $rowData);
 					$abhaElse  = ($abhaField && strlen($rawDigits) === 14)
 						? " or p.{$abhaField} = " . $this->db->escape($rawDigits) . " or p.{$abhaField} = " . $this->db->escape($rowData)
 						: '';
+					$legacyUhidClause = '';
+					if ($oldUhidField !== null && $oldUhidField !== '') {
+						$escapedValue = $this->db->escape($rowData);
+						$escapedLikeValue = $this->db->escape('%' . $rowData . '%');
+						$escapedSuffixLikeValue = $this->db->escape('%' . $rowData);
+						$legacyUhidClause = " or (TRIM(COALESCE(p.{$oldUhidField}, '')) != '' AND (p.{$oldUhidField} = " . $escapedValue . ' OR p.' . $oldUhidField . ' LIKE ' . $escapedLikeValue . ' OR p.' . $oldUhidField . ' LIKE ' . $escapedSuffixLikeValue . '))';
+					}
 					$searchString .= " and (p.p_code like " . $this->db->escape($rowData) . " 
-						or p.email1 = " . $this->db->escape($rowData) . $abhaElse . ")";
+						or p.email1 = " . $this->db->escape($rowData) . $abhaElse . $legacyUhidClause . ")";
 				}
 			}
 		}
