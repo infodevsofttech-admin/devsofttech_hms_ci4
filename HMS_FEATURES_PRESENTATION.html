@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>E-Atria HMS — Feature Overview</title>
+<style>
+  :root {
+    --blue: #0d6efd;
+    --cyan: #0dcaf0;
+    --green: #198754;
+    --teal: #0d9488;
+    --purple: #6f42c1;
+    --orange: #fd7e14;
+    --dark: #1e293b;
+    --mid: #475569;
+    --light: #f8fafc;
+    --border: #e2e8f0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f1f5f9; color: var(--dark); }
+
+  /* ── Cover ── */
+  .cover {
+    background: linear-gradient(135deg, #0d6efd 0%, #0dcaf0 60%, #6f42c1 100%);
+    color: white; text-align: center; padding: 80px 24px 60px;
+  }
+  .cover h1 { font-size: clamp(2rem, 5vw, 3.4rem); font-weight: 800; letter-spacing: -1px; }
+  .cover p.tagline { font-size: 1.2rem; opacity: .88; margin-top: 12px; }
+  .cover-badges { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
+  .badge { background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.35);
+    color: white; padding: 5px 14px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+
+  /* ── Layout ── */
+  .container { max-width: 1200px; margin: 0 auto; padding: 48px 24px 80px; }
+  .section-title {
+    font-size: 1.55rem; font-weight: 700; color: var(--dark);
+    border-left: 5px solid var(--blue); padding-left: 14px; margin: 52px 0 24px;
+  }
+  .section-intro { color: var(--mid); margin: -12px 0 24px 19px; font-size: .95rem; }
+
+  /* ── Cards ── */
+  .cards { display: grid; gap: 20px; }
+  .cards.col-2 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .cards.col-3 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  .card {
+    background: white; border: 1px solid var(--border); border-radius: 14px;
+    padding: 22px 20px; box-shadow: 0 4px 16px rgba(0,0,0,.04);
+  }
+  .card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .card-icon {
+    width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center;
+    justify-content: center; font-size: 18px; flex-shrink: 0;
+  }
+  .card h3 { font-size: 1rem; font-weight: 700; }
+  .card ul { list-style: none; padding: 0; }
+  .card ul li { font-size: .875rem; color: var(--mid); padding: 4px 0; border-bottom: 1px solid #f1f5f9; }
+  .card ul li:last-child { border-bottom: none; }
+  .card ul li::before { content: '✓ '; color: var(--green); font-weight: 700; }
+
+  /* ── Module strip ── */
+  .mod-strip {
+    background: white; border: 1px solid var(--border); border-radius: 14px;
+    padding: 18px 22px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.03);
+  }
+  .mod-strip h3 { font-size: .95rem; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .mod-strip .tags { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tag {
+    background: #f0f4ff; color: #3b5bdb; padding: 4px 10px;
+    border-radius: 6px; font-size: 12px; font-weight: 600;
+  }
+  .tag.green { background: #ecfdf5; color: #065f46; }
+  .tag.orange { background: #fff7ed; color: #9a3412; }
+  .tag.purple { background: #f5f3ff; color: #5b21b6; }
+  .tag.teal { background: #f0fdfa; color: #0f766e; }
+
+  /* ── Table ── */
+  .feat-table { width: 100%; border-collapse: collapse; background: white;
+    border-radius: 14px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,.04); }
+  .feat-table th { background: linear-gradient(90deg, #0d6efd, #0dcaf0); color: white;
+    padding: 12px 16px; text-align: left; font-size: .85rem; font-weight: 700; }
+  .feat-table td { padding: 11px 16px; font-size: .875rem; border-bottom: 1px solid var(--border); }
+  .feat-table tr:last-child td { border-bottom: none; }
+  .feat-table tr:nth-child(even) td { background: #f8fafc; }
+  .feat-table td:first-child { font-weight: 600; color: var(--dark); }
+  .feat-table td:not(:first-child) { color: var(--mid); }
+
+  /* ── Modality grid ── */
+  .modality-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 14px; }
+  .mod-tile {
+    background: white; border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px 10px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,.03);
+  }
+  .mod-tile .ico { font-size: 28px; margin-bottom: 8px; }
+  .mod-tile span { font-size: .8rem; font-weight: 700; color: var(--mid); display: block; }
+
+  /* ── Tech stack ── */
+  .tech-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; }
+  .tech-card {
+    background: white; border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,.03);
+  }
+  .tech-card .tier { font-size: 11px; font-weight: 700; color: var(--mid); letter-spacing: 1px;
+    text-transform: uppercase; margin-bottom: 6px; }
+  .tech-card .name { font-size: 1rem; font-weight: 700; color: var(--dark); }
+  .tech-card .sub { font-size: 12px; color: var(--mid); margin-top: 4px; }
+
+  /* ── Compliance ── */
+  .compliance-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+  .comp-card {
+    background: white; border: 2px solid var(--border); border-radius: 14px;
+    padding: 20px; text-align: center;
+  }
+  .comp-card .label { font-size: 1.1rem; font-weight: 800; color: var(--blue); }
+  .comp-card .desc { font-size: .8rem; color: var(--mid); margin-top: 6px; }
+
+  /* ── Footer ── */
+  footer {
+    background: var(--dark); color: #94a3b8; text-align: center;
+    padding: 28px 16px; font-size: .85rem; margin-top: 60px;
+  }
+  footer strong { color: white; }
+
+  /* ── Introduction block ── */
+  .intro-section {
+    background: white; border: 1px solid var(--border); border-radius: 16px;
+    padding: 40px 44px; margin-bottom: 0; box-shadow: 0 4px 24px rgba(0,0,0,.05);
+  }
+  .intro-section h2 { font-size: 1.35rem; font-weight: 800; color: var(--dark); margin-bottom: 18px;
+    display: flex; align-items: center; gap: 10px; }
+  .intro-section p { font-size: .97rem; color: var(--mid); line-height: 1.85; margin-bottom: 14px; }
+  .intro-section p:last-child { margin-bottom: 0; }
+  .intro-section strong { color: var(--dark); }
+  .intro-pillars { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-top: 28px; }
+  .pillar {
+    background: linear-gradient(135deg, #eff6ff, #e0f2fe); border: 1px solid #bfdbfe;
+    border-radius: 10px; padding: 14px 12px; text-align: center;
+  }
+  .pillar .pico { font-size: 22px; margin-bottom: 6px; }
+  .pillar .ptxt { font-size: .78rem; font-weight: 700; color: #1d4ed8; }
+
+  /* ── Print-a-PDF toolbar ── */
+  .print-bar {
+    position: fixed; bottom: 24px; right: 24px; z-index: 999;
+    display: flex; gap: 10px;
+  }
+  .print-bar button {
+    background: var(--blue); color: white; border: none; border-radius: 8px;
+    padding: 10px 20px; font-size: 14px; font-weight: 700; cursor: pointer;
+    box-shadow: 0 4px 12px rgba(13,110,253,.35); display: flex; align-items: center; gap: 6px;
+  }
+  .print-bar button:hover { background: #0b5ed7; }
+
+  @media print {
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    body { background: white !important; font-size: 11pt; }
+    .print-bar { display: none !important; }
+    .cover {
+      page-break-after: always;
+      padding: 100px 40px 80px;
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+    }
+    .intro-section { page-break-after: always; border: 1pt solid #e2e8f0; box-shadow: none; }
+    .section-title { page-break-before: always; margin-top: 0; }
+    .card, .mod-strip, .tech-card, .comp-card, .mod-tile {
+      box-shadow: none !important; border: 1pt solid #e2e8f0 !important;
+      break-inside: avoid;
+    }
+    .cards.col-3 { grid-template-columns: repeat(3, 1fr); }
+    .cards.col-2 { grid-template-columns: repeat(2, 1fr); }
+    .modality-grid { grid-template-columns: repeat(7, 1fr); }
+    .tech-grid { grid-template-columns: repeat(5, 1fr); }
+    .compliance-grid { grid-template-columns: repeat(4, 1fr); }
+    .feat-table th { background: #0d6efd !important; color: white !important; }
+    footer { background: #1e293b !important; color: #94a3b8 !important; }
+    .container { padding: 32px 24px; }
+    @page { size: A4; margin: 15mm 12mm; }
+    @page :first { margin: 0; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ COVER ═══════════════ -->
+<div class="cover">
+  <h1>🏥 E-Atria HMS</h1>
+  <p class="tagline">Hospital Management System — Complete Feature Overview</p>
+  <div class="cover-badges">
+    <span class="badge">ABDM Integrated</span>
+    <span class="badge">FHIR R4 Compliant</span>
+    <span class="badge">NABH Audit Support</span>
+    <span class="badge">SNOMED-CT Coded</span>
+    <span class="badge">ICD-10 Linked</span>
+    <span class="badge">AI Assisted</span>
+    <span class="badge">CodeIgniter 4 · PHP 8.3</span>
+  </div>
+</div>
+
+<!-- ── Print toolbar ── -->
+<div class="print-bar">
+  <button onclick="window.print()">🖨️ Print / Save PDF</button>
+</div>
+
+<div class="container">
+
+  <!-- ═══ INTRODUCTION ═══ -->
+  <div class="intro-section" style="margin-top:0;">
+    <h2>📄 About E-Atria HIMS</h2>
+    <p>
+      <strong>E-Atria Hospital Information and Management System (HIMS)</strong> is a comprehensive,
+      integrated software platform engineered to automate, coordinate, and optimise the full spectrum
+      of hospital operations — clinical, administrative, financial, and operational — within a single
+      unified digital environment.
+    </p>
+    <p>
+      The system empowers hospitals to manage every patient touchpoint with precision: from first
+      registration and outpatient consultation through laboratory investigations, pharmacy dispensing,
+      inpatient admission, surgical records, discharge summary, and post-discharge health record
+      sharing. Real-time information flows seamlessly across all departments, eliminating data silos
+      and reducing manual errors that compromise patient safety.
+    </p>
+    <p>
+      E-Atria HIMS is purpose-built for the <strong>Indian healthcare ecosystem</strong>. It is
+      fully integrated with <strong>ABDM (Ayushman Bharat Digital Mission)</strong>, enabling
+      hospitals to create and verify ABHA Health IDs, generate FHIR-compliant electronic health
+      records, obtain patient consent, and share standardised clinical documents — prescriptions,
+      discharge summaries, diagnostic reports, immunisation records — directly with the national
+      health network. Clinical coding is enforced through <strong>SNOMED-CT</strong> and
+      <strong>ICD-10</strong>, ensuring interoperability and data quality across institutions.
+    </p>
+    <p>
+      Built on modern, scalable web technology (<strong>CodeIgniter 4 · PHP 8.3 · MySQL</strong>),
+      the platform is designed for reliability in production environments with multi-user concurrent
+      access, role-based security, audit trails for every sensitive change, and AI-assisted clinical
+      documentation to reduce physician workload. Compliance with <strong>NABH</strong> standards is
+      supported through structured audit logs, verification workflows, and mandatory edit-reason
+      enforcement.
+    </p>
+    <p>
+      By streamlining hospital workflows, optimising resource utilisation, and connecting every
+      department through a centralised digital platform, <strong>E-Atria HIMS significantly improves
+      operational efficiency, patient satisfaction, regulatory compliance, and data-driven
+      decision-making</strong> for the modern Indian hospital.
+    </p>
+    <div class="intro-pillars">
+      <div class="pillar"><div class="pico">🏥</div><div class="ptxt">Clinical Management</div></div>
+      <div class="pillar"><div class="pico">💰</div><div class="ptxt">Revenue Cycle</div></div>
+      <div class="pillar"><div class="pico">💊</div><div class="ptxt">Pharmacy &amp; Inventory</div></div>
+      <div class="pillar"><div class="pico">🧪</div><div class="ptxt">Diagnostics</div></div>
+      <div class="pillar"><div class="pico">🔗</div><div class="ptxt">ABDM Integration</div></div>
+      <div class="pillar"><div class="pico">🤖</div><div class="ptxt">AI Assistance</div></div>
+      <div class="pillar"><div class="pico">📊</div><div class="ptxt">Finance &amp; Audit</div></div>
+      <div class="pillar"><div class="pico">🛡️</div><div class="ptxt">NABH Compliance</div></div>
+    </div>
+  </div>
+
+  <!-- ═══ 1. PATIENT MANAGEMENT ═══ -->
+  <h2 class="section-title">1. Patient Management</h2>
+  <p class="section-intro">Unified patient registry — single source of truth across every department.</p>
+  <div class="cards col-3">
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#eff6ff">👤</div><h3>Registration</h3></div>
+      <ul>
+        <li>UHID auto-generation</li>
+        <li>Full demographics (name, DOB, gender, address)</li>
+        <li>Age estimation from year/month</li>
+        <li>Phone, email, blood group</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#f0fdf4">🔍</div><h3>Search</h3></div>
+      <ul>
+        <li>Name, UHID, phone, Aadhaar</li>
+        <li>Old/legacy UHID (migrated records)</li>
+        <li>Advanced multi-field search</li>
+        <li>AJAX live search</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#faf5ff">🪪</div><h3>Identity & Records</h3></div>
+      <ul>
+        <li>Aadhaar &amp; insurance card storage</li>
+        <li>ABHA (National Health ID) linking</li>
+        <li>Patient photo capture &amp; upload</li>
+        <li>Document file attachments</li>
+        <li>Family / guardian tracking</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ═══ 2. OPD ═══ -->
+  <h2 class="section-title">2. OPD — Outpatient Department</h2>
+  <p class="section-intro">End-to-end outpatient workflow from appointment to e-prescription and ABDM sharing.</p>
+  <div class="cards col-2">
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#eff6ff">📅</div><h3>Appointments & Queue</h3></div>
+      <ul>
+        <li>Doctor-wise scheduling and calendar</li>
+        <li>Walk-in and pre-booked slots</li>
+        <li>ABDM Scan &amp; Share QR check-in</li>
+        <li>OPD queue with token display</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#f0fdf4">💊</div><h3>Clinical Documentation</h3></div>
+      <ul>
+        <li>Vital signs (BP, pulse, temp, SpO₂, BMI)</li>
+        <li>Chief complaints with structured master</li>
+        <li>ICD-linked diagnosis + SNOMED-CT coding</li>
+        <li>Medicines with dosage, frequency, duration</li>
+        <li>Lab investigation requisition inline</li>
+        <li>Clinical advice with reusable templates</li>
+        <li>Drug allergy / ADR history</li>
+        <li>Previous visit timeline</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#fdf4ff">🤖</div><h3>AI Clinical Assistance</h3></div>
+      <ul>
+        <li>AI-drafted chief complaints</li>
+        <li>AI full-prescription generation</li>
+        <li>Auto-fill sections from patient history</li>
+        <li>AI extraction of lab values from scan images</li>
+        <li>Local and cloud AI model support</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#fff7ed">🖨️</div><h3>Templates, Print & Sharing</h3></div>
+      <ul>
+        <li>Custom print template builder</li>
+        <li>Letterhead &amp; plain paper independently</li>
+        <li>Prescription group shortcuts</li>
+        <li>Referral letter PDF generation</li>
+        <li>OPD invoice printing</li>
+        <li>FHIR e-Prescription ABDM sharing</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ═══ 3. IPD ═══ -->
+  <h2 class="section-title">3. IPD — Inpatient / Admission Management</h2>
+  <p class="section-intro">Complete hospital admission lifecycle from registration to discharge and FHIR sharing.</p>
+  <div class="cards col-3">
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#eff6ff">🏨</div><h3>Admission</h3></div>
+      <ul>
+        <li>Patient admission with bed assignment</li>
+        <li>History of Present Illness (HPI)</li>
+        <li>Multiple attending doctors</li>
+        <li>Bed transfer with history</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#f0fdf4">🩺</div><h3>Nursing & Care</h3></div>
+      <ul>
+        <li>Nursing notes by shift</li>
+        <li>Bedside item charges (consumables)</li>
+        <li>Doctor visit charge recording</li>
+        <li>Paper form scanning &amp; digitisation</li>
+        <li>Nursing chart printing</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#fff7ed">💰</div><h3>IPD Billing</h3></div>
+      <ul>
+        <li>Bed, nursing, procedure charges</li>
+        <li>Package-based billing</li>
+        <li>Ayushman / insurance package mapping</li>
+        <li>TPA, bank &amp; cash payments</li>
+        <li>Payment adjustments &amp; deductions</li>
+        <li>Cash balance export to Excel</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#faf5ff">📋</div><h3>Discharge Summary</h3></div>
+      <ul>
+        <li>Configurable HTML editor</li>
+        <li>Section templates (course, diagnosis, surgery)</li>
+        <li>ICD diagnosis coding on discharge</li>
+        <li>Surgery/procedure documentation</li>
+        <li>Dietary advice templates</li>
+        <li>Letterhead &amp; plain paper PDF</li>
+        <li>FHIR discharge bundle for ABDM</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#f0fdfa">🛏️</div><h3>Bed Management</h3></div>
+      <ul>
+        <li>Dept → Ward → Category → Bed hierarchy</li>
+        <li>Real-time occupancy dashboard</li>
+        <li>Bed maintenance logging</li>
+        <li>Bed type categories (ICU, Private, etc.)</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ═══ 4. DIAGNOSIS ═══ -->
+  <h2 class="section-title">4. Diagnosis — Laboratory &amp; Imaging</h2>
+  <p class="section-intro">All diagnostic modalities with NABH-compliant verification, DICOM viewing, and AI assistance.</p>
+
+  <div class="modality-grid" style="margin-bottom:24px;">
+    <div class="mod-tile"><div class="ico">🧪</div><span>Pathology</span></div>
+    <div class="mod-tile"><div class="ico">🔬</div><span>Biopsy</span></div>
+    <div class="mod-tile"><div class="ico">🩻</div><span>X-Ray</span></div>
+    <div class="mod-tile"><div class="ico">🔊</div><span>Ultrasound</span></div>
+    <div class="mod-tile"><div class="ico">🧲</div><span>MRI</span></div>
+    <div class="mod-tile"><div class="ico">💡</div><span>CT Scan</span></div>
+    <div class="mod-tile"><div class="ico">❤️</div><span>Echo</span></div>
+  </div>
+
+  <div class="cards col-2">
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#f0fdf4">🧪</div><h3>Lab Core</h3></div>
+      <ul>
+        <li>Lab request from OPD, IPD, or walk-in</li>
+        <li>Sample collection tracking</li>
+        <li>Test parameter entry with normal-range validation</li>
+        <li>Combined multi-test compiled PDF reports</li>
+        <li>Lab number and TAT tracking</li>
+        <li>NABH-compliant verification workflow</li>
+        <li>Edit audit trail (reason required)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#eff6ff">🖼️</div><h3>Imaging & AI</h3></div>
+      <ul>
+        <li>Image &amp; scan file upload per report</li>
+        <li>DICOM image viewer</li>
+        <li>AI-assisted DICOM diagnosis suggestions</li>
+        <li>Image gallery per patient</li>
+        <li>AI extraction of lab values from photos</li>
+        <li>Professional letterhead &amp; plain paper PDF</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ═══ 5. PHARMACY ═══ -->
+  <h2 class="section-title">5. Pharmacy / Medical Store</h2>
+  <p class="section-intro">Complete inventory management from procurement to dispensing and returns.</p>
+  <div class="cards col-3">
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#f0fdf4">💊</div><h3>Dispensing</h3></div>
+      <ul>
+        <li>OPD, IPD &amp; counter-sale billing</li>
+        <li>Patient, IPD and organisation-linked invoices</li>
+        <li>Batch, expiry &amp; stock visibility at POS</li>
+        <li>Medicine return / credit note</li>
+        <li>Group payment &amp; discount</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#fff7ed">📦</div><h3>Inventory</h3></div>
+      <ul>
+        <li>Batch-level tracking with expiry dates</li>
+        <li>Expiry alert reports</li>
+        <li>Stock transfer between locations</li>
+        <li>Stock reconciliation</li>
+        <li>Merge duplicate products</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#faf5ff">🛒</div><h3>Purchasing</h3></div>
+      <ul>
+        <li>Purchase order creation &amp; tracking</li>
+        <li>Supplier invoice management</li>
+        <li>Goods receipt &amp; stock update</li>
+        <li>Purchase return to supplier</li>
+        <li>Supplier payment ledger</li>
+        <li>Challan / delivery note</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ═══ 6. BILLING & FINANCE ═══ -->
+  <h2 class="section-title">6. Billing &amp; Finance</h2>
+  <p class="section-intro">Integrated revenue cycle — from charge capture to bank reconciliation and doctor payouts.</p>
+  <div class="cards col-2">
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#eff6ff">🧾</div><h3>Billing</h3></div>
+      <ul>
+        <li>OPD, IPD, procedure &amp; diagnostics invoicing</li>
+        <li>Organisation / insurance case billing</li>
+        <li>Contingent billing</li>
+        <li>Discount application (% or fixed)</li>
+        <li>Invoice cancellation / void</li>
+        <li>Payment request &amp; refund workflow</li>
+        <li>NHCX digital insurance claim</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#f0fdf4">🏦</div><h3>Finance</h3></div>
+      <ul>
+        <li>Cash book — daily collections by department</li>
+        <li>Bank deposit tracking</li>
+        <li>Bank statement reconciliation</li>
+        <li>POS settlement management</li>
+        <li>Cash scroll / bundle submission</li>
+        <li>Doctor commission &amp; payout management</li>
+        <li>Vendor management &amp; purchase orders</li>
+        <li>Finance compliance &amp; audit reports</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ═══ 7. ABDM ═══ -->
+  <h2 class="section-title">7. ABDM — Ayushman Bharat Digital Mission</h2>
+  <p class="section-intro">Fully integrated with India's national digital health ecosystem.</p>
+
+  <div class="mod-strip">
+    <h3>🪪 ABHA — Health ID</h3>
+    <div class="tags">
+      <span class="tag">ABHA Creation (Aadhaar OTP)</span>
+      <span class="tag">ABHA Creation (Mobile OTP)</span>
+      <span class="tag">ABHA Verification</span>
+      <span class="tag">Profile Fetch</span>
+      <span class="tag">ABHA Card Display</span>
+      <span class="tag">Facility QR Code</span>
+    </div>
+  </div>
+
+  <div class="mod-strip">
+    <h3>🔗 Care Context &amp; Linking</h3>
+    <div class="tags">
+      <span class="tag green">Patient Discovery</span>
+      <span class="tag green">Care Context Creation</span>
+      <span class="tag green">Scan &amp; Share (QR)</span>
+      <span class="tag green">HIP Linking Token</span>
+      <span class="tag green">SMS Notification</span>
+    </div>
+  </div>
+
+  <div class="mod-strip">
+    <h3>📤 Health Record Sharing</h3>
+    <div class="tags">
+      <span class="tag orange">e-Prescription (OPD)</span>
+      <span class="tag orange">Discharge Summary (IPD)</span>
+      <span class="tag orange">Diagnostic Report</span>
+      <span class="tag orange">Immunisation Record</span>
+      <span class="tag orange">Wellness Record</span>
+      <span class="tag orange">Health Document</span>
+      <span class="tag orange">Invoice / Billing</span>
+    </div>
+  </div>
+
+  <div class="mod-strip">
+    <h3>⚖️ Consent Management</h3>
+    <div class="tags">
+      <span class="tag purple">Consent Request Initiation</span>
+      <span class="tag purple">Webhook Notifications</span>
+      <span class="tag purple">Consent Status Tracking</span>
+      <span class="tag purple">HIU Data Fetch</span>
+      <span class="tag purple">Consent Reconciliation</span>
+    </div>
+  </div>
+
+  <div class="mod-strip">
+    <h3>⚙️ FHIR &amp; Coding</h3>
+    <div class="tags">
+      <span class="tag teal">FHIR R4 Bundle Generation</span>
+      <span class="tag teal">SNOMED-CT Coding Panel</span>
+      <span class="tag teal">ICD-10 Diagnosis Coding</span>
+      <span class="tag teal">FHIR Preview Before Share</span>
+      <span class="tag teal">Coding Review &amp; Verification</span>
+    </div>
+  </div>
+
+  <div class="mod-strip">
+    <h3>📡 Monitoring &amp; Operations</h3>
+    <div class="tags">
+      <span class="tag">Gateway Health Check</span>
+      <span class="tag">Bridge Log Viewer</span>
+      <span class="tag">Task Board</span>
+      <span class="tag">Background Sync Queue</span>
+      <span class="tag">Dead-Letter Replay</span>
+      <span class="tag">NHCX Insurance Claims</span>
+    </div>
+  </div>
+
+  <!-- ═══ 8. REPORTS ═══ -->
+  <h2 class="section-title">8. Reports</h2>
+  <p class="section-intro">Ready-to-use clinical and administrative reports available across departments.</p>
+  <table class="feat-table">
+    <thead>
+      <tr><th>Report</th><th>Description</th><th>Export</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>OPD Total Report</td><td>Daily / period OPD summary by doctor</td><td>Print</td></tr>
+      <tr><td>Diagnosis Report</td><td>Lab workload and TAT analysis</td><td>Print / PDF</td></tr>
+      <tr><td>Insurance Credit Report</td><td>Organisation outstanding dues</td><td>Print</td></tr>
+      <tr><td>NABH Audit Report</td><td>Compliance audit trail with edit reasons</td><td>Print</td></tr>
+      <tr><td>IPD Cash Balance</td><td>IPD collection summary by period</td><td>Excel / Print</td></tr>
+      <tr><td>Stock Report</td><td>Pharmacy inventory by item &amp; category</td><td>Print / PDF</td></tr>
+      <tr><td>Expiry Report</td><td>Near-expiry and expired medicines</td><td>PDF</td></tr>
+      <tr><td>Supplier Ledger</td><td>Supplier account statement</td><td>Print</td></tr>
+      <tr><td>Bank Audit</td><td>Bank reconciliation and statement matching</td><td>Print</td></tr>
+      <tr><td>Doctor Payout</td><td>Commission and disbursement history</td><td>Print</td></tr>
+      <tr><td>Finance Compliance</td><td>Collections, deposits, POS settlements</td><td>Print</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ═══ 9. ADMIN & SETTINGS ═══ -->
+  <h2 class="section-title">9. Admin &amp; Settings</h2>
+  <p class="section-intro">Centralised configuration for the entire hospital.</p>
+  <div class="cards col-3">
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#eff6ff">🗂️</div><h3>Master Data</h3></div>
+      <ul>
+        <li>Doctor master (specialisation, fees, schedule)</li>
+        <li>User management &amp; role-based access</li>
+        <li>Hospital profile &amp; logo</li>
+        <li>Bank &amp; payment source master</li>
+        <li>Insurance master</li>
+        <li>Referral doctor master</li>
+        <li>Bed / Ward / Department master</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#f0fdf4">🖨️</div><h3>Templates</h3></div>
+      <ul>
+        <li>Diagnosis print settings per modality</li>
+        <li>Letterhead &amp; plain paper independently</li>
+        <li>Discharge summary HTML templates</li>
+        <li>OPD prescription templates</li>
+        <li>Watermark &amp; logo configuration</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#faf5ff">🖥️</div><h3>System Operations ✨</h3></div>
+      <ul>
+        <li>Server overview (host, OS, uptime)</li>
+        <li>Live CPU / RAM / Disk gauges</li>
+        <li>Services &amp; RAID status</li>
+        <li>Update HMS — git pull (60s timeout)</li>
+        <li>Web server &amp; PHP-FPM restart</li>
+        <li>Server reboot &amp; shutdown</li>
+        <li>Update history with error details</li>
+        <li>AJAX auto-refresh (no page reload)</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ═══ 10. TECH STACK ═══ -->
+  <h2 class="section-title">10. Technology Stack</h2>
+  <div class="tech-grid">
+    <div class="tech-card"><div class="tier">Backend</div><div class="name">CodeIgniter 4</div><div class="sub">PHP 8.3</div></div>
+    <div class="tech-card"><div class="tier">Database</div><div class="name">MySQL / MariaDB</div><div class="sub">ACID compliant</div></div>
+    <div class="tech-card"><div class="tier">Frontend</div><div class="name">NiceAdmin</div><div class="sub">Bootstrap 5</div></div>
+    <div class="tech-card"><div class="tier">PDF Engine</div><div class="name">mPDF</div><div class="sub">Hindi font support</div></div>
+    <div class="tech-card"><div class="tier">AI Engine</div><div class="name">OpenAI-Compatible</div><div class="sub">Local &amp; cloud</div></div>
+    <div class="tech-card"><div class="tier">Health Standard</div><div class="name">FHIR R4</div><div class="sub">HL7 compliant</div></div>
+    <div class="tech-card"><div class="tier">Imaging</div><div class="name">DICOM Viewer</div><div class="sub">Integrated</div></div>
+    <div class="tech-card"><div class="tier">Health Identity</div><div class="name">ABHA / ABDM</div><div class="sub">National Gateway</div></div>
+    <div class="tech-card"><div class="tier">Clinical Coding</div><div class="name">SNOMED-CT</div><div class="sub">+ ICD-10</div></div>
+    <div class="tech-card"><div class="tier">Insurance Claim</div><div class="name">NHCX</div><div class="sub">Digital claim exchange</div></div>
+  </div>
+
+  <!-- ═══ 11. COMPLIANCE ═══ -->
+  <h2 class="section-title">11. Compliance &amp; Standards</h2>
+  <div class="compliance-grid">
+    <div class="comp-card"><div class="label">NABH</div><div class="desc">National Accreditation Board for Hospitals — audit trail &amp; edit-reason enforcement</div></div>
+    <div class="comp-card"><div class="label">ABDM</div><div class="desc">Ayushman Bharat Digital Mission — certified national gateway integration</div></div>
+    <div class="comp-card"><div class="label">FHIR R4</div><div class="desc">HL7 FHIR R4 — every health record exchanged in standard format</div></div>
+    <div class="comp-card"><div class="label">SNOMED-CT</div><div class="desc">Structured clinical terminology for complaints, diagnosis &amp; procedures</div></div>
+    <div class="comp-card"><div class="label">ICD-10</div><div class="desc">International Classification of Diseases — diagnosis &amp; discharge coding</div></div>
+    <div class="comp-card"><div class="label">NHCX</div><div class="desc">National Health Claim Exchange — digital insurance claim submission</div></div>
+    <div class="comp-card"><div class="label">Aadhaar</div><div class="desc">Identity-verified ABHA creation via Aadhaar OTP authentication</div></div>
+  </div>
+
+</div>
+
+<footer>
+  <strong>E-Atria HMS</strong> &nbsp;·&nbsp; Built for modern Indian hospitals &nbsp;·&nbsp; ABDM · FHIR · NABH · NHCX
+</footer>
+
+</body>
+</html>

@@ -89,7 +89,7 @@
             setInterval(function(){ refreshPanel(); }, 30000);
 
             $(document).off('click', '#btnUpdateSystem, #btnRestartWeb, #btnRestartPhp, #btnReboot, #btnShutdown')
-                .on('click', '#btnUpdateSystem', function(){ if (!confirm('Run the system update workflow now?')) return; postAction('<?= base_url('setting/admin/system-ops/update') ?>', {}, this); })
+                .on('click', '#btnUpdateSystem', function(){ if (!confirm('Pull latest HMS code from repository?')) return; postAction('<?= base_url('setting/admin/system-ops/update') ?>', {}, this); })
                 .on('click', '#btnRestartWeb', function(){ if (!confirm('Restart the web server now?')) return; postAction('<?= base_url('setting/admin/system-ops/action') ?>', {action: 'restart_web'}, this); })
                 .on('click', '#btnRestartPhp', function(){ if (!confirm('Restart PHP-FPM now?')) return; postAction('<?= base_url('setting/admin/system-ops/action') ?>', {action: 'restart_php'}, this); })
                 .on('click', '#btnReboot', function(){ if (!confirm('Reboot the server now?')) return; postAction('<?= base_url('setting/admin/system-ops/action') ?>', {action: 'reboot'}, this); })
