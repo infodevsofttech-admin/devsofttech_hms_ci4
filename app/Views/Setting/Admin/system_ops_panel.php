@@ -151,6 +151,7 @@
                                     <th>Type</th>
                                     <th>Status</th>
                                     <th>Message</th>
+                                    <th>Details</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -163,6 +164,13 @@
                                             <span class="ops-pill <?= $st === 'success' ? 'success' : ($st === 'failed' ? 'danger' : 'warning') ?>"><?= esc($st) ?></span>
                                         </td>
                                         <td><?= esc((string) ($entry['message'] ?? '')) ?></td>
+                                        <td>
+                                            <?php if (!empty($entry['detail'])) : ?>
+                                                <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#detailModal" data-detail="<?= esc((string) ($entry['detail'] ?? '')) ?>" title="Show details">
+                                                    <i class="bi bi-info-circle"></i>
+                                                </button>
+                                            <?php endif; ?>
+                                        </td>
                                     </tr>
                                 <?php endforeach; ?>
                             </tbody>
@@ -173,3 +181,33 @@
         </div>
     </div>
 </div>
+
+<!-- Detail Modal -->
+<div class="modal fade" id="detailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Operation Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <pre id="detailContent" style="max-height: 400px; overflow-y: auto; background: #f8f9fa; padding: 12px; border-radius: 4px;"></pre>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Handle detail modal
+    document.addEventListener('show.bs.modal', function(e) {
+        if (e.relatedTarget && e.relatedTarget.id === 'detailModal' || (e.relatedTarget && e.relatedTarget.closest('[data-bs-target="#detailModal"]'))) {
+            var btn = e.relatedTarget;
+            if (!btn) btn = event.target;
+            var detail = btn.getAttribute('data-detail') || '';
+            document.getElementById('detailContent').textContent = detail;
+        }
+    });
+</script>
