@@ -1214,6 +1214,10 @@ $routes->group('setting', static function($routes) {
     $routes->get('admin/abdm-report-doctors', 'Setting\\AbdmReportDoctorSettings::index', ['filter' => $settingsAdminFilter]);
     $routes->post('admin/abdm-report-doctors/save', 'Setting\\AbdmReportDoctorSettings::save', ['filter' => $settingsAdminFilter]);
     $routes->get('admin/hospital-profile', 'Setting\\HospitalProfile::index');
+    $routes->get('admin/system-ops', 'SystemOps::index', ['filter' => $settingsAdminFilter]);
+    $routes->get('admin/system-ops/panel', 'SystemOps::panel', ['filter' => $settingsAdminFilter]);
+    $routes->post('admin/system-ops/update', 'SystemOps::update', ['filter' => $settingsAdminFilter]);
+    $routes->post('admin/system-ops/action', 'SystemOps::action', ['filter' => $settingsAdminFilter]);
     $routes->post('admin/hospital-profile/save', 'Setting\\HospitalProfile::save');
     $routes->post('admin/hospital-profile/delete-logo', 'Setting\\HospitalProfile::deleteLogo');
     $routes->post('admin/hospital-profile/reset', 'Setting\\HospitalProfile::reset');
