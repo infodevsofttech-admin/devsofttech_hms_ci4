@@ -29,6 +29,24 @@
         <?= view('Setting/Admin/system_ops_panel', ['status' => $status, 'history' => $history]) ?>
     </div>
 
+    <!-- Detail Modal: outside #systemOpsPanel so panel refresh never destroys it -->
+    <div class="modal fade" id="detailModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Operation Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <pre id="detailContent" style="max-height:400px; overflow-y:auto; background:#f8f9fa; padding:12px; border-radius:4px; white-space:pre-wrap; word-break:break-word;"></pre>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         function setHealthState(state) {
             if (typeof $ === 'undefined') return;
@@ -40,6 +58,8 @@
 
         function refreshPanel() {
             if (typeof $ === 'undefined') return;
+            // Skip refresh while detail modal is open to avoid destroying its DOM
+            if ($('#detailModal').hasClass('show')) return;
             $.ajax({
                 url: '<?= base_url('setting/admin/system-ops/panel') ?>',
                 type: 'GET',
@@ -87,6 +107,19 @@
         if (typeof $ !== 'undefined') {
             setHealthState('healthy');
             setInterval(function(){ refreshPanel(); }, 30000);
+
+            // Populate detail modal from data-detail attribute on the triggering button
+            $(document).on('show.bs.modal', '#detailModal', function(e) {
+                var btn = e.relatedTarget;
+                var detail = btn ? ($(btn).data('detail') || '') : '';
+                $('#detailContent').text(detail);
+            });
+
+            // Clean up backdrop on modal hidden (prevents stuck overlay after panel refresh)
+            $(document).on('hidden.bs.modal', '#detailModal', function() {
+                $('.modal-backdrop').remove();
+                $('body').removeClass('modal-open').css('padding-right', '');
+            });
 
             $(document).off('click', '#btnUpdateDirectGithub')
                 .on('click', '#btnUpdateDirectGithub', function(){ if (!confirm('Deploy latest HMS code from GitHub?\n\nThis will download the latest code and update all files.')) return; postAction('<?= base_url('setting/admin/system-ops/updateDirect') ?>', {}, this); });
