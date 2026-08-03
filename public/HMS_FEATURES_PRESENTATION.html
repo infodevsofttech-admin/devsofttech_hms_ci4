@@ -151,8 +151,50 @@
   }
   .print-bar button:hover { background: #0b5ed7; }
 
+  /* ── Screenshots Gallery ── */
+  .gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+  }
+  .gallery-item {
+    background: white; border: 1px solid var(--border); border-radius: 14px;
+    overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,.06);
+    cursor: pointer; transition: transform .15s ease, box-shadow .15s ease;
+  }
+  .gallery-item:hover { transform: translateY(-3px); box-shadow: 0 10px 28px rgba(0,0,0,.12); }
+  .gallery-item .screen-img {
+    width: 100%; aspect-ratio: 16/9; object-fit: cover; object-position: top;
+    display: block; background: #f1f5f9;
+  }
+  .gallery-item .screen-img.placeholder {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 3rem; background: linear-gradient(135deg, #eff6ff, #e0f2fe);
+  }
+  .gallery-caption {
+    padding: 14px 16px;
+  }
+  .gallery-caption .cap-badge {
+    font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
+    color: var(--blue); margin-bottom: 5px;
+  }
+  .gallery-caption h4 { font-size: .95rem; font-weight: 700; color: var(--dark); margin-bottom: 4px; }
+  .gallery-caption p { font-size: .8rem; color: var(--mid); line-height: 1.5; }
+
+  /* Lightbox */
+  #lightbox { display:none; position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:9999;
+    align-items:center; justify-content:center; padding:20px; }
+  #lightbox.open { display:flex; }
+  #lightbox img { max-width:90vw; max-height:88vh; border-radius:10px; object-fit:contain; }
+  #lightbox .lb-close { position:fixed; top:20px; right:28px; font-size:2rem; color:white;
+    cursor:pointer; line-height:1; }
+  #lightbox .lb-caption { position:fixed; bottom:20px; left:0; right:0; text-align:center;
+    color:white; font-size:.95rem; font-weight:600; }
+
   @media print {
-    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    .gallery-item { break-inside: avoid; }
+    #lightbox { display: none !important; }
+  }
     body { background: white !important; font-size: 11pt; }
     .print-bar { display: none !important; }
     .cover {
@@ -254,6 +296,119 @@
       <div class="pillar"><div class="pico">🛡️</div><div class="ptxt">NABH Compliance</div></div>
     </div>
   </div>
+
+  <!-- ═══ SCREENSHOTS GALLERY ═══ -->
+  <h2 class="section-title">System Screenshots</h2>
+  <p class="section-intro">Real screens from E-Atria HIMS — live hospital environment.</p>
+
+  <div class="gallery-grid">
+
+    <div class="gallery-item" onclick="openLb(this)" data-caption="Dashboard — Real-time OPD, IPD &amp; Admit/Discharge overview">
+      <div class="screen-img placeholder">📊</div>
+      <div class="gallery-caption">
+        <div class="cap-badge">Dashboard</div>
+        <h4>Hospital Dashboard</h4>
+        <p>Real-time counts for OPD today, Current IPD in-house, Admissions &amp; Discharges, and Daily trend for the current month.</p>
+      </div>
+    </div>
+
+    <div class="gallery-item" onclick="openLb(this)" data-caption="Patient Management — Search, New Person, ABHA Create/Verify, ABHA Register">
+      <div class="screen-img placeholder">👤</div>
+      <div class="gallery-caption">
+        <div class="cap-badge">Patient Management</div>
+        <h4>Patient Search &amp; Registration</h4>
+        <p>Multi-tab workspace: Search by UHID/name/phone, register new patients, view last OPDs, create or verify ABHA Health ID.</p>
+      </div>
+    </div>
+
+    <div class="gallery-item" onclick="openLb(this)" data-caption="ABHA Create/Verify — 4-step wizard: Aadhaar &amp; Consent → OTP Verify → Mobile Confirm → ABHA Ready">
+      <div class="screen-img placeholder">🪪</div>
+      <div class="gallery-caption">
+        <div class="cap-badge">ABDM / ABHA</div>
+        <h4>ABHA Health ID Creation</h4>
+        <p>Guided 4-step wizard: Aadhaar number + patient consent → OTP verification → mobile confirmation → ABHA ID issued instantly.</p>
+      </div>
+    </div>
+
+    <div class="gallery-item" onclick="openLb(this)" data-caption="OPD Appointment Queue — Live queue with status: Waiting, Visited, Booked, Cancelled; vitals &amp; consult actions per patient">
+      <div class="screen-img placeholder">📋</div>
+      <div class="gallery-caption">
+        <div class="cap-badge">OPD</div>
+        <h4>Doctor-wise Appointment Queue</h4>
+        <p>Live OPD queue per doctor showing status (Waiting/Visited/Cancelled), queue number, UHID, payment type, and quick-action buttons for Consult, Vitals, Scan, Upload.</p>
+      </div>
+    </div>
+
+    <div class="gallery-item" onclick="openLb(this)" data-caption="Bed Status — Ward &amp; Floor Map showing 85 beds across Ground Floor, ICU, Private Ward, and Semi-Private Ward with real-time occupancy">
+      <div class="screen-img placeholder">🛏️</div>
+      <div class="gallery-caption">
+        <div class="cap-badge">IPD / Bed Management</div>
+        <h4>Real-time Bed Status Map</h4>
+        <p>Visual ward &amp; floor map: 85 total beds across wards, ICU, private rooms. Shows Available / Occupied / Reserved / Maintenance with patient name and LOS per bed.</p>
+      </div>
+    </div>
+
+    <div class="gallery-item" onclick="openLb(this)" data-caption="Charge Master with per-insurance-company rates — USG KUB: standard ₹1,000 / ECHS rate ₹170 with code RI039">
+      <div class="screen-img placeholder">💰</div>
+      <div class="gallery-caption">
+        <div class="cap-badge">Billing</div>
+        <h4>Charge Master &amp; Insurance Rates</h4>
+        <p>Per-procedure charge configuration with company-specific rates and codes. Example: USG KUB at ₹1,000 standard rate with ECHS rate at ₹170 (code RI039).</p>
+      </div>
+    </div>
+
+    <div class="gallery-item" onclick="openLb(this)" data-caption="Hospital Stock Control Center — 1,570 low-stock items, 16 near-expiry batches, Rs. 12.27L stock value, 864 pending purchase invoices">
+      <div class="screen-img placeholder">📦</div>
+      <div class="gallery-caption">
+        <div class="cap-badge">Pharmacy / Hospital Stock</div>
+        <h4>Stock Control Center</h4>
+        <p>Central dashboard showing indents, low-stock alerts, near-expiry batches (within 60 days), approximate stock value, and quick-access to Indent Desk, Day Report, Stock Search, and Store Controls.</p>
+      </div>
+    </div>
+
+    <div class="gallery-item" onclick="openLb(this)" data-caption="Report Panel — grouped into Billing, Finance, Diagnosis, IPD, Insurance Credit, and Document reports">
+      <div class="screen-img placeholder">📈</div>
+      <div class="gallery-caption">
+        <div class="cap-badge">Reports</div>
+        <h4>Report Panel</h4>
+        <p>Grouped quick-access panel covering Total Payment, OPD Total, Billing Operations, Finance Dashboard, NABH Audit, Diagnosis, Insurance Case IPD/OPD, Ayushman Case Dashboard, and Document Issue reports.</p>
+      </div>
+    </div>
+
+    <div class="gallery-item" onclick="openLb(this)" data-caption="Admin Panel — Doctor Master, User Management, AI Settings, HealthPlix, ABDM Gateway, Hospital Profile, Insurance, Bank, Bed Management, Stock">
+      <div class="screen-img placeholder">⚙️</div>
+      <div class="gallery-caption">
+        <div class="cap-badge">Admin &amp; Settings</div>
+        <h4>Admin Control Panel</h4>
+        <p>Tile-based admin panel giving quick access to all configuration modules: Doctor Master, User &amp; Role Management, AI Settings, HealthPlix Integration, ABDM Gateway, Hospital Profile, Insurance, and more.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Lightbox overlay -->
+  <div id="lightbox" onclick="closeLb()">
+    <span class="lb-close" onclick="closeLb()">&times;</span>
+    <img id="lbImg" src="" alt="">
+    <div class="lb-caption" id="lbCaption"></div>
+  </div>
+
+  <script>
+    function openLb(el) {
+      var img = el.querySelector('.screen-img');
+      var cap = el.getAttribute('data-caption') || '';
+      if (img && img.tagName === 'IMG') {
+        document.getElementById('lbImg').src = img.src;
+        document.getElementById('lbImg').style.display = '';
+      } else {
+        document.getElementById('lbImg').style.display = 'none';
+      }
+      document.getElementById('lbCaption').textContent = cap;
+      document.getElementById('lightbox').classList.add('open');
+    }
+    function closeLb() { document.getElementById('lightbox').classList.remove('open'); }
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeLb(); });
+  </script>
 
   <!-- ═══ 1. PATIENT MANAGEMENT ═══ -->
   <h2 class="section-title">1. Patient Management</h2>
