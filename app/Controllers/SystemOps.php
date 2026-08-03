@@ -45,4 +45,12 @@ class SystemOps extends BaseController
 
         return $this->response->setJSON($result);
     }
+
+    public function diagnose()
+    {
+        $ops = new SystemOperations();
+        $diag = $ops->getGitDiagnosticsForWeb();
+
+        return $this->response->setJSON($diag);
+    }
 }

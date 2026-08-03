@@ -291,6 +291,111 @@ class SystemOperations
         return $diagnostics;
     }
 
+    public function getGitDiagnosticsForWeb(): array
+    {
+        $repoPath = ROOTPATH;
+        $gitPath = $this->findGitCommand();
+        
+        $info = [
+            'timestamp' => date('Y-m-d H:i:s'),
+            'php_user' => get_current_user() ?: 'unknown',
+            'repo_path' => $repoPath,
+            'git_path' => $gitPath ?: 'NOT FOUND',
+            'git_version' => 'N/A',
+            'directory_exists' => [
+                '.git' => is_dir($repoPath . '/.git'),
+                '.git/config' => file_exists($repoPath . '/.git/config'),
+            ],
+            'file_permissions' => [
+                '.git_readable' => is_readable($repoPath . '/.git'),
+                '.git_writable' => is_writable($repoPath . '/.git'),
+                'config_readable' => is_readable($repoPath . '/.git/config'),
+                'config_writable' => is_writable($repoPath . '/.git/config'),
+            ],
+            'git_config_values' => [
+                'user.name' => 'NOT SET',
+                'user.email' => 'NOT SET',
+                'remote.origin.url' => 'NOT SET',
+                'current_branch' => 'UNKNOWN',
+            ],
+            'git_commands_output' => [],
+            'troubleshooting_commands' => [],
+        ];
+
+        if (!$gitPath) {
+            $info['error'] = 'Git binary not found. Tried: /usr/bin/git, /bin/git, /usr/local/bin/git';
+            return $info;
+        }
+
+        // Get git version
+        $result = $this->runCommand(escapeshellarg($gitPath) . ' --version 2>&1');
+        $info['git_version'] = trim($result['output']) ?: 'Failed to get version';
+        $info['git_commands_output']['--version'] = [
+            'exit_code' => $result['exit_code'],
+            'output' => $result['output'],
+        ];
+
+        // Get user.name
+        $result = $this->runCommand('cd ' . escapeshellarg($repoPath) . ' && ' . escapeshellarg($gitPath) . ' config user.name 2>&1');
+        if ($result['exit_code'] === 0 && trim($result['output']) !== '') {
+            $info['git_config_values']['user.name'] = trim($result['output']);
+        }
+        $info['git_commands_output']['config_user.name'] = [
+            'exit_code' => $result['exit_code'],
+            'output' => $result['output'] ?: '(empty)',
+        ];
+
+        // Get user.email
+        $result = $this->runCommand('cd ' . escapeshellarg($repoPath) . ' && ' . escapeshellarg($gitPath) . ' config user.email 2>&1');
+        if ($result['exit_code'] === 0 && trim($result['output']) !== '') {
+            $info['git_config_values']['user.email'] = trim($result['output']);
+        }
+        $info['git_commands_output']['config_user.email'] = [
+            'exit_code' => $result['exit_code'],
+            'output' => $result['output'] ?: '(empty)',
+        ];
+
+        // Get remote origin URL
+        $result = $this->runCommand('cd ' . escapeshellarg($repoPath) . ' && ' . escapeshellarg($gitPath) . ' config remote.origin.url 2>&1');
+        if ($result['exit_code'] === 0 && trim($result['output']) !== '') {
+            $info['git_config_values']['remote.origin.url'] = trim($result['output']);
+        }
+        $info['git_commands_output']['config_remote.origin.url'] = [
+            'exit_code' => $result['exit_code'],
+            'output' => $result['output'] ?: '(empty)',
+        ];
+
+        // Get current branch
+        $result = $this->runCommand('cd ' . escapeshellarg($repoPath) . ' && ' . escapeshellarg($gitPath) . ' rev-parse --abbrev-ref HEAD 2>&1');
+        if ($result['exit_code'] === 0 && trim($result['output']) !== '') {
+            $info['git_config_values']['current_branch'] = trim($result['output']);
+        }
+        $info['git_commands_output']['current_branch'] = [
+            'exit_code' => $result['exit_code'],
+            'output' => $result['output'] ?: '(empty)',
+        ];
+
+        // Test git status
+        $result = $this->runCommand('cd ' . escapeshellarg($repoPath) . ' && ' . escapeshellarg($gitPath) . ' status 2>&1');
+        $info['git_commands_output']['status'] = [
+            'exit_code' => $result['exit_code'],
+            'output_preview' => substr(trim($result['output']), 0, 200) . (strlen($result['output']) > 200 ? '...' : ''),
+        ];
+
+        // Provide troubleshooting commands
+        if ($info['git_config_values']['user.name'] === 'NOT SET' || $info['git_config_values']['user.email'] === 'NOT SET') {
+            $info['troubleshooting_commands'] = [
+                'Run these commands on your server as root:',
+                "cd {$repoPath}",
+                "sudo -u www-data {$gitPath} config user.name 'www-data'",
+                "sudo -u www-data {$gitPath} config user.email 'deploy@localhost'",
+                "sudo -u www-data {$gitPath} status",
+            ];
+        }
+
+        return $info;
+    }
+
     public function runServerAction(string $action): array
     {
         $commands = [
