@@ -44,10 +44,7 @@
                 <h5 class="mb-0">Maintenance Actions</h5>
             </div>
             <div class="card-body d-grid gap-2">
-                <div class="d-grid gap-2">
-                    <button class="btn btn-primary" id="btnUpdateSystem" title="Update via git (requires git configuration)">Update HMS (Git)</button>
-                    <button class="btn btn-success" id="btnUpdateDirectGithub" title="Download and deploy latest from GitHub (more reliable)">Deploy from GitHub</button>
-                </div>
+                <button class="btn btn-success" id="btnUpdateDirectGithub" title="Download and deploy latest from GitHub">Deploy from GitHub</button>
                 <hr class="my-2">
                 <button class="btn btn-outline-warning" id="btnRestartWeb">Restart Web Server</button>
                 <button class="btn btn-outline-info" id="btnRestartPhp">Restart PHP-FPM</button>

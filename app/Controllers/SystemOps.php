@@ -29,14 +29,6 @@ class SystemOps extends BaseController
         return view('Setting/Admin/system_ops_panel', $data);
     }
 
-    public function update()
-    {
-        $ops = new SystemOperations();
-        $result = $ops->runUpdate();
-
-        return $this->response->setJSON($result);
-    }
-
     public function updateDirect()
     {
         $ops = new SystemOperations();
