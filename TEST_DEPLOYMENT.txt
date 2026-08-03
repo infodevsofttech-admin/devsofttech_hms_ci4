@@ -1,0 +1,22 @@
+HMS GitHub Deployment Verification Test
+========================================
+
+This file is used to verify that the GitHub deployment feature works correctly.
+
+Test Timestamp: 2026-08-04
+Deployed Method: Direct GitHub Download (via Deploy from GitHub button)
+
+How to verify deployment worked:
+1. Check if this file exists on live server at: /var/www/html/hms_etria/TEST_DEPLOYMENT.txt
+2. Check file modification time matches deployment time
+3. Commit history should show this test in the latest deployment
+
+Verification Commands (run on live server):
+  ls -lh /var/www/html/hms_etria/TEST_DEPLOYMENT.txt
+  date
+  tail -50 /var/www/html/hms_etria/writable/system_update.log
+
+Expected Output:
+  - File should exist
+  - File timestamp should match when you clicked "Deploy from GitHub"
+  - system_update.log should show successful deployment with file list
