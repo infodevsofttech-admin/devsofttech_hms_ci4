@@ -465,6 +465,18 @@ class Patient extends BaseController
 		return "TRIM(COALESCE(p.{$oldUhidField}, '')) != '' AND (" . implode(' OR ', $clauses) . ')';
 	}
 
+	protected function formatPatientCodeCell(int $patientId, string $patientCode, string $oldUhid = ''): string
+	{
+		$link = '<a href="javascript:load_form(\'' . base_url('billing/patient/person_record/' . $patientId) . '\');">' . esc($patientCode) . '</a>';
+		$oldUhid = trim($oldUhid);
+
+		if ($oldUhid === '') {
+			return $link;
+		}
+
+		return $link . '<br><small><i>' . esc($oldUhid) . '</i></small>';
+	}
+
 	protected function buildPatientSearchCondition(string $rowData, ?string $abhaField = null, ?string $oldUhidField = null): string
 	{
 		$escapedValue = $this->db->escape($rowData);
@@ -590,10 +602,14 @@ class Patient extends BaseController
 		foreach ($records as $index => $row) {
 			$patientId = (int) ($row->id ?? 0);
 			$age = esc(get_age_1($row->dob ?? null, $row->age ?? '', $row->age_in_month ?? '', $row->estimate_dob ?? '', $row->Last_Visit ?? null));
+			$oldUhid = '';
+			if ($oldUhidField !== null && $oldUhidField !== '' && isset($row->{$oldUhidField})) {
+				$oldUhid = (string) $row->{$oldUhidField};
+			}
 			
 			$data[] = [
 				$start + $index + 1,
-				'<a href="javascript:load_form(\'' . base_url('billing/patient/person_record/' . $patientId) . '\');">' . esc($row->p_code ?? '') . '</a>',
+				$this->formatPatientCodeCell($patientId, (string) ($row->p_code ?? ''), $oldUhid),
 				esc(($row->p_fname ?? '') . ' {' . ($row->p_rname ?? '') . '}'),
 				$age,
 				esc($row->Last_Visit ?? ''),
