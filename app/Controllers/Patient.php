@@ -431,17 +431,43 @@ class Patient extends BaseController
 	public function search()
 	{
 		$sdata = (string) $this->request->getPost('txtsearch');
-		$sdata = preg_replace('/[^A-Za-z0-9 _.@\-]/', '', trim($sdata ?? ''));
+		$sdata = preg_replace('/[^A-Za-z0-9 _.@\/-]/', '', trim($sdata ?? ''));
 
 		$data['search_query'] = $sdata;
 		return view('billing/Patient_Search_V', $data);
 	}
 
-	protected function buildPatientSearchCondition(string $rowData, ?string $abhaField = null, ?string $oldUhidField = null): string
+	protected function buildOldUhidSearchClause(string $rowData, ?string $oldUhidField): string
 	{
+		if ($oldUhidField === null || $oldUhidField === '') {
+			return '';
+		}
+
 		$escapedValue = $this->db->escape($rowData);
 		$escapedLikeValue = $this->db->escape('%' . $rowData . '%');
 		$escapedSuffixLikeValue = $this->db->escape('%' . $rowData);
+		$normalizedTerm = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $rowData));
+
+		$clauses = [
+			"p.{$oldUhidField} = " . $escapedValue,
+			'p.' . $oldUhidField . ' LIKE ' . $escapedLikeValue,
+			'p.' . $oldUhidField . ' LIKE ' . $escapedSuffixLikeValue,
+		];
+
+		if ($normalizedTerm !== '') {
+			$escapedNormalizedTerm = $this->db->escape($normalizedTerm);
+			$normalizedField = "UPPER(REPLACE(REPLACE(REPLACE(TRIM(COALESCE(p.{$oldUhidField}, '')), '/', ''), '-', ''), ' ', ''))";
+			$clauses[] = $normalizedField . ' = ' . $escapedNormalizedTerm;
+			$clauses[] = $normalizedField . ' LIKE ' . $this->db->escape('%' . $normalizedTerm . '%');
+			$clauses[] = $normalizedField . ' LIKE ' . $this->db->escape('%' . $normalizedTerm);
+		}
+
+		return "TRIM(COALESCE(p.{$oldUhidField}, '')) != '' AND (" . implode(' OR ', $clauses) . ')';
+	}
+
+	protected function buildPatientSearchCondition(string $rowData, ?string $abhaField = null, ?string $oldUhidField = null): string
+	{
+		$escapedValue = $this->db->escape($rowData);
 		$clauses = [
 			'p.p_code like ' . $this->db->escape('%' . $rowData),
 			'p.mphone1 = ' . $escapedValue,
@@ -452,8 +478,9 @@ class Patient extends BaseController
 			$clauses[] = 'p.' . $abhaField . ' = ' . $escapedValue;
 		}
 
-		if ($oldUhidField !== null && $oldUhidField !== '') {
-			$clauses[] = "TRIM(COALESCE(p.{$oldUhidField}, '')) != '' AND (p.{$oldUhidField} = " . $escapedValue . ' OR p.' . $oldUhidField . ' LIKE ' . $escapedLikeValue . ' OR p.' . $oldUhidField . ' LIKE ' . $escapedSuffixLikeValue . ')';
+		$oldUhidClause = $this->buildOldUhidSearchClause($rowData, $oldUhidField);
+		if ($oldUhidClause !== '') {
+			$clauses[] = $oldUhidClause;
 		}
 
 		return ' and (' . implode(' or ', $clauses) . ')';
@@ -469,7 +496,7 @@ class Patient extends BaseController
 		
 		// Use DataTables search if provided, otherwise use initial search_query
 		$sdata = $dtSearch !== '' ? $dtSearch : $initialSearch;
-		$sdata = preg_replace('/[^A-Za-z0-9 _.@\-]/', '', $sdata);
+		$sdata = preg_replace('/[^A-Za-z0-9 _.@\/-]/', '', $sdata);
 
 // Detect ABHA and legacy UHID columns in patient_master
 		$abhaField = null;
@@ -496,11 +523,10 @@ class Patient extends BaseController
 					$searchString .= $this->buildPatientSearchCondition($rowData, $abhaField, $oldUhidField);
 				} elseif (ctype_alpha($rowData)) {
 					$escapedValue = $this->db->escape($rowData);
-					$escapedLikeValue = $this->db->escape('%' . $rowData . '%');
-					$escapedSuffixLikeValue = $this->db->escape('%' . $rowData);
 					$legacyUhidClause = '';
-					if ($oldUhidField !== null && $oldUhidField !== '') {
-						$legacyUhidClause = " or (TRIM(COALESCE(p.{$oldUhidField}, '')) != '' AND (p.{$oldUhidField} = " . $escapedValue . ' OR p.' . $oldUhidField . ' LIKE ' . $escapedLikeValue . ' OR p.' . $oldUhidField . ' LIKE ' . $escapedSuffixLikeValue . '))';
+					$oldUhidClause = $this->buildOldUhidSearchClause($rowData, $oldUhidField);
+					if ($oldUhidClause !== '') {
+						$legacyUhidClause = ' or (' . $oldUhidClause . ')';
 					}
 					$searchString .= " and (p.p_fname like " . $this->db->escape('%' . $rowData . '%') . " 
 						or p.email1 = " . $this->db->escape($rowData) . " 
@@ -512,11 +538,9 @@ class Patient extends BaseController
 						? " or p.{$abhaField} = " . $this->db->escape($rawDigits) . " or p.{$abhaField} = " . $this->db->escape($rowData)
 						: '';
 					$legacyUhidClause = '';
-					if ($oldUhidField !== null && $oldUhidField !== '') {
-						$escapedValue = $this->db->escape($rowData);
-						$escapedLikeValue = $this->db->escape('%' . $rowData . '%');
-						$escapedSuffixLikeValue = $this->db->escape('%' . $rowData);
-						$legacyUhidClause = " or (TRIM(COALESCE(p.{$oldUhidField}, '')) != '' AND (p.{$oldUhidField} = " . $escapedValue . ' OR p.' . $oldUhidField . ' LIKE ' . $escapedLikeValue . ' OR p.' . $oldUhidField . ' LIKE ' . $escapedSuffixLikeValue . '))';
+					$oldUhidClause = $this->buildOldUhidSearchClause($rowData, $oldUhidField);
+					if ($oldUhidClause !== '') {
+						$legacyUhidClause = ' or (' . $oldUhidClause . ')';
 					}
 					$searchString .= " and (p.p_code like " . $this->db->escape($rowData) . " 
 						or p.email1 = " . $this->db->escape($rowData) . $abhaElse . $legacyUhidClause . ")";
