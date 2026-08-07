@@ -436,7 +436,7 @@ $ayushmanChecklistItems = $ayushman_checklist_items ?? [];
     }
 
     function ipdPackageReload() {
-        load_form_div('<?= base_url('IpdNew/ipd_package/' . $ipdId) ?>', 'tab_package_content');
+        load_form_div('<?= base_url('billing/ipd/panel/' . $ipdId . '/tab/package') ?>', 'tab_package_content');
     }
 
     function ipdPackageSetRate() {
