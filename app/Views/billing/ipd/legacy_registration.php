@@ -256,12 +256,13 @@
         <div class="col-md-6">
           <div class="form-group">
             <label>Refer By</label>
-            <select class="form-control" name="refer_by_list" id="refer_by_list">
-              <option value="0">Select Refer By</option>
+            <input type="hidden" name="refer_by_list" id="refer_by_list" value="0">
+            <input class="form-control" id="refer_by_list_search" list="refer_by_list_options" placeholder="Type to search referral" autocomplete="off">
+            <datalist id="refer_by_list_options">
               <?php foreach ($refer_master as $row): ?>
-                <option value="<?= esc($row->id ?? 0) ?>"><?= esc(trim(($row->title ?? '') . ' ' . ($row->f_name ?? ''))) ?></option>
+                <option value="<?= esc(trim(($row->title ?? '') . ' ' . ($row->f_name ?? ''))) ?>" data-id="<?= esc($row->id ?? 0) ?>"></option>
               <?php endforeach; ?>
-            </select>
+            </datalist>
           </div>
         </div>
       </div>
@@ -308,6 +309,37 @@
 
 <script>
   $(function() {
+    function bindReferByDatalist(hiddenSelector, inputSelector, listSelector) {
+      var $hidden = $(hiddenSelector);
+      var $input = $(inputSelector);
+      var list = document.querySelector(listSelector);
+
+      if (!$hidden.length || !$input.length || !list) {
+        return;
+      }
+
+      function syncReferByValue() {
+        var typedValue = ($input.val() || '').trim();
+        var matchedId = '0';
+        var options = list.querySelectorAll('option');
+
+        options.forEach(function(option) {
+          if (matchedId !== '0') {
+            return;
+          }
+          if ((option.value || '').trim().toUpperCase() === typedValue.toUpperCase()) {
+            matchedId = option.getAttribute('data-id') || '0';
+          }
+        });
+
+        $hidden.val(matchedId);
+      }
+
+      $input.on('input change blur', syncReferByValue);
+    }
+
+    bindReferByDatalist('#refer_by_list', '#refer_by_list_search', '#refer_by_list_options');
+
     function formatLegacyDate(dateValue) {
       if (!dateValue) {
         return '';

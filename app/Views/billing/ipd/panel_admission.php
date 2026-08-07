@@ -150,12 +150,14 @@ $alertId = 'ipd-admission-alert-' . (int) ($ipd->id ?? 0);
                 </div>
                 <div class="col-lg-6 col-md-12">
                     <label class="form-label">Refer By</label>
-                    <select name="refer_by" class="form-select">
-                        <option value="0">Select Refer By</option>
+                    <input type="hidden" name="refer_by" id="refer_by" value="<?= (int) ($ipd->refer_by ?? 0) ?>">
+                    <input class="form-control" id="refer_by_search" list="refer_by_options" placeholder="Type to search referral" autocomplete="off"
+                        value="<?= esc($referByName !== 'Not set' ? $referByName : '') ?>">
+                    <datalist id="refer_by_options">
                         <?php foreach ($referMaster as $refer) : ?>
-                            <option value="<?= (int) ($refer->id ?? 0) ?>" <?= (int) ($refer->id ?? 0) === (int) ($ipd->refer_by ?? 0) ? 'selected' : '' ?>><?= esc(trim((string) (($refer->title ?? '') . ' ' . ($refer->f_name ?? '')))) ?></option>
+                            <option value="<?= esc(trim((string) (($refer->title ?? '') . ' ' . ($refer->f_name ?? '')))) ?>" data-id="<?= (int) ($refer->id ?? 0) ?>"></option>
                         <?php endforeach; ?>
-                    </select>
+                    </datalist>
                 </div>
                 <div class="col-12">
                     <label class="form-label">Assigned Doctors</label>
@@ -239,8 +241,34 @@ $alertId = 'ipd-admission-alert-' . (int) ($ipd->id ?? 0);
             submitButton.textContent = isSaving ? 'Saving...' : 'Save Admission Changes';
         }
 
+        function syncReferByValue() {
+            var hiddenInput = document.getElementById('refer_by');
+            var searchInput = document.getElementById('refer_by_search');
+            var optionsList = document.getElementById('refer_by_options');
+            if (!hiddenInput || !searchInput || !optionsList) {
+                return;
+            }
+
+            var typedValue = (searchInput.value || '').trim().toUpperCase();
+            var matchedId = '0';
+            optionsList.querySelectorAll('option').forEach(function(option) {
+                if (matchedId !== '0') {
+                    return;
+                }
+
+                if (((option.value || '').trim().toUpperCase()) === typedValue) {
+                    matchedId = option.getAttribute('data-id') || '0';
+                }
+            });
+
+            hiddenInput.value = matchedId;
+        }
+
+        $('#refer_by_search').on('input change blur', syncReferByValue);
+
         form.addEventListener('submit', function(event) {
             event.preventDefault();
+            syncReferByValue();
             setSavingState(true);
             if (alertBox) {
                 alertBox.innerHTML = '';

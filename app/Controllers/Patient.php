@@ -36,6 +36,8 @@ class Patient extends BaseController
                 ->getResultArray();
         }
 
+		$data['refer_master'] = $this->getActiveReferMasters();
+
         return view('billing/Patient_V', $data);
     }
 
@@ -130,6 +132,7 @@ class Patient extends BaseController
 			'udai' => strtoupper((string) $this->request->getPost('input_udai')),
 			'estimate_dob' => $estimate_dob,
 		];
+		$this->applyPatientReferbyField($data, (string) $this->request->getPost('refer_by_name'));
 		$this->applyPatientAbhaFieldValues($data, $abhaId, $abhaAddress);
 
 		if ($chk_age === 'on') {
@@ -715,6 +718,8 @@ class Patient extends BaseController
 		$query = $this->db->query($sql);
 		$data['blood_group'] = $query->getResult();
 
+		$data['refer_master'] = $this->getActiveReferMasters();
+
 		$sql = "select * from tag_master  Order by tag_name";
 		$query = $this->db->query($sql);
 		$data['tag_master'] = $query->getResult();
@@ -823,6 +828,7 @@ class Patient extends BaseController
 			'estimate_dob' => $estimate_dob,
 			'blood_group' => $this->request->getPost('input_blood_group'),
 		];
+		$this->applyPatientReferbyField($data, (string) $this->request->getPost('refer_by_name'));
 
 		if ($isAbhaVerifiedLocked) {
 			$data['p_fname'] = (string) ($existingPatient['p_fname'] ?? $data['p_fname']);
@@ -861,6 +867,28 @@ class Patient extends BaseController
 			'update' => 1,
 			'showcontent' => 'Data Saved successfully',
 		]);
+	}
+
+	private function getActiveReferMasters(): array
+	{
+		if (! $this->db->tableExists('refer_master')) {
+			return [];
+		}
+
+		return $this->db->table('refer_master')
+			->where('active', 1)
+			->orderBy('f_name', 'ASC')
+			->get()
+			->getResult();
+	}
+
+	private function applyPatientReferbyField(array &$data, string $referByName): void
+	{
+		if (! $this->db->fieldExists('referby', 'patient_master')) {
+			return;
+		}
+
+		$data['referby'] = trim(strtoupper($referByName));
 	}
 
 	public function update_aadhar()

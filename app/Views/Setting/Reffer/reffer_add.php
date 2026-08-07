@@ -15,12 +15,7 @@
             <div class="row g-3">
                 <div class="col-md-2">
                     <label class="form-label">Title</label>
-                    <select class="form-select" name="cbo_title" id="cbo_title">
-                        <option value="Mr.">Mr.</option>
-                        <option value="Mrs.">Mrs.</option>
-                        <option value="Ms.">Ms.</option>
-                        <option value="Dr.">Dr.</option>
-                    </select>
+                    <input class="form-control" name="cbo_title" id="cbo_title" type="text" placeholder="Title / Clinic / Hospital" autocomplete="off">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">Name</label>

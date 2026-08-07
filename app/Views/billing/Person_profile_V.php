@@ -129,6 +129,16 @@
                                     </div>
                                 </div>
                                 <div class="row">
+                                    <div class="col-lg-3 col-md-4 label">Refer By</div>
+                                    <div class="col-lg-9 col-md-8">
+                                        <?php if (trim((string) ($data[0]->referby ?? '')) !== '') : ?>
+                                            <?= esc(ucwords(strtolower((string) ($data[0]->referby ?? '')))) ?>
+                                        <?php else : ?>
+                                            <span class="text-muted small">Not filled</span>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                                <div class="row">
                                     <div class="col-lg-3 col-md-4 label">Aadhar No.</div>
                                     <div class="col-lg-9 col-md-8"><?=$data[0]->udai?></div>
                                 </div>

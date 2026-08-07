@@ -238,6 +238,20 @@
 								</select>
 							</div>
 						</div>
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label>Refer By</label>
+                                <input class="form-control input-sm" name="refer_by_name" id="refer_by_name"
+                                    list="refer_by_name_list" placeholder="Type to search referral"
+                                    value="<?= esc($data[0]->referby ?? '') ?>" autocomplete="off">
+                                <datalist id="refer_by_name_list">
+                                    <?php foreach (($refer_master ?? []) as $row) : ?>
+                                        <?php $referLabel = trim((string) (($row->title ?? '') . ' ' . ($row->f_name ?? ''))); ?>
+                                        <option value="<?= esc($referLabel) ?>"></option>
+                                    <?php endforeach; ?>
+                                </datalist>
+                            </div>
+                        </div>
                     </div>
                     <div class="row">
                         <div class="col-md-6">

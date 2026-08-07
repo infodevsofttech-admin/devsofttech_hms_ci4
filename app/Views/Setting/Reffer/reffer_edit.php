@@ -16,12 +16,7 @@
                 <div class="row g-3">
                     <div class="col-md-2">
                         <label class="form-label">Title</label>
-                        <select class="form-select" name="cbo_title" id="cbo_title">
-                            <option value="Mr." <?= combo_checked('Mr.', $data[0]->title ?? '') ?>>Mr.</option>
-                            <option value="Mrs." <?= combo_checked('Mrs.', $data[0]->title ?? '') ?>>Mrs.</option>
-                            <option value="Ms." <?= combo_checked('Ms.', $data[0]->title ?? '') ?>>Ms.</option>
-                            <option value="Dr." <?= combo_checked('Dr.', $data[0]->title ?? '') ?>>Dr.</option>
-                        </select>
+                        <input class="form-control" name="cbo_title" id="cbo_title" type="text" placeholder="Title / Clinic / Hospital" value="<?= esc($data[0]->title ?? '') ?>" autocomplete="off">
                     </div>
                     <div class="col-md-3">
                         <label class="form-label">Name</label>
