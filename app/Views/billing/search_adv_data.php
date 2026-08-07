@@ -114,6 +114,7 @@ if (! empty($search_result) && is_array($search_result)) {
             <?php
             $profileUrl = base_url('billing/patient/person_record') . '/' . (int) ($row->id ?? 0);
             $fullName = trim((string) ($row->p_fname ?? ''));
+            $referBy = trim((string) ($row->referby ?? ''));
             $relative = trim((string) ($row->p_relative ?? '')) . ' ' . trim((string) ($row->p_rname ?? ''));
             $relative = trim($relative);
             $addressParts = array_filter([
@@ -164,6 +165,9 @@ if (! empty($search_result) && is_array($search_result)) {
                         View Profile
                     </button>
                 </div>
+                <?php if ($referBy !== '') : ?>
+                    <div class="small fst-italic text-muted">Refer By: <?= esc(ucwords(strtolower($referBy))) ?></div>
+                <?php endif; ?>
                 <div class="small text-muted"><?= esc($relative !== '' ? $relative : 'Relative: NA') ?></div>
                 <?php if (! empty($matchReasons)) : ?>
                     <div class="mt-1">

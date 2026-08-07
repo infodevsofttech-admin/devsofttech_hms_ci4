@@ -315,6 +315,72 @@
                                         <button type="submit" class="btn btn-info btn-flat">Go!</button>
                                     </span>
                                 </div>
+                                <div class="mt-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <small class="text-muted">Blank search shows patients from last 30 days by register date or last visit date.</small>
+                                    <button type="button" id="toggle_advanced_search" class="btn btn-outline-secondary btn-sm">
+                                        <i class="bi bi-funnel"></i> Advanced Search
+                                    </button>
+                                </div>
+                                <div id="advanced_search_panel" class="card mt-2" style="display:none;">
+                                    <div class="card-body py-3">
+                                        <div class="row g-2 align-items-end">
+                                            <div class="col-md-4">
+                                                <label class="form-label">Search By</label>
+                                                <select class="form-select" name="adv_search_by" id="adv_search_by">
+                                                    <option value="">Select field</option>
+                                                    <option value="patient_uhid">Patient / UHID</option>
+                                                    <option value="patient_name">Patient Name</option>
+                                                    <option value="relative_name">Relative Name</option>
+                                                    <option value="phone">Phone No</option>
+                                                    <option value="age">Age</option>
+                                                    <option value="refer_by">Refer By</option>
+                                                    <option value="old_uhid">OLD UHID</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-4" id="adv_value_col">
+                                                <label class="form-label">Search Value</label>
+                                                <input type="text" class="form-control" name="adv_search_value" id="adv_search_value" placeholder="Enter value">
+                                                <datalist id="adv_refer_by_list">
+                                                    <?php foreach (($refer_master ?? []) as $row) : ?>
+                                                        <?php $advReferLabel = trim((string) (($row->title ?? '') . ' ' . ($row->f_name ?? ''))); ?>
+                                                        <?php if ($advReferLabel !== '') : ?>
+                                                            <option value="<?= esc($advReferLabel) ?>"></option>
+                                                        <?php endif; ?>
+                                                    <?php endforeach; ?>
+                                                </datalist>
+                                            </div>
+                                            <div class="col-md-4 d-none" id="adv_age_mode_col">
+                                                <label class="form-label">Age Mode</label>
+                                                <select class="form-select" name="adv_age_mode" id="adv_age_mode">
+                                                    <option value="approx">Approx</option>
+                                                    <option value="between">Between</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-4 d-none" id="adv_age_approx_col">
+                                                <label class="form-label">Approx Age</label>
+                                                <input type="number" min="0" max="150" class="form-control" name="adv_age_value" id="adv_age_value" placeholder="e.g. 35">
+                                                <small class="text-muted d-block mt-1" id="adv_age_effective_hint">Approx range: -</small>
+                                            </div>
+                                            <div class="col-md-2 d-none" id="adv_age_tolerance_col">
+                                                <label class="form-label">Tolerance (+/- Years)</label>
+                                                <input type="number" min="0" max="20" class="form-control" name="adv_age_tolerance" id="adv_age_tolerance" value="2">
+                                            </div>
+                                            <div class="col-md-2 d-none" id="adv_age_from_col">
+                                                <label class="form-label">Age From</label>
+                                                <input type="number" min="0" max="150" class="form-control" name="adv_age_from" id="adv_age_from" placeholder="0">
+                                            </div>
+                                            <div class="col-md-2 d-none" id="adv_age_to_col">
+                                                <label class="form-label">Age To</label>
+                                                <input type="number" min="0" max="150" class="form-control" name="adv_age_to" id="adv_age_to" placeholder="60">
+                                            </div>
+                                        </div>
+                                        <div class="mt-3 d-flex justify-content-end">
+                                            <button type="button" id="btn_advanced_search" class="btn btn-primary btn-sm">
+                                                <i class="bi bi-search"></i> Search Advanced
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
                             </form>
                             <div id="search_loading" class="alert alert-info mt-2" style="display:none;">
                                 <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
@@ -791,7 +857,144 @@
             return fallbackText;
         }
 
+        function syncAdvancedSearchFields() {
+            var searchBy = String($('#adv_search_by').val() || '');
+            var ageMode = String($('#adv_age_mode').val() || 'approx');
+            var isAge = searchBy === 'age';
+            var isReferBy = searchBy === 'refer_by';
+
+            $('#adv_value_col').toggleClass('d-none', isAge);
+            $('#adv_age_mode_col').toggleClass('d-none', !isAge);
+
+            if (!isAge) {
+                $('#adv_search_value').attr('placeholder', isReferBy ? 'Type referral name' : 'Enter value');
+                if (isReferBy) {
+                    $('#adv_search_value').attr('list', 'adv_refer_by_list');
+                } else {
+                    $('#adv_search_value').removeAttr('list');
+                }
+            }
+
+            if (!isAge) {
+                $('#adv_age_approx_col,#adv_age_tolerance_col,#adv_age_from_col,#adv_age_to_col').addClass('d-none');
+                $('#adv_age_value,#adv_age_from,#adv_age_to').val('');
+                $('#adv_age_tolerance').val('2');
+                $('#adv_age_effective_hint').text('Approx range: -');
+                return;
+            }
+
+            if (ageMode === 'between') {
+                $('#adv_age_approx_col,#adv_age_tolerance_col').addClass('d-none');
+                $('#adv_age_value').val('');
+                $('#adv_age_tolerance').val('2');
+                $('#adv_age_effective_hint').text('Approx range: -');
+                $('#adv_age_from_col,#adv_age_to_col').removeClass('d-none');
+            } else {
+                $('#adv_age_from_col,#adv_age_to_col').addClass('d-none');
+                $('#adv_age_from,#adv_age_to').val('');
+                $('#adv_age_approx_col').removeClass('d-none');
+                $('#adv_age_tolerance_col').removeClass('d-none');
+                syncAgeApproxHint();
+            }
+        }
+
+        function syncAgeApproxHint() {
+            var ageValue = parseInt($('#adv_age_value').val(), 10);
+            var tolerance = parseInt($('#adv_age_tolerance').val(), 10);
+
+            if (isNaN(tolerance) || tolerance < 0) {
+                tolerance = 0;
+            }
+            if (tolerance > 20) {
+                tolerance = 20;
+            }
+
+            if (isNaN(ageValue) || ageValue < 0) {
+                $('#adv_age_effective_hint').text('Approx range: -');
+                return;
+            }
+
+            var minAge = Math.max(0, ageValue - tolerance);
+            var maxAge = ageValue + tolerance;
+            $('#adv_age_effective_hint').text('Approx range: ' + minAge + ' to ' + maxAge + ' years');
+        }
+
+        function getDatalistValues(listId) {
+            return $('#' + listId + ' option').map(function() {
+                return String($(this).val() || '').trim().toUpperCase();
+            }).get().filter(function(v) {
+                return v !== '';
+            });
+        }
+
+        function validateAdvancedReferBy() {
+            var searchBy = String($('#adv_search_by').val() || '');
+            if (searchBy !== 'refer_by') {
+                return true;
+            }
+
+            var typedValue = String($('#adv_search_value').val() || '').trim();
+            if (typedValue === '') {
+                return true;
+            }
+
+            var allowedValues = getDatalistValues('adv_refer_by_list');
+            var typedUpper = typedValue.toUpperCase();
+            var isValid = allowedValues.indexOf(typedUpper) !== -1;
+
+            if (!isValid) {
+                if (typeof notify === 'function') {
+                    notify('warning', 'Please Attention', 'Refer By must be selected from Refer Master list.');
+                }
+                $('#adv_search_value').focus();
+                return false;
+            }
+
+            return true;
+        }
+
+        function validateReferByAgainstMaster(inputSelector, listId) {
+            var typedValue = String($(inputSelector).val() || '').trim();
+            if (typedValue === '') {
+                return true;
+            }
+
+            var allowedValues = getDatalistValues(listId);
+            var typedUpper = typedValue.toUpperCase();
+            var isValid = allowedValues.indexOf(typedUpper) !== -1;
+
+            if (!isValid) {
+                if (typeof notify === 'function') {
+                    notify('warning', 'Please Attention', 'Refer By must be selected from Refer Master list.');
+                }
+                $(inputSelector).focus();
+                return false;
+            }
+
+            return true;
+        }
+
+        $('#toggle_advanced_search').on('click', function() {
+            $('#advanced_search_panel').stop(true, true).slideToggle(120);
+        });
+
+        $('#adv_search_by').on('change', syncAdvancedSearchFields);
+        $('#adv_age_mode').on('change', syncAdvancedSearchFields);
+        $('#adv_age_value,#adv_age_tolerance').on('input change', syncAgeApproxHint);
+        $('#adv_search_value').on('blur', function() {
+            validateAdvancedReferBy();
+        });
+        $('#refer_by_name').on('blur', function() {
+            validateReferByAgainstMaster('#refer_by_name', 'refer_by_name_list');
+        });
+        syncAdvancedSearchFields();
+
         $('form.form1').on('submit', function(form) {
+            if (!validateReferByAgainstMaster('#refer_by_name', 'refer_by_name_list')) {
+                form.preventDefault();
+                return;
+            }
+
             $("#RegisterPatient").prop("disabled", true);
             form.preventDefault();
 
@@ -805,24 +1008,44 @@
             }, 'json');
         });
 
+        function runPatientSearch(payload, triggerButton, buttonText) {
+            var loadingDiv = $('#search_loading');
+            var originalText = buttonText || triggerButton.text();
+
+            loadingDiv.show();
+            triggerButton.prop('disabled', true);
+            triggerButton.text('Searching...');
+
+            $.post('<?= base_url('billing/patient/search') ?>', payload, function(data) {
+                $('div.searchresult').html(data);
+                loadingDiv.hide();
+                triggerButton.prop('disabled', false);
+                triggerButton.text(originalText);
+            }).fail(function() {
+                loadingDiv.hide();
+                triggerButton.prop('disabled', false);
+                triggerButton.text(originalText);
+            });
+        }
+
         $('form.form2').on('submit', function(form) {
             form.preventDefault();
-            var searchBtn = $('form.form2 button[type="submit"]');
-            var loadingDiv = $('#search_loading');
-            
-            // Show loading indicator and disable button
-            loadingDiv.show();
-            searchBtn.prop('disabled', true);
-            searchBtn.text('Searching...');
-            
-            $.post('<?= base_url('billing/patient/search') ?>', $('form.form2').serialize(), function(data) {
-                $('div.searchresult').html(data);
-                
-                // Hide loading indicator and re-enable button
-                loadingDiv.hide();
-                searchBtn.prop('disabled', false);
-                searchBtn.text('Go!');
+
+            // Classic Go search should keep old behavior: only txtsearch + csrf.
+            var basicFields = $('form.form2').serializeArray().filter(function(field) {
+                return field.name.indexOf('adv_') !== 0;
             });
+
+            var searchBtn = $('form.form2 button[type="submit"]');
+            runPatientSearch($.param(basicFields), searchBtn, 'Go!');
+        });
+
+        $('#btn_advanced_search').on('click', function() {
+            if (!validateAdvancedReferBy()) {
+                return;
+            }
+            var advancedBtn = $(this);
+            runPatientSearch($('form.form2').serialize(), advancedBtn, 'Search Advanced');
         });
 
         /* ===================== ABHA CREATION WIZARD ===================== */

@@ -19,6 +19,7 @@
                     <tr>
                         <th>Name</th>
                         <th>Type</th>
+                        <th>Address</th>
                         <th>Register Date</th>
                         <th>Status</th>
                         <th>Edit</th>
@@ -27,9 +28,19 @@
                 <tbody>
                     <?php if (! empty($refer_master)) : ?>
                         <?php foreach ($refer_master as $row) : ?>
+                            <?php
+                                $addressParts = array_filter([
+                                    trim((string) ($row->place ?? '')),
+                                    trim((string) ($row->city ?? '')),
+                                    trim((string) ($row->district ?? '')),
+                                    trim((string) ($row->state ?? '')),
+                                ], static fn ($v) => $v !== '');
+                                $addressText = $addressParts === [] ? 'NA' : implode(', ', $addressParts);
+                            ?>
                             <tr>
                                 <td><?= esc(($row->title ?? '') . ' ' . ($row->f_name ?? '')) ?></td>
                                 <td><?= esc($row->type_desc ?? 'Others') ?></td>
+                                <td><?= esc($addressText) ?></td>
                                 <td><?= esc($row->str_dateadd ?? '') ?></td>
                                 <td>
                                     <?php if (! empty($row->active)) : ?>
@@ -45,7 +56,7 @@
                         <?php endforeach ?>
                     <?php else : ?>
                         <tr>
-                            <td colspan="5" class="text-center text-muted">No referral clients found.</td>
+                            <td colspan="6" class="text-center text-muted">No referral clients found.</td>
                         </tr>
                     <?php endif ?>
                 </tbody>

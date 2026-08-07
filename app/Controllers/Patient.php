@@ -111,6 +111,21 @@ class Patient extends BaseController
 				->with('error', $abhaError);
 		}
 
+		$referByName = trim((string) $this->request->getPost('refer_by_name'));
+		$referByError = $this->validatePatientReferByInput($referByName);
+		if ($referByError !== null) {
+			if ($isAjax) {
+				return $this->response->setJSON([
+					'insertid' => 0,
+					'error_text' => $referByError,
+				]);
+			}
+
+			return redirect()->to(base_url('billing/patient'))
+				->withInput()
+				->with('error', $referByError);
+		}
+
 		$bloodGroup = trim((string) $this->request->getPost('input_blood_group'));
 		if ($bloodGroup === '') {
 			$bloodGroup = 'Not Define';
@@ -132,7 +147,7 @@ class Patient extends BaseController
 			'udai' => strtoupper((string) $this->request->getPost('input_udai')),
 			'estimate_dob' => $estimate_dob,
 		];
-		$this->applyPatientReferbyField($data, (string) $this->request->getPost('refer_by_name'));
+		$this->applyPatientReferbyField($data, $referByName);
 		$this->applyPatientAbhaFieldValues($data, $abhaId, $abhaAddress);
 
 		if ($chk_age === 'on') {
@@ -220,6 +235,9 @@ class Patient extends BaseController
 
 		$builder = $this->db->table('patient_master');
 		$builder->select("id,p_fname,p_relative,p_rname,gender,add1,city,district,state,zip,mphone1,udai,last_visit,dob,age,age_in_month,estimate_dob");
+		if ($this->db->fieldExists('referby', 'patient_master')) {
+			$builder->select('referby');
+		}
 		if ($abhaField !== null) {
 			$builder->select($abhaField . ' AS abha_id');
 		}
@@ -436,7 +454,31 @@ class Patient extends BaseController
 		$sdata = (string) $this->request->getPost('txtsearch');
 		$sdata = preg_replace('/[^A-Za-z0-9 _.@\/-]/', '', trim($sdata ?? ''));
 
+		$advSearchBy = trim((string) $this->request->getPost('adv_search_by'));
+		$advSearchValue = preg_replace('/[^A-Za-z0-9 _.@\/-]/', '', trim((string) $this->request->getPost('adv_search_value')));
+		$advAgeMode = trim((string) $this->request->getPost('adv_age_mode'));
+		$advAgeValue = preg_replace('/[^0-9]/', '', trim((string) $this->request->getPost('adv_age_value')));
+		$advAgeFrom = preg_replace('/[^0-9]/', '', trim((string) $this->request->getPost('adv_age_from')));
+		$advAgeTo = preg_replace('/[^0-9]/', '', trim((string) $this->request->getPost('adv_age_to')));
+		$advAgeTolerance = preg_replace('/[^0-9]/', '', trim((string) $this->request->getPost('adv_age_tolerance')));
+		$advAgeToleranceInt = $advAgeTolerance === '' ? 2 : (int) $advAgeTolerance;
+		if ($advAgeToleranceInt < 0) {
+			$advAgeToleranceInt = 0;
+		}
+		if ($advAgeToleranceInt > 20) {
+			$advAgeToleranceInt = 20;
+		}
+
 		$data['search_query'] = $sdata;
+		$data['advanced_filters'] = [
+			'adv_search_by' => $advSearchBy,
+			'adv_search_value' => $advSearchValue,
+			'adv_age_mode' => $advAgeMode,
+			'adv_age_value' => $advAgeValue,
+			'adv_age_from' => $advAgeFrom,
+			'adv_age_to' => $advAgeTo,
+			'adv_age_tolerance' => (string) $advAgeToleranceInt,
+		];
 		return view('billing/Patient_Search_V', $data);
 	}
 
@@ -508,10 +550,29 @@ class Patient extends BaseController
 		// Get search value from DataTables search box or from initial search_query
 		$dtSearch = trim((string) ($request['search']['value'] ?? ''));
 		$initialSearch = trim((string) ($request['search_query'] ?? ''));
+		$advSearchBy = trim((string) ($request['adv_search_by'] ?? ''));
+		$advSearchValue = trim((string) ($request['adv_search_value'] ?? ''));
+		$advAgeMode = trim((string) ($request['adv_age_mode'] ?? ''));
+		$advAgeValue = trim((string) ($request['adv_age_value'] ?? ''));
+		$advAgeFrom = trim((string) ($request['adv_age_from'] ?? ''));
+		$advAgeTo = trim((string) ($request['adv_age_to'] ?? ''));
+		$advAgeTolerance = trim((string) ($request['adv_age_tolerance'] ?? ''));
 		
 		// Use DataTables search if provided, otherwise use initial search_query
 		$sdata = $dtSearch !== '' ? $dtSearch : $initialSearch;
 		$sdata = preg_replace('/[^A-Za-z0-9 _.@\/-]/', '', $sdata);
+		$advSearchValue = preg_replace('/[^A-Za-z0-9 _.@\/-]/', '', $advSearchValue);
+		$advAgeValue = preg_replace('/[^0-9]/', '', $advAgeValue);
+		$advAgeFrom = preg_replace('/[^0-9]/', '', $advAgeFrom);
+		$advAgeTo = preg_replace('/[^0-9]/', '', $advAgeTo);
+		$advAgeTolerance = preg_replace('/[^0-9]/', '', $advAgeTolerance);
+		$advAgeToleranceInt = $advAgeTolerance === '' ? 2 : (int) $advAgeTolerance;
+		if ($advAgeToleranceInt < 0) {
+			$advAgeToleranceInt = 0;
+		}
+		if ($advAgeToleranceInt > 20) {
+			$advAgeToleranceInt = 20;
+		}
 
 // Detect ABHA and legacy UHID columns in patient_master
 		$abhaField = null;
@@ -522,6 +583,72 @@ class Patient extends BaseController
 		}
 		foreach (['old_uhid', 'legacy_uhid', 'old_patient_code'] as $f) {
 			if (in_array($f, $pmFields, true)) { $oldUhidField = $f; break; }
+		}
+
+		$hasAdvancedFilters = false;
+		$advancedClause = '';
+
+		if ($advSearchBy === 'age') {
+			$ageExpr = "(CASE
+				WHEN p.dob IS NOT NULL AND p.dob != '0000-00-00' THEN TIMESTAMPDIFF(YEAR, p.dob, CURDATE())
+				WHEN p.age REGEXP '^[0-9]+$' THEN CAST(p.age AS UNSIGNED)
+				ELSE NULL
+			END)";
+
+			if ($advAgeMode === 'between' && $advAgeFrom !== '' && $advAgeTo !== '') {
+				$from = (int) $advAgeFrom;
+				$to = (int) $advAgeTo;
+				if ($from > $to) {
+					[$from, $to] = [$to, $from];
+				}
+				$advancedClause = " and {$ageExpr} between {$from} and {$to}";
+				$hasAdvancedFilters = true;
+			} elseif ($advAgeMode === 'approx' && $advAgeValue !== '') {
+				$age = (int) $advAgeValue;
+				$min = max(0, $age - $advAgeToleranceInt);
+				$max = $age + $advAgeToleranceInt;
+				$advancedClause = " and {$ageExpr} between {$min} and {$max}";
+				$hasAdvancedFilters = true;
+			}
+		} elseif ($advSearchValue !== '') {
+			$escapedLike = $this->db->escape('%' . $advSearchValue . '%');
+			$escapedExact = $this->db->escape($advSearchValue);
+
+			switch ($advSearchBy) {
+				case 'patient_uhid':
+					$advancedClause = " and (p.p_code LIKE {$escapedLike}";
+					if (ctype_digit($advSearchValue)) {
+						$advancedClause .= ' or p.id = ' . (int) $advSearchValue;
+					}
+					$advancedClause .= ')';
+					$hasAdvancedFilters = true;
+					break;
+				case 'patient_name':
+					$advancedClause = " and p.p_fname LIKE {$escapedLike}";
+					$hasAdvancedFilters = true;
+					break;
+				case 'relative_name':
+					$advancedClause = " and p.p_rname LIKE {$escapedLike}";
+					$hasAdvancedFilters = true;
+					break;
+				case 'phone':
+					$advancedClause = " and (p.mphone1 = {$escapedExact} or p.mphone1 LIKE {$escapedLike})";
+					$hasAdvancedFilters = true;
+					break;
+				case 'refer_by':
+					if (in_array('referby', $pmFields, true)) {
+						$advancedClause = " and p.referby LIKE {$escapedLike}";
+						$hasAdvancedFilters = true;
+					}
+					break;
+				case 'old_uhid':
+					$oldUhidClause = $this->buildOldUhidSearchClause($advSearchValue, $oldUhidField);
+					if ($oldUhidClause !== '') {
+						$advancedClause = ' and (' . $oldUhidClause . ')';
+						$hasAdvancedFilters = true;
+					}
+					break;
+			}
 		}
 
 		// Build WHERE clause based on search query
@@ -561,6 +688,25 @@ class Patient extends BaseController
 						or p.email1 = " . $this->db->escape($rowData) . $abhaElse . $legacyUhidClause . ")";
 				}
 			}
+		}
+
+		$searchString .= $advancedClause;
+
+		$useLatestThirtyOnly = (strlen($sdata) === 0 && ! $hasAdvancedFilters);
+		if ($useLatestThirtyOnly) {
+			$searchString .= " and (
+				(
+					p.last_visit IS NOT NULL
+					AND p.last_visit != '0000-00-00'
+					AND DATE(p.last_visit) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+				)
+				OR
+				(
+					p.insert_date IS NOT NULL
+					AND p.insert_date != '0000-00-00'
+					AND DATE(p.insert_date) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+				)
+			)";
 		}
 
 		// Count total records (without filtering)
@@ -606,6 +752,11 @@ class Patient extends BaseController
 			$patientId = (int) ($row->id ?? 0);
 			$age = esc(get_age_1($row->dob ?? null, $row->age ?? '', $row->age_in_month ?? '', $row->estimate_dob ?? '', $row->Last_Visit ?? null));
 			$oldUhid = '';
+			$patientNameCell = esc(($row->p_fname ?? '') . ' {' . ($row->p_rname ?? '') . '}');
+			$referBy = trim((string) ($row->referby ?? ''));
+			if ($referBy !== '') {
+				$patientNameCell .= '<br><small><i>Refer By: ' . esc(ucwords(strtolower($referBy))) . '</i></small>';
+			}
 			if ($oldUhidField !== null && $oldUhidField !== '' && isset($row->{$oldUhidField})) {
 				$oldUhid = (string) $row->{$oldUhidField};
 			}
@@ -613,7 +764,7 @@ class Patient extends BaseController
 			$data[] = [
 				$start + $index + 1,
 				$this->formatPatientCodeCell($patientId, (string) ($row->p_code ?? ''), $oldUhid),
-				esc(($row->p_fname ?? '') . ' {' . ($row->p_rname ?? '') . '}'),
+				$patientNameCell,
 				$age,
 				esc($row->Last_Visit ?? ''),
 				esc($row->insurance_status ?? 'Self'),
@@ -811,6 +962,16 @@ class Patient extends BaseController
 			]);
 		}
 
+		$referByName = trim((string) $this->request->getPost('refer_by_name'));
+		$existingReferBy = is_array($existingPatient) ? (string) ($existingPatient['referby'] ?? '') : null;
+		$referByError = $this->validatePatientReferByInput($referByName, $existingReferBy);
+		if ($referByError !== null) {
+			return $this->response->setJSON([
+				'update' => 0,
+				'error_text' => $referByError,
+			]);
+		}
+
 		$data = [
 			'mphone1' => $this->request->getPost('input_mphone1'),
 			'p_fname' => strtoupper((string) $this->request->getPost('input_name')),
@@ -828,7 +989,7 @@ class Patient extends BaseController
 			'estimate_dob' => $estimate_dob,
 			'blood_group' => $this->request->getPost('input_blood_group'),
 		];
-		$this->applyPatientReferbyField($data, (string) $this->request->getPost('refer_by_name'));
+		$this->applyPatientReferbyField($data, $referByName);
 
 		if ($isAbhaVerifiedLocked) {
 			$data['p_fname'] = (string) ($existingPatient['p_fname'] ?? $data['p_fname']);
@@ -889,6 +1050,34 @@ class Patient extends BaseController
 		}
 
 		$data['referby'] = trim(strtoupper($referByName));
+	}
+
+	private function validatePatientReferByInput(string $referByName, ?string $existingReferBy = null): ?string
+	{
+		$referByName = trim($referByName);
+		if ($referByName === '') {
+			return null;
+		}
+
+		$normalize = static fn (string $v): string => strtoupper(trim(preg_replace('/\s+/', ' ', $v)));
+		$typed = $normalize($referByName);
+		if ($typed === '') {
+			return null;
+		}
+
+		if ($existingReferBy !== null && $normalize($existingReferBy) === $typed) {
+			return null;
+		}
+
+		$activeRefs = $this->getActiveReferMasters();
+		foreach ($activeRefs as $row) {
+			$label = trim((string) (($row->title ?? '') . ' ' . ($row->f_name ?? '')));
+			if ($label !== '' && $normalize($label) === $typed) {
+				return null;
+			}
+		}
+
+		return 'Refer By must be selected from Refer Master list.';
 	}
 
 	public function update_aadhar()

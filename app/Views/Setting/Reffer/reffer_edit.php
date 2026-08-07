@@ -34,6 +34,22 @@
                             <?php endforeach ?>
                         </select>
                     </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Place</label>
+                        <input class="form-control" name="input_place" placeholder="Place" value="<?= esc($data[0]->place ?? '') ?>" type="text" autocomplete="off">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">City</label>
+                        <input class="form-control" name="input_city" placeholder="City" value="<?= esc($data[0]->city ?? '') ?>" type="text" autocomplete="off">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">District</label>
+                        <input class="form-control" name="input_district" placeholder="District" value="<?= esc($data[0]->district ?? '') ?>" type="text" autocomplete="off">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">State</label>
+                        <input class="form-control" name="input_state" placeholder="State" value="<?= esc($data[0]->state ?? '') ?>" type="text" autocomplete="off">
+                    </div>
                 </div>
                 <div class="row mt-3">
                     <div class="col-md-3">

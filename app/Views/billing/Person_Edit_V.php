@@ -243,6 +243,7 @@
                                 <label>Refer By</label>
                                 <input class="form-control input-sm" name="refer_by_name" id="refer_by_name"
                                     list="refer_by_name_list" placeholder="Type to search referral"
+                                    data-original-value="<?= esc($data[0]->referby ?? '') ?>"
                                     value="<?= esc($data[0]->referby ?? '') ?>" autocomplete="off">
                                 <datalist id="refer_by_name_list">
                                     <?php foreach (($refer_master ?? []) as $row) : ?>
@@ -374,11 +375,55 @@ function onchange_title() {
     }
 }
 
+function getReferMasterValues() {
+    return $('#refer_by_name_list option').map(function() {
+        return String($(this).val() || '').trim().toUpperCase();
+    }).get().filter(function(v) {
+        return v !== '';
+    });
+}
+
+function normalizeReferValue(v) {
+    return String(v || '').trim().replace(/\s+/g, ' ').toUpperCase();
+}
+
+function validateEditReferBy() {
+    var typedValue = String($('#refer_by_name').val() || '').trim();
+    if (typedValue === '') {
+        return true;
+    }
+
+    var originalValue = String($('#refer_by_name').attr('data-original-value') || '').trim();
+    if (normalizeReferValue(originalValue) !== '' && normalizeReferValue(originalValue) === normalizeReferValue(typedValue)) {
+        return true;
+    }
+
+    var allowedValues = getReferMasterValues();
+    var isValid = allowedValues.indexOf(normalizeReferValue(typedValue)) !== -1;
+    if (!isValid) {
+        if (typeof notify === 'function') {
+            notify('warning', 'Please Attention', 'Refer By must be selected from Refer Master list.');
+        }
+        $('#refer_by_name').focus();
+        return false;
+    }
+
+    return true;
+}
+
 $(document).ready(function() {
 
     document.title = 'Pt.:<?=$data[0]->p_fname ?>/<?=$data[0]->id ?>';
 
+    $('#refer_by_name').on('blur', function() {
+        validateEditReferBy();
+    });
+
     $('#btn_update').click(function() {
+        if (!validateEditReferBy()) {
+            return;
+        }
+
         $.post('<?= base_url('billing/patient/update') ?>', $('form.form1').serialize(), function(data) {
             var resp = data;
             if (typeof data === 'string') {

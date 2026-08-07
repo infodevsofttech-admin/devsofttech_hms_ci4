@@ -9,6 +9,7 @@ class Reffer extends BaseController
 {
     public function index(): string
     {
+        $this->ensureReferMasterAddressColumns();
         $model = new RefferModel();
 
         return view('Setting/Reffer/reffer_index', [
@@ -18,6 +19,7 @@ class Reffer extends BaseController
 
     public function create(): string
     {
+        $this->ensureReferMasterAddressColumns();
         $model = new RefferModel();
 
         return view('Setting/Reffer/reffer_add', [
@@ -27,6 +29,7 @@ class Reffer extends BaseController
 
     public function edit(int $id): string
     {
+        $this->ensureReferMasterAddressColumns();
         $model = new RefferModel();
 
         return view('Setting/Reffer/reffer_edit', [
@@ -37,6 +40,7 @@ class Reffer extends BaseController
 
     public function store()
     {
+        $this->ensureReferMasterAddressColumns();
         if (! $this->request->isAJAX()) {
             return $this->response->setJSON(['insertid' => 0, 'error_text' => 'Invalid request']);
         }
@@ -66,6 +70,8 @@ class Reffer extends BaseController
             'active' => 1,
         ];
 
+        $data = array_merge($data, $this->getReferAddressData());
+
         $insertId = $model->insert($data);
 
         return $this->response->setJSON([
@@ -76,6 +82,7 @@ class Reffer extends BaseController
 
     public function update(int $id)
     {
+        $this->ensureReferMasterAddressColumns();
         if (! $this->request->isAJAX()) {
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
         }
@@ -104,6 +111,8 @@ class Reffer extends BaseController
             'phone_number' => $this->request->getPost('input_phone_number'),
             'active' => 1,
         ];
+
+        $data = array_merge($data, $this->getReferAddressData());
 
         $updated = $model->updateReffer($data, $id);
 
@@ -195,5 +204,51 @@ class Reffer extends BaseController
             'types' => $model->getTypes(),
             'errors' => $errors,
         ]);
+    }
+
+    private function getReferAddressData(): array
+    {
+        $db = db_connect();
+        $data = [];
+
+        if ($db->fieldExists('place', 'refer_master')) {
+            $data['place'] = trim((string) $this->request->getPost('input_place'));
+        }
+        if ($db->fieldExists('city', 'refer_master')) {
+            $data['city'] = trim((string) $this->request->getPost('input_city'));
+        }
+        if ($db->fieldExists('district', 'refer_master')) {
+            $data['district'] = trim((string) $this->request->getPost('input_district'));
+        }
+        if ($db->fieldExists('state', 'refer_master')) {
+            $data['state'] = trim((string) $this->request->getPost('input_state'));
+        }
+
+        return $data;
+    }
+
+    private function ensureReferMasterAddressColumns(): void
+    {
+        try {
+            $db = db_connect();
+            if (! $db->tableExists('refer_master')) {
+                return;
+            }
+
+            $columnsToEnsure = [
+                'place' => "ALTER TABLE refer_master ADD COLUMN place varchar(150) DEFAULT NULL AFTER phone_number",
+                'city' => "ALTER TABLE refer_master ADD COLUMN city varchar(100) DEFAULT NULL AFTER place",
+                'district' => "ALTER TABLE refer_master ADD COLUMN district varchar(100) DEFAULT NULL AFTER city",
+                'state' => "ALTER TABLE refer_master ADD COLUMN state varchar(100) DEFAULT NULL AFTER district",
+            ];
+
+            foreach ($columnsToEnsure as $column => $sql) {
+                if (! $db->fieldExists($column, 'refer_master')) {
+                    $db->query($sql);
+                }
+            }
+        } catch (\Throwable $e) {
+            // Fail-open so referral pages still load if schema update is blocked.
+        }
     }
 }
