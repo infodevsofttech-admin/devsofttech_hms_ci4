@@ -44,11 +44,14 @@
         $('#example1').DataTable({
             processing: true,
             serverSide: true,
+            searching: true,
+            lengthChange: true,
             ajax: {
                 url: '<?= base_url('billing/patient/search_ajax') ?>',
                 type: 'GET',
         data: function(d) {
           d.search_query = searchQuery;
+          d.dt_search = d.search && d.search.value ? d.search.value : '';
           d.adv_search_by = advancedFilters.adv_search_by || '';
           d.adv_search_value = advancedFilters.adv_search_value || '';
           d.adv_age_mode = advancedFilters.adv_age_mode || '';
@@ -68,7 +71,6 @@
                 { data: 6, orderable: false }
             ],
             order: [[4, 'desc']], // Order by Last Visit (column index 4) DESC
-            searching: false,
             pageLength: 30,
             lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
             language: {

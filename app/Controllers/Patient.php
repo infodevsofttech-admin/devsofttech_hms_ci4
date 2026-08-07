@@ -548,7 +548,7 @@ class Patient extends BaseController
 		$request = $this->request->getGet();
 		
 		// Get search value from DataTables search box or from initial search_query
-		$dtSearch = trim((string) ($request['search']['value'] ?? ''));
+		$dtSearch = trim((string) ($request['dt_search'] ?? ($request['search']['value'] ?? '')));
 		$initialSearch = trim((string) ($request['search_query'] ?? ''));
 		$advSearchBy = trim((string) ($request['adv_search_by'] ?? ''));
 		$advSearchValue = trim((string) ($request['adv_search_value'] ?? ''));
@@ -558,9 +558,8 @@ class Patient extends BaseController
 		$advAgeTo = trim((string) ($request['adv_age_to'] ?? ''));
 		$advAgeTolerance = trim((string) ($request['adv_age_tolerance'] ?? ''));
 		
-		// Use DataTables search if provided, otherwise use initial search_query
-		$sdata = $dtSearch !== '' ? $dtSearch : $initialSearch;
-		$sdata = preg_replace('/[^A-Za-z0-9 _.@\/-]/', '', $sdata);
+		$initialSearch = preg_replace('/[^A-Za-z0-9 _.@\/-]/', '', $initialSearch);
+		$dtSearch = preg_replace('/[^A-Za-z0-9 _.@\/-]/', '', $dtSearch);
 		$advSearchValue = preg_replace('/[^A-Za-z0-9 _.@\/-]/', '', $advSearchValue);
 		$advAgeValue = preg_replace('/[^0-9]/', '', $advAgeValue);
 		$advAgeFrom = preg_replace('/[^0-9]/', '', $advAgeFrom);
@@ -651,10 +650,9 @@ class Patient extends BaseController
 			}
 		}
 
-		// Build WHERE clause based on search query
-		$searchString = ' 1=1 ';
-		if (strlen($sdata) > 0) {
-			$sdateArray = explode(' ', $sdata);
+		$buildTokenClause = function (string $searchValue) use ($abhaField, $oldUhidField): string {
+			$searchClause = '';
+			$sdateArray = explode(' ', $searchValue);
 
 			foreach ($sdateArray as $rowData) {
 				if ($rowData === '') {
@@ -662,7 +660,7 @@ class Patient extends BaseController
 				}
 
 				if (is_numeric($rowData)) {
-					$searchString .= $this->buildPatientSearchCondition($rowData, $abhaField, $oldUhidField);
+					$searchClause .= $this->buildPatientSearchCondition($rowData, $abhaField, $oldUhidField);
 				} elseif (ctype_alpha($rowData)) {
 					$escapedValue = $this->db->escape($rowData);
 					$legacyUhidClause = '';
@@ -670,7 +668,7 @@ class Patient extends BaseController
 					if ($oldUhidClause !== '') {
 						$legacyUhidClause = ' or (' . $oldUhidClause . ')';
 					}
-					$searchString .= " and (p.p_fname like " . $this->db->escape('%' . $rowData . '%') . " 
+					$searchClause .= " and (p.p_fname like " . $this->db->escape('%' . $rowData . '%') . " 
 						or p.email1 = " . $this->db->escape($rowData) . " 
 						or SUBSTRING_INDEX(p.p_fname,' ',1) sounds like " . $this->db->escape($rowData) . $legacyUhidClause . ")";
 				} else {
@@ -684,15 +682,27 @@ class Patient extends BaseController
 					if ($oldUhidClause !== '') {
 						$legacyUhidClause = ' or (' . $oldUhidClause . ')';
 					}
-					$searchString .= " and (p.p_code like " . $this->db->escape($rowData) . " 
+					$searchClause .= " and (p.p_code like " . $this->db->escape($rowData) . " 
 						or p.email1 = " . $this->db->escape($rowData) . $abhaElse . $legacyUhidClause . ")";
 				}
 			}
+
+			return $searchClause;
+		};
+
+		// Build WHERE clause using base filters first; DataTable search only narrows those results.
+		$searchString = ' 1=1 ';
+		if ($initialSearch !== '') {
+			$searchString .= $buildTokenClause($initialSearch);
+		}
+
+		if ($dtSearch !== '') {
+			$searchString .= $buildTokenClause($dtSearch);
 		}
 
 		$searchString .= $advancedClause;
 
-		$useLatestThirtyOnly = (strlen($sdata) === 0 && ! $hasAdvancedFilters);
+		$useLatestThirtyOnly = ($initialSearch === '' && $dtSearch === '' && ! $hasAdvancedFilters);
 		if ($useLatestThirtyOnly) {
 			$searchString .= " and (
 				(
