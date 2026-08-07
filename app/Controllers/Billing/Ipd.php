@@ -517,6 +517,7 @@ class Ipd extends BaseController
 
         if ($tab === 'package') {
             $panelData['ipd_packages'] = $this->ipdModel->getIpdPackages($ipdId);
+            $panelData['medical_bills'] = $this->ipdModel->getMedicalBills($ipdId);
             $caseMeta = $this->ipdModel->getIpdCaseMeta($ipdId);
             $insCompId = (int) ($caseMeta['insurance_id'] ?? 0);
             if ($insCompId <= 0) {
@@ -1973,6 +1974,67 @@ class Ipd extends BaseController
         $result = $this->ipdEditModel->deletePackage($packageItemId);
 
         return $this->response->setJSON(['ok' => $result === 1]);
+    }
+
+    public function updateMedicalBillCreditType(int $invoiceId)
+    {
+        $permission = $this->requireAnyPermission([
+            'billing.access',
+            'billing.ipd.invoice',
+        ]);
+        if ($permission) {
+            return $permission;
+        }
+
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => false, 'error' => 'Invalid request']);
+        }
+
+        if ($invoiceId <= 0 || ! $this->db->tableExists('invoice_med_master')) {
+            return $this->response->setStatusCode(404)->setJSON(['ok' => false, 'error' => 'Medical bill not found']);
+        }
+
+        $fields = $this->db->getFieldNames('invoice_med_master') ?? [];
+        if (! in_array('ipd_credit_type', $fields, true)) {
+            return $this->response->setStatusCode(422)->setJSON(['ok' => false, 'error' => 'Medical bill credit type column not available']);
+        }
+
+        $invoice = $this->db->table('invoice_med_master')
+            ->select('id,ipd_id')
+            ->where('id', $invoiceId)
+            ->get(1)
+            ->getRowArray();
+
+        if (empty($invoice)) {
+            return $this->response->setStatusCode(404)->setJSON(['ok' => false, 'error' => 'Medical bill not found']);
+        }
+
+        $creditType = (int) ($this->request->getPost('ipd_credit_type') ?? 0) === 1 ? 1 : 0;
+        $update = [
+            'ipd_credit_type' => $creditType,
+        ];
+
+        if (in_array('ipd_credit', $fields, true)) {
+            $update['ipd_credit'] = 1;
+        }
+
+        if (in_array('ipd_credit_type_update', $fields, true)) {
+            $user = function_exists('auth') ? auth()->user() : null;
+            $userId = (int) ($user->id ?? 0);
+            $userName = (string) ($user->username ?? $user->email ?? 'user');
+            $update['ipd_credit_type_update'] = $userName . '[' . $userId . '] D:' . date('d-m-Y h:i:s');
+        }
+
+        $this->db->table('invoice_med_master')
+            ->where('id', $invoiceId)
+            ->update($update);
+
+        return $this->response->setJSON([
+            'ok' => true,
+            'invoice_id' => $invoiceId,
+            'ipd_id' => (int) ($invoice['ipd_id'] ?? 0),
+            'ipd_credit_type' => $creditType,
+        ]);
     }
 
     public function loadPaymentModal(int $ipdId)

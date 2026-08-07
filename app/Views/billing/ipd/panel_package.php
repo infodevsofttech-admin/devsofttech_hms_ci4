@@ -129,7 +129,7 @@ $ayushmanChecklistItems = $ayushman_checklist_items ?? [];
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label">Rate</label>
-                                <input class="form-control form-control-sm" id="input_amount_m" value="0.00" type="number" $11" />
+                                <input class="form-control form-control-sm" id="input_amount_m" value="0.00" type="number" step="0.01" />
                             </div>
                             <div class="col-md-3 d-flex align-items-end">
                                 <button type="button" class="btn btn-primary btn-sm" onclick="ipdPackageAddManual()">Add in List</button>
@@ -161,7 +161,7 @@ $ayushmanChecklistItems = $ayushman_checklist_items ?? [];
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label">Amount</label>
-                                <input class="form-control form-control-sm" id="input_amount_p" value="0.00" type="number" $11" />
+                                <input class="form-control form-control-sm" id="input_amount_p" value="0.00" type="number" step="0.01" />
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Comment</label>
@@ -321,6 +321,63 @@ $ayushmanChecklistItems = $ayushman_checklist_items ?? [];
     </div>
 </div>
 
+<div class="card border-top border-3 border-info mt-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>Pharmacy Bills Package Mapping</strong>
+        <span class="small text-muted">Unchecked = In Package, Checked = Include in Bill</span>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped table-sm align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Invoice Code</th>
+                        <th>Date</th>
+                        <th class="text-end">Amount</th>
+                        <th class="text-center">Include in Bill</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (! empty($medical_bills)) : ?>
+                        <?php $medicalSrNo = 1; ?>
+                        <?php foreach ($medical_bills as $medicalBill) : ?>
+                            <?php $includeInBillChecked = (int) ($medicalBill->ipd_credit_type ?? 1) === 1 ? 'checked' : ''; ?>
+                            <tr>
+                                <td><?= $medicalSrNo++ ?></td>
+                                <td>
+                                    <?= esc($medicalBill->inv_med_code ?? $medicalBill->id ?? '') ?>
+                                    <?php if ((int) ($medicalBill->payment_status ?? 0) > 0) : ?>
+                                        <span class="badge bg-success ms-1">Paid</span>
+                                    <?php else : ?>
+                                        <span class="badge bg-warning text-dark ms-1">Pending</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td><?= esc((string) ($medicalBill->inv_date ?? '')) ?></td>
+                                <td class="text-end"><?= esc(number_format((float) ($medicalBill->net_amount ?? 0), 2)) ?></td>
+                                <td class="text-center">
+                                    <div class="form-check d-inline-flex justify-content-center mb-0">
+                                        <input
+                                            class="form-check-input"
+                                            type="checkbox"
+                                            onchange="ipdMedicalBillToggleType(this, <?= (int) ($medicalBill->id ?? 0) ?>)"
+                                            <?= $includeInBillChecked ?>
+                                        />
+                                    </div>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php else : ?>
+                        <tr>
+                            <td colspan="5" class="text-center text-muted">No pharmacy bills found for this IPD.</td>
+                        </tr>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
 <div class="modal fade" id="ayushmanMappingModal" tabindex="-1" aria-labelledby="ayushmanMappingModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
@@ -365,6 +422,7 @@ $ayushmanChecklistItems = $ayushman_checklist_items ?? [];
     var ipdAyushmanMapUrlBase = '<?= site_url('billing/ipd/panel/' . $ipdId . '/ayushman/map') ?>';
     var ipdAyushmanChecklistUrl = '<?= site_url('billing/ipd/panel/' . $ipdId . '/ayushman/checklist') ?>';
     var ipdAyushmanClaimSheetUrl = '<?= site_url('billing/ipd/panel/' . $ipdId . '/ayushman/claim-sheet') ?>';
+    var ipdMedicalBillCreditTypeUrlBase = '<?= site_url('billing/ipd/medical-bill/credit-type') ?>';
     var ipdAyushmanResults = {};
 
     // Initialize Select2 on package list select
@@ -478,6 +536,25 @@ $ayushmanChecklistItems = $ayushman_checklist_items ?? [];
 
         $.post(ipdPackageBaseUrl + 'billing/ipd/package/add/' + ipdPackageIpdId, payload, function() {
             ipdPackageReload();
+        });
+    }
+
+    function ipdMedicalBillToggleType(checkbox, invoiceId) {
+        var payload = {};
+        payload[ipdPackageCsrfName] = ipdPackageCsrfHash;
+        payload.ipd_credit_type = checkbox.checked ? 1 : 0;
+
+        $.post(ipdMedicalBillCreditTypeUrlBase + '/' + invoiceId, payload, function(resp) {
+            if (!resp || !resp.ok) {
+                checkbox.checked = !checkbox.checked;
+                alert((resp && resp.error) ? resp.error : 'Unable to update pharmacy bill option.');
+                return;
+            }
+            ipdPackageReload();
+        }).fail(function(xhr) {
+            checkbox.checked = !checkbox.checked;
+            var msg = (xhr && xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Unable to update pharmacy bill option.';
+            alert(msg);
         });
     }
 

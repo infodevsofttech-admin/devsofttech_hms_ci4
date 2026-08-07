@@ -459,6 +459,7 @@ $routes->group('billing', function($routes) {
     $routes->post('ipd/nursing-charge/delete/(:num)/(:num)', 'Billing\\Ipd::deleteNursingCharge/$1/$2');
     $routes->post('ipd/charge/package/(:num)', 'Billing\\Ipd::updateIpdChargePackage/$1');
     $routes->post('ipd/package/add/(:num)', 'Billing\\Ipd::addIpdPackage/$1');
+    $routes->post('ipd/medical-bill/credit-type/(:num)', 'Billing\\Ipd::updateMedicalBillCreditType/$1');
     $routes->get('ipd/panel/(:num)/ayushman/search', 'Billing\Ipd::searchAyushmanPackages/$1');
     $routes->post('ipd/panel/(:num)/ayushman/map/(:num)', 'Billing\Ipd::saveAyushmanPackageMapping/$1/$2');
     $routes->post('ipd/panel/(:num)/ayushman/checklist', 'Billing\Ipd::saveAyushmanChecklist/$1');
