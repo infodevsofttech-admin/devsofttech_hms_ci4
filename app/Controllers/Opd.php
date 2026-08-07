@@ -6104,12 +6104,21 @@ class Opd extends BaseController
     {
         $opdRow = $this->db->table('opd_master')->where('opd_id', $opdid)->get(1)->getRowArray();
         if (empty($opdRow)) {
+            log_message('warning', 'OPD scan upload failed: OPD not found (opd_id={opd_id})', ['opd_id' => $opdid]);
             return $this->response->setStatusCode(404)->setJSON(['update' => 0, 'error_text' => 'OPD not found']);
         }
 
         $uploadsDir = rtrim(FCPATH, '/\\') . '/uploads/' . date('Ymd');
         if (!is_dir($uploadsDir)) {
             @mkdir($uploadsDir, 0777, true);
+        }
+        if (!is_dir($uploadsDir) || !is_writable($uploadsDir)) {
+            log_message('error', 'OPD scan upload dir issue (opd_id={opd_id}, dir={dir}, exists={exists}, writable={writable})', [
+                'opd_id' => $opdid,
+                'dir' => $uploadsDir,
+                'exists' => is_dir($uploadsDir) ? 'yes' : 'no',
+                'writable' => is_writable($uploadsDir) ? 'yes' : 'no',
+            ]);
         }
 
         $baseFilename = 'OPD-' . $opdid . '-' . time();
@@ -6130,11 +6139,19 @@ class Opd extends BaseController
             }
             $filename = $baseFilename . '.' . $ext;
             $fullPath = $uploadsDir . '/' . $filename;
-            $uploadedFile->move($uploadsDir, $filename);
-            $saved = is_file($fullPath);
-            $detectedMimeType = (string) ($uploadedFile->getClientMimeType() ?: 'image/jpeg');
-            $isImageFile = 1;
-            $detectedExt = '.' . $ext;
+            try {
+                $uploadedFile->move($uploadsDir, $filename);
+                $saved = is_file($fullPath);
+                $detectedMimeType = (string) ($uploadedFile->getClientMimeType() ?: 'image/jpeg');
+                $isImageFile = 1;
+                $detectedExt = '.' . $ext;
+            } catch (\Throwable $e) {
+                log_message('error', 'OPD webcam upload move failed (opd_id={opd_id}, dir={dir}, error={error})', [
+                    'opd_id' => $opdid,
+                    'dir' => $uploadsDir,
+                    'error' => $e->getMessage(),
+                ]);
+            }
         }
 
         // Source 2: manual file upload (PDF/image).
@@ -6152,11 +6169,20 @@ class Opd extends BaseController
                 }
                 $filename = $baseFilename . '.' . $ext;
                 $fullPath = $uploadsDir . '/' . $filename;
-                $uploadedFile->move($uploadsDir, $filename);
-                $saved = is_file($fullPath);
-                $detectedMimeType = (string) ($uploadedFile->getClientMimeType() ?: ($ext === 'pdf' ? 'application/pdf' : 'image/jpeg'));
-                $isImageFile = $ext === 'pdf' ? 0 : 1;
-                $detectedExt = '.' . $ext;
+                try {
+                    $uploadedFile->move($uploadsDir, $filename);
+                    $saved = is_file($fullPath);
+                    $detectedMimeType = (string) ($uploadedFile->getClientMimeType() ?: ($ext === 'pdf' ? 'application/pdf' : 'image/jpeg'));
+                    $isImageFile = $ext === 'pdf' ? 0 : 1;
+                    $detectedExt = '.' . $ext;
+                } catch (\Throwable $e) {
+                    log_message('error', 'OPD userfile upload move failed (opd_id={opd_id}, ext={ext}, dir={dir}, error={error})', [
+                        'opd_id' => $opdid,
+                        'ext' => $ext,
+                        'dir' => $uploadsDir,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
             }
         }
 
@@ -6176,16 +6202,32 @@ class Opd extends BaseController
                 $fullPath = $uploadsDir . '/' . $filename;
                 $raw = base64_decode((string) preg_replace('#^data:image/\w+;base64,#i', '', $dataUri));
                 if ($raw !== false && $raw !== '') {
-                    file_put_contents($fullPath, $raw);
-                    $saved = is_file($fullPath);
-                    $detectedMimeType = 'image/' . ($imgExt === 'jpg' ? 'jpeg' : $imgExt);
-                    $isImageFile = 1;
-                    $detectedExt = '.' . $imgExt;
+                    try {
+                        file_put_contents($fullPath, $raw);
+                        $saved = is_file($fullPath);
+                        $detectedMimeType = 'image/' . ($imgExt === 'jpg' ? 'jpeg' : $imgExt);
+                        $isImageFile = 1;
+                        $detectedExt = '.' . $imgExt;
+                    } catch (\Throwable $e) {
+                        log_message('error', 'OPD base64 upload save failed (opd_id={opd_id}, ext={ext}, file={file}, error={error})', [
+                            'opd_id' => $opdid,
+                            'ext' => $imgExt,
+                            'file' => $fullPath,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
                 }
             }
         }
 
         if (!$saved) {
+            log_message('error', 'OPD scan save failed: no source persisted (opd_id={opd_id}, dir={dir}, has_webcam={has_webcam}, has_userfile={has_userfile}, has_data_uri={has_data_uri})', [
+                'opd_id' => $opdid,
+                'dir' => $uploadsDir,
+                'has_webcam' => ($this->request->getFile('webcam') !== null) ? 1 : 0,
+                'has_userfile' => ($this->request->getFile('userfile') !== null) ? 1 : 0,
+                'has_data_uri' => ((string) ($this->request->getPost('webcam_data') ?? $this->request->getPost('image') ?? '') !== '') ? 1 : 0,
+            ]);
             return $this->response->setJSON([
                 'update' => 0,
                 'error_text' => 'Unable to capture image. Please allow camera and retry.',
@@ -6211,6 +6253,13 @@ class Opd extends BaseController
             $isImageFile,
             $detectedExt
         );
+        if ($insertId <= 0) {
+            log_message('error', 'OPD scan upload saved but DB insert failed (opd_id={opd_id}, file={file}, public_path={public_path})', [
+                'opd_id' => $opdid,
+                'file' => $fullPath,
+                'public_path' => $publicPath,
+            ]);
+        }
 
         $scanType = $this->detectScanType((string) $filename);
 
@@ -6278,6 +6327,7 @@ class Opd extends BaseController
     public function opd_file_last_list(int $opdid = 0)
     {
         if (!$this->db->tableExists('file_upload_data')) {
+            log_message('error', 'OPD scan list failed: file_upload_data table missing (opd_id={opd_id})', ['opd_id' => $opdid]);
             return $this->response->setBody('<div class="text-muted">No scan table found.</div>');
         }
 
@@ -6320,6 +6370,9 @@ class Opd extends BaseController
         }
 
         $rows = $builder->get()->getResultArray();
+        if ($opdid > 0 && empty($rows)) {
+            log_message('warning', 'OPD scan list returned no rows (opd_id={opd_id})', ['opd_id' => $opdid]);
+        }
         $list = [];
         foreach ($rows as $row) {
             $raw = str_replace('\\', '/', (string) ($row['full_path'] ?? ''));
@@ -6373,6 +6426,7 @@ class Opd extends BaseController
     public function opd_file_list(int $opdid)
     {
         if (! $this->db->tableExists('file_upload_data')) {
+            log_message('error', 'OPD scan carousel failed: file_upload_data table missing (opd_id={opd_id})', ['opd_id' => $opdid]);
             return $this->response->setBody('<div class="text-muted">No scan table found.</div>');
         }
 
@@ -6396,6 +6450,9 @@ class Opd extends BaseController
         }
 
         $rows = $builder->get()->getResultArray();
+        if (empty($rows)) {
+            log_message('warning', 'OPD scan carousel returned no rows (opd_id={opd_id})', ['opd_id' => $opdid]);
+        }
 
         $slides = [];
         foreach ($rows as $row) {
