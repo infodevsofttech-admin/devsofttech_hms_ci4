@@ -6282,6 +6282,7 @@ class Opd extends BaseController
         }
 
         $fields = $this->db->getFieldNames('file_upload_data');
+        $hasShowType = in_array('show_type', $fields, true);
         $safeSelect = [
             'id',
             'full_path',
@@ -6289,8 +6290,13 @@ class Opd extends BaseController
             'insert_date',
             'pid',
             'opd_id',
-            'show_type',
         ];
+        if ($hasShowType) {
+            $safeSelect[] = 'show_type';
+        }
+        if (in_array('public_path', $fields, true)) {
+            $safeSelect[] = 'public_path';
+        }
         foreach (['scan_type', 'document_type', 'content_description', 'ai_status', 'ai_alert_flag', 'ai_alert_text'] as $optional) {
             if (in_array($optional, $fields, true)) {
                 $safeSelect[] = $optional;
@@ -6302,9 +6308,12 @@ class Opd extends BaseController
 
         $builder = $this->db->table('file_upload_data')
             ->select(implode(',', $safeSelect))
-            ->where('show_type', 0)
             ->orderBy('id', 'DESC')
             ->limit(10);
+
+        if ($hasShowType) {
+            $builder->where('show_type', 0);
+        }
 
         if ($opdid > 0) {
             $builder->where('opd_id', $opdid);
@@ -6313,11 +6322,21 @@ class Opd extends BaseController
         $rows = $builder->get()->getResultArray();
         $list = [];
         foreach ($rows as $row) {
-            $raw = (string) ($row['full_path'] ?? '');
-            $publicPath = $raw;
-            $pos = strpos(str_replace('\\', '/', $raw), '/uploads/');
-            if ($pos !== false) {
-                $publicPath = substr(str_replace('\\', '/', $raw), $pos);
+            $raw = str_replace('\\', '/', (string) ($row['full_path'] ?? ''));
+            $publicPath = trim((string) ($row['public_path'] ?? ''));
+            if ($publicPath === '') {
+                $publicPath = $raw;
+                $pos = strpos($raw, '/uploads/');
+                if ($pos !== false) {
+                    $publicPath = substr($raw, $pos);
+                }
+            }
+            $publicPath = str_replace('\\', '/', $publicPath);
+            if (strpos($publicPath, '/uploads/') !== 0) {
+                $trimmedPath = ltrim($publicPath, '/');
+                if (stripos($trimmedPath, 'uploads/') === 0) {
+                    $publicPath = '/' . $trimmedPath;
+                }
             }
 
             $ext = strtolower((string) ($row['file_ext'] ?? pathinfo($publicPath, PATHINFO_EXTENSION)));
@@ -6359,26 +6378,42 @@ class Opd extends BaseController
 
         $fields = $this->db->getFieldNames('file_upload_data');
         $safeSelect = ['id', 'full_path', 'file_ext', 'insert_date'];
-        if (in_array('show_type', $fields, true)) {
+        $hasShowType = in_array('show_type', $fields, true);
+        if ($hasShowType) {
             $safeSelect[] = 'show_type';
         }
+        if (in_array('public_path', $fields, true)) {
+            $safeSelect[] = 'public_path';
+        }
 
-        $rows = $this->db->table('file_upload_data')
+        $builder = $this->db->table('file_upload_data')
             ->select(implode(',', $safeSelect))
             ->where('opd_id', (int) $opdid)
-            ->where('show_type', 0)
-            ->orderBy('id', 'ASC')
-            ->get()
-            ->getResultArray();
+            ->orderBy('id', 'ASC');
+
+        if ($hasShowType) {
+            $builder->where('show_type', 0);
+        }
+
+        $rows = $builder->get()->getResultArray();
 
         $slides = [];
         foreach ($rows as $row) {
-            $rawPath = (string) ($row['full_path'] ?? '');
-            $normalizedPath = str_replace('\\', '/', $rawPath);
-            $publicPath = $normalizedPath;
+            $normalizedPath = str_replace('\\', '/', (string) ($row['full_path'] ?? ''));
+            $publicPath = trim((string) ($row['public_path'] ?? ''));
+            if ($publicPath === '') {
+                $publicPath = $normalizedPath;
+            }
             $uploadPos = strpos($normalizedPath, '/uploads/');
-            if ($uploadPos !== false) {
+            if ($uploadPos !== false && strpos($publicPath, '/uploads/') !== 0) {
                 $publicPath = substr($normalizedPath, $uploadPos);
+            }
+            $publicPath = str_replace('\\', '/', $publicPath);
+            if (strpos($publicPath, '/uploads/') !== 0) {
+                $trimmedPath = ltrim($publicPath, '/');
+                if (stripos($trimmedPath, 'uploads/') === 0) {
+                    $publicPath = '/' . $trimmedPath;
+                }
             }
 
             $ext = strtolower((string) ($row['file_ext'] ?? pathinfo($publicPath, PATHINFO_EXTENSION)));
