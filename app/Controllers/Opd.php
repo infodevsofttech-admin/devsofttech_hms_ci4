@@ -2601,7 +2601,11 @@ class Opd extends BaseController
         $phone = (string) ($patient->mphone1 ?? '');
         $pAddress = trim((string) (($patient->add1 ?? '') . ', ' . ($patient->add2 ?? '') . ', ' . ($patient->city ?? '')), ' ,');
 
-        $uhidNo = (string) ($patient->p_code ?? '');
+        $uhidNo = trim((string) ($patient->p_code ?? ''));
+        $oldUhid = trim((string) ($patient->old_uhid ?? ''));
+        if ($oldUhid !== '') {
+            $uhidNo .= ' / ' . $oldUhid;
+        }
         $opdSrNo = (string) ($opd->opd_no ?? '');
         $opdNo = (string) ($opd->opd_code ?? '');
         $opdDate = (string) ($opd->str_apointment_date ?? '');
