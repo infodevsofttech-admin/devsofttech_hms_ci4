@@ -677,10 +677,35 @@ class IpdBillingModel extends Model
     public function getMedicalBills(int $ipdId): array
     {
         return $this->db->table('invoice_med_master')
+            ->where('ipd_id >', 0)
             ->where('ipd_id', $ipdId)
+            ->where('ipd_credit', 1)
             ->orderBy('id', 'DESC')
             ->get()
             ->getResult();
+    }
+
+    public function getMedicalBillDetails(int $ipdId, int $invoiceId): array
+    {
+        $invoice = $this->db->table('invoice_med_master')
+            ->where('id', $invoiceId)
+            ->where('ipd_id', $ipdId)
+            ->where('ipd_credit', 1)
+            ->get(1)
+            ->getRow();
+
+        if ($invoice === null) {
+            return [];
+        }
+
+        return [
+            'invoice' => $invoice,
+            'items' => $this->db->table('inv_med_item')
+                ->where('inv_med_id', $invoiceId)
+                ->orderBy('id', 'ASC')
+                ->get()
+                ->getResult(),
+        ];
     }
 
     public function getBillDetails(int $ipdId): array

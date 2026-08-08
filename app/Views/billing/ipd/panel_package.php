@@ -542,6 +542,7 @@ $ayushmanChecklistItems = $ayushman_checklist_items ?? [];
     function ipdMedicalBillToggleType(checkbox, invoiceId) {
         var payload = {};
         payload[ipdPackageCsrfName] = ipdPackageCsrfHash;
+        payload.ipd_id = ipdPackageIpdId;
         payload.ipd_credit_type = checkbox.checked ? 1 : 0;
 
         $.post(ipdMedicalBillCreditTypeUrlBase + '/' + invoiceId, payload, function(resp) {
