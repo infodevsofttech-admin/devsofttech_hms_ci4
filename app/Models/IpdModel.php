@@ -94,20 +94,22 @@ class IpdModel extends Model
             return 0;
         }
 
-        $user = $this->getUserIdentity();
-        $row['update_by_id'] = $user['id'];
-        $row['update_by'] = $user['name'] . '[' . date('Y-m-d H:i:s') . ']';
+        if ($this->db->tableExists('ipd_master_doc_list_delete')) {
+            $user = $this->getUserIdentity();
+            $row['update_by_id'] = $user['id'];
+            $row['update_by'] = $user['name'] . '[' . date('Y-m-d H:i:s') . ']';
+            $archiveData = $this->filterTableDataByExistingColumns('ipd_master_doc_list_delete', $row);
 
-        $inserted = $this->db->table('ipd_master_doc_list_delete')->insert($row);
-        if (! $inserted) {
-            return 0;
+            if (empty($archiveData) || ! $this->db->table('ipd_master_doc_list_delete')->insert($archiveData)) {
+                return 0;
+            }
         }
 
-        $this->db->table('ipd_master_doc_list')
+        $deleted = $this->db->table('ipd_master_doc_list')
             ->where('id', $ipdDocId)
             ->delete();
 
-        return 1;
+        return $deleted ? 1 : 0;
     }
 
     public function replaceIpdDoctors(int $ipdId, array $doctorIds): void
