@@ -12430,7 +12430,7 @@ class Medical extends BaseController
 
         $whereSql = implode(' AND ', $conditions);
 
-        $sql = "SELECT p.item_name, p.genericname,
+        $sql = "SELECT p.item_name, p.formulation, p.genericname,
                     IFNULL(s.packing,p.packing) AS packing,
                     SUM(s.total_unit-s.total_sale_unit-s.total_lost_unit-s.total_return_unit) AS C_Unit_Stock_Qty,
                     CONCAT(
@@ -12453,20 +12453,21 @@ class Medical extends BaseController
                 JOIN purchase_invoice m ON s.purchase_id=m.id
                 LEFT JOIN med_supplier ms ON ms.sid=m.sid
                 WHERE {$whereSql}
-                GROUP BY p.item_name, p.genericname, IFNULL(s.packing,p.packing)
+                GROUP BY p.item_name, p.formulation, p.genericname, IFNULL(s.packing,p.packing)
                 {$havingSql}
                 ORDER BY p.item_name";
 
         $rows = $this->db->query($sql, $params)->getResult();
 
         $content = '<table border="1"><thead><tr>'
-            . '<th>Item Name</th><th>Generic</th><th>Current Pak.</th><th>Current Unit Qty</th>'
+            . '<th>Item Name</th><th>Formulation</th><th>Generic</th><th>Current Pak.</th><th>Current Unit Qty</th>'
             . '<th>Total Sale Pak.</th><th>Total Sale Unit Qty</th><th>Lost Unit</th><th>Package/Re-Order Qty</th>'
             . '</tr></thead><tbody>';
 
         foreach ($rows as $row) {
             $content .= '<tr>'
                 . '<td>' . esc((string) ($row->item_name ?? '')) . '</td>'
+                . '<td>' . esc((string) ($row->formulation ?? '')) . '</td>'
                 . '<td>' . esc((string) ($row->genericname ?? '')) . '</td>'
                 . '<td>' . esc((string) ($row->C_Pak_Qty ?? '0')) . '</td>'
                 . '<td>' . esc(number_format((float) ($row->C_Unit_Stock_Qty ?? 0), 2, '.', '')) . '</td>'
