@@ -5272,6 +5272,7 @@ class Ipd_discharge extends BaseController
     public function search_patient()
     {
         $permission = $this->requireAnyPermission([
+            'ipd_discharge.view',
             'billing.access',
             'billing.ipd.invoice',
             'billing.ipd.current-admission',
@@ -5286,6 +5287,7 @@ class Ipd_discharge extends BaseController
     public function search_patient_ajax()
     {
         $permission = $this->requireAnyPermission([
+            'ipd_discharge.view',
             'billing.access',
             'billing.ipd.invoice',
             'billing.ipd.current-admission',
@@ -5472,6 +5474,7 @@ class Ipd_discharge extends BaseController
     public function placeholder_preview(int $ipdId = 0)
     {
         $permission = $this->requireAnyPermission([
+            'ipd_discharge.view',
             'billing.access',
             'billing.ipd.invoice',
             'billing.ipd.current-admission',
@@ -5634,6 +5637,7 @@ class Ipd_discharge extends BaseController
     public function ipd_select(int $ipdId, int $reCreate = 0)
     {
         $permission = $this->requireAnyPermission([
+            'ipd_discharge.manage',
             'billing.access',
             'billing.ipd.invoice',
             'billing.ipd.current-admission',
@@ -7040,6 +7044,7 @@ class Ipd_discharge extends BaseController
     public function preview_discharge_report(int $ipdId)
     {
         $permission = $this->requireAnyPermission([
+            'ipd_discharge.view',
             'billing.access',
             'billing.ipd.invoice',
             'billing.ipd.current-admission',
@@ -7098,6 +7103,7 @@ class Ipd_discharge extends BaseController
     public function show_discharge(int $ipdId, int $printType = 1)
     {
         $permission = $this->requireAnyPermission([
+            'ipd_discharge.view',
             'billing.access',
             'billing.ipd.invoice',
             'billing.ipd.current-admission',

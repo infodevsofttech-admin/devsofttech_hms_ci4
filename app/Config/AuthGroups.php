@@ -57,6 +57,10 @@ class AuthGroups extends ShieldAuthGroups
             'title'       => 'Doctor',
             'description' => 'Clinical doctor access to OPD work, diagnosis reports, and immunization records.',
         ],
+        'nurse' => [
+            'title'       => 'Nurse',
+            'description' => 'In-patient nursing records, bedside care, bed transfers, and nursing charges.',
+        ],
         'pharmacy_admin' => [
             'title'       => 'Pharmacy Admin',
             'description' => 'Full pharmacy controls including old bill edits and discount overrides.',
@@ -209,6 +213,13 @@ class AuthGroups extends ShieldAuthGroups
         'billing.items.manage' => 'Can manage billing item masters',
         'billing.packages.view' => 'Can view billing package masters',
         'billing.packages.manage' => 'Can manage billing package masters',
+        'ipd_nursing.view' => 'Can view the IPD patient list, nursing workspace, and nursing charts',
+        'ipd_nursing.record.manage' => 'Can create and update nursing records, admission history, and scanned nursing entries',
+        'ipd_nursing.bed.transfer' => 'Can transfer admitted patients between beds',
+        'ipd_nursing.charge.manage' => 'Can add, update, and remove nursing and bedside charges',
+        'ipd_discharge.view' => 'Can search, preview, and print IPD discharge summaries',
+        'ipd_discharge.manage' => 'Can create and update IPD discharge summaries and personal section templates',
+        'ipd_discharge.master.manage' => 'Can manage shared discharge surgery, course, dietary, and ICD masters',
     ];
 
     /**
@@ -242,6 +253,8 @@ class AuthGroups extends ShieldAuthGroups
             'template.*',
             'hospital_stock.*',
             'abdm.*',
+            'ipd_nursing.*',
+            'ipd_discharge.*',
         ],
         'admin' => [
             'admin.access',
@@ -268,6 +281,8 @@ class AuthGroups extends ShieldAuthGroups
             'template.*',
             'hospital_stock.*',
             'abdm.*',
+            'ipd_nursing.*',
+            'ipd_discharge.*',
         ],
         'developer' => [
             'admin.access',
@@ -293,6 +308,8 @@ class AuthGroups extends ShieldAuthGroups
             'template.*',
             'hospital_stock.*',
             'abdm.*',
+            'ipd_nursing.*',
+            'ipd_discharge.*',
         ],
         'doctor' => [
             'opd.doctor-panel.access',
@@ -301,6 +318,16 @@ class AuthGroups extends ShieldAuthGroups
             'doctor_work.immunization.record-manage',
             'diagnosis.access',
             'diagnosis.report.view',
+            'ipd_nursing.view',
+            'ipd_discharge.view',
+            'ipd_discharge.manage',
+        ],
+        'nurse' => [
+            'ipd_nursing.view',
+            'ipd_nursing.record.manage',
+            'ipd_nursing.bed.transfer',
+            'ipd_nursing.charge.manage',
+            'ipd_discharge.view',
         ],
         'pharmacy_admin' => [
             'pharmacy.*',
@@ -343,6 +370,7 @@ class AuthGroups extends ShieldAuthGroups
             'billing.payment_request.manage',
             'billing.refund.view',
             'billing.refund.manage',
+            'ipd_discharge.view',
         ],
         'accounts_officer' => [
             'finance.workflow.view',

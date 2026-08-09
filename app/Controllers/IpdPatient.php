@@ -35,6 +35,7 @@ class IpdPatient extends BaseController
     public function index()
     {
         $permission = $this->requireAnyPermission([
+            'ipd_nursing.view',
             'billing.access',
             'billing.ipd.current-admission',
             'billing.ipd.invoice',
@@ -51,6 +52,7 @@ class IpdPatient extends BaseController
     public function workspace(int $ipdId)
     {
         $permission = $this->requireAnyPermission([
+            'ipd_nursing.view',
             'billing.access',
             'billing.ipd.current-admission',
             'billing.ipd.invoice',
@@ -128,6 +130,7 @@ class IpdPatient extends BaseController
     public function saveAdmissionHistory(int $ipdId)
     {
         $permission = $this->requireAnyPermission([
+            'ipd_nursing.record.manage',
             'billing.access',
             'billing.ipd.current-admission',
             'billing.ipd.invoice',
@@ -238,6 +241,7 @@ class IpdPatient extends BaseController
     public function saveNursingEntry(int $ipdId)
     {
         $permission = $this->requireAnyPermission([
+            'ipd_nursing.record.manage',
             'billing.access',
             'billing.ipd.current-admission',
             'billing.ipd.invoice',
@@ -337,6 +341,7 @@ class IpdPatient extends BaseController
     public function scanNursingPaper(int $ipdId)
     {
         $permission = $this->requireAnyPermission([
+            'ipd_nursing.record.manage',
             'billing.access',
             'billing.ipd.current-admission',
             'billing.ipd.invoice',
@@ -417,6 +422,7 @@ class IpdPatient extends BaseController
     public function saveScannedNursingEntries(int $ipdId)
     {
         $permission = $this->requireAnyPermission([
+            'ipd_nursing.record.manage',
             'billing.access',
             'billing.ipd.current-admission',
             'billing.ipd.invoice',
@@ -560,6 +566,7 @@ class IpdPatient extends BaseController
     public function nursingChartPrint(int $ipdId)
     {
         $permission = $this->requireAnyPermission([
+            'ipd_nursing.view',
             'billing.access',
             'billing.ipd.current-admission',
             'billing.ipd.invoice',
@@ -850,6 +857,7 @@ class IpdPatient extends BaseController
     public function bedTransfer(int $ipdId)
     {
         $permission = $this->requireAnyPermission([
+            'ipd_nursing.bed.transfer',
             'billing.access',
             'billing.ipd.current-admission',
             'billing.ipd.invoice',

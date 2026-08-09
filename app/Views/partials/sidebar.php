@@ -23,6 +23,17 @@ $canIpdBilling = $user && method_exists($user, 'can')
         || $user->can('billing.access'))
     : false;
 
+$canIpdNursing = $user && method_exists($user, 'can')
+    ? ($user->can('ipd_nursing.view') || $user->can('ipd_nursing.*'))
+    : false;
+$canIpdDischarge = $user && method_exists($user, 'can')
+    ? ($user->can('ipd_discharge.view') || $user->can('ipd_discharge.manage') || $user->can('ipd_discharge.*'))
+    : false;
+if ($user && method_exists($user, 'inGroup') && $user->inGroup('superadmin', 'admin', 'developer')) {
+    $canIpdNursing = true;
+    $canIpdDischarge = true;
+}
+
 $canBilling = false;
 if ($user && method_exists($user, 'can')) {
     $canBilling = $user->can('billing.access')
@@ -307,20 +318,24 @@ if (! $canChargesSettings && $user && method_exists($user, 'inGroup')) {
             </ul>
         </li>
     <?php } ?>
-    <?php if ($canIpdBilling) { ?>
+    <?php if ($canIpdNursing || $canIpdDischarge) { ?>
         <li class="nav-heading">In-Patient & Nursing Care</li>
+        <?php if ($canIpdNursing) { ?>
         <li class="nav-item">
             <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('/ipd/patient') ?>','IPD Patient List')">
                 <i class="bi bi-person-vcard"></i>
                 <span>IPD Patient List</span>
             </a>
         </li>
+        <?php } ?>
+        <?php if ($canIpdDischarge) { ?>
         <li class="nav-item">
             <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Ipd_discharge/search_patient') ?>','Discharge Management')">
                 <i class="bi bi-file-medical"></i>
                 <span>Discharge</span>
             </a>
         </li>
+        <?php } ?>
     <?php } ?>
     
     <?php if ($canDoctorWork) { ?>

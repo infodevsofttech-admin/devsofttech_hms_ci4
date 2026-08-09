@@ -1207,6 +1207,7 @@ class Ipd extends BaseController
     public function addBedsideCharge(int $ipdId)
     {
         $permission = $this->requireAnyPermission([
+            'ipd_nursing.charge.manage',
             'billing.access',
             'billing.ipd.invoice',
             'billing.ipd.current-admission',
@@ -1323,6 +1324,7 @@ class Ipd extends BaseController
     public function addDoctorVisitCharge(int $ipdId)
     {
         $permission = $this->requireAnyPermission([
+            'ipd_nursing.charge.manage',
             'billing.access',
             'billing.ipd.invoice',
             'billing.ipd.current-admission',
@@ -1467,6 +1469,7 @@ class Ipd extends BaseController
     public function updateNursingCharge(int $ipdId, int $chargeId)
     {
         $permission = $this->requireAnyPermission([
+            'ipd_nursing.charge.manage',
             'billing.access',
             'billing.ipd.invoice',
             'billing.ipd.current-admission',
@@ -1554,6 +1557,7 @@ class Ipd extends BaseController
     public function deleteNursingCharge(int $ipdId, int $chargeId)
     {
         $permission = $this->requireAnyPermission([
+            'ipd_nursing.charge.manage',
             'billing.access',
             'billing.ipd.invoice',
             'billing.ipd.current-admission',
