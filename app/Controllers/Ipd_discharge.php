@@ -1618,7 +1618,7 @@ class Ipd_discharge extends BaseController
 
     private function isNarrativeTemplateSectionAllowed(string $section): bool
     {
-        return in_array($section, ['diagnosis_remark', 'course_remark', 'instruction_other', 'instruction_remark'], true);
+        return in_array($section, ['diagnosis_remark', 'inhos_remark', 'course_remark', 'instruction_other', 'instruction_remark'], true);
     }
 
     private function narrativeSectionTable(string $section): ?string
@@ -1724,6 +1724,7 @@ class Ipd_discharge extends BaseController
         }
 
         $section = trim((string) $this->request->getPost('section'));
+        $templateId = max(0, (int) ($this->request->getPost('template_id') ?? 0));
         $templateName = trim((string) $this->request->getPost('template_name'));
         $templateText = trim((string) $this->request->getPost('template_text'));
         $templateScope = strtolower(trim((string) $this->request->getPost('template_scope')));
@@ -1742,20 +1743,34 @@ class Ipd_discharge extends BaseController
 
         $docId = $templateScope === 'master' ? 0 : $this->getCurrentUserId();
         $table = $this->db->table('ipd_discharge_narrative_templates');
-        $existing = $table
-            ->where('doc_id', $docId)
-            ->where('section_key', $section)
-            ->where('template_name', $templateName)
-            ->where('is_active', 1)
-            ->get(1)
-            ->getRowArray();
+        if ($templateId > 0) {
+            $existing = $table
+                ->where('id', $templateId)
+                ->where('doc_id', $docId)
+                ->where('section_key', $section)
+                ->get(1)
+                ->getRowArray();
+            if (empty($existing)) {
+                return $this->response->setJSON(['update' => 0, 'error_text' => 'Template not found']);
+            }
+        } else {
+            $existing = $table
+                ->where('doc_id', $docId)
+                ->where('section_key', $section)
+                ->where('template_name', $templateName)
+                ->get(1)
+                ->getRowArray();
+        }
 
         $now = date('Y-m-d H:i:s');
         if (! empty($existing)) {
             $table->where('id', (int) ($existing['id'] ?? 0))->update([
+                'template_name' => $templateName,
                 'template_text' => $templateText,
+                'is_active' => 1,
                 'updated_at' => $now,
             ]);
+            $templateId = (int) ($existing['id'] ?? 0);
         } else {
             $table->insert([
                 'doc_id' => $docId,
@@ -1766,10 +1781,12 @@ class Ipd_discharge extends BaseController
                 'created_at' => $now,
                 'updated_at' => $now,
             ]);
+            $templateId = (int) $this->db->insertID();
         }
 
         return $this->response->setJSON([
             'update' => 1,
+            'id' => $templateId,
             'error_text' => $docId === 0 ? 'Master template saved' : 'My template saved',
             'csrfName' => csrf_token(),
             'csrfHash' => csrf_hash(),
@@ -1803,6 +1820,46 @@ class Ipd_discharge extends BaseController
             ->getResultArray();
 
         return $this->response->setJSON(['rows' => $rows]);
+    }
+
+    public function section_template_remove()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $templateId = max(0, (int) ($this->request->getPost('template_id') ?? 0));
+        $section = trim((string) $this->request->getPost('section'));
+        if ($templateId <= 0 || ! $this->isNarrativeTemplateSectionAllowed($section) || ! $this->ensureDischargeNarrativeTemplateTable()) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Template not found']);
+        }
+
+        $docId = $this->getCurrentUserId();
+        $row = $this->db->table('ipd_discharge_narrative_templates')
+            ->select('id')
+            ->where('id', $templateId)
+            ->where('section_key', $section)
+            ->groupStart()
+            ->where('doc_id', $docId)
+            ->orWhere('doc_id', 0)
+            ->groupEnd()
+            ->get(1)
+            ->getRowArray();
+
+        if (empty($row)) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Template not found']);
+        }
+
+        $this->db->table('ipd_discharge_narrative_templates')
+            ->where('id', $templateId)
+            ->update(['is_active' => 0, 'updated_at' => date('Y-m-d H:i:s')]);
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'error_text' => 'Template deactivated',
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
     }
 
     private function byIpdRows(string $table, array $columns = ['*'], string $orderBy = 'id ASC', int $ipdId = 0): array
@@ -3812,6 +3869,43 @@ class Ipd_discharge extends BaseController
         $rows = [];
 
         if ($q !== '') {
+            if ($this->db->tableExists('disease_master')) {
+                $fields = $this->db->getFieldNames('disease_master') ?? [];
+                $select = ['Code', 'Name'];
+                foreach (['snomed_concept_id', 'snomed_term'] as $field) {
+                    if (in_array($field, $fields, true)) {
+                        $select[] = $field;
+                    }
+                }
+
+                $builder = $this->db->table('disease_master')
+                    ->select(implode(',', $select))
+                    ->groupStart()
+                    ->like('Name', $q);
+                if (in_array('snomed_term', $fields, true)) {
+                    $builder->orLike('snomed_term', $q);
+                }
+                if (in_array('snomed_concept_id', $fields, true)) {
+                    $builder->orLike('snomed_concept_id', $q);
+                }
+                $builder->groupEnd();
+                if (in_array('is_active', $fields, true)) {
+                    $builder->where('is_active', 1);
+                }
+
+                foreach ($builder->orderBy('Name', 'ASC')->limit(20)->get()->getResultArray() as $row) {
+                    $rows[] = [
+                        'id' => (int) ($row['Code'] ?? 0),
+                        'master_code' => (int) ($row['Code'] ?? 0),
+                        'name' => (string) ($row['Name'] ?? ''),
+                        'icd_code' => '',
+                        'snomed_concept_id' => (string) ($row['snomed_concept_id'] ?? ''),
+                        'snomed_term' => (string) ($row['snomed_term'] ?? ''),
+                        'source' => 'disease_master',
+                    ];
+                }
+            }
+
             if ($this->ensureDischargeIcdMasterTable()) {
                 $icdRows = $this->db->table('ipd_discharge_icd_master')
                     ->select('id,icd_code,diagnosis_text')
@@ -3828,32 +3922,12 @@ class Ipd_discharge extends BaseController
                 foreach ($icdRows as $row) {
                     $rows[] = [
                         'id' => (int) ($row['id'] ?? 0),
+                        'master_code' => 0,
                         'name' => (string) ($row['diagnosis_text'] ?? ''),
                         'icd_code' => (string) ($row['icd_code'] ?? ''),
+                        'snomed_concept_id' => '',
+                        'snomed_term' => '',
                         'source' => 'icd_master',
-                    ];
-                }
-            }
-
-            if (count($rows) < 25 && $this->db->tableExists('complaints_master')) {
-                $fallbackRows = $this->db->table('complaints_master')
-                    ->select('Code as id, Name as name, name_hinglish')
-                    ->groupStart()
-                    ->like('Name', $q)
-                    ->orLike('name_hinglish', $q)
-                    ->groupEnd()
-                    ->orderBy('Name', 'ASC')
-                    ->limit(25 - count($rows))
-                    ->get()
-                    ->getResultArray();
-
-                foreach ($fallbackRows as $row) {
-                    $rows[] = [
-                        'id' => (int) ($row['id'] ?? 0),
-                        'name' => (string) ($row['name'] ?? ''),
-                        'icd_code' => '',
-                        'source' => 'complaints_master',
-                        'name_hinglish' => (string) ($row['name_hinglish'] ?? ''),
                     ];
                 }
             }
@@ -5801,15 +5875,27 @@ class Ipd_discharge extends BaseController
             } elseif ($action === 'add_diagnosis') {
                 $name = trim((string) ($this->request->getPost('new_diagnosis_name') ?? ''));
                 $remark = trim((string) ($this->request->getPost('new_diagnosis_remark') ?? ''));
+                $masterCode = max(0, (int) ($this->request->getPost('new_diagnosis_master_code') ?? 0));
+                $snomedConceptId = trim((string) ($this->request->getPost('new_diagnosis_snomed_concept_id') ?? ''));
+                $snomedTerm = trim((string) ($this->request->getPost('new_diagnosis_snomed_term') ?? ''));
                 $diagnosisRemarkText = trim((string) ($this->request->getPost('diagnosis_remark') ?? ''));
                 if ($name !== '' && $this->tableHasColumns('ipd_discharge_diagnosis', ['ipd_id', 'comp_report'])) {
                     $insert = [
                         'ipd_id' => $ipdId,
-                        'comp_code' => 0,
+                        'comp_code' => $masterCode,
                         'comp_report' => $name,
                         'comp_remark' => $remark,
                         'update_by' => $userLabel,
                     ];
+                    if ($this->db->fieldExists('snomed_concept_id', 'ipd_discharge_diagnosis')) {
+                        $insert['snomed_concept_id'] = $snomedConceptId;
+                    }
+                    if ($this->db->fieldExists('snomed_term', 'ipd_discharge_diagnosis')) {
+                        $insert['snomed_term'] = $snomedTerm;
+                    }
+                    if ($this->db->fieldExists('snomed_source', 'ipd_discharge_diagnosis')) {
+                        $insert['snomed_source'] = $snomedConceptId !== '' ? 'disease_master' : '';
+                    }
                     if ($this->db->fieldExists('order_id', 'ipd_discharge_diagnosis')) {
                         $insert['order_id'] = 0;
                     }

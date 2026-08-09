@@ -396,6 +396,7 @@ $routes->match(['GET', 'POST'], 'Ipd_discharge/ipd_select/(:num)/(:num)', 'Ipd_d
 $routes->get('Ipd_discharge/section_past_data', 'Ipd_discharge::section_past_data');
 $routes->get('Ipd_discharge/section_template_list', 'Ipd_discharge::section_template_list');
 $routes->post('Ipd_discharge/section_template_save', 'Ipd_discharge::section_template_save');
+$routes->post('Ipd_discharge/section_template_remove', 'Ipd_discharge::section_template_remove');
 $routes->get('Ipd_discharge/surgery_master_lookup', 'Ipd_discharge::surgery_master_lookup');
 $routes->get('Ipd_discharge/surgery_master_list', 'Ipd_discharge::surgery_master_list');
 $routes->post('Ipd_discharge/surgery_master_save', 'Ipd_discharge::surgery_master_save');

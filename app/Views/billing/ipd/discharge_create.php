@@ -1075,7 +1075,10 @@ $historyFields = [
                         <div class="card border-secondary mt-3" id="section-diagnosis">
                             <div class="card-header py-2 d-flex justify-content-between align-items-center">
                                 <strong>Final Diagnosis</strong>
-                                <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_discharge_seed_icd">Load ICD Starter</button>
+                                <div class="d-flex gap-2">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_discharge_manage_diagnosis_master">Master CRUD</button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_discharge_seed_icd">Load ICD Starter</button>
+                                </div>
                             </div>
                             <div class="card-body">
                                 <table class="table table-sm table-bordered">
@@ -1102,13 +1105,16 @@ $historyFields = [
                                     </tbody>
                                 </table>
                                 <input type="hidden" name="diagnosis_remove_id" id="diagnosis_remove_id" value="0">
+                                <input type="hidden" name="new_diagnosis_master_code" id="new_diagnosis_master_code" value="0">
+                                <input type="hidden" name="new_diagnosis_snomed_concept_id" id="new_diagnosis_snomed_concept_id" value="">
+                                <input type="hidden" name="new_diagnosis_snomed_term" id="new_diagnosis_snomed_term" value="">
                                 <div class="row g-2">
                                     <div class="col-md-6"><input type="text" class="form-control" name="new_diagnosis_name" id="new_diagnosis_name" list="discharge_diagnosis_suggest" autocomplete="off" placeholder="Diagnosis"></div>
                                     <div class="col-md-5"><input type="text" class="form-control" name="new_diagnosis_remark" placeholder="Remark"></div>
                                     <div class="col-md-1"><button type="submit" class="btn btn-primary btn-sm" name="action" value="add_diagnosis">+ADD</button></div>
                                 </div>
                                 <datalist id="discharge_diagnosis_suggest"></datalist>
-                                <small class="text-muted">Tip: if ICD match exists, selected value appends code in diagnosis text.</small>
+                                <small class="text-muted">Type a diagnosis name, SNOMED term, or ICD code to search master data.</small>
                                 <div id="discharge_diagnosis_status" class="complaint-status text-muted"></div>
 
                                 <div class="mt-3">
@@ -1116,6 +1122,7 @@ $historyFields = [
                                         <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-field-past" data-section="diagnosis_remark" data-target="diagnosis_remark">Past Data</button>
                                         <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-template-load" data-section="diagnosis_remark" data-target="diagnosis_remark">Load Template</button>
                                         <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-template-save" data-section="diagnosis_remark" data-target="diagnosis_remark">Save as Template</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-template-master" data-section="diagnosis_remark" data-target="diagnosis_remark" data-title="Final Diagnosis Narrative">Template Master</button>
                                     </label>
                                     <textarea class="form-control" name="diagnosis_remark" id="diagnosis_remark" rows="3"><?= esc((string) ($diagnosis_remark ?? '')) ?></textarea>
                                 </div>
@@ -1129,7 +1136,12 @@ $historyFields = [
                         <div class="card border-secondary mt-3" id="section-summary-invest">
                             <div class="card-header py-2"><strong>Summary of key investigation during Hospitalization</strong></div>
                             <div class="card-body">
-                                <textarea class="form-control" name="inhos_remark" rows="4"><?= esc($inhosRemark) ?></textarea>
+                                <div class="mb-2">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-template-load" data-section="inhos_remark" data-target="inhos_remark">Load Template</button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-template-save" data-section="inhos_remark" data-target="inhos_remark">Save as Template</button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-template-master" data-section="inhos_remark" data-target="inhos_remark" data-title="Summary of Key Investigation during Hospitalization">Template Master</button>
+                                </div>
+                                <textarea class="form-control" name="inhos_remark" id="inhos_remark" rows="4"><?= esc($inhosRemark) ?></textarea>
                                 <div class="mt-3 d-flex justify-content-end">
                                     <button type="submit" class="btn btn-outline-success btn-sm" name="action" value="save_main" data-reload-section="section-summary-invest">Save Summary Investigation</button>
                                 </div>
@@ -1185,6 +1197,7 @@ $historyFields = [
                                         <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-field-past" data-section="course_remark" data-target="course_remark">Past Data</button>
                                         <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-template-load" data-section="course_remark" data-target="course_remark">Load Template</button>
                                         <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-template-save" data-section="course_remark" data-target="course_remark">Save as Template</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-template-master" data-section="course_remark" data-target="course_remark" data-title="Course / Treatment in Hospital Narrative">Template Master</button>
                                     </label>
                                     <textarea class="form-control" name="course_remark" id="course_remark" rows="3"><?= esc((string) ($course_remark ?? '')) ?></textarea>
                                 </div>
@@ -1453,6 +1466,7 @@ $historyFields = [
                                     <label class="form-label">Other Advice
                                         <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-template-load" data-section="instruction_other" data-target="instruction_other">Load Template</button>
                                         <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-template-save" data-section="instruction_other" data-target="instruction_other">Save as Template</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-template-master" data-section="instruction_other" data-target="instruction_other" data-title="Other Advice">Template Master</button>
                                     </label>
                                     <textarea class="form-control" name="instruction_other" id="instruction_other" rows="2" placeholder="Additional custom advice..."><?= esc($instructionOther) ?></textarea>
                                     <div id="discharge_instruction_other_status" class="complaint-status text-muted"></div>
@@ -1462,6 +1476,7 @@ $historyFields = [
                                     <label class="form-label">Discharge Summary
                                         <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-template-load" data-section="instruction_remark" data-target="instruction_remark">Load Template</button>
                                         <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-template-save" data-section="instruction_remark" data-target="instruction_remark">Save as Template</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm btn-discharge-template-master" data-section="instruction_remark" data-target="instruction_remark" data-title="Discharge Summary">Template Master</button>
                                     </label>
                                     <textarea class="form-control" name="instruction_remark" id="instruction_remark" rows="3"><?= esc((string) ($instruction_remark ?? '')) ?></textarea>
                                     <div id="discharge_instruction_remark_status" class="complaint-status text-muted"></div>
@@ -1623,6 +1638,58 @@ $historyFields = [
         </div>
     </div>
 
+    <div class="modal fade" id="ipdNarrativeTemplateMasterModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="ipd_narrative_template_master_title">Narrative Template Master</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="table-responsive" style="max-height:240px;overflow:auto;">
+                        <table class="table table-sm table-bordered align-middle mb-2">
+                            <thead>
+                                <tr>
+                                    <th style="width:110px;">Scope</th>
+                                    <th>Name</th>
+                                    <th>Template Text</th>
+                                    <th style="width:150px;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ipd_narrative_template_master_rows">
+                                <tr><td colspan="4" class="text-center text-muted">No templates.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <hr>
+                    <input type="hidden" id="ipd_narrative_template_master_id" value="0">
+                    <div class="row g-2">
+                        <div class="col-md-3">
+                            <label class="form-label">Scope</label>
+                            <select class="form-select form-select-sm" id="ipd_narrative_template_master_scope">
+                                <option value="doctor">My Template</option>
+                                <option value="master">Master Template</option>
+                            </select>
+                        </div>
+                        <div class="col-md-9">
+                            <label class="form-label">Template Name</label>
+                            <input type="text" class="form-control form-control-sm" id="ipd_narrative_template_master_name" maxlength="120">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Template Text</label>
+                            <textarea class="form-control form-control-sm" id="ipd_narrative_template_master_text" rows="5"></textarea>
+                        </div>
+                    </div>
+                    <div class="mt-2 d-flex gap-2">
+                        <button type="button" class="btn btn-primary btn-sm" id="btn_ipd_narrative_template_master_save">Save</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_ipd_narrative_template_master_new">New</button>
+                    </div>
+                    <div id="ipd_narrative_template_master_status" class="complaint-status text-muted mt-2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal fade" id="ipdSurgeryMasterModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
@@ -1700,6 +1767,58 @@ $historyFields = [
         </div>
     </div>
 
+    <div class="modal fade" id="ipdDiagnosisMasterModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Final Diagnosis Master</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-9">
+                            <input type="text" class="form-control form-control-sm" id="diagnosis_master_search" placeholder="Search diagnosis or SNOMED term">
+                        </div>
+                        <div class="col-md-3 d-grid">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_diagnosis_master_refresh">Refresh List</button>
+                        </div>
+                    </div>
+                    <div class="table-responsive" style="max-height:260px;overflow:auto;">
+                        <table class="table table-sm table-bordered align-middle">
+                            <thead><tr><th>Name</th><th>SNOMED ID</th><th>Status</th><th>Action</th></tr></thead>
+                            <tbody id="diagnosis_master_rows"><tr><td colspan="4" class="text-center text-muted">No records.</td></tr></tbody>
+                        </table>
+                    </div>
+                    <hr>
+                    <input type="hidden" id="diagnosis_master_code" value="0">
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <label class="form-label">Name</label>
+                            <input type="text" class="form-control form-control-sm" id="diagnosis_master_name">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">SNOMED ID</label>
+                            <input type="text" class="form-control form-control-sm" id="diagnosis_master_snomed_id">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Status</label>
+                            <select class="form-select form-select-sm" id="diagnosis_master_active"><option value="1">Active</option><option value="0">Inactive</option></select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">SNOMED Term</label>
+                            <input type="text" class="form-control form-control-sm" id="diagnosis_master_snomed_term">
+                        </div>
+                    </div>
+                    <div class="mt-2 d-flex gap-2">
+                        <button type="button" class="btn btn-primary btn-sm" id="btn_diagnosis_master_save">Save</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_diagnosis_master_clear">New</button>
+                    </div>
+                    <div id="diagnosis_master_status" class="complaint-status text-muted mt-2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Quick Add Surgery/Procedure Modal -->
     <div class="modal fade" id="quickAddTermModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -1771,6 +1890,12 @@ $historyFields = [
                 section: '',
                 text: '',
                 target: ''
+            };
+            var narrativeTemplateMasterState = {
+                section: '',
+                target: '',
+                title: '',
+                rows: []
             };
             var narrativeTemplateToolsBound = false;
             var surgeryMasterState = {
@@ -3034,6 +3159,130 @@ $historyFields = [
                     setNarrativeStatus(section, mode === 'append' ? 'Template appended.' : 'Template loaded.', 'success');
                     hideModalById('ipdNarrativeTemplateModal');
                 });
+
+                function resetNarrativeTemplateMasterForm() {
+                    $('#ipd_narrative_template_master_id').val('0');
+                    $('#ipd_narrative_template_master_scope').val('doctor').prop('disabled', false);
+                    $('#ipd_narrative_template_master_name').val('');
+                    $('#ipd_narrative_template_master_text').val('');
+                    $('#ipd_narrative_template_master_status').text('').attr('class', 'complaint-status text-muted mt-2');
+                }
+
+                function renderNarrativeTemplateMasterRows(rows) {
+                    narrativeTemplateMasterState.rows = rows || [];
+                    var $body = $('#ipd_narrative_template_master_rows');
+                    $body.empty();
+                    if (!narrativeTemplateMasterState.rows.length) {
+                        $body.html('<tr><td colspan="4" class="text-center text-muted">No templates.</td></tr>');
+                        return;
+                    }
+
+                    narrativeTemplateMasterState.rows.forEach(function(row, index) {
+                        var scope = parseInt(row.doc_id || '0', 10) === 0 ? 'Master' : 'My';
+                        var scopeClass = scope === 'Master' ? 'bg-primary' : 'bg-secondary';
+                        var $tr = $('<tr>');
+                        $tr.append($('<td>').append($('<span>').addClass('badge ' + scopeClass).text(scope)));
+                        $tr.append($('<td>').text(row.template_name || ''));
+                        $tr.append($('<td>').addClass('text-break').text(row.template_text || ''));
+                        var $actions = $('<td>');
+                        $actions.append($('<button type="button" class="btn btn-outline-primary btn-sm me-1 btn-edit-ipd-narrative-template">Edit</button>').attr('data-index', index));
+                        $actions.append($('<button type="button" class="btn btn-outline-danger btn-sm btn-remove-ipd-narrative-template">Deactivate</button>').attr('data-index', index));
+                        $tr.append($actions);
+                        $body.append($tr);
+                    });
+                }
+
+                function loadNarrativeTemplateMaster() {
+                    var section = (narrativeTemplateMasterState.section || '').toString();
+                    if (!section) {
+                        return;
+                    }
+                    $.get('<?= base_url('Ipd_discharge/section_template_list') ?>?section=' + encodeURIComponent(section), function(data) {
+                        renderNarrativeTemplateMasterRows((data && data.rows) ? data.rows : []);
+                    }, 'json').fail(function() {
+                        $('#ipd_narrative_template_master_status').text('Unable to load templates.').attr('class', 'complaint-status text-danger mt-2');
+                    });
+                }
+
+                $(document)
+                    .off('click.ipdNarrativeMaster', '.btn-discharge-template-master')
+                    .on('click.ipdNarrativeMaster', '.btn-discharge-template-master', function() {
+                        narrativeTemplateMasterState.section = ($(this).data('section') || '').toString();
+                        narrativeTemplateMasterState.target = ($(this).data('target') || '').toString();
+                        narrativeTemplateMasterState.title = ($(this).data('title') || 'Narrative').toString();
+                        $('#ipd_narrative_template_master_title').text(narrativeTemplateMasterState.title + ' Template Master');
+                        resetNarrativeTemplateMasterForm();
+                        loadNarrativeTemplateMaster();
+                        showModalById('ipdNarrativeTemplateMasterModal');
+                    })
+                    .off('click.ipdNarrativeMaster', '#btn_ipd_narrative_template_master_new')
+                    .on('click.ipdNarrativeMaster', '#btn_ipd_narrative_template_master_new', resetNarrativeTemplateMasterForm)
+                    .off('click.ipdNarrativeMaster', '.btn-edit-ipd-narrative-template')
+                    .on('click.ipdNarrativeMaster', '.btn-edit-ipd-narrative-template', function() {
+                        var row = narrativeTemplateMasterState.rows[parseInt($(this).data('index') || '0', 10)] || null;
+                        if (!row) {
+                            return;
+                        }
+                        $('#ipd_narrative_template_master_id').val(row.id || '0');
+                        $('#ipd_narrative_template_master_scope').val(parseInt(row.doc_id || '0', 10) === 0 ? 'master' : 'doctor').prop('disabled', true);
+                        $('#ipd_narrative_template_master_name').val(row.template_name || '');
+                        $('#ipd_narrative_template_master_text').val(row.template_text || '');
+                    })
+                    .off('click.ipdNarrativeMaster', '#btn_ipd_narrative_template_master_save')
+                    .on('click.ipdNarrativeMaster', '#btn_ipd_narrative_template_master_save', function() {
+                        var form = getDischargeForm();
+                        var section = (narrativeTemplateMasterState.section || '').toString();
+                        var name = ($('#ipd_narrative_template_master_name').val() || '').toString().trim();
+                        var text = ($('#ipd_narrative_template_master_text').val() || '').toString().trim();
+                        if (!form || !name || !text) {
+                            $('#ipd_narrative_template_master_status').text('Template name and text are required.').attr('class', 'complaint-status text-danger mt-2');
+                            return;
+                        }
+                        var csrf = getCsrfPair(form);
+                        var payload = {
+                            section: section,
+                            template_id: $('#ipd_narrative_template_master_id').val() || '0',
+                            template_scope: $('#ipd_narrative_template_master_scope').val() || 'doctor',
+                            template_name: name,
+                            template_text: text
+                        };
+                        payload[csrf.name] = csrf.value;
+                        $.post('<?= base_url('Ipd_discharge/section_template_save') ?>', payload, function(data) {
+                            if (data && data.csrfName && data.csrfHash) {
+                                form.querySelector('input[name="' + data.csrfName + '"]').value = data.csrfHash;
+                            }
+                            if (!data || parseInt(data.update || '0', 10) !== 1) {
+                                $('#ipd_narrative_template_master_status').text((data && data.error_text) || 'Unable to save template.').attr('class', 'complaint-status text-danger mt-2');
+                                return;
+                            }
+                            resetNarrativeTemplateMasterForm();
+                            $('#ipd_narrative_template_master_status').text(data.error_text || 'Template saved.').attr('class', 'complaint-status text-success mt-2');
+                            loadNarrativeTemplateMaster();
+                        }, 'json');
+                    })
+                    .off('click.ipdNarrativeMaster', '.btn-remove-ipd-narrative-template')
+                    .on('click.ipdNarrativeMaster', '.btn-remove-ipd-narrative-template', function() {
+                        var row = narrativeTemplateMasterState.rows[parseInt($(this).data('index') || '0', 10)] || null;
+                        var form = getDischargeForm();
+                        if (!row || !form || !window.confirm('Deactivate this template?')) {
+                            return;
+                        }
+                        var csrf = getCsrfPair(form);
+                        var payload = { section: narrativeTemplateMasterState.section || '', template_id: row.id || '0' };
+                        payload[csrf.name] = csrf.value;
+                        $.post('<?= base_url('Ipd_discharge/section_template_remove') ?>', payload, function(data) {
+                            if (data && data.csrfName && data.csrfHash) {
+                                form.querySelector('input[name="' + data.csrfName + '"]').value = data.csrfHash;
+                            }
+                            if (!data || parseInt(data.update || '0', 10) !== 1) {
+                                $('#ipd_narrative_template_master_status').text((data && data.error_text) || 'Unable to deactivate template.').attr('class', 'complaint-status text-danger mt-2');
+                                return;
+                            }
+                            resetNarrativeTemplateMasterForm();
+                            $('#ipd_narrative_template_master_status').text(data.error_text || 'Template deactivated.').attr('class', 'complaint-status text-success mt-2');
+                            loadNarrativeTemplateMaster();
+                        }, 'json');
+                    });
             }
 
             function bindSmartTermLookup(form, lookupId, suggestId, addBtnId, targetInputId, statusId, emptyText) {
@@ -3048,6 +3297,9 @@ $historyFields = [
                 var suggestions = [];
 
                 lookup.addEventListener('input', function() {
+                    $('#new_diagnosis_master_code').val('0');
+                    $('#new_diagnosis_snomed_concept_id').val('');
+                    $('#new_diagnosis_snomed_term').val('');
                     var q = (lookup.value || '').trim();
                     if (q.length < 2 || !window.jQuery) {
                         return;
@@ -3527,6 +3779,9 @@ $historyFields = [
                             diagnosisText += ' [ICD: ' + code + ']';
                         }
                         lookup.value = diagnosisText;
+                        $('#new_diagnosis_master_code').val(String(chosen.master_code || '0'));
+                        $('#new_diagnosis_snomed_concept_id').val(String(chosen.snomed_concept_id || ''));
+                        $('#new_diagnosis_snomed_term').val(String(chosen.snomed_term || ''));
                         setSectionStatus('discharge_diagnosis_status', code !== '' ? 'Diagnosis with ICD selected. Click +ADD to save row.' : 'Diagnosis selected. Click +ADD to save row.', 'success');
                         return;
                     }
@@ -3563,6 +3818,130 @@ $historyFields = [
                 }
             }
 
+            function initDiagnosisMasterCrud(form) {
+                if (!window.jQuery || !form || !$('#ipdDiagnosisMasterModal').length) {
+                    return;
+                }
+
+                var diagnosisMasterRows = [];
+                var $search = $('#diagnosis_master_search');
+                var $rows = $('#diagnosis_master_rows');
+
+                function setStatus(text, level) {
+                    setSectionStatus('diagnosis_master_status', text, level || 'muted');
+                }
+
+                function clearForm() {
+                    $('#diagnosis_master_code').val('0');
+                    $('#diagnosis_master_name').val('');
+                    $('#diagnosis_master_snomed_id').val('');
+                    $('#diagnosis_master_snomed_term').val('');
+                    $('#diagnosis_master_active').val('1');
+                }
+
+                function renderRows() {
+                    if (!diagnosisMasterRows.length) {
+                        $rows.html('<tr><td colspan="4" class="text-center text-muted">No records.</td></tr>');
+                        return;
+                    }
+
+                    var html = '';
+                    diagnosisMasterRows.forEach(function(row) {
+                        var code = parseInt(row.Code || '0', 10);
+                        var active = typeof row.is_active === 'undefined' || parseInt(row.is_active || '0', 10) === 1;
+                        html += '<tr>'
+                            + '<td>' + $('<div>').text(row.Name || '').html() + '</td>'
+                            + '<td>' + $('<div>').text(row.snomed_concept_id || '').html() + '</td>'
+                            + '<td>' + (active ? 'Active' : 'Inactive') + '</td>'
+                            + '<td><button type="button" class="btn btn-outline-primary btn-sm btn-diagnosis-master-edit" data-code="' + code + '">Edit</button> '
+                            + (active ? '<button type="button" class="btn btn-outline-danger btn-sm btn-diagnosis-master-remove" data-code="' + code + '">Deactivate</button>' : '')
+                            + '</td></tr>';
+                    });
+                    $rows.html(html);
+                }
+
+                function fetchRows() {
+                    $.get('<?= base_url('Opd_prescription/disease_master_data') ?>', {
+                        start: 0,
+                        length: 100,
+                        filter: ($search.val() || '').toString().trim()
+                    }, function(data) {
+                        diagnosisMasterRows = (data && data.data) ? data.data : [];
+                        renderRows();
+                    }, 'json').fail(function() {
+                        setStatus('Unable to load diagnosis master.', 'error');
+                    });
+                }
+
+                $(document)
+                    .off('click.ipdDiagnosisCrud', '#btn_discharge_manage_diagnosis_master')
+                    .on('click.ipdDiagnosisCrud', '#btn_discharge_manage_diagnosis_master', function() {
+                        clearForm();
+                        $search.val('');
+                        setStatus('', 'muted');
+                        fetchRows();
+                        showModalById('ipdDiagnosisMasterModal');
+                    })
+                    .off('click.ipdDiagnosisCrud', '.btn-diagnosis-master-edit')
+                    .on('click.ipdDiagnosisCrud', '.btn-diagnosis-master-edit', function() {
+                        var code = parseInt($(this).data('code') || '0', 10);
+                        var row = diagnosisMasterRows.find(function(item) {
+                            return parseInt(item.Code || '0', 10) === code;
+                        });
+                        if (!row) return;
+                        $('#diagnosis_master_code').val(String(code));
+                        $('#diagnosis_master_name').val(row.Name || '');
+                        $('#diagnosis_master_snomed_id').val(row.snomed_concept_id || '');
+                        $('#diagnosis_master_snomed_term').val(row.snomed_term || '');
+                        $('#diagnosis_master_active').val(typeof row.is_active === 'undefined' || parseInt(row.is_active || '0', 10) === 1 ? '1' : '0');
+                    })
+                    .off('click.ipdDiagnosisCrud', '.btn-diagnosis-master-remove')
+                    .on('click.ipdDiagnosisCrud', '.btn-diagnosis-master-remove', function() {
+                        var code = parseInt($(this).data('code') || '0', 10);
+                        if (code <= 0 || !window.confirm('Deactivate this diagnosis?')) return;
+                        var csrf = getCsrfPair(form);
+                        var payload = {};
+                        payload[csrf.name] = csrf.value;
+                        $.post('<?= base_url('Opd_prescription/disease_master_remove') ?>/' + code, payload, function(data) {
+                            updateFormCsrf(form, data);
+                            setStatus((data && data.error_text) ? data.error_text : 'Diagnosis deactivated.', data && parseInt(data.update || '0', 10) === 1 ? 'success' : 'error');
+                            fetchRows();
+                        }, 'json');
+                    });
+
+                $('#btn_diagnosis_master_refresh').off('.ipdDiagnosisCrud').on('click.ipdDiagnosisCrud', fetchRows);
+                $search.off('.ipdDiagnosisCrud').on('input.ipdDiagnosisCrud', fetchRows);
+                $('#btn_diagnosis_master_clear').off('.ipdDiagnosisCrud').on('click.ipdDiagnosisCrud', clearForm);
+                $('#btn_diagnosis_master_save').off('.ipdDiagnosisCrud').on('click.ipdDiagnosisCrud', function() {
+                    var name = ($('#diagnosis_master_name').val() || '').toString().trim();
+                    if (name === '') {
+                        setStatus('Name is required.', 'error');
+                        return;
+                    }
+                    var csrf = getCsrfPair(form);
+                    var payload = {
+                        Code: parseInt($('#diagnosis_master_code').val() || '0', 10),
+                        Name: name,
+                        snomed_concept_id: ($('#diagnosis_master_snomed_id').val() || '').toString().trim(),
+                        snomed_term: ($('#diagnosis_master_snomed_term').val() || '').toString().trim(),
+                        is_active: parseInt($('#diagnosis_master_active').val() || '1', 10)
+                    };
+                    payload[csrf.name] = csrf.value;
+                    $.post('<?= base_url('Opd_prescription/disease_master_save') ?>', payload, function(data) {
+                        updateFormCsrf(form, data);
+                        if (!data || parseInt(data.update || '0', 10) !== 1) {
+                            setStatus((data && data.error_text) ? data.error_text : 'Unable to save diagnosis.', 'error');
+                            return;
+                        }
+                        setStatus(data.error_text || 'Diagnosis saved.', 'success');
+                        clearForm();
+                        fetchRows();
+                    }, 'json').fail(function() {
+                        setStatus('Unable to save diagnosis.', 'error');
+                    });
+                });
+            }
+
             function initDiagnosisTools() {
                 var section = document.getElementById('section-diagnosis');
                 if (!section || section.dataset.toolsBound === '1') {
@@ -3576,6 +3955,7 @@ $historyFields = [
                 }
 
                 bindDiagnosisIcdLookup(form);
+                initDiagnosisMasterCrud(form);
             }
 
             function initCourseTools() {
