@@ -333,6 +333,7 @@ $routes->post('Finance/bank_pos_settlement_create', 'Finance::bankPosSettlementC
 $routes->post('Finance/bank_pos_settlement_accept', 'Finance::bankPosSettlementAccept');
 
 service('auth')->routes($routes);
+$routes->get('auth/session-status', 'AuthSession::status');
 
 // Hospital Stock Management (Storestock)
 $routes->get('Storestock', 'Storestock::index');
@@ -697,14 +698,14 @@ $routes->post('AbdmGateway/share_immunization_bundle', 'AbdmGateway::shareImmuni
 $routes->post('AbdmGateway/share_wellness_bundle', 'AbdmGateway::shareWellnessBundle', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmGateway/share_health_document_bundle', 'AbdmGateway::shareHealthDocumentBundle', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmGateway/share_invoice_bundle', 'AbdmGateway::shareInvoiceBundle', ['filter' => $abdmPermFilter]);
-$routes->get('Immunization', 'Immunization::index', ['filter' => 'permission:doctor_work.access,doctor_work.template_workspace.access,abdm.access,abdm.taskboard.access,abdm.gateway.use']);
-$routes->get('Immunization/schedule_master', 'Immunization::scheduleMaster', ['filter' => 'permission:doctor_work.access,doctor_work.template_workspace.access,abdm.access,abdm.taskboard.access,abdm.gateway.use']);
-$routes->post('Immunization/sync_uip_master', 'Immunization::syncUipMaster', ['filter' => 'permission:doctor_work.access,doctor_work.template_workspace.access,abdm.access,abdm.taskboard.access,abdm.gateway.use']);
-$routes->post('Immunization/update_schedule/(:num)', 'Immunization::updateSchedule/$1', ['filter' => 'permission:doctor_work.access,doctor_work.template_workspace.access,abdm.access,abdm.taskboard.access,abdm.gateway.use']);
-$routes->get('Immunization/schedule', 'Immunization::schedule', ['filter' => 'permission:doctor_work.access,doctor_work.template_workspace.access,abdm.access,abdm.taskboard.access,abdm.gateway.use']);
-$routes->get('Immunization/patient/(:num)', 'Immunization::patient/$1', ['filter' => 'permission:doctor_work.access,doctor_work.template_workspace.access,abdm.access,abdm.taskboard.access,abdm.gateway.use']);
-$routes->post('Immunization/generate_patient_schedule/(:num)', 'Immunization::generatePatientSchedule/$1', ['filter' => 'permission:doctor_work.access,doctor_work.template_workspace.access,abdm.access,abdm.taskboard.access,abdm.gateway.use']);
-$routes->post('Immunization/complete/(:num)', 'Immunization::complete/$1', ['filter' => 'permission:doctor_work.access,doctor_work.template_workspace.access,abdm.access,abdm.taskboard.access,abdm.gateway.use']);
+$routes->get('Immunization', 'Immunization::index', ['filter' => 'permission:doctor_work.immunization.access']);
+$routes->get('Immunization/schedule_master', 'Immunization::scheduleMaster', ['filter' => 'permission:doctor_work.immunization.schedule-manage']);
+$routes->post('Immunization/sync_uip_master', 'Immunization::syncUipMaster', ['filter' => 'permission:doctor_work.immunization.schedule-manage']);
+$routes->post('Immunization/update_schedule/(:num)', 'Immunization::updateSchedule/$1', ['filter' => 'permission:doctor_work.immunization.schedule-manage']);
+$routes->get('Immunization/schedule', 'Immunization::schedule', ['filter' => 'permission:doctor_work.immunization.access']);
+$routes->get('Immunization/patient/(:num)', 'Immunization::patient/$1', ['filter' => 'permission:doctor_work.immunization.access']);
+$routes->post('Immunization/generate_patient_schedule/(:num)', 'Immunization::generatePatientSchedule/$1', ['filter' => 'permission:doctor_work.immunization.record-manage']);
+$routes->post('Immunization/complete/(:num)', 'Immunization::complete/$1', ['filter' => 'permission:doctor_work.immunization.record-manage']);
 $routes->post('AbdmGateway/push_health_record', 'AbdmGateway::pushHealthRecord', ['filter' => $abdmPermFilter]);
 $routes->get('AbdmGateway/health_records_list', 'AbdmGateway::healthRecordsList', ['filter' => $abdmPermFilter]);
 $routes->get('AbdmGateway/bridge_record_status/(:num)', 'AbdmGateway::bridgeRecordStatus/$1', ['filter' => $abdmPermFilter]);
@@ -728,15 +729,15 @@ $routes->post('AbdmGateway/abha_aadhaar_verify_otp', 'AbdmGateway::abhaAadhaarVe
 $routes->post('AbdmGateway/abha_mobile_generate_otp', 'AbdmGateway::abhaMobileGenerateOtp', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmGateway/abha_mobile_verify_otp', 'AbdmGateway::abhaMobileVerifyOtp', ['filter' => $abdmPermFilter]);
 // ABHA creation wizard — billing/patient ABHA Create tab
-$routes->post('abha/create/initiate', 'Abha::initiate');
-$routes->post('abha/create/verify_otp', 'Abha::verifyOtp');
-$routes->post('abha/create/communication', 'Abha::communication');
-$routes->post('abha/create/verify_comm_otp', 'Abha::verifyCommOtp');
-$routes->post('abha/create/confirm_patient', 'Abha::confirmPatient');
-$routes->post('abha/create/address', 'Abha::address');
-$routes->get('abha/card/(:segment)', 'Abha::card/$1');
-$routes->post('abha/register/validate', 'Abha::validateAbha');
-$routes->get('abha/register/facility_qr', 'Abha::facilityQr');
+$routes->post('abha/create/initiate', 'Abha::initiate', ['filter' => 'permission:abdm.abha.create']);
+$routes->post('abha/create/verify_otp', 'Abha::verifyOtp', ['filter' => 'permission:abdm.abha.create']);
+$routes->post('abha/create/communication', 'Abha::communication', ['filter' => 'permission:abdm.abha.create']);
+$routes->post('abha/create/verify_comm_otp', 'Abha::verifyCommOtp', ['filter' => 'permission:abdm.abha.create']);
+$routes->post('abha/create/confirm_patient', 'Abha::confirmPatient', ['filter' => 'permission:abdm.abha.create']);
+$routes->post('abha/create/address', 'Abha::address', ['filter' => 'permission:abdm.abha.create']);
+$routes->get('abha/card/(:segment)', 'Abha::card/$1', ['filter' => 'permission:abdm.abha.create']);
+$routes->post('abha/register/validate', 'Abha::validateAbha', ['filter' => 'permission:abdm.abha.create']);
+$routes->get('abha/register/facility_qr', 'Abha::facilityQr', ['filter' => 'permission:abdm.abha.create']);
 $routes->get('AbdmTaskBoard', 'AbdmTaskBoard::index', ['filter' => $abdmPermFilter]);
 $routes->get('AbdmTaskBoard/list', 'AbdmTaskBoard::list', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmTaskBoard/perform_action', 'AbdmTaskBoard::performAction', ['filter' => $abdmPermFilter]);
@@ -925,17 +926,17 @@ $routes->get('Opd_prescription/show_old_Prescribed/(:num)/(:num)', 'Opd_prescrip
 $routes->get('Opd_prescription/show_medical_item/(:num)', 'Opd_prescription::show_medical_item/$1');
 $routes->get('Opd_prescription/prescribed_dose/(:num)/(:num)', 'Opd_prescription::prescribed_dose/$1/$2');
 
-$routes->get('Invoice/list_req_payment', 'Invoice::list_req_payment');
-$routes->get('Invoice/opdlist', 'Invoice::opdlist');
-$routes->get('Invoice/chargeslist', 'Invoice::chargeslist');
-$routes->post('Invoice/getRequestTable', 'Invoice::getRequestTable');
-$routes->get('Invoice/payment_form/(:num)', 'Invoice::payment_form/$1');
-$routes->post('Invoice/req_payment_process', 'Invoice::req_payment_process');
-$routes->get('Invoice/print_org_payment_invoice/(:num)', 'Invoice::print_org_payment_invoice/$1');
-$routes->get('Invoice/list_refund', 'Invoice::list_refund');
-$routes->post('Invoice/getRefundTable', 'Invoice::getRefundTable');
-$routes->get('Invoice/refund_form/(:num)', 'Invoice::refund_form/$1');
-$routes->post('Invoice/refund_process', 'Invoice::refund_process');
+$routes->get('Invoice/list_req_payment', 'Invoice::list_req_payment', ['filter' => 'permission:billing.payment_request.view,billing.payment_request.manage']);
+$routes->get('Invoice/opdlist', 'Invoice::opdlist', ['filter' => 'permission:billing.access,billing.opd.edit']);
+$routes->get('Invoice/chargeslist', 'Invoice::chargeslist', ['filter' => 'permission:billing.charges.view,billing.access']);
+$routes->post('Invoice/getRequestTable', 'Invoice::getRequestTable', ['filter' => 'permission:billing.payment_request.view,billing.payment_request.manage']);
+$routes->get('Invoice/payment_form/(:num)', 'Invoice::payment_form/$1', ['filter' => 'permission:billing.payment_request.view,billing.payment_request.manage']);
+$routes->post('Invoice/req_payment_process', 'Invoice::req_payment_process', ['filter' => 'permission:billing.payment_request.manage']);
+$routes->get('Invoice/print_org_payment_invoice/(:num)', 'Invoice::print_org_payment_invoice/$1', ['filter' => 'permission:billing.payment_request.view,billing.payment_request.manage']);
+$routes->get('Invoice/list_refund', 'Invoice::list_refund', ['filter' => 'permission:billing.refund.view,billing.refund.manage']);
+$routes->post('Invoice/getRefundTable', 'Invoice::getRefundTable', ['filter' => 'permission:billing.refund.view,billing.refund.manage']);
+$routes->get('Invoice/refund_form/(:num)', 'Invoice::refund_form/$1', ['filter' => 'permission:billing.refund.view,billing.refund.manage']);
+$routes->post('Invoice/refund_process', 'Invoice::refund_process', ['filter' => 'permission:billing.refund.manage']);
 
 $routes->get('Lab_Admin/report_list', 'Setting\Template::report_list');
 $routes->get('Lab_Admin/report_ultrasound_list/(:num)', 'Setting\Template::report_ultrasound_list/$1');
@@ -988,10 +989,10 @@ $routes->post('Opdcase/showfee', 'Opdcase::showfee');
 $routes->post('Opdcase/confirm_opd', 'Opdcase::confirm_opd');
 $routes->get('Opdcase/invoice/(:num)', 'Opd::invoice/$1');
 
-$routes->get('Report', 'Report::index');
-$routes->get('Report/index', 'Report::index');
-$routes->get('report', 'Report::index');
-$routes->get('report/index', 'Report::index');
+$routes->get('Report', 'Report::index', ['filter' => 'permission:reports.access']);
+$routes->get('Report/index', 'Report::index', ['filter' => 'permission:reports.access']);
+$routes->get('report', 'Report::index', ['filter' => 'permission:reports.access']);
+$routes->get('report/index', 'Report::index', ['filter' => 'permission:reports.access']);
 
 $reportsCollectionFilter = 'permission:reports.collection.view,reports.access';
 $routes->get('Report/collection_report', 'Report::collection_report', ['filter' => $reportsCollectionFilter]);
@@ -1005,24 +1006,24 @@ $routes->get('Report/report_total_payment_app_show/(:segment)/(:segment)/(:segme
 $routes->get('Report/report_total_payment_total_amount_show/(:segment)/(:segment)/(:segment)', 'Report::report_total_payment_total_amount_show/$1/$2/$3', ['filter' => $reportsCollectionFilter]);
 $routes->get('Report/report_total_payment_total_amount_show/(:segment)/(:segment)/(:segment)/(:num)', 'Report::report_total_payment_total_amount_show/$1/$2/$3/$4', ['filter' => $reportsCollectionFilter]);
 
-$routes->get('Report/billing_operations_report', 'Report::billing_operations_report');
-$routes->get('Report/billing_operations_report_data/(:segment)/(:segment)', 'Report::billing_operations_report_data/$1/$2');
-$routes->get('Report/billing_operations_report_data/(:segment)/(:segment)/(:num)', 'Report::billing_operations_report_data/$1/$2/$3');
+$routes->get('Report/billing_operations_report', 'Report::billing_operations_report', ['filter' => 'permission:reports.billing_operations.view']);
+$routes->get('Report/billing_operations_report_data/(:segment)/(:segment)', 'Report::billing_operations_report_data/$1/$2', ['filter' => 'permission:reports.billing_operations.view']);
+$routes->get('Report/billing_operations_report_data/(:segment)/(:segment)/(:num)', 'Report::billing_operations_report_data/$1/$2/$3', ['filter' => 'permission:reports.billing_operations.view']);
 
-$routes->get('Report/document_list', 'Report::document_list');
-$routes->get('Report/document_list_data/(:segment)/(:num)', 'Report::document_list_data/$1/$2');
-$routes->get('Report/document_list_data/(:segment)/(:num)/(:num)', 'Report::document_list_data/$1/$2/$3');
+$routes->get('Report/document_list', 'Report::document_list', ['filter' => 'permission:reports.document_issue.view']);
+$routes->get('Report/document_list_data/(:segment)/(:num)', 'Report::document_list_data/$1/$2', ['filter' => 'permission:reports.document_issue.view']);
+$routes->get('Report/document_list_data/(:segment)/(:num)/(:num)', 'Report::document_list_data/$1/$2/$3', ['filter' => 'permission:reports.document_issue.view']);
 
 // Legacy Report5 compatibility for Document Issue Report.
-$routes->get('Report5/document_list', 'Report::document_list');
-$routes->get('Report5/document_list_data/(:segment)/(:num)', 'Report::document_list_data/$1/$2');
-$routes->get('Report5/document_list_data/(:segment)/(:num)/(:num)', 'Report::document_list_data/$1/$2/$3');
+$routes->get('Report5/document_list', 'Report::document_list', ['filter' => 'permission:reports.document_issue.view']);
+$routes->get('Report5/document_list_data/(:segment)/(:num)', 'Report::document_list_data/$1/$2', ['filter' => 'permission:reports.document_issue.view']);
+$routes->get('Report5/document_list_data/(:segment)/(:num)/(:num)', 'Report::document_list_data/$1/$2/$3', ['filter' => 'permission:reports.document_issue.view']);
 
 $routes->get('Report/diagnosis_report', 'Report::diagnosis_report', ['filter' => 'permission:diagnosis.report.view,diagnosis.access']);
-$routes->get('Report/diagnosis_report_data/(:segment)', 'Report::diagnosis_report_data/$1');
-$routes->get('Report/diagnosis_report_data/(:segment)/(:segment)', 'Report::diagnosis_report_data/$1/$2');
-$routes->get('Report/diagnosis_report_data/(:segment)/(:segment)/(:segment)', 'Report::diagnosis_report_data/$1/$2/$3');
-$routes->get('Report/diagnosis_report_data/(:segment)/(:segment)/(:segment)/(:num)', 'Report::diagnosis_report_data/$1/$2/$3/$4');
+$routes->get('Report/diagnosis_report_data/(:segment)', 'Report::diagnosis_report_data/$1', ['filter' => 'permission:diagnosis.report.view,diagnosis.access']);
+$routes->get('Report/diagnosis_report_data/(:segment)/(:segment)', 'Report::diagnosis_report_data/$1/$2', ['filter' => 'permission:diagnosis.report.view,diagnosis.access']);
+$routes->get('Report/diagnosis_report_data/(:segment)/(:segment)/(:segment)', 'Report::diagnosis_report_data/$1/$2/$3', ['filter' => 'permission:diagnosis.report.view,diagnosis.access']);
+$routes->get('Report/diagnosis_report_data/(:segment)/(:segment)/(:segment)/(:num)', 'Report::diagnosis_report_data/$1/$2/$3/$4', ['filter' => 'permission:diagnosis.report.view,diagnosis.access']);
 
 $reportsNabhFilter = 'permission:reports.nabh_audit.view,reports.access';
 $routes->get('Report/nabh_audit_report', 'Report::nabh_audit_report', ['filter' => $reportsNabhFilter]);
@@ -1049,12 +1050,12 @@ $routes->get('Report/ayushman_case_dashboard_data/(:segment)/(:segment)', 'Repor
 $routes->get('Report/ayushman_case_dashboard_data/(:segment)/(:segment)/(:num)', 'Report::ayushman_case_dashboard_data/$1/$2/$3', ['filter' => $reportsInsuranceFilter]);
 
 // Legacy Report4 compatibility for Insurance Case reports
-$routes->get('Report4/echs_ipd_list_main', 'Report::echs_ipd_list_main');
-$routes->get('Report4/echs_opd_list_main', 'Report::echs_opd_list_main');
-$routes->get('Report4/echs_ipd_list_data/(:segment)/(:segment)/(:segment)', 'Report::echs_ipd_list_data/$1/$2/$3');
-$routes->get('Report4/echs_ipd_list_data/(:segment)/(:segment)/(:segment)/(:num)', 'Report::echs_ipd_list_data/$1/$2/$3/$4');
-$routes->get('Report4/echs_opd_list_data/(:segment)/(:segment)/(:segment)', 'Report::echs_opd_list_data/$1/$2/$3');
-$routes->get('Report4/echs_opd_list_data/(:segment)/(:segment)/(:segment)/(:num)', 'Report::echs_opd_list_data/$1/$2/$3/$4');
+$routes->get('Report4/echs_ipd_list_main', 'Report::echs_ipd_list_main', ['filter' => $reportsInsuranceFilter]);
+$routes->get('Report4/echs_opd_list_main', 'Report::echs_opd_list_main', ['filter' => $reportsInsuranceFilter]);
+$routes->get('Report4/echs_ipd_list_data/(:segment)/(:segment)/(:segment)', 'Report::echs_ipd_list_data/$1/$2/$3', ['filter' => $reportsInsuranceFilter]);
+$routes->get('Report4/echs_ipd_list_data/(:segment)/(:segment)/(:segment)/(:num)', 'Report::echs_ipd_list_data/$1/$2/$3/$4', ['filter' => $reportsInsuranceFilter]);
+$routes->get('Report4/echs_opd_list_data/(:segment)/(:segment)/(:segment)', 'Report::echs_opd_list_data/$1/$2/$3', ['filter' => $reportsInsuranceFilter]);
+$routes->get('Report4/echs_opd_list_data/(:segment)/(:segment)/(:segment)/(:num)', 'Report::echs_opd_list_data/$1/$2/$3/$4', ['filter' => $reportsInsuranceFilter]);
 
 // Organization Packing Routes
 $routes->get('org-packing', 'OrgPacking::index');
@@ -1195,15 +1196,25 @@ $routes->group('setting', static function($routes) {
     $settingsBedFilter = 'permission:settings.bed_status.view,admin.settings,admin.access';
     $settingsChargesFilter = 'permission:settings.charges.access,admin.settings,admin.access';
     $routes->get('admin', 'Setting\\Admin::index', ['filter' => $settingsAdminFilter]);
-    $routes->get('admin/user-management', 'Setting\\UserManagement::index');
-    $routes->get('admin/user-management/new', 'Setting\\UserManagement::create');
-    $routes->post('admin/user-management/new', 'Setting\\UserManagement::store');
-    $routes->get('admin/user-management/edit/(:num)', 'Setting\\UserManagement::edit/$1');
-    $routes->post('admin/user-management/edit/(:num)', 'Setting\\UserManagement::update/$1');
-    $routes->get('admin/user-management/reset-password/(:num)', 'Setting\\UserManagement::resetPasswordForm/$1');
-    $routes->post('admin/user-management/reset-password/(:num)', 'Setting\\UserManagement::resetPassword/$1');
-    $routes->get('admin/user-management/permissions', 'Setting\\UserManagement::permissions');
-    $routes->post('admin/user-management/permissions', 'Setting\\UserManagement::savePermissions');
+    $routes->get('admin/user-management', 'Setting\\UserManagement::index', ['filter' => $settingsAdminFilter]);
+    $routes->get('admin/user-management/new', 'Setting\\UserManagement::create', ['filter' => 'permission:users.create,users.manage-admins']);
+    $routes->post('admin/user-management/new', 'Setting\\UserManagement::store', ['filter' => ['permission:users.create,users.manage-admins', 'csrf']]);
+    $routes->get('admin/user-management/edit/(:num)', 'Setting\\UserManagement::edit/$1', ['filter' => 'permission:users.edit,users.manage-admins']);
+    $routes->post('admin/user-management/edit/(:num)', 'Setting\\UserManagement::update/$1', ['filter' => ['permission:users.edit,users.manage-admins', 'csrf']]);
+    $routes->get('admin/user-management/reset-password/(:num)', 'Setting\\UserManagement::resetPasswordForm/$1', ['filter' => 'permission:users.edit,users.manage-admins']);
+    $routes->post('admin/user-management/reset-password/(:num)', 'Setting\\UserManagement::resetPassword/$1', ['filter' => ['permission:users.edit,users.manage-admins', 'csrf']]);
+    $routes->get('admin/user-management/permissions', 'Setting\\UserManagement::permissions', ['filter' => 'permission:users.manage-admins']);
+    $routes->post('admin/user-management/permissions', 'Setting\\UserManagement::savePermissions', ['filter' => ['permission:users.manage-admins', 'csrf']]);
+    $routes->get('admin/user-management/sessions', 'Setting\\UserManagement::sessions', ['filter' => 'permission:users.edit,users.manage-admins']);
+    $routes->post('admin/user-management/sessions/force-logout/(:num)', 'Setting\\UserManagement::forceLogout/$1', ['filter' => ['permission:users.edit,users.manage-admins', 'csrf']]);
+    $routes->post('admin/user-management/delete/(:num)', 'Setting\\UserManagement::delete/$1', ['filter' => ['permission:users.delete,users.manage-admins', 'csrf']]);
+    $routes->get('admin/roles', 'Setting\\RoleManagement::index', ['filter' => 'permission:users.manage-admins']);
+    $routes->get('admin/roles/new', 'Setting\\RoleManagement::create', ['filter' => 'permission:users.manage-admins']);
+    $routes->post('admin/roles', 'Setting\\RoleManagement::store', ['filter' => ['permission:users.manage-admins', 'csrf']]);
+    $routes->get('admin/roles/edit/(:num)', 'Setting\\RoleManagement::edit/$1', ['filter' => 'permission:users.manage-admins']);
+    $routes->post('admin/roles/edit/(:num)', 'Setting\\RoleManagement::update/$1', ['filter' => ['permission:users.manage-admins', 'csrf']]);
+    $routes->post('admin/roles/status/(:num)', 'Setting\\RoleManagement::status/$1', ['filter' => ['permission:users.manage-admins', 'csrf']]);
+    $routes->post('admin/roles/delete/(:num)', 'Setting\\RoleManagement::delete/$1', ['filter' => ['permission:users.manage-admins', 'csrf']]);
     $routes->get('admin/ai-settings', 'Setting\\AiSettings::index');
     $routes->post('admin/ai-settings/save', 'Setting\\AiSettings::save');
     $routes->post('admin/ai-settings/test', 'Setting\\AiSettings::test');
@@ -1323,7 +1334,7 @@ $routes->group('setting', static function($routes) {
     $routes->get('charges', 'Setting\\Charges::index', ['filter' => $settingsChargesFilter]);
 });
 
-$routes->group('item', static function($routes) {
+$routes->group('item', ['filter' => 'permission:billing.items.view,billing.items.manage,billing.access,settings.charges.access,admin.settings'], static function($routes) {
     $routes->get('search', 'Item::search');
     $routes->get('search-itemtype', 'Item::searchItemType');
     $routes->get('search-adv/(:num)', 'Item::searchAdv/$1');
@@ -1331,17 +1342,17 @@ $routes->group('item', static function($routes) {
     $routes->get('export-excel/(:num)', 'Item::exportExcel/$1');
     $routes->match(['GET', 'POST'], 'item-record/(:num)', 'Item::itemRecord/$1');
     $routes->get('itemtype-record/(:num)', 'Item::itemTypeRecord/$1');
-    $routes->get('add', 'Item::addRecord');
-    $routes->get('add-type', 'Item::addItemTypeRecord');
-    $routes->post('create', 'Item::createRecord');
-    $routes->post('update', 'Item::updateRecord');
-    $routes->post('create-type', 'Item::createItemTypeRecord');
-    $routes->post('update-type', 'Item::updateItemTypeRecord');
-    $routes->post('insurance/add', 'Item::addInsuranceItemRecord');
-    $routes->post('insurance/remove', 'Item::removeInsuranceItem');
+    $routes->get('add', 'Item::addRecord', ['filter' => 'permission:billing.items.manage,admin.settings']);
+    $routes->get('add-type', 'Item::addItemTypeRecord', ['filter' => 'permission:billing.items.manage,admin.settings']);
+    $routes->post('create', 'Item::createRecord', ['filter' => 'permission:billing.items.manage,admin.settings']);
+    $routes->post('update', 'Item::updateRecord', ['filter' => 'permission:billing.items.manage,admin.settings']);
+    $routes->post('create-type', 'Item::createItemTypeRecord', ['filter' => 'permission:billing.items.manage,admin.settings']);
+    $routes->post('update-type', 'Item::updateItemTypeRecord', ['filter' => 'permission:billing.items.manage,admin.settings']);
+    $routes->post('insurance/add', 'Item::addInsuranceItemRecord', ['filter' => 'permission:billing.items.manage,admin.settings']);
+    $routes->post('insurance/remove', 'Item::removeInsuranceItem', ['filter' => 'permission:billing.items.manage,admin.settings']);
 });
 
-$routes->group('item-ipd', static function($routes) {
+$routes->group('item-ipd', ['filter' => 'permission:billing.items.view,billing.items.manage,billing.access,settings.charges.access,admin.settings'], static function($routes) {
     $routes->get('search', 'ItemIpd::search');
     $routes->get('search-itemtype', 'ItemIpd::searchItemType');
     $routes->get('search-adv/(:num)', 'ItemIpd::searchAdv/$1');
@@ -1349,19 +1360,19 @@ $routes->group('item-ipd', static function($routes) {
     $routes->get('export-excel/(:num)', 'ItemIpd::exportExcel/$1');
     $routes->match(['GET', 'POST'], 'item-record/(:num)', 'ItemIpd::itemRecord/$1');
     $routes->get('itemtype-record/(:num)', 'ItemIpd::itemTypeRecord/$1');
-    $routes->get('add', 'ItemIpd::addRecord');
-    $routes->get('add-type', 'ItemIpd::addItemTypeRecord');
-    $routes->post('create', 'ItemIpd::createRecord');
-    $routes->post('update', 'ItemIpd::updateRecord');
-    $routes->post('create-type', 'ItemIpd::createItemTypeRecord');
-    $routes->post('update-type', 'ItemIpd::updateItemTypeRecord');
-    $routes->post('delete-type', 'ItemIpd::deleteItemTypeRecord');
-    $routes->post('change-sort-type', 'ItemIpd::changeItemTypeSort');
-    $routes->post('insurance/add', 'ItemIpd::addInsuranceItemRecord');
-    $routes->post('insurance/remove', 'ItemIpd::removeInsuranceItem');
+    $routes->get('add', 'ItemIpd::addRecord', ['filter' => 'permission:billing.items.manage,admin.settings']);
+    $routes->get('add-type', 'ItemIpd::addItemTypeRecord', ['filter' => 'permission:billing.items.manage,admin.settings']);
+    $routes->post('create', 'ItemIpd::createRecord', ['filter' => 'permission:billing.items.manage,admin.settings']);
+    $routes->post('update', 'ItemIpd::updateRecord', ['filter' => 'permission:billing.items.manage,admin.settings']);
+    $routes->post('create-type', 'ItemIpd::createItemTypeRecord', ['filter' => 'permission:billing.items.manage,admin.settings']);
+    $routes->post('update-type', 'ItemIpd::updateItemTypeRecord', ['filter' => 'permission:billing.items.manage,admin.settings']);
+    $routes->post('delete-type', 'ItemIpd::deleteItemTypeRecord', ['filter' => 'permission:billing.items.manage,admin.settings']);
+    $routes->post('change-sort-type', 'ItemIpd::changeItemTypeSort', ['filter' => 'permission:billing.items.manage,admin.settings']);
+    $routes->post('insurance/add', 'ItemIpd::addInsuranceItemRecord', ['filter' => 'permission:billing.items.manage,admin.settings']);
+    $routes->post('insurance/remove', 'ItemIpd::removeInsuranceItem', ['filter' => 'permission:billing.items.manage,admin.settings']);
 });
 
-$routes->group('package', static function($routes) {
+$routes->group('package', ['filter' => 'permission:billing.packages.view,billing.packages.manage,billing.access,settings.charges.access,admin.settings'], static function($routes) {
     $routes->get('search', 'Package::search');
     $routes->get('search-itemtype', 'Package::searchItemType');
     $routes->get('search-adv/(:num)', 'Package::searchAdv/$1');
@@ -1369,17 +1380,17 @@ $routes->group('package', static function($routes) {
     $routes->get('export-excel/(:num)', 'Package::exportExcel/$1');
     $routes->match(['GET', 'POST'], 'item-record/(:num)', 'Package::itemRecord/$1');
     $routes->get('itemtype-record/(:num)', 'Package::itemTypeRecord/$1');
-    $routes->get('add', 'Package::addRecord');
-    $routes->get('add-type', 'Package::addItemTypeRecord');
-    $routes->post('create', 'Package::createRecord');
-    $routes->post('update', 'Package::updateRecord');
-    $routes->post('create-type', 'Package::createItemTypeRecord');
-    $routes->post('update-type', 'Package::updateItemTypeRecord');
-    $routes->post('insurance/add', 'Package::addInsuranceItemRecord');
-    $routes->post('insurance/remove', 'Package::removeInsuranceItem');
+    $routes->get('add', 'Package::addRecord', ['filter' => 'permission:billing.packages.manage,admin.settings']);
+    $routes->get('add-type', 'Package::addItemTypeRecord', ['filter' => 'permission:billing.packages.manage,admin.settings']);
+    $routes->post('create', 'Package::createRecord', ['filter' => 'permission:billing.packages.manage,admin.settings']);
+    $routes->post('update', 'Package::updateRecord', ['filter' => 'permission:billing.packages.manage,admin.settings']);
+    $routes->post('create-type', 'Package::createItemTypeRecord', ['filter' => 'permission:billing.packages.manage,admin.settings']);
+    $routes->post('update-type', 'Package::updateItemTypeRecord', ['filter' => 'permission:billing.packages.manage,admin.settings']);
+    $routes->post('insurance/add', 'Package::addInsuranceItemRecord', ['filter' => 'permission:billing.packages.manage,admin.settings']);
+    $routes->post('insurance/remove', 'Package::removeInsuranceItem', ['filter' => 'permission:billing.packages.manage,admin.settings']);
 });
 
-$routes->group('Package', static function($routes) {
+$routes->group('Package', ['filter' => 'permission:billing.packages.view,billing.packages.manage,billing.access,settings.charges.access,admin.settings'], static function($routes) {
     $routes->get('search', 'Package::search');
     $routes->get('search_itemtype', 'Package::searchItemType');
     $routes->get('search_adv/(:num)', 'Package::searchAdv/$1');
@@ -1387,17 +1398,17 @@ $routes->group('Package', static function($routes) {
     $routes->get('export-excel/(:num)', 'Package::exportExcel/$1');
     $routes->match(['GET', 'POST'], 'item_record/(:num)', 'Package::itemRecord/$1');
     $routes->get('itemtype_record/(:num)', 'Package::itemTypeRecord/$1');
-    $routes->get('AddRecord', 'Package::addRecord');
-    $routes->get('AddItemTypeRecord', 'Package::addItemTypeRecord');
-    $routes->post('CreateRecord', 'Package::createRecord');
-    $routes->post('UpdateRecord', 'Package::updateRecord');
-    $routes->post('CreateItemTypeRecord', 'Package::createItemTypeRecord');
-    $routes->post('UpdateItemTypeRecord', 'Package::updateItemTypeRecord');
-    $routes->post('AddInsuranceItemRecord', 'Package::addInsuranceItemRecord');
-    $routes->post('remove_record_item', 'Package::removeInsuranceItem');
+    $routes->get('AddRecord', 'Package::addRecord', ['filter' => 'permission:billing.packages.manage,admin.settings']);
+    $routes->get('AddItemTypeRecord', 'Package::addItemTypeRecord', ['filter' => 'permission:billing.packages.manage,admin.settings']);
+    $routes->post('CreateRecord', 'Package::createRecord', ['filter' => 'permission:billing.packages.manage,admin.settings']);
+    $routes->post('UpdateRecord', 'Package::updateRecord', ['filter' => 'permission:billing.packages.manage,admin.settings']);
+    $routes->post('CreateItemTypeRecord', 'Package::createItemTypeRecord', ['filter' => 'permission:billing.packages.manage,admin.settings']);
+    $routes->post('UpdateItemTypeRecord', 'Package::updateItemTypeRecord', ['filter' => 'permission:billing.packages.manage,admin.settings']);
+    $routes->post('AddInsuranceItemRecord', 'Package::addInsuranceItemRecord', ['filter' => 'permission:billing.packages.manage,admin.settings']);
+    $routes->post('remove_record_item', 'Package::removeInsuranceItem', ['filter' => 'permission:billing.packages.manage,admin.settings']);
 });
 
-$routes->group('IPD_Package', static function($routes) {
+$routes->group('IPD_Package', ['filter' => 'permission:billing.packages.view,billing.packages.manage,billing.access,settings.charges.access,admin.settings'], static function($routes) {
     $routes->get('search', 'Package::search');
     $routes->get('search_itemtype', 'Package::searchItemType');
     $routes->get('search_adv/(:num)', 'Package::searchAdv/$1');
@@ -1405,17 +1416,17 @@ $routes->group('IPD_Package', static function($routes) {
     $routes->get('export-excel/(:num)', 'Package::exportExcel/$1');
     $routes->match(['GET', 'POST'], 'item_record/(:num)', 'Package::itemRecord/$1');
     $routes->get('itemtype_record/(:num)', 'Package::itemTypeRecord/$1');
-    $routes->get('AddRecord', 'Package::addRecord');
-    $routes->get('AddItemTypeRecord', 'Package::addItemTypeRecord');
-    $routes->post('CreateRecord', 'Package::createRecord');
-    $routes->post('UpdateRecord', 'Package::updateRecord');
-    $routes->post('CreateItemTypeRecord', 'Package::createItemTypeRecord');
-    $routes->post('UpdateItemTypeRecord', 'Package::updateItemTypeRecord');
-    $routes->post('AddInsuranceItemRecord', 'Package::addInsuranceItemRecord');
-    $routes->post('remove_record_item', 'Package::removeInsuranceItem');
+    $routes->get('AddRecord', 'Package::addRecord', ['filter' => 'permission:billing.packages.manage,admin.settings']);
+    $routes->get('AddItemTypeRecord', 'Package::addItemTypeRecord', ['filter' => 'permission:billing.packages.manage,admin.settings']);
+    $routes->post('CreateRecord', 'Package::createRecord', ['filter' => 'permission:billing.packages.manage,admin.settings']);
+    $routes->post('UpdateRecord', 'Package::updateRecord', ['filter' => 'permission:billing.packages.manage,admin.settings']);
+    $routes->post('CreateItemTypeRecord', 'Package::createItemTypeRecord', ['filter' => 'permission:billing.packages.manage,admin.settings']);
+    $routes->post('UpdateItemTypeRecord', 'Package::updateItemTypeRecord', ['filter' => 'permission:billing.packages.manage,admin.settings']);
+    $routes->post('AddInsuranceItemRecord', 'Package::addInsuranceItemRecord', ['filter' => 'permission:billing.packages.manage,admin.settings']);
+    $routes->post('remove_record_item', 'Package::removeInsuranceItem', ['filter' => 'permission:billing.packages.manage,admin.settings']);
 });
 
-$routes->group('Item_IPD', static function($routes) {
+$routes->group('Item_IPD', ['filter' => 'permission:billing.items.view,billing.items.manage,billing.access,settings.charges.access,admin.settings'], static function($routes) {
     $routes->get('search', 'ItemIpd::search');
     $routes->get('search_itemtype', 'ItemIpd::searchItemType');
     $routes->get('search_adv/(:num)', 'ItemIpd::searchAdv/$1');
@@ -1423,13 +1434,13 @@ $routes->group('Item_IPD', static function($routes) {
     $routes->get('export-excel/(:num)', 'ItemIpd::exportExcel/$1');
     $routes->match(['GET', 'POST'], 'item_record/(:num)', 'ItemIpd::itemRecord/$1');
     $routes->get('itemtype_record/(:num)', 'ItemIpd::itemTypeRecord/$1');
-    $routes->get('AddRecord', 'ItemIpd::addRecord');
-    $routes->get('AddItemTypeRecord', 'ItemIpd::addItemTypeRecord');
-    $routes->post('CreateRecord', 'ItemIpd::createRecord');
-    $routes->post('UpdateRecord', 'ItemIpd::updateRecord');
-    $routes->post('CreateItemTypeRecord', 'ItemIpd::createItemTypeRecord');
-    $routes->post('UpdateItemTypeRecord', 'ItemIpd::updateItemTypeRecord');
-    $routes->post('change_sort_itemtype', 'ItemIpd::changeItemTypeSort');
-    $routes->post('AddInsuranceItemRecord', 'ItemIpd::addInsuranceItemRecord');
-    $routes->post('remove_record_item', 'ItemIpd::removeInsuranceItem');
+    $routes->get('AddRecord', 'ItemIpd::addRecord', ['filter' => 'permission:billing.items.manage,admin.settings']);
+    $routes->get('AddItemTypeRecord', 'ItemIpd::addItemTypeRecord', ['filter' => 'permission:billing.items.manage,admin.settings']);
+    $routes->post('CreateRecord', 'ItemIpd::createRecord', ['filter' => 'permission:billing.items.manage,admin.settings']);
+    $routes->post('UpdateRecord', 'ItemIpd::updateRecord', ['filter' => 'permission:billing.items.manage,admin.settings']);
+    $routes->post('CreateItemTypeRecord', 'ItemIpd::createItemTypeRecord', ['filter' => 'permission:billing.items.manage,admin.settings']);
+    $routes->post('UpdateItemTypeRecord', 'ItemIpd::updateItemTypeRecord', ['filter' => 'permission:billing.items.manage,admin.settings']);
+    $routes->post('change_sort_itemtype', 'ItemIpd::changeItemTypeSort', ['filter' => 'permission:billing.items.manage,admin.settings']);
+    $routes->post('AddInsuranceItemRecord', 'ItemIpd::addInsuranceItemRecord', ['filter' => 'permission:billing.items.manage,admin.settings']);
+    $routes->post('remove_record_item', 'ItemIpd::removeInsuranceItem', ['filter' => 'permission:billing.items.manage,admin.settings']);
 });

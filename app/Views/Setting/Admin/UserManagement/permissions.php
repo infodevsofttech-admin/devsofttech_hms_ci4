@@ -1,6 +1,9 @@
 <div class="card">
         <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
-            <h3 class="card-title  mb-0">Give Permissions</h3>
+            <div>
+                <h3 class="card-title mb-0">Additional User Permissions</h3>
+                <div class="text-muted small">Role permissions are inherited automatically. Use this page only for extra access needed by one user.</div>
+            </div>
             <div class="card-tools ms-auto">
                 <button class="btn btn-light" type="button" onclick="load_form_div('<?= base_url('setting/admin/user-management') ?>','maindiv','User Management');">
                     <i class="bi bi-arrow-left"></i>
@@ -49,7 +52,15 @@
                     </div>
 
                     <div class="mt-4">
-                        <label class="form-label">Permissions</label>
+                        <?php if (! empty($selectedUser)) : ?>
+                            <div class="alert alert-secondary py-2 mb-3">
+                                <strong>Assigned role:</strong>
+                                <?= esc(! empty($selectedRoleTitles) ? implode(', ', $selectedRoleTitles) : 'No role') ?>.
+                                Permissions marked <span class="badge bg-secondary">Inherited from Role</span> are already available through this role.
+                            </div>
+                        <?php endif ?>
+                        <label class="form-label">Direct grants</label>
+                        <div class="text-muted small mb-2">Checked boxes are additional permissions saved specifically for this user. Unchecking one does not remove access inherited from the role.</div>
                         <div class="alert alert-info py-2 mb-2">
                             Pharmacy module access is controlled by <strong>pharmacy.access</strong>. Editing past Walk-in/Registered pharmacy invoices requires <strong>pharmacy.invoice.edit-old</strong> (or <strong>pharmacy.invoice.admin</strong>). Discount caps can be granted with <strong>pharmacy.invoice.discount.10</strong>, <strong>pharmacy.invoice.discount.20</strong>, <strong>pharmacy.invoice.discount.30</strong>, or full override using <strong>pharmacy.invoice.admin</strong>. Base user discount can be set in hospital setting key <strong>PHARMACY_NORMAL_MAX_DISCOUNT_PERCENT</strong>.
                         </div>
@@ -57,6 +68,7 @@
                             <?php
                             $selectedPermissions = [];
                             $permissions = $permissions ?? [];
+                            $inheritedPermissions = $inheritedPermissions ?? [];
                             if (! empty($selectedUser)) {
                                 $selectedPermissions = $selectedUser->getPermissions() ?? [];
                             }
@@ -134,6 +146,9 @@
                                                     <input class="form-check-input" type="checkbox" id="perm_<?= esc($permissionKey) ?>" name="permissions[]" value="<?= esc($permissionKey) ?>" <?= in_array($permissionKey, $selectedPermissions, true) ? 'checked' : '' ?>>
                                                     <label class="form-check-label" for="perm_<?= esc($permissionKey) ?>">
                                                         <?= esc($permissionLabel) ?>
+                                                        <?php if (in_array($permissionKey, $inheritedPermissions, true)) : ?>
+                                                            <span class="badge bg-secondary ms-1">Inherited from Role</span>
+                                                        <?php endif ?>
                                                     </label>
                                                 </div>
                                             <?php endforeach ?>
@@ -164,7 +179,7 @@
                     return;
                 }
 
-                loadButton.addEventListener('click', function() {
+                $(document).off('click.userPermissionsLoad', '#loadPermissions').on('click.userPermissionsLoad', '#loadPermissions', function() {
                     var userId = userSelect.value;
                     if (!userId) {
                         return;
@@ -177,7 +192,7 @@
                     return;
                 }
 
-                $(form).on('submit', function(event) {
+                $(form).off('submit.userPermissions').on('submit.userPermissions', function(event) {
                     event.preventDefault();
 
                     $.post($(form).attr('action'), $(form).serialize())

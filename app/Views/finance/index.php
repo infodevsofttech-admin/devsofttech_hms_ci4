@@ -3,7 +3,7 @@
     <?php $canBillingSubmit = $user && method_exists($user, 'can') ? ($user->can('finance.cash.billing.submit') || $user->can('finance.*')) : false; ?>
     <?php $canAccountsVerify = $user && method_exists($user, 'can') ? ($user->can('finance.cash.accounts.accept') || $user->can('finance.cash.accounts.verify') || $user->can('finance.*')) : false; ?>
     <?php $canBankAudit = $user && method_exists($user, 'can') ? ($user->can('finance.bank.deposit.create') || $user->can('finance.bank.audit') || $user->can('finance.bank.statement.update') || $user->can('finance.*')) : false; ?>
-    <?php $canMedicalStoreCredit = $user && method_exists($user, 'can') ? ($user->can('finance.workflow.view') || $user->can('finance.cash.accounts.accept') || $user->can('finance.cash.accounts.verify') || $user->can('finance.doctor_payout.manage') || $user->can('finance.*')) : false; ?>
+    <?php $canMedicalStoreCredit = $user && method_exists($user, 'can') ? ($user->can('finance.workflow.view') || $user->can('finance.access') || $user->can('finance.cash.accounts.accept') || $user->can('finance.cash.accounts.verify') || $user->can('finance.doctor_payout.manage') || $user->can('finance.*')) : false; ?>
 
     <div class="mb-3">
         <h2 class="mb-1">Accounts And Finance</h2>

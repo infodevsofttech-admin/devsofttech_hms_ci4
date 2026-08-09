@@ -3,11 +3,39 @@
 namespace App\Controllers\Setting;
 
 use App\Controllers\BaseController;
+use App\Libraries\UserSessionRegistry;
 use CodeIgniter\Shield\Entities\User;
 use CodeIgniter\Shield\Models\UserModel;
 
 class UserManagement extends BaseController
 {
+    private function currentUserId(): int
+    {
+        return function_exists('auth') ? (int) (auth()->user()->id ?? 0) : 0;
+    }
+
+    private function canManageAdmins(): bool
+    {
+        return function_exists('auth') && auth()->loggedIn() && auth()->user()->can('users.manage-admins');
+    }
+
+    private function availableRoles(): array
+    {
+        $roles = (array) setting('AuthGroups.groups');
+        if (! $this->canManageAdmins()) {
+            foreach (['superadmin', 'admin', 'developer'] as $privilegedRole) {
+                unset($roles[$privilegedRole]);
+            }
+        }
+
+        return $roles;
+    }
+
+    private function isPrivilegedUser(User $user): bool
+    {
+        return $user->inGroup('superadmin', 'admin', 'developer') || $user->can('users.manage-admins');
+    }
+
     public function index(): string
     {
         $userModel = model(UserModel::class);
@@ -25,23 +53,25 @@ class UserManagement extends BaseController
     public function create(): string
     {
         return view('Setting/Admin/UserManagement/create', [
-            'roles' => setting('AuthGroups.groups'),
+            'roles' => $this->availableRoles(),
         ]);
     }
 
     public function store()
     {
         $rules = [
-            'username' => 'required|min_length[3]|max_length[30]',
+            'username' => 'required|min_length[3]|max_length[30]|regex_match[/^[a-zA-Z0-9.]+$/]',
             'email'    => 'required|valid_email|max_length[254]',
             'password' => 'required|min_length[8]',
             'role'     => 'required',
+            'person_name' => 'permit_empty|max_length[120]',
+            'phone_no' => 'permit_empty|regex_match[/^[0-9+()\\s-]{7,20}$/]',
         ];
 
         if (! $this->validate($rules)) {
             if ($this->request->isAJAX()) {
                 return view('Setting/Admin/UserManagement/create', [
-                    'roles' => setting('AuthGroups.groups'),
+                    'roles' => $this->availableRoles(),
                     'errors' => $this->validator->getErrors(),
                     'formData' => $this->request->getPost(),
                 ]);
@@ -51,12 +81,12 @@ class UserManagement extends BaseController
         }
 
         $role = strtolower((string) $this->request->getPost('role'));
-        $allowedRoles = array_keys(setting('AuthGroups.groups'));
+        $allowedRoles = array_keys($this->availableRoles());
         if (! in_array($role, $allowedRoles, true)) {
             $errors = ['role' => 'Invalid role selected.'];
             if ($this->request->isAJAX()) {
                 return view('Setting/Admin/UserManagement/create', [
-                    'roles' => setting('AuthGroups.groups'),
+                    'roles' => $this->availableRoles(),
                     'errors' => $errors,
                     'formData' => $this->request->getPost(),
                 ]);
@@ -72,11 +102,31 @@ class UserManagement extends BaseController
         $user->active = 1;
 
         $userModel = model(UserModel::class);
-        $userModel->save($user);
+        try {
+            if (! $userModel->save($user)) {
+                throw new \RuntimeException(implode(' ', $userModel->errors()));
+            }
+        } catch (\Throwable $e) {
+            return view('Setting/Admin/UserManagement/create', [
+                'roles' => $this->availableRoles(),
+                'errors' => ['user' => $e->getMessage() !== '' ? $e->getMessage() : 'Unable to create user.'],
+                'formData' => $this->request->getPost(),
+            ]);
+        }
 
         $savedUser = $userModel->find($userModel->getInsertID());
         if ($savedUser !== null) {
             $savedUser->addGroup($role);
+            $this->syncIdentityMeta(
+                (int) $savedUser->id,
+                trim((string) $this->request->getPost('person_name')),
+                trim((string) $this->request->getPost('phone_no'))
+            );
+            $this->auditClinicalUpdate('user_management', 'create', $savedUser->id, null, [
+                'username' => $savedUser->username,
+                'role' => $role,
+                'active' => 1,
+            ]);
         }
 
         if ($this->request->isAJAX()) {
@@ -111,10 +161,14 @@ class UserManagement extends BaseController
             $selectedUser = $userModel->withPermissions()->find($selectedUserId);
         }
 
+        $roleContext = $this->rolePermissionContext($selectedUser);
+
         return view('Setting/Admin/UserManagement/permissions', [
             'users' => $users,
             'permissions' => setting('AuthGroups.permissions'),
             'selectedUser' => $selectedUser,
+            'selectedRoleTitles' => $roleContext['titles'],
+            'inheritedPermissions' => $roleContext['permissions'],
         ]);
     }
 
@@ -138,6 +192,13 @@ class UserManagement extends BaseController
             ]);
         }
 
+        if ($this->isPrivilegedUser($user) && ! $this->canManageAdmins()) {
+            return view('Setting/Admin/UserManagement/index', [
+                'users' => $userModel->withIdentities()->withGroups()->findAll(),
+                'errors' => ['You cannot edit an administrator account.'],
+            ]);
+        }
+
         $emailIdentity = $user->getEmailIdentity();
         $email = $emailIdentity ? (string) ($emailIdentity->secret ?? '') : '';
         $meta = $this->decodeIdentityExtra($emailIdentity->extra ?? null);
@@ -147,13 +208,15 @@ class UserManagement extends BaseController
             'email' => $email,
             'person_name' => trim((string) ($meta['full_name'] ?? '')),
             'phone_no' => trim((string) ($meta['phone_no'] ?? '')),
+            'roles' => $this->availableRoles(),
+            'current_role' => (string) (($user->getGroups() ?? [])[0] ?? ''),
         ]);
     }
 
     public function update(int $userId)
     {
         $userModel = model(UserModel::class);
-        $user = $userModel->find($userId);
+        $user = $userModel->withGroups()->find($userId);
         if ($user === null) {
             $users = $userModel
                 ->withIdentities()
@@ -166,12 +229,26 @@ class UserManagement extends BaseController
             ]);
         }
 
+        if ($this->isPrivilegedUser($user) && ! $this->canManageAdmins()) {
+            return view('Setting/Admin/UserManagement/index', [
+                'users' => $userModel->withIdentities()->withGroups()->findAll(),
+                'errors' => ['You cannot edit an administrator account.'],
+            ]);
+        }
+
         $username = trim((string) $this->request->getPost('username'));
         $email = trim((string) $this->request->getPost('email'));
         $personName = trim((string) $this->request->getPost('person_name'));
         $phoneNo = trim((string) $this->request->getPost('phone_no'));
         $password = (string) $this->request->getPost('password');
         $active = $this->request->getPost('active') ? 1 : 0;
+        $role = strtolower(trim((string) $this->request->getPost('role')));
+        $oldGroups = $user->getGroups() ?? [];
+        $oldState = [
+            'username' => (string) ($user->username ?? ''),
+            'groups' => $oldGroups,
+            'active' => (int) ($user->active ?? 0),
+        ];
 
         $errors = [];
         if ($username === '' || strlen($username) < 3 || strlen($username) > 30 || preg_match('/\A[a-zA-Z0-9\.]+\z/', $username) !== 1) {
@@ -188,6 +265,12 @@ class UserManagement extends BaseController
         }
         if ($password !== '' && strlen($password) < 8) {
             $errors['password'] = 'Password must be at least 8 characters.';
+        }
+        if (! array_key_exists($role, $this->availableRoles())) {
+            $errors['role'] = 'Invalid role selected.';
+        }
+        if ($userId === $this->currentUserId() && $active !== 1) {
+            $errors['active'] = 'You cannot deactivate your own account.';
         }
 
         $tables = config('Auth')->tables;
@@ -223,6 +306,8 @@ class UserManagement extends BaseController
                 'email' => $email,
                 'person_name' => $personName,
                 'phone_no' => $phoneNo,
+                'roles' => $this->availableRoles(),
+                'current_role' => $role,
                 'errors' => $errors,
                 'formData' => [
                     'username' => $username,
@@ -230,6 +315,7 @@ class UserManagement extends BaseController
                     'person_name' => $personName,
                     'phone_no' => $phoneNo,
                     'active' => $active,
+                    'role' => $role,
                 ],
             ]);
         }
@@ -242,7 +328,17 @@ class UserManagement extends BaseController
         }
 
         $userModel->save($user);
+        $user->syncGroups($role);
         $this->syncIdentityMeta($userId, $personName, $phoneNo);
+        $this->auditClinicalUpdate('user_management', 'update', $userId, $oldState, [
+            'username' => $username,
+            'groups' => [$role],
+            'active' => $active,
+        ]);
+
+        if ($active !== 1) {
+            (new UserSessionRegistry($this->db))->revokeUser($userId, $this->currentUserId(), 'account_deactivated');
+        }
 
         $users = $userModel
             ->withIdentities()
@@ -272,6 +368,13 @@ class UserManagement extends BaseController
             ]);
         }
 
+        if ($this->isPrivilegedUser($user) && ! $this->canManageAdmins()) {
+            return view('Setting/Admin/UserManagement/index', [
+                'users' => $userModel->withIdentities()->withGroups()->findAll(),
+                'errors' => ['You cannot reset an administrator password.'],
+            ]);
+        }
+
         return view('Setting/Admin/UserManagement/reset_password', [
             'user' => $user,
         ]);
@@ -280,7 +383,7 @@ class UserManagement extends BaseController
     public function resetPassword(int $userId)
     {
         $userModel = model(UserModel::class);
-        $user = $userModel->find($userId);
+        $user = $userModel->withGroups()->find($userId);
         if ($user === null) {
             $users = $userModel
                 ->withIdentities()
@@ -290,6 +393,12 @@ class UserManagement extends BaseController
             return view('Setting/Admin/UserManagement/index', [
                 'users' => $users,
                 'errors' => ['User not found.'],
+            ]);
+        }
+        if ($this->isPrivilegedUser($user) && ! $this->canManageAdmins()) {
+            return view('Setting/Admin/UserManagement/index', [
+                'users' => $userModel->withIdentities()->withGroups()->findAll(),
+                'errors' => ['You cannot reset an administrator password.'],
             ]);
         }
 
@@ -352,6 +461,8 @@ class UserManagement extends BaseController
                 'force_reset' => 1,
                 'updated_at' => date('Y-m-d H:i:s'),
             ]);
+        (new UserSessionRegistry($this->db))->revokeUser($userId, $this->currentUserId(), 'password_reset');
+        $this->auditClinicalUpdate('user_management', 'password_reset', $userId, null, ['force_reset' => 1]);
 
         $users = $userModel
             ->withIdentities()
@@ -473,7 +584,9 @@ class UserManagement extends BaseController
             return redirect()->back()->withInput()->with('errors', $errors);
         }
 
+        $oldPermissions = $userModel->withPermissions()->find($userId)?->getPermissions() ?? [];
         $user->syncPermissions(...$permissions);
+        $this->auditClinicalUpdate('user_management', 'permissions', $userId, $oldPermissions, $permissions);
 
         if ($this->request->isAJAX()) {
             $users = $userModel
@@ -482,11 +595,14 @@ class UserManagement extends BaseController
                 ->findAll();
 
             $selectedUser = $userModel->withPermissions()->find($userId);
+            $roleContext = $this->rolePermissionContext($selectedUser);
 
             return view('Setting/Admin/UserManagement/permissions', [
                 'users' => $users,
                 'permissions' => setting('AuthGroups.permissions'),
                 'selectedUser' => $selectedUser,
+                'selectedRoleTitles' => $roleContext['titles'],
+                'inheritedPermissions' => $roleContext['permissions'],
                 'message' => 'Permissions updated successfully.',
             ]);
         }
@@ -494,5 +610,118 @@ class UserManagement extends BaseController
         return redirect()
             ->to('setting/admin/user-management/permissions?user_id=' . $userId)
             ->with('message', 'Permissions updated successfully.');
+    }
+
+    /**
+     * @return array{titles: list<string>, permissions: list<string>}
+     */
+    private function rolePermissionContext(?User $user): array
+    {
+        if ($user === null) {
+            return ['titles' => [], 'permissions' => []];
+        }
+
+        $availablePermissions = array_keys((array) setting('AuthGroups.permissions'));
+        $groups = (array) setting('AuthGroups.groups');
+        $matrix = (array) setting('AuthGroups.matrix');
+        $inheritedPermissions = [];
+        $roleTitles = [];
+
+        foreach ($user->getGroups() ?? [] as $role) {
+            $roleTitles[] = (string) ($groups[$role]['title'] ?? $role);
+            foreach ($matrix[$role] ?? [] as $grant) {
+                if (str_ends_with($grant, '.*')) {
+                    $prefix = substr($grant, 0, -1);
+                    foreach ($availablePermissions as $permission) {
+                        if (str_starts_with($permission, $prefix)) {
+                            $inheritedPermissions[] = $permission;
+                        }
+                    }
+                } elseif (in_array($grant, $availablePermissions, true)) {
+                    $inheritedPermissions[] = $grant;
+                }
+            }
+        }
+
+        return [
+            'titles' => array_values(array_unique($roleTitles)),
+            'permissions' => array_values(array_unique($inheritedPermissions)),
+        ];
+    }
+
+    public function sessions(): string
+    {
+        $registry = new UserSessionRegistry($this->db);
+        $registry->cleanup();
+        $rows = $registry->onlineUsers();
+        foreach ($rows as &$row) {
+            $meta = $this->decodeIdentityExtra($row['extra'] ?? null);
+            $row['person_name'] = trim((string) ($meta['full_name'] ?? ''));
+            unset($row['extra']);
+        }
+        unset($row);
+
+        return view('Setting/Admin/UserManagement/sessions', [
+            'sessions' => $rows,
+            'current_user_id' => $this->currentUserId(),
+        ]);
+    }
+
+    public function forceLogout(int $userId)
+    {
+        if ($userId === $this->currentUserId()) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Use Sign Out to end your own session.']);
+        }
+
+        $user = model(UserModel::class)->withGroups()->find($userId);
+        if ($user === null) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'User not found.']);
+        }
+        if ($this->isPrivilegedUser($user) && ! $this->canManageAdmins()) {
+            return $this->response->setStatusCode(403)->setJSON(['update' => 0, 'error_text' => 'You cannot log out an administrator.']);
+        }
+
+        $count = (new UserSessionRegistry($this->db))->revokeUser($userId, $this->currentUserId());
+        $this->auditClinicalUpdate('user_management', 'force_logout', $userId, null, ['sessions_revoked' => $count]);
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'error_text' => $count > 0 ? 'User session ended.' : 'No active session found.',
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
+    public function delete(int $userId)
+    {
+        if ($userId === $this->currentUserId()) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'You cannot delete your own account.']);
+        }
+
+        $userModel = model(UserModel::class);
+        $user = $userModel->withGroups()->find($userId);
+        if ($user === null) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'User not found.']);
+        }
+        if ($this->isPrivilegedUser($user) && ! $this->canManageAdmins()) {
+            return $this->response->setStatusCode(403)->setJSON(['update' => 0, 'error_text' => 'You cannot delete an administrator.']);
+        }
+
+        (new UserSessionRegistry($this->db))->revokeUser($userId, $this->currentUserId(), 'account_deleted');
+        $this->auditClinicalUpdate('user_management', 'delete', $userId, [
+            'username' => $user->username,
+            'groups' => $user->getGroups() ?? [],
+        ], ['deleted' => true]);
+
+        if (! $userModel->delete($userId)) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Unable to delete user.']);
+        }
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'error_text' => 'User deleted successfully.',
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
     }
 }

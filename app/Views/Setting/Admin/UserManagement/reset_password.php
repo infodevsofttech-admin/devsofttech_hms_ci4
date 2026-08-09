@@ -67,11 +67,11 @@
         $('#pin_hint').text('PIN generated. Share this temporary PIN with user.');
     }
 
-    $('#btn_generate_pin').on('click', function() {
+    $('#btn_generate_pin').off('click.userReset').on('click.userReset', function() {
         applyGeneratedPin(makeSixDigitPin());
     });
 
-    $('#btn_copy_pin').on('click', function() {
+    $('#btn_copy_pin').off('click.userReset').on('click.userReset', function() {
         var pin = ($('#password').val() || '').toString();
         if (!/^\d{6}$/.test(pin)) {
             $('#pin_hint').text('Enter/generate valid 6-digit PIN first.');
@@ -92,7 +92,7 @@
 
     applyGeneratedPin(makeSixDigitPin());
 
-    $(form).on('submit', function(event) {
+    $(form).off('submit.userReset').on('submit.userReset', function(event) {
         event.preventDefault();
         $.post($(form).attr('action'), $(form).serialize())
             .done(function(html) {

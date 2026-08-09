@@ -33,6 +33,52 @@
     <link href="<?= base_url('assets/css/custom-theme-dark-borders.css') ?>" rel="stylesheet">
 
     <script>
+        (function() {
+            var checkingSession = false;
+            var terminated = false;
+
+            function checkActiveSession() {
+                if (checkingSession || terminated || document.hidden) {
+                    return;
+                }
+                checkingSession = true;
+
+                fetch('<?= base_url('auth/session-status') ?>', {
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    cache: 'no-store',
+                    credentials: 'same-origin'
+                }).then(function(response) {
+                    if (response.status !== 409) {
+                        return null;
+                    }
+                    return response.json();
+                }).then(function(payload) {
+                    if (!payload || !payload.session_terminated || terminated) {
+                        return;
+                    }
+                    terminated = true;
+                    window.alert(payload.message || 'This login session was ended. Please sign in again.');
+                    window.location.assign(payload.login_url || '<?= base_url('login') ?>');
+                }).catch(function() {
+                }).finally(function() {
+                    checkingSession = false;
+                });
+            }
+
+            window.setInterval(checkActiveSession, 15000);
+            document.addEventListener('visibilitychange', function() {
+                if (!document.hidden) {
+                    checkActiveSession();
+                }
+            });
+            window.setTimeout(checkActiveSession, 3000);
+        })();
+    </script>
+
+    <script>
         // Early fallback so javascript:load_form(...) links never fail before full app scripts initialize.
         if (typeof window.load_form !== 'function') {
             window.load_form = function(ourl) {

@@ -6,10 +6,23 @@ namespace App\Authentication\Authenticators;
 
 use CodeIgniter\Shield\Authentication\Authenticators\Session;
 use CodeIgniter\Shield\Authentication\Passwords;
+use CodeIgniter\Shield\Entities\User;
 use CodeIgniter\Shield\Result;
 
 class LegacySafeSession extends Session
 {
+    public function completeLogin(User $user): void
+    {
+        parent::completeLogin($user);
+        (new \App\Libraries\UserSessionRegistry())->activate((int) $user->id);
+    }
+
+    public function logout(): void
+    {
+        (new \App\Libraries\UserSessionRegistry())->deactivateCurrent();
+        parent::logout();
+    }
+
     /**
      * @phpstan-param array{email?: string, username?: string, password?: string} $credentials
      */

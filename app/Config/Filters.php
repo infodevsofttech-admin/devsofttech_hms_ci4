@@ -2,6 +2,7 @@
 
 namespace Config;
 
+use App\Filters\SingleActiveSessionFilter;
 use CodeIgniter\Config\Filters as BaseFilters;
 use CodeIgniter\Filters\Cors;
 use CodeIgniter\Filters\CSRF;
@@ -34,6 +35,7 @@ class Filters extends BaseFilters
         'forcehttps'    => ForceHTTPS::class,
         'pagecache'     => PageCache::class,
         'performance'   => PerformanceMetrics::class,
+        'singleSession' => SingleActiveSessionFilter::class,
     ];
 
     /**
@@ -71,6 +73,7 @@ class Filters extends BaseFilters
      */
     public array $globals = [
         'before' => [
+            'singleSession',
             // 'honeypot',
             // 'csrf',
             // 'invalidchars',

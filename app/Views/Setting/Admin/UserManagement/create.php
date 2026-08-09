@@ -34,6 +34,14 @@
                         <div class="invalid-feedback">Email is required.</div>
                     </div>
                     <div class="col-md-6">
+                        <label class="form-label" for="person_name">Person Name</label>
+                        <input class="form-control" id="person_name" name="person_name" type="text" maxlength="120" value="<?= esc($formData['person_name'] ?? old('person_name')) ?>">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="phone_no">Phone No.</label>
+                        <input class="form-control" id="phone_no" name="phone_no" type="text" maxlength="20" value="<?= esc($formData['phone_no'] ?? old('phone_no')) ?>">
+                    </div>
+                    <div class="col-md-6">
                         <label class="form-label" for="password">Password</label>
                         <input class="form-control" id="password" name="password" type="password" required>
                         <div class="invalid-feedback">Password is required.</div>
@@ -51,6 +59,7 @@
                             <?php endif ?>
                         </select>
                         <div class="invalid-feedback">Role is required.</div>
+                        <div class="form-text">Choose the closest job role for baseline access. Add exceptional access later from Additional User Permissions.</div>
                     </div>
                 </div>
 
@@ -69,7 +78,7 @@
                 return;
             }
 
-            $(form).on('submit', function(event) {
+            $(form).off('submit.userCreate').on('submit.userCreate', function(event) {
                 event.preventDefault();
 
                 $.post($(form).attr('action'), $(form).serialize())

@@ -1794,6 +1794,13 @@ class Finance extends BaseController
             'finance.bank.deposit.create',
             'finance.bank.audit',
             'finance.bank.statement.update',
+            'finance.access',
+            'finance.compliance.view',
+            'finance.doctor_payout.manage',
+            'finance.vendor.manage',
+            'finance.po.manage',
+            'finance.grn.manage',
+            'finance.invoice.manage',
         ])) {
             return $this->response->setStatusCode(403)->setBody('Access denied');
         }

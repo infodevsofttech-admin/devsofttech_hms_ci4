@@ -7,9 +7,17 @@
                     <i class="bi bi-person-plus"></i>
                     New User
                 </button>
-                <button class="btn btn-outline-primary" type="button" onclick="load_form_div('<?= base_url('setting/admin/user-management/permissions') ?>','maindiv','Give Permission');">
+                <button class="btn btn-outline-dark" type="button" onclick="load_form_div('<?= base_url('setting/admin/roles') ?>','maindiv','Role Master');">
+                    <i class="bi bi-person-badge"></i>
+                    Role Master
+                </button>
+                <button class="btn btn-outline-primary" type="button" onclick="load_form_div('<?= base_url('setting/admin/user-management/permissions') ?>','maindiv','Additional Permissions');">
                     <i class="bi bi-shield-lock"></i>
-                    Give Permission
+                        Additional Permissions
+                </button>
+                <button class="btn btn-outline-success" type="button" onclick="load_form_div('<?= base_url('setting/admin/user-management/sessions') ?>','maindiv','Active Sessions');">
+                    <i class="bi bi-person-check"></i>
+                    Who is Online
                 </button>
             </div>
         </div>
@@ -100,6 +108,9 @@
                                         <div class="d-flex gap-1">
                                             <button type="button" class="btn btn-sm btn-outline-primary" onclick="load_form_div('<?= base_url('setting/admin/user-management/edit/' . (int) ($user->id ?? 0)) ?>','maindiv','Edit User');">Edit</button>
                                             <button type="button" class="btn btn-sm btn-outline-warning" onclick="load_form_div('<?= base_url('setting/admin/user-management/reset-password/' . (int) ($user->id ?? 0)) ?>','maindiv','Reset Password');">Reset Password</button>
+                                            <?php if ((int) ($user->id ?? 0) !== (int) (auth()->user()->id ?? 0)) : ?>
+                                                <button type="button" class="btn btn-sm btn-outline-danger btn-delete-user" data-user-id="<?= (int) ($user->id ?? 0) ?>" data-username="<?= esc((string) ($user->username ?? ''), 'attr') ?>">Delete</button>
+                                            <?php endif ?>
                                         </div>
                                     </td>
                                 </tr>
@@ -140,6 +151,26 @@
     $(document).off('click.umFilterReset', '#um_filter_reset').on('click.umFilterReset', '#um_filter_reset', function() {
         $('#um_filter_person,#um_filter_phone').val('');
         applyUserFilters();
+    });
+
+    $(document).off('click.userDelete', '.btn-delete-user').on('click.userDelete', '.btn-delete-user', function() {
+        var userId = parseInt($(this).data('user-id') || '0', 10);
+        var username = ($(this).data('username') || 'this user').toString();
+        if (userId <= 0 || !window.confirm('Delete ' + username + '? The account will no longer be able to sign in.')) {
+            return;
+        }
+
+        $.post('<?= base_url('setting/admin/user-management/delete') ?>/' + userId, {
+            '<?= csrf_token() ?>': $('input[name="<?= csrf_token() ?>"]').first().val() || '<?= csrf_hash() ?>'
+        }, function(data) {
+            if (!data || parseInt(data.update || '0', 10) !== 1) {
+                window.alert((data && data.error_text) || 'Unable to delete user.');
+                return;
+            }
+            load_form_div('<?= base_url('setting/admin/user-management') ?>', 'maindiv', 'User Management');
+        }, 'json').fail(function(xhr) {
+            window.alert((xhr.responseJSON && xhr.responseJSON.error_text) || 'Unable to delete user.');
+        });
     });
 })();
 </script>

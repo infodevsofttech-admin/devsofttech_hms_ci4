@@ -39,6 +39,18 @@
                     <input class="form-control" id="phone_no" name="phone_no" type="text" maxlength="20" value="<?= esc($formData['phone_no'] ?? ($phone_no ?? '')) ?>">
                 </div>
                 <div class="col-md-6">
+                    <label class="form-label" for="role">Role</label>
+                    <select class="form-select" id="role" name="role" required>
+                        <option value="">Select role</option>
+                        <?php foreach (($roles ?? []) as $roleKey => $roleInfo) : ?>
+                            <option value="<?= esc($roleKey) ?>" <?= (string) ($formData['role'] ?? ($current_role ?? '')) === (string) $roleKey ? 'selected' : '' ?>>
+                                <?= esc($roleInfo['title'] ?? $roleKey) ?>
+                            </option>
+                        <?php endforeach ?>
+                    </select>
+                    <div class="form-text">The role provides baseline access. Use Additional User Permissions only when this user needs extra access beyond the role.</div>
+                </div>
+                <div class="col-md-6">
                     <label class="form-label" for="password">New Password (Optional)</label>
                     <input class="form-control" id="password" name="password" type="password" autocomplete="new-password" placeholder="Leave blank to keep current password">
                 </div>
@@ -65,7 +77,7 @@
         return;
     }
 
-    $(form).on('submit', function(event) {
+    $(form).off('submit.userEdit').on('submit.userEdit', function(event) {
         event.preventDefault();
         $.post($(form).attr('action'), $(form).serialize())
             .done(function(html) {
