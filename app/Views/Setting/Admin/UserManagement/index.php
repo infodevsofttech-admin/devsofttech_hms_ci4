@@ -11,14 +11,6 @@
                     <i class="bi bi-person-badge"></i>
                     Role Master
                 </button>
-                <button class="btn btn-outline-primary" type="button" onclick="load_form_div('<?= base_url('setting/admin/user-management/permissions') ?>','maindiv','Additional Permissions');">
-                    <i class="bi bi-shield-lock"></i>
-                        Additional Permissions
-                </button>
-                <button class="btn btn-outline-success" type="button" onclick="load_form_div('<?= base_url('setting/admin/user-management/sessions') ?>','maindiv','Active Sessions');">
-                    <i class="bi bi-person-check"></i>
-                    Who is Online
-                </button>
             </div>
         </div>
         <div class="card-body">
@@ -106,10 +98,19 @@
                                     </td>
                                     <td>
                                         <div class="d-flex gap-1">
-                                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="load_form_div('<?= base_url('setting/admin/user-management/edit/' . (int) ($user->id ?? 0)) ?>','maindiv','Edit User');">Edit</button>
-                                            <button type="button" class="btn btn-sm btn-outline-warning" onclick="load_form_div('<?= base_url('setting/admin/user-management/reset-password/' . (int) ($user->id ?? 0)) ?>','maindiv','Reset Password');">Reset Password</button>
+                                            <button type="button" class="btn btn-sm btn-outline-primary" title="Edit user" aria-label="Edit user" onclick="load_form_div('<?= base_url('setting/admin/user-management/edit/' . (int) ($user->id ?? 0)) ?>','maindiv','Edit User');">
+                                                <i class="bi bi-pencil-square" aria-hidden="true"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-warning" title="Reset password" aria-label="Reset password" onclick="load_form_div('<?= base_url('setting/admin/user-management/reset-password/' . (int) ($user->id ?? 0)) ?>','maindiv','Reset Password');">
+                                                <i class="bi bi-key" aria-hidden="true"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-info" title="Additional permissions" aria-label="Additional permissions" onclick="load_form_div('<?= base_url('setting/admin/user-management/permissions?user_id=' . (int) ($user->id ?? 0)) ?>','maindiv','Additional Permissions');">
+                                                <i class="bi bi-shield-lock" aria-hidden="true"></i>
+                                            </button>
                                             <?php if ((int) ($user->id ?? 0) !== (int) (auth()->user()->id ?? 0)) : ?>
-                                                <button type="button" class="btn btn-sm btn-outline-danger btn-delete-user" data-user-id="<?= (int) ($user->id ?? 0) ?>" data-username="<?= esc((string) ($user->username ?? ''), 'attr') ?>">Delete</button>
+                                                <button type="button" class="btn btn-sm btn-outline-danger btn-delete-user" title="Delete user" aria-label="Delete user" data-user-id="<?= (int) ($user->id ?? 0) ?>" data-username="<?= esc((string) ($user->username ?? ''), 'attr') ?>">
+                                                    <i class="bi bi-trash" aria-hidden="true"></i>
+                                                </button>
                                             <?php endif ?>
                                         </div>
                                     </td>

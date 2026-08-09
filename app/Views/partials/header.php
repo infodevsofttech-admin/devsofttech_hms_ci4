@@ -7,6 +7,7 @@
                 $hdrCanIpdBilling = false;
                 $hdrCanDoctorWork = false;
                 $hdrCanPharmacy = false;
+                $hdrCanManageSessions = false;
                 if ($authUser && method_exists($authUser, 'can')) {
                     $hdrCanBilling = $authUser->can('billing.access')
                         || $authUser->can('billing.opd.edit')
@@ -32,6 +33,9 @@
                         || $authUser->can('doctor_work.*');
                     $hdrCanPharmacy = $authUser->can('pharmacy.access')
                         || $authUser->can('billing.access');
+                    $hdrCanManageSessions = $authUser->can('users.edit')
+                        || $authUser->can('users.manage-admins')
+                        || $authUser->can('users.*');
                 }
                 if ($authUser && method_exists($authUser, 'inGroup')) {
                     $inAdminGroup = $authUser->inGroup('superadmin', 'admin', 'developer');
@@ -39,6 +43,7 @@
                     if (! $hdrCanIpdBilling)  { $hdrCanIpdBilling  = $inAdminGroup; }
                     if (! $hdrCanDoctorWork)  { $hdrCanDoctorWork  = $inAdminGroup; }
                     if (! $hdrCanPharmacy)    { $hdrCanPharmacy    = $inAdminGroup; }
+                    if (! $hdrCanManageSessions) { $hdrCanManageSessions = $inAdminGroup; }
                 }
 
                 $loginId = trim((string) ($authUser->username ?? ''));
@@ -166,6 +171,14 @@
                                 <span>My Profile</span>
                             </a>
                         </li>
+                        <?php if ($hdrCanManageSessions) { ?>
+                        <li>
+                            <a class="dropdown-item d-flex align-items-center" href="javascript:load_form('<?= base_url('setting/admin/user-management/sessions') ?>','Who is Online');">
+                                <i class="bi bi-person-check"></i>
+                                <span>Who is Online</span>
+                            </a>
+                        </li>
+                        <?php } ?>
                         <li>
                             <hr class="dropdown-divider">
                         </li>
