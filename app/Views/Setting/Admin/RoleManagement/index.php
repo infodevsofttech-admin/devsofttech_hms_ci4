@@ -14,11 +14,8 @@
         </div>
     </div>
     <div class="card-body">
-        <?php if (! empty($message)) : ?><div class="alert alert-success"><?= esc($message) ?></div><?php endif ?>
-        <?php if (! empty($errors)) : ?>
-            <div class="alert alert-danger"><?php foreach ($errors as $error) : ?><div><?= esc($error) ?></div><?php endforeach ?></div>
-        <?php endif ?>
-
+        <?php if (! empty($message)) : ?><span class="d-none" data-page-notification data-notification-type="success" data-notification-title="Role Master" data-notification-message="<?= esc((string) $message, 'attr') ?>"></span><?php endif ?>
+        <?php foreach ((array) ($errors ?? []) as $error) : ?><span class="d-none" data-page-notification data-notification-type="error" data-notification-title="Role Master" data-notification-message="<?= esc((string) $error, 'attr') ?>"></span><?php endforeach ?>
         <div class="table-responsive">
             <table class="table table-striped align-middle">
                 <thead><tr><th>Role</th><th>Code</th><th>Permissions</th><th>Users</th><th>Status</th><th>Type</th><th>Action</th></tr></thead>
@@ -59,11 +56,12 @@
         data[csrfName] = csrfHash;
         $.post(url, data, null, 'json').done(function(response) {
             csrfHash = response.csrf_hash || csrfHash;
+            notify('success', 'Role Master', response.message || 'Role updated successfully.');
             load_form_div('<?= base_url('setting/admin/roles') ?>', 'maindiv', 'Role Master');
         }).fail(function(xhr) {
             var response = xhr.responseJSON || {};
             csrfHash = response.csrf_hash || csrfHash;
-            alert(response.error_text || 'Unable to update role.');
+            notify('error', 'Role Master', response.error_text || 'Unable to update role.');
         });
     }
 

@@ -18,7 +18,6 @@
         <div class="alert alert-info py-2">
             <strong><?= count($sessions) ?></strong> user<?= count($sessions) === 1 ? '' : 's' ?> currently online. A user can have only one active HMS session.
         </div>
-        <div id="user_session_notice"></div>
         <div class="table-responsive">
             <table class="table table-striped align-middle">
                 <thead>
@@ -88,14 +87,15 @@
                 '<?= csrf_token() ?>': $('input[name="<?= csrf_token() ?>"]').first().val() || '<?= csrf_hash() ?>'
             }, function(data) {
                 if (!data || parseInt(data.update || '0', 10) !== 1) {
-                    $('#user_session_notice').html('<div class="alert alert-danger">' + $('<div>').text((data && data.error_text) || 'Unable to end session.').html() + '</div>');
+                    notify('error', 'Force Logout', (data && data.error_text) || 'Unable to end session.');
                     button.disabled = false;
                     return;
                 }
+                notify('success', 'Force Logout', data.error_text || 'User session ended.');
                 load_form_div(listUrl, 'maindiv', 'Active Sessions');
             }, 'json').fail(function(xhr) {
                 var message = (xhr.responseJSON && xhr.responseJSON.error_text) || 'Unable to end session.';
-                $('#user_session_notice').html('<div class="alert alert-danger">' + $('<div>').text(message).html() + '</div>');
+                notify('error', 'Force Logout', message);
                 button.disabled = false;
             });
         });

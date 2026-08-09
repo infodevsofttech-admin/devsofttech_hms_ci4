@@ -339,6 +339,9 @@
                             mainEl.innerHTML = html;
                         }
                         executeInjectedScripts('main');
+                        if (typeof window.showPageNotifications === 'function') {
+                            window.showPageNotifications(mainEl);
+                        }
                         if (typeof initfunc === 'function') {
                             initfunc();
                         }
@@ -388,6 +391,9 @@
                             targetEl.innerHTML = html;
                         }
                         executeInjectedScripts(xdiv);
+                        if (typeof window.showPageNotifications === 'function') {
+                            window.showPageNotifications(targetEl);
+                        }
                         if (typeof initfunc === 'function') {
                             initfunc();
                         }
@@ -479,6 +485,18 @@
                 }
             };
         }
+
+        window.showPageNotifications = function(root) {
+            var scope = root && root.querySelectorAll ? root : document;
+            scope.querySelectorAll('[data-page-notification]:not([data-notification-shown])').forEach(function(item) {
+                item.setAttribute('data-notification-shown', '1');
+                window.notify(
+                    item.getAttribute('data-notification-type') || 'error',
+                    item.getAttribute('data-notification-title') || 'Notification',
+                    item.getAttribute('data-notification-message') || ''
+                );
+            });
+        };
     </script>
     <script>
         (function() {

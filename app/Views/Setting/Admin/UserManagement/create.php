@@ -13,13 +13,7 @@
         <div class="card-body">
             <?php $errors = $errors ?? session('errors'); ?>
             <?php $formData = $formData ?? []; ?>
-            <?php if (! empty($errors)) : ?>
-                <div class="alert alert-danger">
-                    <?php foreach ((array) $errors as $error) : ?>
-                        <div><?= esc($error) ?></div>
-                    <?php endforeach ?>
-                </div>
-            <?php endif ?>
+            <?php foreach ((array) $errors as $error) : ?><span class="d-none" data-page-notification data-notification-type="error" data-notification-title="Create User" data-notification-message="<?= esc((string) $error, 'attr') ?>"></span><?php endforeach ?>
             <form class="needs-validation" novalidate action="<?= base_url('setting/admin/user-management/new') ?>" method="post">
                 <?= csrf_field() ?>
                 <div class="row g-3">
@@ -84,9 +78,10 @@
                 $.post($(form).attr('action'), $(form).serialize())
                     .done(function(html) {
                         $('#maindiv').html(html);
+                        showPageNotifications(document.getElementById('maindiv'));
                     })
-                    .fail(function() {
-                        alert('Request failed. Please try again.');
+                    .fail(function(xhr) {
+                        notify('error', 'Create User', (xhr.responseJSON && xhr.responseJSON.error_text) || 'Request failed. Please try again.');
                     });
             });
         })();

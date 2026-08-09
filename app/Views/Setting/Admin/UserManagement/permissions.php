@@ -14,16 +14,8 @@
             <div class="card-body">
                 <?php $message = $message ?? session('message'); ?>
                 <?php $errors = $errors ?? session('errors'); ?>
-                <?php if (! empty($message)) : ?>
-                    <div class="alert alert-success"><?= esc($message) ?></div>
-                <?php endif ?>
-                <?php if (! empty($errors)) : ?>
-                    <div class="alert alert-danger">
-                        <?php foreach ((array) $errors as $error) : ?>
-                            <div><?= esc($error) ?></div>
-                        <?php endforeach ?>
-                    </div>
-                <?php endif ?>
+                <?php if (! empty($message)) : ?><span class="d-none" data-page-notification data-notification-type="success" data-notification-title="Additional Permissions" data-notification-message="<?= esc((string) $message, 'attr') ?>"></span><?php endif ?>
+                <?php foreach ((array) $errors as $error) : ?><span class="d-none" data-page-notification data-notification-type="error" data-notification-title="Additional Permissions" data-notification-message="<?= esc((string) $error, 'attr') ?>"></span><?php endforeach ?>
                 <?php
                 $selectedEmail = '';
                 $selectedPersonName = '';
@@ -293,9 +285,10 @@
                     $.post($(form).attr('action'), $(form).serialize())
                         .done(function(html) {
                             $('#maindiv').html(html);
+                            showPageNotifications(document.getElementById('maindiv'));
                         })
-                        .fail(function() {
-                            alert('Request failed. Please try again.');
+                        .fail(function(xhr) {
+                            notify('error', 'Additional Permissions', (xhr.responseJSON && xhr.responseJSON.error_text) || 'Request failed. Please try again.');
                         });
                 });
             })();

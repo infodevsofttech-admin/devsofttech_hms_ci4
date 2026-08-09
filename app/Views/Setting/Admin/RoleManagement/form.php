@@ -16,7 +16,7 @@ foreach ($allPermissions as $key => $label) {
         <button class="btn btn-light" type="button" onclick="load_form_div('<?= base_url('setting/admin/roles') ?>','maindiv','Role Master');"><i class="bi bi-arrow-left"></i> Back to Role Master</button>
     </div>
     <div class="card-body">
-        <?php if (! empty($errors)) : ?><div class="alert alert-danger"><?php foreach ($errors as $error) : ?><div><?= esc($error) ?></div><?php endforeach ?></div><?php endif ?>
+        <?php foreach ((array) ($errors ?? []) as $error) : ?><span class="d-none" data-page-notification data-notification-type="error" data-notification-title="Role Master" data-notification-message="<?= esc((string) $error, 'attr') ?>"></span><?php endforeach ?>
         <?php if ($isSuperAdmin) : ?><div class="alert alert-info">Super Admin permissions are protected against lockout and cannot be changed.</div><?php endif ?>
 
         <form id="frm_role_master" action="<?= $isEdit ? base_url('setting/admin/roles/edit/' . (int) $role['id']) : base_url('setting/admin/roles') ?>" method="post">
@@ -75,8 +75,9 @@ foreach ($allPermissions as $key => $label) {
         var form = this;
         $.post($(form).attr('action'), $(form).serialize()).done(function(html) {
             $('#maindiv').html(html);
+            showPageNotifications(document.getElementById('maindiv'));
         }).fail(function(xhr) {
-            alert((xhr.responseJSON && xhr.responseJSON.error_text) || 'Unable to save role.');
+            notify('error', 'Role Master', (xhr.responseJSON && xhr.responseJSON.error_text) || 'Unable to save role.');
         });
     });
 })();

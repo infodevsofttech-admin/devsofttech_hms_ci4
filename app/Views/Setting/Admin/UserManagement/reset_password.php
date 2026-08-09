@@ -10,13 +10,7 @@
     </div>
     <div class="card-body">
         <?php $errors = $errors ?? session('errors'); ?>
-        <?php if (! empty($errors)) : ?>
-            <div class="alert alert-danger">
-                <?php foreach ((array) $errors as $error) : ?>
-                    <div><?= esc($error) ?></div>
-                <?php endforeach ?>
-            </div>
-        <?php endif ?>
+        <?php foreach ((array) $errors as $error) : ?><span class="d-none" data-page-notification data-notification-type="error" data-notification-title="Reset Password" data-notification-message="<?= esc((string) $error, 'attr') ?>"></span><?php endforeach ?>
 
         <div class="mb-3">
             <div><strong>Login ID:</strong> <?= esc((string) ($user->username ?? '')) ?></div>
@@ -97,9 +91,10 @@
         $.post($(form).attr('action'), $(form).serialize())
             .done(function(html) {
                 $('#maindiv').html(html);
+                showPageNotifications(document.getElementById('maindiv'));
             })
-            .fail(function() {
-                alert('Request failed. Please try again.');
+            .fail(function(xhr) {
+                notify('error', 'Reset Password', (xhr.responseJSON && xhr.responseJSON.error_text) || 'Request failed. Please try again.');
             });
     });
 })();
