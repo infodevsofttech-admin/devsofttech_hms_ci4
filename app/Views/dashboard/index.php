@@ -5,6 +5,8 @@ $admitToday = $admit_today ?? 0;
 $dischargeToday = $discharge_today ?? 0;
 $currentIpd = $current_ipd ?? 0;
 $currentOrgIpd = $current_org_ipd ?? 0;
+$diagnosisToday = $diagnosis_today ?? 0;
+$diagnosisCompletedToday = $diagnosis_completed_today ?? 0;
 $opdOrgList = $opd_org_list ?? [];
 $opdDoctorList = $opd_doctor_list ?? [];
 $ipdDoctorList = $ipd_doctor_list ?? [];
@@ -26,8 +28,8 @@ $trendIpd = $trend_ipd ?? [];
 
 <section class="section dashboard">
     <div class="row">
-        <div class="col-xxl-3 col-md-6">
-            <div class="card info-card sales-card">
+        <div class="col-xxl col-md-6">
+            <div class="card info-card sales-card dashboard-drill-card" role="button" tabindex="0" data-dashboard-url="<?= base_url('dashboard/opd') ?>" data-dashboard-title="OPD Dashboard">
                 <div class="card-body">
                     <h5 class="card-title">OPD <span>| Today</span></h5>
                     <div class="d-flex align-items-center">
@@ -43,8 +45,8 @@ $trendIpd = $trend_ipd ?? [];
             </div>
         </div>
 
-        <div class="col-xxl-3 col-md-6">
-            <div class="card info-card revenue-card">
+        <div class="col-xxl col-md-6">
+            <div class="card info-card revenue-card dashboard-drill-card" role="button" tabindex="0" data-dashboard-url="<?= base_url('dashboard/ipd') ?>" data-dashboard-title="IPD Dashboard">
                 <div class="card-body">
                     <h5 class="card-title">Admit & Discharge <span>| Today</span></h5>
                     <div class="d-flex align-items-center">
@@ -60,8 +62,8 @@ $trendIpd = $trend_ipd ?? [];
             </div>
         </div>
 
-        <div class="col-xxl-3 col-md-6">
-            <div class="card info-card customers-card">
+        <div class="col-xxl col-md-6">
+            <div class="card info-card customers-card dashboard-drill-card" role="button" tabindex="0" data-dashboard-url="<?= base_url('dashboard/ipd') ?>" data-dashboard-title="IPD Dashboard">
                 <div class="card-body">
                     <h5 class="card-title">Current IPD <span>| In-house</span></h5>
                     <div class="d-flex align-items-center">
@@ -77,7 +79,16 @@ $trendIpd = $trend_ipd ?? [];
             </div>
         </div>
 
-        <div class="col-xxl-3 col-md-6">
+        <div class="col-xxl col-md-6">
+            <div class="card info-card dashboard-drill-card" role="button" tabindex="0" data-dashboard-url="<?= base_url('dashboard/diagnosis') ?>" data-dashboard-title="Diagnosis Dashboard">
+                <div class="card-body">
+                    <h5 class="card-title">Diagnosis <span>| Today</span></h5>
+                    <div class="d-flex align-items-center"><div class="card-icon rounded-circle d-flex align-items-center justify-content-center"><i class="bi bi-clipboard2-pulse"></i></div><div class="ps-3"><h6><?= esc((string) $diagnosisToday) ?></h6><span class="text-muted small pt-1">Completed: <?= esc((string) $diagnosisCompletedToday) ?></span></div></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xxl col-md-6">
             <div class="card info-card">
                 <div class="card-body">
                     <h5 class="card-title">Daily Trend <span>| Current Month</span></h5>
@@ -241,9 +252,17 @@ $trendIpd = $trend_ipd ?? [];
     </div>
 </section>
 
+<style>.dashboard-drill-card{cursor:pointer;transition:transform .16s ease,box-shadow .16s ease}.dashboard-drill-card:hover,.dashboard-drill-card:focus{transform:translateY(-2px);box-shadow:0 8px 20px rgba(25,55,95,.13);outline:2px solid rgba(36,107,253,.25);outline-offset:2px}</style>
+
 <script src="<?= base_url('assets/vendor/chart.js/chart.umd.js') ?>"></script>
 <script>
     (function () {
+        $('.dashboard-drill-card').off('click.dashboardDrill keydown.dashboardDrill').on('click.dashboardDrill keydown.dashboardDrill', function(event) {
+            if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            load_form($(this).data('dashboard-url'), $(this).data('dashboard-title'));
+        });
+
         const labels = <?= json_encode($trendLabels) ?>;
         const opdData = <?= json_encode($trendOpd) ?>;
         const ipdData = <?= json_encode($trendIpd) ?>;

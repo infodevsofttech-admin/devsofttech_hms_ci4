@@ -96,6 +96,24 @@ class Home extends BaseController
             ->where('i.ipd_status', 0)
             ->countAllResults();
 
+        $diagnosisToday = $this->db->table('invoice_item ii')
+            ->join('invoice_master im', 'im.id = ii.inv_master_id', 'inner')
+            ->whereIn('ii.item_type', [1, 2, 3, 4, 5, 6, 30])
+            ->where('im.invoice_status', 1)
+            ->where('im.inv_date >=', $today)
+            ->where('im.inv_date <', date('Y-m-d', strtotime('+1 day')))
+            ->countAllResults();
+
+        $diagnosisCompletedToday = $this->db->table('invoice_item ii')
+            ->join('invoice_master im', 'im.id = ii.inv_master_id', 'inner')
+            ->join('lab_request lr', 'lr.charge_item_id = ii.id AND lr.charge_id = im.id', 'left')
+            ->whereIn('ii.item_type', [1, 2, 3, 4, 5, 6, 30])
+            ->where('im.invoice_status', 1)
+            ->where('im.inv_date >=', $today)
+            ->where('im.inv_date <', date('Y-m-d', strtotime('+1 day')))
+            ->where('lr.status', 2)
+            ->countAllResults();
+
         $opdOrgList = $this->db->table('opd_master o')
             ->select('ins.short_name as org_name')
             ->select('COUNT(o.opd_id) as total_cases', false)
@@ -206,6 +224,8 @@ class Home extends BaseController
             'discharge_today' => $dischargeToday,
             'current_ipd' => $currentIpd,
             'current_org_ipd' => $currentOrgIpd,
+            'diagnosis_today' => $diagnosisToday,
+            'diagnosis_completed_today' => $diagnosisCompletedToday,
             'opd_org_list' => $opdOrgList,
             'opd_doctor_list' => $opdDoctorList,
             'ipd_doctor_list' => $ipdDoctorList,
@@ -217,6 +237,168 @@ class Home extends BaseController
         ];
 
         return view('dashboard/index', $data);
+    }
+
+    public function opdDashboard()
+    {
+        if (($response = $this->dashboardAccessResponse('dashboard/opd', 'OPD Dashboard')) !== null) {
+            return $response;
+        }
+
+        [$fromDate, $toDate, $fromDateTime, $toExclusive] = $this->dashboardDateRange();
+        $base = $this->db->table('opd_master')
+            ->where('apointment_date >=', $fromDateTime)
+            ->where('apointment_date <', $toExclusive);
+
+        $totals = $this->db->table('opd_master')
+            ->select('COUNT(opd_id) total_visits, COUNT(DISTINCT p_id) unique_patients', false)
+            ->select('SUM(CASE WHEN opd_status = 2 THEN 1 ELSE 0 END) completed_visits', false)
+            ->select('SUM(CASE WHEN opd_status = 3 THEN 1 ELSE 0 END) cancelled_visits', false)
+            ->where('apointment_date >=', $fromDateTime)
+            ->where('apointment_date <', $toExclusive)
+            ->get()->getRowArray() ?? [];
+
+        $doctorRows = (clone $base)
+            ->select("COALESCE(NULLIF(doc_name, ''), 'Unassigned') label", false)
+            ->select('COUNT(opd_id) total, COUNT(DISTINCT p_id) patients', false)
+            ->groupBy('label')->orderBy('total', 'DESC')->get()->getResultArray();
+        $departmentRows = (clone $base)
+            ->select("COALESCE(NULLIF(doc_spec, ''), 'Unassigned') label", false)
+            ->select('COUNT(opd_id) total, COUNT(DISTINCT p_id) patients', false)
+            ->groupBy('label')->orderBy('total', 'DESC')->get()->getResultArray();
+        $organizationRows = (clone $base)
+            ->select("CASE WHEN o.insurance_id IS NULL OR o.insurance_id <= 1 THEN 'Direct' ELSE COALESCE(NULLIF(ins.short_name, ''), 'Organization') END label", false)
+            ->select('COUNT(o.opd_id) total', false)
+            ->join('hc_insurance ins', 'ins.id = o.insurance_id', 'left')
+            ->from('opd_master o', true)
+            ->groupBy('label')->orderBy('total', 'DESC')->get()->getResultArray();
+
+        $referralRows = $this->db->query(
+            "SELECT COALESCE(NULLIF(CONCAT_WS(' ', NULLIF(r.title, ''), NULLIF(r.f_name, '')), ''), NULLIF(x.refer_name, ''), 'Not recorded') label,
+                    COUNT(o.opd_id) total, COUNT(DISTINCT o.p_id) patients
+             FROM opd_master o
+             LEFT JOIN (
+                 SELECT opd_code, MAX(NULLIF(refer_by_id, 0)) refer_id,
+                        MAX(NULLIF(NULLIF(refer_by_other, ''), '0')) refer_name
+                 FROM invoice_master GROUP BY opd_code
+             ) x ON x.opd_code = o.opd_code
+             LEFT JOIN refer_master r ON r.id = x.refer_id
+             WHERE o.apointment_date >= ? AND o.apointment_date < ?
+             GROUP BY label ORDER BY total DESC",
+            [$fromDateTime, $toExclusive]
+        )->getResultArray();
+
+        return view('dashboard/opd', compact('fromDate', 'toDate', 'totals', 'doctorRows', 'departmentRows', 'organizationRows', 'referralRows'));
+    }
+
+    public function ipdDashboard()
+    {
+        if (($response = $this->dashboardAccessResponse('dashboard/ipd', 'IPD Dashboard')) !== null) {
+            return $response;
+        }
+
+        [$fromDate, $toDate] = $this->dashboardDateRange();
+        $totals = $this->db->table('ipd_master')
+            ->select('COUNT(id) admissions', false)
+            ->select('SUM(CASE WHEN ipd_status = 0 THEN 1 ELSE 0 END) active_cases', false)
+            ->where('register_date >=', $fromDate)->where('register_date <=', $toDate)
+            ->get()->getRowArray() ?? [];
+        $totals['discharges'] = $this->db->table('ipd_master')
+            ->where('ipd_status', 1)->where('discharge_date >=', $fromDate)->where('discharge_date <=', $toDate)
+            ->countAllResults();
+        $totals['current_in_house'] = $this->db->table('ipd_master')->where('ipd_status', 0)->countAllResults();
+
+        $departmentRows = $this->db->table('ipd_master i')
+            ->select("COALESCE(NULLIF(d.vName, ''), 'Unassigned') label", false)->select('COUNT(i.id) total', false)
+            ->join('hc_department d', 'd.iId = i.dept_id', 'left')
+            ->where('i.register_date >=', $fromDate)->where('i.register_date <=', $toDate)
+            ->groupBy('label')->orderBy('total', 'DESC')->get()->getResultArray();
+        $doctorRows = $this->db->table('ipd_master i')
+            ->select("COALESCE(NULLIF(d.p_fname, ''), NULLIF(i.r_doc_name, ''), 'Unassigned') label", false)
+            ->select('COUNT(DISTINCT i.id) total', false)
+            ->join('ipd_master_doc_list l', 'l.ipd_id = i.id', 'left')
+            ->join('doctor_master d', 'd.id = l.doc_id', 'left')
+            ->where('i.register_date >=', $fromDate)->where('i.register_date <=', $toDate)
+            ->groupBy('label')->orderBy('total', 'DESC')->get()->getResultArray();
+        $referralRows = $this->db->table('ipd_master i')
+            ->select("COALESCE(NULLIF(CONCAT_WS(' ', NULLIF(r.title, ''), NULLIF(r.f_name, '')), ''), 'Not recorded') label", false)
+            ->select('COUNT(i.id) total', false)
+            ->join('refer_master r', 'r.id = i.refer_by', 'left')
+            ->where('i.register_date >=', $fromDate)->where('i.register_date <=', $toDate)
+            ->groupBy('label')->orderBy('total', 'DESC')->get()->getResultArray();
+        $organizationRows = $this->db->table('ipd_master i')
+            ->select("CASE WHEN i.case_id IS NULL OR i.case_id = 0 THEN 'Direct' ELSE COALESCE(NULLIF(ins.short_name, ''), 'Organization') END label", false)
+            ->select('COUNT(i.id) total', false)
+            ->join('organization_case_master oc', 'oc.id = i.case_id', 'left')
+            ->join('hc_insurance ins', 'ins.id = oc.insurance_id', 'left')
+            ->where('i.register_date >=', $fromDate)->where('i.register_date <=', $toDate)
+            ->groupBy('label')->orderBy('total', 'DESC')->get()->getResultArray();
+
+        return view('dashboard/ipd', compact('fromDate', 'toDate', 'totals', 'doctorRows', 'departmentRows', 'organizationRows', 'referralRows'));
+    }
+
+    public function diagnosisDashboard()
+    {
+        if (($response = $this->dashboardAccessResponse('dashboard/diagnosis', 'Diagnosis Dashboard')) !== null) {
+            return $response;
+        }
+
+        [$fromDate, $toDate] = $this->dashboardDateRange();
+        $modalityNames = [1 => 'Ultrasound', 2 => 'MRI', 3 => 'X-Ray', 4 => 'CT Scan', 5 => 'Pathology', 6 => 'Echo', 30 => 'Biopsy'];
+        $rows = $this->db->table('invoice_item ii')
+            ->select('ii.item_type modality_id')->select('COUNT(DISTINCT ii.id) total', false)
+            ->select('SUM(CASE WHEN lr.id IS NOT NULL THEN 1 ELSE 0 END) samples_received', false)
+            ->select('SUM(CASE WHEN lr.id IS NULL THEN 1 ELSE 0 END) pending_collection', false)
+            ->select('SUM(CASE WHEN lr.id IS NOT NULL AND IFNULL(lr.status, 0) < 2 THEN 1 ELSE 0 END) pending_reports', false)
+            ->select('SUM(CASE WHEN lr.status = 2 THEN 1 ELSE 0 END) completed_reports', false)
+            ->join('invoice_master im', 'im.id = ii.inv_master_id', 'inner')
+            ->join('lab_request lr', 'lr.charge_item_id = ii.id AND lr.charge_id = im.id', 'left')
+            ->whereIn('ii.item_type', array_keys($modalityNames))->where('im.invoice_status', 1)
+            ->where('im.inv_date >=', $fromDate)->where('im.inv_date <=', $toDate)
+            ->groupBy('ii.item_type')->get()->getResultArray();
+        $modalityRows = [];
+        foreach ($modalityNames as $id => $name) {
+            $match = array_values(array_filter($rows, static fn (array $row): bool => (int) $row['modality_id'] === $id))[0] ?? [];
+            $modalityRows[] = array_merge(['modality_id' => $id, 'label' => $name, 'total' => 0, 'samples_received' => 0, 'pending_collection' => 0, 'pending_reports' => 0, 'completed_reports' => 0], $match);
+        }
+        $totals = ['total' => 0, 'samples_received' => 0, 'pending_collection' => 0, 'pending_reports' => 0, 'completed_reports' => 0];
+        foreach ($modalityRows as $row) {
+            foreach (array_keys($totals) as $key) {
+                $totals[$key] += (int) $row[$key];
+            }
+        }
+
+        return view('dashboard/diagnosis', compact('fromDate', 'toDate', 'totals', 'modalityRows'));
+    }
+
+    private function dashboardAccessResponse(string $route, string $title)
+    {
+        if (($authRedirect = $this->ensureAuthenticated()) !== null) {
+            return $authRedirect;
+        }
+        if (! $this->request->isAJAX()) {
+            return view('welcome_message', ['initial_route' => base_url($route), 'initial_title' => $title]);
+        }
+
+        return null;
+    }
+
+    /** @return array{0:string,1:string,2:string,3:string} */
+    private function dashboardDateRange(): array
+    {
+        $today = date('Y-m-d');
+        $fromDate = (string) ($this->request->getGet('from_date') ?: $today);
+        $toDate = (string) ($this->request->getGet('to_date') ?: $fromDate);
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fromDate) || strtotime($fromDate) === false) {
+            $fromDate = $today;
+        }
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $toDate) || strtotime($toDate) === false) {
+            $toDate = $fromDate;
+        }
+        if ($fromDate > $toDate) {
+            [$fromDate, $toDate] = [$toDate, $fromDate];
+        }
+        return [$fromDate, $toDate, $fromDate . ' 00:00:00', date('Y-m-d', strtotime($toDate . ' +1 day')) . ' 00:00:00'];
     }
 
     public function myProfile()

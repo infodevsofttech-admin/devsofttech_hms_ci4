@@ -7,6 +7,9 @@ use CodeIgniter\Router\RouteCollection;
  */
 $routes->get('/', 'Home::index');
 $routes->get('dashboard', 'Home::dashboard');
+$routes->get('dashboard/opd', 'Home::opdDashboard');
+$routes->get('dashboard/ipd', 'Home::ipdDashboard');
+$routes->get('dashboard/diagnosis', 'Home::diagnosisDashboard');
 $routes->get('my-profile', 'Home::myProfile');
 $routes->post('my-profile/save', 'Home::myProfileSave');
 $routes->post('my-profile/save-settings', 'Home::myProfileSaveSettings');
