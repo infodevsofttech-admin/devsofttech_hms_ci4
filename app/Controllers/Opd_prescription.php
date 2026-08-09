@@ -8174,6 +8174,7 @@ class Opd_prescription extends BaseController
         $daysField = $this->resolveFirstField($fields, ['no_of_days']);
         $qtyField = $this->resolveFirstField($fields, ['qty']);
         $remarkField = $this->resolveFirstField($fields, ['remark']);
+        $saltField = $this->resolveFirstField($fields, ['genericname', 'salt_name']);
 
         if ($idField === null || $nameField === null) {
             return $this->response->setJSON(['rows' => []]);
@@ -8204,9 +8205,12 @@ class Opd_prescription extends BaseController
         if ($remarkField !== null) {
             $select .= ',' . $remarkField . ' as remark';
         }
+        if ($saltField !== null) {
+            $select .= ',' . $saltField . ' as med_salt';
+        }
 
         $userId = (int) ($this->getCurrentUserId() ?? 0);
-        $cacheKey = 'medicine_search_v2_' . md5(json_encode([
+        $cacheKey = 'medicine_search_v4_' . md5(json_encode([
             'q' => strtoupper($q),
             'scope' => $scope,
             'user' => $userId,

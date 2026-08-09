@@ -111,6 +111,7 @@ if (! empty($legacyDrugRows)) {
             'id' => (int) ($row['id'] ?? 0),
             'source' => 'legacy',
             'med_name' => (string) ($row['med_name'] ?? ''),
+            'med_salt' => (string) ($row['med_salt'] ?? ''),
             'med_type' => (string) ($row['med_type'] ?? ''),
             'dosage' => $doseLabel !== '' ? $doseLabel : (string) ($row['dosage'] ?? ''),
             'dosage_when' => $whenLabel !== '' ? $whenLabel : (string) ($row['dosage_when'] ?? ''),
@@ -129,6 +130,7 @@ if (! empty($legacyDrugRows)) {
             'id' => (int) ($row['id'] ?? 0),
             'source' => 'classic',
             'med_name' => (string) ($row['drug_name'] ?? ''),
+            'med_salt' => '',
             'med_type' => '',
             'dosage' => (string) ($row['drug_dose'] ?? ''),
             'dosage_when' => '',
@@ -1266,6 +1268,7 @@ $historyFields = [
                                                                         data-id="<?= (int) ($row['id'] ?? 0) ?>"
                                                                         data-source="<?= esc((string) ($row['source'] ?? 'legacy')) ?>"
                                                                         data-med-name="<?= esc((string) ($row['med_name'] ?? '')) ?>"
+                                                                        data-med-salt="<?= esc((string) ($row['med_salt'] ?? '')) ?>"
                                                                         data-med-type="<?= esc((string) ($row['med_type'] ?? '')) ?>"
                                                                         data-dose-id="<?= (int) ($row['dosage_id'] ?? 0) ?>"
                                                                         data-dose-when-id="<?= (int) ($row['dosage_when_id'] ?? 0) ?>"
@@ -1301,6 +1304,7 @@ $historyFields = [
                                                 <input type="hidden" id="discharge_med_item_id" value="0">
                                                 <input type="hidden" id="discharge_med_item_source" value="legacy">
                                                 <input type="hidden" id="discharge_med_id" value="0">
+                                                <input type="hidden" id="discharge_med_salt" value="">
 <div class="row g-2 mb-2">
                                                 <div class="col-8">
                                                     <label class="form-label small">Medicine Name (Brand)</label>
@@ -4198,6 +4202,9 @@ $historyFields = [
                                     if (section.querySelector('#discharge_med_id')) {
                                         section.querySelector('#discharge_med_id').value = String(matched.id || '0');
                                     }
+                                    if (section.querySelector('#discharge_med_salt')) {
+                                        section.querySelector('#discharge_med_salt').value = String(matched.med_salt || '').trim();
+                                    }
                                     // Auto-fill type if empty
                                     if (dischargeMedType && dischargeMedType.value.trim() === '') {
                                         dischargeMedType.value = String(matched.med_type || '').trim();
@@ -4222,6 +4229,9 @@ $historyFields = [
                             if (section.querySelector('#discharge_med_id')) {
                                 section.querySelector('#discharge_med_id').value = '0';
                             }
+                            if (section.querySelector('#discharge_med_salt')) {
+                                section.querySelector('#discharge_med_salt').value = '';
+                            }
                             return;
                         }
 
@@ -4238,6 +4248,9 @@ $historyFields = [
                             $(dischargeMedInput).data('med-id', parseInt(matched.id || 0, 10));
                             if (section.querySelector('#discharge_med_id')) {
                                 section.querySelector('#discharge_med_id').value = String(matched.id || '0');
+                            }
+                            if (section.querySelector('#discharge_med_salt')) {
+                                section.querySelector('#discharge_med_salt').value = String(matched.med_salt || '').trim();
                             }
 
                             // Auto-fill Type
@@ -4284,6 +4297,9 @@ $historyFields = [
                             $(dischargeMedInput).data('med-id', 0);
                             if (section.querySelector('#discharge_med_id')) {
                                 section.querySelector('#discharge_med_id').value = '0';
+                            }
+                            if (section.querySelector('#discharge_med_salt')) {
+                                section.querySelector('#discharge_med_salt').value = '';
                             }
                         }
                     });
@@ -4554,6 +4570,7 @@ $historyFields = [
                     var rowSource = String($(this).data('source') || row.data('row-source') || 'legacy').trim() || 'legacy';
 
                     var medName = String($(this).data('med-name') || row.find('td:eq(1)').text() || '').trim();
+                    var medSalt = String($(this).data('med-salt') || '').trim();
                     var medType = String($(this).data('med-type') || row.find('td:eq(0)').text() || '').trim();
                     var doseId = String($(this).data('dose-id') || '').trim();
                     var whenId = String($(this).data('dose-when-id') || '').trim();
@@ -4568,6 +4585,7 @@ $historyFields = [
                     $('#discharge_med_item_id').val(rowId > 0 ? rowId : 0);
                     $('#discharge_med_item_source').val(rowSource);
                     $('#discharge_med_name').val(medName);
+                    $('#discharge_med_salt').val(medSalt);
                     $('#discharge_med_type').val(medType);
 
                     if (doseId !== '' && doseId !== '0') {
@@ -4638,6 +4656,7 @@ $historyFields = [
                     btnAddMed.dataset.bound = '1';
                     btnAddMed.addEventListener('click', function() {
                         var medName = $('#discharge_med_name').val().trim();
+                        var medSalt = $('#discharge_med_salt').val().trim();
                         var medType = $('#discharge_med_type').val().trim();
                         var dosage = $('#discharge_dosage').val();
                         var dosageWhen = $('#discharge_dosage_when').val();
@@ -4706,6 +4725,7 @@ $historyFields = [
                             drug_edit_id: editRowId,
                             drug_edit_source: editRowSource,
                             new_drug_name: medName,
+                            new_drug_salt: medSalt,
                             new_drug_type: medType,
                             new_drug_dose: dosage,
                             new_drug_when: dosageWhen,
@@ -4781,6 +4801,7 @@ $historyFields = [
                                     var editBtn = targetRow.querySelector('.btn-edit-discharge-med');
                                     if (editBtn) {
                                         editBtn.setAttribute('data-med-name', medName);
+                                        editBtn.setAttribute('data-med-salt', medSalt);
                                         editBtn.setAttribute('data-med-type', medType);
                                         editBtn.setAttribute('data-dose-id', dosage || '');
                                         editBtn.setAttribute('data-dose-when-id', dosageWhen || '');
@@ -4795,7 +4816,7 @@ $historyFields = [
                                 }
 
                                 // Clear form
-                                $('#discharge_med_name, #discharge_med_type, #discharge_no_of_days, #discharge_qty, #discharge_remark').val('');
+                                $('#discharge_med_name, #discharge_med_salt, #discharge_med_type, #discharge_no_of_days, #discharge_qty, #discharge_remark').val('');
                                 $('#discharge_dosage, #discharge_dosage_when, #discharge_dosage_freq, #discharge_dose_where').val('');
                                 resetMedicineFormState();
                                 $('#discharge_med_name').focus();

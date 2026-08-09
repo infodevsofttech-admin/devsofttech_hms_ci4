@@ -2668,36 +2668,35 @@ class Ipd_discharge extends BaseController
 
         $drugRows = $this->byIpdRows('ipd_discharge_drug', ['drug_name', 'drug_dose', 'drug_day'], 'id ASC', $ipdId);
         if (! empty($drugRows)) {
-            $html = '<h4 class="discharge-section-heading">Discharge Medications</h4><ol class="discharge-list">';
+            $html = '<h4 class="discharge-section-heading">Discharge Medications</h4>'
+                . '<table class="discharge-medicine-table">'
+                . '<thead><tr><th>Medicine Name</th><th>Dosage</th><th>Qty</th><th>Day</th></tr></thead>'
+                . '<tbody>';
             foreach ($drugRows as $row) {
                 $drugName = trim((string) ($row['drug_name'] ?? ''));
                 if ($drugName === '') {
                     continue;
                 }
 
-                $line = esc($drugName);
                 $dose = trim((string) ($row['drug_dose'] ?? ''));
                 $days = trim((string) ($row['drug_day'] ?? ''));
 
-                if ($dose !== '') {
-                    $line .= ' <span class="discharge-remark">' . esc($dose) . '</span>';
-                }
-                if ($days !== '') {
-                    $line .= ' <span class="discharge-remark">[' . esc($days) . ' days]</span>';
-                }
-
-                $html .= '<li>' . $line . '</li>';
+                $html .= '<tr>'
+                    . '<td>' . esc($drugName) . '</td>'
+                    . '<td>' . esc($dose) . '</td>'
+                    . '<td></td>'
+                    . '<td>' . esc($days) . '</td>'
+                    . '</tr>';
             }
-            $html .= '</ol>';
+            $html .= '</tbody></table>';
             $sections[] = $html;
         } else {
-            $medRows = $this->byIpdRows('ipd_discharge_prescrption_prescribed', ['med_name', 'med_type', 'dosage', 'dosage_when', 'dosage_freq', 'qty', 'no_of_days', 'remark'], 'id ASC', $ipdId);
+            $medRows = $this->byIpdRows('ipd_discharge_prescrption_prescribed', ['med_name', 'med_salt', 'med_type', 'dosage', 'dosage_when', 'dosage_freq', 'qty', 'no_of_days', 'remark'], 'id ASC', $ipdId);
             if (! empty($medRows)) {
                 $html = '<h4 class="discharge-section-heading">Discharge Medications</h4>'
-                    . '<table class="discharge-medicine-table" border="0" cellpadding="6">'
+                    . '<table class="discharge-medicine-table">'
                     . '<thead><tr><th>Medicine Name</th><th>Dosage</th><th>Qty</th><th>Day</th></tr></thead>'
                     . '<tbody>';
-                $sr = 1;
                 foreach ($medRows as $row) {
                     $medName = trim((string) ($row['med_name'] ?? ''));
                     if ($medName === '') {
@@ -2729,13 +2728,23 @@ class Ipd_discharge extends BaseController
                     if ($composition !== '') {
                         $html .= '<br><small class="discharge-composition">Composition : ' . esc($composition) . '</small>';
                     }
+                    $advice = trim((string) ($row['remark'] ?? ''));
+                    if ($advice !== '') {
+                        $html .= '<br><span class="discharge-medicine-advice">Medicine Advice: ' . esc($advice) . '</span>';
+                    }
                     
                     $html .= '</td>'
                         . '<td>' . ($dosageDisplay !== '' ? esc($dosageDisplay) : '-') . '</td>'
                         . '<td>' . esc((string) ($row['qty'] ?? '')) . '</td>'
                         . '<td>' . esc((string) ($row['no_of_days'] ?? '')) . '</td>'
                         . '</tr>';
-                    $sr++;
+
+                    $saltName = trim((string) ($row['med_salt'] ?? ''));
+                    if ($saltName !== '') {
+                        $html .= '<tr class="discharge-medicine-salt-row">'
+                            . '<td colspan="4" class="discharge-medicine-salt">' . esc($saltName) . '</td>'
+                            . '</tr>';
+                    }
                 }
                 $html .= '</tbody></table>';
                 $sections[] = $html;
@@ -5902,6 +5911,7 @@ class Ipd_discharge extends BaseController
                 $day = trim((string) ($this->request->getPost('new_drug_day') ?? ''));
                 $qty = trim((string) ($this->request->getPost('new_drug_qty') ?? ''));
                 $remark = trim((string) ($this->request->getPost('new_drug_remark') ?? ''));
+                $salt = trim((string) ($this->request->getPost('new_drug_salt') ?? ''));
                 $editId = (int) ($this->request->getPost('drug_edit_id') ?? 0);
                 $editSource = strtolower(trim((string) ($this->request->getPost('drug_edit_source') ?? 'legacy')));
 
@@ -5912,6 +5922,7 @@ class Ipd_discharge extends BaseController
                     if ($editSource === 'legacy' && $legacyDrugTable !== null && $this->tableHasColumns($legacyDrugTable, ['id', 'ipd_id'])) {
                         $update = [
                             'med_name' => $name,
+                            'med_salt' => $salt,
                             'med_type' => $type,
                             'dosage' => $dose,
                             'dosage_when' => $when,
@@ -5971,6 +5982,7 @@ class Ipd_discharge extends BaseController
                         'ipd_id' => $ipdId,
                         'med_id' => 0,
                         'med_name' => $name,
+                        'med_salt' => $salt,
                         'med_type' => $type,
                         'dosage' => $dose,
                         'dosage_when' => $when,
@@ -6067,6 +6079,7 @@ class Ipd_discharge extends BaseController
                                     'ipd_id' => $ipdId,
                                     'med_id' => (int) ($row['med_id'] ?? 0),
                                     'med_name' => $medName,
+                                    'med_salt' => trim((string) ($row['med_salt'] ?? $row['genericname'] ?? '')),
                                     'med_type' => trim((string) ($row['med_type'] ?? '')),
                                     'dosage' => trim((string) ($row['dosage'] ?? '')),
                                     'dosage_when' => trim((string) ($row['dosage_when'] ?? '')),
@@ -6075,7 +6088,6 @@ class Ipd_discharge extends BaseController
                                     'no_of_days' => trim((string) ($row['no_of_days'] ?? '')),
                                     'qty' => trim((string) ($row['qty'] ?? '')),
                                     'remark' => trim((string) ($row['remark'] ?? '')),
-                                    'genericname' => trim((string) ($row['genericname'] ?? '')),
                                     'update_by' => $userLabel,
                                 ];
                                 if ($this->db->fieldExists('order_id', $legacyDrugTable)) {
@@ -6799,9 +6811,9 @@ class Ipd_discharge extends BaseController
         $diagnosisRows = $this->byIpdRows('ipd_discharge_diagnosis', ['id', 'comp_report', 'comp_remark'], 'id ASC', $ipdId);
         $courseRows = $this->byIpdRows('ipd_discharge_course', ['id', 'comp_report', 'comp_remark'], 'id ASC', $ipdId);
         $drugRows = $this->byIpdRows('ipd_discharge_drug', ['id', 'drug_name', 'drug_dose', 'drug_day'], 'id ASC', $ipdId);
-        $legacyDrugRows = $this->byIpdRows('ipd_discharge_prescrption_prescribed', ['id', 'med_name', 'med_type', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days', 'qty', 'remark'], 'id ASC', $ipdId);
+        $legacyDrugRows = $this->byIpdRows('ipd_discharge_prescrption_prescribed', ['id', 'med_name', 'med_salt', 'med_type', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days', 'qty', 'remark'], 'id ASC', $ipdId);
         if (empty($legacyDrugRows)) {
-            $legacyDrugRows = $this->byIpdRows('ipd_discharge_prescription_prescribed', ['id', 'med_name', 'med_type', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days', 'qty', 'remark'], 'id ASC', $ipdId);
+            $legacyDrugRows = $this->byIpdRows('ipd_discharge_prescription_prescribed', ['id', 'med_name', 'med_salt', 'med_type', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days', 'qty', 'remark'], 'id ASC', $ipdId);
         }
         
         // Load dose master maps for label display
