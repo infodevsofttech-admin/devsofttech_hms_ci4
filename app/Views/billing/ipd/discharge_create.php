@@ -1312,16 +1312,16 @@ $historyFields = [
                                                     <datalist id="discharge_med_suggest"></datalist>
                                                 </div>
 
-                                                <!-- Substitute Medicines Box -->
-                                                <div id="discharge_substitute_box" style="display:none;margin-bottom:0.5rem;">
-                                                    <div class="small text-muted" id="discharge_substitute_note"></div>
-                                                    <div class="small text-muted" id="discharge_substitute_empty" style="display:none;">No substitute found.</div>
-                                                    <div id="discharge_substitute_rows" style="max-height:200px;overflow-y:auto;"></div>
-                                                </div>
-
                                                 <div class="col-4">
                                                     <label class="form-label small">Type</label>
                                                     <input type="text" id="discharge_med_type" class="form-control form-control-sm" placeholder="TAB,CAP,SYR,INJ">
+                                                </div>
+
+                                                <!-- Substitute Medicines Box -->
+                                                <div class="col-12" id="discharge_substitute_box" style="display:none;margin-bottom:0.5rem;">
+                                                    <div class="small text-muted" id="discharge_substitute_note"></div>
+                                                    <div class="small text-muted" id="discharge_substitute_empty" style="display:none;">No substitute found.</div>
+                                                    <div id="discharge_substitute_rows" style="max-height:200px;overflow-y:auto;"></div>
                                                 </div>
 </div>
                                                 <div class="row g-2 mb-2">
@@ -2321,7 +2321,8 @@ $historyFields = [
 
                 // Surgery quick-add button
                 var btnQuickSurgery = document.getElementById('btn_quick_add_surgery');
-                if (btnQuickSurgery) {
+                if (btnQuickSurgery && btnQuickSurgery.dataset.quickAddBound !== '1') {
+                    btnQuickSurgery.dataset.quickAddBound = '1';
                     btnQuickSurgery.addEventListener('click', function() {
                         var surgeryInput = document.getElementById('new_surgery_name');
                         var surgeryName = surgeryInput ? surgeryInput.value.trim() : '';
@@ -2345,7 +2346,8 @@ $historyFields = [
 
                 // Procedure quick-add button
                 var btnQuickProcedure = document.getElementById('btn_quick_add_procedure');
-                if (btnQuickProcedure) {
+                if (btnQuickProcedure && btnQuickProcedure.dataset.quickAddBound !== '1') {
+                    btnQuickProcedure.dataset.quickAddBound = '1';
                     btnQuickProcedure.addEventListener('click', function() {
                         var procedureInput = document.getElementById('new_procedure_name');
                         var procedureName = procedureInput ? procedureInput.value.trim() : '';
@@ -2368,7 +2370,8 @@ $historyFields = [
                 }
 
                 // Save button in modal
-                if (btnSave) {
+                if (btnSave && btnSave.dataset.quickAddBound !== '1') {
+                    btnSave.dataset.quickAddBound = '1';
                     btnSave.addEventListener('click', function() {
                         var name = quickName.value.trim();
                         var type = quickType.value;
@@ -2476,6 +2479,8 @@ $historyFields = [
                 var dropdown = document.getElementById(dropdownId);
                 var hidden = document.getElementById(hiddenId);
                 if (!input || !dropdown || !hidden) return;
+                if (input.dataset.termAutocompleteBound === '1') return;
+                input.dataset.termAutocompleteBound = '1';
 
                 var searchTimer = null;
                 var highlightedIndex = -1;
@@ -3289,14 +3294,12 @@ $historyFields = [
                     return;
                 }
 
-                if (window.__ipdSurgeryCrudBound === true) {
-                    return;
-                }
-                window.__ipdSurgeryCrudBound = true;
-
                 var $type = $('#surgery_master_type');
                 var $search = $('#surgery_master_search');
                 var $rows = $('#surgery_master_rows');
+                if (!form || !$type.length || !$search.length || !$rows.length) {
+                    return;
+                }
 
                 function setMasterStatus(text, level) {
                     setSectionStatus('surgery_master_status', text, level || 'muted');
@@ -3348,27 +3351,32 @@ $historyFields = [
                     });
                 }
 
-                $(document).on('click', '#btn_discharge_manage_surgery_master', function() {
+                $(document)
+                    .off('click.ipdSurgeryCrud', '#btn_discharge_manage_surgery_master')
+                    .on('click.ipdSurgeryCrud', '#btn_discharge_manage_surgery_master', function() {
                     clearMasterForm();
+                    $search.val('');
                     setMasterStatus('', 'muted');
                     fetchMasterRows();
                     showModalById('ipdSurgeryMasterModal');
                 });
 
-                $('#btn_surgery_master_refresh').on('click', fetchMasterRows);
-                $type.on('change', function() {
+                $('#btn_surgery_master_refresh').off('.ipdSurgeryCrud').on('click.ipdSurgeryCrud', fetchMasterRows);
+                $type.off('.ipdSurgeryCrud').on('change.ipdSurgeryCrud', function() {
                     clearMasterForm();
                     fetchMasterRows();
                 });
-                $search.on('input', function() {
+                $search.off('.ipdSurgeryCrud').on('input.ipdSurgeryCrud', function() {
                     fetchMasterRows();
                 });
 
-                $('#btn_surgery_master_clear').on('click', function() {
+                $('#btn_surgery_master_clear').off('.ipdSurgeryCrud').on('click.ipdSurgeryCrud', function() {
                     clearMasterForm();
                 });
 
-                $(document).on('click', '.btn-master-edit', function() {
+                $(document)
+                    .off('click.ipdSurgeryCrud', '.btn-master-edit')
+                    .on('click.ipdSurgeryCrud', '.btn-master-edit', function() {
                     var id = parseInt($(this).data('id') || '0', 10);
                     var type = ($type.val() || 'surgery').toString();
                     var row = (surgeryMasterState[type] || []).find(function(item) {
@@ -3385,7 +3393,9 @@ $historyFields = [
                     $('#surgery_master_active').val(parseInt(row.is_active || '0', 10) === 1 ? '1' : '0');
                 });
 
-                $(document).on('click', '.btn-master-delete', function() {
+                $(document)
+                    .off('click.ipdSurgeryCrud', '.btn-master-delete')
+                    .on('click.ipdSurgeryCrud', '.btn-master-delete', function() {
                     var id = parseInt($(this).data('id') || '0', 10);
                     if (id <= 0) {
                         return;
@@ -3415,7 +3425,7 @@ $historyFields = [
                     });
                 });
 
-                $('#btn_surgery_master_save').on('click', function() {
+                $('#btn_surgery_master_save').off('.ipdSurgeryCrud').on('click.ipdSurgeryCrud', function() {
                     var name = ($('#surgery_master_name').val() || '').toString().trim();
                     if (name === '') {
                         setMasterStatus('Name is required.', 'error');
@@ -3450,8 +3460,7 @@ $historyFields = [
             }
 
             function initSurgeryTools(form) {
-                // Surgery/Procedure autocomplete now handled by initSurgeryProcedureAutocomplete()
-                // Old bindSurgeryTermLookup removed - using custom dropdown instead of datalist
+                initSurgeryProcedureAutocomplete();
                 initSurgeryMasterCrud(form);
             }
 
@@ -4147,7 +4156,63 @@ $historyFields = [
                 var dischargeMedSuggestRows = [];
                 var dischargeMedInputTimer = null;
 
+                function applyDischargeMedicineMatch(matched) {
+                    if (!matched || !dischargeMedInput) {
+                        return;
+                    }
+
+                    $(dischargeMedInput).data('med-id', parseInt(matched.id || 0, 10));
+                    if (section.querySelector('#discharge_med_id')) {
+                        section.querySelector('#discharge_med_id').value = String(matched.id || '0');
+                    }
+                    if (section.querySelector('#discharge_med_salt')) {
+                        section.querySelector('#discharge_med_salt').value = String(matched.med_salt || '').trim();
+                    }
+                    if (dischargeMedType && dischargeMedType.value.trim() === '') {
+                        dischargeMedType.value = String(matched.med_type || '').trim();
+                    }
+
+                    var fieldMap = [
+                        ['dosage', '#discharge_dosage'],
+                        ['dosage_when', '#discharge_dosage_when'],
+                        ['dosage_freq', '#discharge_dosage_freq'],
+                        ['dosage_where', '#discharge_dose_where']
+                    ];
+                    fieldMap.forEach(function(mapping) {
+                        var value = matched[mapping[0]];
+                        var target = section.querySelector(mapping[1]);
+                        if (value && target && target.value === '') {
+                            ensureDoseOption(target, value);
+                            target.value = value;
+                        }
+                    });
+
+                    var textFieldMap = [
+                        ['no_of_days', '#discharge_no_of_days'],
+                        ['qty', '#discharge_qty'],
+                        ['remark', '#discharge_remark']
+                    ];
+                    textFieldMap.forEach(function(mapping) {
+                        var value = matched[mapping[0]];
+                        var target = section.querySelector(mapping[1]);
+                        if (value && target && target.value === '') {
+                            target.value = String(value).trim();
+                        }
+                    });
+                }
+
                 if (dischargeMedInput) {
+                    dischargeMedInput.addEventListener('keydown', function(event) {
+                        if (event.key !== 'Enter') {
+                            return;
+                        }
+
+                        dischargeMedInput.dataset.suppressImplicitSubmit = '1';
+                        setTimeout(function() {
+                            delete dischargeMedInput.dataset.suppressImplicitSubmit;
+                        }, 0);
+                    });
+
                     dischargeMedInput.addEventListener('input', function() {
                         var q = String(dischargeMedInput.value || '').trim();
 
@@ -4197,18 +4262,7 @@ $historyFields = [
                                     }
                                 });
                                 if (matched) {
-                                    // Store med_id
-                                    $(dischargeMedInput).data('med-id', parseInt(matched.id || 0, 10));
-                                    if (section.querySelector('#discharge_med_id')) {
-                                        section.querySelector('#discharge_med_id').value = String(matched.id || '0');
-                                    }
-                                    if (section.querySelector('#discharge_med_salt')) {
-                                        section.querySelector('#discharge_med_salt').value = String(matched.med_salt || '').trim();
-                                    }
-                                    // Auto-fill type if empty
-                                    if (dischargeMedType && dischargeMedType.value.trim() === '') {
-                                        dischargeMedType.value = String(matched.med_type || '').trim();
-                                    }
+                                    applyDischargeMedicineMatch(matched);
                                 }
                             }, 'json').fail(function() {
                                 dischargeMedSuggestRows = [];
@@ -4244,54 +4298,7 @@ $historyFields = [
                         });
 
                         if (matched) {
-                            // Store med_id for reference
-                            $(dischargeMedInput).data('med-id', parseInt(matched.id || 0, 10));
-                            if (section.querySelector('#discharge_med_id')) {
-                                section.querySelector('#discharge_med_id').value = String(matched.id || '0');
-                            }
-                            if (section.querySelector('#discharge_med_salt')) {
-                                section.querySelector('#discharge_med_salt').value = String(matched.med_salt || '').trim();
-                            }
-
-                            // Auto-fill Type
-                            if (dischargeMedType && dischargeMedType.value.trim() === '') {
-                                dischargeMedType.value = String(matched.med_type || '').trim();
-                            }
-
-                            // Auto-fill dose fields if they have values
-                            var dosageSelect = section.querySelector('#discharge_dosage');
-                            var whenSelect = section.querySelector('#discharge_dosage_when');
-                            var freqSelect = section.querySelector('#discharge_dosage_freq');
-                            var whereSelect = section.querySelector('#discharge_dose_where');
-                            var daysInput = section.querySelector('#discharge_no_of_days');
-                            var qtyInput = section.querySelector('#discharge_qty');
-                            var remarkInput = section.querySelector('#discharge_remark');
-
-                            if (matched.dosage && dosageSelect && dosageSelect.value === '') {
-                                ensureDoseOption(dosageSelect, matched.dosage);
-                                dosageSelect.value = matched.dosage;
-                            }
-                            if (matched.dosage_when && whenSelect && whenSelect.value === '') {
-                                ensureDoseOption(whenSelect, matched.dosage_when);
-                                whenSelect.value = matched.dosage_when;
-                            }
-                            if (matched.dosage_freq && freqSelect && freqSelect.value === '') {
-                                ensureDoseOption(freqSelect, matched.dosage_freq);
-                                freqSelect.value = matched.dosage_freq;
-                            }
-                            if (matched.dosage_where && whereSelect && whereSelect.value === '') {
-                                ensureDoseOption(whereSelect, matched.dosage_where);
-                                whereSelect.value = matched.dosage_where;
-                            }
-                            if (matched.no_of_days && daysInput && daysInput.value === '') {
-                                daysInput.value = String(matched.no_of_days || '').trim();
-                            }
-                            if (matched.qty && qtyInput && qtyInput.value === '') {
-                                qtyInput.value = String(matched.qty || '').trim();
-                            }
-                            if (matched.remark && remarkInput && remarkInput.value === '') {
-                                remarkInput.value = String(matched.remark || '').trim();
-                            }
+                            applyDischargeMedicineMatch(matched);
                         } else {
                             // No match found - clear med_id
                             $(dischargeMedInput).data('med-id', 0);
@@ -4314,13 +4321,13 @@ $historyFields = [
                     var $empty = $('#discharge_substitute_empty');
                     var $rows = $('#discharge_substitute_rows');
 
-                    if (medId <= 0 && medName === '') {
+                    if (medId <= 0) {
                         $box.hide();
                         return;
                     }
 
                     $note.text('loading...');
-                    $empty.show();
+                    $empty.hide();
                     $rows.empty();
                     $box.show();
 
@@ -5244,6 +5251,11 @@ $historyFields = [
 
                 form.addEventListener('submit', function(e) {
                     e.preventDefault();
+                    var medicineNameInput = form.querySelector('#discharge_med_name');
+                    if (medicineNameInput && medicineNameInput.dataset.suppressImplicitSubmit === '1') {
+                        delete medicineNameInput.dataset.suppressImplicitSubmit;
+                        return;
+                    }
                     syncEditorValues();
                     // DISABLED: No longer needed since medicines are saved via AJAX on Add button
                     // serializeDischargeMedicineTable();
@@ -5304,6 +5316,17 @@ $historyFields = [
 
                     if (isMedicineAction) {
                         targetSectionId = 'section-medicine';
+                    }
+
+                    if (actionValue === 'add_procedure') {
+                        var procedureDateInput = form.querySelector('[name="new_procedure_date"]');
+                        if (!procedureDateInput || String(procedureDateInput.value || '').trim() === '') {
+                            setSectionStatus('discharge_surgery_status', 'Select procedure date before adding.', 'error');
+                            if (procedureDateInput) {
+                                procedureDateInput.focus();
+                            }
+                            return;
+                        }
                     }
 
                     window.jQuery.ajax({

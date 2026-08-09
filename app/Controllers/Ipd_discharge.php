@@ -5756,7 +5756,7 @@ class Ipd_discharge extends BaseController
                 $date = $this->parseInputDateToDb((string) ($this->request->getPost('new_procedure_date') ?? ''));
                 $remark = trim((string) ($this->request->getPost('new_procedure_remark') ?? ''));
                 $masterId = max(0, (int) ($this->request->getPost('new_procedure_master_id') ?? 0));
-                if ($name !== '' && $this->tableHasColumns('ipd_discharge_procedure', ['ipd_id', 'procedure_name'])) {
+                if ($name !== '' && $date !== null && $this->tableHasColumns('ipd_discharge_procedure', ['ipd_id', 'procedure_name'])) {
                     $insert = [
                         'ipd_id' => $ipdId,
                         'procedure_name' => $name,
@@ -5776,9 +5776,13 @@ class Ipd_discharge extends BaseController
                     $notice = $savedAny ? 'Procedure row added.' : 'Unable to add procedure row.';
                     $noticeType = $savedAny ? 'success' : 'warning';
                 } else {
-                    $notice = $name === ''
-                        ? 'Enter procedure name before adding.'
-                        : 'Procedure table/columns are missing in database.';
+                    if ($name === '') {
+                        $notice = 'Enter procedure name before adding.';
+                    } elseif ($date === null) {
+                        $notice = 'Select a valid procedure date before adding.';
+                    } else {
+                        $notice = 'Procedure table/columns are missing in database.';
+                    }
                     $noticeType = 'warning';
                 }
             } elseif ($action === 'remove_procedure') {
