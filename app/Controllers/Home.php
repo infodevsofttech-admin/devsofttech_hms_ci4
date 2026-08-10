@@ -34,6 +34,18 @@ class Home extends BaseController
         ]);
     }
 
+    public function accessDenied()
+    {
+        $authRedirect = $this->ensureAuthenticated();
+        if ($authRedirect !== null) {
+            return $authRedirect;
+        }
+
+        return $this->response
+            ->setStatusCode(403)
+            ->setBody(view('errors/html/access_denied'));
+    }
+
     public function billing()
     {
         $authRedirect = $this->ensureAuthenticated();

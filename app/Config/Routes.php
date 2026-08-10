@@ -6,6 +6,7 @@ use CodeIgniter\Router\RouteCollection;
  * @var RouteCollection $routes
  */
 $routes->get('/', 'Home::index');
+$routes->get('access-denied', 'Home::accessDenied');
 $routes->get('dashboard', 'Home::dashboard');
 $routes->get('dashboard/opd', 'Home::opdDashboard');
 $routes->get('dashboard/ipd', 'Home::ipdDashboard');
