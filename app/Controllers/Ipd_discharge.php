@@ -1104,9 +1104,6 @@ class Ipd_discharge extends BaseController
             $tokenVars['INSTRUCTION_REMARK'] = '';
         }
 
-        if (! $this->templateHasKnownDischargeTokens($templateHtml, $tokenVars)) {
-            $templateHtml .= "\n{{CONTENT}}";
-        }
         $patientName = html_entity_decode((string) ($tokenVars['PATIENT_NAME'] ?? ''), ENT_QUOTES, 'UTF-8');
         $patientCode = html_entity_decode((string) ($tokenVars['UHID'] ?? ''), ENT_QUOTES, 'UTF-8');
         $ipdCode = html_entity_decode((string) ($tokenVars['IPD_CODE'] ?? ''), ENT_QUOTES, 'UTF-8');
@@ -1179,42 +1176,6 @@ class Ipd_discharge extends BaseController
         }
 
         return $renderedHtml;
-    }
-
-    private function templateHasKnownDischargeTokens(string $templateHtml, array $tokenVars): bool
-    {
-        if (trim($templateHtml) === '') {
-            return false;
-        }
-
-        $matches = [];
-        $matchCount = preg_match_all('/\{\{\s*([A-Za-z0-9_]+)\s*\}\}|\{\s*([A-Za-z0-9_]+)\s*\}/', $templateHtml, $matches, PREG_SET_ORDER);
-        if ($matchCount === false || $matchCount === 0) {
-            return false;
-        }
-
-        foreach ($matches as $match) {
-            $tokenName = (string) (($match[1] ?? '') !== '' ? $match[1] : ($match[2] ?? ''));
-            if ($tokenName === '') {
-                continue;
-            }
-
-            $lower = strtolower($tokenName);
-            $candidates = [
-                $tokenName,
-                strtoupper($tokenName),
-                $lower,
-                ucfirst($lower),
-            ];
-
-            foreach ($candidates as $candidate) {
-                if (array_key_exists($candidate, $tokenVars)) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
     }
 
     private function shouldUseContentOnlyTemplate(string $content, string $templateHtml): bool
