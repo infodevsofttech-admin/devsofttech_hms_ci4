@@ -498,9 +498,6 @@ class Ipd_discharge extends BaseController
     private function buildDischargeSectionTokenVars(string $content, array $panelData): array
     {
         $full = trim($content);
-        if ($full === '') {
-            return [];
-        }
 
         $ipd = $panelData['ipd_info'] ?? null;
         $dischargeStatus = $this->getDischargeStatusText($ipd);
@@ -1114,7 +1111,7 @@ class Ipd_discharge extends BaseController
         $patientCode = html_entity_decode((string) ($tokenVars['UHID'] ?? ''), ENT_QUOTES, 'UTF-8');
         $ipdCode = html_entity_decode((string) ($tokenVars['IPD_CODE'] ?? ''), ENT_QUOTES, 'UTF-8');
 
-        if ($this->shouldUseContentOnlyTemplate($content, $templateHtml)) {
+        if ($requestedTemplateId === null && $this->shouldUseContentOnlyTemplate($content, $templateHtml)) {
             $templateHtml = '{{CONTENT}}';
         }
 

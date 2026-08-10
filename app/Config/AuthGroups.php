@@ -157,6 +157,7 @@ class AuthGroups extends ShieldAuthGroups
         'finance.bank.deposit.create' => 'Can create bank deposit register entries',
         'finance.bank.audit' => 'Can mark bank transaction audit status',
         'finance.bank.statement.update' => 'Can mark updated in bank statement status',
+        'finance.payment.edit' => 'Can correct payment mode, amount, or recorded user',
         'finance.compliance.view' => 'Can view finance compliance reports',
         'finance.doctor_payout.manage' => 'Can manage doctor payouts and agreements',
         'finance.vendor.manage' => 'Can manage finance vendors',
@@ -378,6 +379,7 @@ class AuthGroups extends ShieldAuthGroups
             'finance.cash.accounts.verify',
             'finance.bank.audit',
             'finance.bank.statement.update',
+            'finance.payment.edit',
         ],
         'user' => [],
         'beta' => [

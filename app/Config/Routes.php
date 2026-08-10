@@ -292,6 +292,16 @@ $routes->post('Payment_Medical/change_to_cash', 'Payment_Medical::change_to_cash
 $routes->post('Payment_Medical/update_amount', 'Payment_Medical::update_amount');
 $routes->post('Payment_Medical/change_user', 'Payment_Medical::change_user');
 
+$paymentEditFilter = ['filter' => 'permission:finance.payment.edit'];
+$routes->get('Payment', 'Payment::index', $paymentEditFilter);
+$routes->post('Payment/payment_record', 'Payment::paymentRecord', $paymentEditFilter);
+$routes->post('Payment/change_to_bank', 'Payment::changeToBank', $paymentEditFilter);
+$routes->post('Payment/change_to_cash', 'Payment::changeToCash', $paymentEditFilter);
+$routes->post('Payment/change_user', 'Payment::changeUser', $paymentEditFilter);
+$routes->post('Payment/change_amount', 'Payment::changeAmount', $paymentEditFilter);
+$routes->post('Payment/update_amount', 'Payment::changeAmount', $paymentEditFilter);
+$routes->get('finance/payment-edit', 'Payment::index', $paymentEditFilter);
+
 // Finance & Accounting SOP - Phase 1
 $routes->get('Finance', 'Finance::index');
 $routes->get('Finance/index', 'Finance::index');

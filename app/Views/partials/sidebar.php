@@ -92,16 +92,19 @@ if ($user && method_exists($user, 'can')) {
         || $user->can('finance.bank.deposit.create')
         || $user->can('finance.bank.audit')
         || $user->can('finance.bank.statement.update')
+        || $user->can('finance.payment.edit')
         || $user->can('finance.*');
 }
 
 $canFinanceBilling = false;
 $canFinanceAccounts = false;
 $canFinanceBank = false;
+$canFinancePaymentEdit = false;
 if ($user && method_exists($user, 'can')) {
     $canFinanceBilling = $user->can('finance.cash.billing.submit') || $user->can('finance.*');
     $canFinanceAccounts = $user->can('finance.cash.accounts.accept') || $user->can('finance.cash.accounts.verify') || $user->can('finance.*');
     $canFinanceBank = $user->can('finance.bank.deposit.create') || $user->can('finance.bank.audit') || $user->can('finance.bank.statement.update') || $user->can('finance.*');
+    $canFinancePaymentEdit = $user->can('finance.payment.edit') || $user->can('finance.*');
 }
 
 $canDoctorWork = false;
@@ -291,6 +294,14 @@ if (! $canChargesSettings && $user && method_exists($user, 'inGroup')) {
                 <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Finance/cashbook/accounts') ?>','Accounts Accept and Verify')">
                     <i class="bi bi-patch-check"></i>
                     <span>Accounts Verify Payment</span>
+                </a>
+            </li>
+        <?php } ?>
+        <?php if ($canFinancePaymentEdit) { ?>
+            <li class="nav-item">
+                <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Payment') ?>','Payment Edit')">
+                    <i class="bi bi-pencil-square"></i>
+                    <span>Payment Edit</span>
                 </a>
             </li>
         <?php } ?>
