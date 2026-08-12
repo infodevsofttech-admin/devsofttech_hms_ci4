@@ -30,10 +30,6 @@
                                 </td>
                             </tr>
                         <?php endforeach; ?>
-                    <?php else: ?>
-                        <tr>
-                            <td colspan="5" class="text-center text-muted">No active organization credit records found.</td>
-                        </tr>
                     <?php endif; ?>
                 </tbody>
             </table>
@@ -54,7 +50,10 @@
 
         jQuery(tableId).DataTable({
             order: [[2, 'desc']],
-            pageLength: 25
+            pageLength: 25,
+            language: {
+                emptyTable: 'No active organization credit records found.'
+            }
         });
     })();
 </script>
