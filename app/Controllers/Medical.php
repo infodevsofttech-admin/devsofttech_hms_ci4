@@ -2545,7 +2545,7 @@ class Medical extends BaseController
             return redirect()->to(base_url('Medical/list_med_inv/' . (int) $ipdId));
         }
 
-        $data['modeLabel'] = 'Medicine Reurn';
+        $data['modeLabel'] = 'Medicine Return';
 
         return view('medical/ipd_return_medicine', $data);
     }
@@ -2561,7 +2561,7 @@ class Medical extends BaseController
             return redirect()->to(base_url('Medical/list_med_inv/' . (int) $ipdId));
         }
 
-        $data['modeLabel'] = 'Medicine Reurn New';
+        $data['modeLabel'] = 'Medicine Return 2';
 
         return view('medical/ipd_return_medicine', $data);
     }

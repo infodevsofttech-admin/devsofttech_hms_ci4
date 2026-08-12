@@ -3,7 +3,7 @@
     $ipdCode = (string) ($ipd->ipd_code ?? ('IPD-' . $ipdId));
     $patientName = (string) ($patient->p_fname ?? '-');
     $patientCode = (string) ($patient->p_code ?? '-');
-    $modeLabel = (string) ($modeLabel ?? 'Medicine Reurn');
+    $modeLabel = (string) ($modeLabel ?? 'Medicine Return');
 
     $totalInvoices = !empty($invoices) ? count($invoices) : 0;
     $totalItems = 0;

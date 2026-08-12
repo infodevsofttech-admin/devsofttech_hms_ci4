@@ -278,6 +278,10 @@ $routes->get('Medical/supplier_account_edit_entry/(:num)', 'Medical::supplier_ac
 $routes->post('Medical/supplier_account_edit_entry/(:num)', 'Medical::supplier_account_edit_entry/$1');
 $routes->get('Medical/invoice_item_log', 'Medical::invoice_item_log');
 $routes->match(['GET', 'POST'], 'Medical/invoice_item_log_data', 'Medical::invoice_item_log_data');
+$routes->get('Medical/credit_payout_request', 'Medical::credit_payout_request');
+$routes->post('Medical/credit_payout_pool_datatable', 'Medical::credit_payout_pool_datatable');
+$routes->post('Medical/credit_payout_requests_datatable', 'Medical::credit_payout_requests_datatable');
+$routes->post('Medical/credit_payout_request_create', 'Medical::credit_payout_request_create');
 $routes->get('Medical/master', 'Medical::master');
 $routes->get('Medical/master_report/med-payment-edit', 'Payment_Medical::index');
 $routes->get('Medical/master_report/(:segment)', 'Medical::master_report/$1');

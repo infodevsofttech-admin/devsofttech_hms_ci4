@@ -153,8 +153,8 @@
         <div class="table-responsive mb-2">
             <table class="table table-sm table-striped align-middle mb-0">
                 <tr>
-                    <td><a class="btn btn-warning btn-sm" href="javascript:load_form_div('<?= base_url('Medical/med_return/' . $ipdId) ?>','medical-main');">Medicine Reurn</a></td>
-                    <td><a class="btn btn-success btn-sm" href="javascript:load_form_div('<?= base_url('Medical/med_return_new/' . $ipdId) ?>','medical-main');">Medicine Reurn New</a></td>
+                    <td><a class="btn btn-warning btn-sm" href="javascript:load_form_div('<?= base_url('Medical/med_return/' . $ipdId) ?>','medical-main');">Medicine Return</a></td>
+                    <td><a class="btn btn-success btn-sm" href="javascript:load_form_div('<?= base_url('Medical/med_return_new/' . $ipdId) ?>','medical-main');">Medicine Return 2</a></td>
                     <td></td>
                 </tr>
                 <tr>
