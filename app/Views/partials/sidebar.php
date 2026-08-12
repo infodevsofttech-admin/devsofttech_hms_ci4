@@ -29,9 +29,13 @@ $canIpdNursing = $user && method_exists($user, 'can')
 $canIpdDischarge = $user && method_exists($user, 'can')
     ? ($user->can('ipd_discharge.view') || $user->can('ipd_discharge.manage') || $user->can('ipd_discharge.*'))
     : false;
+$canIpdOt = $user && method_exists($user, 'can')
+    ? ($user->can('ipd_ot.view') || $user->can('ipd_ot.request.manage') || $user->can('ipd_ot.schedule.manage') || $user->can('ipd_ot.status.manage') || $user->can('ipd_ot.postop.manage') || $user->can('ipd_ot.*'))
+    : false;
 if ($user && method_exists($user, 'inGroup') && $user->inGroup('superadmin', 'admin', 'developer')) {
     $canIpdNursing = true;
     $canIpdDischarge = true;
+    $canIpdOt = true;
 }
 
 $canBilling = false;
@@ -329,13 +333,21 @@ if (! $canChargesSettings && $user && method_exists($user, 'inGroup')) {
             </ul>
         </li>
     <?php } ?>
-    <?php if ($canIpdNursing || $canIpdDischarge) { ?>
+    <?php if ($canIpdNursing || $canIpdDischarge || $canIpdOt) { ?>
         <li class="nav-heading">In-Patient & Nursing Care</li>
         <?php if ($canIpdNursing) { ?>
         <li class="nav-item">
             <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('/ipd/patient') ?>','IPD Patient List')">
                 <i class="bi bi-person-vcard"></i>
                 <span>IPD Patient List</span>
+            </a>
+        </li>
+        <?php } ?>
+        <?php if ($canIpdOt) { ?>
+        <li class="nav-item">
+            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('ot/queue') ?>','OT Surgery Queue')">
+                <i class="bi bi-calendar2-week"></i>
+                <span>OT Surgery Queue</span>
             </a>
         </li>
         <?php } ?>

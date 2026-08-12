@@ -98,8 +98,8 @@ class Payment extends BaseController
     {
         $paymentId = (int) $this->request->getPost('pay_id');
         $rawAmount = trim((string) $this->request->getPost('change_value'));
-        if (! is_numeric($rawAmount) || (float) $rawAmount <= 0) {
-            return $this->error('Enter a valid amount greater than zero.', 422);
+        if (! is_numeric($rawAmount) || (float) $rawAmount < 0) {
+            return $this->error('Enter a valid amount of zero or greater.', 422);
         }
 
         $payment = $this->paymentModel->findPayment($paymentId);

@@ -221,6 +221,12 @@ class AuthGroups extends ShieldAuthGroups
         'ipd_discharge.view' => 'Can search, preview, and print IPD discharge summaries',
         'ipd_discharge.manage' => 'Can create and update IPD discharge summaries and personal section templates',
         'ipd_discharge.master.manage' => 'Can manage shared discharge surgery, course, dietary, and ICD masters',
+        'ipd_ot.view' => 'Can view IPD Surgery/OT and specialty pre-operative examinations',
+        'ipd_ot.examination.manage' => 'Can create, complete, and revise specialty pre-operative examinations',
+        'ipd_ot.request.manage' => 'Can create and update OT surgery requests',
+        'ipd_ot.schedule.manage' => 'Can schedule and reschedule OT surgery cases',
+        'ipd_ot.status.manage' => 'Can record patient calls, safety checks, and OT status changes',
+        'ipd_ot.postop.manage' => 'Can record signed post-operative assessments and handover',
     ];
 
     /**
@@ -256,6 +262,7 @@ class AuthGroups extends ShieldAuthGroups
             'abdm.*',
             'ipd_nursing.*',
             'ipd_discharge.*',
+            'ipd_ot.*',
         ],
         'admin' => [
             'admin.access',
@@ -284,6 +291,7 @@ class AuthGroups extends ShieldAuthGroups
             'abdm.*',
             'ipd_nursing.*',
             'ipd_discharge.*',
+            'ipd_ot.*',
         ],
         'developer' => [
             'admin.access',
@@ -311,6 +319,7 @@ class AuthGroups extends ShieldAuthGroups
             'abdm.*',
             'ipd_nursing.*',
             'ipd_discharge.*',
+            'ipd_ot.*',
         ],
         'doctor' => [
             'opd.doctor-panel.access',
@@ -322,6 +331,12 @@ class AuthGroups extends ShieldAuthGroups
             'ipd_nursing.view',
             'ipd_discharge.view',
             'ipd_discharge.manage',
+            'ipd_ot.view',
+            'ipd_ot.examination.manage',
+            'ipd_ot.request.manage',
+            'ipd_ot.schedule.manage',
+            'ipd_ot.status.manage',
+            'ipd_ot.postop.manage',
         ],
         'nurse' => [
             'ipd_nursing.view',
@@ -329,6 +344,10 @@ class AuthGroups extends ShieldAuthGroups
             'ipd_nursing.bed.transfer',
             'ipd_nursing.charge.manage',
             'ipd_discharge.view',
+            'ipd_ot.view',
+            'ipd_ot.request.manage',
+            'ipd_ot.status.manage',
+            'ipd_ot.postop.manage',
         ],
         'pharmacy_admin' => [
             'pharmacy.*',

@@ -448,6 +448,17 @@ $routes->post('setup/db-tools/prepare-filesystem', 'Setup::prepareFilesystem');
 $routes->post('setup/db-tools/ensure-admin', 'Setup::ensureAdminLogin');
 $routes->post('setup/db-tools/complete', 'Setup::complete');
 
+$routes->get('ipd/ot/(:num)', 'IpdOt::panel/$1', ['filter' => 'permission:ipd_ot.view,ipd_ot.examination.manage']);
+$routes->get('ipd/ot/(:num)/examination/(:segment)', 'IpdOt::examination/$1/$2', ['filter' => 'permission:ipd_ot.view,ipd_ot.examination.manage']);
+$routes->post('ipd/ot/(:num)/examination/(:segment)', 'IpdOt::saveExamination/$1/$2', ['filter' => 'permission:ipd_ot.examination.manage']);
+$routes->get('ipd/ot/(:num)/request', 'IpdOt::requestForm/$1', ['filter' => 'permission:ipd_ot.request.manage']);
+$routes->post('ipd/ot/(:num)/requests', 'IpdOt::createCase/$1', ['filter' => 'permission:ipd_ot.request.manage']);
+$routes->get('ot/queue', 'IpdOt::queue', ['filter' => 'permission:ipd_ot.view,ipd_ot.schedule.manage,ipd_ot.status.manage,ipd_ot.postop.manage']);
+$routes->get('ot/cases/(:num)', 'IpdOt::caseForm/$1', ['filter' => 'permission:ipd_ot.view,ipd_ot.schedule.manage,ipd_ot.status.manage,ipd_ot.postop.manage']);
+$routes->post('ot/cases/(:num)', 'IpdOt::updateCase/$1', ['filter' => 'permission:ipd_ot.schedule.manage,ipd_ot.status.manage']);
+$routes->get('ot/cases/(:num)/postop', 'IpdOt::postopForm/$1', ['filter' => 'permission:ipd_ot.view,ipd_ot.postop.manage']);
+$routes->post('ot/cases/(:num)/postop', 'IpdOt::savePostop/$1', ['filter' => 'permission:ipd_ot.postop.manage']);
+
 
 $routes->group('billing', function($routes) {
     $routes->get('ipd', 'Billing\\Ipd::index');

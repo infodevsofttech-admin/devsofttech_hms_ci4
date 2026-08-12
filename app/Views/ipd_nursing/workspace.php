@@ -13,6 +13,10 @@ $dischargeSummaryUrl = site_url('Ipd_discharge/preview_discharge_report/' . $ipd
 $dischargeSummaryCreateUrl = site_url('Ipd_discharge/ipd_select/' . $ipdId);
 $bedsideChargeUrl = site_url('billing/ipd/bedside-charge/add/' . $ipdId);
 $doctorVisitChargeUrl = site_url('billing/ipd/doctor-visit/add/' . $ipdId);
+$otPanelUrl = site_url('ipd/ot/' . $ipdId);
+$authUser = function_exists('auth') ? auth()->user() : null;
+$canViewIpdOt = $authUser && method_exists($authUser, 'can')
+    && ($authUser->can('ipd_ot.view') || $authUser->can('ipd_ot.examination.manage'));
 $today = date('Y-m-d');
 $csrfName = csrf_token();
 $csrfHash = csrf_hash();
@@ -193,6 +197,11 @@ ksort($nurseNames);
                     <li class="nav-item" role="presentation">
                         <button type="button" class="nav-link" data-nursing-tab="nursing_tab_treatment">Treatment / Procedure Note</button>
                     </li>
+                    <?php if ($canViewIpdOt) : ?>
+                        <li class="nav-item" role="presentation">
+                            <button type="button" class="nav-link" data-nursing-tab="nursing_tab_ot" data-url="<?= esc($otPanelUrl, 'attr') ?>">Surgery / OT</button>
+                        </li>
+                    <?php endif ?>
                     <li class="nav-item" role="presentation">
                         <button type="button" class="nav-link" data-nursing-tab="nursing_tab_scan">Scan Paper -> Auto Fill</button>
                     </li>
@@ -518,6 +527,12 @@ ksort($nurseNames);
                         <div class="col-md-12"><button type="submit" class="btn btn-primary btn-sm">Save Treatment Note</button></div>
                     </form>
                 </div>
+
+                <?php if ($canViewIpdOt) : ?>
+                    <div class="nursing-tab-pane d-none" id="nursing_tab_ot">
+                        <div id="tab_ot_content">Loading...</div>
+                    </div>
+                <?php endif ?>
 
                 <div class="nursing-tab-pane d-none" id="nursing_tab_scan">
                     <div class="alert alert-warning py-2 mb-3">
@@ -1333,6 +1348,11 @@ ksort($nurseNames);
             var targetPane = document.getElementById(targetId);
             if (targetPane) {
                 targetPane.classList.remove('d-none');
+            }
+
+            var contentUrl = button.getAttribute('data-url');
+            if (contentUrl && targetId === 'nursing_tab_ot') {
+                load_form_div(contentUrl, 'tab_ot_content');
             }
         });
     });

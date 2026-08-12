@@ -92,7 +92,7 @@ $locked = ($cashStatus !== '' && $cashStatus !== 'open')
             <div class="row g-2 align-items-end">
                 <div class="col-md-4">
                     <label for="payment-edit-amount" class="form-label">Correct Amount</label>
-                    <input class="form-control" type="number" min="0.01" step="0.01" id="payment-edit-amount" value="<?= esc(number_format((float) ($payment['amount'] ?? 0), 2, '.', '')) ?>" <?= $locked ? 'disabled' : '' ?>>
+                    <input class="form-control" type="number" min="0" step="0.01" id="payment-edit-amount" value="<?= esc(number_format((float) ($payment['amount'] ?? 0), 2, '.', '')) ?>" <?= $locked ? 'disabled' : '' ?>>
                 </div>
                 <div class="col-md-3 d-grid"><button class="btn btn-primary" id="payment-edit-change-amount" <?= $locked ? 'disabled' : '' ?>>Change Amount</button></div>
             </div>
