@@ -69,13 +69,8 @@
                         <li class="nav-item" role="presentation">
                             <button class="nav-link" id="abha-tab" data-bs-toggle="tab"
                                 data-bs-target="#abha" type="button" role="tab" aria-controls="abha"
-                                aria-selected="false">ABHA Create/Verify</button>
-                        </li>
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link" id="abhareg-tab" data-bs-toggle="tab"
-                                data-bs-target="#abha-register" type="button" role="tab"
                                 aria-selected="false">
-                                <i class="bi bi-person-check-fill me-1"></i>ABHA Register
+                                <i class="bi bi-person-vcard me-1"></i>ABHA Management
                             </button>
                         </li>
                     </ul>
@@ -395,60 +390,86 @@
 
                         </div>
                         <div class="tab-pane fade" id="abha" role="tabpanel" aria-labelledby="abha-tab">
+                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-1 px-2">
+                                <div>
+                                    <h6 class="card-title mb-0">ABHA Management</h6>
+                                    <p class="text-muted small mb-0">Create, verify and scan Ayushman Bharat Health Accounts</p>
+                                </div>
+                                <button type="button" class="btn btn-outline-primary btn-sm" id="abhareg_facility_print_launch_btn">
+                                    <i class="bi bi-printer me-1"></i>Print Facility QR
+                                </button>
+                            </div>
+
+                            <div class="row g-3 py-3 px-2">
+                                <div class="col-lg-4">
+                                    <div class="card h-100 border-primary">
+                                        <div class="card-body d-flex flex-column">
+                                            <div class="d-flex align-items-center gap-2 mb-2">
+                                                <i class="bi bi-person-plus-fill fs-3 text-primary"></i>
+                                                <h6 class="mb-0">Create ABHA</h6>
+                                            </div>
+                                            <p class="text-muted small mb-2">Register a new health account using the patient's Aadhaar number. OTP is sent to the Aadhaar-linked mobile.</p>
+                                            <ul class="list-unstyled small text-muted mb-3">
+                                                <li><i class="bi bi-check-circle-fill text-success me-1"></i>Aadhaar-based identity verification</li>
+                                                <li><i class="bi bi-check-circle-fill text-success me-1"></i>Choose or customise the ABHA address</li>
+                                                <li><i class="bi bi-check-circle-fill text-success me-1"></i>Official ABHA card stored for printing</li>
+                                            </ul>
+                                            <button type="button" class="btn btn-primary w-100 mt-auto" id="abha_open_create_modal_btn"><i class="bi bi-plus-lg me-1"></i>Create ABHA Record</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-lg-4">
+                                    <div class="card h-100 border-success">
+                                        <div class="card-body d-flex flex-column">
+                                            <div class="d-flex align-items-center gap-2 mb-2">
+                                                <i class="bi bi-shield-check fs-3 text-success"></i>
+                                                <h6 class="mb-0">Verify ABHA Account</h6>
+                                            </div>
+                                            <p class="text-muted small mb-2">Verify an existing ABHA account and link it to a patient record. An OTP is sent to the linked mobile.</p>
+                                            <ul class="list-unstyled small text-muted mb-3">
+                                                <li><i class="bi bi-check-circle-fill text-success me-1"></i>Link ABHA to a patient record</li>
+                                                <li><i class="bi bi-check-circle-fill text-success me-1"></i>View and download the ABHA card</li>
+                                            </ul>
+                                            <div class="d-grid gap-2 mt-auto">
+                                                <button type="button" class="btn btn-success" onclick="abhaRegSelectMethod('number')"><i class="bi bi-person-vcard me-1"></i>By ABHA Number</button>
+                                                <button type="button" class="btn btn-outline-success" onclick="abhaRegSelectMethod('mobile')"><i class="bi bi-phone me-1"></i>By Mobile OTP</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-lg-4">
+                                    <div class="card h-100 border-info">
+                                        <div class="card-body d-flex flex-column">
+                                            <div class="d-flex align-items-center gap-2 mb-2">
+                                                <i class="bi bi-qr-code-scan fs-3 text-info"></i>
+                                                <h6 class="mb-0">Scan ABHA QR</h6>
+                                            </div>
+                                            <p class="text-muted small mb-2">Scan the QR on the patient's ABHA card or PHR app to capture their details instantly.</p>
+                                            <ul class="list-unstyled small text-muted mb-3">
+                                                <li><i class="bi bi-check-circle-fill text-success me-1"></i>Works with a handheld QR scanner</li>
+                                                <li><i class="bi bi-check-circle-fill text-success me-1"></i>No OTP needed for demographics</li>
+                                            </ul>
+                                            <button type="button" class="btn btn-info text-white w-100 mt-auto" onclick="abhaRegSelectMethod('qr')"><i class="bi bi-upc-scan me-1"></i>Scan ABHA QR</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Legacy inline flows kept hidden; their element IDs are still used by the wizard scripts. -->
+                            <div class="d-none">
                             <div class="row">
                                 <div class="col-md-12">
                                     <div class="card">
                                         <div class="card-body">
-                                            <h6 class="card-title">ABHA Number Create and Verify</h6>
-                                            <p class="text-muted">Create and verify your unique health identification number</p>
-                                            
-                                            <ul class="nav nav-tabs" id="abhaSubTabs" role="tablist">
-                                                <li class="nav-item" role="presentation">
-                                                    <button class="nav-link active" id="abha-create-tab" data-bs-toggle="tab"
-                                                        data-bs-target="#abha-create" type="button" role="tab" aria-controls="abha-create"
-                                                        aria-selected="true">Create ABHA</button>
-                                                </li>
-                                                <li class="nav-item" role="presentation">
-                                                    <button class="nav-link" id="abha-verify-tab" data-bs-toggle="tab"
-                                                        data-bs-target="#abha-verify" type="button" role="tab" aria-controls="abha-verify"
-                                                        aria-selected="false">Verify ABHA</button>
-                                                </li>
-                                            </ul>
-                                            
                                             <div class="tab-content pt-3" id="abhaSubTabsContent">
-                                                <div class="tab-pane fade show active" id="abha-create" role="tabpanel" aria-labelledby="abha-create-tab">
+                                                <div class="tab-pane fade show active" id="abha-create" role="tabpanel">
 
-                                                    <div class="row g-3 py-2" id="abha_launcher_cards">
+                                                    <div class="row g-3 py-2 d-none" id="abha_launcher_cards">
                                                         <div class="col-md-6">
                                                             <div class="card h-100 border-primary">
                                                                 <div class="card-body">
-                                                                    <div class="d-flex align-items-center gap-2 mb-2">
-                                                                        <i class="bi bi-person-plus-fill fs-3 text-primary"></i>
-                                                                        <h6 class="mb-0">Create ABHA</h6>
-                                                                    </div>
-                                                                    <p class="text-muted small mb-2">Register a new Ayushman Bharat Health Account for a patient using their Aadhaar number. OTP is sent to the Aadhaar-linked mobile.</p>
-                                                                    <ul class="list-unstyled small text-muted mb-3">
-                                                                        <li><i class="bi bi-check-circle-fill text-success me-1"></i>Aadhaar-based identity verification</li>
-                                                                        <li><i class="bi bi-check-circle-fill text-success me-1"></i>Choose or customise the ABHA address</li>
-                                                                        <li><i class="bi bi-check-circle-fill text-success me-1"></i>Official ABHA card stored for printing</li>
-                                                                    </ul>
-                                                                    <button type="button" class="btn btn-primary w-100" id="abha_open_create_modal_btn"><i class="bi bi-plus-lg me-1"></i>Create ABHA Record</button>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        <div class="col-md-6">
-                                                            <div class="card h-100 border-success">
-                                                                <div class="card-body">
-                                                                    <div class="d-flex align-items-center gap-2 mb-2">
-                                                                        <i class="bi bi-shield-check fs-3 text-success"></i>
-                                                                        <h6 class="mb-0">Verify ABHA Account</h6>
-                                                                    </div>
-                                                                    <p class="text-muted small mb-2">Verify an existing ABHA account using the ABHA address or ABHA number. An OTP is sent to the linked mobile for authentication.</p>
-                                                                    <ul class="list-unstyled small text-muted mb-3">
-                                                                        <li><i class="bi bi-check-circle-fill text-success me-1"></i>Verify via ABHA address or ABHA number</li>
-                                                                        <li><i class="bi bi-check-circle-fill text-success me-1"></i>Link ABHA to a patient record</li>
-                                                                        <li><i class="bi bi-check-circle-fill text-success me-1"></i>View and download the ABHA card</li>
-                                                                    </ul>
                                                                     <button type="button" class="btn btn-success w-100" id="abha_open_verify_modal_btn"><i class="bi bi-shield-check me-1"></i>Verify ABHA Account</button>
                                                                 </div>
                                                             </div>
@@ -615,53 +636,13 @@
                                 </div>
                             </div>
                         </div>
-                    </div>
-                </div>
 
                 <!-- ============================================================ -->
-                <!-- ABHA REGISTER TAB PANE                                       -->
+                <!-- ABHA REGISTRATION METHODS (inside ABHA Management)           -->
                 <!-- ============================================================ -->
-                <div class="tab-pane fade" id="abha-register" role="tabpanel" aria-labelledby="abhareg-tab">
+                <div id="abha-register">
                   <div class="row">
                     <div class="col-12">
-                      <h6 class="fw-bold mb-3"><i class="bi bi-person-check-fill me-2 text-primary" style="margin-left: 10px;margin-right: 10px;"></i>ABHA-Based Patient Registration</h6>
-
-                      <!-- Method selector cards -->
-                      <div id="abhareg_methods" class="row g-2 mb-3" style="margin-left: 10px;margin-right: 10px;">
-                        <div class="col-6 col-md-3">
-                          <div class="card border abhareg-method-card text-center py-3" data-method="number" role="button" tabindex="0" onclick="abhaRegSelectMethod('number')" style="cursor:pointer">
-                            <div class="fs-2 mb-1">🆔</div>
-                            <div class="fw-semibold small">By ABHA Number</div>
-                            <div class="text-muted" style="font-size:11px">14-digit or @abdm address</div>
-                          </div>
-                        </div>
-                        <div class="col-6 col-md-3">
-                          <div class="card border abhareg-method-card text-center py-3" data-method="qr" role="button" tabindex="0" onclick="abhaRegSelectMethod('qr')" style="cursor:pointer">
-                            <div class="fs-2 mb-1">📷</div>
-                            <div class="fw-semibold small">Scan ABHA QR</div>
-                            <div class="text-muted" style="font-size:11px">Scan patient's ABHA card QR</div>
-                          </div>
-                        </div>
-                        <div class="col-6 col-md-3">
-                          <div class="card border abhareg-method-card text-center py-3" data-method="facility" role="button" tabindex="0" onclick="abhaRegSelectMethod('facility')" style="cursor:pointer">
-                            <div class="fs-2 mb-1">🏥</div>
-                            <div class="fw-semibold small">Scan Facility QR</div>
-                            <div class="text-muted" style="font-size:11px">Patient scans hospital QR</div>
-                          </div>
-                        </div>
-                        <div class="col-6 col-md-3">
-                          <div class="card border abhareg-method-card text-center py-3" data-method="mobile" role="button" tabindex="0" onclick="abhaRegSelectMethod('mobile')" style="cursor:pointer">
-                            <div class="fs-2 mb-1">📱</div>
-                            <div class="fw-semibold small">By Mobile OTP</div>
-                            <div class="text-muted" style="font-size:11px">OTP to ABHA-linked mobile</div>
-                          </div>
-                        </div>
-                      </div>
-
-                    </div>
-                  </div>
-                  <div class="row">
-                    <div class="col-12" style="margin: 10px;">
                       <!-- Active method banner -->
                       <div id="abhareg_active_banner" class="alert alert-primary d-flex align-items-center py-2 d-none mb-3">
                         <span id="abhareg_banner_icon" class="me-2 fs-5"></span>
@@ -848,7 +829,9 @@
                     </div>
                   </div>
                 </div>
-                <!-- /.ABHA REGISTER TAB PANE -->
+                <!-- /.ABHA REGISTRATION METHODS -->
+                </div>
+                <!-- /.ABHA MANAGEMENT TAB PANE -->
 
             </div>
         </div>
@@ -1468,8 +1451,9 @@
                 $('#abhareg_mob_step1_alert,#abhareg_mob_step2_alert').html('');
             };
 
-            function loadFacilityQr(force) {
+            function loadFacilityQr(force, onReady) {
                 if (facilityQrLoaded && !force) {
+                    if (typeof onReady === 'function') { onReady(true); }
                     return;
                 }
 
@@ -1483,6 +1467,7 @@
                         var msg = pickApiMessage(resp, 'Unable to load Health Facility QR.');
                         $('#abhareg_facility_loading').html('');
                         $('#abhareg_facility_alert').html('<div class="alert alert-danger py-2">' + msg + '</div>');
+                        if (typeof onReady === 'function') { onReady(false, msg); }
                         return;
                     }
 
@@ -1499,6 +1484,7 @@
                     $('#abhareg_facility_hfr').text(resp.hfr_id || '—');
                     $('#abhareg_facility_qr_img').data('hospitalName', resp.hospital_name || 'Health Facility');
                     $('#abhareg_facility_qr_img').data('hfrId', resp.hfr_id || '');
+                    if (typeof onReady === 'function') { onReady(true); }
                 }).fail(function(xhr) {
                     var msg = 'Unable to load Health Facility QR.';
                     if (xhr && xhr.responseJSON && xhr.responseJSON.error_text) {
@@ -1506,6 +1492,7 @@
                     }
                     $('#abhareg_facility_loading').html('');
                     $('#abhareg_facility_alert').html('<div class="alert alert-danger py-2">' + msg + '</div>');
+                    if (typeof onReady === 'function') { onReady(false, msg); }
                 }).always(function() {
                     $('#abhareg_facility_refresh_btn').prop('disabled', false);
                 });
@@ -1715,6 +1702,16 @@
 
             // --- Method 2: QR Scanner ---
             $('#abhareg_qr_open_modal_btn').on('click', function() { openAbhaQrScan(); });
+            $('#abhareg_facility_print_launch_btn').on('click', function() {
+                var $btn = $(this);
+                var original = $btn.html();
+                $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>Loading QR');
+                loadFacilityQr(false, function(ok, msg) {
+                    $btn.prop('disabled', false).html(original);
+                    if (ok) { printFacilityQr(); return; }
+                    alert(msg || 'Unable to load the Health Facility QR.');
+                });
+            });
             $('#abhareg_facility_refresh_btn').on('click', function() { loadFacilityQr(true); });
             $('#abhareg_facility_print_btn').on('click', function() { printFacilityQr(); });
 
