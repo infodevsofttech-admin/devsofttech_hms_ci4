@@ -1488,16 +1488,19 @@ class Abha extends BaseController
     private function pickGatewayAbhaProfile(array $payload): array
     {
         $account = is_array($payload['account'] ?? null) ? $payload['account'] : [];
+        $dataAccount = is_array($payload['data']['account'] ?? null) ? $payload['data']['account'] : [];
         $loginAccount = is_array($payload['accounts'][0] ?? null) ? $payload['accounts'][0] : [];
         $mergedAccount = $loginAccount;
-        foreach ($account as $key => $value) {
-            if (! is_scalar($value) || trim((string) $value) === '') {
-                continue;
+        foreach ([$dataAccount, $account] as $accountSource) {
+            foreach ($accountSource as $key => $value) {
+                if (! is_scalar($value) || trim((string) $value) === '') {
+                    continue;
+                }
+                if (in_array(strtoupper(trim((string) $value)), ['PATIENT', 'PATIENT NAME', 'N/A'], true)) {
+                    continue;
+                }
+                $mergedAccount[$key] = $value;
             }
-            if (in_array(strtoupper(trim((string) $value)), ['PATIENT', 'PATIENT NAME', 'N/A'], true)) {
-                continue;
-            }
-            $mergedAccount[$key] = $value;
         }
 
         $candidates = [
@@ -1507,6 +1510,7 @@ class Abha extends BaseController
             $mergedAccount,
             $account,
             $loginAccount,
+            $payload['data']['account'] ?? null,
             $payload['gateway_patient'] ?? null,
             $payload,
         ];
@@ -1526,7 +1530,7 @@ class Abha extends BaseController
      */
     private function extractAbhaProfileName(array $profile, array $payload): string
     {
-        foreach ([$profile, $payload, $payload['account'] ?? [], $payload['gateway_abha_profile'] ?? [], $payload['gateway_patient'] ?? []] as $source) {
+        foreach ([$profile, $payload, $payload['account'] ?? [], $payload['data']['account'] ?? [], $payload['gateway_abha_profile'] ?? [], $payload['gateway_patient'] ?? []] as $source) {
             if (! is_array($source)) {
                 continue;
             }
@@ -1824,9 +1828,14 @@ class Abha extends BaseController
             ]);
         }
 
-        $payload = is_array($result['data'] ?? null)
-            ? array_merge($result, $result['data'])
-            : $result;
+        $payload = $result;
+        if (is_array($result['data'] ?? null)) {
+            foreach ($result['data'] as $key => $value) {
+                if (! array_key_exists($key, $payload)) {
+                    $payload[$key] = $value;
+                }
+            }
+        }
         $profile = $this->pickGatewayAbhaProfile($payload);
         $firstNonEmpty = static function (array $values): string {
             foreach ($values as $value) {
