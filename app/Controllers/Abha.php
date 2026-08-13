@@ -506,6 +506,45 @@ class Abha extends BaseController
     }
 
     // -------------------------------------------------------------------------
+    // Fetch official ABHA card — POST abha/register/card
+    // -------------------------------------------------------------------------
+    public function fetchOfficialCard()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $abhaNumber = trim((string) ($this->request->getPost('abha_number') ?? ''));
+        $abhaAddress = trim((string) ($this->request->getPost('abha_address') ?? ''));
+
+        if ($abhaNumber === '' && $abhaAddress === '') {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'ABHA number or ABHA address is required']);
+        }
+
+        try {
+            $result = AbdmConnectorFactory::make()->fetchOfficialAbhaCard([
+                'abha_number' => $abhaNumber,
+                'abha_address' => $abhaAddress,
+            ]);
+        } catch (\Throwable $e) {
+            log_message('error', '[ABHA] Official card fetch failed: ' . $e->getMessage());
+            return $this->response->setStatusCode(502)->setJSON([
+                'ok' => 0,
+                'error_text' => 'The official ABHA card could not be downloaded from the Bridge.',
+            ]);
+        }
+
+        if (empty($result['ok']) || (int) $result['ok'] !== 1) {
+            return $this->response->setStatusCode(502)->setJSON([
+                'ok' => 0,
+                'error_text' => $this->extractBridgeErrorText($result, 'The official ABHA card was not returned by the Bridge.'),
+            ]);
+        }
+
+        return $this->response->setJSON($result);
+    }
+
+    // -------------------------------------------------------------------------
     // ABHA Card view — GET abha/card/{abha_number}
     // Renders a printable card page for a patient whose ABHA is stored in HMS.
     // -------------------------------------------------------------------------
@@ -1671,6 +1710,7 @@ class Abha extends BaseController
 
         $candidates = [
             $payload['ABHAProfile'] ?? null,
+            $payload['data']['ABHAProfile'] ?? null,
             $payload['gateway_abha_profile'] ?? null,
             $payload['data']['gateway_abha_profile'] ?? null,
             $payload['gateway_patient'] ?? null,
@@ -1750,12 +1790,18 @@ class Abha extends BaseController
             return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
         }
 
-        $input = trim((string) ($this->request->getPost('abha_id') ?? $this->request->getPost('abha_address') ?? ''));
+        $lookupType = strtolower(trim((string) ($this->request->getPost('lookup_type') ?? '')));
+        $postedNumber = trim((string) ($this->request->getPost('abha_id') ?? ''));
+        $postedAddress = trim((string) ($this->request->getPost('abha_address') ?? ''));
+        if (! in_array($lookupType, ['number', 'address'], true)) {
+            $lookupType = $postedAddress !== '' || str_contains($postedNumber, '@') ? 'address' : 'number';
+        }
+        $input = $lookupType === 'address' ? $postedAddress : $postedNumber;
         if ($input === '') {
-            return $this->response->setJSON(['ok' => 0, 'error_text' => 'ABHA ID or address required']);
+            return $this->response->setJSON(['ok' => 0, 'error_text' => $lookupType === 'address' ? 'ABHA Address is required' : 'ABHA Number or ID is required']);
         }
 
-        $isAddress = str_contains($input, '@');
+        $isAddress = $lookupType === 'address';
         $payload   = $isAddress
             ? ['abha_address' => $input]
             : ['abha_id' => preg_replace('/\D/', '', $input)];
@@ -2163,7 +2209,19 @@ class Abha extends BaseController
 
     private function extractAbhaCardData(array $payload): string
     {
-        $sources = [$payload, $payload['data'] ?? [], $payload['account'] ?? [], $payload['profile'] ?? [], $payload['gateway_patient'] ?? [], $payload['data']['gateway_patient'] ?? []];
+        $data = is_array($payload['data'] ?? null) ? $payload['data'] : [];
+        $sources = [
+            $payload,
+            $data,
+            $payload['account'] ?? [],
+            $data['account'] ?? [],
+            $payload['profile'] ?? [],
+            $data['profile'] ?? [],
+            $payload['ABHAProfile'] ?? [],
+            $data['ABHAProfile'] ?? [],
+            $payload['gateway_patient'] ?? [],
+            $data['gateway_patient'] ?? [],
+        ];
         foreach ($sources as $source) {
             if (! is_array($source)) { continue; }
             foreach (['official_card', 'card_data_uri', 'card_base64', 'card_data', 'abhaCard', 'abha_card', 'cardData', 'card'] as $key) {

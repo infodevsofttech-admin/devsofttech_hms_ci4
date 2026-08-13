@@ -439,8 +439,9 @@
                                                 <li><i class="bi bi-check-circle-fill text-success me-1"></i>View and download the ABHA card</li>
                                             </ul>
                                             <div class="d-grid gap-2 mt-auto">
-                                                <button type="button" class="btn btn-success" onclick="abhaRegSelectMethod('number')"><i class="bi bi-person-vcard me-1"></i>By ABHA Number</button>
-                                                <button type="button" class="btn btn-outline-success" onclick="abhaRegSelectMethod('mobile')"><i class="bi bi-phone me-1"></i>By Mobile OTP</button>
+                                                <button type="button" class="btn btn-success" onclick="abhaRegSelectMethod('number')"><i class="bi bi-person-vcard me-1"></i>By ABHA Number or ID</button>
+                                                <button type="button" class="btn btn-outline-primary" onclick="abhaRegSelectMethod('address')"><i class="bi bi-at me-1"></i>By ABHA Address</button>
+                                                <button type="button" class="btn btn-outline-secondary" onclick="abhaRegSelectMethod('mobile')"><i class="bi bi-phone me-1"></i>By Mobile OTP</button>
                                             </div>
                                         </div>
                                     </div>
@@ -527,7 +528,6 @@
                                                                 <label class="form-label">Authentication Via</label>
                                                                 <select class="form-select" id="abha_auth_type">
                                                                     <option value="aadhaar_otp">OTP</option>
-                                                                    <option value="biometric">Biometric</option>
                                                                 </select>
                                                             </div>
                                                         </div>
@@ -1337,7 +1337,8 @@
             var csrf         = function() { return $('input[name="<?= csrf_token() ?>"]').first().val(); };
 
             var methodMeta = {
-                number:   { icon: '🆔', title: 'By ABHA Number/Address', sub: 'Secure modal verification' },
+                number:   { icon: '🆔', title: 'By ABHA Number or ID', sub: 'Secure modal verification' },
+                address:  { icon: '@',   title: 'By ABHA Address',      sub: 'Secure modal verification' },
                 qr:       { icon: '📷', title: 'Scan Patient ABHA QR',   sub: 'Scan QR → patient details' },
                 facility: { icon: '🏥', title: 'Scan Facility QR',       sub: 'Patient scans via ABHA app' },
                 mobile:   { icon: '📱', title: 'By Mobile OTP',          sub: 'OTP to ABHA-linked mobile' }
@@ -1357,7 +1358,10 @@
                 $('#abhareg_result').addClass('d-none');
                 if (method === 'number') {
                     $('#abhareg_panel_number').addClass('d-none');
-                    openAbhaAccountVerification('', null);
+                    openAbhaAccountVerification('', null, 'number');
+                } else if (method === 'address') {
+                    $('#abhareg_panel_number').addClass('d-none');
+                    openAbhaAccountVerification('', null, 'address');
                 } else if (method === 'mobile') {
                     $('#abhareg_panel_mobile').addClass('d-none');
                     openAbhaMobileVerification();
@@ -1393,7 +1397,7 @@
                 });
             }
 
-            function openAbhaAccountVerification(identifier, lookupResponse) {
+            function openAbhaAccountVerification(identifier, lookupResponse, lookupType) {
                 if (!window.AbhaVerifyModal) {
                     regAlert('abhareg_num_stepA_alert', 'danger', 'ABHA verification modal is unavailable. Reload the page and try again.');
                     return;
@@ -1406,7 +1410,7 @@
                     window.AbhaPatientMatchModal.open(profile, profile.candidates || [], function(finalResponse) {
                         showRegResult(finalResponse);
                     });
-                });
+                }, lookupType || 'number');
             }
 
             $(document).off('click.abhaLauncher').on('click.abhaLauncher', '#abha_open_create_modal_btn', function() {

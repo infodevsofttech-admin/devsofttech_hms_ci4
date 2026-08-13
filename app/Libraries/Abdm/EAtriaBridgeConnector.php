@@ -708,6 +708,46 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         return $this->attachOfficialAbhaCard($result);
     }
 
+    public function fetchOfficialAbhaCard(array $payload): array
+    {
+        $abhaNumber = trim((string) ($payload['abha_number'] ?? $payload['abhaNumber'] ?? ''));
+        $abhaAddress = trim((string) ($payload['abha_address'] ?? $payload['abhaAddress'] ?? ''));
+
+        if ($abhaNumber === '' && $abhaAddress === '') {
+            return ['ok' => 0, 'error_text' => 'ABHA number or ABHA address is required'];
+        }
+
+        $result = $this->get('/v3/abha/card', array_filter([
+            'abha_number' => $abhaNumber,
+            'abha_address' => $abhaAddress,
+        ], static fn($value): bool => trim((string) $value) !== ''));
+
+        if (empty($result['ok']) || (int) $result['ok'] !== 1) {
+            return $result;
+        }
+
+        $data = is_array($result['data'] ?? null) ? $result['data'] : $result;
+        $card = $this->extractOfficialCard($result) ?: $this->extractOfficialCard($data);
+        $source = $this->extractCardSource($result) ?: $this->extractCardSource($data);
+
+        if ($card === '' || $source !== 'abdm') {
+            return [
+                'ok' => 0,
+                'error_text' => 'The Bridge did not return an official ABHA card.',
+                'card_source' => $source,
+                'request_id' => (string) ($result['request_id'] ?? ''),
+            ];
+        }
+
+        return [
+            'ok' => 1,
+            'card_base64' => $card,
+            'card_content_type' => $this->resolveCardContentType($data),
+            'card_source' => $source,
+            'request_id' => (string) ($result['request_id'] ?? ''),
+        ];
+    }
+
     /**
      * Ensure a verify/enrol response carries the official ABHA card, fetching it
      * from the Bridge card endpoint when the response itself omits it.
@@ -730,7 +770,8 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         $card = $this->extractOfficialCard($result)
             ?: $this->extractOfficialCard($data)
             ?: $this->extractOfficialCard($account)
-            ?: $this->extractOfficialCard($profile);
+            ?: $this->extractOfficialCard($profile)
+            ?: $this->extractOfficialCard(is_array($result['ABHAProfile'] ?? null) ? $result['ABHAProfile'] : []);
 
         if ($card !== '') {
             $result['card_source'] = $this->extractCardSource($result) ?: $this->extractCardSource($data);

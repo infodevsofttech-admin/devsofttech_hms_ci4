@@ -37,13 +37,13 @@
                 <div id="abhaVerifyAlert"></div>
 
                 <section id="abhaVerifyStep1">
-                    <label class="form-label fw-semibold" for="abhaVerifyIdentifier">ABHA Number or ABHA Address</label>
+                    <label class="form-label fw-semibold" for="abhaVerifyIdentifier" id="abhaVerifyIdentifierLabel">ABHA Number or ID</label>
                     <div class="input-group input-group-lg">
                         <span class="input-group-text"><i class="bi bi-person-vcard"></i></span>
-                        <input type="text" class="form-control" id="abhaVerifyIdentifier" placeholder="91-0000-0000-0000 or username@abdm" autocomplete="off">
+                        <input type="text" class="form-control" id="abhaVerifyIdentifier" placeholder="91-0000-0000-0000" autocomplete="off">
                         <button type="button" class="btn btn-primary" id="abhaVerifyLookupBtn"><i class="bi bi-search me-1"></i>Find Account</button>
                     </div>
-                    <div class="form-text">Enter the patient's ABHA identity. A mobile number is not required for account lookup.</div>
+                    <div class="form-text" id="abhaVerifyIdentifierHelp">Enter the patient's 14-digit ABHA Number or ID. A mobile number is not required for account lookup.</div>
                 </section>
 
                 <section id="abhaVerifyStep2" class="d-none">
@@ -106,6 +106,7 @@ window.AbhaVerifyModal = (function () {
     var lookupResponse = null;
     var verifiedProfile = null;
     var onVerified = null;
+    var lookupType = 'number';
     var resendTimer = null;
     var resendRemaining = 0;
 
@@ -169,9 +170,11 @@ window.AbhaVerifyModal = (function () {
     }
     function lookup() {
         var identifier = $('#abhaVerifyIdentifier').val().trim();
-        if (!identifier) { alertBox('warning', 'Enter an ABHA number or ABHA address.'); return; }
+        if (!identifier) { alertBox('warning', lookupType === 'address' ? 'Enter an ABHA Address.' : 'Enter an ABHA Number or ID.'); return; }
         var button = $('#abhaVerifyLookupBtn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>Looking up');
-        $.post('<?= base_url('abha/register/validate') ?>', { abha_id:identifier, '<?= csrf_token() ?>':csrf() }, function (response) {
+        var request = { lookup_type: lookupType, '<?= csrf_token() ?>':csrf() };
+        request[lookupType === 'address' ? 'abha_address' : 'abha_id'] = identifier;
+        $.post('<?= base_url('abha/register/validate') ?>', request, function (response) {
             button.prop('disabled', false).html('<i class="bi bi-search me-1"></i>Find Account');
             if (!response || response.ok != 1 || response.status !== 'VALID') { alertBox('danger', apiMessage(response, 'ABHA account was not found.')); return; }
             if (!response.txn_id) { alertBox('warning', 'The Bridge found this ABHA but did not return the login transaction ID. Update /v3/abha/login/search before OTP verification can continue.'); return; }
@@ -276,10 +279,16 @@ window.AbhaVerifyModal = (function () {
         $('#abhaVerifyModal').on('hidden.bs.modal', stopTimer);
     });
     return {
-        open: function (identifier, initialLookup, callback) {
+        open: function (identifier, initialLookup, callback, requestedLookupType) {
             lookupResponse = initialLookup || null;
             verifiedProfile = null;
             onVerified = callback;
+            lookupType = requestedLookupType === 'address' ? 'address' : 'number';
+            $('#abhaVerifyIdentifierLabel').text(lookupType === 'address' ? 'ABHA Address' : 'ABHA Number or ID');
+            $('#abhaVerifyIdentifier').attr('placeholder', lookupType === 'address' ? 'username@abdm' : '91-0000-0000-0000');
+            $('#abhaVerifyIdentifierHelp').text(lookupType === 'address'
+                ? 'Enter the patient\'s ABHA Address, for example username@abdm.'
+                : 'Enter the patient\'s 14-digit ABHA Number or ID. A mobile number is not required for account lookup.');
             $('#abhaVerifyIdentifier').val(identifier || '');
             $('#abhaVerifyPhoto,#abhaVerifyDownloadCard').addClass('d-none');
             showStep(1);
