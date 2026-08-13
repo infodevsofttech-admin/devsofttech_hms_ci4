@@ -28,9 +28,10 @@
             <button class="btn btn-sm btn-outline-primary" id="btnRefresh">
                 <i class="bi bi-arrow-clockwise"></i> Refresh
             </button>
-            <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#abdmQueueModalAddToken">
-                <i class="bi bi-plus-lg"></i> Add Walk-in
-            </button>
+            <a href="javascript:load_form('<?= base_url('billing/patient') ?>','Patient Management')"
+               class="btn btn-sm btn-outline-success">
+                <i class="bi bi-arrow-left"></i> Back to Patient Management
+            </a>
             <a href="javascript:load_form('<?= base_url('AbdmOpdQueue/list') ?>','ABDM OPD List')"
                class="btn btn-sm btn-outline-secondary">
                 <i class="bi bi-list-ul"></i> History

@@ -74,6 +74,12 @@
                                 <i class="bi bi-person-vcard me-1"></i>ABHA Management
                             </button>
                         </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="abdm-opd-queue-tab" type="button"
+                                onclick="load_form('<?= base_url('AbdmOpdQueue') ?>', 'ABDM OPD Queue');">
+                                <i class="bi bi-ticket-perforated me-1"></i>ABDM OPD Queue
+                            </button>
+                        </li>
                     </ul>
                     <div class="tab-content pt-2" id="patientTabsContent">
                         <div class="tab-pane fade" id="nperson" role="tabpanel" aria-labelledby="nperson-tab">
