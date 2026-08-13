@@ -172,6 +172,12 @@ window.AbhaQrModal = (function () {
         $('#abhaQrContinueBtn').on('click', function () {
             if (!scannedProfile) return;
             var profile = scannedProfile;
+            // Already linked: nothing else opens, so keep this window up for the operator to close.
+            if (profile.need_confirmation === false && Number(profile.patient_id || 0) > 0) {
+                alertBox('success', 'This ABHA is already linked to HMS patient <strong>' + escapeHtml(profile.p_code || '') + '</strong>. The page behind has been updated. Close this window when you are done.');
+                if (typeof onResolved === 'function') onResolved(profile);
+                return;
+            }
             $('#abhaQrModal').one('hidden.bs.modal', function () {
                 if (typeof onResolved === 'function') onResolved(profile);
             });

@@ -255,6 +255,12 @@ window.AbhaMobileModal = (function () {
         $('#abhaMobileCompareBtn').on('click', function () {
             if (!verifiedProfile) return;
             var profile = verifiedProfile;
+            // Already linked: nothing else opens, so keep this window up for the operator to close.
+            if (profile.need_confirmation === false && Number(profile.patient_id || 0) > 0) {
+                alertBox('success', 'This ABHA is already linked to HMS patient <strong>' + escapeHtml(profile.p_code || '') + '</strong>. The page behind has been updated. Close this window when you are done.');
+                if (typeof onVerified === 'function') onVerified(profile);
+                return;
+            }
             $('#abhaMobileModal').one('hidden.bs.modal', function () {
                 if (typeof onVerified === 'function') onVerified(profile);
             });
