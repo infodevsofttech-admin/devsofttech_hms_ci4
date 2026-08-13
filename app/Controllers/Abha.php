@@ -85,7 +85,15 @@ class Abha extends BaseController
                 'request_id' => (string) ($result['request_id'] ?? ''),
             ]);
         }
-        $payload  = $result['data'] ?? $result;
+        // Keep top-level keys (gateway_patient, official_card) that also appear under data.
+        $payload = $result;
+        if (is_array($result['data'] ?? null)) {
+            foreach ($result['data'] as $key => $value) {
+                if (! array_key_exists($key, $payload)) {
+                    $payload[$key] = $value;
+                }
+            }
+        }
         $newTxnId = $payload['txnId'] ?? $payload['txn_id'] ?? $txnId;
 
         $profile = $this->pickGatewayAbhaProfile($payload);
@@ -257,7 +265,15 @@ class Abha extends BaseController
             ]);
         }
 
-        $payload = $result['data'] ?? $result;
+        // Keep top-level keys (gateway_patient, official_card) that also appear under data.
+        $payload = $result;
+        if (is_array($result['data'] ?? null)) {
+            foreach ($result['data'] as $key => $value) {
+                if (! array_key_exists($key, $payload)) {
+                    $payload[$key] = $value;
+                }
+            }
+        }
 
         $profile = $this->pickGatewayAbhaProfile($payload);
 
