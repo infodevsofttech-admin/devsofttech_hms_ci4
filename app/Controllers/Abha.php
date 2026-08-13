@@ -1127,7 +1127,6 @@ class Abha extends BaseController
         string $abhaNumClean
     ): array {
         $genderDb   = $this->toPatientGenderValue($genderRaw);
-        $ageYears   = $this->computeAgeYears($dob);
         // ABHA sends DOB as DD-MM-YYYY, patient_master stores YYYY-MM-DD.
         $birthYear  = $this->extractBirthYear($dob);
         $nameUp     = strtoupper(trim($name));
@@ -1147,32 +1146,53 @@ class Abha extends BaseController
             $select .= ',' . $abhaField;
         }
 
-        $builder = $db->table('patient_master')->select($select);
-        $builder->groupStart();
-        $any = false;
-        foreach ($nameTokens as $tok) {
-            $builder->orLike('p_fname', $tok);
-            $any = true;
-        }
-        if ($mobile !== '') {
-            $builder->orWhere('mphone1', $mobile);
-            $any = true;
+        // Two targeted passes: exact identifiers can never be crowded out by a
+        // common name, and gender alone is a filter (see scoring) not a selector.
+        $rows = [];
+        $collect = static function (callable $applyConditions) use ($db, $select, &$rows): void {
+            $builder = $db->table('patient_master')->select($select);
+            $builder->groupStart();
+            $applyConditions($builder);
+            $builder->groupEnd();
+            foreach ($builder->orderBy('insert_date', 'DESC')->limit(200)->get()->getResultArray() as $row) {
+                $rows[(int) ($row['id'] ?? 0)] = $row;
+            }
+        };
+
+        $exactMatches = [];
+        if ($abhaField !== null && $abhaNumClean !== '') {
+            $exactMatches[$abhaField] = $abhaNumClean;
         }
         if ($aadhaar !== '') {
-            $builder->orWhere('udai', $aadhaar);
-            $any = true;
+            $exactMatches['udai'] = $aadhaar;
         }
-        if ($ageYears !== null && $genderDb > 0) {
-            $builder->orWhere('gender', $genderDb);
-            $any = true;
+        if ($mobile !== '') {
+            $exactMatches['mphone1'] = $mobile;
         }
-        $builder->groupEnd();
 
-        if (! $any) {
+        if ($exactMatches !== []) {
+            $collect(static function ($builder) use ($exactMatches): void {
+                foreach ($exactMatches as $column => $value) {
+                    $builder->orWhere($column, $value);
+                }
+            });
+        }
+
+        if ($nameTokens !== []) {
+            $hasLastName = in_array('p_lname', $fields, true);
+            $collect(static function ($builder) use ($nameTokens, $hasLastName): void {
+                foreach ($nameTokens as $token) {
+                    $builder->orLike('p_fname', $token);
+                    if ($hasLastName) {
+                        $builder->orLike('p_lname', $token);
+                    }
+                }
+            });
+        }
+
+        if ($rows === []) {
             return [];
         }
-
-        $rows = $builder->orderBy('insert_date', 'DESC')->limit(40)->get()->getResultArray();
 
         $candidates = [];
         foreach ($rows as $row) {
