@@ -1061,9 +1061,9 @@ class Abha extends BaseController
 
         $candidates = [];
         foreach ($rows as $row) {
-            $rowName    = strtoupper(trim((string) ($row['p_fname'] ?? '')));
-            $rowTokens  = array_filter(preg_split('/\s+/', $rowName) ?: []);
-            $nameOverlap = $nameTokens !== [] && count(array_intersect($nameTokens, $rowTokens)) > 0;
+            $rowName    = strtoupper(trim((string) ($row['p_fname'] ?? '') . ' ' . (string) ($row['p_lname'] ?? '')));
+            $rowTokens  = array_values(array_filter(preg_split('/\s+/', $rowName) ?: [], fn ($t) => strlen($t) >= 3));
+            $nameOverlap = $nameTokens !== [] && $rowTokens !== [] && $nameTokens[0] === $rowTokens[0];
 
             $rowAgeYears = null;
             $rowDob = trim((string) ($row['dob'] ?? ''));
