@@ -639,7 +639,7 @@
                           <div class="card border abhareg-method-card text-center py-3" data-method="qr" role="button" tabindex="0" onclick="abhaRegSelectMethod('qr')" style="cursor:pointer">
                             <div class="fs-2 mb-1">📷</div>
                             <div class="fw-semibold small">Scan ABHA QR</div>
-                            <div class="text-muted" style="font-size:11px">Camera scan patient's QR</div>
+                            <div class="text-muted" style="font-size:11px">Scan patient's ABHA card QR</div>
                           </div>
                         </div>
                         <div class="col-6 col-md-3">
@@ -732,33 +732,10 @@
 
                       <!-- Panel: Method 2 - Scan QR -->
                       <div id="abhareg_panel_qr" class="abhareg-panel d-none">
-                        <p class="text-muted small mb-2">Scan the ABHA QR from the patient's card or PHR app.</p>
-                        <div class="d-flex gap-2 flex-wrap mb-3">
-                          <button type="button" id="abhareg_qr_open_modal_btn" class="btn btn-primary btn-sm">
-                            <i class="bi bi-upc-scan me-1"></i>Use QR Scanner
-                          </button>
-                          <button type="button" id="abhareg_qr_start_camera_btn" class="btn btn-outline-primary btn-sm">
-                            <i class="bi bi-camera me-1"></i>Use Device Camera
-                          </button>
-                        </div>
-                        <div id="abhareg_qr_camera_wrap" class="d-none">
-                                                <div class="mb-2" style="max-width:300px;">
-                                                    <label for="abhareg_qr_camera_select" class="form-label small mb-1">Camera</label>
-                                                    <div class="d-flex gap-2 align-items-start">
-                                                        <select id="abhareg_qr_camera_select" class="form-select form-select-sm">
-                                                            <option value="">Default camera</option>
-                                                        </select>
-                                                        <button type="button" id="abhareg_qr_camera_refresh" class="btn btn-outline-secondary btn-sm">Refresh</button>
-                                                    </div>
-                                                </div>
-                        <div id="abhareg_qr_reader" style="width:300px;max-width:100%;"></div>
-                        </div>
+                        <button type="button" id="abhareg_qr_open_modal_btn" class="btn btn-primary btn-sm">
+                          <i class="bi bi-upc-scan me-1"></i>Open QR Scanner
+                        </button>
                         <div id="abhareg_qr_result" class="mt-2"></div>
-                        <div class="mt-2">
-                          <button type="button" id="abhareg_qr_stop_btn" class="btn btn-outline-secondary btn-sm d-none">
-                            <i class="bi bi-camera-video-off me-1"></i>Stop Camera
-                          </button>
-                        </div>
                       </div>
 
                                             <!-- Panel: Method 3 - Facility QR -->
@@ -1399,24 +1376,12 @@
         /* ===================== ABHA REGISTRATION WIZARD ===================== */
         (function() {
             var regTxnId     = null;
-            var html5QrCode  = null;
-            var qrScriptLoaded = false;
-            var qrScriptLoading = false;
-            var qrCameraStorageKey = 'abha_qr_preferred_camera';
-            var qrSelectedCamera = '';
             var facilityQrLoaded = false;
-            var qrCleanupRequested = false;
             var csrf         = function() { return $('input[name="<?= csrf_token() ?>"]').first().val(); };
-
-            try {
-                qrSelectedCamera = window.localStorage.getItem(qrCameraStorageKey) || '';
-            } catch (e) {
-                qrSelectedCamera = '';
-            }
 
             var methodMeta = {
                 number:   { icon: '🆔', title: 'By ABHA Number/Address', sub: 'Secure modal verification' },
-                qr:       { icon: '📷', title: 'Scan Patient ABHA QR',   sub: 'Camera → ABHA extracted → OTP verify' },
+                qr:       { icon: '📷', title: 'Scan Patient ABHA QR',   sub: 'Scan QR → patient details' },
                 facility: { icon: '🏥', title: 'Scan Facility QR',       sub: 'Patient scans via ABHA app' },
                 mobile:   { icon: '📱', title: 'By Mobile OTP',          sub: 'OTP to ABHA-linked mobile' }
             };
@@ -1437,7 +1402,6 @@
                     $('#abhareg_panel_number').addClass('d-none');
                     openAbhaAccountVerification('', null);
                 } else if (method === 'qr') { openAbhaQrScan(); }
-                else { stopQrScanner(); }
                 if (method === 'facility') { loadFacilityQr(false); }
             };
 
@@ -1489,7 +1453,6 @@
 
             window.abhaRegReset = function() {
                 regTxnId = null;
-                stopQrScanner();
                 $('.abhareg-method-card').removeClass('border-primary bg-primary-subtle shadow-sm');
                 $('#abhareg_active_banner').addClass('d-none');
                 $('.abhareg-panel').addClass('d-none');
@@ -1577,135 +1540,6 @@
 
             function regAlert(id, type, msg) {
                 $('#' + id).html(msg ? '<div class="alert alert-' + type + ' py-2">' + msg + '</div>' : '');
-            }
-
-            function saveQrSelectedCamera(cameraId) {
-                qrSelectedCamera = cameraId || '';
-                try {
-                    if (qrSelectedCamera) {
-                        window.localStorage.setItem(qrCameraStorageKey, qrSelectedCamera);
-                    } else {
-                        window.localStorage.removeItem(qrCameraStorageKey);
-                    }
-                } catch (e) {
-                }
-            }
-
-            function populateQrCameraSelect(cameras, preferredCameraId) {
-                var $select = $('#abhareg_qr_camera_select');
-                if (!$select.length) {
-                    return;
-                }
-                var currentValue = preferredCameraId || qrSelectedCamera || $select.val() || '';
-                var optionsHtml = '<option value="">Default camera</option>';
-                (cameras || []).forEach(function(camera, index) {
-                    var label = camera.label || ('Camera ' + (index + 1));
-                    var value = camera.id || camera.deviceId || '';
-                    var selectedAttr = value && value === currentValue ? ' selected' : '';
-                    optionsHtml += '<option value="' + $('<div>').text(value).html() + '"' + selectedAttr + '>' + $('<div>').text(label).html() + '</option>';
-                });
-                $select.html(optionsHtml);
-                if (currentValue) {
-                    $select.val(currentValue);
-                    if ($select.val() !== currentValue) {
-                        $select.val('');
-                        saveQrSelectedCamera('');
-                    }
-                } else {
-                    $select.val('');
-                }
-            }
-
-            function loadQrScannerScript(onReady) {
-                if (qrScriptLoaded && typeof window.Html5Qrcode !== 'undefined') {
-                    onReady();
-                    return;
-                }
-                if (qrScriptLoading) {
-                    var waitReady = function() {
-                        if (qrScriptLoaded && typeof window.Html5Qrcode !== 'undefined') {
-                            onReady();
-                        } else {
-                            window.setTimeout(waitReady, 100);
-                        }
-                    };
-                    waitReady();
-                    return;
-                }
-
-                qrScriptLoading = true;
-                var script = document.createElement('script');
-                script.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
-                script.onload = function() {
-                    qrScriptLoading = false;
-                    qrScriptLoaded = true;
-                    onReady();
-                };
-                script.onerror = function() {
-                    qrScriptLoading = false;
-                    $('#abhareg_qr_result').html('<div class="alert alert-warning py-2">Unable to load QR scanner library.</div>');
-                };
-                document.head.appendChild(script);
-            }
-
-            function startQrScanner(cameraId) {
-                if (typeof window.Html5Qrcode === 'undefined') {
-                    return;
-                }
-
-                qrCleanupRequested = false;
-                var selectedCameraId = typeof cameraId === 'string' ? cameraId : ($('#abhareg_qr_camera_select').val() || qrSelectedCamera || '');
-
-                if (!html5QrCode) {
-                    html5QrCode = new window.Html5Qrcode('abhareg_qr_reader');
-                }
-
-                $('#abhareg_qr_stop_btn').removeClass('d-none');
-                $('#abhareg_qr_result').html('');
-
-                window.Html5Qrcode.getCameras().then(function(cameras) {
-                    populateQrCameraSelect(cameras, selectedCameraId);
-
-                    var cameraConfig = selectedCameraId
-                        ? { deviceId: { exact: selectedCameraId } }
-                        : { facingMode: 'environment' };
-
-                    html5QrCode.start(
-                        cameraConfig,
-                        { fps: 10, qrbox: { width: 250, height: 250 } },
-                        function(decodedText) {
-                            stopQrScanner();
-                            var scanned = decodedText.trim();
-                            $('#abhareg_qr_result').html('<div class="alert alert-success py-2"><i class="bi bi-qr-code me-2"></i>QR scanned.</div>');
-                            if (window.AbhaQrModal) {
-                                openAbhaQrScan();
-                                window.AbhaQrModal.submit(scanned);
-                                return;
-                            }
-                            var numMatch = scanned.match(/\d{14}/);
-                            openAbhaAccountVerification(numMatch ? numMatch[0] : scanned, null);
-                        },
-                        function() {}
-                    ).then(function() {
-                        if (qrCleanupRequested) {
-                            stopQrScanner();
-                            return;
-                        }
-                        saveQrSelectedCamera(selectedCameraId);
-                    }).catch(function(err) {
-                        if (selectedCameraId) {
-                            saveQrSelectedCamera('');
-                            $('#abhareg_qr_camera_select').val('');
-                            stopQrScanner().then(function() {
-                                initQrScanner('');
-                            });
-                            return;
-                        }
-                        $('#abhareg_qr_result').html('<div class="alert alert-warning py-2">Camera error: ' + err + '. Please allow camera access.</div>');
-                    });
-                }).catch(function(err) {
-                    $('#abhareg_qr_result').html('<div class="alert alert-warning py-2">Unable to list cameras: ' + err + '</div>');
-                });
             }
 
             function showRegResult(resp) {
@@ -1880,61 +1714,7 @@
             });
 
             // --- Method 2: QR Scanner ---
-            function initQrScanner(cameraId) {
-                loadQrScannerScript(function() {
-                    startQrScanner(cameraId);
-                });
-            }
-
-            function stopQrScanner() {
-                $('#abhareg_qr_stop_btn').addClass('d-none');
-                if (!html5QrCode) {
-                    return Promise.resolve();
-                }
-                return html5QrCode.stop().catch(function(){}).then(function() {
-                    html5QrCode = null;
-                });
-            }
-
-            function cleanupQrScanner() {
-                qrCleanupRequested = true;
-                stopQrScanner();
-            }
-
-            var previousPageCleanup = window.pageCleanup;
-            window.pageCleanup = function() {
-                cleanupQrScanner();
-                if (typeof previousPageCleanup === 'function') {
-                    previousPageCleanup();
-                }
-            };
-
-            $(window).off('beforeunload.abhaqr pagehide.abhaqr').on('beforeunload.abhaqr pagehide.abhaqr', cleanupQrScanner);
-            document.addEventListener('visibilitychange', function() {
-                if (document.hidden) {
-                    cleanupQrScanner();
-                }
-            });
-
-            $('#abhareg_qr_stop_btn').on('click', function() { stopQrScanner(); });
             $('#abhareg_qr_open_modal_btn').on('click', function() { openAbhaQrScan(); });
-            $('#abhareg_qr_start_camera_btn').on('click', function() {
-                $('#abhareg_qr_camera_wrap').removeClass('d-none');
-                initQrScanner(qrSelectedCamera || '');
-            });
-            $('#abhareg_qr_camera_select').on('change', function() {
-                var cameraId = ($(this).val() || '').toString();
-                saveQrSelectedCamera(cameraId);
-                stopQrScanner().then(function() {
-                    initQrScanner(cameraId);
-                });
-            });
-            $('#abhareg_qr_camera_refresh').on('click', function() {
-                saveQrSelectedCamera(($('#abhareg_qr_camera_select').val() || '').toString());
-                stopQrScanner().then(function() {
-                    initQrScanner(qrSelectedCamera || '');
-                });
-            });
             $('#abhareg_facility_refresh_btn').on('click', function() { loadFacilityQr(true); });
             $('#abhareg_facility_print_btn').on('click', function() { printFacilityQr(); });
 
