@@ -19,7 +19,7 @@
  * Then call: window.AbhaPatientMatchModal.open(profileResp, candidates, function(confirmResp) { ... });
  */
 ?>
-<div class="modal fade" id="abhaMatchModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+<div class="modal fade" id="abhaMatchModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
     <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">

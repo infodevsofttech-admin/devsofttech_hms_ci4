@@ -39,7 +39,7 @@
     @media (max-width:575.98px) { .abha-create-modal .modal-body{padding:16px}.abha-create-step:not(:last-child)::after{width:22px}.abha-profile-list>div{grid-template-columns:110px minmax(0,1fr)} }
 </style>
 
-<div class="modal fade abha-create-modal" id="abhaCreateModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+<div class="modal fade abha-create-modal" id="abhaCreateModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
@@ -515,6 +515,12 @@ window.AbhaCreateModal = (function () {
         $('#abhaCreateRegisterBtn').on('click', function () {
             if (!createdProfile) return;
             var profile = createdProfile;
+            // Already linked: nothing else opens, so keep this window up for the operator to close.
+            if (profile.need_confirmation === false && Number(profile.patient_id || 0) > 0) {
+                alertBox('success', 'This ABHA is already linked to HMS patient <strong>' + escapeHtml(profile.p_code || '') + '</strong>. The registration page behind has been updated. Close this window when you are done.');
+                if (typeof onCompleted === 'function') onCompleted(profile);
+                return;
+            }
             $('#abhaCreateModal').one('hidden.bs.modal', function () {
                 if (typeof onCompleted === 'function') onCompleted(profile);
             });

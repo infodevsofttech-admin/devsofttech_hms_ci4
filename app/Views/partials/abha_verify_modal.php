@@ -20,7 +20,7 @@
     @media (max-width:575.98px) { .abha-verify-modal .modal-body{padding:16px}.abha-verify-step:not(:last-child)::after{width:22px}.abha-profile-list>div{grid-template-columns:110px minmax(0,1fr)} }
 </style>
 
-<div class="modal fade abha-verify-modal" id="abhaVerifyModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+<div class="modal fade abha-verify-modal" id="abhaVerifyModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
