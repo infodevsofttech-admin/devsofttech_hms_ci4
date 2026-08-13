@@ -44,6 +44,7 @@
 <?= view('partials/abha_verify_modal') ?>
 <?= view('partials/abha_create_modal') ?>
 <?= view('partials/abha_qr_modal') ?>
+<?= view('partials/abha_mobile_modal') ?>
 <section class="content">
     <div class="row">
         <div class="col-md-12">
@@ -757,41 +758,8 @@
                         </div>
                       </div>
 
-                      <!-- Panel: Method 4 - Mobile OTP only -->
-                      <div id="abhareg_panel_mobile" class="abhareg-panel d-none">
-                        <div id="abhareg_mob_step1">
-                          <p class="text-muted small mb-2">Enter the patient's mobile number linked to ABDM/ABHA. OTP will be sent for verification.</p>
-                          <div class="row g-2 align-items-end">
-                            <div class="col-md-4">
-                              <label class="form-label">Mobile Number <span class="text-danger">*</span></label>
-                              <input type="text" id="abhareg_mob_mobile" class="form-control" placeholder="10-digit mobile" maxlength="10" inputmode="numeric" autocomplete="off">
-                            </div>
-                          </div>
-                          <div id="abhareg_mob_step1_alert" class="mt-2"></div>
-                          <div class="mt-3">
-                            <button type="button" id="abhareg_mob_send_btn" class="btn btn-primary">
-                              <span id="abhareg_mob_send_spinner" class="spinner-border spinner-border-sm me-1 d-none"></span>Send OTP
-                            </button>
-                          </div>
-                        </div>
-                        <div id="abhareg_mob_step2" class="d-none mt-3">
-                          <p class="text-muted small mb-2">Enter the 6-digit OTP sent to the patient's mobile.</p>
-                          <div class="row g-2">
-                            <div class="col-md-3">
-                              <label class="form-label">One-Time Password <span class="text-danger">*</span></label>
-                              <input type="text" id="abhareg_mob_otp_input" class="form-control form-control-lg text-center fw-bold" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="— — — — — —">
-                            </div>
-                          </div>
-                          <div id="abhareg_mob_step2_alert" class="mt-2"></div>
-                          <div class="mt-3 d-flex gap-2 flex-wrap">
-                            <button type="button" id="abhareg_mob_verify_btn" class="btn btn-success">
-                              <span id="abhareg_mob_verify_spinner" class="spinner-border spinner-border-sm me-1 d-none"></span>Verify OTP
-                            </button>
-                            <button type="button" id="abhareg_mob_resend_btn" class="btn btn-outline-secondary">Resend OTP</button>
-                            <button type="button" id="abhareg_mob_back_btn" class="btn btn-link text-secondary">← Back</button>
-                          </div>
-                        </div>
-                      </div>
+                      <!-- Panel: Method 4 - Mobile OTP (handled by AbhaMobileModal) -->
+                      <div id="abhareg_panel_mobile" class="abhareg-panel d-none"></div>
 
                       <!-- Common result card (all methods) -->
                       <div id="abhareg_result" class="d-none mt-3">
@@ -1384,9 +1352,28 @@
                 if (method === 'number') {
                     $('#abhareg_panel_number').addClass('d-none');
                     openAbhaAccountVerification('', null);
+                } else if (method === 'mobile') {
+                    $('#abhareg_panel_mobile').addClass('d-none');
+                    openAbhaMobileVerification();
                 } else if (method === 'qr') { openAbhaQrScan(); }
                 if (method === 'facility') { loadFacilityQr(false); }
             };
+
+            function openAbhaMobileVerification() {
+                if (!window.AbhaMobileModal) {
+                    alert('ABHA mobile verification modal is unavailable. Reload the page and try again.');
+                    return;
+                }
+                window.AbhaMobileModal.open('', function(profile) {
+                    if (profile && profile.need_confirmation === false && Number(profile.patient_id || 0) > 0) {
+                        showRegResult(profile);
+                        return;
+                    }
+                    window.AbhaPatientMatchModal.open(profile, profile.candidates || [], function(finalResponse) {
+                        showRegResult(finalResponse);
+                    });
+                });
+            }
 
             function openAbhaQrScan() {
                 if (!window.AbhaQrModal) {
@@ -1446,9 +1433,6 @@
                 $('#abhareg_num_stepB,#abhareg_num_stepC').addClass('d-none');
                 $('#abhareg_num_stepA').removeClass('d-none');
                 $('#abhareg_goto_stepB').addClass('d-none');
-                $('#abhareg_mob_mobile,#abhareg_mob_otp_input').val('');
-                $('#abhareg_mob_step2').addClass('d-none');
-                $('#abhareg_mob_step1_alert,#abhareg_mob_step2_alert').html('');
             };
 
             function loadFacilityQr(force, onReady) {
@@ -1679,27 +1663,6 @@
                 $('#abhareg_num_otp_input').val('');
             });
 
-            // Method 4 Send/Verify
-            $('#abhareg_mob_send_btn').on('click', function() {
-                sendOtpToMobile($('#abhareg_mob_mobile').val().trim(), 'abhareg_mob_step1_alert', 'abhareg_mob_send_spinner', 'abhareg_mob_send_btn', function(mobile) {
-                    $('#abhareg_mob_step2').removeClass('d-none');
-                    regAlert('abhareg_mob_step1_alert', 'success', 'OTP sent to mobile ending ' + mobile.slice(-4) + '.');
-                    $('#abhareg_mob_otp_input').focus();
-                });
-            });
-            $('#abhareg_mob_verify_btn').on('click', function() {
-                verifyOtpFromMobile($('#abhareg_mob_otp_input').val().trim(), 'abhareg_mob_step2_alert', 'abhareg_mob_verify_spinner', 'abhareg_mob_verify_btn', $('#abhareg_mob_mobile').val().trim());
-            });
-            $('#abhareg_mob_resend_btn').on('click', function() {
-                $('#abhareg_mob_step2').addClass('d-none');
-                $('#abhareg_mob_otp_input').val('');
-                $('#abhareg_mob_send_btn').trigger('click');
-            });
-            $('#abhareg_mob_back_btn').on('click', function() {
-                $('#abhareg_mob_step2').addClass('d-none');
-                regAlert('abhareg_mob_step2_alert', '', '');
-            });
-
             // --- Method 2: QR Scanner ---
             $('#abhareg_qr_open_modal_btn').on('click', function() { openAbhaQrScan(); });
             $('#abhareg_facility_print_launch_btn').on('click', function() {
@@ -1718,9 +1681,6 @@
             // Enter key on OTP fields
             $('#abhareg_num_otp_input').on('keypress', function(e) {
                 if (e.which === 13) { $('#abhareg_num_verify_otp_btn').trigger('click'); }
-            });
-            $('#abhareg_mob_otp_input').on('keypress', function(e) {
-                if (e.which === 13) { $('#abhareg_mob_verify_btn').trigger('click'); }
             });
 
             $('#abhareg_result_profile_btn').on('click', function() {
