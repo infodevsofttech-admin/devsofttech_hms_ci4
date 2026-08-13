@@ -720,10 +720,12 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         $data = is_array($result['data'] ?? null) ? $result['data'] : [];
         $account = is_array($result['account'] ?? null)
             ? $result['account']
-            : (is_array($data['account'] ?? null) ? $data['account'] : []);
-        $profile = is_array($data['ABHAProfile'] ?? null) ? $data['ABHAProfile'] : [];
-        $abhaNumber = trim((string) ($account['ABHANumber'] ?? $account['abhaNumber'] ?? $account['abha_id'] ?? $data['ABHANumber'] ?? $data['abhaNumber'] ?? $data['abha_id'] ?? $profile['ABHANumber'] ?? $profile['abha_id'] ?? ''));
-        $abhaAddress = trim((string) ($account['abhaAddress'] ?? $account['preferredAddress'] ?? $account['abha_address'] ?? $data['abhaAddress'] ?? $data['preferredAddress'] ?? $data['abha_address'] ?? $profile['preferredAbhaAddress'] ?? $profile['abhaAddress'] ?? ''));
+            : (is_array($data['account'] ?? null) ? $data['account'] : (is_array($data['accounts'][0] ?? null) ? $data['accounts'][0] : []));
+        $profile = is_array($data['ABHAProfile'] ?? null)
+            ? $data['ABHAProfile']
+            : (is_array($data['profile'] ?? null) ? $data['profile'] : []);
+        $abhaNumber = trim((string) ($account['ABHANumber'] ?? $account['abhaNumber'] ?? $account['abha_id'] ?? $data['ABHANumber'] ?? $data['abhaNumber'] ?? $data['abha_id'] ?? $profile['ABHANumber'] ?? $profile['abhaNumber'] ?? $profile['abha_id'] ?? ''));
+        $abhaAddress = trim((string) ($account['abhaAddress'] ?? $account['preferredAddress'] ?? $account['preferredAbhaAddress'] ?? $account['abha_address'] ?? $data['abhaAddress'] ?? $data['preferredAddress'] ?? $data['abha_address'] ?? $profile['preferredAbhaAddress'] ?? $profile['preferredAddress'] ?? $profile['abhaAddress'] ?? ''));
 
         $card = $this->extractOfficialCard($result)
             ?: $this->extractOfficialCard($data)
@@ -895,7 +897,13 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         if ($this->hfrId !== '' && empty($body['hfr_id'])) {
             $body['hfr_id'] = $this->hfrId;
         }
-        return $this->post('/v3/abha/mobile/verify-otp', $body);
+
+        $result = $this->post('/v3/abha/mobile/verify-otp', $body);
+        if (empty($result['ok']) || (int) $result['ok'] !== 1) {
+            return $result;
+        }
+
+        return $this->attachOfficialAbhaCard($result);
     }
 
     public function abhaAddressSuggestions(array $payload): array
