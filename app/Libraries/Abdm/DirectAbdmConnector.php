@@ -152,6 +152,20 @@ class DirectAbdmConnector implements AbdmConnectorInterface
         );
     }
 
+    public function abhaAddressSuggestions(array $payload): array
+    {
+        throw new \RuntimeException(
+            'DirectAbdmConnector::abhaAddressSuggestions() not implemented.'
+        );
+    }
+
+    public function abhaSetAddress(array $payload): array
+    {
+        throw new \RuntimeException(
+            'DirectAbdmConnector::abhaSetAddress() not implemented.'
+        );
+    }
+
     public function facilityQrCode(): array
     {
         return [

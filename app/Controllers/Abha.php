@@ -102,9 +102,9 @@ class Abha extends BaseController
         );
         $name             = $this->extractAbhaProfileName($profile, $payload);
         $photo            = (string) ($profile['profilePhoto'] ?? $profile['profile_photo'] ?? $payload['profilePhoto'] ?? $payload['profile_photo'] ?? '');
-        // Bridge/gateway verify-otp responses don't always echo the mobile back;
-        // fall back to the mobile the user actually typed and OTP-verified.
-        $mobile           = (string) ($profile['mobile'] ?? $payload['mobile'] ?? $payload['mobileNumber'] ?? $requestMobile ?? '');
+        // A different communication number is not verified until Step 3 succeeds.
+        // Never persist the operator-entered number merely because Aadhaar OTP passed.
+        $mobile           = (string) ($profile['mobile'] ?? $payload['mobile'] ?? $payload['mobileNumber'] ?? '');
         $profileGender    = (string) ($profile['gender'] ?? $payload['gender'] ?? '');
         $profileDob       = (string) ($profile['dob'] ?? $profile['date_of_birth'] ?? $payload['dob'] ?? $payload['date_of_birth'] ?? '');
         $verifiedStatus   = (string) (($payload['gateway_abha_profile']['status'] ?? '') ?: ($profile['verifiedStatus'] ?? '') ?: ($profile['status'] ?? '') ?: ($payload['verifiedStatus'] ?? '') ?: ($payload['status'] ?? ''));
@@ -142,6 +142,8 @@ class Abha extends BaseController
             'ok'                => 1,
             'txn_id'            => $newTxnId,
             'skip_mobile'       => true,
+            'card_base64'       => $this->extractAbhaCardData($payload),
+            'card_content_type' => $this->resolveAbhaCardContentType($payload),
             'abha_number'       => $abhaNum,
             'name'              => $name,
             'photo'             => $photo,
@@ -303,6 +305,8 @@ class Abha extends BaseController
 
         $responseBase = [
             'ok'                => 1,
+            'card_base64'       => $this->extractAbhaCardData($payload),
+            'card_content_type' => $this->resolveAbhaCardContentType($payload),
             'abha_number'       => $abhaNum,
             'name'              => $name,
             'photo'             => $photo,
@@ -347,18 +351,93 @@ class Abha extends BaseController
     }
 
     // -------------------------------------------------------------------------
-    // Step 4 — Save/finalise ABHA address
-    // POST abha/create/address
-    // Gateway has no address-assignment endpoint; return ok=1 as confirmation.
+    // Step 4 — ABHA address suggestions / assignment
+    // POST abha/create/address_suggestions, POST abha/create/address
     // -------------------------------------------------------------------------
+    public function addressSuggestions()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $txnId = trim((string) ($this->request->getPost('txn_id') ?? $this->request->getPost('txnId') ?? ''));
+        if ($txnId === '') {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'txn_id is required']);
+        }
+
+        try {
+            $result = AbdmConnectorFactory::make()->abhaAddressSuggestions(['txn_id' => $txnId]);
+        } catch (\Throwable $e) {
+            return $this->response->setJSON(['ok' => 0, 'supported' => false, 'error_text' => $e->getMessage()]);
+        }
+
+        if (empty($result['ok']) || (int) $result['ok'] !== 1) {
+            // A missing Bridge endpoint must not block ABHA creation — the modal
+            // keeps the ABDM-assigned address and skips the selection step.
+            $unsupported = in_array((int) ($result['http_code'] ?? 0), [404, 405], true);
+
+            return $this->response->setJSON([
+                'ok'         => 0,
+                'supported'  => ! $unsupported,
+                'error_text' => $unsupported
+                    ? 'The ABDM Bridge does not expose ABHA address suggestions yet.'
+                    : $this->extractBridgeErrorText($result, 'Unable to load ABHA address suggestions.'),
+                'request_id' => (string) ($result['request_id'] ?? ''),
+            ]);
+        }
+
+        return $this->response->setJSON([
+            'ok'          => 1,
+            'supported'   => true,
+            'txn_id'      => $txnId,
+            'suggestions' => array_values((array) ($result['suggestions'] ?? [])),
+        ]);
+    }
+
     public function address()
     {
         if (! $this->request->isAJAX()) {
             return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
         }
 
-        // Address assignment is noted for the staff. No gateway call available.
-        return $this->response->setJSON(['ok' => 1, 'message' => 'ABHA created successfully.']);
+        $txnId       = trim((string) ($this->request->getPost('txn_id') ?? $this->request->getPost('txnId') ?? ''));
+        $abhaAddress = trim((string) ($this->request->getPost('abha_address') ?? ''));
+
+        if ($abhaAddress === '') {
+            return $this->response->setJSON(['ok' => 1, 'message' => 'ABHA created successfully.']);
+        }
+
+        if (! preg_match('/^[a-zA-Z0-9._]{4,}$/', explode('@', $abhaAddress)[0])) {
+            return $this->response->setJSON([
+                'ok'         => 0,
+                'error_text' => 'ABHA address must be at least 4 characters and may use only letters, numbers, dot or underscore.',
+            ]);
+        }
+
+        try {
+            $result = AbdmConnectorFactory::make()->abhaSetAddress([
+                'txn_id'       => $txnId,
+                'abha_address' => $abhaAddress,
+            ]);
+        } catch (\Throwable $e) {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => $e->getMessage()]);
+        }
+
+        if (empty($result['ok']) || (int) $result['ok'] !== 1) {
+            return $this->response->setJSON([
+                'ok'         => 0,
+                'error_text' => $this->extractBridgeErrorText($result, 'Unable to set the ABHA address.'),
+                'request_id' => (string) ($result['request_id'] ?? ''),
+            ]);
+        }
+
+        $data = is_array($result['data'] ?? null) ? $result['data'] : [];
+
+        return $this->response->setJSON([
+            'ok'           => 1,
+            'abha_address' => (string) ($result['abha_address'] ?? $data['abhaAddress'] ?? $data['abha_address'] ?? $abhaAddress),
+            'message'      => 'ABHA address updated successfully.',
+        ]);
     }
 
     // -------------------------------------------------------------------------

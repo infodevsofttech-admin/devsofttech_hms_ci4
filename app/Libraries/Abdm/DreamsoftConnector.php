@@ -167,6 +167,22 @@ class DreamsoftConnector implements AbdmConnectorInterface
         );
     }
 
+    public function abhaAddressSuggestions(array $payload): array
+    {
+        throw new \RuntimeException(
+            'DreamsoftConnector does not support ABHA address selection. '
+            . 'Set abdm.connector = eatria_bridge in .env to use M1 endpoints.'
+        );
+    }
+
+    public function abhaSetAddress(array $payload): array
+    {
+        throw new \RuntimeException(
+            'DreamsoftConnector does not support ABHA address selection. '
+            . 'Set abdm.connector = eatria_bridge in .env to use M1 endpoints.'
+        );
+    }
+
     // -------------------------------------------------------------------------
     // NHCX Claims
     // -------------------------------------------------------------------------

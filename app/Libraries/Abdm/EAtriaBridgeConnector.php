@@ -810,6 +810,109 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         return $this->post('/v3/abha/mobile/verify-otp', $body);
     }
 
+    public function abhaAddressSuggestions(array $payload): array
+    {
+        $txnId = (string) ($payload['txn_id'] ?? $payload['txnId'] ?? '');
+        $body  = ['txn_id' => $txnId, 'txnId' => $txnId];
+        if ($this->hfrId !== '') {
+            $body['hfr_id'] = $this->hfrId;
+        }
+
+        $result = $this->postFirstAvailable([
+            '/v3/abha/enrollment/suggestion',
+            '/v3/abha/address/suggestion',
+            '/v3/abha/enrol/suggestion',
+        ], $body);
+
+        if (empty($result['ok']) || (int) $result['ok'] !== 1) {
+            return $result;
+        }
+
+        $result['suggestions'] = $this->normalizeAbhaAddressSuggestions($result);
+
+        return $result;
+    }
+
+    public function abhaSetAddress(array $payload): array
+    {
+        $txnId   = (string) ($payload['txn_id'] ?? $payload['txnId'] ?? '');
+        $address = (string) ($payload['abha_address'] ?? $payload['abhaAddress'] ?? '');
+        $body    = [
+            'txn_id'       => $txnId,
+            'txnId'        => $txnId,
+            'abha_address' => $address,
+            'abhaAddress'  => $address,
+        ];
+        if ($this->hfrId !== '') {
+            $body['hfr_id'] = $this->hfrId;
+        }
+
+        return $this->postFirstAvailable([
+            '/v3/abha/enrollment/abha-address',
+            '/v3/abha/address/set',
+            '/v3/abha/enrol/abha-address',
+        ], $body);
+    }
+
+    /**
+     * Bridge path naming for newer endpoints is still settling; try each
+     * candidate and keep the first response that is not a 404/405.
+     *
+     * @param string[]             $paths
+     * @param array<string, mixed> $body
+     * @return array<string, mixed>
+     */
+    private function postFirstAvailable(array $paths, array $body): array
+    {
+        $result = ['ok' => 0, 'http_code' => 404, 'error_text' => 'Endpoint not available on the ABDM Bridge.'];
+
+        foreach ($paths as $path) {
+            $result = $this->post($path, $body);
+            if (! in_array((int) ($result['http_code'] ?? 0), [404, 405], true)) {
+                return $result;
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param array<string, mixed> $result
+     * @return string[]
+     */
+    private function normalizeAbhaAddressSuggestions(array $result): array
+    {
+        $data = is_array($result['data'] ?? null) ? $result['data'] : [];
+
+        $raw = [];
+        foreach ([
+            $result['suggestions'] ?? null,
+            $result['abhaAddressList'] ?? null,
+            $result['abha_address_list'] ?? null,
+            $data['suggestions'] ?? null,
+            $data['abhaAddressList'] ?? null,
+            $data['abha_address_list'] ?? null,
+        ] as $candidate) {
+            if (is_array($candidate) && $candidate !== []) {
+                $raw = $candidate;
+                break;
+            }
+        }
+
+        $addresses = [];
+        foreach ($raw as $entry) {
+            $value = is_array($entry)
+                ? (string) ($entry['abhaAddress'] ?? $entry['abha_address'] ?? $entry['address'] ?? $entry['value'] ?? '')
+                : (string) $entry;
+            $value = trim($value);
+            if ($value !== '' && ! in_array($value, $addresses, true)) {
+                $addresses[] = $value;
+            }
+        }
+
+        return $addresses;
+    }
+
     // -------------------------------------------------------------------------
     // Consent
     // -------------------------------------------------------------------------

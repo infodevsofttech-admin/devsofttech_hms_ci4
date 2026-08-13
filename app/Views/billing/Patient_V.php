@@ -42,6 +42,7 @@
 </style>
 <?= view('partials/abha_patient_match_modal') ?>
 <?= view('partials/abha_verify_modal') ?>
+<?= view('partials/abha_create_modal') ?>
 <section class="content">
     <div class="row">
         <div class="col-md-12">
@@ -416,6 +417,45 @@
                                             <div class="tab-content pt-3" id="abhaSubTabsContent">
                                                 <div class="tab-pane fade show active" id="abha-create" role="tabpanel" aria-labelledby="abha-create-tab">
 
+                                                    <div class="row g-3 py-2" id="abha_launcher_cards">
+                                                        <div class="col-md-6">
+                                                            <div class="card h-100 border-primary">
+                                                                <div class="card-body">
+                                                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                                                        <i class="bi bi-person-plus-fill fs-3 text-primary"></i>
+                                                                        <h6 class="mb-0">Create ABHA</h6>
+                                                                    </div>
+                                                                    <p class="text-muted small mb-2">Register a new Ayushman Bharat Health Account for a patient using their Aadhaar number. OTP is sent to the Aadhaar-linked mobile.</p>
+                                                                    <ul class="list-unstyled small text-muted mb-3">
+                                                                        <li><i class="bi bi-check-circle-fill text-success me-1"></i>Aadhaar-based identity verification</li>
+                                                                        <li><i class="bi bi-check-circle-fill text-success me-1"></i>Choose or customise the ABHA address</li>
+                                                                        <li><i class="bi bi-check-circle-fill text-success me-1"></i>Official ABHA card stored for printing</li>
+                                                                    </ul>
+                                                                    <button type="button" class="btn btn-primary w-100" id="abha_open_create_modal_btn"><i class="bi bi-plus-lg me-1"></i>Create ABHA Record</button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="card h-100 border-success">
+                                                                <div class="card-body">
+                                                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                                                        <i class="bi bi-shield-check fs-3 text-success"></i>
+                                                                        <h6 class="mb-0">Verify ABHA Account</h6>
+                                                                    </div>
+                                                                    <p class="text-muted small mb-2">Verify an existing ABHA account using the ABHA address or ABHA number. An OTP is sent to the linked mobile for authentication.</p>
+                                                                    <ul class="list-unstyled small text-muted mb-3">
+                                                                        <li><i class="bi bi-check-circle-fill text-success me-1"></i>Verify via ABHA address or ABHA number</li>
+                                                                        <li><i class="bi bi-check-circle-fill text-success me-1"></i>Link ABHA to a patient record</li>
+                                                                        <li><i class="bi bi-check-circle-fill text-success me-1"></i>View and download the ABHA card</li>
+                                                                    </ul>
+                                                                    <button type="button" class="btn btn-success w-100" id="abha_open_verify_modal_btn"><i class="bi bi-shield-check me-1"></i>Verify ABHA Account</button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Legacy inline wizard, superseded by AbhaCreateModal. -->
+                                                    <div class="d-none">
                                                     <!-- Step progress indicator -->
                                                     <div class="abha-progress-wrap mt-3 mb-4">
                                                         <div class="abha-node active" id="abha_node_1">
@@ -514,6 +554,7 @@
                                                     <div id="abha_step_4" class="abha-panel" style="display:none;">
                                                         <div id="abha_created_result"></div>
                                                         <div id="abha_step4_alert" class="mt-2"></div>
+                                                    </div>
                                                     </div>
 
                                                 </div>
@@ -1400,6 +1441,20 @@
                     });
                 });
             }
+
+            $(document).off('click.abhaLauncher').on('click.abhaLauncher', '#abha_open_create_modal_btn', function() {
+                if (!window.AbhaCreateModal) {
+                    alert('ABHA create modal is unavailable. Reload the page and try again.');
+                    return;
+                }
+                window.AbhaCreateModal.open(function(profile) {
+                    window.AbhaPatientMatchModal.open(profile, profile.candidates || [], function(finalResponse) {
+                        if (typeof showRegResult === 'function') showRegResult(finalResponse);
+                    });
+                });
+            }).on('click.abhaLauncher', '#abha_open_verify_modal_btn', function() {
+                openAbhaAccountVerification('', null);
+            });
 
             window.abhaRegReset = function() {
                 regTxnId = null;

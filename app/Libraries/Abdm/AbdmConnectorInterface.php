@@ -109,6 +109,20 @@ interface AbdmConnectorInterface
     public function abhaMobileVerifyOtp(array $payload): array;
 
     /**
+     * ABDM M1: List ABHA address suggestions for an in-progress enrolment.
+     *
+     * @param array<string, mixed> $payload  Must contain 'txn_id'
+     */
+    public function abhaAddressSuggestions(array $payload): array;
+
+    /**
+     * ABDM M1: Set the chosen (suggested or custom) ABHA address.
+     *
+     * @param array<string, mixed> $payload  Must contain 'txn_id' and 'abha_address'
+     */
+    public function abhaSetAddress(array $payload): array;
+
+    /**
      * Fetch hospital facility details and official ABDM Scan & Share QR image.
      * Gateway response includes hospital_name, hfr_id, and qr_data data URI/base64.
      */
