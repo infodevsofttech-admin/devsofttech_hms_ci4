@@ -220,7 +220,10 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             }
 
             $lowerKey = strtolower($key);
-            if (in_array($lowerKey, ['token', 'refresh_token', 'refreshtoken', 'authorization', 'auth', 'otp'], true)) {
+            if (in_array($lowerKey, [
+                'token', 'refresh_token', 'refreshtoken', 'authorization', 'auth', 'otp',
+                'loginid', 'login_id', 'mobile', 'mobilenumber', 'mobile_number', 'phone', 'phone_number',
+            ], true)) {
                 return '[REDACTED]';
             }
 
@@ -544,6 +547,11 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             'type'  => $inputType,
             'value' => $inputValue,
         ];
+        if ($inputType === 'abha-address') {
+            $body['abha_address'] = $inputValue;
+        } else {
+            $body['abha_id'] = $inputValue;
+        }
         if ($this->hfrId !== '') {
             $body['hfr_id'] = $this->hfrId;
         }
@@ -569,8 +577,20 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         }
 
         $data = is_array($result['data'] ?? null) ? $result['data'] : [];
+        $nestedResult = is_array($result['result'] ?? null) ? $result['result'] : [];
         $accounts = is_array($data['accounts'] ?? null) ? $data['accounts'] : [];
-        $firstAccount = isset($accounts[0]) && is_array($accounts[0]) ? $accounts[0] : [];
+        $firstAccount = isset($accounts[0]) && is_array($accounts[0])
+            ? $accounts[0]
+            : (is_array($data['account'] ?? null) ? $data['account'] : []);
+
+        $txnId = trim((string) (
+            $result['txn_id'] ?? $result['txnId']
+            ?? $data['txn_id'] ?? $data['txnId']
+            ?? $data['transaction_id'] ?? $data['transactionId']
+            ?? $nestedResult['txn_id'] ?? $nestedResult['txnId']
+            ?? $nestedResult['transaction_id'] ?? $nestedResult['transactionId']
+            ?? $firstAccount['txn_id'] ?? $firstAccount['txnId'] ?? ''
+        ));
 
         $status = '';
         foreach ([
@@ -592,9 +612,14 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
 
         $authMethods = [];
         foreach ([
+            $result['authMethods'] ?? null,
+            $result['auth_methods'] ?? null,
             $data['authMethods'] ?? null,
             $data['auth_methods'] ?? null,
             $data['availableAuthMethods'] ?? null,
+            $nestedResult['authMethods'] ?? null,
+            $nestedResult['auth_methods'] ?? null,
+            $nestedResult['availableAuthMethods'] ?? null,
             $firstAccount['authMethods'] ?? null,
             $firstAccount['auth_methods'] ?? null,
             $firstAccount['availableAuthMethods'] ?? null,
@@ -613,9 +638,115 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             $result['auth_methods'] = $authMethods;
         }
 
+        if ($txnId !== '') {
+            $result['txn_id'] = $txnId;
+        }
+
+        $maskedMobile = trim((string) (
+            $result['masked_mobile'] ?? $result['maskedMobile']
+            ?? $data['masked_mobile'] ?? $data['maskedMobile'] ?? $data['mobile']
+            ?? $data['mobile_number'] ?? $data['phone'] ?? $data['phone_number']
+            ?? $firstAccount['masked_mobile'] ?? $firstAccount['maskedMobile'] ?? $firstAccount['mobile']
+            ?? $firstAccount['mobile_number'] ?? $firstAccount['phone'] ?? $firstAccount['phone_number'] ?? ''
+        ));
+        if ($maskedMobile !== '') {
+            $result['masked_mobile'] = $maskedMobile;
+        }
+
         // HMS callers expect a status-like field; treat successful search as VALID when absent.
         $result['status'] = $status !== '' ? $status : 'VALID';
         return $result;
+    }
+
+    public function abhaLoginRequestOtp(array $payload): array
+    {
+        $authMethod = strtoupper((string) ($payload['auth_method'] ?? $payload['authMethod'] ?? ''));
+        $body = [
+            'txn_id' => (string) ($payload['txn_id'] ?? $payload['txnId'] ?? ''),
+            'auth_method' => $authMethod,
+        ];
+        if (($payload['abha_id'] ?? '') !== '') { $body['abha_id'] = (string) $payload['abha_id']; }
+        if (($payload['abha_address'] ?? '') !== '') { $body['abha_address'] = (string) $payload['abha_address']; }
+        if ($this->hfrId !== '') {
+            $body['hfr_id'] = $this->hfrId;
+        }
+
+        return $this->post('/v3/abha/login/request-otp', $body);
+    }
+
+    public function abhaLoginVerifyOtp(array $payload): array
+    {
+        $authMethod = strtoupper((string) ($payload['auth_method'] ?? $payload['authMethod'] ?? ''));
+        $body = [
+            'txn_id' => (string) ($payload['txn_id'] ?? $payload['txnId'] ?? ''),
+            'txnId' => (string) ($payload['txn_id'] ?? $payload['txnId'] ?? ''),
+            'auth_method' => $authMethod,
+            'otp' => (string) ($payload['otp'] ?? ''),
+            'scope' => $authMethod === 'AADHAAR_OTP'
+                ? ['abha-login', 'aadhaar-verify']
+                : ['abha-login', 'mobile-verify'],
+        ];
+        if (isset($payload['authData']) && is_array($payload['authData'])) {
+            $body['authData'] = $payload['authData'];
+        }
+        if ($this->hfrId !== '') {
+            $body['hfr_id'] = $this->hfrId;
+        }
+
+        $result = $this->post('/v3/abha/login/verify-otp', $body);
+        if (empty($result['ok']) || (int) $result['ok'] !== 1) {
+            return $result;
+        }
+
+        $data = is_array($result['data'] ?? null) ? $result['data'] : [];
+        $account = is_array($result['account'] ?? null)
+            ? $result['account']
+            : (is_array($data['account'] ?? null) ? $data['account'] : []);
+        $abhaNumber = trim((string) ($account['ABHANumber'] ?? $account['abhaNumber'] ?? $account['abha_id'] ?? $data['ABHANumber'] ?? $data['abhaNumber'] ?? $data['abha_id'] ?? ''));
+        $abhaAddress = trim((string) ($account['abhaAddress'] ?? $account['preferredAddress'] ?? $account['abha_address'] ?? $data['abhaAddress'] ?? $data['preferredAddress'] ?? $data['abha_address'] ?? ''));
+        $extractCard = static function (array $source): string {
+            foreach (['card_base64', 'card_data', 'abhaCard', 'abha_card', 'official_card', 'cardData', 'card'] as $key) {
+                $value = $source[$key] ?? '';
+                if (is_string($value) && trim($value) !== '') {
+                    return trim($value);
+                }
+                if (is_array($value)) {
+                    foreach (['base64', 'data', 'card_base64', 'card_data'] as $nestedKey) {
+                        if (is_string($value[$nestedKey] ?? null) && trim($value[$nestedKey]) !== '') {
+                            return trim($value[$nestedKey]);
+                        }
+                    }
+                }
+            }
+            return '';
+        };
+        $card = $extractCard($result) ?: $extractCard($data) ?: $extractCard($account);
+
+        if ($card === '' && ($abhaNumber !== '' || $abhaAddress !== '')) {
+            $cardResult = $this->get('/v3/abha/card', array_filter([
+                'abha_number' => $abhaNumber,
+                'abha_address' => $abhaAddress,
+            ], static fn($value): bool => trim((string) $value) !== ''));
+            if (! empty($cardResult['ok']) && (int) $cardResult['ok'] === 1) {
+                $cardData = is_array($cardResult['data'] ?? null) ? $cardResult['data'] : $cardResult;
+                $card = $extractCard($cardData);
+                if ($card !== '') {
+                    $result['card_base64'] = $card;
+                    $result['card_content_type'] = $this->resolveCardContentType($cardData);
+                }
+            }
+        }
+
+        return $result;
+    }
+
+    private function resolveCardContentType(array $payload): string
+    {
+        $format = strtolower(trim((string) ($payload['card_content_type'] ?? $payload['content_type'] ?? $payload['card_format'] ?? '')));
+        if ($format === 'png') { return 'image/png'; }
+        if ($format === 'jpg' || $format === 'jpeg') { return 'image/jpeg'; }
+        if ($format === 'pdf') { return 'application/pdf'; }
+        return $format !== '' && str_contains($format, '/') ? $format : 'image/png';
     }
 
     // -------------------------------------------------------------------------

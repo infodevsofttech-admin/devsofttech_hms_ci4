@@ -41,6 +41,7 @@
     .abha-panel { border-left:3px solid #007bff; padding-left:16px; }
 </style>
 <?= view('partials/abha_patient_match_modal') ?>
+<?= view('partials/abha_verify_modal') ?>
 <section class="content">
     <div class="row">
         <div class="col-md-12">
@@ -1362,7 +1363,7 @@
             }
 
             var methodMeta = {
-                number:   { icon: '🆔', title: 'By ABHA Number/Address', sub: 'Validate then OTP verify' },
+                number:   { icon: '🆔', title: 'By ABHA Number/Address', sub: 'Secure modal verification' },
                 qr:       { icon: '📷', title: 'Scan Patient ABHA QR',   sub: 'Camera → ABHA extracted → OTP verify' },
                 facility: { icon: '🏥', title: 'Scan Facility QR',       sub: 'Patient scans via ABHA app' },
                 mobile:   { icon: '📱', title: 'By Mobile OTP',          sub: 'OTP to ABHA-linked mobile' }
@@ -1380,10 +1381,25 @@
                 $('.abhareg-panel').addClass('d-none');
                 $('#abhareg_panel_' + method).removeClass('d-none');
                 $('#abhareg_result').addClass('d-none');
-                if (method === 'qr') { initQrScanner(); }
+                if (method === 'number') {
+                    $('#abhareg_panel_number').addClass('d-none');
+                    openAbhaAccountVerification('', null);
+                } else if (method === 'qr') { initQrScanner(); }
                 else { stopQrScanner(); }
                 if (method === 'facility') { loadFacilityQr(false); }
             };
+
+            function openAbhaAccountVerification(identifier, lookupResponse) {
+                if (!window.AbhaVerifyModal) {
+                    regAlert('abhareg_num_stepA_alert', 'danger', 'ABHA verification modal is unavailable. Reload the page and try again.');
+                    return;
+                }
+                window.AbhaVerifyModal.open(identifier || '', lookupResponse || null, function(profile) {
+                    window.AbhaPatientMatchModal.open(profile, profile.candidates || [], function(finalResponse) {
+                        showRegResult(finalResponse);
+                    });
+                });
+            }
 
             window.abhaRegReset = function() {
                 regTxnId = null;
@@ -1577,9 +1593,7 @@
                             var numMatch = abha.match(/\d{14}/);
                             if (numMatch) { abha = numMatch[0]; }
                             $('#abhareg_qr_result').html('<div class="alert alert-success py-2"><i class="bi bi-qr-code me-2"></i>QR scanned: <strong>' + abha + '</strong></div>');
-                            abhaRegSelectMethod('number');
-                            $('#abhareg_abha_input').val(abha);
-                            $('#abhareg_validate_btn').trigger('click');
+                            openAbhaAccountVerification(abha, null);
                         },
                         function() {}
                     ).then(function() {
@@ -1658,7 +1672,7 @@
                     $('#abhareg_validate_btn').prop('disabled', false);
                     if (resp && resp.ok == 1 && resp.status === 'VALID') {
                         $('#abhareg_abha_status').html('<span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>VALID</span>');
-                        $('#abhareg_goto_stepB').removeClass('d-none');
+                        openAbhaAccountVerification(abha, resp);
                     } else {
                         var msg = pickApiMessage(resp, (resp && resp.status ? 'Status: ' + resp.status : 'ABHA not found or invalid.'));
                         regAlert('abhareg_num_stepA_alert', 'danger', msg);

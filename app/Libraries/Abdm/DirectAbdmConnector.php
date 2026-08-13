@@ -55,6 +55,16 @@ class DirectAbdmConnector implements AbdmConnectorInterface
         );
     }
 
+    public function abhaLoginRequestOtp(array $payload): array
+    {
+        throw new \RuntimeException('DirectAbdmConnector::abhaLoginRequestOtp() not implemented.');
+    }
+
+    public function abhaLoginVerifyOtp(array $payload): array
+    {
+        throw new \RuntimeException('DirectAbdmConnector::abhaLoginVerifyOtp() not implemented.');
+    }
+
     // -------------------------------------------------------------------------
     // Consent
     // -------------------------------------------------------------------------

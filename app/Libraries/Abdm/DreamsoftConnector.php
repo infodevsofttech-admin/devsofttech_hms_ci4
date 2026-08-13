@@ -41,6 +41,16 @@ class DreamsoftConnector implements AbdmConnectorInterface
         return ['ok' => 1, 'queue_id' => $queueId, 'status' => 'queued'];
     }
 
+    public function abhaLoginRequestOtp(array $payload): array
+    {
+        throw new \RuntimeException('ABHA login OTP requires the synchronous e-Atria Bridge connector.');
+    }
+
+    public function abhaLoginVerifyOtp(array $payload): array
+    {
+        throw new \RuntimeException('ABHA login OTP verification requires the synchronous e-Atria Bridge connector.');
+    }
+
     // -------------------------------------------------------------------------
     // Consent
     // -------------------------------------------------------------------------

@@ -3186,89 +3186,7 @@ class Patient extends BaseController
 		$patient = $this->findPatientForAbhaProfile($requestedPid, $abhaDigits, $gatewayMobile);
 		$patientId = (int) ($patient['id'] ?? 0);
 		$before = $patient !== null ? $this->buildPatientSnapshot($patient) : null;
-
-		$photoMeta = [
-			'saved' => false,
-			'path' => '',
-			'error' => '',
-		];
-
-		if ($patientId > 0 && $this->db->tableExists('patient_master')) {
-			$updates = [];
-
-			if ($abhaDigits !== '') {
-				$abhaField = $this->resolvePatientAbhaIdField();
-				if ($abhaField !== null) {
-					$updates[$abhaField] = $abhaDigits;
-				}
-			}
-
-			$pmFields = $this->db->getFieldNames('patient_master') ?? [];
-			if ($gatewayMobile !== '' && in_array('mphone1', $pmFields, true)) {
-				$updates['mphone1'] = preg_replace('/\D/', '', $gatewayMobile);
-			}
-			$dobDb = $this->normalizeGatewayDobToDb($gatewayDob);
-			if ($dobDb !== '' && in_array('dob', $pmFields, true)) {
-				$updates['dob'] = $dobDb;
-				if (in_array('estimate_dob', $pmFields, true)) {
-					$updates['estimate_dob'] = 0;
-				}
-			}
-			$genderDb = $this->toPatientGenderDbValue($gatewayGender);
-			if ($genderDb !== null && in_array('gender', $pmFields, true)) {
-				$updates['gender'] = $genderDb;
-			}
-			if ($gatewayAddress !== '' && in_array('add1', $pmFields, true)) {
-				$updates['add1'] = $gatewayAddress;
-			}
-			if ($gatewayCity !== '' && in_array('city', $pmFields, true)) {
-				$updates['city'] = $gatewayCity;
-			}
-			if ($gatewayDistrictName !== '' && in_array('district', $pmFields, true)) {
-				$updates['district'] = $gatewayDistrictName;
-			}
-			if ($gatewayStateName !== '' && in_array('state', $pmFields, true)) {
-				$updates['state'] = $gatewayStateName;
-			}
-			if ($gatewayZip !== '' && in_array('zip', $pmFields, true)) {
-				$updates['zip'] = $gatewayZip;
-			}
-			if ($gatewayEmail !== '' && in_array('email1', $pmFields, true)) {
-				$updates['email1'] = $gatewayEmail;
-			}
-			if ($verifiedStatus !== '' && in_array('abha_verified_status', $pmFields, true)) {
-				$updates['abha_verified_status'] = $verifiedStatus;
-			}
-			if ($verificationType !== '' && in_array('abha_verification_type', $pmFields, true)) {
-				$updates['abha_verification_type'] = $verificationType;
-			}
-			if ($kycVerified !== null && in_array('abha_kyc_verified', $pmFields, true)) {
-				$updates['abha_kyc_verified'] = (int) ((string) $kycVerified === '1' || (string) $kycVerified === 'true' || (string) $kycVerified === 'yes');
-			}
-			if ($mobileVerified !== null && in_array('abha_mobile_verified', $pmFields, true)) {
-				$updates['abha_mobile_verified'] = (int) ((string) $mobileVerified === '1' || (string) $mobileVerified === 'true' || (string) $mobileVerified === 'yes');
-			}
-			if ($abhaAddress !== '' && in_array('abha_address', $pmFields, true)) {
-				$updates['abha_address'] = $abhaAddress;
-			}
-			if (in_array('abdm_linked_at', $pmFields, true) && ($abhaDigits !== '' || $abhaAddress !== '')) {
-				$updates['abdm_linked_at'] = date('Y-m-d H:i:s');
-			}
-
-			if ($updates !== []) {
-				$this->db->table('patient_master')->where('id', $patientId)->update($updates);
-			}
-
-			if ($gatewayPhoto !== '') {
-				$photoMeta = $this->saveGatewayProfilePhotoToPatient($patientId, $gatewayPhoto);
-			}
-		}
-
-		$afterPatient = null;
-		if ($patientId > 0 && $this->db->tableExists('patient_master')) {
-			$afterPatient = $this->db->table('patient_master')->where('id', $patientId)->get()->getRowArray();
-		}
-		$after = $afterPatient !== null ? $this->buildPatientSnapshot($afterPatient) : $before;
+		$after = $before;
 
 		$result['gateway_user'] = [
 			'name' => $gatewayName,
@@ -3324,7 +3242,11 @@ class Patient extends BaseController
 					? $this->normalizeGenderForCompare((string) ($after['gender'] ?? '')) === $this->normalizeGenderForCompare($gatewayGender)
 					: null,
 			],
-			'photo_update' => $photoMeta,
+			'photo_update' => [
+				'saved' => false,
+				'path' => '',
+				'error' => '',
+			],
 		];
 
 		return $result;

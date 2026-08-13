@@ -23,7 +23,7 @@
     <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-people-fill me-2"></i>Possible Matching Patients Found</h5>
+                <h5 class="modal-title"><i class="bi bi-people-fill me-2"></i>Patient Already Exists</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
@@ -63,6 +63,7 @@
                         <div id="abhaMatch_empty" class="alert alert-warning py-2 small d-none">
                             No matching patient found in HMS by name, age or gender. You can create a new patient record.
                         </div>
+                        <div class="small text-muted mt-2"><i class="bi bi-info-circle me-1"></i>The verified ABHA identity is linked in both existing-patient actions. Keep Existing preserves HMS demographics; Update Details applies the latest ABHA profile.</div>
                     </div>
                 </div>
             </div>
@@ -70,9 +71,10 @@
                 <button type="button" class="btn btn-outline-secondary" id="abhaMatch_create_new_btn">
                     <i class="bi bi-person-plus me-1"></i>Create New Patient
                 </button>
-                <button type="button" class="btn btn-success" id="abhaMatch_update_existing_btn" disabled>
-                    <i class="bi bi-link-45deg me-1"></i>Update Selected Patient
-                </button>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-primary" id="abhaMatch_keep_existing_btn" disabled><i class="bi bi-person-check me-1"></i>Keep Existing</button>
+                    <button type="button" class="btn btn-primary" id="abhaMatch_update_existing_btn" disabled><i class="bi bi-arrow-repeat me-1"></i>Update Details</button>
+                </div>
             </div>
         </div>
     </div>
@@ -164,6 +166,7 @@ window.AbhaPatientMatchModal = (function () {
                 +            badge(m.aadhaar, 'Aadhaar')
                 + '        </div>'
                 + '        <div class="small text-muted mt-1">DOB: ' + esc(c.dob || '—') + ' | Mobile: ' + esc(maskMobile(c.mobile) || '—') + '</div>'
+                + '        <div class="small text-muted mt-1">Address: ' + esc(c.address || '—') + '</div>'
                 +          conflictNote
                 + '      </div>'
                 + '      <div class="form-check">'
@@ -181,18 +184,19 @@ window.AbhaPatientMatchModal = (function () {
         $('.abhaMatch-candidate').removeClass('border-success bg-success-subtle');
         $('.abhaMatch-candidate[data-id="' + id + '"]').addClass('border-success bg-success-subtle');
         $('.abhaMatch-radio[value="' + id + '"]').prop('checked', true);
-        $('#abhaMatch_update_existing_btn').prop('disabled', !id);
+        $('#abhaMatch_keep_existing_btn,#abhaMatch_update_existing_btn').prop('disabled', !id);
     }
 
-    function submitConfirm(action, patientId, $btn) {
+    function submitConfirm(action, patientId, updateMode, $btn) {
         $('#abhaMatch_alert').empty();
         var origHtml = $btn.html();
         $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>Saving…');
-        $('#abhaMatch_create_new_btn,#abhaMatch_update_existing_btn').prop('disabled', true);
+        $('#abhaMatch_create_new_btn,#abhaMatch_keep_existing_btn,#abhaMatch_update_existing_btn').prop('disabled', true);
 
         var c = csrfPair();
         var payload = {
             action: action,
+            update_mode: updateMode || 'update',
             patient_id: patientId || 0,
             abha_number: _profile.abha_number || '',
             name: _profile.name || '',
@@ -216,9 +220,8 @@ window.AbhaPatientMatchModal = (function () {
         $.post('<?= base_url('abha/create/confirm_patient') ?>', payload, function (resp) {
             updateCsrf(resp);
             $btn.prop('disabled', false).html(origHtml);
-            $('#abhaMatch_create_new_btn,#abhaMatch_update_existing_btn').prop('disabled', !_selectedId && $btn.attr('id') === 'abhaMatch_update_existing_btn');
             $('#abhaMatch_create_new_btn').prop('disabled', false);
-            $('#abhaMatch_update_existing_btn').prop('disabled', !_selectedId);
+            $('#abhaMatch_keep_existing_btn,#abhaMatch_update_existing_btn').prop('disabled', !_selectedId);
 
             if (!resp || resp.ok != 1) {
                 $('#abhaMatch_alert').html(alertHtml('danger', esc((resp && resp.error_text) || 'Failed to save patient link.')));
@@ -231,7 +234,7 @@ window.AbhaPatientMatchModal = (function () {
         }, 'json').fail(function () {
             $btn.prop('disabled', false).html(origHtml);
             $('#abhaMatch_create_new_btn').prop('disabled', false);
-            $('#abhaMatch_update_existing_btn').prop('disabled', !_selectedId);
+            $('#abhaMatch_keep_existing_btn,#abhaMatch_update_existing_btn').prop('disabled', !_selectedId);
             $('#abhaMatch_alert').html(alertHtml('danger', 'Server error while saving. Please try again.'));
         });
     }
@@ -246,11 +249,15 @@ window.AbhaPatientMatchModal = (function () {
         });
 
         $('#abhaMatch_create_new_btn').on('click', function () {
-            submitConfirm('new', 0, $(this));
+            submitConfirm('new', 0, 'update', $(this));
+        });
+        $('#abhaMatch_keep_existing_btn').on('click', function () {
+            if (!_selectedId) { return; }
+            submitConfirm('existing', _selectedId, 'keep', $(this));
         });
         $('#abhaMatch_update_existing_btn').on('click', function () {
             if (!_selectedId) { return; }
-            submitConfirm('existing', _selectedId, $(this));
+            submitConfirm('existing', _selectedId, 'update', $(this));
         });
     });
 
@@ -260,7 +267,7 @@ window.AbhaPatientMatchModal = (function () {
             _selectedId = 0;
             _onResolved = onResolved;
             $('#abhaMatch_alert').empty();
-            $('#abhaMatch_update_existing_btn').prop('disabled', true);
+            $('#abhaMatch_keep_existing_btn,#abhaMatch_update_existing_btn').prop('disabled', true);
             renderProfile(_profile);
             renderCandidates(candidates || []);
             if (_bsModal) { _bsModal.show(); } else { $modalEl.modal('show'); }

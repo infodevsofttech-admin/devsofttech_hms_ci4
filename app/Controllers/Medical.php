@@ -12530,7 +12530,7 @@ class Medical extends BaseController
             : '';
 
         $whereSql = implode(' AND ', $conditions);
-        $sql = "SELECT p.item_name, p.genericname,
+        $sql = "SELECT p.item_name, p.formulation, p.genericname,
                     IFNULL(s.packing,p.packing) AS packing,
                     s.batch_no,
                     s.expiry_date,
@@ -12546,7 +12546,7 @@ class Medical extends BaseController
                 JOIN purchase_invoice_item s ON p.id=s.item_code
                 JOIN purchase_invoice m ON s.purchase_id=m.id
                 WHERE {$whereSql}
-                GROUP BY p.item_name, p.genericname, IFNULL(s.packing,p.packing), s.batch_no, s.expiry_date, s.mrp, s.purchase_unit_rate, s.CGST_per
+                GROUP BY p.item_name, p.formulation, p.genericname, IFNULL(s.packing,p.packing), s.batch_no, s.expiry_date, s.mrp, s.purchase_unit_rate, s.CGST_per
                 {$havingSql}
                 ORDER BY p.item_name, s.batch_no";
 
@@ -12562,9 +12562,10 @@ class Medical extends BaseController
         foreach ($stockList as $row) {
             $stockCost = (float) ($row->stock_cost ?? 0);
             $totalStockValue += $stockCost;
+            $medicineName = trim((string) ($row->formulation ?? '') . ' ' . (string) ($row->item_name ?? ''));
 
             $content .= '<tr>'
-                . '<td>' . esc((string) ($row->item_name ?? '')) . '</td>'
+                . '<td>' . esc($medicineName) . '</td>'
                 . '<td>' . esc((string) ($row->genericname ?? '')) . '</td>'
                 . '<td>' . esc(number_format((float) ($row->mrp ?? 0), 2, '.', '')) . '</td>'
                 . '<td>' . esc((string) ($row->batch_no ?? '')) . '</td>'

@@ -37,6 +37,22 @@ interface AbdmConnectorInterface
      */
     public function validateAbha(string $abhaId, array $fullPayload = []): array;
 
+    /**
+     * Request an OTP for an ABHA account returned by validateAbha().
+     *
+     * @param array<string, mixed> $payload Must contain the search txn_id and
+     *                                      selected MOBILE_OTP or AADHAAR_OTP method.
+     */
+    public function abhaLoginRequestOtp(array $payload): array;
+
+    /**
+     * Verify an account-bound ABHA login OTP and return the normalized profile
+     * plus the official ABHA card payload when available.
+     *
+     * @param array<string, mixed> $payload Must contain txn_id, auth_method, and otp.
+     */
+    public function abhaLoginVerifyOtp(array $payload): array;
+
     // -------------------------------------------------------------------------
     // Consent
     // -------------------------------------------------------------------------

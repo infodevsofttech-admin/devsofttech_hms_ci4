@@ -731,16 +731,35 @@ class Abha extends BaseController
      */
     private function extractBridgeErrorText(array $result, string $fallback): string
     {
+        $fieldErrors = [];
+        if (is_array($result['data'] ?? null)) {
+            foreach ($result['data'] as $field => $message) {
+                if ($field === 'timestamp' || ! is_string($message) || trim($message) === '') {
+                    continue;
+                }
+                $fieldErrors[] = $field . ': ' . trim($message);
+            }
+        }
+        if ($fieldErrors !== []) {
+            return implode('; ', $fieldErrors);
+        }
+
         $candidates = [
             $result['error_text'] ?? null,
             $result['message'] ?? null,
             $result['error']['message'] ?? null,
             $result['error']['description'] ?? null,
             $result['error']['code'] ?? null,
+            $result['error']['error'] ?? null,
+            $result['error']['error_description'] ?? null,
             $result['data']['message'] ?? null,
             $result['data']['error']['message'] ?? null,
             $result['data']['error']['description'] ?? null,
             $result['data']['error']['code'] ?? null,
+            $result['data']['error']['error'] ?? null,
+            $result['data']['error']['error_description'] ?? null,
+            $result['details']['message'] ?? null,
+            $result['details']['error'] ?? null,
             $result['description'] ?? null,
             $result['data']['description'] ?? null,
         ];
@@ -766,6 +785,7 @@ class Abha extends BaseController
         }
 
         $action    = trim((string) ($this->request->getPost('action') ?? ''));
+        $updateMode = trim((string) ($this->request->getPost('update_mode') ?? 'update'));
         $patientId = (int) ($this->request->getPost('patient_id') ?? 0);
         $abhaNum   = (string) ($this->request->getPost('abha_number') ?? '');
         $name      = trim((string) ($this->request->getPost('name') ?? ''));
@@ -775,6 +795,9 @@ class Abha extends BaseController
 
         if (! in_array($action, ['new', 'existing'], true)) {
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'Invalid action. Must be "new" or "existing".']);
+        }
+        if (! in_array($updateMode, ['keep', 'update'], true)) {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'Invalid patient update mode.']);
         }
 
         $abhaMeta = [
@@ -841,7 +864,20 @@ class Abha extends BaseController
                 ]);
             }
 
-            $patientInfo = $this->linkAbhaToPatient($db, $patientId, $name, $mobile, $gender, $dob, $abhaMeta, $abhaNumClean, $abhaAddress, $fields, $abhaField);
+            $patientInfo = $this->linkAbhaToPatient(
+                $db,
+                $patientId,
+                $updateMode === 'update' ? $name : '',
+                $updateMode === 'update' ? $mobile : '',
+                $updateMode === 'update' ? $gender : '',
+                $updateMode === 'update' ? $dob : '',
+                $updateMode === 'update' ? $abhaMeta : array_diff_key($abhaMeta, array_flip(['address', 'district', 'state', 'zip', 'email'])),
+                $abhaNumClean,
+                $abhaAddress,
+                $fields,
+                $abhaField,
+                $updateMode === 'update'
+            );
         } else {
             $patientInfo = $this->createPatientFromAbha($db, $name, $mobile, $gender, $dob, $abhaMeta, $abhaNumClean, $abhaAddress, $fields, $abhaField);
         }
@@ -987,7 +1023,11 @@ class Abha extends BaseController
             return [];
         }
 
-        $select = 'id,p_code,p_fname,p_lname,gender,dob,age,mphone1,udai';
+        $selectFields = array_values(array_intersect(
+            ['id', 'p_code', 'p_fname', 'p_lname', 'gender', 'dob', 'age', 'mphone1', 'udai', 'add1', 'district', 'state', 'zip'],
+            $fields
+        ));
+        $select = implode(',', $selectFields);
         if ($abhaField !== null && ! in_array($abhaField, ['id', 'p_code', 'p_fname', 'p_lname', 'gender', 'dob', 'age', 'mphone1', 'udai'], true)) {
             $select .= ',' . $abhaField;
         }
@@ -1060,6 +1100,12 @@ class Abha extends BaseController
                 'dob'           => $rowDob,
                 'age'           => $rowAgeYears,
                 'mobile'        => (string) ($row['mphone1'] ?? ''),
+                'address'       => trim(implode(', ', array_filter([
+                    (string) ($row['add1'] ?? ''),
+                    (string) ($row['district'] ?? ''),
+                    (string) ($row['state'] ?? ''),
+                    (string) ($row['zip'] ?? ''),
+                ]))),
                 'aadhaar'       => (string) ($row['udai'] ?? ''),
                 'abha'          => $rowAbha,
                 'abha_conflict' => $abhaConflict,
@@ -1099,21 +1145,22 @@ class Abha extends BaseController
         string $abhaNumClean,
         string $abhaAddress,
         array $fields,
-        ?string $abhaField
+        ?string $abhaField,
+        bool $updateDetails = false
     ): array {
         $existing = $db->table('patient_master')->where('id', $patientId)->get()->getRowArray() ?? [];
         $pCode    = (string) ($existing['p_code'] ?? '');
         $existingUpdates = [];
 
         $existingName = strtoupper(trim((string) ($existing['p_fname'] ?? '')));
-        if ($name !== '' && ($existingName === '' || $existingName === 'ABHA PATIENT')) {
+        if ($name !== '' && ($updateDetails || $existingName === '' || $existingName === 'ABHA PATIENT')) {
             $existingUpdates['p_fname'] = strtoupper($name);
         }
 
         // Backfill DOB/gender/mobile from ABHA profile only if not already recorded,
         // so we never clobber a manually-corrected value.
         $existingDob = trim((string) ($existing['dob'] ?? ''));
-        if (($existingDob === '' || $existingDob === '0000-00-00') && $dob !== '') {
+        if (($updateDetails || $existingDob === '' || $existingDob === '0000-00-00') && $dob !== '') {
             $dobDb = $this->normalizeDobToDb($dob);
             if ($dobDb !== '') {
                 $existingUpdates['dob'] = $dobDb;
@@ -1123,10 +1170,10 @@ class Abha extends BaseController
             }
         }
         $existingGenderRaw = (int) ($existing['gender'] ?? 0);
-        if ($existingGenderRaw <= 0 && $gender !== '') {
+        if (($updateDetails || $existingGenderRaw <= 0) && $gender !== '') {
             $existingUpdates['gender'] = $this->toPatientGenderValue($gender);
         }
-        if ($mobile !== '' && empty($existing['mphone1'])) {
+        if ($mobile !== '' && ($updateDetails || empty($existing['mphone1']))) {
             $existingUpdates['mphone1'] = $mobile;
         }
 
@@ -1440,11 +1487,26 @@ class Abha extends BaseController
      */
     private function pickGatewayAbhaProfile(array $payload): array
     {
+        $account = is_array($payload['account'] ?? null) ? $payload['account'] : [];
+        $loginAccount = is_array($payload['accounts'][0] ?? null) ? $payload['accounts'][0] : [];
+        $mergedAccount = $loginAccount;
+        foreach ($account as $key => $value) {
+            if (! is_scalar($value) || trim((string) $value) === '') {
+                continue;
+            }
+            if (in_array(strtoupper(trim((string) $value)), ['PATIENT', 'PATIENT NAME', 'N/A'], true)) {
+                continue;
+            }
+            $mergedAccount[$key] = $value;
+        }
+
         $candidates = [
             $payload['ABHAProfile'] ?? null,
             $payload['gateway_abha_profile'] ?? null,
             $payload['profile'] ?? null,
-            $payload['accounts'][0] ?? null,
+            $mergedAccount,
+            $account,
+            $loginAccount,
             $payload['gateway_patient'] ?? null,
             $payload,
         ];
@@ -1464,7 +1526,7 @@ class Abha extends BaseController
      */
     private function extractAbhaProfileName(array $profile, array $payload): string
     {
-        foreach ([$profile, $payload, $payload['gateway_abha_profile'] ?? [], $payload['gateway_patient'] ?? []] as $source) {
+        foreach ([$profile, $payload, $payload['account'] ?? [], $payload['gateway_abha_profile'] ?? [], $payload['gateway_patient'] ?? []] as $source) {
             if (! is_array($source)) {
                 continue;
             }
@@ -1541,11 +1603,17 @@ class Abha extends BaseController
                 $result['error'] ?? null,
                 $result['error']['message'] ?? null,
                 $result['error']['description'] ?? null,
+                $result['error']['error'] ?? null,
+                $result['error']['error_description'] ?? null,
                 $result['data']['message'] ?? null,
                 $result['data']['description'] ?? null,
                 $result['data']['error'] ?? null,
                 $result['data']['error']['message'] ?? null,
                 $result['data']['error']['description'] ?? null,
+                $result['data']['error']['error'] ?? null,
+                $result['data']['error']['error_description'] ?? null,
+                $result['details']['message'] ?? null,
+                $result['details']['error'] ?? null,
                 $result['data']['raw_response'] ?? null,
             ] as $candidate) {
                 if (is_string($candidate) && trim($candidate) !== '') {
@@ -1603,10 +1671,246 @@ class Abha extends BaseController
         $validStates = ['VALID', 'ACTIVE', 'VERIFIED', 'EXISTS', 'FOUND', 'SUCCESS'];
         $status = in_array($statusRaw, $validStates, true) || $statusRaw === '' ? 'VALID' : $statusRaw;
 
+        $data = is_array($result['data'] ?? null) ? $result['data'] : [];
+        $accounts = is_array($data['accounts'] ?? null) ? $data['accounts'] : [];
+        $account = isset($accounts[0]) && is_array($accounts[0])
+            ? $accounts[0]
+            : (is_array($data['account'] ?? null) ? $data['account'] : []);
+        $txnId = trim((string) (
+            $result['txn_id']
+            ?? $result['txnId']
+            ?? $data['txn_id']
+            ?? $data['txnId']
+            ?? $data['transaction_id']
+            ?? $data['transactionId']
+            ?? $account['txn_id']
+            ?? $account['txnId']
+            ?? ''
+        ));
+        $authMethods = is_array($result['auth_methods'] ?? null)
+            ? $result['auth_methods']
+            : (is_array($result['authMethods'] ?? null)
+                ? $result['authMethods']
+                : (is_array($data['authMethods'] ?? null) ? $data['authMethods'] : ($data['auth_methods'] ?? [])));
+        $blockedMethods = $data['blockedAuthMethods'] ?? $data['blocked_auth_methods'] ?? $account['blockedAuthMethods'] ?? $account['blocked_auth_methods'] ?? [];
+        $maskedMobile = $this->maskAbhaMobile((string) (
+            $data['mobile']
+            ?? $data['mobileNumber']
+            ?? $data['maskedMobile']
+            ?? $data['masked_mobile']
+            ?? $data['phone']
+            ?? $account['masked_mobile']
+            ?? $account['mobile']
+            ?? $account['mobileNumber']
+            ?? $account['maskedMobile']
+            ?? $account['phone']
+            ?? ''
+        ));
         return $this->response->setJSON([
             'ok' => 1,
             'status' => $status,
             'raw_status' => $statusRaw,
+            'txn_id' => $txnId,
+            'auth_methods' => array_values(array_unique(array_map(static fn($method): string => strtoupper(trim((string) $method)), $authMethods))),
+            'blocked_auth_methods' => is_array($blockedMethods) ? array_values($blockedMethods) : [],
+            'masked_mobile' => $maskedMobile,
+            'account' => [
+                'name' => trim((string) ($account['name'] ?? $account['fullName'] ?? $account['full_name'] ?? $data['name'] ?? $data['fullName'] ?? $data['full_name'] ?? '')),
+                'abha_number' => trim((string) ($account['ABHANumber'] ?? $account['abhaNumber'] ?? $account['abha_id'] ?? $account['healthIdNumber'] ?? $data['ABHANumber'] ?? $data['healthIdNumber'] ?? $data['abha_id'] ?? '')),
+                'abha_address' => trim((string) ($account['abhaAddress'] ?? $account['preferredAddress'] ?? $account['preferredAbhaAddress'] ?? $account['abha_address'] ?? $data['abhaAddress'] ?? $data['preferredAddress'] ?? $data['preferredAbhaAddress'] ?? $data['abha_address'] ?? '')),
+                'masked_mobile' => $maskedMobile,
+            ],
         ]);
+    }
+
+    private function maskAbhaMobile(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '' || preg_match('/\*/', $value) === 1) {
+            return $value;
+        }
+
+        $digits = preg_replace('/\D/', '', $value);
+        if (strlen($digits) === 10) {
+            return substr($digits, 0, 2) . '*****' . substr($digits, -3);
+        }
+
+        return $value;
+    }
+
+    public function loginRequestOtp()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $txnId = trim((string) ($this->request->getPost('txn_id') ?? ''));
+        $authMethod = strtoupper(trim((string) ($this->request->getPost('auth_method') ?? '')));
+        if ($txnId === '' || ! in_array($authMethod, ['MOBILE_OTP', 'AADHAAR_OTP'], true)) {
+            return $this->response->setStatusCode(422)->setJSON(['ok' => 0, 'error_text' => 'Valid transaction and OTP method are required.']);
+        }
+
+        try {
+            $result = AbdmConnectorFactory::make()->abhaLoginRequestOtp([
+                'txn_id' => $txnId,
+                'auth_method' => $authMethod,
+                'abha_id' => trim((string) ($this->request->getPost('abha_id') ?? '')),
+                'abha_address' => trim((string) ($this->request->getPost('abha_address') ?? '')),
+                'scope' => trim((string) ($this->request->getPost('scope') ?? 'abha-login')),
+            ]);
+        } catch (\Throwable $e) {
+            return $this->response->setStatusCode(502)->setJSON(['ok' => 0, 'error_text' => $e->getMessage()]);
+        }
+
+        if (empty($result['ok']) || (int) $result['ok'] !== 1) {
+            $httpCode = (int) ($result['http_code'] ?? 0);
+            if ($httpCode < 400 || $httpCode > 599) {
+                $httpCode = 502;
+            }
+            return $this->response->setStatusCode($httpCode)->setJSON([
+                'ok' => 0,
+                'error_text' => $this->extractBridgeErrorText($result, 'The ABDM Bridge could not send the OTP.'),
+                'request_id' => (string) ($result['request_id'] ?? ''),
+            ]);
+        }
+
+        $data = is_array($result['data'] ?? null) ? $result['data'] : [];
+        $maskedMobile = trim((string) ($data['masked_mobile'] ?? $data['maskedMobile'] ?? $data['mobile'] ?? ''));
+        $deliveryMessage = trim((string) ($result['message'] ?? $data['message'] ?? ''));
+        if ($maskedMobile === '' && preg_match('/(\d{4})(?!.*\d)/', $deliveryMessage, $mobileEnding) === 1) {
+            $maskedMobile = '******' . $mobileEnding[1];
+        }
+        return $this->response->setJSON([
+            'ok' => 1,
+            'txn_id' => (string) ($result['txn_id'] ?? $result['txnId'] ?? $data['txn_id'] ?? $data['txnId'] ?? $txnId),
+            'auth_method' => $authMethod,
+            'masked_mobile' => $this->maskAbhaMobile($maskedMobile),
+            'resend_after' => max(60, (int) ($data['resend_after'] ?? $data['resendAfter'] ?? 60)),
+        ]);
+    }
+
+    public function loginVerifyOtp()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $txnId = trim((string) ($this->request->getPost('txn_id') ?? ''));
+        $authMethod = strtoupper(trim((string) ($this->request->getPost('auth_method') ?? '')));
+        $otp = preg_replace('/\D/', '', trim((string) ($this->request->getPost('otp') ?? '')));
+        if ($txnId === '' || ! in_array($authMethod, ['MOBILE_OTP', 'AADHAAR_OTP'], true) || strlen($otp) !== 6) {
+            return $this->response->setStatusCode(422)->setJSON(['ok' => 0, 'error_text' => 'Transaction, OTP method, and 6-digit OTP are required.']);
+        }
+
+        try {
+            $result = AbdmConnectorFactory::make()->abhaLoginVerifyOtp([
+                'txn_id' => $txnId,
+                'auth_method' => $authMethod,
+                'otp' => $otp,
+            ]);
+        } catch (\Throwable $e) {
+            return $this->response->setStatusCode(502)->setJSON(['ok' => 0, 'error_text' => $e->getMessage()]);
+        }
+
+        if (empty($result['ok']) || (int) $result['ok'] !== 1) {
+            $httpCode = (int) ($result['http_code'] ?? 0);
+            if ($httpCode < 400 || $httpCode > 599) {
+                $httpCode = 502;
+            }
+            return $this->response->setStatusCode($httpCode)->setJSON([
+                'ok' => 0,
+                'error_text' => $this->extractBridgeErrorText($result, 'OTP verification failed.'),
+                'request_id' => (string) ($result['request_id'] ?? ''),
+            ]);
+        }
+
+        $payload = is_array($result['data'] ?? null)
+            ? array_merge($result, $result['data'])
+            : $result;
+        $profile = $this->pickGatewayAbhaProfile($payload);
+        $firstNonEmpty = static function (array $values): string {
+            foreach ($values as $value) {
+                if (is_scalar($value) && trim((string) $value) !== '') {
+                    return trim((string) $value);
+                }
+            }
+            return '';
+        };
+        $abhaNumber = preg_replace('/\D/', '', $firstNonEmpty([$profile['ABHANumber'] ?? null, $profile['abhaNumber'] ?? null, $profile['abha_number'] ?? null, $profile['abha_id'] ?? null, $payload['ABHANumber'] ?? null, $payload['abhaNumber'] ?? null, $payload['abha_id'] ?? null]));
+        $abhaAddress = $firstNonEmpty([$profile['preferredAddress'] ?? null, $profile['preferredAbhaAddress'] ?? null, $profile['abhaAddress'] ?? null, $profile['abha_address'] ?? null, $payload['preferredAddress'] ?? null, $payload['abhaAddress'] ?? null, $payload['abha_address'] ?? null]);
+        $name = $this->extractAbhaProfileName($profile, $payload);
+        $mobile = $firstNonEmpty([$profile['mobile'] ?? null, $profile['mobileNumber'] ?? null, $profile['mobile_number'] ?? null, $payload['mobile'] ?? null, $payload['mobileNumber'] ?? null, $payload['mobile_number'] ?? null]);
+        $gender = $firstNonEmpty([$profile['gender'] ?? null, $payload['gender'] ?? null]);
+        $dob = $firstNonEmpty([$profile['dob'] ?? null, $profile['dateOfBirth'] ?? null, $profile['date_of_birth'] ?? null, $payload['dob'] ?? null, $payload['dateOfBirth'] ?? null, $payload['date_of_birth'] ?? null]);
+        if ($dob === '') {
+            $day = $firstNonEmpty([$profile['dayOfBirth'] ?? null, $profile['day_of_birth'] ?? null]);
+            $month = $firstNonEmpty([$profile['monthOfBirth'] ?? null, $profile['month_of_birth'] ?? null]);
+            $year = $firstNonEmpty([$profile['yearOfBirth'] ?? null, $profile['year_of_birth'] ?? null]);
+            if ($day !== '' && $month !== '' && $year !== '') {
+                $dob = sprintf('%04d-%02d-%02d', (int) $year, (int) $month, (int) $day);
+            }
+        }
+        $address = $firstNonEmpty([$profile['address'] ?? null, $profile['addressLine'] ?? null, $profile['address_line'] ?? null, $payload['address'] ?? null, $payload['addressLine'] ?? null, $payload['address_line'] ?? null]);
+        $district = $firstNonEmpty([$profile['districtName'] ?? null, $profile['district_name'] ?? null, $profile['district'] ?? null, $payload['districtName'] ?? null, $payload['district_name'] ?? null, $payload['district'] ?? null]);
+        $state = $firstNonEmpty([$profile['stateName'] ?? null, $profile['state_name'] ?? null, $profile['state'] ?? null, $payload['stateName'] ?? null, $payload['state_name'] ?? null, $payload['state'] ?? null]);
+        $zip = $firstNonEmpty([$profile['pinCode'] ?? null, $profile['pincode'] ?? null, $profile['pin'] ?? null, $payload['pinCode'] ?? null, $payload['pincode'] ?? null, $payload['pin'] ?? null]);
+        $photo = $firstNonEmpty([$profile['profilePhoto'] ?? null, $profile['profile_photo'] ?? null, $profile['photo'] ?? null, $payload['profilePhoto'] ?? null, $payload['profile_photo'] ?? null, $payload['photo'] ?? null]);
+        $cardData = $this->extractAbhaCardData($payload);
+
+        $db = \Config\Database::connect();
+        $fields = $db->getFieldNames('patient_master') ?? [];
+        $abhaField = $this->resolveAbhaFieldName($fields);
+        $candidates = $this->findMatchingCandidates($db, $fields, $name, $mobile, $gender, $dob, '', $abhaField, $abhaNumber);
+
+        return $this->response->setJSON([
+            'ok' => 1,
+            'need_confirmation' => true,
+            'abha_number' => $abhaNumber,
+            'abha_address' => $abhaAddress,
+            'name' => $name,
+            'mobile' => $mobile,
+            'gender' => $gender,
+            'dob' => $dob,
+            'address' => $address,
+            'district' => $district,
+            'state' => $state,
+            'zip' => $zip,
+            'photo' => $photo,
+            'verified_status' => 'VERIFIED',
+            'verification_type' => $authMethod,
+            'mobile_verified' => $authMethod === 'MOBILE_OTP' ? 1 : null,
+            'card_base64' => $cardData,
+            'card_content_type' => $this->resolveAbhaCardContentType($payload),
+            'candidates' => $candidates,
+        ]);
+    }
+
+    private function extractAbhaCardData(array $payload): string
+    {
+        $sources = [$payload, $payload['account'] ?? [], $payload['profile'] ?? []];
+        foreach ($sources as $source) {
+            if (! is_array($source)) { continue; }
+            foreach (['card_base64', 'card_data', 'abhaCard', 'abha_card', 'official_card', 'cardData', 'card'] as $key) {
+                $value = $source[$key] ?? '';
+                if (is_string($value) && trim($value) !== '') { return trim($value); }
+                if (is_array($value)) {
+                    foreach (['base64', 'data', 'card_base64', 'card_data'] as $nestedKey) {
+                        if (is_string($value[$nestedKey] ?? null) && trim($value[$nestedKey]) !== '') {
+                            return trim($value[$nestedKey]);
+                        }
+                    }
+                }
+            }
+        }
+        return '';
+    }
+
+    private function resolveAbhaCardContentType(array $payload): string
+    {
+        $format = strtolower(trim((string) ($payload['card_content_type'] ?? $payload['cardContentType'] ?? $payload['card_format'] ?? ($payload['account']['card_format'] ?? ''))));
+        if ($format === 'png') { return 'image/png'; }
+        if ($format === 'jpg' || $format === 'jpeg') { return 'image/jpeg'; }
+        if ($format === 'pdf') { return 'application/pdf'; }
+        return $format !== '' && str_contains($format, '/') ? $format : 'image/png';
     }
 }
