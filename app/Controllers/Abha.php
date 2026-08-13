@@ -2010,7 +2010,7 @@ class Abha extends BaseController
         $sources = [$payload, $payload['data'] ?? [], $payload['account'] ?? [], $payload['profile'] ?? [], $payload['gateway_patient'] ?? [], $payload['data']['gateway_patient'] ?? []];
         foreach ($sources as $source) {
             if (! is_array($source)) { continue; }
-            foreach (['card_base64', 'card_data', 'abhaCard', 'abha_card', 'official_card', 'cardData', 'card'] as $key) {
+            foreach (['official_card', 'card_data_uri', 'card_base64', 'card_data', 'abhaCard', 'abha_card', 'cardData', 'card'] as $key) {
                 $value = $source[$key] ?? '';
                 if (is_string($value) && trim($value) !== '') { return trim($value); }
                 if (is_array($value)) {

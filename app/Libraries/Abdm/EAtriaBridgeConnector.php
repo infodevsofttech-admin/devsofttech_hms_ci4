@@ -270,24 +270,26 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
     }
 
     /**
-     * @param array<string, mixed> $query
+     * @param array<string, mixed>  $query
+     * @param array<string, string> $extraHeaders
      * @return array<string, mixed>
      */
-    private function get(string $path, array $query = []): array
+    private function get(string $path, array $query = [], array $extraHeaders = []): array
     {
         // e-Atria bridge expects hfr_id alongside Bearer auth for GET endpoints too.
         if ($this->hfrId !== '' && empty($query['hfr_id'])) {
             $query['hfr_id'] = $this->hfrId;
         }
-        return $this->httpCall('GET', $path, [], $query);
+        return $this->httpCall('GET', $path, [], $query, $extraHeaders);
     }
 
     /**
-     * @param array<string, mixed> $body
-     * @param array<string, mixed> $query
+     * @param array<string, mixed>  $body
+     * @param array<string, mixed>  $query
+     * @param array<string, string> $extraHeaders
      * @return array<string, mixed>
      */
-    private function httpCall(string $method, string $path, array $body = [], array $query = []): array
+    private function httpCall(string $method, string $path, array $body = [], array $query = [], array $extraHeaders = []): array
     {
         // Credentials can be rotated from settings without restarting PHP workers.
         // Refresh before each call to avoid stale token/HFR causing 401/403.
@@ -300,7 +302,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
 
         $safeRequestBody = $this->redactSensitiveForLog($body);
 
-        $callWithToken = function (string $tokenValue) use ($method, $url, $body, $safeRequestBody): array {
+        $callWithToken = function (string $tokenValue) use ($method, $url, $body, $safeRequestBody, $extraHeaders): array {
             $headers = [
                 'Content-Type: application/json',
                 'Accept: application/json',
@@ -310,6 +312,11 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             }
             if ($this->bridgeHospitalId !== '') {
                 $headers[] = 'X-Hospital-Id: ' . $this->bridgeHospitalId;
+            }
+            foreach ($extraHeaders as $headerName => $headerValue) {
+                if (trim((string) $headerValue) !== '') {
+                    $headers[] = $headerName . ': ' . $headerValue;
+                }
             }
 
             $maskedToken = $tokenValue !== '' ? (substr($tokenValue, 0, 6) . '***' . substr($tokenValue, -4)) : '(none)';
@@ -724,13 +731,20 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             ?: $this->extractOfficialCard($profile);
 
         if ($card === '' && ($abhaNumber !== '' || $abhaAddress !== '')) {
-            $cardResult = $this->get('/v3/abha/card', array_filter([
-                'abha_number' => $abhaNumber,
-                'abha_address' => $abhaAddress,
-            ], static fn($value): bool => trim((string) $value) !== ''));
+            // Without the patient X-Token the Bridge can only return a generated
+            // card; with it, ABDM's genuine card is fetched.
+            $patientToken = $this->extractPatientXToken($result);
+            $cardResult = $this->get(
+                '/v3/abha/card',
+                array_filter([
+                    'abha_number' => $abhaNumber,
+                    'abha_address' => $abhaAddress,
+                ], static fn($value): bool => trim((string) $value) !== ''),
+                $patientToken !== '' ? ['X-Token' => 'Bearer ' . $patientToken] : []
+            );
             if (! empty($cardResult['ok']) && (int) $cardResult['ok'] === 1) {
                 $cardData = is_array($cardResult['data'] ?? null) ? $cardResult['data'] : $cardResult;
-                $card = $this->extractOfficialCard($cardData);
+                $card = $this->extractOfficialCard($cardResult) ?: $this->extractOfficialCard($cardData);
                 if ($card !== '') {
                     $result['card_base64'] = $card;
                     $result['card_content_type'] = $this->resolveCardContentType($cardData);
@@ -742,11 +756,36 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
     }
 
     /**
+     * @param array<string, mixed> $result
+     */
+    private function extractPatientXToken(array $result): string
+    {
+        $data = is_array($result['data'] ?? null) ? $result['data'] : [];
+        $tokens = is_array($result['tokens'] ?? null) ? $result['tokens'] : (is_array($data['tokens'] ?? null) ? $data['tokens'] : []);
+
+        foreach ([
+            $result['X-Token'] ?? null,
+            $result['x_token'] ?? null,
+            $data['X-Token'] ?? null,
+            $data['x_token'] ?? null,
+            $result['token'] ?? null,
+            $data['token'] ?? null,
+            $tokens['token'] ?? null,
+        ] as $candidate) {
+            if (is_string($candidate) && trim($candidate) !== '') {
+                return preg_replace('/^Bearer\s+/i', '', trim($candidate));
+            }
+        }
+
+        return '';
+    }
+
+    /**
      * @param array<string, mixed> $source
      */
     private function extractOfficialCard(array $source): string
     {
-        foreach (['card_base64', 'card_data', 'abhaCard', 'abha_card', 'official_card', 'cardData', 'card'] as $key) {
+        foreach (['official_card', 'card_data_uri', 'card_base64', 'card_data', 'abhaCard', 'abha_card', 'cardData', 'card'] as $key) {
             $value = $source[$key] ?? '';
             if (is_string($value) && trim($value) !== '') {
                 return trim($value);
