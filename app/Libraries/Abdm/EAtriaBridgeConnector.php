@@ -730,6 +730,10 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             ?: $this->extractOfficialCard($account)
             ?: $this->extractOfficialCard($profile);
 
+        if ($card !== '') {
+            $result['card_source'] = $this->extractCardSource($result) ?: $this->extractCardSource($data);
+        }
+
         if ($card === '' && ($abhaNumber !== '' || $abhaAddress !== '')) {
             // Without the patient X-Token the Bridge can only return a generated
             // card; with it, ABDM's genuine card is fetched.
@@ -748,11 +752,27 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
                 if ($card !== '') {
                     $result['card_base64'] = $card;
                     $result['card_content_type'] = $this->resolveCardContentType($cardData);
+                    $result['card_source'] = $this->extractCardSource($cardResult) ?: $this->extractCardSource($cardData);
                 }
             }
         }
 
         return $result;
+    }
+
+    /**
+     * @param array<string, mixed> $source
+     */
+    private function extractCardSource(array $source): string
+    {
+        foreach ([$source['card_source'] ?? null, $source['source'] ?? null] as $candidate) {
+            $value = strtolower(trim((string) $candidate));
+            if ($value !== '') {
+                return str_contains($value, 'abdm') ? 'abdm' : 'generated';
+            }
+        }
+
+        return '';
     }
 
     /**

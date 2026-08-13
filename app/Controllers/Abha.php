@@ -144,6 +144,7 @@ class Abha extends BaseController
             'skip_mobile'       => true,
             'card_base64'       => $this->extractAbhaCardData($result),
             'card_content_type' => $this->resolveAbhaCardContentType($result),
+            'card_source'       => $this->resolveAbhaCardSource($result),
             'abha_number'       => $abhaNum,
             'name'              => $name,
             'photo'             => $photo,
@@ -307,6 +308,7 @@ class Abha extends BaseController
             'ok'                => 1,
             'card_base64'       => $this->extractAbhaCardData($result),
             'card_content_type' => $this->resolveAbhaCardContentType($result),
+            'card_source'       => $this->resolveAbhaCardSource($result),
             'abha_number'       => $abhaNum,
             'name'              => $name,
             'photo'             => $photo,
@@ -2001,6 +2003,7 @@ class Abha extends BaseController
             'mobile_verified' => $authMethod === 'MOBILE_OTP' ? 1 : null,
             'card_base64' => $cardData,
             'card_content_type' => $this->resolveAbhaCardContentType($payload),
+            'card_source' => $this->resolveAbhaCardSource($payload),
             'candidates' => $candidates,
         ]);
     }
@@ -2022,6 +2025,24 @@ class Abha extends BaseController
                 }
             }
         }
+        return '';
+    }
+
+    private function resolveAbhaCardSource(array $payload): string
+    {
+        $data = is_array($payload['data'] ?? null) ? $payload['data'] : [];
+        foreach ([
+            $payload['card_source'] ?? null,
+            $payload['source'] ?? null,
+            $data['card_source'] ?? null,
+            $data['source'] ?? null,
+        ] as $candidate) {
+            $value = strtolower(trim((string) $candidate));
+            if ($value !== '') {
+                return str_contains($value, 'abdm') ? 'abdm' : 'generated';
+            }
+        }
+
         return '';
     }
 
