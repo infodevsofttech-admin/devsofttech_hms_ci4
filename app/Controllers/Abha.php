@@ -1057,6 +1057,24 @@ class Abha extends BaseController
     }
 
     /**
+     * ABHA returns DOB as DD-MM-YYYY while patient_master stores YYYY-MM-DD.
+     */
+    private function extractBirthYear(string $dob): string
+    {
+        $dob = trim($dob);
+        if ($dob === '') {
+            return '';
+        }
+
+        $normalized = $this->normalizeDobToDb($dob);
+        if ($normalized !== '' && preg_match('/^(\d{4})/', $normalized, $match) === 1) {
+            return $match[1];
+        }
+
+        return preg_match('/(?<!\d)(\d{4})(?!\d)/', $dob, $match) === 1 ? $match[1] : '';
+    }
+
+    /**
      * Compute whole-years age from a dob string ('DD-MM-YYYY' or 'YYYY-MM-DD').
      */
     private function computeAgeYears(string $dob): ?int
@@ -1110,7 +1128,8 @@ class Abha extends BaseController
     ): array {
         $genderDb   = $this->toPatientGenderValue($genderRaw);
         $ageYears   = $this->computeAgeYears($dob);
-        $birthYear  = preg_match('/^(\d{4})/', trim($dob), $birthYearMatch) === 1 ? $birthYearMatch[1] : '';
+        // ABHA sends DOB as DD-MM-YYYY, patient_master stores YYYY-MM-DD.
+        $birthYear  = $this->extractBirthYear($dob);
         $nameUp     = strtoupper(trim($name));
         $nameTokens = array_values(array_filter(preg_split('/\s+/', $nameUp) ?: [], fn ($t) => strlen($t) >= 3));
         $aadhaar    = preg_replace('/\D/', '', $aadhaar);
@@ -1174,7 +1193,7 @@ class Abha extends BaseController
                 $rowAgeYears = (int) $row['age'];
             }
 
-            $rowBirthYear = preg_match('/^(\d{4})/', $rowDob, $rowBirthYearMatch) === 1 ? $rowBirthYearMatch[1] : '';
+            $rowBirthYear = $this->extractBirthYear($rowDob);
             $birthYearMatch = $birthYear !== '' && $rowBirthYear !== '' && $rowBirthYear === $birthYear;
             $ageMatch       = $birthYearMatch;
             $genderMatch    = $genderDb > 0 && (int) ($row['gender'] ?? 0) === $genderDb;
