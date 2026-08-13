@@ -1436,6 +1436,10 @@
                     return;
                 }
                 window.AbhaVerifyModal.open(identifier || '', lookupResponse || null, function(profile) {
+                    if (profile && profile.need_confirmation === false && Number(profile.patient_id || 0) > 0) {
+                        showRegResult(profile);
+                        return;
+                    }
                     window.AbhaPatientMatchModal.open(profile, profile.candidates || [], function(finalResponse) {
                         showRegResult(finalResponse);
                     });
@@ -1448,6 +1452,10 @@
                     return;
                 }
                 window.AbhaCreateModal.open(function(profile) {
+                    if (profile && profile.need_confirmation === false && Number(profile.patient_id || 0) > 0) {
+                        if (typeof showRegResult === 'function') showRegResult(profile);
+                        return;
+                    }
                     window.AbhaPatientMatchModal.open(profile, profile.candidates || [], function(finalResponse) {
                         if (typeof showRegResult === 'function') showRegResult(finalResponse);
                     });
