@@ -1015,11 +1015,12 @@ class Abha extends BaseController
     ): array {
         $genderDb   = $this->toPatientGenderValue($genderRaw);
         $ageYears   = $this->computeAgeYears($dob);
+        $birthYear  = preg_match('/^(\d{4})/', trim($dob), $birthYearMatch) === 1 ? $birthYearMatch[1] : '';
         $nameUp     = strtoupper(trim($name));
         $nameTokens = array_values(array_filter(preg_split('/\s+/', $nameUp) ?: [], fn ($t) => strlen($t) >= 3));
         $aadhaar    = preg_replace('/\D/', '', $aadhaar);
 
-        if ($nameTokens === [] && $mobile === '' && $aadhaar === '' && $ageYears === null) {
+        if ($nameTokens === [] && $mobile === '' && $aadhaar === '' && $abhaNumClean === '' && $birthYear === '') {
             return [];
         }
 
@@ -1078,18 +1079,26 @@ class Abha extends BaseController
                 $rowAgeYears = (int) $row['age'];
             }
 
-            $ageMatch     = $ageYears !== null && $rowAgeYears !== null && abs($rowAgeYears - $ageYears) <= 1;
-            $genderMatch  = $genderDb > 0 && (int) ($row['gender'] ?? 0) === $genderDb;
-            $mobileMatch  = $mobile !== '' && preg_replace('/\D/', '', (string) ($row['mphone1'] ?? '')) === $mobile;
-            $aadhaarMatch = $aadhaar !== '' && preg_replace('/\D/', '', (string) ($row['udai'] ?? '')) === $aadhaar;
+            $rowBirthYear = preg_match('/^(\d{4})/', $rowDob, $rowBirthYearMatch) === 1 ? $rowBirthYearMatch[1] : '';
+            $birthYearMatch = $birthYear !== '' && $rowBirthYear !== '' && $rowBirthYear === $birthYear;
+            $ageMatch       = $birthYearMatch;
+            $genderMatch    = $genderDb > 0 && (int) ($row['gender'] ?? 0) === $genderDb;
+            $mobileMatch    = $mobile !== '' && preg_replace('/\D/', '', (string) ($row['mphone1'] ?? '')) === $mobile;
+            $aadhaarMatch   = $aadhaar !== '' && preg_replace('/\D/', '', (string) ($row['udai'] ?? '')) === $aadhaar;
 
             $rowAbha      = $abhaField !== null ? trim((string) ($row[$abhaField] ?? '')) : '';
             $abhaConflict = $rowAbha !== '' && preg_replace('/\D/', '', $rowAbha) !== $abhaNumClean;
 
-            $score = ($nameOverlap ? 2 : 0) + ($ageMatch ? 1 : 0) + ($genderMatch ? 1 : 0) + ($mobileMatch ? 2 : 0) + ($aadhaarMatch ? 3 : 0);
-            if ($score <= 0) {
+            $abhaMatch = $abhaNumClean !== '' && $rowAbha !== ''
+                && preg_replace('/\D/', '', $rowAbha) === $abhaNumClean;
+            $minimumDemographicMatch = $nameOverlap && $birthYearMatch && $genderMatch;
+            if (! $abhaMatch && ! $aadhaarMatch && ! $minimumDemographicMatch) {
                 continue;
             }
+
+            $score = ($abhaMatch ? 12 : 0) + ($aadhaarMatch ? 10 : 0)
+                + ($minimumDemographicMatch ? 5 : 0) + ($nameOverlap ? 2 : 0)
+                + ($birthYearMatch ? 2 : 0) + ($genderMatch ? 1 : 0) + ($mobileMatch ? 4 : 0);
 
             $candidates[] = [
                 'id'            => (int) ($row['id'] ?? 0),
@@ -1115,6 +1124,7 @@ class Abha extends BaseController
                     'gender'  => $genderMatch,
                     'mobile'  => $mobileMatch,
                     'aadhaar' => $aadhaarMatch,
+                    'abha'    => $abhaMatch,
                 ],
                 'score' => $score,
             ];
