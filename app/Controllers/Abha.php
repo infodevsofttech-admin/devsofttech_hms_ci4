@@ -474,6 +474,7 @@ class Abha extends BaseController
             'abha_qr_url' => $abhaQrUrl,
             'patient_mobile' => $mobileNo,
             'mobile_verified' => $mobileVerified,
+            'stored_abha_card' => trim((string) ($patient['abha_card_base64'] ?? '')),
         ]);
     }
 
@@ -803,6 +804,7 @@ class Abha extends BaseController
         $abhaMeta = [
             'abha_address'      => (string) ($this->request->getPost('abha_address') ?? ''),
             'profile_photo'     => (string) ($this->request->getPost('photo') ?? ''),
+            'card_base64'       => (string) ($this->request->getPost('card_base64') ?? ''),
             'verified_status'   => (string) ($this->request->getPost('verified_status') ?? ''),
             'verification_type' => (string) ($this->request->getPost('verification_type') ?? ''),
             'kyc_verified'      => $this->request->getPost('kyc_verified'),
@@ -1025,7 +1027,7 @@ class Abha extends BaseController
         }
 
         $selectFields = array_values(array_intersect(
-            ['id', 'p_code', 'p_fname', 'p_lname', 'gender', 'dob', 'age', 'mphone1', 'udai', 'add1', 'district', 'state', 'zip'],
+            ['id', 'p_code', 'p_fname', 'p_lname', 'gender', 'dob', 'age', 'mphone1', 'udai', 'add1', 'district', 'state', 'zip', 'profile_file_id', 'profile_picture', 'abha_profile_photo_base64'],
             $fields
         ));
         $select = implode(',', $selectFields);
@@ -1109,6 +1111,7 @@ class Abha extends BaseController
                 'dob'           => $rowDob,
                 'age'           => $rowAgeYears,
                 'mobile'        => (string) ($row['mphone1'] ?? ''),
+                'photo_url'     => $this->resolvePatientPhotoUrl($row),
                 'address'       => trim(implode(', ', array_filter([
                     (string) ($row['add1'] ?? ''),
                     (string) ($row['district'] ?? ''),
@@ -1390,6 +1393,11 @@ class Abha extends BaseController
         $profilePhoto = trim((string) ($abhaMeta['profile_photo'] ?? ''));
         if ($profilePhoto !== '' && in_array('abha_profile_photo_base64', $fields, true)) {
             $target['abha_profile_photo_base64'] = $profilePhoto;
+        }
+
+        $cardBase64 = trim((string) ($abhaMeta['card_base64'] ?? ''));
+        if ($cardBase64 !== '' && in_array('abha_card_base64', $fields, true)) {
+            $target['abha_card_base64'] = $cardBase64;
         }
     }
 

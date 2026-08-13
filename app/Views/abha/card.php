@@ -168,6 +168,8 @@
     background: #fff;
   }
   .qr-value { margin-top: 5px; font-size: 10px; color: #3b5474; word-break: break-word; }
+  .official-card-wrap { margin-top: 14px; text-align: center; }
+  .official-card { display: block; width: 100%; max-height: 480px; object-fit: contain; border: 1px solid #d8e6fb; border-radius: 8px; background: #fff; }
   .abha-number-wrap {
     margin-top: 12px;
     border: 1px solid #d3e3f9;
@@ -241,6 +243,10 @@ $abhaQrUrl = esc($abha_qr_url ?? '');
 $barcodeImage = esc($hms_barcode_image ?? '');
 $patientMobile = esc($patient_mobile ?? '');
 $mobileVerified = (bool) ($mobile_verified ?? false);
+$storedAbhaCard = trim((string) ($stored_abha_card ?? ''));
+$storedAbhaCardSrc = $storedAbhaCard !== ''
+  ? (str_starts_with($storedAbhaCard, 'data:') ? $storedAbhaCard : 'data:image/png;base64,' . $storedAbhaCard)
+  : '';
 ?>
 
 <div class="abha-shell">
@@ -262,6 +268,13 @@ $mobileVerified = (bool) ($mobile_verified ?? false);
       </div>
     </div>
   </div>
+
+  <?php if ($storedAbhaCardSrc !== ''): ?>
+    <div class="official-card-wrap">
+      <div class="meta">Stored official ABHA card</div>
+      <img class="official-card" src="<?= esc($storedAbhaCardSrc) ?>" alt="Stored official ABHA card">
+    </div>
+  <?php endif; ?>
 
   <?php if ($barcodeImage !== '' && $hmsId !== ''): ?>
     <div class="hospital-strip">

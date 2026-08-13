@@ -60,6 +60,7 @@
                             <span class="badge bg-secondary" id="abhaMatch_count">0 found</span>
                         </div>
                         <div id="abhaMatch_candidates" style="max-height:360px;overflow-y:auto"></div>
+                        <div id="abhaMatch_update_preview" class="alert alert-info py-2 small d-none"></div>
                         <div id="abhaMatch_empty" class="alert alert-warning py-2 small d-none">
                             No matching patient found in HMS by name, age or gender. You can create a new patient record.
                         </div>
@@ -118,6 +119,27 @@ window.AbhaPatientMatchModal = (function () {
     function alertHtml(type, msg) {
         return '<div class="alert alert-' + type + ' py-2">' + msg + '</div>';
     }
+    function profileValue(value) { return String(value == null ? '' : value).trim().toUpperCase(); }
+    function normalizedGender(value) {
+        var gender = profileValue(value);
+        if (gender === '1' || gender === 'M' || gender === 'MALE') return 'M';
+        if (gender === '2' || gender === 'F' || gender === 'FEMALE') return 'F';
+        if (gender === '3' || gender === 'O' || gender === 'OTHER') return 'O';
+        return gender;
+    }
+    function renderUpdatePreview(c) {
+        var fields = [];
+        var p = _profile || {};
+        if (profileValue(p.name) !== profileValue(c.name)) fields.push('Name');
+        if (normalizedGender(p.gender) !== normalizedGender(c.gender_label)) fields.push('Gender');
+        if (String(p.dob || '').slice(0, 4) !== String(c.dob || '').slice(0, 4)) fields.push('Birth year');
+        if (String(p.mobile || '').replace(/\D/g, '') !== String(c.mobile || '').replace(/\D/g, '')) fields.push('Mobile');
+        var abhaAddress = [p.address, p.district, p.state, p.zip].filter(Boolean).join(', ');
+        if (profileValue(abhaAddress) !== profileValue(c.address)) fields.push('Address');
+        $('#abhaMatch_update_preview').toggleClass('d-none', !fields.length).html(
+            fields.length ? '<strong>Update Details will change:</strong> ' + fields.map(esc).join(', ') : '<strong>No HMS demographic changes detected.</strong>'
+        );
+    }
 
     function renderProfile(p) {
         var abhaNum = p.abha_number || '';
@@ -157,7 +179,8 @@ window.AbhaPatientMatchModal = (function () {
                 + '  <div class="card-body py-2">'
                 + '    <div class="d-flex justify-content-between align-items-start">'
                 + '      <div>'
-                + '        <div class="fw-semibold">' + esc(c.name || '—') + ' <small class="text-muted">(' + esc(c.p_code || '') + ')</small></div>'
+                + (c.photo_url ? '        <img src="' + esc(c.photo_url) + '" alt="Patient photo" class="rounded-circle me-2" style="width:38px;height:38px;object-fit:cover;vertical-align:middle">' : '')
+                + '        <div class="fw-semibold d-inline-block">' + esc(c.name || '—') + ' <small class="text-muted">(' + esc(c.p_code || '') + ')</small></div>'
                 + '        <div class="mt-1">'
                 +            badge(m.name, 'Name')
                 +            badge(m.age, 'Age ' + (c.age != null ? c.age : '?'))
@@ -185,6 +208,8 @@ window.AbhaPatientMatchModal = (function () {
         $('.abhaMatch-candidate[data-id="' + id + '"]').addClass('border-success bg-success-subtle');
         $('.abhaMatch-radio[value="' + id + '"]').prop('checked', true);
         $('#abhaMatch_keep_existing_btn,#abhaMatch_update_existing_btn').prop('disabled', !id);
+        var selected = (_profile && window._abhaMatchCandidates || []).find(function (candidate) { return Number(candidate.id) === Number(id); });
+        if (selected) renderUpdatePreview(selected);
     }
 
     function submitConfirm(action, patientId, updateMode, $btn) {
@@ -205,6 +230,7 @@ window.AbhaPatientMatchModal = (function () {
             dob: _profile.dob || '',
             abha_address: _profile.abha_address || '',
             photo: _profile.photo || '',
+            card_base64: _profile.card_base64 || '',
             verified_status: _profile.verified_status || '',
             verification_type: _profile.verification_type || '',
             kyc_verified: _profile.kyc_verified,
@@ -264,12 +290,14 @@ window.AbhaPatientMatchModal = (function () {
     return {
         open: function (profile, candidates, onResolved) {
             _profile = profile || {};
+            window._abhaMatchCandidates = candidates || [];
             _selectedId = 0;
             _onResolved = onResolved;
             $('#abhaMatch_alert').empty();
             $('#abhaMatch_keep_existing_btn,#abhaMatch_update_existing_btn').prop('disabled', true);
             renderProfile(_profile);
             renderCandidates(candidates || []);
+            $('#abhaMatch_update_preview').addClass('d-none').empty();
             if (_bsModal) { _bsModal.show(); } else { $modalEl.modal('show'); }
         }
     };
