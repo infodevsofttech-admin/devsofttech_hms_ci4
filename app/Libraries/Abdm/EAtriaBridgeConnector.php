@@ -850,8 +850,26 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         }
 
         $result['suggestions'] = $this->normalizeAbhaAddressSuggestions($result);
+        $result['bridge_mock'] = $result['suggestions'] === [] && $this->isMockBridgeResponse($result);
 
         return $result;
+    }
+
+    /**
+     * The Bridge answers stubbed endpoints with {"ok":1,"mode":"test"} and no real
+     * payload; treating that as success would report false results to the operator.
+     *
+     * @param array<string, mixed> $result
+     */
+    private function isMockBridgeResponse(array $result): bool
+    {
+        if (strtolower(trim((string) ($result['mode'] ?? ''))) === 'test') {
+            return true;
+        }
+
+        $data = is_array($result['data'] ?? null) ? $result['data'] : [];
+
+        return stripos((string) ($data['message'] ?? ''), 'mock') !== false;
     }
 
     public function abhaSetAddress(array $payload): array
@@ -877,6 +895,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             if ($preferred !== '') {
                 $result['abha_address'] = $preferred;
             }
+            $result['bridge_mock'] = $preferred === '' && $this->isMockBridgeResponse($result);
         }
 
         return $result;

@@ -391,6 +391,10 @@ class Abha extends BaseController
             'supported'   => true,
             'txn_id'      => $txnId,
             'suggestions' => array_values((array) ($result['suggestions'] ?? [])),
+            'bridge_mock' => ! empty($result['bridge_mock']),
+            'error_text'  => ! empty($result['bridge_mock'])
+                ? 'The ABDM Bridge is running in test mode and returned a mock response, so no ABHA address suggestions were provided.'
+                : '',
         ]);
     }
 
@@ -432,6 +436,14 @@ class Abha extends BaseController
         }
 
         $data = is_array($result['data'] ?? null) ? $result['data'] : [];
+
+        if (! empty($result['bridge_mock'])) {
+            return $this->response->setJSON([
+                'ok'         => 0,
+                'error_text' => 'The ABDM Bridge is running in test mode and did not apply the ABHA address. Ask the Bridge team to enable live mode for /v3/abha/set-address.',
+                'request_id' => (string) ($result['request_id'] ?? ''),
+            ]);
+        }
 
         return $this->response->setJSON([
             'ok'           => 1,
