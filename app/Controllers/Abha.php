@@ -1506,12 +1506,14 @@ class Abha extends BaseController
         $candidates = [
             $payload['ABHAProfile'] ?? null,
             $payload['gateway_abha_profile'] ?? null,
+            $payload['data']['gateway_abha_profile'] ?? null,
+            $payload['gateway_patient'] ?? null,
+            $payload['data']['gateway_patient'] ?? null,
             $payload['profile'] ?? null,
             $mergedAccount,
             $account,
             $loginAccount,
             $payload['data']['account'] ?? null,
-            $payload['gateway_patient'] ?? null,
             $payload,
         ];
 
@@ -1530,7 +1532,7 @@ class Abha extends BaseController
      */
     private function extractAbhaProfileName(array $profile, array $payload): string
     {
-        foreach ([$profile, $payload, $payload['account'] ?? [], $payload['data']['account'] ?? [], $payload['gateway_abha_profile'] ?? [], $payload['gateway_patient'] ?? []] as $source) {
+        foreach ([$profile, $payload, $payload['account'] ?? [], $payload['data']['account'] ?? [], $payload['gateway_abha_profile'] ?? [], $payload['gateway_patient'] ?? [], $payload['data']['gateway_patient'] ?? []] as $source) {
             if (! is_array($source)) {
                 continue;
             }
@@ -1863,7 +1865,7 @@ class Abha extends BaseController
         $district = $firstNonEmpty([$profile['districtName'] ?? null, $profile['district_name'] ?? null, $profile['district'] ?? null, $payload['districtName'] ?? null, $payload['district_name'] ?? null, $payload['district'] ?? null]);
         $state = $firstNonEmpty([$profile['stateName'] ?? null, $profile['state_name'] ?? null, $profile['state'] ?? null, $payload['stateName'] ?? null, $payload['state_name'] ?? null, $payload['state'] ?? null]);
         $zip = $firstNonEmpty([$profile['pinCode'] ?? null, $profile['pincode'] ?? null, $profile['pin'] ?? null, $payload['pinCode'] ?? null, $payload['pincode'] ?? null, $payload['pin'] ?? null]);
-        $photo = $firstNonEmpty([$profile['profilePhoto'] ?? null, $profile['profile_photo'] ?? null, $profile['photo'] ?? null, $payload['profilePhoto'] ?? null, $payload['profile_photo'] ?? null, $payload['photo'] ?? null]);
+        $photo = $firstNonEmpty([$profile['profilePhoto'] ?? null, $profile['profile_photo'] ?? null, $profile['photo'] ?? null, $payload['patient_photo'] ?? null, $payload['profilePhoto'] ?? null, $payload['profile_photo'] ?? null, $payload['photo'] ?? null, $payload['data']['profilePhoto'] ?? null, $payload['data']['patient_photo'] ?? null]);
         $cardData = $this->extractAbhaCardData($payload);
 
         $db = \Config\Database::connect();
@@ -1896,7 +1898,7 @@ class Abha extends BaseController
 
     private function extractAbhaCardData(array $payload): string
     {
-        $sources = [$payload, $payload['account'] ?? [], $payload['profile'] ?? []];
+        $sources = [$payload, $payload['data'] ?? [], $payload['account'] ?? [], $payload['profile'] ?? [], $payload['gateway_patient'] ?? [], $payload['data']['gateway_patient'] ?? []];
         foreach ($sources as $source) {
             if (! is_array($source)) { continue; }
             foreach (['card_base64', 'card_data', 'abhaCard', 'abha_card', 'official_card', 'cardData', 'card'] as $key) {
