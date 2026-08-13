@@ -43,6 +43,7 @@
 <?= view('partials/abha_patient_match_modal') ?>
 <?= view('partials/abha_verify_modal') ?>
 <?= view('partials/abha_create_modal') ?>
+<?= view('partials/abha_qr_modal') ?>
 <section class="content">
     <div class="row">
         <div class="col-md-12">
@@ -731,7 +732,16 @@
 
                       <!-- Panel: Method 2 - Scan QR -->
                       <div id="abhareg_panel_qr" class="abhareg-panel d-none">
-                        <p class="text-muted small mb-2">Point camera at patient's ABHA QR code (from PHR app or printed card).</p>
+                        <p class="text-muted small mb-2">Scan the ABHA QR from the patient's card or PHR app.</p>
+                        <div class="d-flex gap-2 flex-wrap mb-3">
+                          <button type="button" id="abhareg_qr_open_modal_btn" class="btn btn-primary btn-sm">
+                            <i class="bi bi-upc-scan me-1"></i>Use QR Scanner
+                          </button>
+                          <button type="button" id="abhareg_qr_start_camera_btn" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-camera me-1"></i>Use Device Camera
+                          </button>
+                        </div>
+                        <div id="abhareg_qr_camera_wrap" class="d-none">
                                                 <div class="mb-2" style="max-width:300px;">
                                                     <label for="abhareg_qr_camera_select" class="form-label small mb-1">Camera</label>
                                                     <div class="d-flex gap-2 align-items-start">
@@ -742,6 +752,7 @@
                                                     </div>
                                                 </div>
                         <div id="abhareg_qr_reader" style="width:300px;max-width:100%;"></div>
+                        </div>
                         <div id="abhareg_qr_result" class="mt-2"></div>
                         <div class="mt-2">
                           <button type="button" id="abhareg_qr_stop_btn" class="btn btn-outline-secondary btn-sm d-none">
@@ -1425,10 +1436,22 @@
                 if (method === 'number') {
                     $('#abhareg_panel_number').addClass('d-none');
                     openAbhaAccountVerification('', null);
-                } else if (method === 'qr') { initQrScanner(); }
+                } else if (method === 'qr') { openAbhaQrScan(); }
                 else { stopQrScanner(); }
                 if (method === 'facility') { loadFacilityQr(false); }
             };
+
+            function openAbhaQrScan() {
+                if (!window.AbhaQrModal) {
+                    regAlert('abhareg_qr_result', 'danger', 'ABHA QR modal is unavailable. Reload the page and try again.');
+                    return;
+                }
+                window.AbhaQrModal.open(function(profile) {
+                    window.AbhaPatientMatchModal.open(profile, profile.candidates || [], function(finalResponse) {
+                        showRegResult(finalResponse);
+                    });
+                });
+            }
 
             function openAbhaAccountVerification(identifier, lookupResponse) {
                 if (!window.AbhaVerifyModal) {
@@ -1652,11 +1675,15 @@
                         { fps: 10, qrbox: { width: 250, height: 250 } },
                         function(decodedText) {
                             stopQrScanner();
-                            var abha = decodedText.trim();
-                            var numMatch = abha.match(/\d{14}/);
-                            if (numMatch) { abha = numMatch[0]; }
-                            $('#abhareg_qr_result').html('<div class="alert alert-success py-2"><i class="bi bi-qr-code me-2"></i>QR scanned: <strong>' + abha + '</strong></div>');
-                            openAbhaAccountVerification(abha, null);
+                            var scanned = decodedText.trim();
+                            $('#abhareg_qr_result').html('<div class="alert alert-success py-2"><i class="bi bi-qr-code me-2"></i>QR scanned.</div>');
+                            if (window.AbhaQrModal) {
+                                openAbhaQrScan();
+                                window.AbhaQrModal.submit(scanned);
+                                return;
+                            }
+                            var numMatch = scanned.match(/\d{14}/);
+                            openAbhaAccountVerification(numMatch ? numMatch[0] : scanned, null);
                         },
                         function() {}
                     ).then(function() {
@@ -1890,6 +1917,11 @@
             });
 
             $('#abhareg_qr_stop_btn').on('click', function() { stopQrScanner(); });
+            $('#abhareg_qr_open_modal_btn').on('click', function() { openAbhaQrScan(); });
+            $('#abhareg_qr_start_camera_btn').on('click', function() {
+                $('#abhareg_qr_camera_wrap').removeClass('d-none');
+                initQrScanner(qrSelectedCamera || '');
+            });
             $('#abhareg_qr_camera_select').on('change', function() {
                 var cameraId = ($(this).val() || '').toString();
                 saveQrSelectedCamera(cameraId);

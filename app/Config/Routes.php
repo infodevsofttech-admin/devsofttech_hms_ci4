@@ -776,6 +776,7 @@ $routes->post('abha/create/address', 'Abha::address', ['filter' => 'permission:a
 $routes->post('abha/create/address_suggestions', 'Abha::addressSuggestions', ['filter' => 'permission:abdm.abha.create']);
 $routes->get('abha/card/(:segment)', 'Abha::card/$1', ['filter' => 'permission:abdm.abha.create']);
 $routes->post('abha/register/validate', 'Abha::validateAbha', ['filter' => 'permission:abdm.abha.create']);
+$routes->post('abha/register/qr_scan', 'Abha::qrScan', ['filter' => 'permission:abdm.abha.create']);
 $routes->post('abha/register/login/request-otp', 'Abha::loginRequestOtp', ['filter' => 'permission:abdm.abha.create']);
 $routes->post('abha/register/login/verify-otp', 'Abha::loginVerifyOtp', ['filter' => 'permission:abdm.abha.create']);
 $routes->get('abha/register/facility_qr', 'Abha::facilityQr', ['filter' => 'permission:abdm.abha.create']);

@@ -2047,6 +2047,104 @@ class Abha extends BaseController
         ]);
     }
 
+    // -------------------------------------------------------------------------
+    // ABHA QR scan — POST abha/register/qr_scan
+    // Accepts the JSON payload printed on an ABHA card / PHR app QR code and
+    // returns the demographics plus possible existing HMS patients. The QR is a
+    // demographic capture, not an OTP authentication, so it is never marked VERIFIED.
+    // -------------------------------------------------------------------------
+    public function qrScan()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $raw = trim((string) ($this->request->getPost('qr_data') ?? ''));
+        if ($raw === '') {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'Scan or paste the ABHA QR content first.']);
+        }
+
+        $decoded = json_decode($raw, true);
+        if (! is_array($decoded)) {
+            // Some cards/apps encode only the ABHA number or address.
+            $digits = preg_replace('/\D/', '', $raw);
+            if (strlen($digits) === 14) {
+                $decoded = ['hidn' => $digits];
+            } elseif (str_contains($raw, '@')) {
+                $decoded = ['hid' => $raw];
+            } else {
+                return $this->response->setJSON([
+                    'ok' => 0,
+                    'error_text' => 'This QR code is not a recognised ABHA card. Scan the QR printed on the ABHA card or shown in the ABHA/PHR app.',
+                ]);
+            }
+        }
+
+        // ABHA QR keys vary by issuer ("state name", "stateName", "state_name").
+        $normalized = [];
+        foreach ($decoded as $key => $value) {
+            $flatKey = strtolower(preg_replace('/[^a-z0-9]/i', '', (string) $key));
+            if ($flatKey !== '' && is_scalar($value)) {
+                $normalized[$flatKey] = trim((string) $value);
+            }
+        }
+
+        $pick = static function (array $keys) use ($normalized): string {
+            foreach ($keys as $key) {
+                if (trim((string) ($normalized[$key] ?? '')) !== '') {
+                    return trim((string) $normalized[$key]);
+                }
+            }
+            return '';
+        };
+
+        $abhaNumber  = preg_replace('/\D/', '', $pick(['hidn', 'abhanumber', 'healthidnumber', 'abhano', 'abhaid']));
+        $abhaAddress = $pick(['hid', 'phr', 'phraddress', 'abhaaddress', 'healthid', 'preferredabhaaddress']);
+        $name        = $pick(['name', 'fullname', 'patientname']);
+        $gender      = $pick(['gender', 'sex']);
+        $dob         = $pick(['dob', 'dateofbirth', 'birthdate']);
+        $mobile      = preg_replace('/\D/', '', $pick(['mobile', 'mobilenumber', 'phone', 'contact']));
+        $address     = $pick(['address', 'addressline']);
+        $district    = $pick(['districtname', 'district', 'distname']);
+        $state       = $pick(['statename', 'state']);
+        $zip         = $pick(['pincode', 'pin', 'postalcode', 'zip']);
+
+        if ($abhaNumber === '' && $abhaAddress === '') {
+            return $this->response->setJSON([
+                'ok' => 0,
+                'error_text' => 'The QR code did not contain an ABHA number or ABHA address.',
+            ]);
+        }
+
+        if ($abhaNumber === '' && str_contains($abhaAddress, '@')) {
+            $candidateDigits = preg_replace('/\D/', '', explode('@', $abhaAddress)[0]);
+            if (strlen($candidateDigits) === 14) {
+                $abhaNumber = $candidateDigits;
+            }
+        }
+
+        $db        = \Config\Database::connect();
+        $fields    = $db->getFieldNames('patient_master') ?? [];
+        $abhaField = $this->resolveAbhaFieldName($fields);
+
+        return $this->response->setJSON([
+            'ok'                => 1,
+            'need_confirmation' => true,
+            'abha_number'       => $abhaNumber,
+            'abha_address'      => $abhaAddress,
+            'name'              => $name,
+            'mobile'            => $mobile,
+            'gender'            => $gender,
+            'dob'               => $dob,
+            'address'           => $address,
+            'district'          => $district,
+            'state'             => $state,
+            'zip'               => $zip,
+            'verification_type' => 'QR_SCAN',
+            'candidates'        => $this->findMatchingCandidates($db, $fields, $name, $mobile, $gender, $dob, '', $abhaField, $abhaNumber),
+        ]);
+    }
+
     private function extractAbhaCardData(array $payload): string
     {
         $sources = [$payload, $payload['data'] ?? [], $payload['account'] ?? [], $payload['profile'] ?? [], $payload['gateway_patient'] ?? [], $payload['data']['gateway_patient'] ?? []];
