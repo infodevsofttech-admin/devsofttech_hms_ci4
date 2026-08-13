@@ -142,8 +142,8 @@ class Abha extends BaseController
             'ok'                => 1,
             'txn_id'            => $newTxnId,
             'skip_mobile'       => true,
-            'card_base64'       => $this->extractAbhaCardData($payload),
-            'card_content_type' => $this->resolveAbhaCardContentType($payload),
+            'card_base64'       => $this->extractAbhaCardData($result),
+            'card_content_type' => $this->resolveAbhaCardContentType($result),
             'abha_number'       => $abhaNum,
             'name'              => $name,
             'photo'             => $photo,
@@ -305,8 +305,8 @@ class Abha extends BaseController
 
         $responseBase = [
             'ok'                => 1,
-            'card_base64'       => $this->extractAbhaCardData($payload),
-            'card_content_type' => $this->resolveAbhaCardContentType($payload),
+            'card_base64'       => $this->extractAbhaCardData($result),
+            'card_content_type' => $this->resolveAbhaCardContentType($result),
             'abha_number'       => $abhaNum,
             'name'              => $name,
             'photo'             => $photo,
@@ -2015,7 +2015,8 @@ class Abha extends BaseController
 
     private function resolveAbhaCardContentType(array $payload): string
     {
-        $format = strtolower(trim((string) ($payload['card_content_type'] ?? $payload['cardContentType'] ?? $payload['card_format'] ?? ($payload['account']['card_format'] ?? ''))));
+        $data = is_array($payload['data'] ?? null) ? $payload['data'] : [];
+        $format = strtolower(trim((string) ($payload['card_content_type'] ?? $payload['cardContentType'] ?? $payload['card_format'] ?? ($payload['account']['card_format'] ?? '') ?: ($data['card_format'] ?? ''))));
         if ($format === 'png') { return 'image/png'; }
         if ($format === 'jpg' || $format === 'jpeg') { return 'image/jpeg'; }
         if ($format === 'pdf') { return 'application/pdf'; }

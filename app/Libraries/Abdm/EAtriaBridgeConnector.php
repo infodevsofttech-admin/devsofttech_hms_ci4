@@ -698,29 +698,30 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             return $result;
         }
 
+        return $this->attachOfficialAbhaCard($result);
+    }
+
+    /**
+     * Ensure a verify/enrol response carries the official ABHA card, fetching it
+     * from the Bridge card endpoint when the response itself omits it.
+     *
+     * @param array<string, mixed> $result
+     * @return array<string, mixed>
+     */
+    private function attachOfficialAbhaCard(array $result): array
+    {
         $data = is_array($result['data'] ?? null) ? $result['data'] : [];
         $account = is_array($result['account'] ?? null)
             ? $result['account']
             : (is_array($data['account'] ?? null) ? $data['account'] : []);
-        $abhaNumber = trim((string) ($account['ABHANumber'] ?? $account['abhaNumber'] ?? $account['abha_id'] ?? $data['ABHANumber'] ?? $data['abhaNumber'] ?? $data['abha_id'] ?? ''));
-        $abhaAddress = trim((string) ($account['abhaAddress'] ?? $account['preferredAddress'] ?? $account['abha_address'] ?? $data['abhaAddress'] ?? $data['preferredAddress'] ?? $data['abha_address'] ?? ''));
-        $extractCard = static function (array $source): string {
-            foreach (['card_base64', 'card_data', 'abhaCard', 'abha_card', 'official_card', 'cardData', 'card'] as $key) {
-                $value = $source[$key] ?? '';
-                if (is_string($value) && trim($value) !== '') {
-                    return trim($value);
-                }
-                if (is_array($value)) {
-                    foreach (['base64', 'data', 'card_base64', 'card_data'] as $nestedKey) {
-                        if (is_string($value[$nestedKey] ?? null) && trim($value[$nestedKey]) !== '') {
-                            return trim($value[$nestedKey]);
-                        }
-                    }
-                }
-            }
-            return '';
-        };
-        $card = $extractCard($result) ?: $extractCard($data) ?: $extractCard($account);
+        $profile = is_array($data['ABHAProfile'] ?? null) ? $data['ABHAProfile'] : [];
+        $abhaNumber = trim((string) ($account['ABHANumber'] ?? $account['abhaNumber'] ?? $account['abha_id'] ?? $data['ABHANumber'] ?? $data['abhaNumber'] ?? $data['abha_id'] ?? $profile['ABHANumber'] ?? $profile['abha_id'] ?? ''));
+        $abhaAddress = trim((string) ($account['abhaAddress'] ?? $account['preferredAddress'] ?? $account['abha_address'] ?? $data['abhaAddress'] ?? $data['preferredAddress'] ?? $data['abha_address'] ?? $profile['preferredAbhaAddress'] ?? $profile['abhaAddress'] ?? ''));
+
+        $card = $this->extractOfficialCard($result)
+            ?: $this->extractOfficialCard($data)
+            ?: $this->extractOfficialCard($account)
+            ?: $this->extractOfficialCard($profile);
 
         if ($card === '' && ($abhaNumber !== '' || $abhaAddress !== '')) {
             $cardResult = $this->get('/v3/abha/card', array_filter([
@@ -729,7 +730,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             ], static fn($value): bool => trim((string) $value) !== ''));
             if (! empty($cardResult['ok']) && (int) $cardResult['ok'] === 1) {
                 $cardData = is_array($cardResult['data'] ?? null) ? $cardResult['data'] : $cardResult;
-                $card = $extractCard($cardData);
+                $card = $this->extractOfficialCard($cardData);
                 if ($card !== '') {
                     $result['card_base64'] = $card;
                     $result['card_content_type'] = $this->resolveCardContentType($cardData);
@@ -738,6 +739,28 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         }
 
         return $result;
+    }
+
+    /**
+     * @param array<string, mixed> $source
+     */
+    private function extractOfficialCard(array $source): string
+    {
+        foreach (['card_base64', 'card_data', 'abhaCard', 'abha_card', 'official_card', 'cardData', 'card'] as $key) {
+            $value = $source[$key] ?? '';
+            if (is_string($value) && trim($value) !== '') {
+                return trim($value);
+            }
+            if (is_array($value)) {
+                foreach (['base64', 'data', 'card_base64', 'card_data'] as $nestedKey) {
+                    if (is_string($value[$nestedKey] ?? null) && trim($value[$nestedKey]) !== '') {
+                        return trim($value[$nestedKey]);
+                    }
+                }
+            }
+        }
+
+        return '';
     }
 
     private function resolveCardContentType(array $payload): string
@@ -781,7 +804,13 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         if ($this->hfrId !== '' && empty($body['hfr_id'])) {
             $body['hfr_id'] = $this->hfrId;
         }
-        return $this->post('/v3/abha/aadhaar/verify-otp', $body);
+
+        $result = $this->post('/v3/abha/aadhaar/verify-otp', $body);
+        if (empty($result['ok']) || (int) $result['ok'] !== 1) {
+            return $result;
+        }
+
+        return $this->attachOfficialAbhaCard($result);
     }
 
     public function abhaMobileGenerateOtp(array $payload): array
@@ -813,16 +842,8 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
     public function abhaAddressSuggestions(array $payload): array
     {
         $txnId = (string) ($payload['txn_id'] ?? $payload['txnId'] ?? '');
-        $body  = ['txn_id' => $txnId, 'txnId' => $txnId];
-        if ($this->hfrId !== '') {
-            $body['hfr_id'] = $this->hfrId;
-        }
 
-        $result = $this->postFirstAvailable([
-            '/v3/abha/enrollment/suggestion',
-            '/v3/abha/address/suggestion',
-            '/v3/abha/enrol/suggestion',
-        ], $body);
+        $result = $this->get('/v3/abha/suggestions', ['txnId' => $txnId]);
 
         if (empty($result['ok']) || (int) $result['ok'] !== 1) {
             return $result;
@@ -837,39 +858,24 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
     {
         $txnId   = (string) ($payload['txn_id'] ?? $payload['txnId'] ?? '');
         $address = (string) ($payload['abha_address'] ?? $payload['abhaAddress'] ?? '');
+        // ABDM expects the handle without the @provider suffix.
+        $address = explode('@', $address)[0];
         $body    = [
-            'txn_id'       => $txnId,
-            'txnId'        => $txnId,
-            'abha_address' => $address,
-            'abhaAddress'  => $address,
+            'txnId'       => $txnId,
+            'abhaAddress' => $address,
+            'preferred'   => 1,
         ];
         if ($this->hfrId !== '') {
             $body['hfr_id'] = $this->hfrId;
         }
 
-        return $this->postFirstAvailable([
-            '/v3/abha/enrollment/abha-address',
-            '/v3/abha/address/set',
-            '/v3/abha/enrol/abha-address',
-        ], $body);
-    }
+        $result = $this->post('/v3/abha/set-address', $body);
 
-    /**
-     * Bridge path naming for newer endpoints is still settling; try each
-     * candidate and keep the first response that is not a 404/405.
-     *
-     * @param string[]             $paths
-     * @param array<string, mixed> $body
-     * @return array<string, mixed>
-     */
-    private function postFirstAvailable(array $paths, array $body): array
-    {
-        $result = ['ok' => 0, 'http_code' => 404, 'error_text' => 'Endpoint not available on the ABDM Bridge.'];
-
-        foreach ($paths as $path) {
-            $result = $this->post($path, $body);
-            if (! in_array((int) ($result['http_code'] ?? 0), [404, 405], true)) {
-                return $result;
+        if (! empty($result['ok']) && (int) $result['ok'] === 1) {
+            $data = is_array($result['data'] ?? null) ? $result['data'] : [];
+            $preferred = trim((string) ($data['preferredAbhaAddress'] ?? $data['preferred_abha_address'] ?? $data['abhaAddress'] ?? ''));
+            if ($preferred !== '') {
+                $result['abha_address'] = $preferred;
             }
         }
 
