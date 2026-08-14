@@ -55,7 +55,7 @@ class AbdmGatewayPushClient
             ];
         }
 
-        $baseUrl = rtrim($this->readSetting('ABDM_BRIDGE_URL', 'EATRIA_BRIDGE_URL'), '/');
+        $baseUrl = $this->resolveBridgeBaseUrl();
         if ($baseUrl === '') {
             return [
                 'ok' => false,
@@ -81,7 +81,7 @@ class AbdmGatewayPushClient
             ];
         }
 
-        $url = $baseUrl . '/api/v3/records/push';
+        $url = $this->buildGatewayUrl($baseUrl, '/api/v3/records/push');
         $headers = [
             'Authorization' => 'Bearer ' . $token,
             'Content-Type' => 'application/json',
@@ -153,7 +153,7 @@ class AbdmGatewayPushClient
             ];
         }
 
-        $baseUrl = rtrim($this->readSetting('ABDM_BRIDGE_URL', 'EATRIA_BRIDGE_URL'), '/');
+        $baseUrl = $this->resolveBridgeBaseUrl();
         if ($baseUrl === '') {
             return [
                 'ok' => false,
@@ -443,6 +443,27 @@ class AbdmGatewayPushClient
         $isSubmitted = $httpStatus === 201 || $isDuplicate;
         $message = (string) ($body['message'] ?? $body['error_text'] ?? ('HTTP ' . $httpStatus));
 
+        // The bridge returns field-level FHIR errors here; without them a 422 is undiagnosable.
+        $validationErrors = is_array($body['errors'] ?? null) ? $body['errors'] : [];
+        if ($validationErrors !== []) {
+            $details = [];
+            foreach ($validationErrors as $error) {
+                if (! is_array($error)) {
+                    $details[] = trim((string) $error);
+                    continue;
+                }
+                $details[] = trim(implode(' ', array_filter([
+                    trim((string) ($error['code'] ?? '')),
+                    trim((string) ($error['field'] ?? '')),
+                    trim((string) ($error['message'] ?? '')),
+                ])));
+            }
+            $details = array_values(array_filter($details));
+            if ($details !== []) {
+                $message .= ' | ' . implode(' ; ', $details);
+            }
+        }
+
         if ($isSubmitted || ((int) ($body['ok'] ?? 0) === 1 && $httpStatus >= 200 && $httpStatus < 300)) {
             return [
                 'ok' => true,
@@ -652,6 +673,25 @@ class AbdmGatewayPushClient
         }
 
         return str_repeat('*', strlen($left) - 4) . substr($left, -4) . ($right !== '' ? '@' . $right : '');
+    }
+
+    /**
+     * ABDM_BRIDGE_URL still points at the retired /api/v1/bridge root in older .env files,
+     * so normalise every source down to the bridge API root that serves /api/v3/*.
+     */
+    private function resolveBridgeBaseUrl(): string
+    {
+        $baseUrl = trim($this->readSetting('EATRIA_BRIDGE_URL', 'ABDM_BRIDGE_URL'));
+        if ($baseUrl === '') {
+            return '';
+        }
+
+        $baseUrl = rtrim($baseUrl, '/');
+        $baseUrl = (string) preg_replace('#/api/v\d+/bridge$#i', '/api', $baseUrl);
+        $baseUrl = (string) preg_replace('#/v\d+/bridge$#i', '', $baseUrl);
+        $baseUrl = (string) preg_replace('#/api/v\d+$#i', '/api', $baseUrl);
+
+        return rtrim($baseUrl, '/');
     }
 
     private function buildGatewayUrl(string $baseUrl, string $path): string

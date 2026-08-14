@@ -1102,7 +1102,7 @@ class AbdmGateway extends BaseController
         $abhaId = trim((string) $this->request->getPost('abha_id'));
         $abhaAddressPost = trim((string) $this->request->getPost('abha_address'));
         $consentHandle = trim((string) $this->request->getPost('consent_handle'));
-        $pushToGateway = (int) $this->request->getPost('push_to_gateway') === 1;
+        $pushToGateway = $this->resolveGatewayPushMode();
         $now = Time::now('Asia/Kolkata')->toDateTimeString();
 
         $logBridge = function (string $status, array $responsePayload, string $errorMessage = '', string $eventType = 'abdm.opd.prescription.share') use ($opdId, $patientId, $now, $pushToGateway): void {
@@ -2087,13 +2087,16 @@ class AbdmGateway extends BaseController
         $abhaId = trim((string) $this->request->getPost('abha_id'));
         $abhaAddressPost = trim((string) $this->request->getPost('abha_address'));
         $consentHandle = trim((string) $this->request->getPost('consent_handle'));
-        $pushToGateway = (int) $this->request->getPost('push_to_gateway') === 1;
+        $pushToGateway = $this->resolveGatewayPushMode();
 
         if ($abhaId === '' && $abhaAddressPost !== '') {
             $abhaId = $abhaAddressPost;
         }
         if ($patientId <= 0) {
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'patient_id is required']);
+        }
+        if ($abhaId === '') {
+            $abhaId = $this->resolvePatientAbhaIdentifier($patientId);
         }
 
         $payload = $this->buildImmunizationGatewayPayload($patientId, $recordId, $abhaId);
@@ -2248,6 +2251,10 @@ class AbdmGateway extends BaseController
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'No wellness/vital data found for this patient']);
         }
 
+        if ($abhaId === '') {
+            $abhaId = $this->resolvePatientAbhaIdentifier($patientId);
+        }
+
         return $this->pushAdditionalHiRecord($payload, $patientId, $abhaId, $consentHandle);
     }
 
@@ -2268,6 +2275,10 @@ class AbdmGateway extends BaseController
         $payload = $this->buildHealthDocumentRecordPayload($patientId, $abhaId);
         if ($payload === null) {
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'document_title with document_text/document_base64/file_path is required']);
+        }
+
+        if ($abhaId === '') {
+            $abhaId = $this->resolvePatientAbhaIdentifier($patientId);
         }
 
         return $this->pushAdditionalHiRecord($payload, $patientId, $abhaId, $consentHandle);
@@ -2291,6 +2302,10 @@ class AbdmGateway extends BaseController
         $payload = $this->buildInvoiceRecordPayload($invoiceId, $patientId, $abhaId);
         if ($payload === null) {
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'Invoice not found or patient could not be resolved']);
+        }
+
+        if ($abhaId === '') {
+            $abhaId = $this->resolvePatientAbhaIdentifier((int) $payload['patient_id']);
         }
 
         return $this->pushAdditionalHiRecord($payload, (int) $payload['patient_id'], $abhaId, $consentHandle);
@@ -4505,6 +4520,23 @@ class AbdmGateway extends BaseController
         };
     }
 
+    /**
+     * HMS sits behind NAT, so ABDM/bridge discovery callbacks can never reach it —
+     * records must be pushed to the gateway to become discoverable in the PHR.
+     * Set ABDM_GATEWAY_PUSH_MODE=0 only for a callback-reachable deployment.
+     */
+    private function resolveGatewayPushMode(): bool
+    {
+        $requested = $this->request->getPost('push_to_gateway');
+        if ($requested !== null && trim((string) $requested) !== '') {
+            return (int) $requested === 1;
+        }
+
+        $setting = strtolower(trim($this->readRuntimeSetting('ABDM_GATEWAY_PUSH_MODE')));
+
+        return ! in_array($setting, ['0', 'off', 'false', 'no'], true);
+    }
+
     private function readRuntimeSetting(string $name): string
     {
         $envValue = getenv($name);
@@ -5769,6 +5801,32 @@ class AbdmGateway extends BaseController
             'care_context_display' => 'Invoice ' . (string) ($invoice['invoice_code'] ?? $invoiceId),
             'bundle' => $bundle,
         ];
+    }
+
+    /**
+     * Share endpoints are triggered from screens that do not carry the ABHA, and an
+     * empty identifier silently downgrades the record to local-only instead of pushing.
+     */
+    private function resolvePatientAbhaIdentifier(int $patientId): string
+    {
+        $row = $this->loadPatientRow($patientId);
+        if ($row === []) {
+            return '';
+        }
+
+        $address = trim((string) ($row['abha_address'] ?? ''));
+        if ($address !== '') {
+            return $address;
+        }
+
+        foreach (['abha_id', 'abha_no', 'abha'] as $field) {
+            $value = trim((string) ($row[$field] ?? ''));
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return '';
     }
 
     private function loadPatientRow(int $patientId): array

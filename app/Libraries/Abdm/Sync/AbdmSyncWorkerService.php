@@ -106,43 +106,45 @@ class AbdmSyncWorkerService
 
         $patientProfile = $this->resolvePatientProfile((int) ($record['local_patient_id'] ?? 0), $payload);
 
-        $hospitalId = (int) ($payload['hospital_id'] ?? 0);
-        if ($hospitalId <= 0) {
-            $hospitalId = $this->resolveHospitalIdFromSettings();
+        $hfrId = trim((string) ($record['hfr_id'] ?? ''));
+        if ($hfrId === '') {
+            $hfrId = trim((string) ($payload['hfr_id'] ?? ''));
+        }
+
+        $bundle = $payload['fhir_bundle'] ?? null;
+        if (is_string($bundle)) {
+            $bundle = json_decode($bundle, true);
         }
 
         $recordType = $this->mapHiTypeToRecordType((string) ($record['hi_type'] ?? ''));
-        $careContextPayload = [
-            'hospital_id' => $hospitalId,
-            'hfr_id' => (string) ($record['hfr_id'] ?? ''),
-            'patient' => [
-                'patient_id' => $patientProfile['patient_id'],
-                'name' => $patientProfile['name'],
-                'mobile' => $patientProfile['mobile'],
-                'gender' => $patientProfile['gender'],
-                'year_of_birth' => $patientProfile['year_of_birth'],
-            ],
-            'care_contexts' => [[
-                'reference_number' => (string) ($record['care_context_reference'] ?? ''),
-                'display' => (string) ($record['care_context_display'] ?? $recordType),
-                'record_type' => $recordType,
-                'visit_date' => $this->normalizeVisitDateTime((string) ($record['visit_date'] ?? '')),
-                'doctor_name' => (string) ($record['doctor_name'] ?? ''),
-                'department' => (string) ($record['department'] ?? ''),
-            ]],
+
+        // NAT deployment: the bridge answers ABDM discovery/data requests from pushed
+        // records, so /api/v3/records/push is the only call needed (v1 link is retired).
+        $recordPayload = [
+            'hfr_id' => $hfrId,
+            'hi_type' => (string) ($record['hi_type'] ?? $recordType),
+            'care_context_reference' => (string) ($record['care_context_reference'] ?? ''),
+            'care_context_display' => (string) ($record['care_context_display'] ?? $recordType),
+            'visit_date' => $this->normalizeVisitDateTime((string) ($record['visit_date'] ?? '')),
+            'doctor_name' => (string) ($record['doctor_name'] ?? ''),
+            'department' => (string) ($record['department'] ?? ''),
+            'patient_name' => $patientProfile['name'],
+            'gender' => $patientProfile['gender'],
+            'mobile' => $patientProfile['mobile'],
+            'fhir_bundle' => is_array($bundle) ? $bundle : null,
         ];
 
         $abhaAddress = trim((string) ($patientProfile['abha_address'] ?? ''));
         if ($abhaAddress !== '') {
-            $careContextPayload['patient']['abha_address'] = $abhaAddress;
+            $recordPayload['abha_address'] = $abhaAddress;
         }
 
         $abhaNumber = trim((string) ($patientProfile['abha_number'] ?? ''));
         if ($abhaNumber !== '') {
-            $careContextPayload['patient']['abha_number'] = $abhaNumber;
+            $recordPayload['abha_id'] = $abhaNumber;
         }
 
-        $result = $this->gatewayClient->pushCareContextLink($careContextPayload, $idempotencyKey);
+        $result = $this->gatewayClient->pushRecord($recordPayload, $idempotencyKey);
 
         $this->recordModel->update($syncRecordId, [
             'sync_status' => (bool) ($result['ok'] ?? false) ? 'done' : ((bool) ($result['retryable'] ?? false) ? 'failed' : 'dead'),

@@ -1235,6 +1235,37 @@ class FhirR4Builder
         if ($organizationRef !== '') {
             $encounterResource['serviceProvider'] = ['reference' => $organizationRef];
         }
+
+        // ABDM rejects a DischargeSummaryRecord without at least one Condition or
+        // Procedure resource, so the diagnosis must be a resource and not just narrative.
+        $diagnosisResourceText = trim((string) (
+            $summary['diagnosis_text']
+            ?? $summary['final_diagnosis']
+            ?? $summary['chief_complaints']
+            ?? ''
+        ));
+        $conditionRef = '';
+        if ($diagnosisResourceText !== '') {
+            $conditionUuid = $this->generateUuid();
+            $conditionRef  = 'urn:uuid:' . $conditionUuid;
+
+            $encounterResource['diagnosis'] = [[
+                'condition' => ['reference' => $conditionRef, 'display' => 'Condition'],
+            ]];
+
+            $resourceEntries[] = ['fullUrl' => $conditionRef, 'resource' => [
+                'resourceType'       => 'Condition',
+                'id'                 => $conditionUuid,
+                'meta'               => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition']],
+                'clinicalStatus'     => ['coding' => [['system' => 'http://terminology.hl7.org/CodeSystem/condition-clinical', 'code' => 'active', 'display' => 'Active']]],
+                'verificationStatus' => ['coding' => [['system' => 'http://terminology.hl7.org/CodeSystem/condition-ver-status', 'code' => 'confirmed', 'display' => 'Confirmed']]],
+                'category'           => [['coding' => [['system' => 'http://terminology.hl7.org/CodeSystem/condition-category', 'code' => 'encounter-diagnosis', 'display' => 'Encounter Diagnosis']]]],
+                'code'               => ['text' => $diagnosisResourceText],
+                'subject'            => ['reference' => $patientRef, 'display' => 'Patient'],
+                'encounter'          => ['reference' => $encounterRef],
+            ]];
+        }
+
         $resourceEntries[] = ['fullUrl' => $encounterRef, 'resource' => $encounterResource];
 
         // ── Composition sections per DischargeSummaryRecord spec ──────────────
@@ -1261,6 +1292,15 @@ class FhirR4Builder
                 'title' => 'Medical History',
                 'code'  => ['coding' => [['system' => 'http://snomed.info/sct', 'code' => '1003642006', 'display' => 'Past medical history section']]],
                 'text'  => ['status' => 'generated', 'div' => '<div xmlns="http://www.w3.org/1999/xhtml">' . htmlspecialchars($diagnosisText) . '</div>'],
+            ];
+        }
+
+        if ($conditionRef !== '') {
+            $sections[] = [
+                'title' => 'Diagnosis',
+                'code'  => ['coding' => [['system' => 'http://snomed.info/sct', 'code' => '721981007', 'display' => 'Diagnosis']]],
+                'entry' => [['reference' => $conditionRef, 'display' => 'Condition']],
+                'text'  => ['status' => 'generated', 'div' => '<div xmlns="http://www.w3.org/1999/xhtml">' . htmlspecialchars($diagnosisResourceText) . '</div>'],
             ];
         }
 
@@ -1434,11 +1474,81 @@ class FhirR4Builder
             ]],
         ];
 
+        // ABDM validates InvoiceRecord on a FHIR Invoice resource; Claim alone is rejected.
+        $invoiceLineItems = [];
+        foreach ($claimItems as $index => $claimItem) {
+            $invoiceLineItems[] = [
+                'sequence' => $index + 1,
+                'chargeItemCodeableConcept' => $claimItem['productOrService'],
+                'priceComponent' => [[
+                    'type' => 'base',
+                    'amount' => $claimItem['net'],
+                ]],
+            ];
+        }
+
+        $invoiceResource = [
+            'resourceType' => 'Invoice',
+            'id' => 'invoice-' . $claimId,
+            'status' => (string) ($claim['invoice_status'] ?? 'issued'),
+            'subject' => ['reference' => $patientRef],
+            'date' => $issuedAt,
+            'totalGross' => [
+                'value' => (float) ($claim['total'] ?? 0),
+                'currency' => (string) ($claim['currency'] ?? 'INR'),
+            ],
+            'totalNet' => [
+                'value' => (float) ($claim['total'] ?? 0),
+                'currency' => (string) ($claim['currency'] ?? 'INR'),
+            ],
+        ];
+
+        $invoiceNo = trim((string) ($claim['invoice_no'] ?? ''));
+        if ($invoiceNo !== '') {
+            $invoiceResource['identifier'] = [['system' => 'https://ndhm.in/invoice', 'value' => $invoiceNo]];
+        }
+        if ($invoiceLineItems !== []) {
+            $invoiceResource['lineItem'] = $invoiceLineItems;
+        }
+
+        // ABDM InvoiceRecord must be a document bundle led by a Composition.
+        $composition = [
+            'resourceType' => 'Composition',
+            'id'           => 'comp-invoice-' . $claimId,
+            'status'       => 'final',
+            'type'         => [
+                'coding' => [[
+                    'system'  => 'http://snomed.info/sct',
+                    'code'    => '736762002',
+                    'display' => 'Invoice record',
+                ]],
+                'text' => 'Invoice',
+            ],
+            'subject'  => ['reference' => $patientRef],
+            'date'     => $issuedAt,
+            'title'    => 'Invoice',
+            'encounter' => ['reference' => $encounterRef],
+            'section'  => [[
+                'title' => 'Invoice',
+                'entry' => [
+                    ['reference' => 'Invoice/invoice-' . $claimId],
+                    ['reference' => 'Claim/' . $claimId],
+                ],
+            ]],
+        ];
+
+        $provider = trim((string) ($claim['provider'] ?? ''));
+        if ($provider !== '') {
+            $composition['author'] = [['display' => $provider]];
+        }
+
         return [
             'resourceType' => 'Bundle',
-            'type' => 'collection',
+            'type' => 'document',
             'timestamp' => $issuedAt,
             'entry' => [[
+                'resource' => $composition,
+            ], [
                 'resource' => $this->buildPatientResource($patient),
             ], [
                 'resource' => [
@@ -1447,6 +1557,8 @@ class FhirR4Builder
                     'status' => (string) ($encounter['status'] ?? 'finished'),
                     'subject' => ['reference' => $patientRef],
                 ],
+            ], [
+                'resource' => $invoiceResource,
             ], [
                 'resource' => $claimResource,
             ]],
@@ -2749,7 +2861,8 @@ class FhirR4Builder
         if ($practitionerRef !== '') {
             $composition['author'] = [['reference' => $practitionerRef]];
         }
-        $entries[] = ['resource' => $composition];
+        // ABDM requires the Composition to be the first bundle entry.
+        array_unshift($entries, ['resource' => $composition]);
 
         return [
             'resourceType' => 'Bundle',

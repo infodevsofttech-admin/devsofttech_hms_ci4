@@ -193,6 +193,26 @@
                 </div>
             </div>
 
+            <hr class="my-2">
+            <div class="small fw-semibold mb-1">Share Additional HI Types</div>
+            <div class="row g-2 mb-2">
+                <div class="col-md-4">
+                    <input type="number" min="1" class="form-control form-control-sm" id="tb_hi_patient_id" placeholder="Patient ID">
+                </div>
+                <div class="col-md-4">
+                    <input type="number" min="1" class="form-control form-control-sm" id="tb_hi_opd_id" placeholder="OPD ID (wellness)">
+                </div>
+                <div class="col-md-4">
+                    <input type="number" min="1" class="form-control form-control-sm" id="tb_hi_invoice_id" placeholder="Invoice ID">
+                </div>
+            </div>
+            <div class="d-flex flex-wrap gap-2 mb-2">
+                <button type="button" class="btn btn-outline-info btn-sm" data-hi-share="immunization">Immunization</button>
+                <button type="button" class="btn btn-outline-info btn-sm" data-hi-share="wellness">Wellness</button>
+                <button type="button" class="btn btn-outline-info btn-sm" data-hi-share="health_document">Health Document</button>
+                <button type="button" class="btn btn-outline-info btn-sm" data-hi-share="invoice">Invoice</button>
+            </div>
+
             <div class="small text-muted" id="abdmSandboxStatus">Ready</div>
             <div class="mt-2 d-none" id="abdmScanResolvePane"></div>
         </div>
@@ -1293,6 +1313,51 @@
                 return;
             }
             setSandboxStatus('Claim status queued. Queue ID: ' + (res.queue_id || '-'), 'success');
+        });
+    });
+
+    document.querySelectorAll('[data-hi-share]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var kind = btn.getAttribute('data-hi-share');
+            var patientId = parseInt((document.getElementById('tb_hi_patient_id').value || '0'), 10) || 0;
+            var opdId = parseInt((document.getElementById('tb_hi_opd_id').value || '0'), 10) || 0;
+            var invoiceId = parseInt((document.getElementById('tb_hi_invoice_id').value || '0'), 10) || 0;
+
+            if (kind !== 'invoice' && patientId <= 0) {
+                setSandboxStatus('Enter Patient ID first.', 'warning');
+                return;
+            }
+            if (kind === 'invoice' && invoiceId <= 0) {
+                setSandboxStatus('Enter Invoice ID first.', 'warning');
+                return;
+            }
+
+            var urls = {
+                immunization: '<?= base_url('AbdmGateway/share_immunization_bundle') ?>',
+                wellness: '<?= base_url('AbdmGateway/share_wellness_bundle') ?>',
+                health_document: '<?= base_url('AbdmGateway/share_health_document_bundle') ?>',
+                invoice: '<?= base_url('AbdmGateway/share_invoice_bundle') ?>'
+            };
+
+            var payload = { patient_id: patientId, consent_handle: '' };
+            if (kind === 'wellness') { payload.opd_id = opdId; }
+            if (kind === 'invoice') { payload.invoice_id = invoiceId; }
+
+            var original = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Sharing';
+            setSandboxStatus('Sharing ' + kind + ' record...');
+
+            post(urls[kind], payload, function (res) {
+                btn.disabled = false;
+                btn.innerHTML = original;
+                if (!res || parseInt(res.ok || '0', 10) !== 1) {
+                    setSandboxStatus(res.error_text || res.error || ('Failed to share ' + kind + ' record.'), 'danger');
+                    return;
+                }
+                setSandboxStatus(kind + ' shared. Care context: ' + (res.care_context_reference || '-')
+                    + (res.queue_id ? (' | Queue: ' + res.queue_id) : ''), 'success');
+            });
         });
     });
 
