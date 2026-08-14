@@ -38,7 +38,7 @@ $BLOCK_START
 * * * * * cd $PROJECT_DIR && $PHP_BIN spark snomed:process-coding >> $LOG_DIR/snomed_process.log 2>&1
 */2 * * * * cd $PROJECT_DIR && $PHP_BIN spark abdm:hiu-poll --limit=30 >> $LOG_DIR/abdm_hiu_poll.log 2>&1
 */5 * * * * cd $PROJECT_DIR && $PHP_BIN spark abdm:hiu-retry --limit=20 >> $LOG_DIR/abdm_hiu_retry.log 2>&1
-30 2 * * * cd $PROJECT_DIR && $PHP_BIN spark abdm:hiu-prune --days=2 --optimize >> $LOG_DIR/abdm_hiu_prune.log 2>&1
+30 2 * * * cd $PROJECT_DIR && $PHP_BIN spark abdm:prune-logs --days=2 --optimize >> $LOG_DIR/abdm_prune_logs.log 2>&1
 $BLOCK_END
 EOF
 
