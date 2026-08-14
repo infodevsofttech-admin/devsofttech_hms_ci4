@@ -153,6 +153,7 @@ class Abha extends BaseController
             'card_base64'       => $this->extractAbhaCardData($result),
             'card_content_type' => $this->resolveAbhaCardContentType($result),
             'card_source'       => $this->resolveAbhaCardSource($result),
+            'card_message'      => $this->resolveAbhaCardMessage($result),
             'abha_number'       => $abhaNum,
             'name'              => $name,
             'photo'             => $photo,
@@ -325,6 +326,7 @@ class Abha extends BaseController
             'card_base64'       => $this->extractAbhaCardData($result),
             'card_content_type' => $this->resolveAbhaCardContentType($result),
             'card_source'       => $this->resolveAbhaCardSource($result),
+            'card_message'      => $this->resolveAbhaCardMessage($result),
             'abha_number'       => $abhaNum,
             'name'              => $name,
             'photo'             => $photo,
@@ -2105,6 +2107,7 @@ class Abha extends BaseController
             'card_base64' => $cardData,
             'card_content_type' => $this->resolveAbhaCardContentType($payload),
             'card_source' => $this->resolveAbhaCardSource($payload),
+            'card_message' => $this->resolveAbhaCardMessage($payload),
             'candidates' => $candidates,
         ]);
     }
@@ -2224,7 +2227,9 @@ class Abha extends BaseController
         ];
         foreach ($sources as $source) {
             if (! is_array($source)) { continue; }
-            foreach (['official_card', 'card_data_uri', 'card_base64', 'card_data', 'abhaCard', 'abha_card', 'cardData', 'card'] as $key) {
+            // card_base64 first: the connector puts the resolved official card there,
+            // while official_card can still hold a Bridge-generated image.
+            foreach (['card_base64', 'official_card', 'card_data_uri', 'card_data', 'abhaCard', 'abha_card', 'cardData', 'card'] as $key) {
                 $value = $source[$key] ?? '';
                 if (is_string($value) && trim($value) !== '') { return trim($value); }
                 if (is_array($value)) {
@@ -2239,6 +2244,23 @@ class Abha extends BaseController
         return '';
     }
 
+    private function resolveAbhaCardMessage(array $payload): string
+    {
+        $data = is_array($payload['data'] ?? null) ? $payload['data'] : [];
+        foreach ([
+            $payload['card_message'] ?? null,
+            $payload['message'] ?? null,
+            $data['message'] ?? null,
+        ] as $candidate) {
+            $value = trim((string) $candidate);
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return '';
+    }
+
     private function resolveAbhaCardSource(array $payload): string
     {
         $data = is_array($payload['data'] ?? null) ? $payload['data'] : [];
@@ -2249,9 +2271,15 @@ class Abha extends BaseController
             $data['source'] ?? null,
         ] as $candidate) {
             $value = strtolower(trim((string) $candidate));
-            if ($value !== '') {
-                return str_contains($value, 'abdm') ? 'abdm' : 'generated';
+            if ($value === '') {
+                continue;
             }
+            if (str_contains($value, 'abdm')) {
+                return 'abdm';
+            }
+
+            // "none" means ABDM issued no card for this session, not a local render.
+            return $value === 'none' ? 'none' : 'generated';
         }
 
         return '';

@@ -65,6 +65,11 @@ class DirectAbdmConnector implements AbdmConnectorInterface
         throw new \RuntimeException('DirectAbdmConnector::abhaLoginVerifyOtp() not implemented.');
     }
 
+    public function fetchOfficialAbhaCard(array $payload): array
+    {
+        return ['ok' => 0, 'error_text' => 'Official ABHA card download requires the e-Atria Bridge connector.'];
+    }
+
     // -------------------------------------------------------------------------
     // Consent
     // -------------------------------------------------------------------------

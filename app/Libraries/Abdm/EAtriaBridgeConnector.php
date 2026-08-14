@@ -733,7 +733,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         if ($card === '' || $source !== 'abdm') {
             return [
                 'ok' => 0,
-                'error_text' => 'The Bridge did not return an official ABHA card.',
+                'error_text' => trim((string) ($result['message'] ?? $data['message'] ?? '')) ?: 'The Bridge did not return an official ABHA card.',
                 'card_source' => $source,
                 'request_id' => (string) ($result['request_id'] ?? ''),
             ];
@@ -773,11 +773,16 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             ?: $this->extractOfficialCard($profile)
             ?: $this->extractOfficialCard(is_array($result['ABHAProfile'] ?? null) ? $result['ABHAProfile'] : []);
 
+        $inlineSource = $this->extractCardSource($result) ?: $this->extractCardSource($data);
         if ($card !== '') {
-            $result['card_source'] = $this->extractCardSource($result) ?: $this->extractCardSource($data);
+            $result['card_base64'] = $card;
+            $result['card_content_type'] = $this->resolveCardContentType($result) ?: $this->resolveCardContentType($data);
+            $result['card_source'] = $inlineSource;
         }
 
-        if ($card === '' && ($abhaNumber !== '' || $abhaAddress !== '')) {
+        // Verify responses often embed a Bridge-generated card under official_card,
+        // so only the dedicated card endpoint can supply the real ABDM card.
+        if (($card === '' || $inlineSource === 'generated') && ($abhaNumber !== '' || $abhaAddress !== '')) {
             // Without the patient X-Token the Bridge can only return a generated
             // card; with it, ABDM's genuine card is fetched.
             $patientToken = $this->extractPatientXToken($result);
@@ -791,11 +796,16 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             );
             if (! empty($cardResult['ok']) && (int) $cardResult['ok'] === 1) {
                 $cardData = is_array($cardResult['data'] ?? null) ? $cardResult['data'] : $cardResult;
-                $card = $this->extractOfficialCard($cardResult) ?: $this->extractOfficialCard($cardData);
-                if ($card !== '') {
-                    $result['card_base64'] = $card;
+                $fetchedCard = $this->extractOfficialCard($cardResult) ?: $this->extractOfficialCard($cardData);
+                $fetchedSource = $this->extractCardSource($cardResult) ?: $this->extractCardSource($cardData);
+                // Never trade a card we already hold for another generated one.
+                if ($fetchedCard !== '' && ($fetchedSource === 'abdm' || $card === '')) {
+                    $result['card_base64'] = $fetchedCard;
                     $result['card_content_type'] = $this->resolveCardContentType($cardData);
-                    $result['card_source'] = $this->extractCardSource($cardResult) ?: $this->extractCardSource($cardData);
+                    $result['card_source'] = $fetchedSource;
+                } elseif ($fetchedCard === '') {
+                    // Bridge reports the upstream ABDM reason here (e.g. token expired).
+                    $result['card_message'] = trim((string) ($cardResult['message'] ?? $cardData['message'] ?? ''));
                 }
             }
         }
@@ -810,9 +820,15 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
     {
         foreach ([$source['card_source'] ?? null, $source['source'] ?? null] as $candidate) {
             $value = strtolower(trim((string) $candidate));
-            if ($value !== '') {
-                return str_contains($value, 'abdm') ? 'abdm' : 'generated';
+            if ($value === '') {
+                continue;
             }
+            if (str_contains($value, 'abdm')) {
+                return 'abdm';
+            }
+
+            // "none" means ABDM issued no card for this session, not a local render.
+            return $value === 'none' ? 'none' : 'generated';
         }
 
         return '';

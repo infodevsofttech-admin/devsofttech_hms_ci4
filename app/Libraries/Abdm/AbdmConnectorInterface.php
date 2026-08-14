@@ -53,6 +53,13 @@ interface AbdmConnectorInterface
      */
     public function abhaLoginVerifyOtp(array $payload): array;
 
+    /**
+     * Fetch the official ABHA card from the Bridge card endpoint.
+     *
+     * @param array<string, mixed> $payload Must contain abha_number or abha_address.
+     */
+    public function fetchOfficialAbhaCard(array $payload): array;
+
     // -------------------------------------------------------------------------
     // Consent
     // -------------------------------------------------------------------------
