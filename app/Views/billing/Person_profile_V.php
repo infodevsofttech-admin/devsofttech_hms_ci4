@@ -140,7 +140,10 @@
                                 </div>
                                 <div class="row">
                                     <div class="col-lg-3 col-md-4 label">Aadhar No.</div>
-                                    <div class="col-lg-9 col-md-8"><?=$data[0]->udai?></div>
+                                    <div class="col-lg-9 col-md-8">
+                                        <?php $aadhaarLast4 = trim((string) ($data[0]->udai_last4 ?? '')); ?>
+                                        <?= $aadhaarLast4 !== '' ? 'XXXX-XXXX-' . esc($aadhaarLast4) : 'Not available' ?>
+                                    </div>
                                 </div>
                                 <div class="row">
                                     <div class="col-lg-3 col-md-4 label">ABHA ID</div>
@@ -253,7 +256,7 @@
                                     <div class="col-lg-6">
                                         <label class="form-label">Aadhar No.</label>
                                         <div class="input-group input-group-sm">
-                                            <input class="form-control" type="text" name="input_Aadhar" id="input_Aadhar" value="<?=$data[0]->udai ?>">
+                                            <input class="form-control" type="text" name="input_Aadhar" id="input_Aadhar" value="<?= trim((string) ($data[0]->udai_last4 ?? '')) !== '' ? 'XXXXXXXX' . esc((string) $data[0]->udai_last4) : '' ?>">
                                             <button type="button" id="btn_update_aadhar" class="btn btn-info">Update</button>
                                         </div>
                                     </div>

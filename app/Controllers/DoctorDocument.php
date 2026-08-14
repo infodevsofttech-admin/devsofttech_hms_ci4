@@ -314,7 +314,13 @@ class DoctorDocument extends BaseController
             $likeToken = $this->db->escapeLikeString($token);
 
             if (is_numeric($token)) {
-                $whereParts[] = "(p.p_code LIKE '%{$likeToken}' ESCAPE '!' OR p.mphone1 = {$escaped} OR p.udai = {$escaped})";
+                $clause = "(p.p_code LIKE '%{$likeToken}' ESCAPE '!' OR p.mphone1 = {$escaped}";
+                // Aadhaar is stored encrypted; match on its deterministic hash instead.
+                $aadhaarHash = (new \App\Libraries\AadhaarVaultService())->hash($token);
+                if ($aadhaarHash !== '') {
+                    $clause .= ' OR p.udai_hash = ' . $this->db->escape($aadhaarHash);
+                }
+                $whereParts[] = $clause . ')';
                 continue;
             }
 

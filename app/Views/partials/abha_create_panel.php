@@ -13,7 +13,7 @@
 $_pid  = (int) ($data[0]->id ?? 0);
 $_abha = esc($patientAbhaId ?? '');
 $_mob  = esc($data[0]->mphone1 ?? '');
-$_aadh = esc($data[0]->udai ?? '');
+$_aadh = '';
 ?>
 
 <h5 class="card-title mb-0">ABHA Number Create and Verify</h5>

@@ -491,7 +491,7 @@ class Medical extends BaseController
         if ($search !== '') {
             $tokens = preg_split('/\s+/', $search) ?: [];
             $searchableFields = [];
-            foreach (['p_code', 'p_fname', 'mphone1', 'udai', 'email1'] as $field) {
+            foreach (['p_code', 'p_fname', 'mphone1', 'email1'] as $field) {
                 if (in_array($field, $fields, true)) {
                     $searchableFields[] = $field;
                 }

@@ -95,9 +95,11 @@
                         <div class="col-md-3">
                             <div class="form-group">
                                 <label>Aadhar No.</label>
+                                <?php $aadhaarLast4 = trim((string) ($data[0]->udai_last4 ?? '')); ?>
                                 <input class="form-control input-sm" name="input_Aadhar" id="input_Aadhar"
-                                    value="<?=$data[0]->udai ?>" placeholder="Aadhar Number" type="text"
+                                    value="<?= $aadhaarLast4 !== '' ? 'XXXXXXXX' . esc($aadhaarLast4) : '' ?>" placeholder="Aadhar Number" type="text"
                                     autocomplete="off">
+                                <small class="text-muted">Stored encrypted. Leave masked value to keep it unchanged.</small>
                             </div>
                         </div>
                         <div class="col-md-3">

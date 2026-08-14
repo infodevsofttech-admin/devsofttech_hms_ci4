@@ -51,18 +51,20 @@ $normalize = static function ($value): string {
 $filters = $filters ?? [];
 $filterPhone = trim((string) ($filters['input_mphone1'] ?? ''));
 $filterAadhaar = $normalize($filters['input_udai'] ?? '');
+// Aadhaar is stored masked/encrypted, so rows can only be compared on the last 4 digits.
+$filterAadhaarLast4 = substr(preg_replace('/\D/', '', (string) ($filters['input_udai'] ?? '')) ?? '', -4);
 $filterAbha = trim((string) ($filters['input_abha_id'] ?? ''));
 $filterName = $normalize($filters['input_name'] ?? '');
 $filterRelativeName = $normalize($filters['input_relative_name'] ?? '');
 
-$getMatchScore = static function ($row) use ($normalize, $filterPhone, $filterAadhaar, $filterAbha, $filterName, $filterRelativeName): int {
+$getMatchScore = static function ($row) use ($normalize, $filterPhone, $filterAadhaarLast4, $filterAbha, $filterName, $filterRelativeName): int {
     $score = 0;
 
     if ($filterPhone !== '' && trim((string) ($row->mphone1 ?? '')) === $filterPhone) {
         $score++;
     }
 
-    if ($filterAadhaar !== '' && $normalize($row->udai ?? '') === $filterAadhaar) {
+    if ($filterAadhaarLast4 !== '' && trim((string) ($row->udai_last4 ?? '')) === $filterAadhaarLast4) {
         $score++;
     }
 
@@ -133,7 +135,7 @@ if (! empty($search_result) && is_array($search_result)) {
             if ($filterPhone !== '' && trim((string) ($row->mphone1 ?? '')) === $filterPhone) {
                 $matchReasons[] = 'Phone';
             }
-            if ($filterAadhaar !== '' && $normalize($row->udai ?? '') === $filterAadhaar) {
+            if ($filterAadhaarLast4 !== '' && trim((string) ($row->udai_last4 ?? '')) === $filterAadhaarLast4) {
                 $matchReasons[] = 'Aadhaar';
             }
             if ($filterAbha !== '' && trim((string) ($row->abha_id ?? '')) === $filterAbha) {

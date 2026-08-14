@@ -144,9 +144,9 @@ class Patient extends BaseController
 			'p_relative' => $this->request->getPost('cbo_relation'),
 			'p_rname' => strtoupper((string) $this->request->getPost('input_relative_name')),
 			'blood_group' => strtoupper($bloodGroup),
-			'udai' => strtoupper((string) $this->request->getPost('input_udai')),
 			'estimate_dob' => $estimate_dob,
 		];
+		$data += (new \App\Libraries\AadhaarVaultService())->buildColumns((string) $this->request->getPost('input_udai'));
 		$this->applyPatientReferbyField($data, $referByName);
 		$this->applyPatientAbhaFieldValues($data, $abhaId, $abhaAddress);
 
@@ -234,7 +234,7 @@ class Patient extends BaseController
 		$abhaField = $this->resolvePatientAbhaIdField();
 
 		$builder = $this->db->table('patient_master');
-		$builder->select("id,p_fname,p_relative,p_rname,gender,add1,city,district,state,zip,mphone1,udai,last_visit,dob,age,age_in_month,estimate_dob");
+		$builder->select("id,p_fname,p_relative,p_rname,gender,add1,city,district,state,zip,mphone1,udai,udai_last4,last_visit,dob,age,age_in_month,estimate_dob");
 		if ($this->db->fieldExists('referby', 'patient_master')) {
 			$builder->select('referby');
 		}
@@ -252,7 +252,8 @@ class Patient extends BaseController
 			}
 
 			if ($inputAadhar !== '') {
-				$builder->orWhere('udai', $inputAadhar);
+				// Aadhaar is stored encrypted, so match on its deterministic hash.
+				$builder->orWhere('udai_hash', (new \App\Libraries\AadhaarVaultService())->hash($inputAadhar));
 				$hasCondition = true;
 			}
 
@@ -528,8 +529,13 @@ class Patient extends BaseController
 		$clauses = [
 			'p.p_code like ' . $this->db->escape('%' . $rowData),
 			'p.mphone1 = ' . $escapedValue,
-			'p.udai = ' . $escapedValue,
 		];
+
+		// Aadhaar lives in the vault, so a typed number matches via its hash.
+		$aadhaarHash = (new \App\Libraries\AadhaarVaultService())->hash($rowData);
+		if ($aadhaarHash !== '') {
+			$clauses[] = 'p.udai_hash = ' . $this->db->escape($aadhaarHash);
+		}
 
 		if ($abhaField !== null && $abhaField !== '') {
 			$clauses[] = 'p.' . $abhaField . ' = ' . $escapedValue;
@@ -995,10 +1001,14 @@ class Patient extends BaseController
 			'p_relative' => strtoupper((string) $this->request->getPost('cbo_relation')),
 			'p_rname' => strtoupper((string) $this->request->getPost('input_relative_name')),
 			'email1' => strtoupper((string) $this->request->getPost('input_email')),
-			'udai' => strtoupper((string) $this->request->getPost('input_Aadhar')),
 			'estimate_dob' => $estimate_dob,
 			'blood_group' => $this->request->getPost('input_blood_group'),
 		];
+		$aadhaarVault = new \App\Libraries\AadhaarVaultService();
+		$aadhaarInput = (string) $this->request->getPost('input_Aadhar');
+		if (! $aadhaarVault->isMasked($aadhaarInput)) {
+			$data += $aadhaarVault->buildColumns($aadhaarInput);
+		}
 		$this->applyPatientReferbyField($data, $referByName);
 
 		if ($isAbhaVerifiedLocked) {
@@ -1101,8 +1111,16 @@ class Patient extends BaseController
 		$pid = (int) $this->request->getPost('p_id');
 		$udai = (string) $this->request->getPost('udai');
 
+		$vault = new \App\Libraries\AadhaarVaultService();
+		if ($vault->isMasked($udai)) {
+			return $this->response->setJSON(['update' => 1, 'showcontent' => 'Aadhaar unchanged']);
+		}
+		if (trim($udai) !== '' && $vault->normalize($udai) === '') {
+			return $this->response->setJSON(['update' => 0, 'error_text' => 'Enter a valid 12-digit Aadhaar number']);
+		}
+
 		$patientModel = new PatientModel();
-		$patientModel->updatePatient(['udai' => $udai], $pid);
+		$patientModel->updatePatient($vault->buildColumns($udai), $pid);
 
 		return $this->response->setJSON([
 			'update' => 1,
