@@ -18,13 +18,30 @@ class AbdmTaskBoard extends BaseController
     {
         $this->backfillPatientAbhaTasks();
         $this->backfillLabRadiologyTasks();
-        $tasks = $this->taskService->getOpenTasks(300);
+        $this->backfillImmunizationTasks();
+        $tasks = $this->enrichImmunizationPushState($this->taskService->getOpenTasks(300));
+
+        $dateFrom = trim((string) ($this->request->getGet('date_from') ?? date('Y-m-d')));
+        $dateTo = trim((string) ($this->request->getGet('date_to') ?? date('Y-m-d')));
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom)) {
+            $dateFrom = date('Y-m-d');
+        }
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo)) {
+            $dateTo = date('Y-m-d');
+        }
+        if ($dateFrom > $dateTo) {
+            [$dateFrom, $dateTo] = [$dateTo, $dateFrom];
+        }
 
         return view('abdm/task_board', [
             'tasks'                  => $tasks,
+            'dashboard_metrics'      => $this->getDashboardMetrics($dateFrom, $dateTo),
+            'dashboard_date_from'    => $dateFrom,
+            'dashboard_date_to'      => $dateTo,
             'today_credit_opd_rows'  => $this->getTodayCreditOpdConsultRows(),
             'opd_book_rows'          => $this->getOpdBookRows(),
             'opd_consult_rows'       => $this->getOpdConsultPublishRows(),
+            'invoice_rows'           => $this->getInvoiceRows(),
         ]);
     }
 
@@ -32,9 +49,10 @@ class AbdmTaskBoard extends BaseController
     {
         $this->backfillPatientAbhaTasks();
         $this->backfillLabRadiologyTasks();
+        $this->backfillImmunizationTasks();
         return $this->response->setJSON([
             'ok' => 1,
-            'tasks' => $this->taskService->getOpenTasks(300),
+            'tasks' => $this->enrichImmunizationPushState($this->taskService->getOpenTasks(300)),
             'csrfName' => csrf_token(),
             'csrfHash' => csrf_hash(),
         ]);
@@ -63,6 +81,56 @@ class AbdmTaskBoard extends BaseController
             'csrfName' => csrf_token(),
             'csrfHash' => csrf_hash(),
         ]);
+    }
+
+    /** @param array<int,array<string,mixed>> $tasks */
+    private function enrichImmunizationPushState(array $tasks): array
+    {
+        if ($tasks === [] || ! $this->db->tableExists('health_records')) {
+            return $tasks;
+        }
+
+        $entityIds = [];
+        foreach ($tasks as $task) {
+            if (($task['task_type'] ?? '') === 'immunization_record_publish') {
+                $entityIds[] = (string) ($task['entity_id'] ?? '');
+            }
+        }
+        $entityIds = array_values(array_filter(array_unique($entityIds), static fn (string $id): bool => $id !== ''));
+        if ($entityIds === []) {
+            return $tasks;
+        }
+
+        $latest = [];
+        $rows = $this->db->table('health_records')
+            ->select('id, entity_id, push_status, care_context_reference, linked_at')
+            ->where('hi_type', 'ImmunizationRecord')
+            ->where('entity_type', 'immunization')
+            ->whereIn('entity_id', $entityIds)
+            ->orderBy('id', 'DESC')
+            ->get()
+            ->getResultArray();
+        foreach ($rows as $row) {
+            $entityId = (string) ($row['entity_id'] ?? '');
+            if ($entityId !== '' && ! isset($latest[$entityId])) {
+                $latest[$entityId] = $row;
+            }
+        }
+
+        foreach ($tasks as &$task) {
+            if (($task['task_type'] ?? '') !== 'immunization_record_publish') {
+                continue;
+            }
+            $healthRecord = $latest[(string) ($task['entity_id'] ?? '')] ?? null;
+            $pushStatus = strtolower(trim((string) ($healthRecord['push_status'] ?? '')));
+            $task['bridge_health_record_id'] = (int) ($healthRecord['id'] ?? 0);
+            $task['bridge_push_status'] = $pushStatus;
+            $task['bridge_care_context_reference'] = trim((string) ($healthRecord['care_context_reference'] ?? ''));
+            $task['bridge_submitted'] = in_array($pushStatus, ['queued', 'pushed', 'linked'], true) ? 1 : 0;
+        }
+        unset($task);
+
+        return $tasks;
     }
 
     public function performAction()
@@ -309,6 +377,80 @@ class AbdmTaskBoard extends BaseController
         }
     }
 
+    private function backfillImmunizationTasks(): void
+    {
+        if (! $this->db->tableExists('abdm_work_tasks') || ! $this->db->tableExists('immunization_records') || ! $this->db->tableExists('patient_master')) {
+            return;
+        }
+
+        $patientFields = $this->db->getFieldNames('patient_master') ?? [];
+        $abhaField = $this->resolveExistingColumn($patientFields, ['abha_id', 'abha_no', 'abha_address', 'abha']);
+        if ($abhaField === null) {
+            return;
+        }
+
+        $rows = $this->db->table('immunization_records r')
+            ->select('r.id, r.patient_id, r.vaccine_name, r.given_date, p.p_fname AS patient_name, p.' . $abhaField . ' AS abha_id', false)
+            ->join('patient_master p', 'p.id = r.patient_id', 'left')
+            ->where('r.status', 'completed')
+            ->where('p.' . $abhaField . ' !=', '')
+            ->orderBy('r.id', 'DESC')
+            ->limit(500)
+            ->get()
+            ->getResultArray();
+
+        foreach ($rows as $row) {
+            $recordId = (int) ($row['id'] ?? 0);
+            $patientId = (int) ($row['patient_id'] ?? 0);
+            $abhaId = trim((string) ($row['abha_id'] ?? ''));
+            if ($recordId <= 0 || $patientId <= 0 || $abhaId === '') {
+                continue;
+            }
+
+            $linked = $this->db->tableExists('health_records') && ! empty($this->db->table('health_records')
+                ->select('id')
+                ->where('hi_type', 'ImmunizationRecord')
+                ->where('entity_type', 'immunization')
+                ->where('entity_id', (string) $recordId)
+                ->where('push_status', 'linked')
+                ->get(1)
+                ->getRowArray());
+            if ($linked) {
+                continue;
+            }
+
+            $exists = $this->db->table('abdm_work_tasks')
+                ->select('id')
+                ->where('task_type', 'immunization_record_publish')
+                ->where('entity_type', 'immunization')
+                ->where('entity_id', (string) $recordId)
+                ->whereIn('status', ['pending', 'in_progress'])
+                ->get(1)
+                ->getRowArray();
+            if (! empty($exists)) {
+                continue;
+            }
+
+            $this->taskService->createOrRefreshTask(
+                'immunization_record_publish',
+                'immunization',
+                'immunization',
+                (string) $recordId,
+                $patientId,
+                trim((string) ($row['patient_name'] ?? '')),
+                $abhaId,
+                'register_m2',
+                [
+                    'record_id' => $recordId,
+                    'vaccine_name' => (string) ($row['vaccine_name'] ?? ''),
+                    'given_date' => (string) ($row['given_date'] ?? ''),
+                    'hi_type' => 'ImmunizationRecord',
+                    'trigger' => 'task_board.backfill',
+                ]
+            );
+        }
+    }
+
     /**
      * @return array<int, array<string, mixed>>
      */
@@ -439,33 +581,252 @@ class AbdmTaskBoard extends BaseController
     }
 
     /**
-     * OPD Book rows: HMS OPD appointments (last 7 days) where patient has ABHA.
+     * @return array<int, array<string, mixed>>
+     */
+    private function getInvoiceRows(): array
+    {
+        $rows = [];
+
+        if ($this->db->tableExists('opd_master')) {
+            foreach ($this->db->table('opd_master')
+                ->select('opd_id AS bill_id, opd_code AS bill_code, p_id AS patient_id, P_name AS patient_name, apointment_date AS bill_date, opd_fee_amount AS amount')
+                ->orderBy('opd_id', 'DESC')
+                ->limit(100)
+                ->get()
+                ->getResultArray() as $row) {
+                $rows[] = array_merge($row, ['source' => 'OPD', 'source_key' => 'opd_invoice']);
+            }
+        }
+
+        if ($this->db->tableExists('invoice_master')) {
+            foreach ($this->db->table('invoice_master i')
+                ->select('i.id AS bill_id, i.invoice_code AS bill_code, i.attach_id AS patient_id, COALESCE(NULLIF(i.inv_name, ""), p.p_fname) AS patient_name, i.inv_date AS bill_date, i.net_amount AS amount')
+                ->join('patient_master p', 'p.id = i.attach_id AND i.attach_type = 0', 'left')
+                ->orderBy('i.id', 'DESC')
+                ->limit(100)
+                ->get()
+                ->getResultArray() as $row) {
+                $rows[] = array_merge($row, ['source' => 'Charges', 'source_key' => 'charges_invoice']);
+            }
+        }
+
+        if ($this->db->tableExists('ipd_master')) {
+            foreach ($this->db->table('ipd_master i')
+                ->select("i.id AS bill_id, i.ipd_code AS bill_code, i.p_id AS patient_id, COALESCE(NULLIF(NULLIF(TRIM(i.P_name), ''), '0'), TRIM(CONCAT_WS(' ', p.p_fname, p.p_lname))) AS patient_name, COALESCE(i.discharge_date, i.register_date) AS bill_date, i.net_amount AS amount", false)
+                ->join('patient_master p', 'p.id = i.p_id', 'left')
+                ->orderBy('i.id', 'DESC')
+                ->limit(100)
+                ->get()
+                ->getResultArray() as $row) {
+                $rows[] = array_merge($row, ['source' => 'IPD Billing', 'source_key' => 'ipd_invoice']);
+            }
+        }
+
+        $healthRecords = [];
+        if ($this->db->tableExists('health_records')) {
+            $hrFields = $this->db->getFieldNames('health_records') ?? [];
+            $select = ['id', 'entity_type', 'entity_id', 'push_status', 'abdm_txn_id', 'care_context_reference', 'push_at', 'linked_at'];
+            if (in_array('bridge_record_id', $hrFields, true)) {
+                $select[] = 'bridge_record_id';
+            }
+
+            $hrRows = $this->db->table('health_records')
+                ->select(implode(',', $select))
+                ->where('hi_type', 'InvoiceRecord')
+                ->whereIn('entity_type', ['invoice', 'charges_invoice', 'opd_invoice', 'ipd_invoice'])
+                ->orderBy('id', 'DESC')
+                ->get()
+                ->getResultArray();
+
+            foreach ($hrRows as $hr) {
+                $key = (string) ($hr['entity_type'] ?? '') . ':' . (string) ($hr['entity_id'] ?? '');
+                if ($key !== ':' && ! isset($healthRecords[$key])) {
+                    $healthRecords[$key] = $hr;
+                }
+            }
+        }
+
+        $recordLinks = [];
+        $healthRecordIds = array_values(array_filter(array_map(
+            static fn (array $hr): int => (int) ($hr['id'] ?? 0),
+            $healthRecords
+        )));
+        if ($healthRecordIds !== [] && $this->db->tableExists('record_links')) {
+            $linkRows = $this->db->table('record_links')
+                ->select('health_record_id, link_status, linked_at')
+                ->whereIn('health_record_id', $healthRecordIds)
+                ->orderBy('id', 'DESC')
+                ->get()
+                ->getResultArray();
+            foreach ($linkRows as $link) {
+                $healthRecordId = (int) ($link['health_record_id'] ?? 0);
+                if ($healthRecordId > 0 && ! isset($recordLinks[$healthRecordId])) {
+                    $recordLinks[$healthRecordId] = $link;
+                }
+            }
+        }
+
+        foreach ($rows as &$row) {
+            $billId = (string) ($row['bill_id'] ?? '');
+            $keys = [(string) $row['source_key'] . ':' . $billId];
+            if ($row['source_key'] === 'charges_invoice') {
+                $keys[] = 'invoice:' . $billId;
+            }
+
+            $hr = null;
+            foreach ($keys as $key) {
+                if (isset($healthRecords[$key])) {
+                    $hr = $healthRecords[$key];
+                    break;
+                }
+            }
+
+            $pushStatus = strtolower(trim((string) ($hr['push_status'] ?? '')));
+            $link = $hr !== null ? ($recordLinks[(int) ($hr['id'] ?? 0)] ?? null) : null;
+            $linkStatus = strtolower(trim((string) ($link['link_status'] ?? '')));
+            $statusLabel = 'Not Pushed';
+            $statusTone = 'secondary';
+
+            if ($pushStatus === 'queued') {
+                $statusLabel = 'Submitted';
+                $statusTone = 'warning';
+            } elseif ($pushStatus === 'pushed') {
+                $statusLabel = 'Pushed';
+                $statusTone = 'primary';
+            } elseif ($pushStatus === 'linked') {
+                $statusLabel = 'Linked';
+                $statusTone = 'success';
+            } elseif ($pushStatus === 'failed') {
+                $statusLabel = 'Failed';
+                $statusTone = 'danger';
+            } elseif ($pushStatus !== '') {
+                $statusLabel = ucwords(str_replace('_', ' ', $pushStatus));
+                $statusTone = 'info';
+            }
+
+            if ($linkStatus === 'linked') {
+                $statusLabel = 'Linked';
+                $statusTone = 'success';
+            } elseif ($linkStatus === 'failed') {
+                $statusLabel = 'Link Failed';
+                $statusTone = 'danger';
+            }
+
+            $row['record_status_label'] = $statusLabel;
+            $row['record_status_tone'] = $statusTone;
+            $row['push_status'] = $pushStatus;
+            $row['link_status'] = $linkStatus;
+            $row['queue_id'] = trim((string) ($hr['abdm_txn_id'] ?? ''));
+            $row['bridge_record_id'] = (int) ($hr['bridge_record_id'] ?? 0);
+            $row['care_context_reference'] = trim((string) ($hr['care_context_reference'] ?? ''));
+        }
+        unset($row);
+
+        usort($rows, static function (array $left, array $right): int {
+            $dateCompare = strcmp((string) ($right['bill_date'] ?? ''), (string) ($left['bill_date'] ?? ''));
+            return $dateCompare !== 0 ? $dateCompare : ((int) ($right['bill_id'] ?? 0) <=> (int) ($left['bill_id'] ?? 0));
+        });
+
+        return array_slice($rows, 0, 300);
+    }
+
+    /**
+     * @return array<string, int|string>
+     */
+    private function getDashboardMetrics(string $dateFrom, string $dateTo): array
+    {
+        $metrics = [
+            'total_patients' => 0,
+            'without_abha' => 0,
+            'abha_verified' => 0,
+            'verified_in_range' => 0,
+            'records_pushed' => 0,
+            'records_pushed_in_range' => 0,
+            'opd_tokens' => 0,
+            'opd_tokens_in_range' => 0,
+            'verification_date_source' => '',
+        ];
+
+        if ($this->db->tableExists('patient_master')) {
+            $fields = $this->db->getFieldNames('patient_master') ?? [];
+            $abhaCol = $this->resolveExistingColumn($fields, ['abha_id', 'abha_no', 'abha']);
+            $verifiedCol = $this->resolveExistingColumn($fields, ['abha_verified_status']);
+            $verifiedDateCol = $this->resolveExistingColumn($fields, ['abha_verified_at', 'abdm_linked_at', 'last_update']);
+
+            $metrics['total_patients'] = $this->db->table('patient_master')->countAllResults();
+            if ($abhaCol !== null) {
+                $validAbhaSql = $abhaCol . " REGEXP '^[0-9]{14}$'";
+                $metrics['without_abha'] = $this->db->table('patient_master')
+                    ->where("COALESCE(" . $abhaCol . ", '') NOT REGEXP '^[0-9]{14}$'", null, false)
+                    ->countAllResults();
+
+                $verifiedBuilder = $this->db->table('patient_master')->where($validAbhaSql, null, false);
+                if ($verifiedCol !== null) {
+                    $verifiedBuilder->where($verifiedCol, 'VERIFIED');
+                }
+                $metrics['abha_verified'] = $verifiedBuilder->countAllResults();
+
+                if ($verifiedDateCol !== null) {
+                    $rangeBuilder = $this->db->table('patient_master')
+                        ->where($validAbhaSql, null, false)
+                        ->where($verifiedDateCol . ' >=', $dateFrom . ' 00:00:00')
+                        ->where($verifiedDateCol . ' <=', $dateTo . ' 23:59:59');
+                    if ($verifiedCol !== null) {
+                        $rangeBuilder->where($verifiedCol, 'VERIFIED');
+                    }
+                    $metrics['verified_in_range'] = $rangeBuilder->countAllResults();
+                    $metrics['verification_date_source'] = $verifiedDateCol;
+                }
+            } else {
+                $metrics['without_abha'] = $metrics['total_patients'];
+            }
+        }
+
+        if ($this->db->tableExists('health_records')) {
+            $fields = $this->db->getFieldNames('health_records') ?? [];
+            $dateCol = $this->resolveExistingColumn($fields, ['push_at', 'linked_at', 'updated_at', 'created_at']);
+            $pushedStatuses = ['queued', 'pushed', 'linked'];
+            $metrics['records_pushed'] = $this->db->table('health_records')
+                ->whereIn('push_status', $pushedStatuses)
+                ->countAllResults();
+            if ($dateCol !== null) {
+                $metrics['records_pushed_in_range'] = $this->db->table('health_records')
+                    ->whereIn('push_status', $pushedStatuses)
+                    ->where($dateCol . ' >=', $dateFrom . ' 00:00:00')
+                    ->where($dateCol . ' <=', $dateTo . ' 23:59:59')
+                    ->countAllResults();
+            }
+        }
+
+        if ($this->db->tableExists('abdm_opd_tokens')) {
+            $metrics['opd_tokens'] = $this->db->table('abdm_opd_tokens')->countAllResults();
+            $metrics['opd_tokens_in_range'] = $this->db->table('abdm_opd_tokens')
+                ->where('queue_date >=', $dateFrom)
+                ->where('queue_date <=', $dateTo)
+                ->countAllResults();
+        }
+
+        return $metrics;
+    }
+
+    /**
+     * OPD Book rows: locally synced ABDM OPD tokens only.
      *
      * @return array<int, array<string, mixed>>
      */
     private function getOpdBookRows(): array
     {
-        if (! $this->db->tableExists('opd_master') || ! $this->db->tableExists('patient_master')) {
+        if (! $this->db->tableExists('abdm_opd_tokens')) {
             return [];
         }
 
-        $patientFields = $this->db->getFieldNames('patient_master') ?? [];
-        $abhaCol = $this->resolveExistingColumn($patientFields, ['abha_id', 'abha_no', 'abha_address', 'abha']);
-        if ($abhaCol === null) {
-            return [];
-        }
-
-        $rows = $this->db->table('opd_master o')
-            ->select('o.opd_id, o.p_id, o.P_name, o.apointment_date, o.opd_status, o.doc_name, p.' . $abhaCol . ' as abha_id', false)
-            ->join('patient_master p', 'p.id = o.p_id', 'left')
-            ->where('DATE(o.apointment_date) >=', date('Y-m-d', strtotime('-7 days')), false)
-            ->where('p.' . $abhaCol . ' !=', '')
-            ->orderBy('o.opd_id', 'DESC')
+        return $this->db->table('abdm_opd_tokens')
+            ->where('queue_date >=', date('Y-m-d', strtotime('-7 days')))
+            ->orderBy('queue_date', 'DESC')
+            ->orderBy('gateway_token_id', 'DESC')
             ->limit(200)
             ->get()
             ->getResultArray();
-
-        return array_values(array_filter($rows, static fn ($r) => preg_match('/^\d{14}$/', trim((string) ($r['abha_id'] ?? ''))) === 1));
     }
 
     /**

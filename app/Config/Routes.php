@@ -736,6 +736,8 @@ $routes->post('AbdmGateway/share_immunization_bundle', 'AbdmGateway::shareImmuni
 $routes->post('AbdmGateway/share_wellness_bundle', 'AbdmGateway::shareWellnessBundle', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmGateway/share_health_document_bundle', 'AbdmGateway::shareHealthDocumentBundle', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmGateway/share_invoice_bundle', 'AbdmGateway::shareInvoiceBundle', ['filter' => $abdmPermFilter]);
+$routes->get('AbdmGateway/invoice_fhir_preview', 'AbdmGateway::invoiceFhirPreview', ['filter' => $abdmPermFilter]);
+$routes->post('AbdmGateway/share_invoice_source_bundle', 'AbdmGateway::shareInvoiceSourceBundle', ['filter' => $abdmPermFilter]);
 $routes->get('Immunization', 'Immunization::index', ['filter' => 'permission:doctor_work.immunization.access']);
 $routes->get('Immunization/schedule_master', 'Immunization::scheduleMaster', ['filter' => 'permission:doctor_work.immunization.schedule-manage']);
 $routes->post('Immunization/sync_uip_master', 'Immunization::syncUipMaster', ['filter' => 'permission:doctor_work.immunization.schedule-manage']);

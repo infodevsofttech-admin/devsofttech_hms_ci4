@@ -17,20 +17,61 @@
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
             <h4 class="mb-0">ABDM Work Task Board</h4>
-            <div class="small text-muted">Unupdated ABHA Patient List + Separate ABDM Task Queues</div>
+            <div class="small text-muted">ABDM operational dashboard and work queues</div>
         </div>
         <button type="button" class="btn btn-sm btn-outline-primary" id="btnRefresh">Refresh</button>
     </div>
 
     <div class="d-flex flex-wrap gap-2 mb-3" id="taskFilters">
-        <button class="btn btn-sm btn-primary filter-btn" data-filter="patient_abha_create">Unupdated ABHA</button>
-        <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="patient_abha_update">ABHA Verify Pending</button>
+        <button class="btn btn-sm btn-primary filter-btn" data-filter="dashboard">Dashboard</button>
         <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="opd_book">OPD Book</button>
         <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="opd_consult_publish">OPD Consult Publish</button>
         <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="lab_report_publish">Lab Reports</button>
         <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="radiology_report_publish">Radiology Reports</button>
-        <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="ipd_admission_publish">IPD Admission</button>
+        <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="immunization_record_publish">Immunization Record</button>
+        <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="invoice">Invoice</button>
         <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="ipd_discharge_publish">IPD Discharge</button>
+    </div>
+
+    <?php $dashboard = $dashboard_metrics ?? []; ?>
+    <div id="dashboardCard">
+        <form method="get" action="<?= current_url() ?>" class="d-flex flex-wrap align-items-end gap-2 mb-3" id="dashboardRangeForm">
+            <div>
+                <label class="form-label small mb-1" for="dashboardDateFrom">From</label>
+                <input type="date" class="form-control form-control-sm" id="dashboardDateFrom" name="date_from" value="<?= esc((string) ($dashboard_date_from ?? date('Y-m-d'))) ?>">
+            </div>
+            <div>
+                <label class="form-label small mb-1" for="dashboardDateTo">To</label>
+                <input type="date" class="form-control form-control-sm" id="dashboardDateTo" name="date_to" value="<?= esc((string) ($dashboard_date_to ?? date('Y-m-d'))) ?>">
+            </div>
+            <button type="submit" class="btn btn-sm btn-outline-primary">Apply Date Range</button>
+        </form>
+        <div class="row g-3 mb-3">
+            <?php foreach ([
+                ['Total Patients', 'total_patients', 'primary'],
+                ['Patients Without ABHA', 'without_abha', 'danger'],
+                ['ABHA Verified', 'abha_verified', 'success'],
+                ['Verified In Range', 'verified_in_range', 'info'],
+                ['Records Pushed', 'records_pushed', 'warning'],
+                ['Pushed In Range', 'records_pushed_in_range', 'primary'],
+                ['OPD Tokens', 'opd_tokens', 'secondary'],
+                ['Tokens In Range', 'opd_tokens_in_range', 'success'],
+            ] as [$label, $key, $tone]): ?>
+                <div class="col-6 col-lg-3">
+                    <div class="card h-100 border-start border-4 border-<?= esc($tone) ?>">
+                        <div class="card-body py-3">
+                            <div class="small text-muted"><?= esc($label) ?></div>
+                            <div class="fs-3 fw-semibold"><?= number_format((int) ($dashboard[$key] ?? 0)) ?></div>
+                        </div>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+        <?php if (($dashboard['verification_date_source'] ?? '') === 'abdm_linked_at'): ?>
+            <div class="small text-muted mb-3">Date-range verification uses the stored ABHA link/verification timestamp.</div>
+        <?php elseif (($dashboard['verification_date_source'] ?? '') === 'last_update'): ?>
+            <div class="small text-muted mb-3">Date-range verification uses the patient last-updated date because an ABHA timestamp is not available.</div>
+        <?php endif; ?>
     </div>
 
     <div class="card shadow-sm mb-3 d-none" id="fhirDebugCard">
@@ -82,7 +123,9 @@
                             $opdSessionId = (int) ($meta['opd_session_id'] ?? 0);
                             $showSandbox = ($type === 'opd_prescription_publish' && $opdId > 0);
                             $showPreview = ($type === 'opd_prescription_publish' && $opdId > 0)
-                                || in_array($type, ['lab_report_publish', 'radiology_report_publish', 'ipd_discharge_publish'], true);
+                                || in_array($type, ['lab_report_publish', 'radiology_report_publish', 'ipd_discharge_publish', 'immunization_record_publish'], true);
+                            $bridgeSubmitted = (int) ($t['bridge_submitted'] ?? 0) === 1;
+                            $bridgeCareContext = trim((string) ($t['bridge_care_context_reference'] ?? ''));
                         ?>
                         <tr
                             data-task-id="<?= (int) ($t['id'] ?? 0) ?>"
@@ -93,6 +136,7 @@
                             data-opd-id="<?= $opdId ?>"
                             data-opd-session-id="<?= $opdSessionId ?>"
                             data-sandbox-eligible="<?= $showSandbox ? '1' : '0' ?>"
+                            data-bridge-submitted="<?= $bridgeSubmitted ? '1' : '0' ?>"
                         >
                             <td><?= (int) ($t['id'] ?? 0) ?></td>
                             <td>
@@ -108,13 +152,28 @@
                                 <div><?= esc((string) ($t['entity_type'] ?? '')) ?></div>
                                 <div class="text-muted small"><?= esc((string) ($t['entity_id'] ?? '')) ?></div>
                             </td>
-                            <td><span class="badge bg-secondary status-pill"><?= esc((string) ($t['status'] ?? 'pending')) ?></span></td>
+                            <td>
+                                <?php if ($bridgeSubmitted && strtolower((string) ($t['bridge_push_status'] ?? '')) === 'linked'): ?>
+                                    <span class="badge bg-success status-pill">LINKED</span>
+                                <?php elseif ($bridgeSubmitted): ?>
+                                    <span class="badge bg-info status-pill">BRIDGE SUBMITTED</span>
+                                    <?php if ($bridgeCareContext !== ''): ?><div class="small"><code><?= esc($bridgeCareContext) ?></code></div><?php endif; ?>
+                                <?php else: ?>
+                                    <span class="badge bg-secondary status-pill"><?= esc((string) ($t['status'] ?? 'pending')) ?></span>
+                                <?php endif; ?>
+                            </td>
                             <td>
                                 <div class="d-flex gap-1 flex-wrap">
                                     <?php if ($type === 'patient_abha_create' || $type === 'patient_abha_link'): ?>
                                         <button class="btn btn-sm btn-outline-success action-btn" data-action="create_abha">Create ABHA</button>
                                     <?php elseif ($type === 'patient_abha_update'): ?>
                                         <button class="btn btn-sm btn-outline-primary action-btn" data-action="update_abha">Update ABHA</button>
+                                    <?php elseif ($type === 'immunization_record_publish'): ?>
+                                        <?php if ($bridgeSubmitted): ?>
+                                            <button class="btn btn-sm btn-outline-success" disabled title="Submitted to ABDM Bridge<?= $bridgeCareContext !== '' ? ': ' . esc($bridgeCareContext) : '' ?>">Submitted to Bridge</button>
+                                        <?php else: ?>
+                                            <button class="btn btn-sm btn-outline-success immunization-bridge-btn" title="Push this ImmunizationRecord FHIR bundle to ABDM Bridge.">Push to Bridge</button>
+                                        <?php endif; ?>
                                     <?php else: ?>
                                         <button class="btn btn-sm btn-outline-warning action-btn" data-action="submit">Submit</button>
                                     <?php endif; ?>
@@ -222,7 +281,7 @@
     <div class="card shadow-sm mt-3 d-none" id="opdBookCard">
         <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
             <div>
-                <strong>OPD Book — ABDM Patients</strong>
+                <strong>OPD Book — ABDM Tokens</strong>
                 <span class="badge bg-primary ms-2" id="hmsOpdBadge"><?= count($opd_book_rows ?? []) ?></span>
             </div>
             <div class="d-flex gap-2 align-items-center">
@@ -245,29 +304,30 @@
                 </table>
             </div>
             <div class="px-3 pt-2 pb-1 bg-light border-bottom border-top d-flex align-items-center gap-2 mt-1">
-                <strong class="small">HMS Direct OPD with ABHA</strong>
+                <strong class="small">HMS ABDM OPD Token List</strong>
                 <span class="badge bg-success"><?= count($opd_book_rows ?? []) ?></span>
-                <span class="text-muted small">Last 7 days · patient has 14-digit ABHA</span>
+                <span class="text-muted small">Last 7 days · synced and manual ABDM tokens only</span>
             </div>
             <div class="table-responsive">
                 <table class="table table-sm mb-0">
                     <thead class="table-light">
-                        <tr><th>OPD ID</th><th>Patient</th><th>ABHA</th><th>Date</th><th>Doctor</th><th>Status</th></tr>
+                        <tr><th>Token</th><th>Patient</th><th>ABHA</th><th>Date</th><th>Source</th><th>Status</th></tr>
                     </thead>
                     <tbody>
                     <?php if (! empty($opd_book_rows ?? [])): ?>
                         <?php foreach (($opd_book_rows ?? []) as $r): ?>
                         <tr>
-                            <td>#<?= (int) ($r['opd_id'] ?? 0) ?></td>
-                            <td><?= esc((string) ($r['P_name'] ?? '')) ?></td>
-                            <td><span class="text-primary small"><?= esc((string) ($r['abha_id'] ?? '')) ?></span></td>
-                            <td><?= esc(substr((string) ($r['apointment_date'] ?? ''), 0, 16)) ?></td>
-                            <td><?= esc((string) ($r['doc_name'] ?? '')) ?></td>
-                            <td><span class="badge bg-<?= (int) ($r['opd_status'] ?? 0) >= 2 ? 'success' : 'warning text-dark' ?>"><?= (int) ($r['opd_status'] ?? 0) >= 2 ? 'Done' : 'Pending' ?></span></td>
+                            <td><?= esc((string) (($r['token_number'] ?? '') ?: ('#' . ($r['gateway_token_id'] ?? '')))) ?></td>
+                            <td><?= esc((string) ($r['patient_name'] ?? '')) ?></td>
+                            <td><span class="text-primary small"><?= esc((string) (($r['abha_number'] ?? '') ?: ($r['abha_address'] ?? ''))) ?></span></td>
+                            <td><?= esc((string) ($r['queue_date'] ?? '')) ?></td>
+                            <td><?= esc(ucwords(str_replace('_', ' ', (string) ($r['source'] ?? '')))) ?></td>
+                            <?php $tokenStatus = strtoupper((string) ($r['status'] ?? 'PENDING')); ?>
+                            <td><span class="badge bg-<?= $tokenStatus === 'COMPLETED' ? 'success' : ($tokenStatus === 'CANCELLED' ? 'danger' : 'warning text-dark') ?>"><?= esc($tokenStatus) ?></span></td>
                         </tr>
                         <?php endforeach; ?>
                     <?php else: ?>
-                        <tr><td colspan="6" class="text-muted px-2 py-2">No OPD with ABHA found in last 7 days.</td></tr>
+                        <tr><td colspan="6" class="text-muted px-2 py-2">No ABDM OPD tokens found in the last 7 days.</td></tr>
                     <?php endif; ?>
                     </tbody>
                 </table>
@@ -359,6 +419,72 @@
                         <?php endforeach; ?>
                     <?php else: ?>
                         <tr><td colspan="8" class="text-muted px-2 py-2">No done OPD with ABHA found in last 30 days.</td></tr>
+                    <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Invoice Status Card -->
+    <div class="card shadow-sm mt-3 d-none" id="invoiceCard">
+        <div class="card-header py-2 d-flex align-items-center gap-2 flex-wrap">
+            <strong>Invoice — ABDM Billing Records</strong>
+            <span class="badge bg-primary"><?= count($invoice_rows ?? []) ?></span>
+            <small class="text-muted">OPD, Charges and IPD Billing</small>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead class="table-light">
+                        <tr><th>Source</th><th>Bill No.</th><th>Patient</th><th>Date</th><th class="text-end">Amount</th><th>Push Status</th><th>Link Status</th><th>Gateway Reference</th><th>Action</th></tr>
+                    </thead>
+                    <tbody>
+                    <?php if (! empty($invoice_rows ?? [])): ?>
+                        <?php foreach (($invoice_rows ?? []) as $invoice): ?>
+                            <?php
+                                $tone = (string) ($invoice['record_status_tone'] ?? 'secondary');
+                                if (! in_array($tone, ['secondary', 'primary', 'info', 'success', 'warning', 'danger'], true)) {
+                                    $tone = 'secondary';
+                                }
+                                $badgeClass = 'badge bg-' . $tone . ($tone === 'warning' ? ' text-dark' : '');
+                                $queueId = trim((string) ($invoice['queue_id'] ?? ''));
+                                $bridgeRecordId = (int) ($invoice['bridge_record_id'] ?? 0);
+                                $careContext = trim((string) ($invoice['care_context_reference'] ?? ''));
+                                $pushStatus = strtolower(trim((string) ($invoice['push_status'] ?? '')));
+                                $linkStatus = strtolower(trim((string) ($invoice['link_status'] ?? '')));
+                                $alreadySubmitted = in_array($pushStatus, ['queued', 'pushed', 'linked'], true) || $linkStatus === 'linked';
+                            ?>
+                            <tr
+                                data-invoice-source="<?= esc((string) ($invoice['source_key'] ?? '')) ?>"
+                                data-bill-id="<?= (int) ($invoice['bill_id'] ?? 0) ?>"
+                                data-patient-id="<?= (int) ($invoice['patient_id'] ?? 0) ?>"
+                                data-push-status="<?= esc($pushStatus) ?>"
+                            >
+                                <td><?= esc((string) ($invoice['source'] ?? '')) ?></td>
+                                <td><strong><?= esc((string) (($invoice['bill_code'] ?? '') ?: ('#' . ($invoice['bill_id'] ?? '')))) ?></strong></td>
+                                <td>
+                                    <div><?= esc((string) ($invoice['patient_name'] ?? '')) ?></div>
+                                    <small class="text-muted">#<?= (int) ($invoice['patient_id'] ?? 0) ?></small>
+                                </td>
+                                <td><?= esc(substr((string) ($invoice['bill_date'] ?? ''), 0, 16)) ?></td>
+                                <td class="text-end"><?= number_format((float) ($invoice['amount'] ?? 0), 2) ?></td>
+                                <td><span class="<?= esc($badgeClass) ?> invoice-status-badge"><?= esc((string) ($invoice['record_status_label'] ?? 'Not Pushed')) ?></span></td>
+                                <td><?= $invoice['link_status'] !== '' ? esc(strtoupper((string) $invoice['link_status'])) : '<span class="text-muted">-</span>' ?></td>
+                                <td class="small text-muted invoice-details" style="min-width:190px;max-width:300px;">
+                                    <?php if ($queueId !== ''): ?><div><strong>Queue:</strong> <?= esc($queueId) ?></div><?php endif; ?>
+                                    <?php if ($bridgeRecordId > 0): ?><div><strong>Bridge:</strong> #<?= $bridgeRecordId ?></div><?php endif; ?>
+                                    <?php if ($careContext !== ''): ?><div class="text-truncate" title="<?= esc($careContext) ?>"><strong>CC:</strong> <?= esc($careContext) ?></div><?php endif; ?>
+                                    <?php if ($queueId === '' && $bridgeRecordId <= 0 && $careContext === ''): ?><span>-</span><?php endif; ?>
+                                </td>
+                                <td class="text-nowrap">
+                                    <button type="button" class="btn btn-sm btn-outline-primary btn-invoice-preview">Preview</button>
+                                    <button type="button" class="btn btn-sm btn-outline-warning btn-invoice-push" <?= $alreadySubmitted ? 'disabled' : '' ?>>Push</button>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <tr><td colspan="9" class="text-muted px-2 py-2">No billing records found.</td></tr>
                     <?php endif; ?>
                     </tbody>
                 </table>
@@ -499,19 +625,29 @@
 
     var opdBookCard    = document.getElementById('opdBookCard');
     var opdConsultCard = document.getElementById('opdConsultCard');
+    var invoiceCard    = document.getElementById('invoiceCard');
     var taskTableCard  = document.getElementById('taskTableCard');
+    var dashboardCard  = document.getElementById('dashboardCard');
 
     function applyFilter(filter) {
         // Hide dedicated section cards
         if (opdBookCard)    opdBookCard.classList.add('d-none');
         if (opdConsultCard) opdConsultCard.classList.add('d-none');
+        if (invoiceCard)    invoiceCard.classList.add('d-none');
+        if (dashboardCard)  dashboardCard.classList.add('d-none');
 
-        if (filter === 'opd_book') {
+        if (filter === 'dashboard') {
+            if (taskTableCard) taskTableCard.classList.add('d-none');
+            if (dashboardCard) dashboardCard.classList.remove('d-none');
+        } else if (filter === 'opd_book') {
             if (taskTableCard) taskTableCard.classList.add('d-none');
             if (opdBookCard)   opdBookCard.classList.remove('d-none');
         } else if (filter === 'opd_consult_publish') {
             if (taskTableCard)  taskTableCard.classList.add('d-none');
             if (opdConsultCard) opdConsultCard.classList.remove('d-none');
+        } else if (filter === 'invoice') {
+            if (taskTableCard) taskTableCard.classList.add('d-none');
+            if (invoiceCard)   invoiceCard.classList.remove('d-none');
         } else {
             if (taskTableCard) taskTableCard.classList.remove('d-none');
             var rows = document.querySelectorAll('#taskTable tbody tr');
@@ -946,6 +1082,20 @@
                 + '&patient_id=' + encodeURIComponent(ipdPatientId)
                 + '&abha_id=' + encodeURIComponent(abhaId);
             title = 'IPD Discharge FHIR Preview — IPD #' + ipdId;
+        } else if (taskType === 'immunization_record_publish') {
+            var immunizationRecordId = parseInt(row.getAttribute('data-entity-id') || '0', 10) || 0;
+            var immunizationPatientId = parseInt(row.getAttribute('data-patient-id') || '0', 10) || 0;
+
+            if (immunizationRecordId <= 0 || immunizationPatientId <= 0) {
+                setStatus('Task data missing for Immunization FHIR preview.', true);
+                return true;
+            }
+
+            previewUrl = '<?= base_url('AbdmGateway/immunization_fhir_preview') ?>'
+                + '?record_id=' + encodeURIComponent(immunizationRecordId)
+                + '&patient_id=' + encodeURIComponent(immunizationPatientId)
+                + '&abha_id=' + encodeURIComponent(abhaId);
+            title = 'ImmunizationRecord FHIR Preview — Record #' + immunizationRecordId;
         } else {
             return false;
         }
@@ -983,6 +1133,50 @@
             modalAbhaInput.value = abhaInput ? abhaInput.value.trim() : '';
             modalTaskSummary.textContent = 'Task: ' + taskTypeLabel + ' | Action: ' + selectedAction.toUpperCase();
             actionModal.show();
+        });
+    });
+
+    document.querySelectorAll('.immunization-bridge-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var row = btn.closest('tr');
+            var abhaInput = row ? row.querySelector('.abha-input') : null;
+            var abhaId = (abhaInput ? abhaInput.value : '').trim();
+            var patientId = row ? (parseInt(row.getAttribute('data-patient-id') || '0', 10) || 0) : 0;
+            var recordId = row ? (parseInt(row.getAttribute('data-entity-id') || '0', 10) || 0) : 0;
+            var taskId = row ? (parseInt(row.getAttribute('data-task-id') || '0', 10) || 0) : 0;
+
+            if (!/^\d{14}$/.test(abhaId) || patientId <= 0 || recordId <= 0) {
+                setStatus('A 14-digit ABHA and valid Immunization record are required.', true);
+                return;
+            }
+
+            var original = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Pushing';
+            post('<?= base_url('AbdmGateway/share_immunization_bundle') ?>', {
+                task_id: taskId,
+                patient_id: patientId,
+                record_id: recordId,
+                abha_id: abhaId,
+                push_to_gateway: 1
+            }, function (res) {
+                btn.disabled = false;
+                btn.innerHTML = original;
+                if (!res || parseInt(res.ok || '0', 10) !== 1) {
+                    setStatus((res && (res.error_text || res.error || res.message)) || 'ABDM Bridge push failed.', true);
+                    return;
+                }
+
+                var badge = row.querySelector('.status-pill');
+                if (badge) {
+                    badge.textContent = 'BRIDGE SUBMITTED';
+                    badge.className = 'badge bg-info status-pill';
+                }
+                btn.disabled = true;
+                btn.textContent = 'Submitted to Bridge';
+                btn.title = 'Submitted to ABDM Bridge: ' + (res.care_context_reference || '-');
+                setStatus('Submitted to ABDM Bridge. Queue ID: ' + (res.queue_id || '-') + '; care context: ' + (res.care_context_reference || '-'));
+            });
         });
     });
 
@@ -1032,7 +1226,7 @@
         });
     });
 
-    applyFilter('patient_abha_create');
+    applyFilter('dashboard');
 
     modalConfirmBtn.addEventListener('click', function () {
         if (!selectedRow || !selectedAction) {
@@ -1468,6 +1662,9 @@
     var _fhirSubmitMode = 'opd';
     var _fhirSubmitTaskRow = null;
     var _fhirSubmitAbha = '';
+    var _fhirInvoiceSource = '';
+    var _fhirInvoiceBillId = 0;
+    var _fhirInvoicePatientId = 0;
 
     // ── Inline complaint SNOMED edit (event delegation on fhirFormView) ─
     var _editTimer = null;
@@ -1775,10 +1972,16 @@
         liveDiagnoses  = liveDiagnoses  || [];
         var resources = (bundle.entry || []).map(function(e) { return e.resource; }).filter(Boolean);
         function byType(t) { return resources.filter(function(r){ return r.resourceType === t; }); }
+        var resourcesByUrl = {};
+        (bundle.entry || []).forEach(function(entry) {
+            if (entry.fullUrl && entry.resource) resourcesByUrl[entry.fullUrl] = entry.resource;
+        });
+        var composition   = byType('Composition')[0];
         var patient       = byType('Patient')[0];
         var encounter     = byType('Encounter')[0];
         var practitioner  = byType('Practitioner')[0];
         var organization  = byType('Organization')[0];
+        var invoice       = byType('Invoice')[0];
         var allConditions = byType('Condition');
         var observations  = byType('Observation');
         var medications   = byType('MedicationRequest');
@@ -1786,6 +1989,24 @@
         var serviceReqs   = byType('ServiceRequest');
         var allergies     = byType('AllergyIntolerance');
         var carePlans     = byType('CarePlan');
+        var documentRefs  = byType('DocumentReference');
+        var immunizations = byType('Immunization');
+
+        (window._abdmFhirObjectUrls || []).forEach(function(url) { URL.revokeObjectURL(url); });
+        window._abdmFhirObjectUrls = [];
+        function attachmentObjectUrl(attachment) {
+            if (!attachment || !attachment.data) return '';
+            try {
+                var bytes = atob(attachment.data);
+                var buffer = new Uint8Array(bytes.length);
+                for (var i = 0; i < bytes.length; i++) buffer[i] = bytes.charCodeAt(i);
+                var url = URL.createObjectURL(new Blob([buffer], { type: attachment.contentType || 'application/octet-stream' }));
+                window._abdmFhirObjectUrls.push(url);
+                return url;
+            } catch (error) {
+                return '';
+            }
+        }
 
         var coursePlans = [];
         var advicePlans = [];
@@ -1828,6 +2049,117 @@
             if (encStart) html += '<span><i class="bi bi-calendar2 me-1"></i>' + hesc(encStart) + '</span>';
             if (orgName) html += '<span><i class="bi bi-hospital me-1"></i>' + hesc(orgName) + '</span>';
             html += '</div></div>';
+        }
+
+        // ── Invoice Record document metadata
+        if (composition && invoice) {
+            var compositionCoding = ((((composition.type || {}).coding) || [])[0]) || {};
+            var compositionIdentifier = (composition.identifier || {}).value || '';
+            var bundleIdentifier = (bundle.identifier || {}).value || '';
+            html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">Invoice Record</small></div>';
+            html += '<div class="card-body py-2 small"><div class="row g-2">';
+            html += '<div class="col-md-4"><span class="text-muted">Document</span><div class="fw-semibold">' + hesc(composition.title || 'Invoice Record') + '</div></div>';
+            html += '<div class="col-md-3"><span class="text-muted">Status</span><div class="text-capitalize">' + hesc(composition.status || '-') + '</div></div>';
+            html += '<div class="col-md-5"><span class="text-muted">Created</span><div>' + hesc(composition.date || bundle.timestamp || '-') + '</div></div>';
+            html += '<div class="col-md-4"><span class="text-muted">Composition Type</span><div>' + hesc(compositionCoding.display || (composition.type || {}).text || '-') + '</div></div>';
+            html += '<div class="col-md-3"><span class="text-muted">LOINC</span><div><code>' + hesc(compositionCoding.code || '-') + '</code></div></div>';
+            html += '<div class="col-md-5"><span class="text-muted">Bundle / Care Context Identifier</span><div><code>' + hesc(bundleIdentifier || compositionIdentifier || '-') + '</code></div></div>';
+            html += '</div></div></div>';
+        }
+
+        // ── Invoice details and line items
+        if (invoice) {
+            var invoiceIdentifier = ((invoice.identifier || [])[0] || {}).value || '';
+            var invoiceCoding = ((((invoice.type || {}).coding) || [])[0]) || {};
+            var totalRate = (((invoice.totalPriceComponent || [])[0] || {}).amount || {});
+            var totalNet = invoice.totalNet || {};
+            var totalGross = invoice.totalGross || {};
+            function money(amount) {
+                if (amount.value === undefined || amount.value === null || amount.value === '') return '-';
+                var numeric = Number(amount.value);
+                return (amount.currency || 'INR') + ' ' + (isNaN(numeric) ? hesc(amount.value) : numeric.toFixed(2));
+            }
+            html += '<div class="card mb-2"><div class="card-header py-1 bg-light d-flex justify-content-between align-items-center"><small class="fw-bold text-uppercase text-secondary">Invoice Details</small>';
+            html += '<span class="badge bg-success text-capitalize">' + hesc(invoice.status || 'issued') + '</span></div><div class="card-body py-2">';
+            html += '<div class="row g-2 small mb-3">';
+            html += '<div class="col-md-4"><span class="text-muted">Invoice Number</span><div class="fw-bold">' + hesc(invoiceIdentifier || invoice.id || '-') + '</div></div>';
+            html += '<div class="col-md-3"><span class="text-muted">Invoice Type</span><div>' + hesc(invoiceCoding.display || (invoice.type || {}).text || '-') + (invoiceCoding.code ? ' <code>' + hesc(invoiceCoding.code) + '</code>' : '') + '</div></div>';
+            html += '<div class="col-md-2"><span class="text-muted">Invoice Date</span><div>' + hesc(fmtDate(invoice.date) || '-') + '</div></div>';
+            html += '<div class="col-md-3"><span class="text-muted">Total Price Component</span><div class="fw-semibold">' + money(totalRate) + '</div></div>';
+            html += '<div class="col-md-3"><span class="text-muted">Net Total</span><div class="fw-semibold">' + money(totalNet) + '</div></div>';
+            html += '<div class="col-md-3"><span class="text-muted">Gross Total</span><div class="fw-semibold">' + money(totalGross) + '</div></div>';
+            html += '</div>';
+            var invoiceItems = invoice.lineItem || [];
+            if (invoiceItems.length) {
+                html += '<div class="table-responsive"><table class="table table-sm table-bordered align-middle mb-0"><thead class="table-light"><tr><th style="width:55px">#</th><th>Item</th><th>Component</th><th class="text-end">Amount</th></tr></thead><tbody>';
+                invoiceItems.forEach(function(item, index) {
+                    var component = ((item.priceComponent || [])[0]) || {};
+                    var componentCoding = ((((component.code || {}).coding) || [])[0]) || {};
+                    var chargeReference = (item.chargeItemReference || {}).reference || '';
+                    var chargeItem = resourcesByUrl[chargeReference] || {};
+                    var itemName = (chargeItem.productCodeableConcept || {}).text
+                        || (chargeItem.code || {}).text
+                        || (item.chargeItemReference || {}).display
+                        || (item.chargeItemCodeableConcept || {}).text
+                        || 'Item';
+                    var itemQuantity = chargeItem.quantity || {};
+                    html += '<tr><td>' + hesc(item.sequence || index + 1) + '</td>';
+                    html += '<td><div class="fw-semibold">' + hesc(itemName) + '</div>';
+                    if (itemQuantity.value !== undefined) html += '<small class="text-muted">Qty: ' + hesc(itemQuantity.value) + ' ' + hesc(itemQuantity.unit || '') + '</small>';
+                    html += '</td>';
+                    html += '<td>' + hesc(componentCoding.display || component.type || '-') + (componentCoding.code ? ' <code>' + hesc(componentCoding.code) + '</code>' : '') + '</td>';
+                    html += '<td class="text-end">' + money(component.amount || {}) + '</td></tr>';
+                });
+                html += '</tbody></table></div>';
+            } else {
+                html += '<div class="text-muted small">No invoice line items found.</div>';
+            }
+            html += '</div></div>';
+        }
+
+        // ── Embedded invoice PDF
+        documentRefs.forEach(function(documentReference) {
+            var attachment = (((documentReference.content || [])[0] || {}).attachment) || {};
+            if (attachment.contentType !== 'application/pdf') return;
+            var pdfUrl = attachmentObjectUrl(attachment);
+            html += '<div class="card mb-2"><div class="card-body py-2 d-flex flex-wrap align-items-center gap-2">';
+            html += '<div class="flex-grow-1"><div class="fw-semibold">' + hesc(attachment.title || 'Invoice PDF') + '</div>';
+            html += '<small class="text-muted">Attached to this FHIR InvoiceRecord</small></div>';
+            if (pdfUrl) {
+                html += '<a class="btn btn-sm btn-outline-primary" href="' + hesc(pdfUrl) + '" target="_blank" rel="noopener">Open PDF</a>';
+                html += '<a class="btn btn-sm btn-primary" href="' + hesc(pdfUrl) + '" download="' + hesc(attachment.title || 'invoice.pdf') + '">Download</a>';
+            } else {
+                html += '<span class="badge bg-danger">Invalid PDF attachment</span>';
+            }
+            html += '</div></div>';
+        });
+
+        // ── Immunization Record
+        if (immunizations.length) {
+            html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">Vaccination Details</small></div>';
+            html += '<div class="table-responsive"><table class="table table-sm table-bordered align-middle mb-0"><thead class="table-light"><tr>';
+            html += '<th>Vaccine</th><th>Date</th><th>Doctor / Facility</th><th>Dose / Series</th><th>Lot</th><th>Target Disease</th></tr></thead><tbody>';
+            immunizations.forEach(function(immunization) {
+                var vaccineCoding = ((((immunization.vaccineCode || {}).coding) || [])[0]) || {};
+                var performerReference = ((((immunization.performer || [])[0] || {}).actor) || {});
+                var performerResource = resourcesByUrl[performerReference.reference || ''] || {};
+                var performerName = performerReference.display || (((performerResource.name || [])[0] || {}).text) || '-';
+                var locationReference = immunization.location || {};
+                var locationResource = resourcesByUrl[locationReference.reference || ''] || {};
+                var facilityName = locationReference.display || locationResource.name || '-';
+                var protocol = ((immunization.protocolApplied || [])[0]) || {};
+                var targetDisease = ((protocol.targetDisease || [])[0]) || {};
+                var targetCoding = (((targetDisease.coding || [])[0]) || {});
+                var dose = protocol.doseNumberPositiveInt || protocol.doseNumberString || '-';
+                html += '<tr><td><div class="fw-semibold">' + hesc((immunization.vaccineCode || {}).text || vaccineCoding.display || '-') + '</div>';
+                if (vaccineCoding.code) html += '<small class="text-muted">' + hesc(vaccineCoding.system || 'Code') + ': <code>' + hesc(vaccineCoding.code) + '</code></small>';
+                html += '</td><td>' + hesc(fmtDate(immunization.occurrenceDateTime) || '-') + '</td>';
+                html += '<td><div>' + hesc(performerName) + '</div><small class="text-muted">' + hesc(facilityName) + '</small></td>';
+                html += '<td><div>Dose ' + hesc(dose) + '</div><small class="text-muted">' + hesc(protocol.series || '-') + '</small></td>';
+                html += '<td>' + hesc(immunization.lotNumber || '-') + '</td>';
+                html += '<td>' + hesc(targetDisease.text || targetCoding.display || '-') + (targetCoding.code ? '<br><code>' + hesc(targetCoding.code) + '</code>' : '') + '</td></tr>';
+            });
+            html += '</tbody></table></div></div>';
         }
 
         // ── Complaints
@@ -2206,6 +2538,9 @@
         _fhirSubmitMode = options.submitMode || 'opd';
         _fhirSubmitTaskRow = options.taskRow || null;
         _fhirSubmitAbha = (options.abhaId || '').trim();
+        _fhirInvoiceSource = (options.invoiceSource || '').trim();
+        _fhirInvoiceBillId = parseInt(options.invoiceBillId || '0', 10) || 0;
+        _fhirInvoicePatientId = parseInt(options.invoicePatientId || '0', 10) || 0;
         var rowPushStatus = (options.pushStatus || '').toString().trim().toLowerCase();
 
         _fhirOpdId = 0; _fhirSessionId = 0;
@@ -2230,6 +2565,15 @@
                 btnSubmitFhirToAbdm.className = 'btn btn-sm btn-outline-warning';
                 btnSubmitFhirToAbdm.innerHTML = '<i class="bi bi-cloud-upload"></i> Submit to Gateway';
                 btnSubmitFhirToAbdm.title = 'Force gateway push for this OPD consult';
+            } else if (_fhirSubmitMode === 'invoice') {
+                btnSubmitFhirToAbdm.className = 'btn btn-sm btn-outline-warning';
+                btnSubmitFhirToAbdm.innerHTML = '<i class="bi bi-cloud-upload"></i> Push Invoice';
+                btnSubmitFhirToAbdm.title = 'Push this InvoiceRecord to the ABDM gateway';
+                if (['linked', 'queued', 'pushed'].indexOf(rowPushStatus) !== -1) {
+                    btnSubmitFhirToAbdm.disabled = true;
+                    btnSubmitFhirToAbdm.className = 'btn btn-sm btn-outline-secondary';
+                    btnSubmitFhirToAbdm.innerHTML = '<i class="bi bi-check2-circle"></i> Already Submitted';
+                }
             } else {
                 btnSubmitFhirToAbdm.className = defaultSubmitBtnClass;
                 btnSubmitFhirToAbdm.innerHTML = defaultSubmitBtnHtml;
@@ -2244,7 +2588,14 @@
         }
 
         if (btnRegenerateFhirModal) {
+            btnRegenerateFhirModal.disabled = false;
             btnRegenerateFhirModal.style.display = _fhirSubmitMode === 'task' ? 'none' : '';
+            btnRegenerateFhirModal.innerHTML = _fhirSubmitMode === 'invoice'
+                ? '<i class="bi bi-arrow-clockwise"></i> Rebuild Bundle'
+                : '<i class="bi bi-arrow-clockwise"></i> Regenerate';
+            btnRegenerateFhirModal.title = _fhirSubmitMode === 'invoice'
+                ? 'Rebuild FHIR JSON from current billing data'
+                : 'Rebuild FHIR bundle from current prescription data';
         }
 
         fhirPreviewModal.show();
@@ -2281,6 +2632,25 @@
     // Regenerate FHIR bundle in modal
     btnRegenerateFhirModal.addEventListener('click', function () {
         var btn = this;
+        if (_fhirSubmitMode === 'invoice') {
+            if (!_fhirInvoiceSource || _fhirInvoiceBillId <= 0 || _fhirInvoicePatientId <= 0) {
+                alert('Invoice source data is incomplete.');
+                return;
+            }
+            if (!confirm('Rebuild this FHIR InvoiceRecord from current billing data?')) return;
+            var invoiceUrl = '<?= base_url('AbdmGateway/invoice_fhir_preview') ?>'
+                + '?source=' + encodeURIComponent(_fhirInvoiceSource)
+                + '&bill_id=' + encodeURIComponent(String(_fhirInvoiceBillId))
+                + '&patient_id=' + encodeURIComponent(String(_fhirInvoicePatientId));
+            openFhirModal(invoiceUrl, fhirModalTitle ? fhirModalTitle.textContent : 'FHIR Invoice Preview', {
+                submitMode: 'invoice',
+                taskRow: _fhirSubmitTaskRow,
+                invoiceSource: _fhirInvoiceSource,
+                invoiceBillId: _fhirInvoiceBillId,
+                invoicePatientId: _fhirInvoicePatientId
+            });
+            return;
+        }
         if (_fhirOpdId <= 0) { alert('No FHIR bundle loaded.'); return; }
         if (!confirm('Rebuild FHIR bundle for OPD #' + _fhirOpdId + '?\nThis overwrites the stored bundle with fresh data.')) return;
         var origHtml = btn.innerHTML;
@@ -2337,6 +2707,61 @@
 
     btnSubmitFhirToAbdm.addEventListener('click', function () {
         var btn = this;
+
+        if (_fhirSubmitMode === 'invoice') {
+            if (!_fhirInvoiceSource || _fhirInvoiceBillId <= 0 || _fhirInvoicePatientId <= 0) {
+                alert('Invoice source data is incomplete.');
+                return;
+            }
+            if (!confirm('Push this verified InvoiceRecord to the ABDM gateway now?')) {
+                return;
+            }
+
+            var originalInvoiceHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Pushing...';
+            post('<?= base_url('AbdmGateway/share_invoice_source_bundle') ?>', {
+                source: _fhirInvoiceSource,
+                bill_id: _fhirInvoiceBillId,
+                patient_id: _fhirInvoicePatientId,
+                consent_handle: ''
+            }, function (res) {
+                if (!res || parseInt(res.ok || '0', 10) !== 1) {
+                    btn.disabled = false;
+                    btn.innerHTML = originalInvoiceHtml;
+                    var errorText = (res && (res.error_text || res.error || res.message)) || 'Invoice push failed';
+                    setStatus(errorText, true);
+                    alert('Invoice push failed:\n' + errorText);
+                    return;
+                }
+
+                var invoiceRow = _fhirSubmitTaskRow;
+                if (invoiceRow) {
+                    invoiceRow.setAttribute('data-push-status', res.status === 'local_stored' ? 'local_only' : 'queued');
+                    var statusBadge = invoiceRow.querySelector('.invoice-status-badge');
+                    if (statusBadge) {
+                        statusBadge.textContent = res.status === 'local_stored' ? 'Local Only' : 'Submitted';
+                        statusBadge.className = 'badge ' + (res.status === 'local_stored' ? 'bg-info' : 'bg-warning text-dark') + ' invoice-status-badge';
+                    }
+                    var details = invoiceRow.querySelector('.invoice-details');
+                    if (details) {
+                        details.innerHTML = res.queue_id
+                            ? '<div><strong>Queue:</strong> ' + hesc(String(res.queue_id)) + '</div>'
+                            : '<span>' + hesc(res.message || '-') + '</span>';
+                    }
+                    var rowPushButton = invoiceRow.querySelector('.btn-invoice-push');
+                    if (rowPushButton && res.status !== 'local_stored') {
+                        rowPushButton.disabled = true;
+                    }
+                }
+
+                btn.className = 'btn btn-sm btn-success';
+                btn.innerHTML = '<i class="bi bi-check-circle"></i> ' + (res.status === 'local_stored' ? 'Stored Locally' : 'Submitted');
+                setStatus(res.message || (res.status === 'local_stored' ? 'Invoice stored locally; patient ABHA is unavailable.' : 'Invoice submitted to ABDM gateway.'));
+                alert(res.message || (res.status === 'local_stored' ? 'Invoice stored locally; patient ABHA is unavailable.' : 'Invoice submitted to ABDM gateway.'));
+            });
+            return;
+        }
 
         if (_fhirSubmitMode === 'task') {
             if (!_fhirSubmitTaskRow) {
@@ -2444,6 +2869,36 @@
                         var logUrl = '<?= base_url('AbdmBridgeLog') ?>' + '?search=' + encodeURIComponent(res.queue_id);
                         window.open(logUrl, '_blank');
                     }
+                    fhirPreviewModal.hide();
+                });
+                return;
+            }
+
+            if (taskType === 'immunization_record_publish') {
+                var immunizationId = parseInt(_fhirSubmitTaskRow.getAttribute('data-entity-id') || '0', 10) || 0;
+                var immunizationPatientId = parseInt(_fhirSubmitTaskRow.getAttribute('data-patient-id') || '0', 10) || 0;
+                if (immunizationId <= 0 || immunizationPatientId <= 0) {
+                    alert('Task data missing (record_id/patient_id).');
+                    return;
+                }
+
+                post('<?= base_url('AbdmGateway/share_immunization_bundle') ?>', {
+                    task_id: parseInt(_fhirSubmitTaskRow.getAttribute('data-task-id') || '0', 10) || 0,
+                    patient_id: immunizationPatientId,
+                    record_id: immunizationId,
+                    abha_id: _fhirSubmitAbha,
+                    push_to_gateway: 1
+                }, function (res) {
+                    if (!res || parseInt(res.ok || '0', 10) !== 1) {
+                        alert('ABDM Bridge push failed:\n' + ((res && (res.error_text || res.error || res.message)) || 'Unknown error'));
+                        return;
+                    }
+                    var badge = _fhirSubmitTaskRow.querySelector('.status-pill');
+                    if (badge) {
+                        badge.textContent = 'BRIDGE SUBMITTED';
+                        badge.className = 'badge bg-info status-pill';
+                    }
+                    setStatus('Submitted to ABDM Bridge. Queue ID: ' + (res.queue_id || '-') + '; care context: ' + (res.care_context_reference || '-'));
                     fhirPreviewModal.hide();
                 });
                 return;
@@ -2569,6 +3024,59 @@
             );
         });
     });
+
+    function openInvoicePreview(row, pushIntent) {
+        var source = (row.getAttribute('data-invoice-source') || '').trim();
+        var billId = parseInt(row.getAttribute('data-bill-id') || '0', 10) || 0;
+        var patientId = parseInt(row.getAttribute('data-patient-id') || '0', 10) || 0;
+        var pushStatus = (row.getAttribute('data-push-status') || '').trim();
+        if (!source || billId <= 0 || patientId <= 0) {
+            setStatus('Invoice source data is incomplete.', true);
+            return;
+        }
+        var previewUrl = '<?= base_url('AbdmGateway/invoice_fhir_preview') ?>'
+            + '?source=' + encodeURIComponent(source)
+            + '&bill_id=' + encodeURIComponent(String(billId))
+            + '&patient_id=' + encodeURIComponent(String(patientId));
+        openFhirModal(previewUrl, (pushIntent ? 'Review & Push' : 'FHIR Preview') + ' — Invoice #' + billId, {
+            submitMode: 'invoice',
+            taskRow: row,
+            pushStatus: pushStatus,
+            invoiceSource: source,
+            invoiceBillId: billId,
+            invoicePatientId: patientId
+        });
+    }
+
+    document.querySelectorAll('.btn-invoice-preview').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var row = btn.closest('tr');
+            if (row) openInvoicePreview(row, false);
+        });
+    });
+
+    document.querySelectorAll('.btn-invoice-push').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var row = btn.closest('tr');
+            if (row) openInvoicePreview(row, true);
+        });
+    });
+
+    var dashboardRangeForm = document.getElementById('dashboardRangeForm');
+    if (dashboardRangeForm) {
+        dashboardRangeForm.addEventListener('submit', function (event) {
+            if (typeof window.load_form !== 'function') {
+                return;
+            }
+            event.preventDefault();
+            var dateFrom = document.getElementById('dashboardDateFrom').value;
+            var dateTo = document.getElementById('dashboardDateTo').value;
+            var rangeUrl = refreshUrl
+                + '?date_from=' + encodeURIComponent(dateFrom)
+                + '&date_to=' + encodeURIComponent(dateTo);
+            window.load_form(rangeUrl, 'ABDM Task Board');
+        });
+    }
 
     document.getElementById('btnRefresh').addEventListener('click', function () {
         if (typeof window.load_form === 'function') {

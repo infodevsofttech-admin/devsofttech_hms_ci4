@@ -6,6 +6,7 @@ use App\Libraries\Abdm\AbdmConnectorInterface;
 use App\Libraries\Abdm\AbdmConnectorFactory;
 use App\Libraries\Abdm\Fhir\FhirGeneratorFactory;
 use App\Libraries\Abdm\Fhir\Support\GatewayPayloadAdapter;
+use App\Libraries\Abdm\M2LinkStatusResolver;
 use App\Libraries\FhirR4Builder;
 use App\Libraries\FhirEncryptionService;
 use App\Libraries\AbdmAuditService;
@@ -139,9 +140,9 @@ class AbdmGateway extends BaseController
             $payload = [];
         }
 
-        $requestId = trim((string) ($payload['request_id'] ?? $this->request->getHeaderLine('X-Request-Id')));
+        $requestId = trim((string) ($payload['request_id'] ?? $payload['requestId'] ?? $this->request->getHeaderLine('X-Request-Id')));
         $abhaId = trim((string) ($payload['abha_id'] ?? ''));
-        $abhaAddress = trim((string) ($payload['abha_address'] ?? ''));
+        $abhaAddress = trim((string) ($payload['abha_address'] ?? $payload['abhaAddress'] ?? ''));
 
         if ($abhaId === '' && $abhaAddress === '') {
             return $this->response->setStatusCode(400)->setJSON([
@@ -152,25 +153,58 @@ class AbdmGateway extends BaseController
             ]);
         }
 
-        if (! $this->db->tableExists('patient_records')) {
+        if (! $this->db->tableExists('patient_records') && ! $this->db->tableExists('health_records')) {
             return $this->response->setJSON(['ok' => 1, 'patient' => null, 'care_contexts' => []]);
         }
 
         $abhaLookup = $abhaAddress !== '' ? $abhaAddress : $abhaId;
-        $rows = $this->db->table('patient_records')
-            ->select('patient_id, abha_id, record_type, created_at, consent_id')
-            ->where('abha_id', $abhaLookup)
-            ->where('status', 'ACTIVE')
-            ->orderBy('record_id', 'DESC')
-            ->limit(200)
-            ->get()
-            ->getResultArray();
+        $rows = [];
+        if ($this->db->tableExists('patient_records')) {
+            $rows = $this->db->table('patient_records')
+                ->select('patient_id, abha_id, record_type, created_at, consent_id')
+                ->where('abha_id', $abhaLookup)
+                ->where('status', 'ACTIVE')
+                ->orderBy('record_id', 'DESC')
+                ->limit(200)
+                ->get()
+                ->getResultArray();
+        }
 
-        if (empty($rows)) {
+        $healthRows = [];
+        if ($this->db->tableExists('health_records')) {
+            $healthFields = $this->db->getFieldNames('health_records') ?? [];
+            if (in_array('care_context_reference', $healthFields, true)) {
+                $healthRows = $this->db->table('health_records')
+                    ->select('id, patient_id, abha_id, hi_type, entity_type, entity_id, care_context_reference, created_at')
+                    ->where('abha_id', $abhaLookup)
+                    ->where('care_context_reference !=', '')
+                    ->whereIn('push_status', ['local_discovery_ready', 'queued', 'pushed', 'linked'])
+                    ->orderBy('id', 'DESC')
+                    ->limit(300)
+                    ->get()
+                    ->getResultArray();
+            }
+        }
+
+        if (empty($rows) && empty($healthRows)) {
             return $this->response->setJSON(['ok' => 1, 'patient' => null, 'care_contexts' => []]);
         }
 
         $contexts = [];
+        foreach ($healthRows as $row) {
+            $ccRef = trim((string) ($row['care_context_reference'] ?? ''));
+            $hiType = trim((string) ($row['hi_type'] ?? ''));
+            if ($ccRef === '' || $hiType === '') {
+                continue;
+            }
+            $createdAt = trim((string) ($row['created_at'] ?? ''));
+            $datePart = $createdAt !== '' ? date('Y-m-d', strtotime($createdAt)) : date('Y-m-d');
+            $contexts[$ccRef] = [
+                'referenceNumber' => $ccRef,
+                'display' => $hiType . ' - ' . $datePart,
+                'hiType' => $hiType,
+            ];
+        }
         foreach ($rows as $row) {
             $patientId = (int) ($row['patient_id'] ?? 0);
             $createdAt = trim((string) ($row['created_at'] ?? ''));
@@ -201,7 +235,7 @@ class AbdmGateway extends BaseController
             'action' => 'discovery_records',
             'entity_type' => 'patient_records',
             'abha_id' => $abhaLookup,
-            'patient_id' => (int) ($rows[0]['patient_id'] ?? 0),
+            'patient_id' => (int) ($healthRows[0]['patient_id'] ?? $rows[0]['patient_id'] ?? 0),
             'request' => $payload,
             'response' => ['count' => count($contextsOut)],
             'outcome' => 'success',
@@ -249,12 +283,12 @@ class AbdmGateway extends BaseController
             ]);
         }
 
-        if (! $this->db->tableExists('patient_records')) {
+        if (! $this->db->tableExists('patient_records') && ! $this->db->tableExists('health_records')) {
             return $this->response->setJSON(['ok' => 1, 'entries' => []]);
         }
 
         $requestedRefs = [];
-        $incomingRefs = $payload['care_context_references'] ?? [];
+        $incomingRefs = $payload['care_context_references'] ?? $payload['careContextReferences'] ?? [];
         if (is_array($incomingRefs)) {
             foreach ($incomingRefs as $ref) {
                 $v = trim((string) $ref);
@@ -264,16 +298,53 @@ class AbdmGateway extends BaseController
             }
         }
 
-        $rows = $this->db->table('patient_records')
-            ->select('record_id, patient_id, abha_id, consent_id, record_type, fhir_resource, created_at')
-            ->where('abha_id', $abhaLookup)
-            ->where('status', 'ACTIVE')
-            ->orderBy('record_id', 'DESC')
-            ->limit(300)
-            ->get()
-            ->getResultArray();
+        $rows = [];
+        if ($this->db->tableExists('patient_records')) {
+            $rows = $this->db->table('patient_records')
+                ->select('record_id, patient_id, abha_id, consent_id, record_type, fhir_resource, created_at')
+                ->where('abha_id', $abhaLookup)
+                ->where('status', 'ACTIVE')
+                ->orderBy('record_id', 'DESC')
+                ->limit(300)
+                ->get()
+                ->getResultArray();
+        }
 
         $entries = [];
+        $resolvedRefs = [];
+        $deliveredHealthRows = [];
+        if ($this->db->tableExists('health_records')) {
+            $healthFields = $this->db->getFieldNames('health_records') ?? [];
+            if (in_array('record_data', $healthFields, true) && in_array('care_context_reference', $healthFields, true)) {
+                $healthBuilder = $this->db->table('health_records')
+                    ->select('id, care_context_reference, record_data, entity_type, entity_id, push_status')
+                    ->where('abha_id', $abhaLookup)
+                    ->where('care_context_reference !=', '')
+                    ->whereIn('push_status', ['local_discovery_ready', 'queued', 'pushed', 'linked'])
+                    ->orderBy('id', 'DESC')
+                    ->limit(300);
+                if (! empty($requestedRefs)) {
+                    $healthBuilder->whereIn('care_context_reference', $requestedRefs);
+                }
+                foreach ($healthBuilder->get()->getResultArray() as $healthRow) {
+                    $ccRef = trim((string) ($healthRow['care_context_reference'] ?? ''));
+                    if ($ccRef === '' || isset($resolvedRefs[$ccRef])) {
+                        continue;
+                    }
+                    $fhir = json_decode((string) ($healthRow['record_data'] ?? ''), true);
+                    if (! is_array($fhir)) {
+                        continue;
+                    }
+                    $resolvedRefs[$ccRef] = true;
+                    $deliveredHealthRows[] = $healthRow;
+                    $entries[] = [
+                        'careContextReference' => $ccRef,
+                        'media' => 'application/fhir+json',
+                        'fhir' => $fhir,
+                    ];
+                }
+            }
+        }
         foreach ($rows as $row) {
             $patientId = (int) ($row['patient_id'] ?? 0);
             $recordType = strtoupper(trim((string) ($row['record_type'] ?? 'OTHER')));
@@ -281,7 +352,7 @@ class AbdmGateway extends BaseController
             $datePart = $createdAt !== '' ? date('Y-m-d', strtotime($createdAt)) : date('Y-m-d');
             $ccRef = $recordType . '-' . $patientId . '-' . str_replace('-', '', $datePart);
 
-            if (! empty($requestedRefs) && ! in_array($ccRef, $requestedRefs, true)) {
+            if (isset($resolvedRefs[$ccRef]) || (! empty($requestedRefs) && ! in_array($ccRef, $requestedRefs, true))) {
                 continue;
             }
 
@@ -295,7 +366,10 @@ class AbdmGateway extends BaseController
                 'media' => 'application/fhir+json',
                 'fhir' => $fhir,
             ];
+            $resolvedRefs[$ccRef] = true;
         }
+
+        $this->confirmFetchedHealthRecordsLinked($deliveredHealthRows, $abhaLookup, $requestId, $payload);
 
         $this->getAuditService()->log([
             'action' => 'fetch_record',
@@ -312,6 +386,80 @@ class AbdmGateway extends BaseController
             'ok' => 1,
             'entries' => $entries,
         ]);
+    }
+
+    /**
+     * A successful authenticated fetch proves that these canonical care contexts
+     * were linked and delivered, even when the bridge omits a link-status callback.
+     *
+     * @param array<int, array<string, mixed>> $healthRows
+     * @param array<string, mixed> $payload
+     */
+    private function confirmFetchedHealthRecordsLinked(array $healthRows, string $abhaId, string $requestId, array $payload): void
+    {
+        if ($healthRows === [] || ! $this->db->tableExists('health_records')) {
+            return;
+        }
+
+        $now = Time::now('Asia/Kolkata')->toDateTimeString();
+        $this->db->transStart();
+        foreach ($healthRows as $healthRow) {
+            $healthRecordId = (int) ($healthRow['id'] ?? 0);
+            $careContextRef = trim((string) ($healthRow['care_context_reference'] ?? ''));
+            if ($healthRecordId <= 0 || $careContextRef === '') {
+                continue;
+            }
+
+            if (strtolower(trim((string) ($healthRow['push_status'] ?? ''))) !== 'linked') {
+                $this->db->table('health_records')->where('id', $healthRecordId)->update([
+                    'push_status' => 'linked',
+                    'linked_at' => $now,
+                    'updated_at' => $now,
+                ]);
+            }
+
+            if ($this->db->tableExists('record_links')) {
+                $existing = $this->db->table('record_links')
+                    ->where('care_context_reference', $careContextRef)
+                    ->orderBy('id', 'DESC')
+                    ->get(1)
+                    ->getRowArray();
+                $linkData = [
+                    'health_record_id' => $healthRecordId,
+                    'abdm_txn_id' => $requestId !== '' ? $requestId : null,
+                    'link_status' => 'linked',
+                    'updated_at' => $now,
+                    'response_json' => (string) json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                ];
+                if (! empty($existing)) {
+                    if (strtolower(trim((string) ($existing['link_status'] ?? ''))) !== 'linked') {
+                        $linkData['linked_at'] = $now;
+                    }
+                    $this->db->table('record_links')->where('id', (int) $existing['id'])->update($linkData);
+                } else {
+                    $this->db->table('record_links')->insert(array_merge($linkData, [
+                        'abha_id' => $abhaId,
+                        'care_context_reference' => $careContextRef,
+                        'linked_at' => $now,
+                        'created_at' => $now,
+                    ]));
+                }
+            }
+
+            if ($this->db->tableExists('abdm_work_tasks')) {
+                $this->db->table('abdm_work_tasks')
+                    ->where('entity_type', (string) ($healthRow['entity_type'] ?? ''))
+                    ->where('entity_id', (string) ($healthRow['entity_id'] ?? ''))
+                    ->whereIn('status', ['pending', 'in_progress'])
+                    ->update([
+                        'status' => 'completed',
+                        'last_action_result' => 'Care context delivered through authenticated M2 fetch.',
+                        'completed_at' => $now,
+                        'updated_at' => $now,
+                    ]);
+            }
+        }
+        $this->db->transComplete();
     }
 
     /**
@@ -376,11 +524,11 @@ class AbdmGateway extends BaseController
             $payload = [];
         }
 
-        $requestId = trim((string) ($payload['request_id'] ?? $this->request->getHeaderLine('X-Request-Id')));
-        $abhaId = trim((string) ($payload['abha_id'] ?? $payload['abha_address'] ?? ''));
-        $status = strtolower(trim((string) ($payload['status'] ?? '')));
-        $careContextRef = trim((string) ($payload['care_context_reference'] ?? ''));
-        $linkedAt = trim((string) ($payload['linked_at'] ?? ''));
+        $callback = M2LinkStatusResolver::parse($payload, $this->request->getHeaderLine('X-Request-Id'));
+        $requestId = $callback['request_id'];
+        $abhaId = $callback['abha_id'];
+        $careContextRef = $callback['care_context_reference'];
+        $linkedAt = $callback['linked_at'];
 
         if ($abhaId === '' || $careContextRef === '') {
             return $this->response->setStatusCode(400)->setJSON([
@@ -391,37 +539,90 @@ class AbdmGateway extends BaseController
             ]);
         }
 
+        $incomingLinkStatus = $callback['status'];
+        $persistedLinkStatus = $incomingLinkStatus;
+        $now = Time::now('Asia/Kolkata')->toDateTimeString();
+        $healthRecord = null;
+
+        if ($this->db->tableExists('health_records')) {
+            $healthRecord = $this->db->table('health_records')
+                ->select('id, push_status, entity_type, entity_id')
+                ->where('care_context_reference', $careContextRef)
+                ->orderBy('id', 'DESC')
+                ->get(1)
+                ->getRowArray();
+        }
+
+        $this->db->transStart();
         if ($this->db->tableExists('record_links')) {
             $existing = $this->db->table('record_links')
                 ->where('care_context_reference', $careContextRef)
-                ->where('abha_id', $abhaId)
                 ->orderBy('id', 'DESC')
                 ->get(1)
                 ->getRowArray();
 
-            $linkStatus = $status === 'linked' ? 'linked' : 'failed';
-            $now = Time::now('Asia/Kolkata')->toDateTimeString();
+            $existingStatus = strtolower(trim((string) ($existing['link_status'] ?? '')));
+            $linkStatus = M2LinkStatusResolver::merge($existingStatus, $incomingLinkStatus);
+            $persistedLinkStatus = $linkStatus;
+            $linkData = [
+                'health_record_id' => ! empty($healthRecord) ? (int) $healthRecord['id'] : null,
+                'abdm_txn_id' => $requestId !== '' ? $requestId : null,
+                'link_status' => $linkStatus,
+                'linked_at' => $linkStatus === 'linked' ? ($linkedAt !== '' ? $linkedAt : $now) : null,
+                'updated_at' => $now,
+                'response_json' => (string) json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            ];
             if (! empty($existing)) {
-                $this->db->table('record_links')->where('id', (int) $existing['id'])->update([
-                    'link_status' => $linkStatus,
-                    'linked_at' => $linkedAt !== '' ? $linkedAt : $now,
-                    'updated_at' => $now,
-                    'response_json' => (string) json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-                ]);
+                if ($existingStatus === 'linked') {
+                    unset($linkData['linked_at']);
+                }
+                $this->db->table('record_links')->where('id', (int) $existing['id'])->update($linkData);
             } else {
-                $this->db->table('record_links')->insert([
+                $this->db->table('record_links')->insert(array_merge($linkData, [
                     'abha_id' => $abhaId,
                     'care_context_reference' => $careContextRef,
-                    'link_status' => $linkStatus,
-                    'linked_at' => $linkedAt !== '' ? $linkedAt : $now,
                     'created_at' => $now,
-                    'updated_at' => $now,
-                    'response_json' => (string) json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-                ]);
+                ]));
             }
         }
 
-        return $this->response->setJSON(['ok' => 1]);
+        if (! empty($healthRecord)) {
+            $currentPushStatus = strtolower(trim((string) ($healthRecord['push_status'] ?? '')));
+            if ($currentPushStatus === 'linked') {
+                $persistedLinkStatus = 'linked';
+            }
+            if ($currentPushStatus !== 'linked' && in_array($incomingLinkStatus, ['linked', 'failed'], true)) {
+                $healthRecordData = [
+                    'push_status' => $incomingLinkStatus,
+                    'updated_at' => $now,
+                ];
+                if ($incomingLinkStatus === 'linked') {
+                    $healthRecordData['linked_at'] = $linkedAt !== '' ? $linkedAt : $now;
+                }
+                $this->db->table('health_records')->where('id', (int) $healthRecord['id'])->update($healthRecordData);
+            }
+
+            if ($incomingLinkStatus === 'linked' && $this->db->tableExists('abdm_work_tasks')) {
+                $this->db->table('abdm_work_tasks')
+                    ->where('entity_type', (string) ($healthRecord['entity_type'] ?? ''))
+                    ->where('entity_id', (string) ($healthRecord['entity_id'] ?? ''))
+                    ->whereIn('status', ['pending', 'in_progress'])
+                    ->update([
+                        'status' => 'completed',
+                        'last_action_result' => 'Care context link confirmed by M2 callback.',
+                        'completed_at' => $linkedAt !== '' ? $linkedAt : $now,
+                        'updated_at' => $now,
+                    ]);
+            }
+        }
+        $this->db->transComplete();
+
+        return $this->response->setJSON([
+            'ok' => $this->db->transStatus() ? 1 : 0,
+            'request_id' => $requestId,
+            'care_context_reference' => $careContextRef,
+            'status' => $persistedLinkStatus,
+        ]);
     }
 
     public function consentRequest()
@@ -1130,10 +1331,6 @@ class AbdmGateway extends BaseController
             ]);
         };
 
-        if ($abhaId === '' && $abhaAddressPost !== '') {
-            $abhaId = $abhaAddressPost;
-        }
-
         if ($opdId <= 0 || $patientId <= 0) {
             $logBridge('error', ['ok' => 0, 'error_text' => 'opd_id and patient_id are required'], 'opd_id and patient_id are required', 'abdm.opd.prescription.share.validation');
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'opd_id and patient_id are required']);
@@ -1144,13 +1341,17 @@ class AbdmGateway extends BaseController
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'opd_fhir_documents table not found']);
         }
 
-        $hasAbha = $abhaId !== '' || $abhaAddressPost !== '';
+        $abhaIdentity = $this->resolvePatientAbhaIdentity($patientId, $abhaId, $abhaAddressPost);
+        $abhaNumber = $abhaIdentity['abha_id'];
+        $abhaAddress = $abhaIdentity['abha_address'];
+        $abhaId = $abhaAddress !== '' ? $abhaAddress : $abhaNumber;
+        $hasAbha = $abhaNumber !== '' || $abhaAddress !== '';
         $consent = null;
         $consentWarning = '';
         $consentEventType = 'abdm.opd.prescription.share.consent_missing';
         $consentLogStatus = 'warning';
         if ($hasAbha) {
-            $consent = $this->getActiveConsentRecord($patientId, $abhaId !== '' ? $abhaId : $abhaAddressPost, $consentHandle);
+            $consent = $this->getActiveConsentRecord($patientId, $abhaId, $consentHandle);
             if ($consent === null) {
                 if ($pushToGateway) {
                     $consentWarning = 'No active consent found. Proceeding with care-context push only.';
@@ -1192,59 +1393,8 @@ class AbdmGateway extends BaseController
             $bundle = ['raw' => $bundleJson];
         }
 
-        // Resolve ABHA identifiers from request + patient profile.
-        $abhaAddress = str_contains($abhaId, '@') ? $abhaId : '';
-        $abhaNumber = '';
-        if ($abhaAddressPost !== '' && str_contains($abhaAddressPost, '@')) {
-            $abhaAddress = $abhaAddressPost;
-        }
-        if ($abhaAddress === '') {
-            $digits = preg_replace('/\D/', '', $abhaId);
-            if (strlen((string) $digits) === 14) {
-                $abhaNumber = (string) $digits;
-            }
-        }
-
-        $patientName = '';
-        $patientRow = [];
-        if ($this->db->tableExists('patient_master')) {
-            $pmFields = $this->db->getFieldNames('patient_master') ?? [];
-            $pmSelect = ['id'];
-            foreach (['p_fname', 'p_lname', 'dob', 'p_dob', 'birth_date', 'date_of_birth', 'birth_year', 'year_of_birth', 'age', 'p_age', 'abha_address', 'abha_id', 'abha_no', 'abha'] as $f) {
-                if (in_array($f, $pmFields, true)) {
-                    $pmSelect[] = $f;
-                }
-            }
-
-            $patientRow = $this->db->table('patient_master')
-                ->select(implode(',', array_unique($pmSelect)))
-                ->where('id', $patientId)
-                ->get(1)
-                ->getRowArray() ?? [];
-
-            $patientName = $this->patientDisplayName($patientRow);
-
-            if ($abhaAddress === '') {
-                foreach (['abha_address', 'abha', 'abha_id', 'abha_no'] as $field) {
-                    $value = trim((string) ($patientRow[$field] ?? ''));
-                    if ($value !== '' && str_contains($value, '@')) {
-                        $abhaAddress = $value;
-                        break;
-                    }
-                }
-            }
-
-            if ($abhaNumber === '') {
-                foreach (['abha_id', 'abha_no', 'abha'] as $field) {
-                    $value = trim((string) ($patientRow[$field] ?? ''));
-                    $digits = preg_replace('/\D/', '', $value);
-                    if (strlen((string) $digits) === 14) {
-                        $abhaNumber = (string) $digits;
-                        break;
-                    }
-                }
-            }
-        }
+        $patientRow = $this->loadPatientRow($patientId);
+        $patientName = $this->patientDisplayName($patientRow);
 
         $patientBirthYear = $this->resolvePatientBirthYear($patientRow, $abhaAddress, $abhaNumber);
 
@@ -1534,13 +1684,18 @@ class AbdmGateway extends BaseController
         $ipdId         = (int) $this->request->getPost('ipd_id');
         $patientId     = (int) $this->request->getPost('patient_id');
         $abhaId        = trim((string) $this->request->getPost('abha_id'));
+        $abhaAddressPost = trim((string) $this->request->getPost('abha_address'));
         $consentHandle = trim((string) $this->request->getPost('consent_handle'));
 
         if ($ipdId <= 0 || $patientId <= 0) {
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'ipd_id and patient_id are required']);
         }
 
-        $hasAbha = $abhaId !== '';
+        $abhaIdentity = $this->resolvePatientAbhaIdentity($patientId, $abhaId, $abhaAddressPost);
+        $abhaNumber = $abhaIdentity['abha_id'];
+        $abhaAddress = $abhaIdentity['abha_address'];
+        $abhaId = $abhaAddress !== '' ? $abhaAddress : $abhaNumber;
+        $hasAbha = $abhaNumber !== '' || $abhaAddress !== '';
         $consent = null;
         $consentWarning = '';
         if ($hasAbha) {
@@ -1565,6 +1720,7 @@ class AbdmGateway extends BaseController
         $ccRef = (string) ($fhirPayload['care_context_reference'] ?? ('IPD-' . $ipdId . '-' . $visitDate));
         $ccDisplay = (string) ($fhirPayload['care_context_display'] ?? ('Discharge Summary ' . $visitDate));
         $bundle = (array) ($fhirPayload['bundle'] ?? []);
+        $attachmentPath = trim((string) ($fhirPayload['attachment_path'] ?? ''));
         $bundleJson = (string) json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
         // ── Store health_record ───────────────────────────────────────────────
@@ -1577,6 +1733,7 @@ class AbdmGateway extends BaseController
             'fhir_bundle'    => $bundleJson,
             'care_context_reference' => $ccRef,
             'consent_handle' => $effectiveConsent,
+            'attachment_path' => $attachmentPath,
         ]);
 
         if (! $hasAbha) {
@@ -1616,7 +1773,8 @@ class AbdmGateway extends BaseController
             $result = $this->connector->pushRecord([
                 'patient_id'             => (string) $patientId,
                 'patient_name'           => $patName !== '' ? $patName : ('PATIENT-' . $patientId),
-                'abha_id'                => $abhaId,
+                'abha_id'                => $abhaNumber,
+                'abha_address'           => $abhaAddress,
                 'year_of_birth'          => $birthYear,
                 'hi_type'                => 'DischargeSummaryRecord',
                 'record_type'            => 'DischargeSummaryRecord',
@@ -1677,6 +1835,7 @@ class AbdmGateway extends BaseController
         $labReqId      = (int) ($this->request->getPost('lab_req_id') ?? 0);
         $patientId     = (int) ($this->request->getPost('patient_id') ?? 0);
         $abhaId        = trim((string) ($this->request->getPost('abha_id') ?? ''));
+        $abhaAddressPost = trim((string) ($this->request->getPost('abha_address') ?? ''));
         $consentHandle = trim((string) ($this->request->getPost('consent_handle') ?? ''));
 
         if ($labReqId <= 0 || $patientId <= 0) {
@@ -1694,7 +1853,11 @@ class AbdmGateway extends BaseController
             return $this->response->setJSON(['ok' => 0, 'error' => 'Lab request not found']);
         }
 
-        $hasAbha = $abhaId !== '';
+        $abhaIdentity = $this->resolvePatientAbhaIdentity($patientId, $abhaId, $abhaAddressPost);
+        $abhaNumber = $abhaIdentity['abha_id'];
+        $abhaAddress = $abhaIdentity['abha_address'];
+        $abhaId = $abhaAddress !== '' ? $abhaAddress : $abhaNumber;
+        $hasAbha = $abhaNumber !== '' || $abhaAddress !== '';
         $consentRecord = null;
         $consentWarning = '';
         if ($hasAbha) {
@@ -1859,7 +2022,8 @@ class AbdmGateway extends BaseController
             $result = $this->connector->pushRecord([
                 'patient_id'             => (string) $patientId,
                 'patient_name'           => $patName,
-                'abha_id'                => $abhaId,
+                'abha_id'                => $abhaNumber,
+                'abha_address'           => $abhaAddress,
                 'year_of_birth'          => $patientBirthYear,
                 'hi_type'                => 'DiagnosticReportRecord',
                 'record_type'            => 'DiagnosticReportRecord',
@@ -2087,16 +2251,19 @@ class AbdmGateway extends BaseController
         $abhaId = trim((string) $this->request->getPost('abha_id'));
         $abhaAddressPost = trim((string) $this->request->getPost('abha_address'));
         $consentHandle = trim((string) $this->request->getPost('consent_handle'));
-        $pushToGateway = $this->resolveGatewayPushMode();
 
-        if ($abhaId === '' && $abhaAddressPost !== '') {
-            $abhaId = $abhaAddressPost;
-        }
         if ($patientId <= 0) {
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'patient_id is required']);
         }
+        $abhaIdentity = $this->resolvePatientAbhaIdentity($patientId, $abhaId, $abhaAddressPost);
+        $abhaNumber = $abhaIdentity['abha_id'];
+        $abhaAddress = $abhaIdentity['abha_address'];
+        $abhaId = $abhaAddress !== '' ? $abhaAddress : $abhaNumber;
         if ($abhaId === '') {
-            $abhaId = $this->resolvePatientAbhaIdentifier($patientId);
+            return $this->response->setStatusCode(422)->setJSON([
+                'ok' => 0,
+                'error_text' => 'ABHA ID is required to push ImmunizationRecord to ABDM Bridge.',
+            ]);
         }
 
         $payload = $this->buildImmunizationGatewayPayload($patientId, $recordId, $abhaId);
@@ -2106,7 +2273,7 @@ class AbdmGateway extends BaseController
 
         $bundle = (array) ($payload['bundle'] ?? []);
         $bundleJson = (string) json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        $ccRef = (string) ($payload['care_context_reference'] ?? ('IMM-' . $patientId . '-' . date('Y-m-d')));
+        $ccRef = (string) ($payload['care_context_reference'] ?? ('IMM-' . ($recordId > 0 ? $recordId : ('PAT-' . $patientId))));
         $visitDate = (string) ($payload['visit_date'] ?? date('Y-m-d'));
         $patientName = (string) ($payload['patient_name'] ?? ('PATIENT-' . $patientId));
 
@@ -2122,54 +2289,27 @@ class AbdmGateway extends BaseController
             'fhir_bundle' => $bundleJson,
             'care_context_reference' => $ccRef,
             'consent_handle' => $effectiveConsent,
+            'reuse_existing' => true,
         ]);
-
-        if ($abhaId === '') {
-            if ($healthRecordId > 0 && $this->db->tableExists('health_records')) {
-                $this->db->table('health_records')->where('id', $healthRecordId)->update([
-                    'push_status' => 'local_only',
-                    'updated_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
-                ]);
-            }
-
-            return $this->response->setJSON([
-                'ok' => 1,
-                'status' => 'local_stored',
-                'health_record_id' => $healthRecordId,
+        if ($healthRecordId <= 0) {
+            return $this->response->setStatusCode(500)->setJSON([
+                'ok' => 0,
+                'error_text' => 'Unable to persist ImmunizationRecord for M2 discovery.',
                 'care_context_reference' => $ccRef,
-                'message' => 'ABHA not available. Immunization record stored locally for later discovery.',
-            ]);
-        }
-
-        if (! $pushToGateway) {
-            if ($healthRecordId > 0 && $this->db->tableExists('health_records')) {
-                $this->db->table('health_records')->where('id', $healthRecordId)->update([
-                    'push_status' => 'local_discovery_ready',
-                    'updated_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
-                ]);
-            }
-
-            return $this->response->setJSON([
-                'ok' => 1,
-                'status' => 'local_discovery_ready',
-                'health_record_id' => $healthRecordId,
-                'care_context_reference' => $ccRef,
-                'consent_handle' => $effectiveConsent,
-                'mode' => 'm2_hms_source',
-                'message' => 'Immunization record registered in HMS for ABDM discovery/fetch callbacks.',
             ]);
         }
 
         $queueId = null;
         $bridgeRecordId = 0;
+        $firstPushedAt = '';
         $connectorError = null;
         $bridgeResponse = [];
         try {
             $result = $this->connector->pushRecord([
                 'patient_id' => (string) $patientId,
                 'patient_name' => $patientName,
-                'abha_id' => preg_match('/^\d{14}$/', $abhaId) === 1 ? $abhaId : '',
-                'abha_address' => str_contains($abhaId, '@') ? $abhaId : '',
+                'abha_id' => $abhaNumber,
+                'abha_address' => $abhaAddress,
                 'year_of_birth' => (int) ($payload['year_of_birth'] ?? 0),
                 'hi_type' => 'ImmunizationRecord',
                 'record_type' => 'ImmunizationRecord',
@@ -2184,6 +2324,7 @@ class AbdmGateway extends BaseController
             $bridgeResponse = $result;
             $queueId = $this->extractGatewayPushQueueId($result);
             $bridgeRecordId = $this->extractGatewayPushRecordId($result);
+            $firstPushedAt = $this->extractGatewayPushFirstPushedAt($result);
 
             if (! $this->isGatewayPushSubmitted($result)) {
                 $connectorError = $this->extractGatewayPushErrorText($result);
@@ -2199,7 +2340,7 @@ class AbdmGateway extends BaseController
         }
 
         if ($healthRecordId > 0) {
-            $this->updateHealthRecordTxn($healthRecordId, (string) ($queueId ?? ''), $connectorError, $bridgeRecordId);
+            $this->updateHealthRecordTxn($healthRecordId, (string) ($queueId ?? ''), $connectorError, $bridgeRecordId, $firstPushedAt);
         }
 
         $this->getAuditService()->log([
@@ -2218,6 +2359,25 @@ class AbdmGateway extends BaseController
             'outcome' => $connectorError === null ? 'success' : 'failure',
             'error_message' => (string) ($connectorError ?? ''),
         ]);
+
+        if ($this->db->tableExists('abdm_work_tasks')) {
+            $taskStatus = $connectorError === null ? 'in_progress' : 'failed';
+            $taskResult = $connectorError === null
+                ? 'Submitted to ABDM Bridge at ' . $ccRef
+                    . ($queueId ? '; queue ID ' . $queueId : '')
+                    . ($bridgeRecordId > 0 ? '; record ID ' . $bridgeRecordId : '') . '.'
+                : 'ABDM Bridge push failed for ' . $ccRef . ': ' . $connectorError;
+            $this->db->table('abdm_work_tasks')
+                ->where('task_type', 'immunization_record_publish')
+                ->where('entity_type', 'immunization')
+                ->where('entity_id', (string) $recordId)
+                ->whereIn('status', ['pending', 'in_progress', 'failed'])
+                ->update([
+                    'status' => $taskStatus,
+                    'last_action_result' => $taskResult,
+                    'updated_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
+                ]);
+        }
 
         return $this->response->setJSON([
             'ok' => $connectorError === null ? 1 : 0,
@@ -2311,6 +2471,85 @@ class AbdmGateway extends BaseController
         return $this->pushAdditionalHiRecord($payload, (int) $payload['patient_id'], $abhaId, $consentHandle);
     }
 
+    public function invoiceFhirPreview()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(403)->setJSON(['status' => 'error', 'message' => 'AJAX only']);
+        }
+
+        $source = strtolower(trim((string) $this->request->getGet('source')));
+        $billId = (int) $this->request->getGet('bill_id');
+        $patientId = (int) $this->request->getGet('patient_id');
+        $abhaId = trim((string) $this->request->getGet('abha_id'));
+
+        if (! in_array($source, ['opd_invoice', 'charges_invoice', 'ipd_invoice'], true) || $billId <= 0) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'status' => 'error',
+                'message' => 'A valid source and bill_id are required.',
+            ]);
+        }
+
+        try {
+            $payload = $this->buildInvoiceSourceRecordPayload($source, $billId, $patientId, $abhaId);
+        } catch (\RuntimeException $e) {
+            return $this->response->setStatusCode(422)->setJSON([
+                'status' => 'error',
+                'message' => $e->getMessage(),
+            ]);
+        }
+        if ($payload === null) {
+            return $this->response->setStatusCode(404)->setJSON([
+                'status' => 'error',
+                'message' => 'Invoice not found or patient could not be resolved.',
+            ]);
+        }
+
+        return $this->response->setJSON([
+            'status' => 'ok',
+            'source' => $source,
+            'bill_id' => $billId,
+            'patient_id' => (int) $payload['patient_id'],
+            'hi_type' => 'InvoiceRecord',
+            'care_context_reference' => (string) $payload['care_context_reference'],
+            'bundle' => (array) $payload['bundle'],
+        ]);
+    }
+
+    public function shareInvoiceSourceBundle()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $source = strtolower(trim((string) $this->request->getPost('source')));
+        $billId = (int) $this->request->getPost('bill_id');
+        $patientId = (int) $this->request->getPost('patient_id');
+        $abhaId = trim((string) ($this->request->getPost('abha_id') ?? $this->request->getPost('abha_address') ?? ''));
+        $consentHandle = trim((string) $this->request->getPost('consent_handle'));
+
+        if (! in_array($source, ['opd_invoice', 'charges_invoice', 'ipd_invoice'], true) || $billId <= 0) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'A valid source and bill_id are required']);
+        }
+
+        try {
+            $payload = $this->buildInvoiceSourceRecordPayload($source, $billId, $patientId, $abhaId);
+        } catch (\RuntimeException $e) {
+            return $this->response->setStatusCode(422)->setJSON([
+                'ok' => 0,
+                'error_text' => $e->getMessage(),
+            ]);
+        }
+        if ($payload === null) {
+            return $this->response->setStatusCode(404)->setJSON(['ok' => 0, 'error_text' => 'Invoice not found or patient could not be resolved']);
+        }
+
+        if ($abhaId === '') {
+            $abhaId = $this->resolvePatientAbhaIdentifier((int) $payload['patient_id']);
+        }
+
+        return $this->pushAdditionalHiRecord($payload, (int) $payload['patient_id'], $abhaId, $consentHandle);
+    }
+
     public function ipdDischargeFhirPreview()
     {
         if (! $this->request->isAJAX()) {
@@ -2370,6 +2609,16 @@ class AbdmGateway extends BaseController
 
         $doctorName = trim((string) ($ipdRow['r_doc_name'] ?? ''));
         $doctorId = (int) ($ipdRow['r_doc_id'] ?? 0);
+        if ($doctorId <= 0 && $this->db->tableExists('ipd_master_doc_list')) {
+            $doctorLink = $this->db->table('ipd_master_doc_list')
+                ->select('doc_id')
+                ->where('ipd_id', $ipdId)
+                ->where('doc_id >', 0)
+                ->orderBy('id', 'ASC')
+                ->get(1)
+                ->getRowArray();
+            $doctorId = (int) ($doctorLink['doc_id'] ?? 0);
+        }
         $doctorRegNo = '';
         if ($doctorId > 0 && $this->db->tableExists('doctor_master')) {
             $dFields = $this->db->getFieldNames('doctor_master') ?? [];
@@ -2609,9 +2858,11 @@ class AbdmGateway extends BaseController
 
         $hospital = $this->getHospitalProfileForFhir();
         $hfrId = trim((string) ($hospital['hfr_id'] ?? ''));
+        $documents = $this->buildIpdPdfDocuments($ipdId, $dischargeRaw);
 
         $source = [
             'record_id' => (string) $ipdId,
+            'bundle_identifier' => 'discharge-' . (trim((string) ($ipdRow['ipd_code'] ?? '')) ?: (string) $ipdId),
             'session_id' => (string) $ipdId,
             'visit_date' => $visitDate,
             'completed_at' => $this->toIsoDateTimeOrNow($dischargeRaw),
@@ -2635,7 +2886,8 @@ class AbdmGateway extends BaseController
                 'abha_address' => $abhaAddress,
             ],
             'encounter' => [
-                'id' => (string) $ipdId,
+                'id' => trim((string) ($ipdRow['ipd_code'] ?? '')) ?: (string) $ipdId,
+                'class_code' => 'IMP',
                 'start' => $this->toIsoDateTimeOrNow($admissionRaw),
                 'end' => $this->toIsoDateTimeOrNow($dischargeRaw),
             ],
@@ -2646,6 +2898,7 @@ class AbdmGateway extends BaseController
             'investigations' => $investigations,
             'allergies' => $allergies,
             'care_plans' => $carePlans,
+            'documents' => $documents,
         ];
 
         $factory = new FhirGeneratorFactory();
@@ -2660,7 +2913,38 @@ class AbdmGateway extends BaseController
             'doctor_name' => (string) ($payload['doctor_name'] ?? $doctorName),
             'visit_date' => (string) ($payload['visit_date'] ?? $visitDate),
             'ipd_row' => $ipdRow,
+            'attachment_path' => (string) ($documents[0]['path'] ?? ''),
         ];
+    }
+
+    /** @return array<int,array<string,string>> */
+    private function buildIpdPdfDocuments(int $ipdId, string $dischargeRaw): array
+    {
+        $directory = WRITEPATH . 'uploads' . DIRECTORY_SEPARATOR . 'abdm' . DIRECTORY_SEPARATOR . 'ipd' . DIRECTORY_SEPARATOR . $ipdId;
+        $createdAt = $this->toIsoDateTimeOrNow($dischargeRaw);
+        $documents = [];
+        foreach ([
+            ['file' => 'discharge-summary.pdf', 'title' => 'IPD Discharge Summary', 'loinc' => '18842-5'],
+        ] as $definition) {
+            $path = $directory . DIRECTORY_SEPARATOR . $definition['file'];
+            if (! is_file($path) || filesize($path) === 0) {
+                continue;
+            }
+            $binary = file_get_contents($path);
+            if (! is_string($binary) || ! str_starts_with($binary, '%PDF-')) {
+                continue;
+            }
+            $documents[] = [
+                'title' => $definition['title'],
+                'loinc_code' => $definition['loinc'],
+                'content_type' => 'application/pdf',
+                'data' => base64_encode($binary),
+                'created_at' => $createdAt,
+                'path' => $path,
+            ];
+        }
+
+        return $documents;
     }
 
     /**
@@ -2678,7 +2962,15 @@ class AbdmGateway extends BaseController
         }
 
         $recordsBuilder = $this->db->table('immunization_records r')
-            ->select('r.*, s.series_name, s.series_doses, s.age_label, v.target_disease_code, v.target_disease_name')
+            ->select("r.*, s.series_name, s.series_doses, s.age_label,
+                COALESCE(NULLIF(r.vaccine_code, ''), v.vaccine_code) AS vaccine_code,
+                COALESCE(NULLIF(r.vaccine_code_system, ''), v.vaccine_code_system) AS vaccine_code_system,
+                COALESCE(NULLIF(r.vaccine_name, ''), NULLIF(v.vaccine_display, ''), v.vaccine_name) AS vaccine_name,
+                COALESCE(NULLIF(r.route_code, ''), v.route_code) AS route_code,
+                COALESCE(NULLIF(r.route_name, ''), v.route_name) AS route_name,
+                COALESCE(NULLIF(r.site_code, ''), v.site_code) AS site_code,
+                COALESCE(NULLIF(r.site_name, ''), v.site_name) AS site_name,
+                v.target_disease_code, v.target_disease_name", false)
             ->join('immunization_schedule_master s', 's.id = r.schedule_id', 'left')
             ->join('immunization_vaccine_master v', 'v.id = r.vaccine_master_id', 'left')
             ->where('r.patient_id', $patientId)
@@ -2739,7 +3031,16 @@ class AbdmGateway extends BaseController
             }
         }
         $visitDate = $latestDate !== '' ? date('Y-m-d', strtotime($latestDate)) : date('Y-m-d');
-        $ccRef = $recordId > 0 ? ('IMM-' . $recordId . '-' . $visitDate) : ('IMM-' . $patientId . '-' . $visitDate);
+        $ccRef = self::resolveImmunizationCareContextReference($records, $recordId, $patientId);
+        if ($recordId > 0 && trim((string) ($records[0]['abdm_care_context_reference'] ?? '')) === '') {
+            $this->db->table('immunization_records')
+                ->where('id', $recordId)
+                ->groupStart()
+                    ->where('abdm_care_context_reference', null)
+                    ->orWhere('abdm_care_context_reference', '')
+                ->groupEnd()
+                ->update(['abdm_care_context_reference' => $ccRef]);
+        }
 
         $birthDate = '';
         foreach (['dob', 'birth_date', 'date_of_birth', 'p_dob'] as $field) {
@@ -2776,6 +3077,36 @@ class AbdmGateway extends BaseController
             'visit_date' => $visitDate,
             'records' => $records,
         ];
+    }
+
+    /**
+     * @param array<int,array<string,mixed>> $records
+     */
+    private static function resolveImmunizationCareContextReference(array $records, int $recordId, int $patientId): string
+    {
+        if ($recordId > 0) {
+            $storedReference = trim((string) ($records[0]['abdm_care_context_reference'] ?? ''));
+            return $storedReference !== '' ? $storedReference : 'IMM-' . $recordId;
+        }
+
+        $sourceIds = [];
+        foreach ($records as $record) {
+            $sourceId = (int) ($record['id'] ?? 0);
+            if ($sourceId > 0) {
+                $sourceIds[] = $sourceId;
+            }
+        }
+        $sourceIds = array_values(array_unique($sourceIds));
+        sort($sourceIds, SORT_NUMERIC);
+
+        if (count($sourceIds) === 1) {
+            return 'IMM-' . $sourceIds[0];
+        }
+        if ($sourceIds !== []) {
+            return 'IMM-SET-' . substr(hash('sha256', implode(',', $sourceIds)), 0, 20);
+        }
+
+        return 'IMM-PAT-' . $patientId;
     }
 
     /**
@@ -2839,13 +3170,13 @@ class AbdmGateway extends BaseController
     private function normalizeFhirGender(string $gender): string
     {
         $value = strtolower(trim($gender));
-        if ($value === 'm' || $value === 'male') {
+        if ($value === '1' || $value === 'm' || $value === 'male') {
             return 'male';
         }
-        if ($value === 'f' || $value === 'female') {
+        if ($value === '2' || $value === 'f' || $value === 'female') {
             return 'female';
         }
-        if ($value === 'other') {
+        if ($value === '3' || $value === 'other') {
             return 'other';
         }
         return 'unknown';
@@ -3335,6 +3666,14 @@ class AbdmGateway extends BaseController
             // Try from POST param as override
             $abhaId = trim((string) $this->request->getPost('abha_id'));
         }
+        $abhaIdentity = $this->resolvePatientAbhaIdentity(
+            $patientId,
+            $abhaId,
+            trim((string) $this->request->getPost('abha_address'))
+        );
+        $abhaNumber = $abhaIdentity['abha_id'];
+        $abhaAddress = $abhaIdentity['abha_address'];
+        $abhaId = $abhaAddress !== '' ? $abhaAddress : $abhaNumber;
 
         // Prefer the plain stored bundle; fall back to the encrypted copy for older rows.
         $storedPayload = [];
@@ -3383,7 +3722,8 @@ class AbdmGateway extends BaseController
             $result  = $this->connector->pushRecord([
                 'patient_id'             => (string) $patientId,
                 'patient_name'           => $sanitizedPatientName !== '' ? $sanitizedPatientName : ('PATIENT-' . $patientId),
-                'abha_id'                => $abhaId,
+                'abha_id'                => $abhaNumber,
+                'abha_address'           => $abhaAddress,
                 'year_of_birth'          => $patientBirthYear,
                 'hi_type'                => $hiType,
                 'record_type'            => $this->mapHiTypeToRecordType($hiType),
@@ -4615,7 +4955,8 @@ class AbdmGateway extends BaseController
      * Returns 0 when the table is absent or on any DB error (fail-open).
      *
     * @param array{patient_id: int, abha_id: string, hi_type: string, entity_type: string,
-    *              entity_id: string, fhir_bundle: string, care_context_reference?: string, consent_handle?: string} $data
+    *              entity_id: string, fhir_bundle: string, care_context_reference?: string, consent_handle?: string,
+    *              attachment_path?: string, reuse_existing?: bool} $data
      */
     private function storeHealthRecord(array $data): int
     {
@@ -4654,6 +4995,29 @@ class AbdmGateway extends BaseController
             $hrFields = $this->db->getFieldNames('health_records') ?? [];
             if (in_array('care_context_reference', $hrFields, true)) {
                 $insert['care_context_reference'] = trim((string) ($data['care_context_reference'] ?? '')) ?: null;
+            }
+            if (in_array('attachment_path', $hrFields, true)) {
+                $insert['attachment_path'] = trim((string) ($data['attachment_path'] ?? '')) ?: null;
+            }
+
+            $careContextReference = trim((string) ($data['care_context_reference'] ?? ''));
+            if (($data['reuse_existing'] ?? false) === true && $careContextReference !== '') {
+                $existing = $this->db->table('health_records')
+                    ->select('id')
+                    ->where('hi_type', (string) ($data['hi_type'] ?? 'unknown'))
+                    ->where('entity_type', (string) ($data['entity_type'] ?? ''))
+                    ->where('entity_id', (string) ($data['entity_id'] ?? ''))
+                    ->where('care_context_reference', $careContextReference)
+                    ->orderBy('id', 'DESC')
+                    ->get(1)
+                    ->getRowArray();
+                if (! empty($existing)) {
+                    $existingId = (int) ($existing['id'] ?? 0);
+                    $update = $insert;
+                    unset($update['push_status'], $update['push_at'], $update['created_at']);
+                    $this->db->table('health_records')->where('id', $existingId)->update($update);
+                    return $existingId;
+                }
             }
 
             $this->db->table('health_records')->insert($insert);
@@ -4893,17 +5257,16 @@ class AbdmGateway extends BaseController
     private function isGatewayPushDuplicate(array $result): bool
     {
         $httpCode = $this->extractGatewayPushHttpCode($result);
-        if ($httpCode === 409) {
-            return true;
-        }
-
         $codes = [
             $result['error_code'] ?? null,
+            is_array($result['error'] ?? null) ? ($result['error']['code'] ?? null) : ($result['error'] ?? null),
             $result['response']['error_code'] ?? null,
+            is_array($result['response']['error'] ?? null) ? ($result['response']['error']['code'] ?? null) : ($result['response']['error'] ?? null),
             $result['data']['error_code'] ?? null,
+            is_array($result['data']['error'] ?? null) ? ($result['data']['error']['code'] ?? null) : ($result['data']['error'] ?? null),
         ];
         foreach ($codes as $code) {
-            if (strtoupper(trim((string) $code)) === 'DUPLICATE_RECORD') {
+            if ($httpCode === 409 && strtoupper(trim((string) $code)) === 'DUPLICATE_RECORD') {
                 return true;
             }
         }
@@ -4919,7 +5282,7 @@ class AbdmGateway extends BaseController
     private function isGatewayPushSubmitted(array $result): bool
     {
         $httpCode = $this->extractGatewayPushHttpCode($result);
-        if ($httpCode === 201 || $httpCode === 409) {
+        if ($httpCode === 201) {
             return true;
         }
 
@@ -4970,6 +5333,25 @@ class AbdmGateway extends BaseController
     }
 
     /**
+     * @param array<string,mixed> $result
+     */
+    private function extractGatewayPushFirstPushedAt(array $result): string
+    {
+        foreach ([
+            $result['first_pushed_at'] ?? null,
+            $result['response']['first_pushed_at'] ?? null,
+            $result['data']['first_pushed_at'] ?? null,
+        ] as $value) {
+            $timestamp = trim((string) $value);
+            if ($timestamp !== '') {
+                return $timestamp;
+            }
+        }
+
+        return '';
+    }
+
+    /**
      * Emit one diagnostic line to show exactly which gateway response fields
      * supplied queue/record identifiers for records/push integration.
      *
@@ -5009,7 +5391,7 @@ class AbdmGateway extends BaseController
      * @param string|null $error           Connector error message (null = success)
      * @param int         $bridgeRecordId  Bridge record_id (from POST /v3/records/push response)
      */
-    private function updateHealthRecordTxn(int $healthRecordId, string $queueId, ?string $error, int $bridgeRecordId = 0): void
+    private function updateHealthRecordTxn(int $healthRecordId, string $queueId, ?string $error, int $bridgeRecordId = 0, string $firstPushedAt = ''): void
     {
         try {
             $now = Time::now('Asia/Kolkata')->toDateTimeString();
@@ -5020,12 +5402,12 @@ class AbdmGateway extends BaseController
                     'push_status'  => $error === null ? 'queued' : 'failed',
                     'updated_at'   => $now,
                 ];
-                // Store bridge record_id when the column exists (migration adds it)
-                if ($bridgeRecordId > 0) {
-                    $hrFields = $this->db->getFieldNames('health_records') ?? [];
-                    if (in_array('bridge_record_id', $hrFields, true)) {
-                        $hrUpdate['bridge_record_id'] = $bridgeRecordId;
-                    }
+                $hrFields = $this->db->getFieldNames('health_records') ?? [];
+                if ($bridgeRecordId > 0 && in_array('bridge_record_id', $hrFields, true)) {
+                    $hrUpdate['bridge_record_id'] = $bridgeRecordId;
+                }
+                if ($firstPushedAt !== '' && in_array('first_pushed_at', $hrFields, true)) {
+                    $hrUpdate['first_pushed_at'] = $firstPushedAt;
                 }
                 $this->db->table('health_records')
                     ->where('id', $healthRecordId)
@@ -5560,6 +5942,10 @@ class AbdmGateway extends BaseController
 
     private function pushAdditionalHiRecord(array $payload, int $patientId, string $abhaId, string $consentHandle)
     {
+        $abhaIdentity = $this->resolvePatientAbhaIdentity($patientId, $abhaId);
+        $abhaNumber = $abhaIdentity['abha_id'];
+        $abhaAddress = $abhaIdentity['abha_address'];
+        $abhaId = $abhaAddress !== '' ? $abhaAddress : $abhaNumber;
         $hiType = (string) ($payload['hi_type'] ?? 'HealthDocumentRecord');
         $entityType = (string) ($payload['entity_type'] ?? strtolower($hiType));
         $entityId = (string) ($payload['entity_id'] ?? $patientId);
@@ -5619,8 +6005,8 @@ class AbdmGateway extends BaseController
             $result = $this->connector->pushRecord([
                 'patient_id' => (string) $patientId,
                 'patient_name' => $patientName,
-                'abha_id' => preg_match('/^\d{14}$/', $abhaId) === 1 ? $abhaId : '',
-                'abha_address' => str_contains($abhaId, '@') ? $abhaId : '',
+                'abha_id' => $abhaNumber,
+                'abha_address' => $abhaAddress,
                 'year_of_birth' => $patientBirthYear,
                 'hi_type' => $hiType,
                 'record_type' => $hiType,
@@ -5803,30 +6189,202 @@ class AbdmGateway extends BaseController
         ];
     }
 
+    private function buildInvoiceSourceRecordPayload(string $source, int $billId, int $patientId, string $abhaId): ?array
+    {
+        $invoice = [];
+        $items = [];
+        $sourcePrefix = '';
+
+        if ($source === 'opd_invoice' && $this->db->tableExists('opd_master')) {
+            $row = $this->db->table('opd_master')->where('opd_id', $billId)->get(1)->getRowArray() ?? [];
+            if ($row !== []) {
+                $amount = (float) ($row['opd_fee_amount'] ?? 0);
+                $invoice = [
+                    'id' => $billId,
+                    'invoice_code' => (string) ($row['opd_code'] ?? $billId),
+                    'invoice_type_code' => '03',
+                    'invoice_type_display' => 'OPD',
+                    'encounter_class' => 'AMB',
+                    'practitioner_id' => (int) ($row['doc_id'] ?? 0),
+                    'practitioner_name' => trim((string) ($row['doc_name'] ?? '')),
+                    'encounter_start' => (string) ($row['apointment_date'] ?? $row['opd_book_date'] ?? ''),
+                    'inv_date' => (string) ($row['apointment_date'] ?? $row['opd_book_date'] ?? date('Y-m-d')),
+                    'net_amount' => $amount,
+                    'total_amount' => (float) ($row['opd_fee_gross_amount'] ?? $amount),
+                    'patient_id' => (int) ($row['p_id'] ?? 0),
+                ];
+                $items[] = [
+                    'item_name' => trim((string) ($row['opd_fee_desc'] ?? '')) ?: 'OPD Consultation Fee',
+                    'item_qty' => 1,
+                    'item_rate' => $amount,
+                    'item_amount' => $amount,
+                ];
+                $sourcePrefix = 'OPD';
+            }
+        } elseif ($source === 'charges_invoice' && $this->db->tableExists('invoice_master')) {
+            $row = $this->db->table('invoice_master')->where('id', $billId)->get(1)->getRowArray() ?? [];
+            if ($row !== []) {
+                $contextRow = [];
+                $opdCode = trim((string) ($row['opd_code'] ?? ''));
+                if ($opdCode !== '' && $opdCode !== '0' && $this->db->tableExists('opd_master')) {
+                    $contextRow = $this->db->table('opd_master')->where('opd_code', $opdCode)->get(1)->getRowArray() ?? [];
+                } elseif ((int) ($row['ipd_id'] ?? 0) > 0 && $this->db->tableExists('ipd_master')) {
+                    $contextRow = $this->db->table('ipd_master')->where('id', (int) $row['ipd_id'])->get(1)->getRowArray() ?? [];
+                }
+                $isIpdContext = isset($contextRow['ipd_code']);
+                $invoice = [
+                    'id' => $billId,
+                    'invoice_code' => (string) ($row['invoice_code'] ?? $billId),
+                    'invoice_type_code' => '99',
+                    'invoice_type_display' => 'Others',
+                    'encounter_class' => $isIpdContext ? 'IMP' : 'AMB',
+                    'practitioner_id' => (int) ($contextRow[$isIpdContext ? 'r_doc_id' : 'doc_id'] ?? 0),
+                    'practitioner_name' => trim((string) ($contextRow[$isIpdContext ? 'r_doc_name' : 'doc_name'] ?? '')),
+                    'encounter_start' => (string) ($contextRow[$isIpdContext ? 'register_date' : 'apointment_date'] ?? $row['inv_date'] ?? ''),
+                    'encounter_end' => (string) ($contextRow['discharge_date'] ?? $row['inv_date'] ?? ''),
+                    'inv_date' => (string) ($row['inv_date'] ?? date('Y-m-d')),
+                    'net_amount' => (float) ($row['net_amount'] ?? 0),
+                    'total_amount' => (float) ($row['total_amount'] ?? $row['net_amount'] ?? 0),
+                    'patient_id' => (int) ($row['attach_id'] ?? 0),
+                ];
+                $items = $this->db->tableExists('invoice_item')
+                    ? $this->db->table('invoice_item')->where('inv_master_id', $billId)->orderBy('id', 'ASC')->get()->getResultArray()
+                    : [];
+                $sourcePrefix = 'CHG';
+            }
+        } elseif ($source === 'ipd_invoice' && $this->db->tableExists('ipd_master')) {
+            $row = $this->db->table('ipd_master')->where('id', $billId)->get(1)->getRowArray() ?? [];
+            if ($row !== []) {
+                $invoice = [
+                    'id' => $billId,
+                    'invoice_code' => (string) ($row['ipd_code'] ?? $billId),
+                    'invoice_type_code' => '02',
+                    'invoice_type_display' => 'IPD',
+                    'encounter_class' => 'IMP',
+                    'practitioner_id' => (int) ($row['r_doc_id'] ?? 0),
+                    'practitioner_name' => trim((string) ($row['r_doc_name'] ?? '')),
+                    'encounter_start' => (string) ($row['register_date'] ?? ''),
+                    'encounter_end' => (string) ($row['discharge_date'] ?? ''),
+                    'inv_date' => (string) ($row['discharge_date'] ?? $row['register_date'] ?? date('Y-m-d')),
+                    'net_amount' => (float) ($row['net_amount'] ?? 0),
+                    'total_amount' => (float) ($row['gross_amount'] ?? $row['net_amount'] ?? 0),
+                    'patient_id' => (int) ($row['p_id'] ?? 0),
+                ];
+
+                if ($this->db->tableExists('ipd_invoice_item')) {
+                    $items = $this->db->table('ipd_invoice_item')
+                        ->select('item_name, item_qty, item_rate, item_amount')
+                        ->where('ipd_id', $billId)
+                        ->orderBy('id', 'ASC')
+                        ->get()
+                        ->getResultArray();
+                }
+                if ($this->db->tableExists('invoice_master') && $this->db->tableExists('invoice_item')) {
+                    $chargeItems = $this->db->table('invoice_master i')
+                        ->select('t.item_name, t.item_qty, t.item_rate, t.item_amount')
+                        ->join('invoice_item t', 't.inv_master_id = i.id')
+                        ->where('i.ipd_id', $billId)
+                        ->where('i.ipd_include', 1)
+                        ->orderBy('t.id', 'ASC')
+                        ->get()
+                        ->getResultArray();
+                    $items = array_merge($items, $chargeItems);
+                }
+                if ($this->db->tableExists('invoice_med_master')) {
+                    $medicineBills = $this->db->table('invoice_med_master')
+                        ->select('inv_med_code, net_amount')
+                        ->where('ipd_id', $billId)
+                        ->where('ipd_credit', 1)
+                        ->where('ipd_credit_type', 1)
+                        ->orderBy('id', 'ASC')
+                        ->get()
+                        ->getResultArray();
+                    foreach ($medicineBills as $medicineBill) {
+                        $amount = (float) ($medicineBill['net_amount'] ?? 0);
+                        $items[] = [
+                            'item_name' => 'Pharmacy ' . (string) ($medicineBill['inv_med_code'] ?? ''),
+                            'item_qty' => 1,
+                            'item_rate' => $amount,
+                            'item_amount' => $amount,
+                        ];
+                    }
+                }
+                $sourcePrefix = 'IPD';
+            }
+        }
+
+        $resolvedPatientId = (int) ($invoice['patient_id'] ?? 0);
+        if ($invoice === [] || $resolvedPatientId <= 0 || ($patientId > 0 && $patientId !== $resolvedPatientId)) {
+            return null;
+        }
+
+        $patientRow = $this->loadPatientRow($resolvedPatientId);
+        if ($patientRow === []) {
+            return null;
+        }
+
+        if ($abhaId === '') {
+            $abhaId = $this->resolvePatientAbhaIdentifier($resolvedPatientId);
+        }
+        $visitTimestamp = strtotime((string) ($invoice['inv_date'] ?? ''));
+        $visitDate = $visitTimestamp !== false ? date('Y-m-d', $visitTimestamp) : date('Y-m-d');
+        $patient = $this->buildAbdmPatientResource($patientRow, $resolvedPatientId, $abhaId);
+
+        return [
+            'hi_type' => 'InvoiceRecord',
+            'entity_type' => $source,
+            'entity_id' => (string) $billId,
+            'patient_id' => $resolvedPatientId,
+            'patient_name' => $this->patientDisplayName($patientRow),
+            'visit_date' => $visitDate,
+            'care_context_reference' => 'INVOICE-' . $sourcePrefix . '-' . $billId . '-' . $visitDate,
+            'care_context_display' => 'Invoice ' . (string) ($invoice['invoice_code'] ?? $billId),
+            'bundle' => $this->buildSimpleInvoiceBundle($patient, $invoice, $items),
+        ];
+    }
+
     /**
      * Share endpoints are triggered from screens that do not carry the ABHA, and an
      * empty identifier silently downgrades the record to local-only instead of pushing.
      */
     private function resolvePatientAbhaIdentifier(int $patientId): string
     {
+        $identity = $this->resolvePatientAbhaIdentity($patientId);
+
+        return $identity['abha_address'] !== '' ? $identity['abha_address'] : $identity['abha_id'];
+    }
+
+    /** @return array{abha_id:string,abha_address:string} */
+    private function resolvePatientAbhaIdentity(int $patientId, string $abhaId = '', string $abhaAddress = ''): array
+    {
+        $number = '';
+        $address = '';
         $row = $this->loadPatientRow($patientId);
-        if ($row === []) {
-            return '';
-        }
+        $candidates = [
+            $abhaAddress,
+            $abhaId,
+            (string) ($row['abha_address'] ?? ''),
+            (string) ($row['abha_id'] ?? ''),
+            (string) ($row['abha_no'] ?? ''),
+            (string) ($row['abha'] ?? ''),
+        ];
 
-        $address = trim((string) ($row['abha_address'] ?? ''));
-        if ($address !== '') {
-            return $address;
-        }
-
-        foreach (['abha_id', 'abha_no', 'abha'] as $field) {
-            $value = trim((string) ($row[$field] ?? ''));
-            if ($value !== '') {
-                return $value;
+        foreach ($candidates as $candidate) {
+            $candidate = trim($candidate);
+            if ($candidate === '') {
+                continue;
+            }
+            if ($address === '' && str_contains($candidate, '@')) {
+                $address = $candidate;
+                continue;
+            }
+            $digits = preg_replace('/\D/', '', $candidate);
+            if ($number === '' && is_string($digits) && strlen($digits) === 14) {
+                $number = $digits;
             }
         }
 
-        return '';
+        return ['abha_id' => $number, 'abha_address' => $address];
     }
 
     private function loadPatientRow(int $patientId): array
@@ -6041,18 +6599,409 @@ class AbdmGateway extends BaseController
     private function buildSimpleInvoiceBundle(array $patient, array $invoice, array $items): array
     {
         $issuedAt = Time::now('Asia/Kolkata')->format(DATE_ATOM);
-        $patientRef = 'Patient/' . (string) ($patient['id'] ?? 'patient-unknown');
+        $invoiceNumber = trim((string) ($invoice['invoice_code'] ?? $invoice['id'] ?? '')) ?: 'unknown';
         $invoiceId = 'invoice-' . (int) ($invoice['id'] ?? 0);
+        $compositionId = 'composition-' . $invoiceId;
+        $patientId = (string) ($patient['id'] ?? 'patient-unknown');
+        $organizationId = 'organization-invoice-issuer';
+        $encounterId = $invoiceId . '-encounter';
+        $patientRef = 'urn:uuid:' . $patientId;
+        $invoiceRef = 'urn:uuid:' . $invoiceId;
+        $organizationRef = 'urn:uuid:' . $organizationId;
+        $encounterRef = 'urn:uuid:' . $encounterId;
+        $identifierSystem = 'https://hms.local/fhir/invoice';
+        $hospital = $this->getHospitalProfileForFhir();
+        $hospitalName = trim((string) ($hospital['name'] ?? '')) ?: 'Healthcare Facility';
+        $hospitalIdentifier = trim((string) ($hospital['hfr_id'] ?? '')) ?: 'local-hospital';
+        $invoiceDateTimestamp = strtotime((string) ($invoice['inv_date'] ?? ''));
+        $invoiceDate = $invoiceDateTimestamp !== false ? date('Y-m-d', $invoiceDateTimestamp) : date('Y-m-d');
+        $encounterStartTimestamp = strtotime((string) ($invoice['encounter_start'] ?? ''));
+        $encounterEndTimestamp = strtotime((string) ($invoice['encounter_end'] ?? ''));
+        $encounterStart = $encounterStartTimestamp !== false ? date('Y-m-d', $encounterStartTimestamp) : $invoiceDate;
+        $encounterEnd = $encounterEndTimestamp !== false ? date('Y-m-d', $encounterEndTimestamp) : $encounterStart;
+        $netAmount = (float) ($invoice['net_amount'] ?? $invoice['total_amount'] ?? 0);
+        $grossAmount = (float) ($invoice['total_amount'] ?? $invoice['net_amount'] ?? 0);
+        $invoiceTypeCode = trim((string) ($invoice['invoice_type_code'] ?? '99')) ?: '99';
+        $invoiceTypeDisplay = trim((string) ($invoice['invoice_type_display'] ?? 'Others')) ?: 'Others';
+        $encounterClass = trim((string) ($invoice['encounter_class'] ?? 'AMB')) ?: 'AMB';
+        $practitionerName = trim((string) ($invoice['practitioner_name'] ?? ''));
+        $practitionerSourceId = (int) ($invoice['practitioner_id'] ?? 0);
+        $practitionerId = $practitionerName !== ''
+            ? 'practitioner-' . ($practitionerSourceId > 0 ? $practitionerSourceId : substr(md5($practitionerName), 0, 12))
+            : '';
+        $practitionerRef = $practitionerId !== '' ? 'urn:uuid:' . $practitionerId : '';
+        $escape = static fn (string $value): string => htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $documentReferenceId = $invoiceId . '-pdf';
+        $pdfFileStem = trim((string) preg_replace('/[^A-Za-z0-9._-]+/', '-', 'Invoice-' . $invoiceNumber), '-');
+        $pdfFilename = ($pdfFileStem !== '' ? $pdfFileStem : 'Invoice') . '.pdf';
+
         $lineItems = [];
+        $chargeItems = [];
         foreach ($items as $idx => $item) {
-            $lineItems[] = ['sequence' => $idx + 1, 'chargeItemCodeableConcept' => ['text' => (string) ($item['item_name'] ?? 'Item')], 'priceComponent' => [['type' => 'base', 'amount' => ['value' => (float) ($item['item_amount'] ?? 0), 'currency' => 'INR']]]];
+            $itemName = trim((string) ($item['item_name'] ?? '')) ?: 'Item';
+            $quantity = (float) ($item['item_qty'] ?? 1);
+            if ($quantity <= 0) {
+                $quantity = 1;
+            }
+            $unit = trim((string) ($item['item_unit'] ?? $item['unit'] ?? '')) ?: 'unit';
+            $rate = (float) ($item['item_rate'] ?? $item['item_amount'] ?? 0);
+            $chargeItemId = $invoiceId . '-charge-' . ($idx + 1);
+            $chargeItemRef = 'urn:uuid:' . $chargeItemId;
+            $chargeItems[] = [
+                'resourceType' => 'ChargeItem',
+                'id' => $chargeItemId,
+                'meta' => [
+                    'versionId' => '1',
+                    'profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/ChargeItem'],
+                ],
+                'text' => [
+                    'status' => 'generated',
+                    'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p>' . $escape($itemName)
+                        . ': ' . $escape((string) $quantity) . ' ' . $escape($unit) . '</p></div>',
+                ],
+                'status' => 'billed',
+                'code' => [
+                    'coding' => [[
+                        'system' => 'https://nrces.in/ndhm/fhir/r4/CodeSystem/ndhm-billing-codes',
+                        'code' => $invoiceTypeCode,
+                        'display' => $invoiceTypeDisplay,
+                    ]],
+                    'text' => $itemName,
+                ],
+                'subject' => ['reference' => $patientRef, 'display' => 'Patient'],
+                'occurrenceDateTime' => $invoiceDate,
+                'quantity' => ['value' => $quantity, 'unit' => $unit],
+                'productCodeableConcept' => ['text' => $itemName],
+            ];
+            $chargeItemActor = $practitionerRef !== '' ? $practitionerRef : $organizationRef;
+            $chargeItems[array_key_last($chargeItems)]['performer'] = [[
+                'actor' => ['reference' => $chargeItemActor],
+            ]];
+            $lineItems[] = [
+                'sequence' => $idx + 1,
+                'chargeItemReference' => [
+                    'reference' => $chargeItemRef,
+                    'display' => $itemName,
+                ],
+                'priceComponent' => [[
+                    'type' => 'base',
+                    'code' => ['coding' => [[
+                        'system' => 'https://nrces.in/ndhm/fhir/r4/CodeSystem/ndhm-price-components',
+                        'code' => '01',
+                        'display' => 'Rate',
+                    ]]],
+                    'amount' => [
+                        'value' => $rate,
+                        'currency' => 'INR',
+                    ],
+                ]],
+            ];
         }
-        $invoiceResource = ['resourceType' => 'Invoice', 'id' => $invoiceId, 'status' => 'issued', 'subject' => ['reference' => $patientRef], 'date' => ! empty($invoice['inv_date']) ? date('Y-m-d', strtotime((string) $invoice['inv_date'])) : date('Y-m-d'), 'totalNet' => ['value' => (float) ($invoice['net_amount'] ?? $invoice['total_amount'] ?? 0), 'currency' => 'INR'], 'totalGross' => ['value' => (float) ($invoice['total_amount'] ?? $invoice['net_amount'] ?? 0), 'currency' => 'INR']];
+
+        $patient['meta'] = array_replace((array) ($patient['meta'] ?? []), [
+            'versionId' => '1',
+            'profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Patient'],
+        ]);
+        $patient['text'] = [
+            'status' => 'generated',
+            'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p>Patient: '
+                . $escape((string) ($patient['name'][0]['text'] ?? $patientId)) . '</p></div>',
+        ];
+        foreach ((array) ($patient['identifier'] ?? []) as &$identifier) {
+            $identifier['assigner'] = ['reference' => $organizationRef];
+        }
+        unset($identifier);
+
+        $organization = [
+            'resourceType' => 'Organization',
+            'id' => $organizationId,
+            'meta' => [
+                'versionId' => '1',
+                'profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Organization'],
+            ],
+            'text' => [
+                'status' => 'generated',
+                'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p>' . $escape($hospitalName) . '</p></div>',
+            ],
+            'identifier' => [[
+                'system' => 'https://facility.abdm.gov.in',
+                'value' => $hospitalIdentifier,
+            ]],
+            'active' => true,
+            'name' => $hospitalName,
+        ];
+
+        $invoiceResource = [
+            'resourceType' => 'Invoice',
+            'id' => $invoiceId,
+            'meta' => [
+                'versionId' => '1',
+                'profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Invoice'],
+            ],
+            'text' => [
+                'status' => 'generated',
+                'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p>Invoice '
+                    . $escape($invoiceNumber) . ' for INR ' . $escape(number_format($netAmount, 2, '.', '')) . '</p></div>',
+            ],
+            'identifier' => [['system' => $identifierSystem, 'value' => $invoiceNumber]],
+            'status' => 'issued',
+            'type' => ['coding' => [[
+                'system' => 'https://nrces.in/ndhm/fhir/r4/CodeSystem/ndhm-billing-codes',
+                'code' => $invoiceTypeCode,
+                'display' => $invoiceTypeDisplay,
+            ]], 'text' => 'Healthcare invoice'],
+            'subject' => ['reference' => $patientRef],
+            'date' => $invoiceDate,
+            'issuer' => ['reference' => $organizationRef],
+            'totalPriceComponent' => [[
+                'type' => 'base',
+                'code' => ['coding' => [[
+                    'system' => 'https://nrces.in/ndhm/fhir/r4/CodeSystem/ndhm-price-components',
+                    'code' => '01',
+                    'display' => 'Rate',
+                ]]],
+                'amount' => ['value' => $netAmount, 'currency' => 'INR'],
+            ]],
+            'totalNet' => ['value' => $netAmount, 'currency' => 'INR'],
+            'totalGross' => ['value' => $grossAmount, 'currency' => 'INR'],
+        ];
         if (! empty($lineItems)) {
             $invoiceResource['lineItem'] = $lineItems;
         }
-        $composition = ['resource' => ['resourceType' => 'Composition', 'id' => 'composition-invoice-' . (int) ($invoice['id'] ?? 0), 'status' => 'final', 'type' => ['text' => 'Invoice Record'], 'subject' => ['reference' => $patientRef], 'date' => $issuedAt, 'title' => 'Invoice ' . (string) ($invoice['invoice_code'] ?? $invoice['id'] ?? ''), 'section' => [['title' => 'Invoice details', 'entry' => [['reference' => 'Invoice/' . $invoiceId]]]]]];
-        return ['resourceType' => 'Bundle', 'type' => 'document', 'timestamp' => $issuedAt, 'entry' => [$composition, ['resource' => $patient], ['resource' => $invoiceResource]]];
+        if ($practitionerRef !== '') {
+            $invoiceResource['participant'] = [[
+                'actor' => ['reference' => $practitionerRef, 'display' => $practitionerName],
+            ]];
+        }
+
+        $patientName = trim((string) ($patient['name'][0]['text'] ?? $patientId)) ?: 'Patient';
+        $invoiceRows = '';
+        foreach ($items as $idx => $item) {
+            $itemName = trim((string) ($item['item_name'] ?? '')) ?: 'Item';
+            $quantity = (float) ($item['item_qty'] ?? 1);
+            if ($quantity <= 0) {
+                $quantity = 1;
+            }
+            $rate = (float) ($item['item_rate'] ?? $item['item_amount'] ?? 0);
+            $amount = (float) ($item['item_amount'] ?? ($quantity * $rate));
+            $invoiceRows .= '<tr><td>' . ($idx + 1) . '</td><td>' . $escape($itemName) . '</td><td class="num">'
+                . $escape((string) $quantity) . '</td><td class="num">' . number_format($rate, 2) . '</td><td class="num">'
+                . number_format($amount, 2) . '</td></tr>';
+        }
+        if ($invoiceRows === '') {
+            $invoiceRows = '<tr><td colspan="5">No line items</td></tr>';
+        }
+        $invoicePdfHtml = '<style>'
+            . 'body{font-family:DejaVu Sans,sans-serif;color:#17212b;font-size:11px}'
+            . 'h1{font-size:20px;margin:0 0 3px}.muted{color:#52606d}.meta{width:100%;margin:18px 0;border-collapse:collapse}'
+            . '.meta td{width:50%;vertical-align:top;border:1px solid #d7dee5;padding:9px}.label{font-weight:bold}'
+            . 'table.items{width:100%;border-collapse:collapse}.items th,.items td{border:1px solid #cbd5df;padding:7px}'
+            . '.items th{background:#eef2f6;text-align:left}.num{text-align:right}.totals{margin-top:12px;text-align:right;font-size:12px}'
+            . '</style><h1>' . $escape($hospitalName) . '</h1><div class="muted">Invoice ' . $escape($invoiceNumber) . '</div>'
+            . '<table class="meta"><tr><td><span class="label">Patient:</span> ' . $escape($patientName)
+            . '<br><span class="label">Gender:</span> ' . $escape((string) ($patient['gender'] ?? ''))
+            . '<br><span class="label">Date of Birth:</span> ' . $escape((string) ($patient['birthDate'] ?? ''))
+            . '</td><td><span class="label">Visit:</span> ' . $escape($invoiceTypeDisplay)
+            . '<br><span class="label">Visit Date:</span> ' . $escape($encounterStart)
+            . '<br><span class="label">Practitioner:</span> ' . $escape($practitionerName)
+            . '<br><span class="label">Invoice Date:</span> ' . $escape($invoiceDate) . '</td></tr></table>'
+            . '<table class="items"><thead><tr><th>#</th><th>Item</th><th class="num">Qty</th><th class="num">Rate (INR)</th>'
+            . '<th class="num">Amount (INR)</th></tr></thead><tbody>' . $invoiceRows . '</tbody></table>'
+            . '<div class="totals"><div>Gross: INR ' . number_format($grossAmount, 2) . '</div><div><strong>Net: INR '
+            . number_format($netAmount, 2) . '</strong></div></div>';
+        $invoicePdf = $this->renderReportHtmlToPdfAttachment($invoicePdfHtml, $pdfFileStem);
+        if ($invoicePdf === null) {
+            throw new \RuntimeException('Unable to render invoice PDF attachment.');
+        }
+        $invoicePdfBytes = base64_decode((string) $invoicePdf['data_base64'], true);
+        if (! is_string($invoicePdfBytes) || ! str_starts_with($invoicePdfBytes, '%PDF-')) {
+            throw new \RuntimeException('Generated invoice PDF attachment is invalid.');
+        }
+        $documentReference = [
+            'resourceType' => 'DocumentReference',
+            'id' => $documentReferenceId,
+            'meta' => [
+                'versionId' => '1',
+                'profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentReference'],
+            ],
+            'text' => [
+                'status' => 'generated',
+                'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p>PDF copy of invoice '
+                    . $escape($invoiceNumber) . '</p></div>',
+            ],
+            'status' => 'current',
+            'docStatus' => 'final',
+            'type' => ['text' => 'Invoice Record'],
+            'subject' => ['reference' => $patientRef, 'display' => $patientName],
+            'date' => $issuedAt,
+            'author' => [[
+                'reference' => $practitionerRef !== '' ? $practitionerRef : $organizationRef,
+                'display' => $practitionerRef !== '' ? $practitionerName : $hospitalName,
+            ]],
+            'custodian' => ['reference' => $organizationRef, 'display' => $hospitalName],
+            'content' => [[
+                'attachment' => [
+                    'contentType' => 'application/pdf',
+                    'language' => 'en-IN',
+                    'data' => $invoicePdf['data_base64'],
+                    'size' => strlen($invoicePdfBytes),
+                    'hash' => base64_encode(sha1($invoicePdfBytes, true)),
+                    'title' => $pdfFilename,
+                    'creation' => $issuedAt,
+                ],
+            ]],
+            'context' => [
+                'encounter' => [['reference' => $encounterRef]],
+                'related' => [['reference' => $invoiceRef, 'display' => 'Invoice ' . $invoiceNumber]],
+            ],
+        ];
+
+        $encounter = [
+            'resourceType' => 'Encounter',
+            'id' => $encounterId,
+            'meta' => [
+                'versionId' => '1',
+                'profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Encounter'],
+            ],
+            'text' => [
+                'status' => 'generated',
+                'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p>' . $escape($invoiceTypeDisplay)
+                    . ' visit on ' . $escape($invoiceDate) . ' at ' . $escape($hospitalName) . '</p></div>',
+            ],
+            'identifier' => [['system' => $identifierSystem . '/encounter', 'value' => $invoiceNumber]],
+            'status' => 'finished',
+            'class' => [
+                'system' => 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
+                'code' => $encounterClass,
+                'display' => $encounterClass === 'IMP' ? 'inpatient encounter' : 'ambulatory',
+            ],
+            'subject' => ['reference' => $patientRef, 'display' => (string) ($patient['name'][0]['text'] ?? 'Patient')],
+            'period' => ['start' => $encounterStart, 'end' => $encounterEnd],
+            'serviceProvider' => ['reference' => $organizationRef, 'display' => $hospitalName],
+        ];
+        if ($practitionerRef !== '') {
+            $encounter['participant'] = [[
+                'individual' => ['reference' => $practitionerRef, 'display' => $practitionerName],
+            ]];
+        }
+
+        $practitioner = null;
+        if ($practitionerRef !== '') {
+            $practitioner = [
+                'resourceType' => 'Practitioner',
+                'id' => $practitionerId,
+                'meta' => [
+                    'versionId' => '1',
+                    'profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Practitioner'],
+                ],
+                'identifier' => [[
+                    'type' => [
+                        'coding' => [[
+                            'system' => 'http://terminology.hl7.org/CodeSystem/v2-0203',
+                            'code' => 'MD',
+                            'display' => 'Medical License number',
+                        ]],
+                    ],
+                    'system' => $identifierSystem . '/practitioner',
+                    'value' => $practitionerSourceId > 0 ? (string) $practitionerSourceId : $practitionerId,
+                ]],
+                'text' => [
+                    'status' => 'generated',
+                    'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p>' . $escape($practitionerName) . '</p></div>',
+                ],
+                'active' => true,
+                'name' => [['text' => $practitionerName]],
+            ];
+        }
+
+        $composition = [
+            'resourceType' => 'Composition',
+            'id' => $compositionId,
+            'meta' => [
+                'versionId' => '1',
+                'profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/InvoiceRecord'],
+            ],
+            'text' => [
+                'status' => 'generated',
+                'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p>Invoice Record '
+                    . $escape($invoiceNumber) . '</p></div>',
+            ],
+            'identifier' => ['system' => $identifierSystem, 'value' => $invoiceNumber],
+            'status' => 'final',
+            'type' => [
+                'coding' => [[
+                    'system' => 'http://loinc.org',
+                    'code' => '69705-9',
+                    'display' => 'Healthcare Invoice',
+                ]],
+                'text' => 'Invoice Record',
+            ],
+            'subject' => ['reference' => $patientRef],
+            'encounter' => ['reference' => $encounterRef],
+            'date' => $issuedAt,
+            'author' => [[
+                'reference' => $practitionerRef !== '' ? $practitionerRef : $organizationRef,
+                'display' => $practitionerRef !== '' ? $practitionerName : $hospitalName,
+            ]],
+            'title' => 'Invoice ' . $invoiceNumber,
+            'custodian' => ['reference' => $organizationRef],
+            'section' => [[
+                'title' => 'Invoice details',
+                'text' => [
+                    'status' => 'generated',
+                    'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p>Billing details for invoice '
+                        . $escape($invoiceNumber) . '</p></div>',
+                ],
+                'entry' => [['reference' => $invoiceRef, 'type' => 'Invoice']],
+            ]],
+        ];
+
+        $resources = [$composition, $patient, $organization, $encounter, $invoiceResource, $documentReference];
+        if ($practitioner !== null) {
+            $resources[] = $practitioner;
+        }
+        $resources = array_merge($resources, $chargeItems);
+        $referenceMap = [];
+        foreach ($resources as $resource) {
+            $id = (string) ($resource['id'] ?? '');
+            $hex = md5((string) ($resource['resourceType'] ?? 'Resource') . '/' . $id);
+            $uuid = substr($hex, 0, 8) . '-' . substr($hex, 8, 4) . '-4' . substr($hex, 13, 3)
+                . '-a' . substr($hex, 17, 3) . '-' . substr($hex, 20, 12);
+            $referenceMap['urn:uuid:' . $id] = 'urn:uuid:' . $uuid;
+        }
+        $rewriteReferences = static function ($value) use (&$rewriteReferences, $referenceMap) {
+            if (is_string($value)) {
+                return $referenceMap[$value] ?? $value;
+            }
+            if (! is_array($value)) {
+                return $value;
+            }
+            foreach ($value as $key => $nested) {
+                $value[$key] = $rewriteReferences($nested);
+            }
+            return $value;
+        };
+        $entries = [];
+        foreach ($resources as $resource) {
+            $entries[] = [
+                'fullUrl' => $referenceMap['urn:uuid:' . (string) $resource['id']],
+                'resource' => $rewriteReferences($resource),
+            ];
+        }
+
+        return [
+            'resourceType' => 'Bundle',
+            'id' => 'bundle-' . $invoiceId,
+            'meta' => [
+                'versionId' => '1',
+                'lastUpdated' => $issuedAt,
+                'profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle'],
+            ],
+            'identifier' => ['system' => $identifierSystem, 'value' => $invoiceNumber],
+            'type' => 'document',
+            'timestamp' => $issuedAt,
+            'entry' => $entries,
+        ];
     }
 
     private function resolveReadableAttachmentPath(string $path): string

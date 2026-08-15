@@ -434,14 +434,26 @@ class AbdmGatewayPushClient
             }
         }
 
+        $error = $body['error'] ?? null;
+        $responseError = $body['response']['error'] ?? null;
+        $dataError = $body['data']['error'] ?? null;
         $errorCode = strtoupper(trim((string) (
             $body['error_code']
+            ?? (is_array($error) ? ($error['code'] ?? null) : $error)
             ?? ($body['response']['error_code'] ?? null)
-            ?? ($body['data']['error_code'] ?? '')
+            ?? (is_array($responseError) ? ($responseError['code'] ?? null) : $responseError)
+            ?? ($body['data']['error_code'] ?? null)
+            ?? (is_array($dataError) ? ($dataError['code'] ?? null) : $dataError)
+            ?? ''
         )));
-        $isDuplicate = $httpStatus === 409 || $errorCode === 'DUPLICATE_RECORD';
+        $isDuplicate = $httpStatus === 409 && $errorCode === 'DUPLICATE_RECORD';
         $isSubmitted = $httpStatus === 201 || $isDuplicate;
         $message = (string) ($body['message'] ?? $body['error_text'] ?? ('HTTP ' . $httpStatus));
+        $firstPushedAt = trim((string) (
+            $body['first_pushed_at']
+            ?? ($body['response']['first_pushed_at'] ?? null)
+            ?? ($body['data']['first_pushed_at'] ?? '')
+        ));
 
         // The bridge returns field-level FHIR errors here; without them a 422 is undiagnosable.
         $validationErrors = is_array($body['errors'] ?? null) ? $body['errors'] : [];
@@ -472,6 +484,7 @@ class AbdmGatewayPushClient
                 'request_id' => $requestId,
                 'gateway_record_id' => $recordId > 0 ? $recordId : null,
                 'gateway_queue_id' => $queueId !== '' ? $queueId : null,
+                'first_pushed_at' => $firstPushedAt !== '' ? $firstPushedAt : null,
                 'gateway_record_source' => $recordSource,
                 'gateway_queue_source' => $queueSource,
                 'submitted' => $isSubmitted ? 1 : 0,
@@ -499,7 +512,7 @@ class AbdmGatewayPushClient
             ];
         }
 
-        if ($httpStatus === 400 || $httpStatus === 401 || $httpStatus === 403 || $httpStatus === 422) {
+        if ($httpStatus === 400 || $httpStatus === 401 || $httpStatus === 403 || $httpStatus === 409 || $httpStatus === 422) {
             return [
                 'ok' => false,
                 'status' => 'failed',

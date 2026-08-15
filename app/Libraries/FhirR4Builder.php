@@ -1689,6 +1689,10 @@ class FhirR4Builder
                 (string) ($immunization['given_date'] ?? $immunization['occurrenceDateTime'] ?? $immunization['due_date'] ?? ''),
                 $issuedAt
             );
+            [$vaccineCodeSystem, $vaccineCode] = $this->normalizeVaccineCoding(
+                (string) ($immunization['vaccine_code_system'] ?? ''),
+                (string) ($immunization['vaccine_code'] ?? '')
+            );
 
             $resource = [
                 'resourceType' => 'Immunization',
@@ -1700,8 +1704,8 @@ class FhirR4Builder
                 ]],
                 'status' => $status,
                 'vaccineCode' => $this->buildSimpleCodeableConcept(
-                    (string) ($immunization['vaccine_code_system'] ?? ''),
-                    (string) ($immunization['vaccine_code'] ?? ''),
+                    $vaccineCodeSystem,
+                    $vaccineCode,
                     $vaccineName,
                     $vaccineName
                 ),
@@ -1779,6 +1783,7 @@ class FhirR4Builder
             }
 
             $immunizationRefs[] = ['reference' => $immunizationRef, 'display' => $vaccineName];
+            $immunizationRefs[array_key_last($immunizationRefs)]['type'] = 'Immunization';
             $resourceEntries[] = ['fullUrl' => $immunizationRef, 'resource' => $resource];
         }
 
@@ -1818,12 +1823,42 @@ class FhirR4Builder
             ]],
         ];
         if ($practitionerRef !== '') {
-            $composition['author'] = [['reference' => $practitionerRef]];
+            $composition['author'] = [[
+                'reference' => $practitionerRef,
+                'display' => trim((string) ($practitioner['name'] ?? '')),
+            ]];
         } elseif ($organizationRef !== '') {
-            $composition['author'] = [['reference' => $organizationRef]];
+            $composition['author'] = [[
+                'reference' => $organizationRef,
+                'display' => trim((string) ($organization['name'] ?? '')),
+            ]];
+        }
+        if ($organizationRef !== '') {
+            $composition['custodian'] = [
+                'reference' => $organizationRef,
+                'display' => trim((string) ($organization['name'] ?? '')),
+            ];
         }
 
-        $careContextReference = trim((string) ($context['care_context_reference'] ?? ('IMM-' . (string) ($patient['id'] ?? 'unknown') . '-' . date('YmdHis'))));
+        $careContextReference = trim((string) ($context['care_context_reference'] ?? ''));
+        if ($careContextReference === '') {
+            $sourceIds = [];
+            foreach ($immunizations as $immunization) {
+                $sourceId = trim((string) ($immunization['id'] ?? ''));
+                if ($sourceId !== '') {
+                    $sourceIds[] = $sourceId;
+                }
+            }
+            $sourceIds = array_values(array_unique($sourceIds));
+            sort($sourceIds, SORT_STRING);
+            if (count($sourceIds) === 1) {
+                $careContextReference = 'IMM-' . $sourceIds[0];
+            } elseif ($sourceIds !== []) {
+                $careContextReference = 'IMM-SET-' . substr(hash('sha256', implode(',', $sourceIds)), 0, 20);
+            } else {
+                $careContextReference = 'IMM-PAT-' . trim((string) ($patient['id'] ?? 'unknown'));
+            }
+        }
         $hfrId = trim((string) ($organization['hfr_id'] ?? $organization['id'] ?? ''));
 
         return [
@@ -1855,6 +1890,34 @@ class FhirR4Builder
             'entered-in-error', 'entered_in_error', 'error' => 'entered-in-error',
             default => 'not-done',
         };
+    }
+
+    /** @return array{0:string,1:string} */
+    private function normalizeVaccineCoding(string $system, string $code): array
+    {
+        $system = trim($system);
+        $code = trim($code);
+        if ($system !== 'https://hms.local/immunization/uip') {
+            return [$system, $code];
+        }
+
+        $cvxCodes = [
+            'UIP-BCG' => '19',
+            'UIP-OPV' => '02',
+            'UIP-HEPB' => '45',
+            'UIP-ROTA' => '122',
+            'UIP-FIPV' => '10',
+            'UIP-PCV' => '152',
+            'UIP-MR' => '04',
+            'UIP-JE' => '39',
+            'UIP-DPT' => '01',
+            'UIP-TD' => '09',
+        ];
+        if (! isset($cvxCodes[$code])) {
+            return [$system, $code];
+        }
+
+        return ['http://hl7.org/fhir/sid/cvx', $cvxCodes[$code]];
     }
 
     /**

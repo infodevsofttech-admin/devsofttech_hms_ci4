@@ -1293,7 +1293,106 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             $body[$optional] = (string) $data[$optional];
         }
 
-        return $this->post('/v3/records/push', $body);
+        return self::normalizePushRecordResponse($this->post('/v3/records/push', $body));
+    }
+
+    /**
+     * @param array<string,mixed> $result
+     * @return array<string,mixed>
+     */
+    private static function normalizePushRecordResponse(array $result): array
+    {
+        $httpCode = (int) ($result['http_code'] ?? 0);
+        $error = $result['error'] ?? null;
+        $responseError = $result['response']['error'] ?? null;
+        $dataError = $result['data']['error'] ?? null;
+        $errorCode = strtoupper(trim((string) (
+            $result['error_code']
+            ?? (is_array($error) ? ($error['code'] ?? null) : $error)
+            ?? ($result['response']['error_code'] ?? null)
+            ?? (is_array($responseError) ? ($responseError['code'] ?? null) : $responseError)
+            ?? ($result['data']['error_code'] ?? null)
+            ?? (is_array($dataError) ? ($dataError['code'] ?? null) : $dataError)
+            ?? ''
+        )));
+        $duplicate = $httpCode === 409 && $errorCode === 'DUPLICATE_RECORD';
+
+        $recordId = self::firstPositiveInteger([
+            $result['record_id'] ?? null,
+            $result['existing_record_id'] ?? null,
+            $result['response']['record_id'] ?? null,
+            $result['response']['existing_record_id'] ?? null,
+            $result['data']['record_id'] ?? null,
+            $result['data']['existing_record_id'] ?? null,
+        ]);
+        $queueId = self::firstNonEmptyString([
+            $result['queue_id'] ?? null,
+            $result['existing_queue_id'] ?? null,
+            $result['response']['queue_id'] ?? null,
+            $result['response']['existing_queue_id'] ?? null,
+            $result['data']['queue_id'] ?? null,
+            $result['data']['existing_queue_id'] ?? null,
+        ]);
+        $firstPushedAt = self::firstNonEmptyString([
+            $result['first_pushed_at'] ?? null,
+            $result['response']['first_pushed_at'] ?? null,
+            $result['data']['first_pushed_at'] ?? null,
+        ]);
+
+        if ($recordId > 0) {
+            $result['record_id'] = $recordId;
+        }
+        if ($queueId !== '') {
+            $result['queue_id'] = $queueId;
+        }
+        if ($firstPushedAt !== '') {
+            $result['first_pushed_at'] = $firstPushedAt;
+        }
+        $result['error_code'] = $errorCode !== '' ? $errorCode : ($result['error_code'] ?? null);
+        $result['duplicate'] = $duplicate ? 1 : 0;
+        $result['submitted'] = ($httpCode === 201 || $duplicate) ? 1 : 0;
+
+        if ($httpCode === 201 || $duplicate) {
+            $result['ok'] = 1;
+            return $result;
+        }
+
+        if ($httpCode === 422) {
+            $result['ok'] = 0;
+            $message = trim((string) ($result['message'] ?? $result['error_text'] ?? 'Validation failed'));
+            $details = [];
+            foreach ((array) ($result['errors'] ?? []) as $error) {
+                $details[] = is_array($error)
+                    ? trim(implode(' ', array_filter([$error['field'] ?? '', $error['message'] ?? ''])))
+                    : trim((string) $error);
+            }
+            $details = array_values(array_filter($details));
+            $result['error_text'] = $message . ($details !== [] ? ' | ' . implode(' ; ', $details) : '');
+        }
+
+        return $result;
+    }
+
+    /** @param array<int,mixed> $values */
+    private static function firstPositiveInteger(array $values): int
+    {
+        foreach ($values as $value) {
+            if ((int) $value > 0) {
+                return (int) $value;
+            }
+        }
+        return 0;
+    }
+
+    /** @param array<int,mixed> $values */
+    private static function firstNonEmptyString(array $values): string
+    {
+        foreach ($values as $value) {
+            if (trim((string) $value) !== '') {
+                return trim((string) $value);
+            }
+        }
+        return '';
     }
 
     // -------------------------------------------------------------------------
