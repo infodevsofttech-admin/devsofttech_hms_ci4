@@ -38,6 +38,9 @@ abstract class AbstractModuleFhirGenerator
         $patient = [
             'resourceType' => 'Patient',
             'id' => 'patient-' . $patientId,
+            'meta' => ['profile' => [
+                'https://nrces.in/ndhm/fhir/r4/StructureDefinition/Patient',
+            ]],
             'identifier' => [
                 [
                     'system' => 'https://hms.local/patient-id',
@@ -116,11 +119,21 @@ abstract class AbstractModuleFhirGenerator
         if ($id === '') {
             return null;
         }
+        $classCode = strtoupper(trim((string) ($enc['class_code'] ?? 'AMB')));
+        $classDisplay = $classCode === 'IMP' ? 'inpatient encounter' : 'ambulatory';
 
         return [
             'resourceType' => 'Encounter',
             'id' => 'encounter-' . $id,
+            'meta' => ['profile' => [
+                'https://nrces.in/ndhm/fhir/r4/StructureDefinition/Encounter',
+            ]],
             'status' => 'finished',
+            'class' => [
+                'system' => 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
+                'code' => $classCode,
+                'display' => $classDisplay,
+            ],
             'subject' => [
                 'reference' => 'urn:uuid:patient-' . (string) ($source['patient']['id'] ?? ''),
             ],
@@ -152,6 +165,9 @@ abstract class AbstractModuleFhirGenerator
         return [
             'resourceType' => 'Practitioner',
             'id' => 'practitioner-' . ($id !== '' ? $id : md5($name)),
+            'meta' => ['profile' => [
+                'https://nrces.in/ndhm/fhir/r4/StructureDefinition/Practitioner',
+            ]],
             'name' => [[
                 'text' => $name,
             ]],
@@ -179,6 +195,9 @@ abstract class AbstractModuleFhirGenerator
         return [
             'resourceType' => 'Organization',
             'id' => 'organization-' . ($id !== '' ? $id : md5($name)),
+            'meta' => ['profile' => [
+                'https://nrces.in/ndhm/fhir/r4/StructureDefinition/Organization',
+            ]],
             'name' => $name,
             'identifier' => $id !== '' ? [[
                 'system' => 'https://hms.local/organization-id',

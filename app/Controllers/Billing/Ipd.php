@@ -988,13 +988,30 @@ class Ipd extends BaseController
         $ipdCode = (string) ($data['ipd_info']->ipd_code ?? ('IPD-' . $ipdId));
         $fileName = 'IPD_Bill_' . preg_replace('/[^A-Za-z0-9_\-]/', '_', $ipdCode) . '_M' . $mode . '.pdf';
 
+        $pdfBinary = $mpdf->Output($fileName, 'S');
+        $this->cacheAbdmIpdBillPdf($ipdId, $pdfBinary);
+
         return $this->response
             ->setHeader('Content-Type', 'application/pdf')
             ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
             ->setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
             ->setHeader('Pragma', 'no-cache')
             ->setHeader('Expires', '0')
-            ->setBody($mpdf->Output($fileName, 'S'));
+            ->setBody($pdfBinary);
+    }
+
+    private function cacheAbdmIpdBillPdf(int $ipdId, string $pdfBinary): void
+    {
+        if ($ipdId <= 0 || $pdfBinary === '' || ! str_starts_with($pdfBinary, '%PDF-')) {
+            return;
+        }
+
+        $directory = WRITEPATH . 'uploads' . DIRECTORY_SEPARATOR . 'abdm' . DIRECTORY_SEPARATOR . 'ipd' . DIRECTORY_SEPARATOR . $ipdId;
+        if (! is_dir($directory) && ! mkdir($directory, 0755, true) && ! is_dir($directory)) {
+            return;
+        }
+
+        file_put_contents($directory . DIRECTORY_SEPARATOR . 'ipd-bill.pdf', $pdfBinary, LOCK_EX);
     }
 
     public function showIpdForm(int $ipdId, int $formNo = 1)

@@ -1955,19 +1955,15 @@ class AbdmGateway extends BaseController
             'period_start' => $reportedAt,
         ];
 
-        $pdfAttachment = $this->loadLatestLabPdfAttachment(
-            (int) ($labReq->charge_id ?? 0),
-            (int) ($labReq->lab_type ?? 0),
-            $labReqId,
-            $testTitle !== '' ? ($testTitle . ' PDF Report') : 'Lab Report PDF'
+        $pdfAttachment = $this->buildDiagnosticDigitalSharePdf(
+            $patientRow,
+            $abhaIdentity,
+            $diagnosticReport,
+            $observations,
+            $practitioner,
+            $hospitalProfile,
+            $labReqId
         );
-
-        if ($pdfAttachment === null) {
-            return $this->response->setStatusCode(422)->setJSON([
-                'ok' => 0,
-                'error' => 'PDF attachment missing for this lab request. Compile and store the report first, then retry ABDM submit.',
-            ]);
-        }
 
         $bundle     = $fhir->buildLabReportBundle($patient, $diagnosticReport, $observations, $practitioner, $organization, $encounter, $pdfAttachment);
         $bundleJson = (string) json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -2180,19 +2176,16 @@ class AbdmGateway extends BaseController
         ];
 
         $fhir = new FhirR4Builder();
-        $pdfAttachment = $this->loadLatestLabPdfAttachment(
-            (int) ($labReq->charge_id ?? 0),
-            (int) ($labReq->lab_type ?? 0),
-            $labReqId,
-            $testTitle !== '' ? ($testTitle . ' PDF Report') : 'Lab Report PDF'
+        $abhaIdentity = $this->resolvePatientAbhaIdentity($patientId, $abhaId);
+        $pdfAttachment = $this->buildDiagnosticDigitalSharePdf(
+            $patientRow,
+            $abhaIdentity,
+            $diagnosticReport,
+            $observations,
+            $practitioner,
+            $hospitalProfile,
+            $labReqId
         );
-
-        if ($pdfAttachment === null) {
-            return $this->response->setStatusCode(422)->setJSON([
-                'status' => 'error',
-                'message' => 'PDF attachment missing for this lab request. Compile and store the report first, then retry preview.',
-            ]);
-        }
 
         $bundle = $fhir->buildLabReportBundle($patient, $diagnosticReport, $observations, $practitioner, $organization, $encounter, $pdfAttachment);
 
@@ -4260,6 +4253,186 @@ class AbdmGateway extends BaseController
         }
     }
 
+    /**
+     * @param array<string,mixed> $patientRow
+     * @param array{abha_id:string,abha_address:string} $abhaIdentity
+     * @param array<string,mixed> $diagnosticReport
+     * @param array<int,array<string,mixed>> $observations
+     * @param array<string,mixed>|null $practitioner
+     * @param array<string,mixed> $hospitalProfile
+     */
+    private function buildDiagnosticDigitalSharePdf(
+        array $patientRow,
+        array $abhaIdentity,
+        array $diagnosticReport,
+        array $observations,
+        ?array $practitioner,
+        array $hospitalProfile,
+        int $labReqId
+    ): ?array {
+        $escape = static fn (string $value): string => htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $contentHtml = trim((string) ($diagnosticReport['report_html'] ?? ''));
+        if ($contentHtml === '' && $observations !== []) {
+            $rows = '';
+            foreach ($observations as $observation) {
+                $value = trim((string) ($observation['value'] ?? ''));
+                $unit = trim((string) ($observation['unit'] ?? ''));
+                $range = trim(implode(' - ', array_filter([
+                    trim((string) ($observation['ref_low'] ?? '')),
+                    trim((string) ($observation['ref_high'] ?? '')),
+                ], static fn (string $part): bool => $part !== '')));
+                $rows .= '<tr><td>' . $escape((string) ($observation['test_name'] ?? 'Test')) . '</td>'
+                    . '<td>' . $escape(trim($value . ' ' . $unit)) . '</td>'
+                    . '<td>' . $escape($range) . '</td>'
+                    . '<td>' . $escape((string) ($observation['interpretation'] ?? '')) . '</td></tr>';
+            }
+            $contentHtml = '<table class="share-content-table"><thead><tr><th>Test</th><th>Result</th><th>Reference</th>'
+                . '<th>Flag</th></tr></thead><tbody>' . $rows . '</tbody></table>';
+        }
+        if ($contentHtml === '') {
+            return null;
+        }
+
+        $conclusion = trim((string) ($diagnosticReport['conclusion'] ?? ''));
+        if ($conclusion !== '') {
+            $contentHtml .= '<div class="share-conclusion"><strong>Conclusion:</strong> ' . $escape($conclusion) . '</div>';
+        }
+        $title = trim((string) ($diagnosticReport['title'] ?? 'Diagnostic Report')) ?: 'Diagnostic Report';
+        $abha = trim(implode(' / ', array_filter([
+            $abhaIdentity['abha_id'],
+            $abhaIdentity['abha_address'],
+        ], static fn (string $value): bool => $value !== '')));
+
+        return $this->renderDigitalSharePdf($contentHtml, 'Digital-Share-LAB-' . $labReqId, [
+            'document_title' => $title,
+            'patient_name' => $this->patientDisplayName($patientRow),
+            'uhid' => trim((string) ($patientRow['p_code'] ?? '')),
+            'abha' => $abha,
+            'record_label' => 'Diagnostic Report',
+            'record_code' => 'LAB-' . $labReqId,
+            'reported_at' => (string) ($diagnosticReport['reported_at'] ?? ''),
+            'practitioner' => trim((string) ($practitioner['name'] ?? '')),
+            'facility_name' => trim((string) ($hospitalProfile['name'] ?? '')),
+        ]);
+    }
+
+    /**
+     * Render the stable PDF layout used for digital/PHR sharing.
+     *
+     * @param array<string,string> $metadata
+     * @return array{content_type:string,data_base64:string,title:string,size:int,hash:string}|null
+     */
+    private function renderDigitalSharePdf(string $contentHtml, string $fileStem, array $metadata): ?array
+    {
+        $contentHtml = trim($contentHtml);
+        if ($contentHtml === '') {
+            return null;
+        }
+
+        try {
+            $escape = static fn (string $value): string => htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $hospital = $this->getHospitalProfileForFhir();
+            $hospitalName = trim((string) ($metadata['facility_name'] ?? $hospital['name'] ?? '')) ?: 'Healthcare Facility';
+            $hospitalAddress = trim((string) ($hospital['address'] ?? ''));
+            $hospitalContact = trim(implode(' | ', array_filter([
+                trim((string) ($hospital['phone'] ?? '')),
+                trim((string) ($hospital['email'] ?? '')),
+            ], static fn (string $value): bool => $value !== '')));
+            $logoHtml = '';
+            $logoName = trim((string) ($hospital['logo'] ?? ''));
+            foreach (array_filter([
+                $logoName !== '' ? FCPATH . 'assets/images/' . ltrim($logoName, '/\\') : '',
+                $logoName !== '' ? FCPATH . 'assets/img/' . ltrim($logoName, '/\\') : '',
+                FCPATH . 'assets/img/logo.png',
+            ]) as $logoPath) {
+                if (is_file($logoPath)) {
+                    $logoHtml = '<img src="' . $escape(str_replace('\\', '/', $logoPath)) . '" style="height:52px;max-width:110px">';
+                    break;
+                }
+            }
+
+            $patientName = trim((string) ($metadata['patient_name'] ?? '')) ?: 'Patient';
+            $uhid = trim((string) ($metadata['uhid'] ?? ''));
+            $abha = trim((string) ($metadata['abha'] ?? ''));
+            $recordCode = trim((string) ($metadata['record_code'] ?? ''));
+            $footerIdentity = trim(implode(' | ', array_filter([$patientName, $uhid !== '' ? 'UHID: ' . $uhid : ''])));
+            $identityFields = [
+                ['Patient', $patientName],
+                ['UHID', $uhid],
+                ['ABHA', $abha],
+                [trim((string) ($metadata['record_label'] ?? 'Record')) ?: 'Record', $recordCode],
+                ['Reported / Issued', trim((string) ($metadata['reported_at'] ?? date('Y-m-d H:i:s')))],
+                ['Practitioner', trim((string) ($metadata['practitioner'] ?? ''))],
+            ];
+            $identityFields = array_values(array_filter(
+                $identityFields,
+                static fn (array $field): bool => trim((string) ($field[1] ?? '')) !== ''
+            ));
+            $identityRows = '';
+            for ($index = 0, $count = count($identityFields); $index < $count; $index += 2) {
+                $identityRows .= '<tr>';
+                for ($column = 0; $column < 2; $column++) {
+                    $field = $identityFields[$index + $column] ?? null;
+                    if ($field === null) {
+                        $identityRows .= '<td></td>';
+                        continue;
+                    }
+                    $identityRows .= '<td><span class="field-label">' . $escape((string) $field[0]) . ':</span> '
+                        . '<strong>' . $escape((string) $field[1]) . '</strong></td>';
+                }
+                $identityRows .= '</tr>';
+            }
+
+            $css = 'body{font-family:DejaVu Sans,sans-serif;color:#17212b;font-size:10.5px}'
+                . '.brand{width:100%;border-collapse:collapse;border-bottom:2px solid #176b87;margin-bottom:10px}.brand td{vertical-align:middle;padding:0 0 9px 0}'
+                . '.brand-logo{width:125px}.facility{font-size:19px;font-weight:bold;color:#123b4a}.facility-meta{font-size:9px;color:#52606d;margin-top:2px}'
+                . '.document-title{font-size:14px;font-weight:bold;text-align:right;color:#176b87}.share-identity{width:100%;border-collapse:collapse;margin-bottom:14px}'
+                . '.share-identity td{width:50%;border:1px solid #cad7de;background:#f5f9fb;padding:6px;vertical-align:top}.field-label{color:#52606d}'
+                . '.share-content-table{width:100%;border-collapse:collapse}'
+                . '.share-content-table th,.share-content-table td{border:1px solid #cbd5df;padding:6px}.share-content-table th{background:#eaf2f5;text-align:left}'
+                . '.items{width:100%;border-collapse:collapse}.items th,.items td{border:1px solid #cbd5df;padding:7px}.items th{background:#eef2f6;text-align:left}'
+                . '.num{text-align:right}.totals{margin-top:12px;text-align:right;font-size:12px;line-height:1.6}'
+                . '.share-conclusion{margin-top:14px;padding:9px;border-left:3px solid #176b87;background:#f5f9fb}table{border-collapse:collapse;max-width:100%}img{max-width:100%}'
+                . 'h1,h2,h3{margin:8px 0}p{margin:5px 0}';
+            $bodyHtml = '<table class="brand"><tr><td class="brand-logo">' . $logoHtml . '</td><td><div class="facility">' . $escape($hospitalName) . '</div>'
+                . '<div class="facility-meta">' . $escape($hospitalAddress) . '</div><div class="facility-meta">' . $escape($hospitalContact) . '</div></td>'
+                . '<td class="document-title">' . $escape((string) ($metadata['document_title'] ?? 'Digital Health Record')) . '</td></tr></table>'
+                . '<table class="share-identity">' . $identityRows . '</table>' . $contentHtml;
+
+            $mpdfTempDir = WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'mpdf';
+            if (! is_dir($mpdfTempDir)) {
+                @mkdir($mpdfTempDir, 0755, true);
+            }
+            $mpdf = new Mpdf([
+                'format' => 'A4',
+                'margin_top' => 10,
+                'margin_bottom' => 16,
+                'margin_left' => 10,
+                'margin_right' => 10,
+                'tempDir' => $mpdfTempDir,
+                'default_font' => 'freeserif',
+            ]);
+            $mpdf->SetHTMLFooter('<div style="border-top:1px solid #9fb3bd;padding-top:5px;font-size:8px;color:#52606d">'
+                . $escape($footerIdentity) . '<span style="float:right">Page {PAGENO} of {nbpg}</span></div>');
+            $mpdf->WriteHTML($css, HTMLParserMode::HEADER_CSS);
+            $mpdf->WriteHTML($bodyHtml, HTMLParserMode::HTML_BODY);
+            $bytes = $mpdf->Output($fileStem . '.pdf', 'S');
+            if (! is_string($bytes) || ! str_starts_with($bytes, '%PDF-')) {
+                return null;
+            }
+
+            return [
+                'content_type' => 'application/pdf',
+                'data_base64' => base64_encode($bytes),
+                'title' => $fileStem . '.pdf',
+                'size' => strlen($bytes),
+                'hash' => base64_encode(sha1($bytes, true)),
+            ];
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     private function resolveStoredFileAbsolutePath(string $fullPath): string
     {
         $normalized = str_replace('\\', '/', trim($fullPath));
@@ -5444,23 +5617,44 @@ class AbdmGateway extends BaseController
     /**
      * Query hospital_setting for FHIR-required hospital profile fields.
      *
-     * @return array{name: string, hfr_id: string}
+    * @return array{name:string,hfr_id:string,address:string,phone:string,email:string,logo:string}
      */
     private function getHospitalProfileForFhir(): array
     {
         try {
             $rows = $this->db->table('hospital_setting')
                 ->select('s_name, s_value')
-                ->whereIn('s_name', ['ABDM_HMS_NAME', 'ABDM_HFR_ID', 'H_Name'])
+                ->whereIn('s_name', [
+                    'ABDM_HMS_NAME', 'ABDM_HFR_ID', 'H_Name', 'H_address_1', 'H_address_2',
+                    'H_phone_No', 'H_Email', 'H_logo',
+                ])
                 ->get()->getResultArray();
             $map   = array_column($rows, 's_value', 's_name');
             $name  = trim((string) ($map['ABDM_HMS_NAME'] ?? $map['H_Name'] ?? ''));
             $hfrId = trim((string) ($map['ABDM_HFR_ID'] ?? ''));
+            $address = trim(implode(', ', array_filter([
+                trim((string) ($map['H_address_1'] ?? '')),
+                trim((string) ($map['H_address_2'] ?? '')),
+            ], static fn (string $value): bool => $value !== '')));
+            $phone = trim((string) ($map['H_phone_No'] ?? ''));
+            $email = trim((string) ($map['H_Email'] ?? ''));
+            $logo = trim((string) ($map['H_logo'] ?? ''));
         } catch (\Throwable $e) {
             $name  = '';
             $hfrId = '';
+            $address = '';
+            $phone = '';
+            $email = '';
+            $logo = '';
         }
-        return ['name' => $name, 'hfr_id' => $hfrId];
+        return [
+            'name' => $name,
+            'hfr_id' => $hfrId,
+            'address' => $address,
+            'phone' => $phone,
+            'email' => $email,
+            'logo' => $logo,
+        ];
     }
 
     /**
@@ -6476,11 +6670,29 @@ class AbdmGateway extends BaseController
         if (! empty($patientRow['dob'])) {
             $patient['birthDate'] = date('Y-m-d', strtotime((string) $patientRow['dob']));
         }
-        if ($abhaId !== '') {
-            $patient['identifier'] = [[
-                'system' => str_contains($abhaId, '@') ? 'https://healthid.ndhm.gov.in/abha-address' : 'https://healthid.ndhm.gov.in',
-                'value' => $abhaId,
-            ]];
+        $patient['identifier'] = [];
+        $uhid = trim((string) ($patientRow['p_code'] ?? ''));
+        if ($uhid !== '') {
+            $patient['identifier'][] = [
+                'system' => 'https://hms.local/fhir/uhid',
+                'value' => $uhid,
+            ];
+        }
+        $abhaIdentity = $this->resolvePatientAbhaIdentity($patientId, $abhaId);
+        if ($abhaIdentity['abha_id'] !== '') {
+            $patient['identifier'][] = [
+                'system' => 'https://healthid.ndhm.gov.in',
+                'value' => $abhaIdentity['abha_id'],
+            ];
+        }
+        if ($abhaIdentity['abha_address'] !== '') {
+            $patient['identifier'][] = [
+                'system' => 'https://healthid.ndhm.gov.in/abha-address',
+                'value' => $abhaIdentity['abha_address'],
+            ];
+        }
+        if ($patient['identifier'] === []) {
+            unset($patient['identifier']);
         }
         return $patient;
     }
@@ -6791,33 +7003,43 @@ class AbdmGateway extends BaseController
         if ($invoiceRows === '') {
             $invoiceRows = '<tr><td colspan="5">No line items</td></tr>';
         }
-        $invoicePdfHtml = '<style>'
-            . 'body{font-family:DejaVu Sans,sans-serif;color:#17212b;font-size:11px}'
-            . 'h1{font-size:20px;margin:0 0 3px}.muted{color:#52606d}.meta{width:100%;margin:18px 0;border-collapse:collapse}'
-            . '.meta td{width:50%;vertical-align:top;border:1px solid #d7dee5;padding:9px}.label{font-weight:bold}'
-            . 'table.items{width:100%;border-collapse:collapse}.items th,.items td{border:1px solid #cbd5df;padding:7px}'
-            . '.items th{background:#eef2f6;text-align:left}.num{text-align:right}.totals{margin-top:12px;text-align:right;font-size:12px}'
-            . '</style><h1>' . $escape($hospitalName) . '</h1><div class="muted">Invoice ' . $escape($invoiceNumber) . '</div>'
-            . '<table class="meta"><tr><td><span class="label">Patient:</span> ' . $escape($patientName)
-            . '<br><span class="label">Gender:</span> ' . $escape((string) ($patient['gender'] ?? ''))
-            . '<br><span class="label">Date of Birth:</span> ' . $escape((string) ($patient['birthDate'] ?? ''))
-            . '</td><td><span class="label">Visit:</span> ' . $escape($invoiceTypeDisplay)
-            . '<br><span class="label">Visit Date:</span> ' . $escape($encounterStart)
-            . '<br><span class="label">Practitioner:</span> ' . $escape($practitionerName)
-            . '<br><span class="label">Invoice Date:</span> ' . $escape($invoiceDate) . '</td></tr></table>'
-            . '<table class="items"><thead><tr><th>#</th><th>Item</th><th class="num">Qty</th><th class="num">Rate (INR)</th>'
+        $invoicePdfHtml = '<table class="items"><thead><tr><th>#</th><th>Item</th><th class="num">Qty</th><th class="num">Rate (INR)</th>'
             . '<th class="num">Amount (INR)</th></tr></thead><tbody>' . $invoiceRows . '</tbody></table>'
             . '<div class="totals"><div>Gross: INR ' . number_format($grossAmount, 2) . '</div><div><strong>Net: INR '
             . number_format($netAmount, 2) . '</strong></div></div>';
-        $invoicePdf = $this->renderReportHtmlToPdfAttachment($invoicePdfHtml, $pdfFileStem);
-        if ($invoicePdf === null) {
-            throw new \RuntimeException('Unable to render invoice PDF attachment.');
+        $patientUhid = '';
+        $patientAbhaValues = [];
+        foreach ((array) ($patient['identifier'] ?? []) as $identifier) {
+            $system = (string) ($identifier['system'] ?? '');
+            if (str_contains($system, '/uhid')) {
+                $patientUhid = trim((string) ($identifier['value'] ?? ''));
+            } elseif (str_contains($system, 'healthid.ndhm.gov.in')) {
+                $value = trim((string) ($identifier['value'] ?? ''));
+                if ($value !== '') {
+                    $patientAbhaValues[] = $value;
+                }
+            }
         }
-        $invoicePdfBytes = base64_decode((string) $invoicePdf['data_base64'], true);
-        if (! is_string($invoicePdfBytes) || ! str_starts_with($invoicePdfBytes, '%PDF-')) {
-            throw new \RuntimeException('Generated invoice PDF attachment is invalid.');
-        }
-        $documentReference = [
+        $patientAbha = implode(' / ', array_values(array_unique($patientAbhaValues)));
+        $invoicePdf = $this->renderDigitalSharePdf(
+            $invoicePdfHtml,
+            $pdfFileStem,
+            [
+                'document_title' => 'Invoice ' . $invoiceNumber,
+                'patient_name' => $patientName,
+                'uhid' => $patientUhid,
+                'abha' => $patientAbha,
+                'record_label' => $invoiceTypeDisplay . ' / Invoice',
+                'record_code' => $invoiceNumber,
+                'reported_at' => $invoiceDate,
+                'practitioner' => $practitionerName,
+            ]
+        );
+        $documentReference = null;
+        if ($invoicePdf !== null) {
+            $invoicePdfBytes = base64_decode((string) $invoicePdf['data_base64'], true);
+            if (is_string($invoicePdfBytes) && str_starts_with($invoicePdfBytes, '%PDF-')) {
+                $documentReference = [
             'resourceType' => 'DocumentReference',
             'id' => $documentReferenceId,
             'meta' => [
@@ -6854,7 +7076,9 @@ class AbdmGateway extends BaseController
                 'encounter' => [['reference' => $encounterRef]],
                 'related' => [['reference' => $invoiceRef, 'display' => 'Invoice ' . $invoiceNumber]],
             ],
-        ];
+                ];
+            }
+        }
 
         $encounter = [
             'resourceType' => 'Encounter',
@@ -6956,7 +7180,10 @@ class AbdmGateway extends BaseController
             ]],
         ];
 
-        $resources = [$composition, $patient, $organization, $encounter, $invoiceResource, $documentReference];
+        $resources = [$composition, $patient, $organization, $encounter, $invoiceResource];
+        if ($documentReference !== null) {
+            $resources[] = $documentReference;
+        }
         if ($practitioner !== null) {
             $resources[] = $practitioner;
         }

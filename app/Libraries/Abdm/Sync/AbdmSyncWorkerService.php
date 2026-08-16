@@ -146,14 +146,20 @@ class AbdmSyncWorkerService
 
         $result = $this->gatewayClient->pushRecord($recordPayload, $idempotencyKey);
 
-        $this->recordModel->update($syncRecordId, [
+        $recordUpdate = [
             'sync_status' => (bool) ($result['ok'] ?? false) ? 'done' : ((bool) ($result['retryable'] ?? false) ? 'failed' : 'dead'),
             'gateway_record_id' => (int) ($result['gateway_record_id'] ?? 0) ?: null,
             'gateway_queue_id' => (string) ($result['gateway_queue_id'] ?? '') ?: null,
             'last_synced_at' => date('Y-m-d H:i:s'),
             'last_error' => (bool) ($result['ok'] ?? false) ? null : (string) ($result['message'] ?? 'Sync failed'),
             'retry_count' => (int) ($record['retry_count'] ?? 0) + ((bool) ($result['ok'] ?? false) ? 0 : 1),
-        ]);
+        ];
+        if ($this->db->fieldExists('first_pushed_at', 'abdm_sync_record')) {
+            $recordUpdate['first_pushed_at'] = (string) ($result['first_pushed_at'] ?? '') ?: null;
+            $this->db->table('abdm_sync_record')->where('id', $syncRecordId)->update($recordUpdate);
+        } else {
+            $this->recordModel->update($syncRecordId, $recordUpdate);
+        }
 
         return $result;
     }

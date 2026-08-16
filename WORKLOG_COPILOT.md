@@ -4,6 +4,23 @@ Date: 2026-02-08
 
 ---
 
+## ABDM Immunization Duplicate Control — 2026-08-15
+
+- Made ImmunizationRecord care-context references stable per source record (`IMM-{record_id}`), while preserving previously stored references and deterministic aggregate fallbacks.
+- Removed the timestamp-based Immunization fallback from `FhirR4Builder` so retries cannot create a new gateway identity.
+- Normalized direct and outbox push responses: HTTP 201 succeeds; HTTP 409 succeeds only for `DUPLICATE_RECORD`; HTTP 422 remains a non-retryable validation failure with field details.
+- Preserved returned gateway `record_id`, `queue_id`, and `first_pushed_at`, persisting each when the deployed schema provides a matching column.
+- Added focused regression tests for stable Immunization references, accepted duplicate responses, generic conflicts, HTTP 201, and detailed HTTP 422 errors.
+
+## ABDM M2 Link Status + Immunization Task Board — 2026-08-15
+
+- Fixed M2 discovery/fetch to use canonical `health_records` care-context references and HI types first, with `patient_records` retained as a backward-compatible fallback.
+- Fixed link callbacks to accept snake_case and camelCase request/care-context identifiers, persist request IDs as transaction metadata, update both `record_links` and `health_records`, and complete source-keyed work tasks.
+- Made link synchronization idempotent: linked records cannot be downgraded, stale pending callbacks cannot erase failures, and duplicate callbacks preserve the confirmed link timestamp.
+- Added the `Immunization Record` task-board tab for completed vaccinations and local M2 registration using the exact `ImmunizationRecord` HI type.
+- Task-board Immunization registration forces `m2_only=1`; it stores the FHIR record for M2 discovery/linking and does not call a Push API.
+- Added focused tests for callback identifier parsing and status transition behavior.
+
 ## Storestock Module — 2026-04-19
 
 Ported Hospital Stock Management (Storestock) module from CI3 to CI4.

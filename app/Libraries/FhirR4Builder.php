@@ -938,6 +938,9 @@ class FhirR4Builder
                 $pdfDocRefRef = 'urn:uuid:' . $pdfDocRefUuid;
                 $pdfContentType = trim((string) ($attachment['content_type'] ?? 'application/pdf')) ?: 'application/pdf';
                 $pdfTitle = trim((string) ($attachment['title'] ?? 'Lab Report PDF')) ?: 'Lab Report PDF';
+                $pdfBytes = base64_decode($pdfData, true);
+                $pdfSize = (int) ($attachment['size'] ?? (is_string($pdfBytes) ? strlen($pdfBytes) : 0));
+                $pdfHash = trim((string) ($attachment['hash'] ?? (is_string($pdfBytes) ? base64_encode(sha1($pdfBytes, true)) : '')));
 
                 $resourceEntries[] = ['fullUrl' => 'urn:uuid:' . $pdfBinaryUuid, 'resource' => [
                     'resourceType' => 'Binary',
@@ -955,12 +958,14 @@ class FhirR4Builder
                     'type'         => ['coding' => [['system' => 'http://snomed.info/sct', 'code' => '721981007', 'display' => 'Diagnostic studies report']]],
                     'subject'      => ['reference' => $patientRef],
                     'content'      => [[
-                        'attachment' => [
+                        'attachment' => array_filter([
                             'contentType' => $pdfContentType,
                             'url' => 'urn:uuid:' . $pdfBinaryUuid,
                             'data' => $pdfData,
                             'title' => $pdfTitle,
-                        ],
+                            'size' => $pdfSize > 0 ? $pdfSize : null,
+                            'hash' => $pdfHash !== '' ? $pdfHash : null,
+                        ], static fn ($value): bool => $value !== null),
                     ]],
                 ]];
 

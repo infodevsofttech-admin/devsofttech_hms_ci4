@@ -51,6 +51,10 @@ class FhirBundleValidator
                 $resourceRefs[$rtype . '/' . $rid] = true;
                 $resourceRefs['urn:uuid:' . $rid] = true;
             }
+            $fullUrl = trim((string) ($entry['fullUrl'] ?? ''));
+            if ($fullUrl !== '') {
+                $resourceRefs[$fullUrl] = true;
+            }
 
             if ($rtype === 'DiagnosticReport') {
                 $results = $resource['result'] ?? [];

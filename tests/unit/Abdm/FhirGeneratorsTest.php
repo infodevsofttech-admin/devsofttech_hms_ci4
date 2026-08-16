@@ -261,6 +261,7 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $this->assertIsString($pdfBytes);
         $this->assertSame('application/pdf', $attachment['contentType'] ?? null);
         $this->assertStringStartsWith('%PDF-', $pdfBytes);
+        $this->assertStringNotContainsString('table.items{', $pdfBytes);
         $this->assertSame(strlen($pdfBytes), $attachment['size'] ?? null);
         $this->assertSame(base64_encode(sha1($pdfBytes, true)), $attachment['hash'] ?? null);
         $this->assertSame(

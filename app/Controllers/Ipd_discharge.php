@@ -7140,10 +7140,14 @@ class Ipd_discharge extends BaseController
         try {
             $headerHtml = '';
             if ($withHeader) {
-                $headerHtml = $this->sanitizeDischargePdfHtml(
-                    $this->applyDischargeTemplateTokens(trim((string) ($templateSettings['header_html'] ?? '')), $templateTokenVars),
-                    false
+                $configuredHeader = $this->applyDischargeTemplateTokens(
+                    trim((string) ($templateSettings['header_html'] ?? '')),
+                    $templateTokenVars
                 );
+                if ($this->isDischargeHeaderBlank($configuredHeader)) {
+                    $configuredHeader = $this->buildDefaultDischargeHeader($templateTokenVars);
+                }
+                $headerHtml = $this->sanitizeDischargePdfHtml($configuredHeader, false);
                 $headerHtml = mpdf_normalize_font_weight_css($headerHtml);
             }
 
@@ -7192,6 +7196,7 @@ class Ipd_discharge extends BaseController
 
                 return $mpdf->Output($fileName, Destination::STRING_RETURN);
             });
+            $this->cacheAbdmIpdPdf($ipdId, 'discharge-summary.pdf', $pdfBinary);
             
             // Clear any output buffers to prevent corruption of binary PDF data
             while (ob_get_level() > 0) {
@@ -7717,6 +7722,46 @@ class Ipd_discharge extends BaseController
             . '</style></head><body>'
             . '<div class="content">' . $renderedContent . '</div>'
             . '</body></html>';
+    }
+
+    private function cacheAbdmIpdPdf(int $ipdId, string $fileName, string $pdfBinary): void
+    {
+        if ($ipdId <= 0 || $pdfBinary === '' || ! str_starts_with($pdfBinary, '%PDF-')) {
+            return;
+        }
+
+        $directory = WRITEPATH . 'uploads' . DIRECTORY_SEPARATOR . 'abdm' . DIRECTORY_SEPARATOR . 'ipd' . DIRECTORY_SEPARATOR . $ipdId;
+        if (! is_dir($directory) && ! mkdir($directory, 0755, true) && ! is_dir($directory)) {
+            return;
+        }
+
+        file_put_contents($directory . DIRECTORY_SEPARATOR . $fileName, $pdfBinary, LOCK_EX);
+    }
+
+    private function isDischargeHeaderBlank(string $headerHtml): bool
+    {
+        $withoutMedia = (string) preg_replace('/<(img|svg)\b[^>]*>[\s\S]*?<\/\1>|<img\b[^>]*\/?\s*>/i', 'media', $headerHtml);
+        $visibleText = html_entity_decode(strip_tags($withoutMedia), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+        return trim((string) preg_replace('/\s+/u', ' ', $visibleText)) === '';
+    }
+
+    /** @param array<string,string> $tokens */
+    private function buildDefaultDischargeHeader(array $tokens): string
+    {
+        $logoPath = trim((string) ($tokens['H_logo_abs'] ?? ''));
+        $logoHtml = $logoPath !== '' && is_file(html_entity_decode($logoPath, ENT_QUOTES | ENT_HTML5, 'UTF-8'))
+            ? '<td style="width:70px;vertical-align:middle;"><img src="' . $logoPath . '" style="max-width:60px;max-height:60px;"></td>'
+            : '';
+
+        return '<table style="width:100%;border-collapse:collapse;border-bottom:1px solid #64748b;padding-bottom:6px;">'
+            . '<tr>' . $logoHtml
+            . '<td style="vertical-align:middle;text-align:center;">'
+            . '<div style="font-family:freeserif,serif;font-size:18pt;font-weight:bold;">' . ($tokens['H_Name'] ?? '') . '</div>'
+            . '<div style="font-family:freeserif,serif;font-size:9pt;">' . ($tokens['hospital_address'] ?? '') . '</div>'
+            . '<div style="font-family:freeserif,serif;font-size:9pt;">Phone: ' . ($tokens['H_phone_No'] ?? '')
+            . (($tokens['H_Email'] ?? '') !== '' ? ' | Email: ' . $tokens['H_Email'] : '') . '</div>'
+            . '</td><td style="width:70px;"></td></tr></table>';
     }
 
     public function show_file3(int $ipdId)

@@ -23,14 +23,14 @@
     </div>
 
     <div class="d-flex flex-wrap gap-2 mb-3" id="taskFilters">
-        <button class="btn btn-sm btn-primary filter-btn" data-filter="dashboard">Dashboard</button>
-        <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="opd_book">OPD Book</button>
-        <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="opd_consult_publish">OPD Consult Publish</button>
-        <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="lab_report_publish">Lab Reports</button>
-        <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="radiology_report_publish">Radiology Reports</button>
-        <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="immunization_record_publish">Immunization Record</button>
-        <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="invoice">Invoice</button>
-        <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="ipd_discharge_publish">IPD Discharge</button>
+        <button type="button" class="btn btn-sm btn-primary filter-btn" data-filter="dashboard">Dashboard</button>
+        <button type="button" class="btn btn-sm btn-outline-primary filter-btn" data-filter="opd_book">OPD Book</button>
+        <button type="button" class="btn btn-sm btn-outline-primary filter-btn" data-filter="opd_consult_publish">OPD Consult Publish</button>
+        <button type="button" class="btn btn-sm btn-outline-primary filter-btn" data-filter="lab_report_publish">Lab Reports</button>
+        <button type="button" class="btn btn-sm btn-outline-primary filter-btn" data-filter="radiology_report_publish">Radiology Reports</button>
+        <button type="button" class="btn btn-sm btn-outline-primary filter-btn" data-filter="immunization_record_publish">Immunization Record</button>
+        <button type="button" class="btn btn-sm btn-outline-primary filter-btn" data-filter="invoice">Invoice</button>
+        <button type="button" class="btn btn-sm btn-outline-primary filter-btn" data-filter="ipd_discharge_publish">IPD Discharge</button>
     </div>
 
     <?php $dashboard = $dashboard_metrics ?? []; ?>
@@ -165,25 +165,25 @@
                             <td>
                                 <div class="d-flex gap-1 flex-wrap">
                                     <?php if ($type === 'patient_abha_create' || $type === 'patient_abha_link'): ?>
-                                        <button class="btn btn-sm btn-outline-success action-btn" data-action="create_abha">Create ABHA</button>
+                                        <button type="button" class="btn btn-sm btn-outline-success action-btn" data-action="create_abha">Create ABHA</button>
                                     <?php elseif ($type === 'patient_abha_update'): ?>
-                                        <button class="btn btn-sm btn-outline-primary action-btn" data-action="update_abha">Update ABHA</button>
+                                        <button type="button" class="btn btn-sm btn-outline-primary action-btn" data-action="update_abha">Update ABHA</button>
                                     <?php elseif ($type === 'immunization_record_publish'): ?>
                                         <?php if ($bridgeSubmitted): ?>
-                                            <button class="btn btn-sm btn-outline-success" disabled title="Submitted to ABDM Bridge<?= $bridgeCareContext !== '' ? ': ' . esc($bridgeCareContext) : '' ?>">Submitted to Bridge</button>
+                                            <button type="button" class="btn btn-sm btn-outline-success" disabled title="Submitted to ABDM Bridge<?= $bridgeCareContext !== '' ? ': ' . esc($bridgeCareContext) : '' ?>">Submitted to Bridge</button>
                                         <?php else: ?>
-                                            <button class="btn btn-sm btn-outline-success immunization-bridge-btn" title="Push this ImmunizationRecord FHIR bundle to ABDM Bridge.">Push to Bridge</button>
+                                            <button type="button" class="btn btn-sm btn-outline-success immunization-bridge-btn" title="Push this ImmunizationRecord FHIR bundle to ABDM Bridge.">Push to Bridge</button>
                                         <?php endif; ?>
                                     <?php else: ?>
-                                        <button class="btn btn-sm btn-outline-warning action-btn" data-action="submit">Submit</button>
+                                        <button type="button" class="btn btn-sm btn-outline-warning action-btn" data-action="submit">Submit</button>
                                     <?php endif; ?>
                                     <?php if ($showSandbox): ?>
-                                        <button class="btn btn-sm btn-outline-info sandbox-btn">Sandbox</button>
+                                        <button type="button" class="btn btn-sm btn-outline-info sandbox-btn">Sandbox</button>
                                     <?php endif; ?>
                                     <?php if ($showPreview): ?>
-                                        <button class="btn btn-sm btn-outline-primary preview-fhir-btn">Preview FHIR</button>
+                                        <button type="button" class="btn btn-sm btn-outline-primary preview-fhir-btn">Preview FHIR</button>
                                     <?php endif; ?>
-                                    <button class="btn btn-sm btn-outline-dark close-btn">Close</button>
+                                    <button type="button" class="btn btn-sm btn-outline-dark close-btn">Close</button>
                                 </div>
                             </td>
                         </tr>
@@ -755,6 +755,19 @@
     function setStatus(msg, isError) {
         statusBox.textContent = msg;
         statusBox.style.color = isError ? '#dc3545' : '#6c757d';
+    }
+
+    function setSubmissionStatus(msg, queueId) {
+        setStatus(msg, false);
+        if (!queueId) {
+            return;
+        }
+        statusBox.appendChild(document.createTextNode(' '));
+        var logLink = document.createElement('a');
+        logLink.href = '<?= base_url('AbdmBridgeLog') ?>' + '?search=' + encodeURIComponent(queueId);
+        logLink.textContent = 'View Bridge Log';
+        logLink.className = 'ms-1';
+        statusBox.appendChild(logLink);
     }
 
     function post(url, payload, cb) {
@@ -1665,6 +1678,7 @@
     var _fhirInvoiceSource = '';
     var _fhirInvoiceBillId = 0;
     var _fhirInvoicePatientId = 0;
+    var _fhirPreviewUrl = '';
 
     // ── Inline complaint SNOMED edit (event delegation on fhirFormView) ─
     var _editTimer = null;
@@ -2535,6 +2549,7 @@
 
     function openFhirModal(url, title, options) {
         options = options || {};
+        _fhirPreviewUrl = url;
         _fhirSubmitMode = options.submitMode || 'opd';
         _fhirSubmitTaskRow = options.taskRow || null;
         _fhirSubmitAbha = (options.abhaId || '').trim();
@@ -2588,14 +2603,19 @@
         }
 
         if (btnRegenerateFhirModal) {
+            var taskType = _fhirSubmitTaskRow ? (_fhirSubmitTaskRow.getAttribute('data-task-type') || '').toLowerCase() : '';
+            var canRebuildDiagnostic = _fhirSubmitMode === 'task'
+                && (taskType === 'lab_report_publish' || taskType === 'radiology_report_publish');
             btnRegenerateFhirModal.disabled = false;
-            btnRegenerateFhirModal.style.display = _fhirSubmitMode === 'task' ? 'none' : '';
-            btnRegenerateFhirModal.innerHTML = _fhirSubmitMode === 'invoice'
-                ? '<i class="bi bi-arrow-clockwise"></i> Rebuild Bundle'
+            btnRegenerateFhirModal.style.display = _fhirSubmitMode === 'task' && !canRebuildDiagnostic ? 'none' : '';
+            btnRegenerateFhirModal.innerHTML = _fhirSubmitMode === 'invoice' || canRebuildDiagnostic
+                ? '<i class="bi bi-arrow-clockwise"></i> Rebuild Digital Record'
                 : '<i class="bi bi-arrow-clockwise"></i> Regenerate';
-            btnRegenerateFhirModal.title = _fhirSubmitMode === 'invoice'
-                ? 'Rebuild FHIR JSON from current billing data'
-                : 'Rebuild FHIR bundle from current prescription data';
+            btnRegenerateFhirModal.title = canRebuildDiagnostic
+                ? 'Rebuild FHIR and Digital Share PDF from the latest report data'
+                : (_fhirSubmitMode === 'invoice'
+                    ? 'Rebuild FHIR and Digital Share PDF from current billing data'
+                    : 'Rebuild FHIR bundle from current prescription data');
         }
 
         fhirPreviewModal.show();
@@ -2632,6 +2652,20 @@
     // Regenerate FHIR bundle in modal
     btnRegenerateFhirModal.addEventListener('click', function () {
         var btn = this;
+        var taskType = _fhirSubmitTaskRow ? (_fhirSubmitTaskRow.getAttribute('data-task-type') || '').toLowerCase() : '';
+        if (_fhirSubmitMode === 'task' && (taskType === 'lab_report_publish' || taskType === 'radiology_report_publish')) {
+            if (_fhirPreviewUrl === '') {
+                alert('Diagnostic preview URL is unavailable.');
+                return;
+            }
+            if (!confirm('Rebuild this FHIR record and Digital Share PDF from the latest report data?')) return;
+            openFhirModal(_fhirPreviewUrl, fhirModalTitle ? fhirModalTitle.textContent : 'Diagnostic FHIR Preview', {
+                submitMode: 'task',
+                taskRow: _fhirSubmitTaskRow,
+                abhaId: _fhirSubmitAbha
+            });
+            return;
+        }
         if (_fhirSubmitMode === 'invoice') {
             if (!_fhirInvoiceSource || _fhirInvoiceBillId <= 0 || _fhirInvoicePatientId <= 0) {
                 alert('Invoice source data is incomplete.');
@@ -2812,17 +2846,13 @@
 
                     var queueText = res.queue_id ? (' Queue ID: ' + res.queue_id) : '';
                     var warningText = res.warning ? (' Warning: ' + res.warning) : '';
-                    setStatus('Submitted to ABDM gateway.' + queueText + warningText);
+                    setSubmissionStatus('Submitted to ABDM gateway.' + queueText + warningText, res.queue_id || '');
                     var badge = _fhirSubmitTaskRow.querySelector('.status-pill');
                     if (badge) {
                         badge.textContent = 'IN_PROGRESS';
                         badge.className = 'badge bg-info status-pill';
                     }
                     alert('Submitted to ABDM gateway.' + queueText + warningText);
-                    if (res.queue_id) {
-                        var logUrl = '<?= base_url('AbdmBridgeLog') ?>' + '?search=' + encodeURIComponent(res.queue_id);
-                        window.open(logUrl, '_blank');
-                    }
                     fhirPreviewModal.hide();
                 });
                 return;
@@ -2858,17 +2888,13 @@
 
                     var queueText = res.queue_id ? (' Queue ID: ' + res.queue_id) : '';
                     var warningText = res.warning ? (' Warning: ' + res.warning) : '';
-                    setStatus('Submitted to ABDM gateway.' + queueText + warningText);
+                    setSubmissionStatus('Submitted to ABDM gateway.' + queueText + warningText, res.queue_id || '');
                     var badge = _fhirSubmitTaskRow.querySelector('.status-pill');
                     if (badge) {
                         badge.textContent = 'IN_PROGRESS';
                         badge.className = 'badge bg-info status-pill';
                     }
                     alert('Submitted to ABDM gateway.' + queueText + warningText);
-                    if (res.queue_id) {
-                        var logUrl = '<?= base_url('AbdmBridgeLog') ?>' + '?search=' + encodeURIComponent(res.queue_id);
-                        window.open(logUrl, '_blank');
-                    }
                     fhirPreviewModal.hide();
                 });
                 return;
