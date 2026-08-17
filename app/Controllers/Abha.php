@@ -110,6 +110,10 @@ class Abha extends BaseController
         $profile = $this->pickGatewayAbhaProfile($payload);
 
         $abhaNum          = (string) ($profile['ABHANumber'] ?? $profile['abha_id'] ?? $payload['ABHANumber'] ?? $payload['abha_id'] ?? '');
+        $aadhaarVerifiedAbha = preg_replace('/\D/', '', $abhaNum);
+        if ($newTxnId && strlen($aadhaarVerifiedAbha) === 14) {
+            session()->set('abha_enrol_identity_' . $newTxnId, $aadhaarVerifiedAbha);
+        }
         $abhaAddress      = (string) (
             ($profile['preferredAddress'] ?? '')
             ?: ($profile['preferredAbhaAddress'] ?? '')
@@ -224,15 +228,28 @@ class Abha extends BaseController
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'Valid 10-digit mobile number is required']);
         }
 
+        if ($txnId === '') {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'Aadhaar enrolment txn_id is required']);
+        }
+
         try {
-            $result = AbdmConnectorFactory::make()->abhaMobileGenerateOtp(['mobile' => $mobile, 'txnId' => $txnId]);
+            $result = AbdmConnectorFactory::make()->abhaEnrolMobileRequestOtp(['mobile' => $mobile, 'txnId' => $txnId]);
         } catch (\Throwable $e) {
             return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => $e->getMessage()]);
         }
 
         if (! empty($result['ok']) && $result['ok'] == 1) {
             $newTxnId = $result['txn_id'] ?? $result['data']['txnId'] ?? $result['data']['txn_id'] ?? $txnId;
-            return $this->response->setJSON(['ok' => 1, 'txn_id' => $newTxnId]);
+            $expectedAbha = (string) (session()->get('abha_enrol_identity_' . $txnId) ?? '');
+            if ($expectedAbha !== '') {
+                session()->set('abha_enrol_identity_' . $newTxnId, $expectedAbha);
+            }
+            return $this->response->setJSON([
+                'ok' => 1,
+                'txn_id' => $newTxnId,
+                'message' => (string) ($result['message'] ?? $result['data']['message'] ?? 'OTP sent to alternate mobile.'),
+                'request_id' => (string) ($result['request_id'] ?? ''),
+            ]);
         }
 
         return $this->response->setJSON([
@@ -264,7 +281,7 @@ class Abha extends BaseController
         }
 
         try {
-            $result = AbdmConnectorFactory::make()->abhaMobileVerifyOtp(['txnId' => $txnId, 'otp' => $otp]);
+            $result = AbdmConnectorFactory::make()->abhaEnrolMobileVerifyOtp(['txnId' => $txnId, 'otp' => $otp]);
         } catch (\Throwable $e) {
             return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => $e->getMessage()]);
         }
@@ -290,6 +307,17 @@ class Abha extends BaseController
         $profile = $this->pickGatewayAbhaProfile($payload);
 
         $abhaNum          = (string) ($profile['ABHANumber'] ?? $profile['abha_id'] ?? $payload['ABHANumber'] ?? $payload['abha_id'] ?? '');
+        $expectedAbha     = preg_replace('/\D/', '', (string) (session()->get('abha_enrol_identity_' . $txnId) ?? ''));
+        $returnedAbha     = preg_replace('/\D/', '', $abhaNum);
+        if (strlen($expectedAbha) !== 14 || $returnedAbha !== $expectedAbha) {
+            log_message('error', '[ABHA] Enrolment identity mismatch blocked for txn ' . $txnId);
+            return $this->response->setStatusCode(409)->setJSON([
+                'ok' => 0,
+                'error_text' => 'ABHA identity mismatch. The alternate-mobile response did not match the Aadhaar-verified person and was rejected.',
+                'request_id' => (string) ($result['request_id'] ?? ''),
+            ]);
+        }
+        session()->remove('abha_enrol_identity_' . $txnId);
         $abhaAddress      = (string) (
             ($profile['preferredAddress'] ?? '')
             ?: ($profile['preferredAbhaAddress'] ?? '')

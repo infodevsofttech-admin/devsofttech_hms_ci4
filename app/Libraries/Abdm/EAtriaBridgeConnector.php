@@ -968,6 +968,37 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         return $this->attachOfficialAbhaCard($result);
     }
 
+    public function abhaEnrolMobileRequestOtp(array $payload): array
+    {
+        $body = [
+            'txnId' => (string) ($payload['txnId'] ?? $payload['txn_id'] ?? ''),
+            'mobile' => (string) ($payload['mobile'] ?? ''),
+        ];
+        if ($this->hfrId !== '') {
+            $body['hfr_id'] = $this->hfrId;
+        }
+
+        return $this->post('/v3/abha/enrol/mobile/request-otp', $body);
+    }
+
+    public function abhaEnrolMobileVerifyOtp(array $payload): array
+    {
+        $body = [
+            'txnId' => (string) ($payload['txnId'] ?? $payload['txn_id'] ?? ''),
+            'otp' => (string) ($payload['otp'] ?? ''),
+        ];
+        if ($this->hfrId !== '') {
+            $body['hfr_id'] = $this->hfrId;
+        }
+
+        $result = $this->post('/v3/abha/enrol/mobile/verify-otp', $body);
+        if (empty($result['ok']) || (int) $result['ok'] !== 1) {
+            return $result;
+        }
+
+        return $this->attachOfficialAbhaCard($result);
+    }
+
     public function abhaAddressSuggestions(array $payload): array
     {
         $txnId = (string) ($payload['txn_id'] ?? $payload['txnId'] ?? '');

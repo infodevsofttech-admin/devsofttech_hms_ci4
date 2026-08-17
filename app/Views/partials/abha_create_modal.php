@@ -79,7 +79,7 @@
                                 <span class="input-group-text"><i class="bi bi-phone"></i></span>
                                 <input type="text" class="form-control" id="abhaCreateMobile" maxlength="10" inputmode="numeric" autocomplete="tel" placeholder="10-digit mobile">
                             </div>
-                            <div class="form-text">Required by ABDM enrolment. If this differs from the Aadhaar-linked mobile, it is verified separately.</div>
+                            <div class="form-text">Required by ABDM enrolment. A different number is verified through the Aadhaar-bound enrolment transaction.</div>
                         </div>
                     </div>
 
@@ -374,8 +374,7 @@ window.AbhaCreateModal = (function () {
             stopTimers();
             createdProfile = response;
             createTxnId = response.txn_id || createTxnId;
-            var abhaMobile = digits(response.mobile).slice(-10);
-            if (communicationMobile && communicationMobile !== abhaMobile) {
+            if (communicationMobile && digits(response.mobile).slice(-10) !== communicationMobile) {
                 requestMobileOtp();
                 return;
             }
@@ -387,22 +386,22 @@ window.AbhaCreateModal = (function () {
     }
 
     function requestMobileOtp() {
-        alertBox('info', 'ABHA verified. Requesting an OTP for the alternate communication mobile...');
+        alertBox('info', 'Aadhaar verified. Requesting OTP for the alternate communication mobile...');
         $.post('<?= base_url('abha/create/communication') ?>', { mobile: communicationMobile, txn_id: createTxnId, '<?= csrf_token() ?>': csrf() }, function (response) {
             if (!response || response.ok != 1) {
                 renderProfile(createdProfile || {});
-                alertBox('warning', 'ABHA verification succeeded, but the communication mobile was not updated: ' + apiMessage(response, 'Unable to send the mobile OTP.'));
+                alertBox('warning', 'Aadhaar verification succeeded, but the alternate mobile OTP could not be sent: ' + apiMessage(response, 'Unable to send mobile OTP.'));
                 return;
             }
             mobileTxnId = response.txn_id || createTxnId;
-            $('#abhaCreateMobileHint').html('Enter the OTP sent to <strong>' + escapeHtml(maskMobile(communicationMobile)) + '</strong> to update the mobile registered on this ABHA account.');
+            $('#abhaCreateMobileHint').text(response.message || ('OTP sent to ' + maskMobile(communicationMobile) + '.'));
             $('#abhaCreateMobileOtp').val('');
             showStep(3);
             startMobileResendTimer($('#abhaCreateMobileResendBtn'));
             $('#abhaCreateMobileOtp').trigger('focus');
         }, 'json').fail(function (xhr) {
             renderProfile(createdProfile || {});
-            alertBox('warning', 'ABHA verification succeeded, but the communication mobile was not updated: ' + apiMessage(xhr.responseJSON, 'Unable to send the mobile OTP.'));
+            alertBox('warning', 'Aadhaar verification succeeded, but the alternate mobile OTP could not be sent: ' + apiMessage(xhr.responseJSON, 'Unable to send mobile OTP.'));
         });
     }
 

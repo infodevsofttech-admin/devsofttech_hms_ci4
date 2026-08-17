@@ -172,6 +172,16 @@ class DreamsoftConnector implements AbdmConnectorInterface
         );
     }
 
+    public function abhaEnrolMobileRequestOtp(array $payload): array
+    {
+        throw new \RuntimeException('ABHA enrolment mobile OTP requires the synchronous e-Atria Bridge connector.');
+    }
+
+    public function abhaEnrolMobileVerifyOtp(array $payload): array
+    {
+        throw new \RuntimeException('ABHA enrolment mobile OTP verification requires the synchronous e-Atria Bridge connector.');
+    }
+
     public function abhaAddressSuggestions(array $payload): array
     {
         throw new \RuntimeException(

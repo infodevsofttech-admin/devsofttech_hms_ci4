@@ -115,6 +115,10 @@ interface AbdmConnectorInterface
      */
     public function abhaMobileVerifyOtp(array $payload): array;
 
+    public function abhaEnrolMobileRequestOtp(array $payload): array;
+
+    public function abhaEnrolMobileVerifyOtp(array $payload): array;
+
     /**
      * ABDM M1: List ABHA address suggestions for an in-progress enrolment.
      *
