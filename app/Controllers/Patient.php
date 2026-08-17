@@ -2697,7 +2697,7 @@ class Patient extends BaseController
 		// older requests the patient later denied/expired in the PHR app keep
 		// showing REQUESTED otherwise, because nothing ever re-checks them.
 		$sessions = $this->getAbdmConsentRequestsList($abhaAddress);
-		$reconcilePayloads = [];
+		$reconcileJobs = [];
 		foreach ($sessions['requests'] ?? [] as $consent) {
 			if (in_array(strtoupper(trim((string) ($consent['status'] ?? ''))), ['EXPIRED', 'DENIED', 'REVOKED'], true)) {
 				continue;
@@ -2708,16 +2708,19 @@ class Patient extends BaseController
 			if ($sessionRequestId === '' && $sessionConsentRequestId === '' && $sessionConsentId === '') {
 				continue;
 			}
-			$reconcilePayloads[] = [
-				'abha_address' => $abhaAddress,
-				'request_id' => $sessionRequestId,
-				'abdm_consent_request_id' => $sessionConsentRequestId,
-				'abdm_consent_artifact_id' => $sessionConsentId,
-				'consent_id' => $sessionConsentId,
+			$reconcileJobs[] = [
+				'anchor_row_id' => (int) ($consent['id'] ?? 0),
+				'payload' => [
+					'abha_address' => $abhaAddress,
+					'request_id' => $sessionRequestId,
+					'abdm_consent_request_id' => $sessionConsentRequestId,
+					'abdm_consent_artifact_id' => $sessionConsentId,
+					'consent_id' => $sessionConsentId,
+				],
 			];
 		}
 
-		if ($reconcilePayloads === []) {
+		if ($reconcileJobs === []) {
 			$snapshot = $this->getLatestAbdmSyncSnapshot($abhaAddress);
 			$requestId = trim((string) ($snapshot['request_id'] ?? ''));
 			$consentRequestId = trim((string) ($snapshot['consent_request_id'] ?? ''));
@@ -2728,12 +2731,15 @@ class Patient extends BaseController
 					'error' => 'No consent request found for this patient to check.',
 				]);
 			}
-			$reconcilePayloads[] = [
-				'abha_address' => $abhaAddress,
-				'request_id' => $requestId,
-				'abdm_consent_request_id' => $consentRequestId,
-				'abdm_consent_artifact_id' => $consentId,
-				'consent_id' => $consentId,
+			$reconcileJobs[] = [
+				'anchor_row_id' => 0,
+				'payload' => [
+					'abha_address' => $abhaAddress,
+					'request_id' => $requestId,
+					'abdm_consent_request_id' => $consentRequestId,
+					'abdm_consent_artifact_id' => $consentId,
+					'consent_id' => $consentId,
+				],
 			];
 		}
 
@@ -2745,7 +2751,8 @@ class Patient extends BaseController
 		$dataUpdates = 0;
 		$dataFailed = 0;
 
-		foreach ($reconcilePayloads as $reconcilePayload) {
+		foreach ($reconcileJobs as $job) {
+			$reconcilePayload = $job['payload'];
 			try {
 				$reconcile = $service->runOperation('consent_reconcile', $reconcilePayload);
 			} catch (\Throwable $e) {
@@ -2758,6 +2765,7 @@ class Patient extends BaseController
 				continue;
 			}
 			$reconcileOk = true;
+			$this->persistConsentPhaseOnRequestRow((int) $job['anchor_row_id'], $reconcile);
 
 			$fetchSummary = ['granted' => false, 'data_updates' => 0, 'failed' => 0, 'artifact_ids' => []];
 			try {
@@ -2782,7 +2790,7 @@ class Patient extends BaseController
 
 		return $this->response->setJSON([
 			'ok' => 1,
-			'sessions_checked' => count($reconcilePayloads),
+			'sessions_checked' => count($reconcileJobs),
 			'reconcile_ok' => $reconcileOk ? 1 : 0,
 			'reconcile_error' => $reconcileOk ? '' : $reconcileError,
 			'granted' => $granted ? 1 : 0,
@@ -2790,6 +2798,52 @@ class Patient extends BaseController
 			'data_fetch_updates' => $dataUpdates,
 			'data_fetch_failed' => $dataFailed,
 		] + $this->getAbdmConsentRequestsList($abhaAddress));
+	}
+
+	/**
+	 * Stamps a reconciled consent status onto the session's own CONSENT_REQUEST
+	 * row. Without this the status lives only on a separate reconcile row, whose
+	 * attribution back to a session depends on id correlation — so a reload could
+	 * show REQUESTED again for a request ABDM already reported as denied/expired.
+	 *
+	 * @param array<string, mixed> $reconcile consent_reconcile operation result
+	 */
+	private function persistConsentPhaseOnRequestRow(int $rowId, array $reconcile): void
+	{
+		if ($rowId <= 0) {
+			return;
+		}
+
+		$status = strtoupper(trim((string) (
+			$reconcile['consent']['status']
+			?? $reconcile['consent_status']
+			?? $reconcile['status']
+			?? ''
+		)));
+		$state = match ($status) {
+			'GRANTED', 'APPROVED', 'ACTIVE' => 'GRANTED',
+			'DENIED' => 'DENIED',
+			'EXPIRED' => 'EXPIRED',
+			'REVOKED' => 'REVOKED',
+			default => '',
+		};
+		if ($state === '') {
+			return;
+		}
+
+		$now = date('Y-m-d H:i:s');
+		$update = ['workflow_state' => $state, 'updated_at' => $now];
+		if ($state === 'EXPIRED') {
+			$update['expired_at'] = $now;
+		} elseif ($state === 'REVOKED' || $state === 'DENIED') {
+			$update['revoked_at'] = $now;
+		}
+
+		try {
+			$this->db->table('abdm_hiu_workflows')->where('id', $rowId)->update($update);
+		} catch (\Throwable $e) {
+			log_message('error', 'Unable to persist ABDM consent status on row ' . $rowId . ': ' . $e->getMessage());
+		}
 	}
 
 	public function abdm_timeline(int $pno)
@@ -4787,6 +4841,14 @@ class Patient extends BaseController
 				$consentRequestRow = $row;
 				break;
 			}
+		}
+
+		// A status stamped directly onto this request row by a live status check
+		// is authoritative: it names this exact consent request, unlike separate
+		// reconcile rows that have to be correlated back to a session.
+		$anchorState = strtoupper(trim((string) (is_array($consentRequestRow) ? ($consentRequestRow['workflow_state'] ?? '') : '')));
+		if (in_array($anchorState, ['EXPIRED', 'DENIED', 'REVOKED'], true)) {
+			$phase = $anchorState;
 		}
 
 		// A short, human-friendly identifier for this session (the "Request ID"
