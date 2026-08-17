@@ -4530,6 +4530,7 @@ class Patient extends BaseController
 		$order = [];
 		$abdmIdToAnchor = [];
 		$requestIdToAnchor = [];
+		$anchorHasAbdmId = [];
 		$openAnchor = null;
 
 		foreach ($chronological as $row) {
@@ -4545,6 +4546,17 @@ class Patient extends BaseController
 				if ($rowRequestId !== '') {
 					$requestIdToAnchor[$rowRequestId] = $anchorKey;
 				}
+				// Reconcile/status rows usually carry only the ABDM ids, so the
+				// anchor must publish its own ids too or those rows cannot match.
+				if ($rowAbdmConsentRequestId !== '') {
+					$abdmIdToAnchor[$rowAbdmConsentRequestId] = $anchorKey;
+					$requestIdToAnchor[$rowAbdmConsentRequestId] = $anchorKey;
+					$anchorHasAbdmId[$anchorKey] = true;
+				}
+				if ($rowConsentId !== '') {
+					$abdmIdToAnchor[$rowConsentId] = $anchorKey;
+					$requestIdToAnchor[$rowConsentId] = $anchorKey;
+				}
 				$openAnchor = $anchorKey;
 				continue;
 			}
@@ -4556,7 +4568,10 @@ class Patient extends BaseController
 				$anchorKey = $requestIdToAnchor[$rowRequestId];
 			} elseif ($rowConsentId !== '' && isset($requestIdToAnchor[$rowConsentId])) {
 				$anchorKey = $requestIdToAnchor[$rowConsentId];
-			} elseif ($openAnchor !== null) {
+			} elseif ($openAnchor !== null && ($rowAbdmConsentRequestId === '' || empty($anchorHasAbdmId[$openAnchor]))) {
+				// Covers the first reconcile that discovers the ABDM id. A row
+				// naming a consent request that belongs elsewhere must not be
+				// guessed onto this session — that hid DENIED/EXPIRED results.
 				$anchorKey = $openAnchor;
 			}
 
@@ -4575,6 +4590,7 @@ class Patient extends BaseController
 			}
 			if ($rowAbdmConsentRequestId !== '') {
 				$abdmIdToAnchor[$rowAbdmConsentRequestId] = $anchorKey;
+				$anchorHasAbdmId[$anchorKey] = true;
 			}
 			if ($rowRequestId !== '') {
 				$requestIdToAnchor[$rowRequestId] = $anchorKey;
