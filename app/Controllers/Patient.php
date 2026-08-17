@@ -2693,56 +2693,102 @@ class Patient extends BaseController
 			]);
 		}
 
-		$snapshot = $this->getLatestAbdmSyncSnapshot($abhaAddress);
-		$requestId = trim((string) ($snapshot['request_id'] ?? ''));
-		$consentRequestId = trim((string) ($snapshot['consent_request_id'] ?? ''));
-		$consentId = trim((string) ($snapshot['consent_id'] ?? ''));
-		if ($requestId === '' && $consentRequestId === '' && $consentId === '') {
-			return $this->response->setStatusCode(422)->setJSON([
-				'ok' => 0,
-				'error' => 'No consent request found for this patient to check.',
-			]);
+		// Every non-terminal session is reconciled, not just the newest one:
+		// older requests the patient later denied/expired in the PHR app keep
+		// showing REQUESTED otherwise, because nothing ever re-checks them.
+		$sessions = $this->getAbdmConsentRequestsList($abhaAddress);
+		$reconcilePayloads = [];
+		foreach ($sessions['requests'] ?? [] as $consent) {
+			if (in_array(strtoupper(trim((string) ($consent['status'] ?? ''))), ['EXPIRED', 'DENIED', 'REVOKED'], true)) {
+				continue;
+			}
+			$sessionRequestId = trim((string) ($consent['request_id'] ?? ''));
+			$sessionConsentRequestId = trim((string) ($consent['consent_request_id'] ?? ''));
+			$sessionConsentId = trim((string) ($consent['consent_id'] ?? ''));
+			if ($sessionRequestId === '' && $sessionConsentRequestId === '' && $sessionConsentId === '') {
+				continue;
+			}
+			$reconcilePayloads[] = [
+				'abha_address' => $abhaAddress,
+				'request_id' => $sessionRequestId,
+				'abdm_consent_request_id' => $sessionConsentRequestId,
+				'abdm_consent_artifact_id' => $sessionConsentId,
+				'consent_id' => $sessionConsentId,
+			];
 		}
 
-		$reconcilePayload = [
-			'abha_address' => $abhaAddress,
-			'request_id' => $requestId,
-			'abdm_consent_request_id' => $consentRequestId,
-			'abdm_consent_artifact_id' => $consentId,
-			'consent_id' => $consentId,
-		];
+		if ($reconcilePayloads === []) {
+			$snapshot = $this->getLatestAbdmSyncSnapshot($abhaAddress);
+			$requestId = trim((string) ($snapshot['request_id'] ?? ''));
+			$consentRequestId = trim((string) ($snapshot['consent_request_id'] ?? ''));
+			$consentId = trim((string) ($snapshot['consent_id'] ?? ''));
+			if ($requestId === '' && $consentRequestId === '' && $consentId === '') {
+				return $this->response->setStatusCode(422)->setJSON([
+					'ok' => 0,
+					'error' => 'No consent request found for this patient to check.',
+				]);
+			}
+			$reconcilePayloads[] = [
+				'abha_address' => $abhaAddress,
+				'request_id' => $requestId,
+				'abdm_consent_request_id' => $consentRequestId,
+				'abdm_consent_artifact_id' => $consentId,
+				'consent_id' => $consentId,
+			];
+		}
 
 		$service = new \App\Libraries\Abdm\M3HiuWorkflowService();
-		try {
-			$reconcile = $service->runOperation('consent_reconcile', $reconcilePayload);
-		} catch (\Throwable $e) {
-			return $this->response->setStatusCode(500)->setJSON([
-				'ok' => 0,
-				'error' => 'Unable to check live status: ' . $e->getMessage(),
-			]);
-		}
+		$reconcileOk = false;
+		$reconcileError = '';
+		$granted = false;
+		$artifactsFetched = 0;
+		$dataUpdates = 0;
+		$dataFailed = 0;
 
-		$reconcileOk = (int) ($reconcile['ok'] ?? 0) === 1;
+		foreach ($reconcilePayloads as $reconcilePayload) {
+			try {
+				$reconcile = $service->runOperation('consent_reconcile', $reconcilePayload);
+			} catch (\Throwable $e) {
+				$reconcileError = $reconcileError !== '' ? $reconcileError : 'Unable to check live status: ' . $e->getMessage();
+				continue;
+			}
 
-		$fetchSummary = ['granted' => false, 'data_updates' => 0, 'failed' => 0, 'artifact_ids' => []];
-		if ($reconcileOk) {
+			if ((int) ($reconcile['ok'] ?? 0) !== 1) {
+				$reconcileError = $reconcileError !== '' ? $reconcileError : (string) ($reconcile['error_text'] ?? 'Live status check failed.');
+				continue;
+			}
+			$reconcileOk = true;
+
+			$fetchSummary = ['granted' => false, 'data_updates' => 0, 'failed' => 0, 'artifact_ids' => []];
 			try {
 				$fetchSummary = $service->fetchAllArtifactsAfterGrant($reconcilePayload, $reconcile);
 			} catch (\Throwable $e) {
 				// Status was successfully reconciled even if the data-fetch
 				// cascade below fails transiently; don't hide that from the UI.
-				$fetchSummary['fetch_error'] = $e->getMessage();
+				$dataFailed++;
 			}
+
+			if (! empty($fetchSummary['granted'])) {
+				$granted = true;
+				$artifactsFetched += count($fetchSummary['artifact_ids'] ?? []) + 1;
+			}
+			$dataUpdates += (int) ($fetchSummary['data_updates'] ?? 0);
+			$dataFailed += (int) ($fetchSummary['failed'] ?? 0);
+		}
+
+		if (! $reconcileOk && $reconcileError === '') {
+			$reconcileError = 'Live status check failed.';
 		}
 
 		return $this->response->setJSON([
 			'ok' => 1,
+			'sessions_checked' => count($reconcilePayloads),
 			'reconcile_ok' => $reconcileOk ? 1 : 0,
-			'reconcile_error' => $reconcileOk ? '' : (string) ($reconcile['error_text'] ?? 'Live status check failed.'),
-			'granted' => $fetchSummary['granted'] ? 1 : 0,
-			'artifacts_fetched' => count($fetchSummary['artifact_ids'] ?? []) + ($fetchSummary['granted'] ? 1 : 0),
-			'data_fetch_updates' => (int) ($fetchSummary['data_updates'] ?? 0),
-			'data_fetch_failed' => (int) ($fetchSummary['failed'] ?? 0),
+			'reconcile_error' => $reconcileOk ? '' : $reconcileError,
+			'granted' => $granted ? 1 : 0,
+			'artifacts_fetched' => $artifactsFetched,
+			'data_fetch_updates' => $dataUpdates,
+			'data_fetch_failed' => $dataFailed,
 		] + $this->getAbdmConsentRequestsList($abhaAddress));
 	}
 
@@ -4645,6 +4691,36 @@ class Patient extends BaseController
 
 		$phase = (string) $best['_phase'];
 
+		// Phase selection above is priority-based, so a GRANTED/COMPLETED row
+		// would otherwise outrank a LATER revocation/expiry/denial reported by
+		// the PHR app. A terminal outcome recorded after the winning row wins.
+		$terminalPhase = '';
+		$terminalRowId = 0;
+		foreach ($rows as $row) {
+			$rowDecoded = json_decode((string) ($row['response_json'] ?? ''), true);
+			if (! is_array($rowDecoded)) {
+				$rowDecoded = [];
+			}
+			$rowStatus = strtoupper(trim((string) (
+				$rowDecoded['consent']['status']
+				?? $rowDecoded['consent_status']
+				?? $rowDecoded['status']
+				?? $rowDecoded['data']['consent']['status']
+				?? ''
+			)));
+			if (! in_array($rowStatus, ['REVOKED', 'EXPIRED', 'DENIED'], true)) {
+				continue;
+			}
+			$rowId = (int) ($row['id'] ?? 0);
+			if ($rowId >= $terminalRowId) {
+				$terminalPhase = $rowStatus;
+				$terminalRowId = $rowId;
+			}
+		}
+		if ($terminalPhase !== '' && $terminalRowId > (int) ($best['id'] ?? 0)) {
+			$phase = $terminalPhase;
+		}
+
 		// IMPORTANT: do NOT read consent_id/consent_request_id only from the
 		// "best" (highest-priority phase) row. The initial consent_request row
 		// and its immediate consent_reconcile/consent_status follow-up often
@@ -4811,6 +4887,7 @@ class Patient extends BaseController
 			'ok' => 1,
 			'consent' => [
 				'id' => $displayId,
+				'request_id' => trim((string) (is_array($consentRequestRow) ? ($consentRequestRow['request_id'] ?? '') : ($best['request_id'] ?? ''))),
 				'consent_id' => $consentId,
 				'consent_request_id' => $consentRequestId,
 				'abha_address' => $abhaAddress,
