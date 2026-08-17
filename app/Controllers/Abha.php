@@ -111,7 +111,10 @@ class Abha extends BaseController
 
         $abhaNum          = (string) ($profile['ABHANumber'] ?? $profile['abha_id'] ?? $payload['ABHANumber'] ?? $payload['abha_id'] ?? '');
         $aadhaarVerifiedAbha = preg_replace('/\D/', '', $abhaNum);
-        if ($newTxnId && strlen($aadhaarVerifiedAbha) === 14) {
+        // ABDM v3 creates/returns the ABHA inside Aadhaar verify-otp when an alternate
+        // mobile is supplied, so no further mobile OTP step may run for this person.
+        $abhaCreated      = strlen($aadhaarVerifiedAbha) === 14;
+        if ($newTxnId && $abhaCreated) {
             session()->set('abha_enrol_identity_' . $newTxnId, $aadhaarVerifiedAbha);
         }
         $abhaAddress      = (string) (
@@ -125,9 +128,14 @@ class Abha extends BaseController
         );
         $name             = $this->extractAbhaProfileName($profile, $payload);
         $photo            = $this->extractAbhaProfilePhoto($profile, $payload);
-        // A different communication number is not verified until Step 3 succeeds.
-        // Never persist the operator-entered number merely because Aadhaar OTP passed.
         $mobile           = (string) ($profile['mobile'] ?? $payload['mobile'] ?? $payload['mobileNumber'] ?? '');
+        $mobileSource     = $mobile === '' ? '' : 'abdm';
+        $enrolMobile      = preg_replace('/\D/', '', $requestMobile);
+        // ABDM accepted this number while creating the ABHA but does not always echo it back.
+        if ($mobile === '' && $abhaCreated && strlen($enrolMobile) === 10) {
+            $mobile       = $enrolMobile;
+            $mobileSource = 'enrolment';
+        }
         $profileGender    = (string) ($profile['gender'] ?? $payload['gender'] ?? '');
         $profileDob       = (string) ($profile['dob'] ?? $profile['date_of_birth'] ?? $payload['dob'] ?? $payload['date_of_birth'] ?? '');
         $verifiedStatus   = (string) (($payload['gateway_abha_profile']['status'] ?? '') ?: ($profile['verifiedStatus'] ?? '') ?: ($profile['status'] ?? '') ?: ($payload['verifiedStatus'] ?? '') ?: ($payload['status'] ?? ''));
@@ -161,10 +169,6 @@ class Abha extends BaseController
 
         $patientInfo = $this->tryAutoLinkByDirectMatch($abhaNum, $name, $mobile, $profileGender, $profileDob, $abhaMeta);
 
-        // ABDM v3 creates/returns the ABHA inside Aadhaar verify-otp when an alternate
-        // mobile is supplied, so no further mobile OTP step may run for this person.
-        $abhaCreated = strlen($aadhaarVerifiedAbha) === 14;
-
         $responseBase = [
             'ok'                => 1,
             'txn_id'            => $newTxnId,
@@ -178,6 +182,7 @@ class Abha extends BaseController
             'name'              => $name,
             'photo'             => $photo,
             'mobile'            => $mobile,
+            'mobile_source'     => $mobileSource,
             'gender'            => $profileGender,
             'dob'               => $profileDob,
             'abha_address'      => $abhaAddress,

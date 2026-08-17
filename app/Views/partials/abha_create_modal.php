@@ -405,12 +405,16 @@ window.AbhaCreateModal = (function () {
             return;
         }
         var maskedComm = escapeHtml(maskMobile(communicationMobile));
-        if (digits(response.mobile).slice(-10) === communicationMobile) {
-            alertBox('success', created + '<br>Alternate mobile <strong>' + maskedComm + '</strong> is attached to this ABHA as the communication number. No separate mobile OTP is needed.');
+        if (response.mobile_source === 'abdm' && digits(response.mobile).slice(-10) === communicationMobile) {
+            alertBox('success', created + '<br>ABDM confirmed mobile <strong>' + maskedComm + '</strong> as the ABHA communication number. It will be saved on the patient record. No separate mobile OTP is needed.');
             return;
         }
-        alertBox('warning', created + '<br>The alternate mobile <strong>' + maskedComm + '</strong> was sent with the Aadhaar verification, but ABDM did not confirm it in the response, so treat it as <strong>not yet attached</strong>.'
-            + '<br>HMS deliberately did not send a second mobile OTP: that check returns whichever ABHA already owns this number (for example a parent\'s ABHA) and would overwrite this record. Attach or change the number from the ABHA app/portal instead.');
+        if (response.mobile_source === 'enrolment') {
+            alertBox('success', created + '<br>Alternate mobile <strong>' + maskedComm + '</strong> was submitted with the Aadhaar verification that created this ABHA and will be saved on the patient record. ABDM did not echo it back in the response, so confirm it in the ABHA app if the beneficiary reports missing notifications.'
+                + '<br>HMS does not send a second mobile OTP: that check returns whichever ABHA already owns this number (for example a parent\'s ABHA) and would overwrite this record.');
+            return;
+        }
+        alertBox('warning', created + '<br>The alternate mobile <strong>' + maskedComm + '</strong> could not be attached, and ABDM returned <strong>' + (escapeHtml(maskMobile(response.mobile)) || 'no number') + '</strong> instead. Attach or change the number from the ABHA app/portal.');
     }
 
     function requestMobileOtp() {
@@ -459,8 +463,8 @@ window.AbhaCreateModal = (function () {
         $('#abhaCreateProfileDob').text(profile.dob || '-');
         $('#abhaCreateProfileGender').text(genderText(profile.gender));
         $('#abhaCreateProfileMobile').text(profile.mobile
-            ? maskMobile(profile.mobile)
-            : (communicationMobile ? maskMobile(communicationMobile) + ' (sent at enrolment, unconfirmed)' : '-'));
+            ? maskMobile(profile.mobile) + (profile.mobile_source === 'enrolment' ? ' (submitted at enrolment)' : '')
+            : '-');
         $('#abhaCreateProfileFullAddress').text([profile.address, profile.district, profile.state, profile.zip].filter(Boolean).join(', ') || '-');
         $('#abhaCreateStatusText').text(profile.abha_number ? 'ABHA Ready' : 'ABHA Verified');
 
