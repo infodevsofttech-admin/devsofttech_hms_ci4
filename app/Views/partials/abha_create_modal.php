@@ -247,7 +247,12 @@ window.AbhaCreateModal = (function () {
     }
     function escapeHtml(value) { return $('<div>').text(value == null ? '' : String(value)).html(); }
     function apiMessage(response, fallback) {
-        return response && (response.error_text || response.message) ? escapeHtml(response.error_text || response.message) : fallback;
+        var message = response && (response.error_text || response.message)
+            ? escapeHtml(response.error_text || response.message)
+            : fallback;
+        return response && response.request_id
+            ? message + ' <small class="d-block mt-1">Bridge Request ID: ' + escapeHtml(response.request_id) + '</small>'
+            : message;
     }
     function alertBox(type, message) {
         $('#abhaCreateAlert').html(message ? '<div class="alert alert-' + type + ' py-2">' + message + '</div>' : '');
@@ -374,15 +379,38 @@ window.AbhaCreateModal = (function () {
             stopTimers();
             createdProfile = response;
             createTxnId = response.txn_id || createTxnId;
-            if (communicationMobile && digits(response.mobile).slice(-10) !== communicationMobile) {
+            // ABDM already created this ABHA with the alternate mobile; requesting another
+            // mobile OTP here would return whichever ABHA owns that number (e.g. the parent).
+            var alreadyCreated = response.abha_created == 1 || digits(response.abha_number).length === 14;
+            if (!alreadyCreated && communicationMobile && digits(response.mobile).slice(-10) !== communicationMobile) {
                 requestMobileOtp();
                 return;
             }
             renderProfile(response);
+            if (alreadyCreated) {
+                reportCommunicationMobileStatus(response);
+            }
         }, 'json').fail(function (xhr) {
             button.prop('disabled', false).html('<i class="bi bi-shield-check me-1"></i>Verify &amp; Create ABHA');
             alertBox('danger', apiMessage(xhr.responseJSON, 'OTP verification failed.'));
         });
+    }
+
+    // Explains the alternate-mobile outcome so the operator is never left guessing whether it was attached.
+    function reportCommunicationMobileStatus(response) {
+        var abhaText = formatAbha(response.abha_number) || 'the ABHA';
+        var created = 'ABHA <strong>' + escapeHtml(abhaText) + '</strong> created successfully by ABDM during Aadhaar OTP verification.';
+        if (!communicationMobile) {
+            alertBox('success', created);
+            return;
+        }
+        var maskedComm = escapeHtml(maskMobile(communicationMobile));
+        if (digits(response.mobile).slice(-10) === communicationMobile) {
+            alertBox('success', created + '<br>Alternate mobile <strong>' + maskedComm + '</strong> is attached to this ABHA as the communication number. No separate mobile OTP is needed.');
+            return;
+        }
+        alertBox('warning', created + '<br>The alternate mobile <strong>' + maskedComm + '</strong> was sent with the Aadhaar verification, but ABDM did not confirm it in the response, so treat it as <strong>not yet attached</strong>.'
+            + '<br>HMS deliberately did not send a second mobile OTP: that check returns whichever ABHA already owns this number (for example a parent\'s ABHA) and would overwrite this record. Attach or change the number from the ABHA app/portal instead.');
     }
 
     function requestMobileOtp() {
@@ -430,7 +458,9 @@ window.AbhaCreateModal = (function () {
         $('#abhaCreateProfileId').text(profile.abha_address || '-');
         $('#abhaCreateProfileDob').text(profile.dob || '-');
         $('#abhaCreateProfileGender').text(genderText(profile.gender));
-        $('#abhaCreateProfileMobile').text(maskMobile(profile.mobile) || '-');
+        $('#abhaCreateProfileMobile').text(profile.mobile
+            ? maskMobile(profile.mobile)
+            : (communicationMobile ? maskMobile(communicationMobile) + ' (sent at enrolment, unconfirmed)' : '-'));
         $('#abhaCreateProfileFullAddress').text([profile.address, profile.district, profile.state, profile.zip].filter(Boolean).join(', ') || '-');
         $('#abhaCreateStatusText').text(profile.abha_number ? 'ABHA Ready' : 'ABHA Verified');
 

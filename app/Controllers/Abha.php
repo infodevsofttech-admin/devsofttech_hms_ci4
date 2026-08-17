@@ -161,10 +161,15 @@ class Abha extends BaseController
 
         $patientInfo = $this->tryAutoLinkByDirectMatch($abhaNum, $name, $mobile, $profileGender, $profileDob, $abhaMeta);
 
+        // ABDM v3 creates/returns the ABHA inside Aadhaar verify-otp when an alternate
+        // mobile is supplied, so no further mobile OTP step may run for this person.
+        $abhaCreated = strlen($aadhaarVerifiedAbha) === 14;
+
         $responseBase = [
             'ok'                => 1,
             'txn_id'            => $newTxnId,
             'skip_mobile'       => true,
+            'abha_created'      => $abhaCreated,
             'card_base64'       => $this->extractAbhaCardData($result),
             'card_content_type' => $this->resolveAbhaCardContentType($result),
             'card_source'       => $this->resolveAbhaCardSource($result),
