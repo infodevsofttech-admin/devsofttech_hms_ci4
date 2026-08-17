@@ -16,7 +16,7 @@
  * this modal is shown.
  *
  * Include once per page:  <?= view('partials/abha_patient_match_modal') ?>
- * Then call: window.AbhaPatientMatchModal.open(profileResp, candidates, function(confirmResp) { ... });
+ * Then call: window.AbhaPatientMatchModal.open(profileResp, candidates, function(confirmResp) { ... }, preferredPatientId);
  */
 ?>
 <div class="modal fade" id="abhaMatchModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
@@ -269,7 +269,8 @@ window.AbhaPatientMatchModal = (function () {
         $modalEl = $('#abhaMatchModal');
         _bsModal = window.bootstrap ? new bootstrap.Modal($modalEl[0]) : null;
 
-        $(document).on('click', '.abhaMatch-candidate', function () {
+        $(document).off('click.abhaPatientMatch', '.abhaMatch-candidate')
+            .on('click.abhaPatientMatch', '.abhaMatch-candidate', function () {
             if ($(this).find('.abhaMatch-radio').is(':disabled')) { return; }
             selectCandidate(parseInt($(this).data('id'), 10));
         });
@@ -288,7 +289,7 @@ window.AbhaPatientMatchModal = (function () {
     });
 
     return {
-        open: function (profile, candidates, onResolved) {
+        open: function (profile, candidates, onResolved, preferredPatientId) {
             _profile = profile || {};
             window._abhaMatchCandidates = candidates || [];
             _selectedId = 0;
@@ -298,6 +299,10 @@ window.AbhaPatientMatchModal = (function () {
             renderProfile(_profile);
             renderCandidates(candidates || []);
             $('#abhaMatch_update_preview').addClass('d-none').empty();
+            if (Number(preferredPatientId || 0) > 0
+                && (candidates || []).some(function(candidate) { return Number(candidate.id) === Number(preferredPatientId); })) {
+                selectCandidate(Number(preferredPatientId));
+            }
             if (_bsModal) { _bsModal.show(); } else { $modalEl.modal('show'); }
         }
     };

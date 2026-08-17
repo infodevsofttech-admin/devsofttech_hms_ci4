@@ -74,12 +74,12 @@
                             <div class="form-text"><i class="bi bi-lock-fill me-1"></i>Aadhaar is encrypted before transmission and never stored in HMS.</div>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold" for="abhaCreateMobile">Mobile Number (For ABHA Communication)</label>
+                            <label class="form-label fw-semibold" for="abhaCreateMobile">Mobile Number (For ABHA Communication) <span class="text-danger">*</span></label>
                             <div class="input-group input-group-lg">
                                 <span class="input-group-text"><i class="bi bi-phone"></i></span>
                                 <input type="text" class="form-control" id="abhaCreateMobile" maxlength="10" inputmode="numeric" autocomplete="tel" placeholder="10-digit mobile">
                             </div>
-                            <div class="form-text">If this differs from the Aadhaar-linked mobile, it is verified separately.</div>
+                            <div class="form-text">Required by ABDM enrolment. If this differs from the Aadhaar-linked mobile, it is verified separately.</div>
                         </div>
                     </div>
 
@@ -124,6 +124,7 @@
                         <i class="bi bi-chat-dots-fill text-success" style="font-size:2.2rem"></i>
                         <h6 class="mt-2 mb-1">Enter OTP</h6>
                         <div class="text-muted small" id="abhaCreateOtpHint">OTP sent to the Aadhaar registered mobile number.</div>
+                        <div class="text-muted small mt-1 d-none" id="abhaCreateOtpRequestId"></div>
                     </div>
                     <label class="form-label fw-semibold" for="abhaCreateOtp">6-digit OTP</label>
                     <div class="input-group input-group-lg">
@@ -317,12 +318,21 @@ window.AbhaCreateModal = (function () {
         if (!value) return '';
         return String(value).indexOf('data:') === 0 ? value : 'data:image/jpeg;base64,' + value;
     }
+    function mergeProfile(baseProfile, response) {
+        var merged = $.extend({}, baseProfile || {});
+        $.each(response || {}, function(key, value) {
+            if (value !== null && value !== undefined && value !== '') {
+                merged[key] = value;
+            }
+        });
+        return merged;
+    }
 
     function sendAadhaarOtp() {
         var aadhaar = digits($('#abhaCreateAadhaar').val());
         var mobile = digits($('#abhaCreateMobile').val());
         if (aadhaar.length !== 12) { alertBox('warning', 'Enter a valid 12-digit Aadhaar number.'); return; }
-        if (mobile && mobile.length !== 10) { alertBox('warning', 'Enter a valid 10-digit mobile number.'); return; }
+        if (mobile.length !== 10) { alertBox('warning', 'Enter a valid 10-digit mobile number for ABHA communication.'); return; }
         if (!$('#abhaCreateConsent1').is(':checked')) { alertBox('warning', 'Aadhaar authentication consent is mandatory before sending the OTP.'); return; }
         if (!$('#abhaCreateConsent4').is(':checked')) { alertBox('warning', 'Confirm that the consent was explained to the patient.'); return; }
 
@@ -333,7 +343,15 @@ window.AbhaCreateModal = (function () {
             if (!response || response.ok != 1) { alertBox('danger', apiMessage(response, 'Unable to send Aadhaar OTP.')); return; }
             createTxnId = response.txn_id || '';
             $('#abhaCreateOtp').val('');
-            $('#abhaCreateOtpHint').text('OTP sent to the mobile number linked with this Aadhaar.');
+            var destination = response.masked_mobile || ((response.message || '').match(/\*{2,}\d{4}/) || [''])[0];
+            var bridgeMessage = String(response.message || '').trim();
+            if (!bridgeMessage) {
+                bridgeMessage = 'OTP sent to the Aadhaar registered mobile number' + (destination ? ' ending with ' + destination : '') + '.';
+            }
+            $('#abhaCreateOtpHint').text(bridgeMessage);
+            $('#abhaCreateOtpRequestId')
+                .toggleClass('d-none', !response.request_id)
+                .text(response.request_id ? 'Bridge Request ID: ' + response.request_id : '');
             showStep(2);
             startResendTimer($('#abhaCreateResendBtn'), 60);
             $('#abhaCreateOtp').trigger('focus');
@@ -356,8 +374,8 @@ window.AbhaCreateModal = (function () {
             stopTimers();
             createdProfile = response;
             createTxnId = response.txn_id || createTxnId;
-            var abhaMobile = digits(response.mobile);
-            if (communicationMobile && abhaMobile && communicationMobile !== abhaMobile) {
+            var abhaMobile = digits(response.mobile).slice(-10);
+            if (communicationMobile && communicationMobile !== abhaMobile) {
                 requestMobileOtp();
                 return;
             }
@@ -369,19 +387,22 @@ window.AbhaCreateModal = (function () {
     }
 
     function requestMobileOtp() {
-        $('#abhaCreateMobileHint').html('Enter the OTP sent to <strong>' + escapeHtml(maskMobile(communicationMobile)) + '</strong> to update the mobile registered on this ABHA account.');
-        $('#abhaCreateMobileOtp').val('');
-        showStep(3);
+        alertBox('info', 'ABHA verified. Requesting an OTP for the alternate communication mobile...');
         $.post('<?= base_url('abha/create/communication') ?>', { mobile: communicationMobile, txn_id: createTxnId, '<?= csrf_token() ?>': csrf() }, function (response) {
             if (!response || response.ok != 1) {
-                alertBox('warning', apiMessage(response, 'Unable to send the mobile OTP. You can skip this step.'));
+                renderProfile(createdProfile || {});
+                alertBox('warning', 'ABHA verification succeeded, but the communication mobile was not updated: ' + apiMessage(response, 'Unable to send the mobile OTP.'));
                 return;
             }
             mobileTxnId = response.txn_id || createTxnId;
+            $('#abhaCreateMobileHint').html('Enter the OTP sent to <strong>' + escapeHtml(maskMobile(communicationMobile)) + '</strong> to update the mobile registered on this ABHA account.');
+            $('#abhaCreateMobileOtp').val('');
+            showStep(3);
             startMobileResendTimer($('#abhaCreateMobileResendBtn'));
             $('#abhaCreateMobileOtp').trigger('focus');
         }, 'json').fail(function (xhr) {
-            alertBox('warning', apiMessage(xhr.responseJSON, 'Unable to send the mobile OTP. You can skip this step.'));
+            renderProfile(createdProfile || {});
+            alertBox('warning', 'ABHA verification succeeded, but the communication mobile was not updated: ' + apiMessage(xhr.responseJSON, 'Unable to send the mobile OTP.'));
         });
     }
 
@@ -393,7 +414,7 @@ window.AbhaCreateModal = (function () {
             button.prop('disabled', false).html('<i class="bi bi-check2-circle me-1"></i>Verify &amp; Update Mobile');
             if (!response || response.ok != 1) { alertBox('danger', apiMessage(response, 'Mobile OTP verification failed.')); return; }
             stopTimers();
-            createdProfile = $.extend({}, createdProfile, response);
+            createdProfile = mergeProfile(createdProfile, response);
             renderProfile(createdProfile);
         }, 'json').fail(function (xhr) {
             button.prop('disabled', false).html('<i class="bi bi-check2-circle me-1"></i>Verify &amp; Update Mobile');
@@ -516,10 +537,11 @@ window.AbhaCreateModal = (function () {
         $('#abhaCreateRegisterBtn').on('click', function () {
             if (!createdProfile) return;
             var profile = createdProfile;
-            // Already linked: nothing else opens, so keep this window up for the operator to close.
             if (profile.need_confirmation === false && Number(profile.patient_id || 0) > 0) {
-                alertBox('success', 'This ABHA is already linked to HMS patient <strong>' + escapeHtml(profile.p_code || '') + '</strong>. The registration page behind has been updated. Close this window when you are done.');
-                if (typeof onCompleted === 'function') onCompleted(profile);
+                $('#abhaCreateModal').one('hidden.bs.modal', function () {
+                    if (typeof onCompleted === 'function') onCompleted(profile);
+                });
+                modal.hide();
                 return;
             }
             $('#abhaCreateModal').one('hidden.bs.modal', function () {
@@ -532,7 +554,7 @@ window.AbhaCreateModal = (function () {
     });
 
     return {
-        open: function (callback) {
+        open: function (callback, prefillMobile) {
             onCompleted = callback;
             createTxnId = '';
             mobileTxnId = '';
@@ -540,6 +562,8 @@ window.AbhaCreateModal = (function () {
             createdProfile = null;
             stopTimers();
             $('#abhaCreateAadhaar,#abhaCreateMobile,#abhaCreateOtp,#abhaCreateMobileOtp,#abhaCreateCustomAddress').val('');
+            $('#abhaCreateMobile').val(digits(prefillMobile));
+            $('#abhaCreateOtpRequestId').addClass('d-none').text('');
             $('#abhaCreateConsent1,#abhaCreateConsent2,#abhaCreateConsent3,#abhaCreateConsent4').prop('checked', false);
             $('#abhaCreatePhoto,#abhaCreateDownloadCard').addClass('d-none');
             showStep(1);

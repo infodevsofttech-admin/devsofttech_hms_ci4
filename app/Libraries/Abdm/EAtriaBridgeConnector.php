@@ -933,11 +933,16 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
 
     public function abhaMobileGenerateOtp(array $payload): array
     {
-        // Gateway API format: { "mobile": "<10-digit>" }
+        // txnId is optional for standalone mobile lookup, but required when
+        // updating the communication mobile during Aadhaar enrolment.
         // Gateway handles RSA encryption and M3 format conversion internally.
         $body = [
             'mobile' => (string) ($payload['mobile'] ?? $payload['loginId'] ?? ''),
         ];
+        $txnId = trim((string) ($payload['txnId'] ?? $payload['txn_id'] ?? ''));
+        if ($txnId !== '') {
+            $body['txnId'] = $txnId;
+        }
         if ($this->hfrId !== '' && empty($body['hfr_id'])) {
             $body['hfr_id'] = $this->hfrId;
         }

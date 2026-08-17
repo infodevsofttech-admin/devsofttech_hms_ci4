@@ -777,6 +777,7 @@ $routes->post('abha/create/confirm_patient', 'Abha::confirmPatient', ['filter' =
 $routes->post('abha/create/address', 'Abha::address', ['filter' => 'permission:abdm.abha.create']);
 $routes->post('abha/create/address_suggestions', 'Abha::addressSuggestions', ['filter' => 'permission:abdm.abha.create']);
 $routes->get('abha/card/(:segment)', 'Abha::card/$1', ['filter' => 'permission:abdm.abha.create']);
+$routes->get('abha/hospital-card/(:num)', 'Abha::hospitalCard/$1', ['filter' => 'permission:abdm.abha.create']);
 $routes->post('abha/register/card', 'Abha::fetchOfficialCard', ['filter' => 'permission:abdm.abha.create']);
 $routes->post('abha/register/validate', 'Abha::validateAbha', ['filter' => 'permission:abdm.abha.create']);
 $routes->post('abha/register/qr_scan', 'Abha::qrScan', ['filter' => 'permission:abdm.abha.create']);

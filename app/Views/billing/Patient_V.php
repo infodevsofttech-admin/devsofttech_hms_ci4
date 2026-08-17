@@ -1426,7 +1426,7 @@
                     window.AbhaPatientMatchModal.open(profile, profile.candidates || [], function(finalResponse) {
                         if (typeof showRegResult === 'function') showRegResult(finalResponse);
                     });
-                });
+                }, $('#input_mphone1').val());
             }).on('click.abhaLauncher', '#abha_open_verify_modal_btn', function() {
                 openAbhaAccountVerification('', null);
             });

@@ -14,7 +14,14 @@
     <form role="form" class="form1">
         <?= csrf_field() ?>
         <?php
-            $patientAbhaId = (string) ($data[0]->abha_id ?? $data[0]->abha_no ?? $data[0]->abha ?? $data[0]->abha_address ?? '');
+            $patientAbhaId = '';
+            foreach (['abha_id', 'abha_no', 'abha', 'abha_address'] as $abhaField) {
+                $candidateAbha = trim((string) ($data[0]->{$abhaField} ?? ''));
+                if ($candidateAbha !== '') {
+                    $patientAbhaId = $candidateAbha;
+                    break;
+                }
+            }
             $abhaAddress = trim((string) ($data[0]->abha_address ?? ''));
             if ($abhaAddress === '' && preg_match('/abha_address\s*:\s*([A-Za-z0-9._-]+@[A-Za-z0-9.-]+)/i', (string) ($data[0]->log ?? ''), $abhaLogMatch) === 1) {
                 $abhaAddress = trim((string) ($abhaLogMatch[1] ?? ''));
@@ -165,15 +172,34 @@
                                             <i class="bi bi-person-check me-1"></i><?= $patientAbhaId !== '' ? 'Re-link ABHA' : 'Link ABHA via OTP' ?>
                                         </button>
                                         <?php endif; ?>
-                                        <?php if ($patientAbhaId !== '') :
-                                            $abhaCardNum = preg_replace('/\D/', '', $patientAbhaId);
+                                        <?php
+                                            $abhaCardNum = '';
+                                            foreach (['abha_id', 'abha_no', 'abha'] as $abhaNumberField) {
+                                                $candidateAbhaNumber = preg_replace('/\D/', '', (string) ($data[0]->{$abhaNumberField} ?? ''));
+                                                if (strlen($candidateAbhaNumber) === 14) {
+                                                    $abhaCardNum = $candidateAbhaNumber;
+                                                    break;
+                                                }
+                                            }
+                                            $hasLinkedAbha = strlen($abhaCardNum) === 14;
+                                            $hasOfficialAbhaCard = $hasLinkedAbha && trim((string) ($data[0]->abha_card_base64 ?? '')) !== '';
                                         ?>
+                                        <?php if ($hasOfficialAbhaCard) : ?>
                                         <a href="<?= base_url('abha/card/' . esc($abhaCardNum, 'url')) ?>"
                                            target="_blank"
                                            class="btn btn-sm btn-outline-success py-0"
                                            style="font-size:12px"
-                                           title="View &amp; Print ABHA Card">
-                                            <i class="bi bi-card-image me-1"></i>ABHA Card
+                                           title="View and print the official NHA ABHA card">
+                                            <i class="bi bi-card-image me-1"></i>Official ABHA Card
+                                        </a>
+                                        <?php endif; ?>
+                                        <?php if ($hasLinkedAbha) : ?>
+                                        <a href="<?= base_url('abha/hospital-card/' . (int) ($data[0]->id ?? 0)) ?>"
+                                           target="_blank"
+                                           class="btn btn-sm btn-outline-primary py-0"
+                                           style="font-size:12px"
+                                           title="View and print the hospital patient card">
+                                            <i class="bi bi-person-vcard me-1"></i>Hospital Card
                                         </a>
                                         <?php endif; ?>
                                     </div>
@@ -397,7 +423,11 @@
 
                             <?php if (!$isAbhaLinkedAndVerified) : ?>
                             <div class="tab-pane fade pt-3" id="profile-abha" role="tabpanel">
-                                <?= view('partials/abha_create_panel', ['data' => $data, 'patientAbhaId' => $patientAbhaId]) ?>
+                                <h5 class="card-title mb-1">ABHA Number Create and Verify</h5>
+                                <p class="text-muted small mb-3">Create a new ABHA or link an existing ABHA profile to this patient.</p>
+                                <button type="button" class="btn btn-primary" id="profile_open_abha_create_btn">
+                                    <i class="bi bi-person-plus-fill me-1"></i>Create ABHA
+                                </button>
                             </div>
                             <?php endif; ?>
 
@@ -409,8 +439,61 @@
     </form>
 </section>
 
+<?php if (!$isAbhaLinkedAndVerified) : ?>
+<?= view('partials/abha_patient_match_modal') ?>
+<?= view('partials/abha_create_modal') ?>
+<?php endif; ?>
+
 <script>
 $(document).ready(function() {
+
+    $(document).off('click.profileAbhaCreate', '#profile_open_abha_create_btn')
+        .on('click.profileAbhaCreate', '#profile_open_abha_create_btn', function() {
+            if (!window.AbhaCreateModal || !window.AbhaPatientMatchModal) {
+                alert('ABHA create workflow is unavailable. Reload the patient profile and try again.');
+                return;
+            }
+
+            window.AbhaCreateModal.open(function(profile) {
+                var refreshProfile = function(result) {
+                    var patientId = Number((result && result.patient_id) || <?= (int) ($data[0]->id ?? 0) ?>);
+                    load_form('<?= base_url('billing/patient/person_record') ?>/' + patientId + '/0');
+                };
+
+                if (profile && profile.need_confirmation === false && Number(profile.patient_id || 0) > 0) {
+                    refreshProfile(profile);
+                    return;
+                }
+
+                var currentPatientId = <?= (int) ($data[0]->id ?? 0) ?>;
+                var candidates = (profile.candidates || []).slice();
+                if (!candidates.some(function(candidate) { return Number(candidate.id) === currentPatientId; })) {
+                    var existingAbhaDigits = String(<?= json_encode($patientAbhaId) ?>).replace(/\D/g, '');
+                    var incomingAbhaDigits = String(profile.abha_number || '').replace(/\D/g, '');
+                    candidates.unshift({
+                        id: currentPatientId,
+                        p_code: <?= json_encode((string) ($data[0]->p_code ?? '')) ?>,
+                        name: <?= json_encode(trim((string) ($data[0]->p_fname ?? '') . ' ' . (string) ($data[0]->p_lname ?? ''))) ?>,
+                        gender: <?= (int) ($data[0]->gender ?? 0) ?>,
+                        gender_label: <?= json_encode((string) ($data[0]->xgender ?? '')) ?>,
+                        dob: <?= json_encode((string) ($data[0]->dob ?? '')) ?>,
+                        mobile: <?= json_encode((string) ($data[0]->mphone1 ?? '')) ?>,
+                        address: <?= json_encode(trim(implode(', ', array_filter([
+                            (string) ($data[0]->add1 ?? ''),
+                            (string) ($data[0]->district ?? ''),
+                            (string) ($data[0]->state ?? ''),
+                            (string) ($data[0]->zip ?? ''),
+                        ])))) ?>,
+                        abha: <?= json_encode($patientAbhaId) ?>,
+                        abha_conflict: existingAbhaDigits.length === 14
+                            && incomingAbhaDigits.length === 14
+                            && existingAbhaDigits !== incomingAbhaDigits,
+                        match: {}
+                    });
+                }
+                window.AbhaPatientMatchModal.open(profile, candidates, refreshProfile, currentPatientId);
+            }, <?= json_encode((string) ($data[0]->mphone1 ?? '')) ?>);
+        });
 
     function getPatientIdOrWarn() {
         var raw = $('#p_id').val();

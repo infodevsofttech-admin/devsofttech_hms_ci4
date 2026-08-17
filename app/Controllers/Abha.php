@@ -43,7 +43,13 @@ class Abha extends BaseController
             if ($txnId) {
                 session()->set('abha_aadhaar_txn_' . $txnId, $aadhaar);
             }
-            return $this->response->setJSON(['ok' => 1, 'txn_id' => $txnId]);
+            return $this->response->setJSON([
+                'ok' => 1,
+                'txn_id' => $txnId,
+                'message' => (string) ($result['message'] ?? $result['data']['message'] ?? 'OTP sent to Aadhaar-linked mobile.'),
+                'masked_mobile' => (string) ($result['masked_mobile'] ?? $result['data']['masked_mobile'] ?? $result['data']['maskedMobile'] ?? ''),
+                'request_id' => (string) ($result['request_id'] ?? ''),
+            ]);
         }
 
         return $this->response->setJSON([
@@ -79,10 +85,15 @@ class Abha extends BaseController
         }
 
         if (empty($result['ok']) || $result['ok'] != 1) {
+            $requestId = trim((string) ($result['request_id'] ?? ''));
+            $errorText = $this->extractBridgeErrorText($result, 'OTP verification failed');
+            if ($requestId !== '') {
+                $errorText .= ' (Bridge Request ID: ' . $requestId . ')';
+            }
             return $this->response->setJSON([
                 'ok'         => 0,
-                'error_text' => $this->extractBridgeErrorText($result, 'OTP verification failed'),
-                'request_id' => (string) ($result['request_id'] ?? ''),
+                'error_text' => $errorText,
+                'request_id' => $requestId,
             ]);
         }
         // Keep top-level keys (gateway_patient, official_card) that also appear under data.
@@ -109,7 +120,7 @@ class Abha extends BaseController
             ?: ''
         );
         $name             = $this->extractAbhaProfileName($profile, $payload);
-        $photo            = (string) ($profile['profilePhoto'] ?? $profile['profile_photo'] ?? $payload['profilePhoto'] ?? $payload['profile_photo'] ?? '');
+        $photo            = $this->extractAbhaProfilePhoto($profile, $payload);
         // A different communication number is not verified until Step 3 succeeds.
         // Never persist the operator-entered number merely because Aadhaar OTP passed.
         $mobile           = (string) ($profile['mobile'] ?? $payload['mobile'] ?? $payload['mobileNumber'] ?? '');
@@ -289,7 +300,7 @@ class Abha extends BaseController
             ?: ''
         );
         $name             = $this->extractAbhaProfileName($profile, $payload);
-        $photo            = (string) ($profile['profilePhoto'] ?? $profile['profile_photo'] ?? $payload['profilePhoto'] ?? $payload['profile_photo'] ?? '');
+        $photo            = $this->extractAbhaProfilePhoto($profile, $payload);
         $gender           = (string) ($profile['gender'] ?? $payload['gender'] ?? '');
         $dob              = (string) ($profile['dob'] ?? $profile['date_of_birth'] ?? $payload['dob'] ?? $payload['date_of_birth'] ?? '');
         // Bridge/gateway verify-otp responses don't always echo the mobile back;
@@ -547,8 +558,8 @@ class Abha extends BaseController
     }
 
     // -------------------------------------------------------------------------
-    // ABHA Card view — GET abha/card/{abha_number}
-    // Renders a printable card page for a patient whose ABHA is stored in HMS.
+    // Official ABHA Card — GET abha/card/{abha_number}
+    // Renders only the official card image returned by ABDM/NHA.
     // -------------------------------------------------------------------------
     public function card(string $abhaNumber = '')
     {
@@ -585,7 +596,47 @@ class Abha extends BaseController
                 ->setBody('<h3 style="font-family:sans-serif;color:red;">Patient with ABHA number ' . esc($abhaNumber) . ' not found.</h3>');
         }
 
-        $abhaDisp = preg_replace('/^(\d{2})(\d{4})(\d{4})(\d{4})$/', '$1-$2-$3-$4', $abhaNumClean) ?: $abhaNumber;
+        $storedCard = trim((string) ($patient['abha_card_base64'] ?? ''));
+        if ($storedCard === '') {
+            return $this->response->setStatusCode(404)
+                ->setBody('<h3 style="font-family:sans-serif;color:red;">Official ABHA card is not available for this patient.</h3>');
+        }
+
+        return view('abha/official_card', [
+            'patient' => $patient,
+            'stored_abha_card' => $storedCard,
+        ]);
+    }
+
+    // Hospital Card — GET abha/hospital-card/{patient_id}
+    public function hospitalCard(int $patientId = 0)
+    {
+        if ($patientId <= 0) {
+            return $this->response->setStatusCode(400)
+                ->setBody('<h3 style="font-family:sans-serif;color:red;">Invalid patient.</h3>');
+        }
+
+        $db = \Config\Database::connect();
+        $patient = $db->table('patient_master')->where('id', $patientId)->get()->getRowArray();
+        if (! $patient) {
+            return $this->response->setStatusCode(404)
+                ->setBody('<h3 style="font-family:sans-serif;color:red;">Patient not found.</h3>');
+        }
+
+        $abhaNumClean = '';
+        foreach (['abha_id', 'abha_no', 'abha'] as $field) {
+            $candidate = preg_replace('/\D/', '', (string) ($patient[$field] ?? ''));
+            if (strlen($candidate) === 14) {
+                $abhaNumClean = $candidate;
+                break;
+            }
+        }
+        if ($abhaNumClean === '') {
+            return $this->response->setStatusCode(404)
+                ->setBody('<h3 style="font-family:sans-serif;color:red;">ABHA is not linked with this patient.</h3>');
+        }
+
+        $abhaDisp = preg_replace('/^(\d{2})(\d{4})(\d{4})(\d{4})$/', '$1-$2-$3-$4', $abhaNumClean) ?: $abhaNumClean;
         $genderRaw = (string) ($patient['gender'] ?? '');
         $genderLabel = $genderRaw === '1' ? 'Male' : ($genderRaw === '2' ? 'Female' : $genderRaw);
         $dobRaw = (string) ($patient['dob'] ?? '');
@@ -602,7 +653,19 @@ class Abha extends BaseController
         $profilePhotoUrl = $this->resolvePatientPhotoUrl($patient);
         $mobileNo = trim((string) ($patient['mphone1'] ?? ''));
         $mobileVerified = (int) ($patient['abha_mobile_verified'] ?? 0) === 1;
-        $abhaQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' . urlencode($abhaNumClean);
+        $patientQrPayload = json_encode([
+            'hidn' => $abhaNumClean,
+            'hid' => trim((string) ($patient['abha_address'] ?? '')),
+            'name' => trim((string) ($patient['p_fname'] ?? '')),
+            'gender' => $genderLabel,
+            'dob' => $dobRaw !== '0000-00-00' ? $dobRaw : '',
+            'mobile' => $mobileNo,
+            'address' => trim((string) ($patient['add1'] ?? '')),
+            'districtName' => trim((string) ($patient['district'] ?? '')),
+            'stateName' => trim((string) ($patient['state'] ?? '')),
+            'pincode' => trim((string) ($patient['zip'] ?? '')),
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $patientQrImage = $this->buildQrCodeDataUri(is_string($patientQrPayload) ? $patientQrPayload : $abhaNumClean);
         $barcodeSvg = $this->buildCode39Svg($hmsId);
         $barcodeImage = $this->buildCode39ImageDataUri($hmsId, $barcodeSvg);
 
@@ -621,11 +684,22 @@ class Abha extends BaseController
             'hms_barcode_svg' => $barcodeSvg,
             'hms_barcode_image' => $barcodeImage,
             'profile_photo_url' => $profilePhotoUrl,
-            'abha_qr_url' => $abhaQrUrl,
+            'patient_qr_image' => $patientQrImage,
             'patient_mobile' => $mobileNo,
             'mobile_verified' => $mobileVerified,
-            'stored_abha_card' => trim((string) ($patient['abha_card_base64'] ?? '')),
         ]);
+    }
+
+    private function buildQrCodeDataUri(string $payload): string
+    {
+        try {
+            $qrCode = new \Mpdf\QrCode\QrCode($payload, 'M');
+            $svg = (new \Mpdf\QrCode\Output\Svg())->output($qrCode, 220);
+            return 'data:image/svg+xml;base64,' . base64_encode($svg);
+        } catch (\Throwable $e) {
+            log_message('error', '[ABHA] Hospital card QR generation failed: ' . $e->getMessage());
+            return '';
+        }
     }
 
     /**
@@ -1762,6 +1836,40 @@ class Abha extends BaseController
 
             if ($parts !== []) {
                 return implode(' ', $parts);
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * @param array<string, mixed> $profile
+     * @param array<string, mixed> $payload
+     */
+    private function extractAbhaProfilePhoto(array $profile, array $payload): string
+    {
+        $sources = [
+            $profile,
+            $payload,
+            $payload['ABHAProfile'] ?? [],
+            $payload['data']['ABHAProfile'] ?? [],
+            $payload['gateway_abha_profile'] ?? [],
+            $payload['data']['gateway_abha_profile'] ?? [],
+            $payload['gateway_patient'] ?? [],
+            $payload['data']['gateway_patient'] ?? [],
+            $payload['account'] ?? [],
+            $payload['data']['account'] ?? [],
+        ];
+
+        foreach ($sources as $source) {
+            if (! is_array($source)) {
+                continue;
+            }
+            foreach (['profilePhoto', 'profile_photo', 'patient_photo', 'photo'] as $key) {
+                $photo = trim((string) ($source[$key] ?? ''));
+                if ($photo !== '') {
+                    return $photo;
+                }
             }
         }
 

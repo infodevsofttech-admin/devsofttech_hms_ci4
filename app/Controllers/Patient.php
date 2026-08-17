@@ -897,7 +897,11 @@ class Patient extends BaseController
 		$query = $this->db->query($sql);
 		$data['patient_tag_list'] = $query->getResult();
 
-		if (count($file_data) > 0) {
+		if ($abha_profile_photo_base64 !== '') {
+			$profile_file_path = str_starts_with($abha_profile_photo_base64, 'data:image')
+				? $abha_profile_photo_base64
+				: 'data:image/jpeg;base64,' . $abha_profile_photo_base64;
+		} elseif (count($file_data) > 0) {
 			$pos = strpos($file_data[0]->full_path, '/uploads/', 1);
 			if ($pos !== false) {
 				$profile_file_path = substr($file_data[0]->full_path, $pos);
@@ -911,10 +915,6 @@ class Patient extends BaseController
             } else {
                 $profile_file_path = $profile_picture_path;
             }
-		} elseif ($abha_profile_photo_base64 !== '') {
-			$profile_file_path = str_starts_with($abha_profile_photo_base64, 'data:image')
-				? $abha_profile_photo_base64
-				: 'data:image/jpeg;base64,' . $abha_profile_photo_base64;
         }
 
 		$data['profile_file_path'] = $profile_file_path;
