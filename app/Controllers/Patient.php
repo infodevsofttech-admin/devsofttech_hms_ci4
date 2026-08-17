@@ -2153,12 +2153,7 @@ class Patient extends BaseController
 			// was happening repeatedly because only the first two wordings were
 			// recognized. Also accept 400 alongside 404 since the bridge doesn't
 			// consistently use 404 for this class of response.
-			$isNonFatalPending = in_array($httpCode, [400, 404], true)
-				&& (stripos($errorText, 'Consent record not found') !== false
-					|| stripos($errorText, 'NOT_FOUND') !== false
-					|| stripos($errorText, 'No HIU sessions found') !== false
-					|| stripos($errorText, 'no sessions found') !== false
-					|| stripos($errorText, 'matching the criteria') !== false);
+			$isNonFatalPending = $this->isPendingBridgeSessionError($errorText, $httpCode);
 
 			if ($isNonFatalPending) {
 				$fallbackLookup = [
@@ -2332,10 +2327,26 @@ class Patient extends BaseController
 					$httpCode = 422;
 				}
 
+				$fetchError = (string) ($fetchResult['error_text'] ?? 'Data fetch failed.');
+				if ($this->isPendingBridgeSessionError($fetchError, $httpCode)) {
+					return $this->response->setJSON([
+						'ok' => 1,
+						'phase' => 'GRANTED',
+						'poll_again' => 1,
+						'request_id' => $flowRefId,
+						'message' => 'Consent granted. Waiting for the health records to arrive from the facilities.',
+						'data' => [
+							'consent_request' => $consentResult,
+							'consent_reconcile' => $reconcileResult,
+							'data_fetch' => $fetchResult,
+						],
+					]);
+				}
+
 				return $this->response->setStatusCode($httpCode)->setJSON([
 					'ok' => 0,
 					'phase' => 'FETCH_FAILED',
-					'error' => (string) ($fetchResult['error_text'] ?? 'Data fetch failed.'),
+					'error' => $fetchError,
 					'request_id' => $flowRefId,
 					'data' => [
 						'consent_request' => $consentResult,
@@ -2475,10 +2486,20 @@ class Patient extends BaseController
 				$httpCode = 422;
 			}
 
+			$fetchError = (string) ($fetchResult['error_text'] ?? 'Data fetch failed.');
+			if ($this->isPendingBridgeSessionError($fetchError, $httpCode)) {
+				return $this->response->setJSON([
+					'ok' => 1,
+					'phase' => 'FETCH_PENDING',
+					'message' => 'No health records have arrived for this consent yet. Try again later.',
+					'data' => ['data_fetch' => $fetchResult],
+				]);
+			}
+
 			return $this->response->setStatusCode($httpCode)->setJSON([
 				'ok' => 0,
 				'phase' => 'FETCH_FAILED',
-				'error' => (string) ($fetchResult['error_text'] ?? 'Data fetch failed.'),
+				'error' => $fetchError,
 				'data' => ['data_fetch' => $fetchResult],
 			]);
 		}
@@ -2844,6 +2865,21 @@ class Patient extends BaseController
 		} catch (\Throwable $e) {
 			log_message('error', 'Unable to persist ABDM consent status on row ' . $rowId . ': ' . $e->getMessage());
 		}
+	}
+
+	/**
+	 * True when the bridge is saying "this reference doesn't resolve to a session
+	 * yet" rather than reporting a real failure. The bridge uses several wordings
+	 * depending on which lookup key was sent, and returns 400 as often as 404.
+	 */
+	private function isPendingBridgeSessionError(string $errorText, int $httpCode): bool
+	{
+		return in_array($httpCode, [400, 404], true)
+			&& (stripos($errorText, 'Consent record not found') !== false
+				|| stripos($errorText, 'NOT_FOUND') !== false
+				|| stripos($errorText, 'No HIU sessions found') !== false
+				|| stripos($errorText, 'no sessions found') !== false
+				|| stripos($errorText, 'matching the criteria') !== false);
 	}
 
 	public function abdm_timeline(int $pno)
