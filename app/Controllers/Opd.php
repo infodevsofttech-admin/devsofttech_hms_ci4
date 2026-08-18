@@ -153,7 +153,7 @@ class Opd extends BaseController
             // Print metadata
             'print_time', 'current_date',
             // Patient
-            'pName', 'pRelative', 'age_sex', 'phoneno', 'p_address',
+            'pName', 'pRelative', 'refer_by', 'age_sex', 'phoneno', 'p_address',
             'uhid_no', 'opd_sr_no', 'opd_no', 'opd_date', 'exp_date',
             'opd_fee_amount', 'opd_fee_desc', 'total_no_visit', 'last_opdvisit_date', 'str_opd_book_date',
             // General Examination (raw values)
@@ -2597,6 +2597,7 @@ class Opd extends BaseController
 
         $pName = strtoupper(trim((string) (($patient->title ?? '') . ' ' . ($patient->p_fname ?? ''))));
         $pRelative = trim((string) (($patient->p_relative ?? '') . ' ' . ($patient->p_rname ?? '')));
+        $referBy = trim((string) ($patient->referby ?? ''));
         $ageSex = trim((string) (($patient->xgender ?? '') . ' / ' . ($patient->age ?? '')));
         $phone = (string) ($patient->mphone1 ?? '');
         $pAddress = trim((string) (($patient->add1 ?? '') . ', ' . ($patient->add2 ?? '') . ', ' . ($patient->city ?? '')), ' ,');
@@ -3169,6 +3170,7 @@ class Opd extends BaseController
             'content_4' => $printContent,
             'pName' => $pName,
             'pRelative' => $pRelative,
+            'refer_by' => $referBy,
             'age_sex' => $ageSex,
             'phoneno' => $phone,
             'p_address' => $pAddress,

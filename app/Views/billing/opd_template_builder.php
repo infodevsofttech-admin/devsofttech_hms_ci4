@@ -34,7 +34,7 @@ $hospitalSet = [
 ];
 
 $patientSet = [
-    'pname', 'prelative', 'age_sex', 'phoneno', 'p_address', 'uhid_no',
+    'pname', 'prelative', 'refer_by', 'age_sex', 'phoneno', 'p_address', 'uhid_no',
     'patient_section',
 ];
 
