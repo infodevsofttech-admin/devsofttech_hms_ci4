@@ -7258,25 +7258,41 @@ class Ipd_discharge extends BaseController
         // DEBUG MODE: Output HTML directly if requested via ?html=1
         $htmlDebugMode = (int) ($this->request->getGet('html') ?? 0) === 1;
         if ($htmlDebugMode) {
+            $dbgHeaderHtml = '';
+            if ($withHeader) {
+                $dbgConfiguredHeader = $this->applyDischargeTemplateTokens(
+                    trim((string) ($templateSettings['header_html'] ?? '')),
+                    $templateTokenVars
+                );
+                $dbgHeaderHtml = $this->sanitizeDischargePdfHtml($dbgConfiguredHeader, false);
+            }
+            $dbgFooterHtml = $this->sanitizeDischargePdfHtml(
+                $this->applyDischargeTemplateTokens(trim((string) ($templateSettings['footer_html'] ?? '')), $templateTokenVars),
+                false
+            );
+            $dbgPrefixHtml = '';
+            if ($withHeader && $dbgHeaderHtml !== '') {
+                $dbgPrefixHtml .= '<htmlpageheader name="myHeader">' . "\n" . $dbgHeaderHtml . "\n" . '</htmlpageheader>' . "\n";
+            }
+            if ($dbgFooterHtml !== '') {
+                $dbgPrefixHtml .= '<htmlpagefooter name="myFooter">' . "\n" . $dbgFooterHtml . "\n" . '</htmlpagefooter>' . "\n";
+            }
             $pdfHtml = $this->buildDischargePdfHtml($panelData, $renderedHtml, $withHeader, $templateName);
+            $fullDebugSource = ($dbgPrefixHtml !== '' ? $dbgPrefixHtml . "\n" : '') . $pdfHtml;
             
             return $this->response
                 ->setContentType('text/html')
                 ->setBody(
                     '<!DOCTYPE html><html><head><meta charset="utf-8">' .
-                    '<title>Discharge Summary HTML Debug - IPD ' . $ipdId . '</title>' .
+                    '<title>Discharge HTML Debug - IPD ' . $ipdId . '</title>' .
                     '<style>body{font-family:Arial,sans-serif;margin:20px;background:#f5f5f5;} ' .
-                    '.debug-info{background:#fff;padding:15px;border:2px solid #4CAF50;margin-bottom:20px;} ' .
-                    '.content-box{background:#fff;padding:20px;border:1px solid #ddd;}</style>' .
+                    'pre{background:#fff;padding:15px;border:1px solid #ddd;white-space:pre-wrap;word-break:break-all;} ' .
+                    '.info{background:#fff;padding:15px;border:2px solid #16a34a;margin-bottom:16px;}</style>' .
                     '</head><body>' .
-                    '<div class="debug-info"><h2>✅ HTML Debug Mode Active</h2>' .
-                    '<p><strong>IPD ID:</strong> ' . $ipdId . '</p>' .
-                    '<p><strong>Template:</strong> ' . esc($templateName) . '</p>' .
-                    '<p><strong>Content Length:</strong> ' . strlen($content) . ' chars</p>' .
-                    '<p><strong>Rendered HTML Length:</strong> ' . strlen($renderedHtml) . ' chars</p>' .
-                    '<p><a href="?html=0">Generate PDF</a> | <a href="?refresh=1&html=1">Regenerate Content</a></p>' .
-                    '</div>' .
-                    '<div class="content-box">' . $pdfHtml . '</div>' .
+                    '<div class="info"><strong>IPD:</strong> ' . $ipdId . ' | <strong>Template:</strong> ' . esc($templateName) .
+                    ' | <strong>header_html raw:</strong> ' . esc((string) ($templateSettings['header_html'] ?? '(empty)')) .
+                    ' | <strong>sanitized header:</strong> ' . esc($dbgHeaderHtml) . '</div>' .
+                    '<pre>' . htmlspecialchars($fullDebugSource, ENT_QUOTES, 'UTF-8') . '</pre>' .
                     '</body></html>'
                 );
         }
@@ -7366,9 +7382,11 @@ class Ipd_discharge extends BaseController
                 $namedBlocks .= '<htmlpagefooter name="myFooter">' . "\n" . $footerHtml . "\n" . '</htmlpagefooter>' . "\n";
             }
 
-            $prefixHtml = $pageBlock . $namedBlocks;
+            $prefixHtml = $namedBlocks;
 
             $pdfHtml = $this->buildDischargePdfHtml($panelData, $renderedHtml, $withHeader, $templateName);
+            // Prepend @page CSS to body so mPDF applies named header/footer on every page.
+            $pdfHtml = str_replace('</head>', $pageBlock . '</head>', $pdfHtml);
             $pdfHtml = mpdf_normalize_font_weight_css($pdfHtml);
             $pdfBinary = $this->runMpdfWithTolerantWarnings(static function () use ($mpdf, $prefixHtml, $pdfHtml, $fileName): string {
                 if ($prefixHtml !== '') {
