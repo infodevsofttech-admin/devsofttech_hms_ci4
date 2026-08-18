@@ -211,7 +211,7 @@ $hasTemplateAccess = $canPathology || $canUltrasound || $canXray || $canCt || $c
 
         <?php if ($canDischarge) { ?>
             <div class="col-6 col-md-2 col-lg-2">
-                <a class="admin-tile" href="javascript:load_form_div('<?= base_url('setting/template/discharge_templates') ?>','maindiv','IPD Discharge Template');">
+                <a class="admin-tile" href="javascript:load_form('<?= base_url('Ipd_discharge/print_template_builder') ?>?mode=list','IPD Discharge Template');">
                     <span class="tile-icon"><i class="bi bi-file-earmark-medical"></i></span>
                     <span>IPD Discharge Template</span>
                 </a>

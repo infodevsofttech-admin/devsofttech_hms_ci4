@@ -5286,6 +5286,64 @@ class Ipd_discharge extends BaseController
         ]);
     }
 
+    public function print_template_builder()
+    {
+        if ($resp = $this->requireAnyPermission(['template.discharge'])) {
+            return $resp;
+        }
+
+        $mode = strtolower(trim((string) $this->request->getGet('mode')));
+        if (! in_array($mode, ['list', 'edit'], true)) {
+            $mode = 'list';
+        }
+
+        $this->ensureDischargeTemplateTable();
+        $rows = $this->db->table('ipd_discharge_templates')
+            ->orderBy('is_default', 'DESC')
+            ->orderBy('id', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        if ($mode === 'list') {
+            return view('ipd_discharge/discharge_template_list', ['rows' => $rows]);
+        }
+
+        $editId = (int) ($this->request->getGet('edit') ?? 0);
+        $editRow = [];
+        if ($editId > 0) {
+            foreach ($rows as $row) {
+                if ((int) ($row['id'] ?? 0) === $editId) {
+                    $editRow = $row;
+                    break;
+                }
+            }
+        }
+
+        return view('ipd_discharge/discharge_template_edit', [
+            'rows' => $rows,
+            'edit_row' => $editRow,
+        ]);
+    }
+
+    public function discharge_template_rename_ajax()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0]);
+        }
+        if ($resp = $this->requireAnyPermission(['template.discharge'])) {
+            return $this->response->setStatusCode(403)->setJSON(['update' => 0]);
+        }
+        $id   = (int) ($this->request->getPost('id') ?? 0);
+        $name = trim((string) ($this->request->getPost('template_name') ?? ''));
+        if ($id <= 0 || $name === '') {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'ID and name required.',
+                'csrfName' => csrf_token(), 'csrfHash' => csrf_hash()]);
+        }
+        $ok = (bool) $this->db->table('ipd_discharge_templates')->where('id', $id)->update(['template_name' => $name]);
+        return $this->response->setJSON(['update' => $ok ? 1 : 0, 'error_text' => $ok ? 'Renamed.' : 'Unable to rename.',
+            'csrfName' => csrf_token(), 'csrfHash' => csrf_hash()]);
+    }
+
     public function search_patient_ajax()
     {
         $permission = $this->requireAnyPermission([

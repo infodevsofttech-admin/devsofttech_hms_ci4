@@ -1024,6 +1024,8 @@ $routes->match(['GET', 'POST'], 'setting/template/discharge_templates', 'Setting
 $routes->post('setting/template/discharge_templates_seed', 'Setting\Template::discharge_templates_seed');
 $routes->get('setting/template/discharge_template_get/(:num)', 'Setting\Template::discharge_template_get/$1');
 $routes->match(['GET', 'POST'], 'setting/template/discharge_templates/delete/(:num)', 'Setting\Template::discharge_template_delete/$1');
+$routes->get('Ipd_discharge/print_template_builder', 'Ipd_discharge::print_template_builder', ['filter' => 'permission:template.discharge,ipd_discharge.manage']);
+$routes->post('Ipd_discharge/discharge_template_rename_ajax', 'Ipd_discharge::discharge_template_rename_ajax', ['filter' => 'permission:template.discharge,ipd_discharge.manage']);
 $routes->match(['GET', 'POST'], 'setting/template/ipd_document_templates', 'Setting\Template::ipd_document_templates');
 $routes->get('setting/template/ipd_document_templates/delete/(:num)', 'Setting\Template::ipd_document_template_delete/$1');
 $routes->match(['GET', 'POST'], 'setting/template/diagnosis_print_settings', 'Setting\Template::diagnosis_print_settings');
