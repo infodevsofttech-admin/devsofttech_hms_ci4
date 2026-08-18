@@ -7,6 +7,7 @@ $renderedHtml = (string) ($rendered_content ?? $previewHtml);
 $noticeText = (string) ($notice ?? '');
 $noticeType = (string) ($notice_type ?? 'success');
 $templateRows = $template_rows ?? [];
+$auditTemplateRows = $audit_template_rows ?? [];
 $selectedTemplateId = (int) ($selected_template_id ?? 0);
 $nabhAudit = is_array($nabh_audit ?? null) ? $nabh_audit : [];
 $nabhItems = is_array($nabhAudit['items'] ?? null) ? $nabhAudit['items'] : [];
@@ -165,6 +166,17 @@ if ($person) {
                                 </option>
                             <?php endforeach; ?>
                         </select>
+                        <?php if (!empty($auditTemplateRows)): ?>
+                            <div class="mt-2">
+                                <label class="form-label form-label-sm mb-1"><strong>NABH Audit Template</strong></label>
+                                <select class="form-select form-select-sm" id="audit_tpl_selector">
+                                    <option value="">Select audit template</option>
+                                    <?php foreach ($auditTemplateRows as $tpl): ?>
+                                        <option value="<?= (int) ($tpl['id'] ?? 0) ?>"><?= esc((string) ($tpl['template_name'] ?? '')) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                        <?php endif; ?>
                     </div>
                     <div class="col-md-6 col-lg-3 d-flex align-items-end">
                         <button type="submit" class="btn btn-outline-primary btn-sm">Apply Template</button>
@@ -253,6 +265,7 @@ if ($person) {
     var printLinks = document.querySelectorAll('.discharge-print-link');
     var applyTemplateForm = document.getElementById('discharge_template_apply_form');
     var tplSelector = document.getElementById('tpl_selector');
+    var auditTplSelector = document.getElementById('audit_tpl_selector');
 
     function confirmNabhPrint() {
         if (nabhCriticalMissingCount <= 0) {
@@ -290,6 +303,16 @@ if ($person) {
                 }
                 loadOrRedirect(action, 'Discharge Preview');
             }
+        });
+    }
+
+    if (auditTplSelector) {
+        auditTplSelector.addEventListener('change', function() {
+            var tplId = parseInt(auditTplSelector.value || '0', 10);
+            if (tplId <= 0) {
+                return;
+            }
+            openUrl('<?= site_url('Ipd_discharge/show_discharge') ?>/' + ipdId + '/1?tpl=' + encodeURIComponent(String(tplId)));
         });
     }
 

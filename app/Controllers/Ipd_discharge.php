@@ -7126,6 +7126,15 @@ class Ipd_discharge extends BaseController
 
         $templatePack = $this->applyDischargeTemplate($content, $panelData, $requestedTemplateId > 0 ? $requestedTemplateId : null);
         $nabhAudit = $this->buildNabhAuditChecklist($ipdId, $panelData);
+        $allTemplateRows = $templatePack['templates'] ?? [];
+        $printableTemplateRows = array_values(array_filter(
+            $allTemplateRows,
+            fn (array $template): bool => ! $this->isDischargeAuditTemplate($template)
+        ));
+        $auditTemplateRows = array_values(array_filter(
+            $allTemplateRows,
+            fn (array $template): bool => $this->isDischargeAuditTemplate($template)
+        ));
 
         return view('billing/ipd/discharge_preview', [
             'ipd_id' => $ipdId,
@@ -7133,7 +7142,8 @@ class Ipd_discharge extends BaseController
             'person_info' => $panelData['person_info'] ?? null,
             'content' => $content,
             'rendered_content' => (string) ($templatePack['rendered_html'] ?? $content),
-            'template_rows' => $templatePack['templates'] ?? [],
+            'template_rows' => $printableTemplateRows,
+            'audit_template_rows' => $auditTemplateRows,
             'selected_template_id' => (int) ($templatePack['selected_template_id'] ?? 0),
             'selected_template_name' => (string) ($templatePack['selected_template_name'] ?? ''),
             'nabh_audit' => $nabhAudit,
