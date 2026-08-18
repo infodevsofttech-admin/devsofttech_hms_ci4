@@ -7415,16 +7415,7 @@ class Ipd_discharge extends BaseController
                 . "margin-right: {$marginRightCm}cm;\n"
                 . "margin-header: {$marginHeaderCm}cm;\n"
                 . "margin-footer: {$marginFooterCm}cm;\n"
-                . ($useHeader ? "header: html_myHeader;\n" : '')
-                . ($useFooter ? "footer: html_myFooter;\n" : '')
                 . "}</style>\n";
-
-            if ($useHeader) {
-                $pdfHtml .= '<htmlpageheader name="myHeader">' . "\n" . $headerHtml . "\n" . '</htmlpageheader>' . "\n";
-            }
-            if ($useFooter) {
-                $pdfHtml .= '<htmlpagefooter name="myFooter">' . "\n" . $footerHtml . "\n" . '</htmlpagefooter>' . "\n";
-            }
 
             $templateCss = trim((string) ($templateSettings['template_css'] ?? ''));
             if ($templateCss !== '') {
