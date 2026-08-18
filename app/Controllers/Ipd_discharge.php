@@ -7377,19 +7377,15 @@ class Ipd_discharge extends BaseController
                 $namedBlocks .= '<htmlpagefooter name="myFooter">' . "\n" . $footerHtml . "\n" . '</htmlpagefooter>' . "\n";
             }
 
-            $prefixHtml = $namedBlocks;
-
+            // Single WriteHTML call: mPDF does not require full HTML document structure.
             $templateCss = trim((string) ($templateSettings['template_css'] ?? ''));
-            $cssBlock = $templateCss !== '' ? '<style>' . $templateCss . '</style>' : '';
 
-            $pdfHtml = $this->buildDischargePdfHtml($panelData, $renderedHtml, $withHeader, $templateName);
-            // Inject @page and template CSS into <head> so they apply globally.
-            $pdfHtml = str_replace('</head>', $pageBlock . $cssBlock . '</head>', $pdfHtml);
+            $pdfHtml = $pageBlock
+                . $namedBlocks
+                . ($templateCss !== '' ? '<style>' . $templateCss . '</style>' . "\n" : '')
+                . $renderedHtml;
             $pdfHtml = mpdf_normalize_font_weight_css($pdfHtml);
-            $pdfBinary = $this->runMpdfWithTolerantWarnings(static function () use ($mpdf, $prefixHtml, $pdfHtml, $fileName): string {
-                if ($prefixHtml !== '') {
-                    $mpdf->WriteHTML($prefixHtml, \Mpdf\HTMLParserMode::HTML_HEADER_BUFFER);
-                }
+            $pdfBinary = $this->runMpdfWithTolerantWarnings(static function () use ($mpdf, $pdfHtml, $fileName): string {
                 $mpdf->WriteHTML($pdfHtml);
 
                 return $mpdf->Output($fileName, Destination::STRING_RETURN);
@@ -7904,22 +7900,15 @@ class Ipd_discharge extends BaseController
 
     private function buildDischargePdfHtml(array $panelData, string $renderedContent, bool $withHeader, string $templateName): string
     {
-        // Keep PDF body clean; header/footer is handled via mPDF SetHTMLHeader/SetHTMLFooter.
-
-        return '<!doctype html>'
-            . '<html><head><meta charset="utf-8">'
-            . '<style>'
+        // mPDF does not require a full HTML document — return a clean fragment.
+        return '<style>'
             . 'body{font-family:freeserif,serif;font-size:11pt;color:#111827;line-height:1.4;}'
-                . '.content{padding:0;}'
-            . '.content h2,.content h3,.content h4{margin:12px 0 6px 0;color:#0f172a;}'
-            . '.content table{width:100%;border-collapse:collapse;margin:6px 0 10px 0;font-size:10pt;}'
-            . '.content th,.content td{border:1px solid #d1d5db;padding:5px;vertical-align:top;}'
-            . '.content table.no-border th,.content table.no-border td{border:none !important;}'
-            . '.content table[border="0"] th,.content table[border="0"] td{border:none !important;border-color:transparent !important;}'
-            . '.content ul,.content ol{margin:4px 0 10px 18px;padding:0;}'
-            . '</style></head><body>'
-            . '<div class="content">' . $renderedContent . '</div>'
-            . '</body></html>';
+            . 'table{width:100%;border-collapse:collapse;margin:6px 0 10px 0;font-size:10pt;}'
+            . 'th,td{border:1px solid #d1d5db;padding:5px;vertical-align:top;}'
+            . 'table.no-border th,table.no-border td,table[border="0"] th,table[border="0"] td{border:none !important;}'
+            . 'ul,ol{margin:4px 0 10px 18px;padding:0;}'
+            . '</style>'
+            . $renderedContent;
     }
 
     private function cacheAbdmIpdPdf(int $ipdId, string $fileName, string $pdfBinary): void
