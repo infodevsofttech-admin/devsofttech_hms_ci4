@@ -7968,12 +7968,19 @@ class Ipd_discharge extends BaseController
             return;
         }
 
-        $directory = WRITEPATH . 'uploads' . DIRECTORY_SEPARATOR . 'abdm' . DIRECTORY_SEPARATOR . 'ipd' . DIRECTORY_SEPARATOR . $ipdId;
-        if (! is_dir($directory) && ! mkdir($directory, 0755, true) && ! is_dir($directory)) {
-            return;
-        }
+        try {
+            $directory = WRITEPATH . 'uploads' . DIRECTORY_SEPARATOR . 'abdm' . DIRECTORY_SEPARATOR . 'ipd' . DIRECTORY_SEPARATOR . $ipdId;
+            if (! is_dir($directory) && ! mkdir($directory, 0755, true) && ! is_dir($directory)) {
+                return;
+            }
 
-        file_put_contents($directory . DIRECTORY_SEPARATOR . $fileName, $pdfBinary, LOCK_EX);
+            file_put_contents($directory . DIRECTORY_SEPARATOR . $fileName, $pdfBinary, LOCK_EX);
+        } catch (\Throwable $e) {
+            log_message('warning', 'Unable to cache ABDM discharge PDF for IPD {ipd}: {msg}', [
+                'ipd' => $ipdId,
+                'msg' => $e->getMessage(),
+            ]);
+        }
     }
 
     public function show_file3(int $ipdId)
