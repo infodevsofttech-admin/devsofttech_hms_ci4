@@ -81,8 +81,7 @@ class Report extends BaseController
             ->select("SUM(CASE WHEN o.opd_status IN (1,2) AND {$newExpr} THEN 1 ELSE 0 END) as new_count", false)
             ->select("SUM(CASE WHEN o.opd_status IN (1,2) AND {$emergencyExpr} THEN 1 ELSE 0 END) as emergency_count", false)
             ->select('SUM(CASE WHEN o.opd_status IN (1,2) THEN o.opd_fee_amount ELSE 0 END) as total_amount', false)
-            ->where('o.apointment_date >=', $minRange)
-            ->where('o.apointment_date <=', $maxRange)
+            ->where("DATE(o.apointment_date) BETWEEN '{$minRange}' AND '{$maxRange}'", null, false)
             ->whereIn('o.opd_status', [1, 2])
             ->where('o.payment_status', 1)
             ->where('(o.payment_mode > 0 OR COALESCE(o.running_opd,0)=1)', null, false);
