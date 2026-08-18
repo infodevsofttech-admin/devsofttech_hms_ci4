@@ -7398,27 +7398,9 @@ class Ipd_discharge extends BaseController
                 $mpdf->SetHTMLFooter($footerHtml, 'E');
             }
 
-            // Replicate the exact OPD template rendering pattern: @page CSS + named blocks + body in one WriteHTML call.
-            $marginTopCm    = (float) ($templateSettings['page_margin_top_cm']    ?? 0.8);
-            $marginBottomCm = (float) ($templateSettings['page_margin_bottom_cm'] ?? 0.8);
-            $marginLeftCm   = (float) ($templateSettings['page_margin_left_cm']   ?? 0.8);
-            $marginRightCm  = (float) ($templateSettings['page_margin_right_cm']  ?? 0.8);
-            $marginHeaderCm = (float) ($templateSettings['margin_header_cm']      ?? 0.5);
-            $marginFooterCm = (float) ($templateSettings['margin_footer_cm']      ?? 0.5);
-            $useHeader      = $withHeader && $headerHtml !== '';
-            $useFooter      = $footerHtml !== '';
-
-            $pdfHtml = '<style>@page {' . "\n"
-                . "margin-top: {$marginTopCm}cm;\n"
-                . "margin-bottom: {$marginBottomCm}cm;\n"
-                . "margin-left: {$marginLeftCm}cm;\n"
-                . "margin-right: {$marginRightCm}cm;\n"
-                . "margin-header: {$marginHeaderCm}cm;\n"
-                . "margin-footer: {$marginFooterCm}cm;\n"
-                . "}</style>\n";
-
             $templateCss = trim((string) ($templateSettings['template_css'] ?? ''));
             if ($templateCss !== '') {
+                $templateCss = (string) preg_replace('/@page(?:\s+[^{]+)?\s*\{[^{}]*\}/i', '', $templateCss);
                 $pdfHtml .= '<style>' . "\n" . $templateCss . "\n" . '</style>' . "\n";
             }
 
