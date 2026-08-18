@@ -9,14 +9,14 @@ $feeTypes = $fee_types ?? [];
         </div>
         <div class="card-body">
             <div class="row g-3 align-items-end">
-                <div class="col-md-3">
+                <div class="col-md-6">
                     <label class="form-label">OPD Date Range</label>
                     <div class="d-flex gap-2">
                         <input type="date" class="form-control" id="opd_report_start">
                         <input type="date" class="form-control" id="opd_report_end">
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label class="form-label">Doctor Name</label>
                     <select class="form-control select2" id="doc_name_id" name="doc_name_id">
                         <option value="0">All Doctors</option>
@@ -25,7 +25,7 @@ $feeTypes = $fee_types ?? [];
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label class="form-label">OPD Type</label>
                     <select class="form-control select2" id="opd_type_id" name="opd_type_id">
                         <option value="0">All Types</option>
@@ -35,7 +35,7 @@ $feeTypes = $fee_types ?? [];
                         <option value="emergency">Emergency OPD</option>
                     </select>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label class="form-label">Specific Fee</label>
                     <select class="form-control select2" id="fee_id" name="fee_id">
                         <option value="0">All Fee Types</option>
