@@ -226,6 +226,37 @@
         const el = document.getElementById('abdmOpdRegisterModal');
         return !!(el && el.classList.contains('show'));
     }
+    function cleanupBootstrapModalState() {
+        document.querySelectorAll('.modal.show').forEach(modalEl => {
+            const instance = bootstrap.Modal.getInstance(modalEl);
+            if (instance) instance.hide();
+            modalEl.classList.remove('show');
+            modalEl.setAttribute('aria-hidden', 'true');
+            modalEl.removeAttribute('aria-modal');
+            modalEl.removeAttribute('role');
+            modalEl.style.display = 'none';
+        });
+        document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove());
+        document.body.classList.remove('modal-open');
+        document.body.style.removeProperty('padding-right');
+    }
+    function closeProcessModal(onClosed) {
+        const modalEl = document.getElementById('abdmQueueModalProcess');
+        if (!modalEl || !modalEl.classList.contains('show')) {
+            if (typeof onClosed === 'function') onClosed();
+            return;
+        }
+        const cleanup = function () {
+            cleanupBootstrapModalState();
+        };
+        const finish = function () {
+            modalEl.removeEventListener('hidden.bs.modal', finish);
+            cleanup();
+            if (typeof onClosed === 'function') onClosed();
+        };
+        modalEl.addEventListener('hidden.bs.modal', finish);
+        bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+    }
     function executeInjectedScripts(containerId) {
         const container = document.getElementById(containerId);
         if (!container) {
@@ -754,8 +785,8 @@
                     ${r.saved_data ? `<div class="mt-2 text-muted">Saved: ${esc([r.saved_data.relation, r.saved_data.email, r.saved_data.address].filter(Boolean).join(' | ') || 'Basic fields')}</div>` : ''}
                 </div></div>
                 <button type="button" class="btn btn-sm btn-primary w-100" onclick="abdmQOpenOpdInModal('${esc(r.redirect_url || '')}')">Open OPD Registration →</button>
-                <button type="button" class="btn btn-sm btn-outline-primary w-100 mt-2" onclick="if (typeof load_form === 'function') { load_form('${esc(r.profile_url || '')}', 'Patient Profile'); } else { window.location.href = '${esc(r.profile_url || '')}'; }">Open Patient Profile</button>
-                <button type="button" class="btn btn-sm btn-outline-primary w-100 mt-2" onclick="if (typeof load_form === 'function') { load_form('${esc(r.edit_url || '')}', 'Edit Patient Profile'); } else { window.location.href = '${esc(r.edit_url || '')}'; }">Edit Person Profile (for photo/details)</button>
+                <button type="button" class="btn btn-sm btn-outline-primary w-100 mt-2" onclick="abdmQOpenPageAfterProcess('${esc(r.profile_url || '')}', 'Patient Profile')">Open Patient Profile</button>
+                <button type="button" class="btn btn-sm btn-outline-primary w-100 mt-2" onclick="abdmQOpenPageAfterProcess('${esc(r.edit_url || '')}', 'Edit Patient Profile')">Edit Person Profile (for photo/details)</button>
                 <button type="button" class="btn btn-sm btn-outline-secondary w-100 mt-2" data-bs-dismiss="modal" onclick="loadQueue()">Back to Queue</button>`;
             loadQueue();
             return;
@@ -814,10 +845,25 @@
     document.getElementById('queueStatus').addEventListener('change', loadQueue);
 
     window.abdmQOpenOpdInModal = function (url) {
-        openOpdRegistrationModal(url);
+        closeProcessModal(function () {
+            openOpdRegistrationModal(url);
+        });
     };
 
-    window.pageCleanup = function () { clearTimeout(autoTimer); };
+    window.abdmQOpenPageAfterProcess = function (url, title) {
+        closeProcessModal(function () {
+            if (typeof window.load_form === 'function') {
+                window.load_form(url, title || '');
+            } else {
+                window.location.href = url;
+            }
+        });
+    };
+
+    window.pageCleanup = function () {
+        clearTimeout(autoTimer);
+        cleanupBootstrapModalState();
+    };
 
     loadQueue();
 })();
