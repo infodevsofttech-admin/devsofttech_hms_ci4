@@ -126,14 +126,32 @@ $placeholders = [
 
                     <div class="mb-2">
                         <label class="form-label form-label-sm">Header HTML</label>
+                        <div class="btn-group btn-group-sm mb-1 ck-align-tools" data-editor="tpl_header_html" role="group" aria-label="Header alignment">
+                            <button type="button" class="btn btn-outline-secondary" data-align="left">Left</button>
+                            <button type="button" class="btn btn-outline-secondary" data-align="center">Center</button>
+                            <button type="button" class="btn btn-outline-secondary" data-align="right">Right</button>
+                            <button type="button" class="btn btn-outline-secondary" data-align="justify">Justify</button>
+                        </div>
                         <textarea id="tpl_header_html" class="form-control form-control-sm" rows="4"><?= esc($headerHtml) ?></textarea>
                     </div>
                     <div class="mb-2">
                         <label class="form-label form-label-sm">Footer HTML</label>
+                        <div class="btn-group btn-group-sm mb-1 ck-align-tools" data-editor="tpl_footer_html" role="group" aria-label="Footer alignment">
+                            <button type="button" class="btn btn-outline-secondary" data-align="left">Left</button>
+                            <button type="button" class="btn btn-outline-secondary" data-align="center">Center</button>
+                            <button type="button" class="btn btn-outline-secondary" data-align="right">Right</button>
+                            <button type="button" class="btn btn-outline-secondary" data-align="justify">Justify</button>
+                        </div>
                         <textarea id="tpl_footer_html" class="form-control form-control-sm" rows="3"><?= esc($footerHtml) ?></textarea>
                     </div>
                     <div class="mb-2">
                         <label class="form-label form-label-sm">HTML Content <span class="text-muted small">(use <code>{{CONTENT}}</code> or section placeholders)</span></label>
+                        <div class="btn-group btn-group-sm mb-1 ck-align-tools" data-editor="tpl_html" role="group" aria-label="Content alignment">
+                            <button type="button" class="btn btn-outline-secondary" data-align="left">Left</button>
+                            <button type="button" class="btn btn-outline-secondary" data-align="center">Center</button>
+                            <button type="button" class="btn btn-outline-secondary" data-align="right">Right</button>
+                            <button type="button" class="btn btn-outline-secondary" data-align="justify">Justify</button>
+                        </div>
                         <textarea id="tpl_html" class="form-control form-control-sm" rows="10"><?= esc($templateHtml) ?></textarea>
                     </div>
                     <div class="mb-2">
@@ -227,11 +245,10 @@ $placeholders = [
             if (!CKEDITOR.instances[id]) {
                 CKEDITOR.replace(id, {
                     height: id === 'tpl_html' ? 280 : 140,
-                    extraPlugins: 'justify',
                     toolbar: [
                         {name: 'clipboard', items: ['Cut', 'Copy', 'Paste', 'PasteText', 'Undo', 'Redo']},
                         {name: 'basicstyles', items: ['Bold', 'Italic', 'Underline', 'Strike', 'RemoveFormat']},
-                        {name: 'paragraph', items: ['NumberedList', 'BulletedList', 'Outdent', 'Indent', 'JustifyLeft', 'JustifyCenter', 'JustifyRight', 'JustifyBlock']},
+                        {name: 'paragraph', items: ['NumberedList', 'BulletedList', 'Outdent', 'Indent']},
                         {name: 'links', items: ['Link', 'Unlink']},
                         {name: 'insert', items: ['Image', 'Table']},
                         {name: 'styles', items: ['Styles', 'Format']},
@@ -241,6 +258,31 @@ $placeholders = [
             }
         });
     }
+
+    document.querySelectorAll('.ck-align-tools button').forEach(function (button) {
+        button.addEventListener('click', function () {
+            var editorId = button.closest('.ck-align-tools').getAttribute('data-editor');
+            var alignment = button.getAttribute('data-align');
+            if (typeof CKEDITOR === 'undefined' || !CKEDITOR.instances[editorId]) {
+                return;
+            }
+            var editor = CKEDITOR.instances[editorId];
+            editor.focus();
+            var element = editor.getSelection().getStartElement();
+            var block = null;
+            while (element) {
+                var tag = element.getName ? element.getName() : '';
+                if (['p', 'div', 'td', 'th', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'].indexOf(tag) !== -1) {
+                    block = element;
+                    break;
+                }
+                element = element.getParent ? element.getParent() : null;
+            }
+            if (block) {
+                block.setStyle('text-align', alignment);
+            }
+        });
+    });
 
     function getCsrf() {
         var el = document.querySelector('input[name^="csrf_"]');
