@@ -15,6 +15,7 @@
                     <ul class="report-links">
                         <li><a href="javascript:load_form('<?= base_url('Report/collection_report') ?>','Collection Report');"><i class="bi bi-arrow-right-short"></i> Total Payment (Cash and Bank)</a></li>
                         <li><a href="javascript:load_form('<?= base_url('Report/report_opd_total') ?>','OPD Total Report');"><i class="bi bi-arrow-right-short"></i> OPD Total Report</a></li>
+                        <li><a href="javascript:load_form('<?= base_url('Report/report_opd_patient_list') ?>','OPD Patient List');"><i class="bi bi-arrow-right-short"></i> OPD Patient List</a></li>
                         <li><a href="javascript:load_form('<?= base_url('Report/billing_operations_report') ?>','Billing Operations Report');"><i class="bi bi-arrow-right-short"></i> Billing Operations Report</a></li>
                         <li><a href="javascript:load_form('<?= base_url('Finance/bank_deposits') ?>','Bank Transaction Audit');"><i class="bi bi-arrow-right-short"></i> Bank Transaction Audit</a></li>
                     </ul>
@@ -31,6 +32,7 @@
                     <ul class="report-links">
                         <li><a href="javascript:load_form('<?= base_url('Report/collection_report') ?>','Collection Report');"><i class="bi bi-arrow-right-short"></i> Total Payment (Cash and Bank)</a></li>
                         <li><a href="javascript:load_form('<?= base_url('Report/report_opd_total') ?>','OPD Total Report');"><i class="bi bi-arrow-right-short"></i> OPD Total Report</a></li>
+                        <li><a href="javascript:load_form('<?= base_url('Report/report_opd_patient_list') ?>','OPD Patient List');"><i class="bi bi-arrow-right-short"></i> OPD Patient List</a></li>
                         <li><a href="javascript:load_form('<?= base_url('Report/billing_operations_report') ?>','Billing Operations Report');"><i class="bi bi-arrow-right-short"></i> Billing Operations Report</a></li>
                         <li><a href="javascript:load_form('<?= base_url('Finance/index') ?>','Accounts And Finance');"><i class="bi bi-arrow-right-short"></i> Accounts And Finance Dashboard</a></li>
                         <li><a href="javascript:load_form('<?= base_url('Finance/medical_store_credit_account') ?>','Medical Store Credit Account');"><i class="bi bi-arrow-right-short"></i> Medical Store Credit Account</a></li>
