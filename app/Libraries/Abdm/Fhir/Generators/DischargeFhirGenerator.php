@@ -96,12 +96,34 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             $builder->addCondition([
                 'resourceType' => 'Condition',
                 'id' => 'discharge-condition-' . $recordId . '-' . $idx,
+                'clinicalStatus' => [
+                    'coding' => [[
+                        'system' => 'http://terminology.hl7.org/CodeSystem/condition-clinical',
+                        'code' => 'active',
+                        'display' => 'Active',
+                    ]],
+                ],
+                'verificationStatus' => [
+                    'coding' => [[
+                        'system' => 'http://terminology.hl7.org/CodeSystem/condition-ver-status',
+                        'code' => 'confirmed',
+                        'display' => 'Confirmed',
+                    ]],
+                ],
+                'category' => [[
+                    'coding' => [[
+                        'system' => 'http://terminology.hl7.org/CodeSystem/condition-category',
+                        'code' => 'encounter-diagnosis',
+                        'display' => 'Encounter Diagnosis',
+                    ]],
+                ]],
                 'code' => [
                     'coding' => $coding,
                     'text' => $text,
                 ],
                 'subject' => ['reference' => $patientRef],
                 'encounter' => $encounterRef ? ['reference' => $encounterRef] : null,
+                'recordedDate' => (string) ($cond['recorded_at'] ?? $timestamp),
             ]);
         }
 
@@ -140,6 +162,11 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                 'intent' => 'order',
                 'subject' => ['reference' => $patientRef],
                 'encounter' => $encounterRef ? ['reference' => $encounterRef] : null,
+                'authoredOn' => (string) ($med['authored_on'] ?? $timestamp),
+                'requester' => is_array($practitioner) ? [
+                    'reference' => 'urn:uuid:' . (string) $practitioner['id'],
+                    'display' => (string) ($practitioner['name'][0]['text'] ?? ''),
+                ] : null,
                 'medicationCodeableConcept' => ['text' => $name],
                 'dosageInstruction' => [[
                     'text' => trim((string) ($med['dosage'] ?? '')),
