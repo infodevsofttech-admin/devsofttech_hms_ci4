@@ -122,6 +122,10 @@ $placeholders = [
                             <label class="form-label form-label-sm">Header (cm)</label>
                             <input type="number" class="form-control form-control-sm" id="tpl_margin_header" step="0.1" min="0" max="25" value="<?= esc($marginHeader) ?>">
                         </div>
+                        <div class="col-4">
+                            <label class="form-label form-label-sm">Footer (cm)</label>
+                            <input type="number" class="form-control form-control-sm" id="tpl_margin_footer" step="0.1" min="0" max="25" value="<?= esc($marginFooter) ?>">
+                        </div>
                     </div>
 
                     <div class="mb-2">
@@ -288,7 +292,7 @@ $placeholders = [
         fd.append('page_margin_left_cm', val('tpl_margin_left'));
         fd.append('page_margin_right_cm', val('tpl_margin_right'));
         fd.append('margin_header_cm', val('tpl_margin_header'));
-        fd.append('margin_footer_cm', '0.5');
+        fd.append('margin_footer_cm', val('tpl_margin_footer'));
         fd.append('status', val('tpl_status'));
         fd.append('is_default', String(checked('tpl_is_default')));
         fd.append('is_audit_only', String(checked('tpl_is_audit')));
