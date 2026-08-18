@@ -7398,6 +7398,7 @@ class Ipd_discharge extends BaseController
                 $mpdf->SetHTMLFooter($footerHtml, 'E');
             }
 
+            $pdfHtml = '';
             $templateCss = trim((string) ($templateSettings['template_css'] ?? ''));
             if ($templateCss !== '') {
                 $templateCss = (string) preg_replace('/@page(?:\s+[^{]+)?\s*\{[^{}]*\}/i', '', $templateCss);
