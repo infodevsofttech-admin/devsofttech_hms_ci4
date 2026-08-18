@@ -19,25 +19,25 @@ CKEDITOR.plugins.add('hmsjustify', {
 
         editor.ui.addButton('HmsJustifyLeft', {
             label: 'Align Left (L)',
-            icon: false,
+            icon: 'icons/left.svg',
             command: 'HmsJustifyLeft',
             toolbar: 'paragraph,40'
         });
         editor.ui.addButton('HmsJustifyCenter', {
             label: 'Center (C)',
-            icon: false,
+            icon: 'icons/center.svg',
             command: 'HmsJustifyCenter',
             toolbar: 'paragraph,41'
         });
         editor.ui.addButton('HmsJustifyRight', {
             label: 'Align Right (R)',
-            icon: false,
+            icon: 'icons/right.svg',
             command: 'HmsJustifyRight',
             toolbar: 'paragraph,42'
         });
         editor.ui.addButton('HmsJustifyBlock', {
             label: 'Justify (J)',
-            icon: false,
+            icon: 'icons/justify.svg',
             command: 'HmsJustifyBlock',
             toolbar: 'paragraph,43'
         });
