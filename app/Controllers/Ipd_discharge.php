@@ -7144,12 +7144,24 @@ class Ipd_discharge extends BaseController
                     trim((string) ($templateSettings['header_html'] ?? '')),
                     $templateTokenVars
                 );
+                $templateCss = trim((string) ($templateSettings['template_css'] ?? ''));
+                if ($templateCss !== '' && $configuredHeader !== '') {
+                    $configuredHeader = '<style>' . $templateCss . '</style>' . $configuredHeader;
+                }
                 $headerHtml = $this->sanitizeDischargePdfHtml($configuredHeader, false);
                 $headerHtml = mpdf_normalize_font_weight_css($headerHtml);
             }
 
+            $configuredFooter = $this->applyDischargeTemplateTokens(
+                trim((string) ($templateSettings['footer_html'] ?? '')),
+                $templateTokenVars
+            );
+            $templateCss = trim((string) ($templateSettings['template_css'] ?? ''));
+            if ($templateCss !== '' && $configuredFooter !== '') {
+                $configuredFooter = '<style>' . $templateCss . '</style>' . $configuredFooter;
+            }
             $footerHtml = $this->sanitizeDischargePdfHtml(
-                $this->applyDischargeTemplateTokens(trim((string) ($templateSettings['footer_html'] ?? '')), $templateTokenVars),
+                $configuredFooter,
                 false
             );
             $footerHtml = mpdf_normalize_font_weight_css($footerHtml);
