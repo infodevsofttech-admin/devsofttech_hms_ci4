@@ -1176,11 +1176,6 @@ class Ipd_discharge extends BaseController
             'template_css' => (string) ($selectedTemplate['template_css'] ?? ''),
         ]);
 
-        $templateCss = trim((string) $templateSettings['template_css']);
-        if ($templateCss !== '') {
-            $templateHtml = '<style>' . $templateCss . '</style>' . $templateHtml;
-        }
-
         $rendered = $this->applyDischargeTemplateTokens($templateHtml, $tokenVars);
         $rendered = $this->dedupeRepeatedClinicalSummary($rendered, (string) ($tokenVars['DISCHARGE_SUMMARY'] ?? ''));
 
@@ -7384,9 +7379,12 @@ class Ipd_discharge extends BaseController
 
             $prefixHtml = $namedBlocks;
 
+            $templateCss = trim((string) ($templateSettings['template_css'] ?? ''));
+            $cssBlock = $templateCss !== '' ? '<style>' . $templateCss . '</style>' : '';
+
             $pdfHtml = $this->buildDischargePdfHtml($panelData, $renderedHtml, $withHeader, $templateName);
-            // Prepend @page CSS to body so mPDF applies named header/footer on every page.
-            $pdfHtml = str_replace('</head>', $pageBlock . '</head>', $pdfHtml);
+            // Inject @page and template CSS into <head> so they apply globally.
+            $pdfHtml = str_replace('</head>', $pageBlock . $cssBlock . '</head>', $pdfHtml);
             $pdfHtml = mpdf_normalize_font_weight_css($pdfHtml);
             $pdfBinary = $this->runMpdfWithTolerantWarnings(static function () use ($mpdf, $prefixHtml, $pdfHtml, $fileName): string {
                 if ($prefixHtml !== '') {
