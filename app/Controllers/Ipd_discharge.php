@@ -7280,12 +7280,18 @@ class Ipd_discharge extends BaseController
             $mpdf->SetTitle('Discharge Summary - ' . ($patientName !== '' ? $patientName : ('IPD ' . $ipdId)));
             $mpdf->SetAuthor('Atria HMS');
 
-            if ($withHeader && $headerHtml !== '') {
-                $mpdf->SetHTMLHeader($headerHtml, 'O', true);
-                $mpdf->SetHTMLHeader($headerHtml, 'E', true);
-            }
             $mpdf->SetHTMLFooter($footerHtml, 'O', true);
             $mpdf->SetHTMLFooter($footerHtml, 'E', true);
+            $bodyHeaderHtml = $withHeader && $headerHtml !== ''
+                ? '<div class="discharge-print-header">' . $headerHtml . '</div>'
+                : '';
+            $pdfHtml = $this->buildDischargePdfHtml(
+                $panelData,
+                $bodyHeaderHtml . $renderedHtml,
+                $withHeader,
+                $templateName
+            );
+            $pdfHtml = mpdf_normalize_font_weight_css($pdfHtml);
             $pdfBinary = $this->runMpdfWithTolerantWarnings(static function () use ($mpdf, $pdfHtml, $fileName): string {
                 $mpdf->WriteHTML($pdfHtml);
 
