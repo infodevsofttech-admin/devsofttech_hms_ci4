@@ -5555,6 +5555,24 @@ class Ipd_discharge extends BaseController
             );
     }
 
+    public function debug_mpdf_input(int $ipdId, int $templateId = 0)
+    {
+        if ($resp = $this->requireAnyPermission(['template.discharge', 'ipd_discharge.view', 'billing.access'])) {
+            return $resp;
+        }
+
+        $file = WRITEPATH . 'debug' . DIRECTORY_SEPARATOR . 'discharge_mpdf_input_' . $ipdId . '_' . $templateId . '.html';
+        if (! is_file($file)) {
+            return $this->response->setStatusCode(404)->setBody('Generate the PDF first, then reopen this debug view.');
+        }
+
+        return view('ipd_discharge/mpdf_raw_html', [
+            'ipd_id' => $ipdId,
+            'template_id' => $templateId,
+            'html' => (string) file_get_contents($file),
+        ]);
+    }
+
     /**
      * Placeholder preview page: shows each placeholder and resolved content for an IPD.
      * Access via: /Ipd_discharge/placeholder_preview/{ipdId}?tpl={templateId}
@@ -7398,6 +7416,14 @@ class Ipd_discharge extends BaseController
 
             $pdfHtml .= $renderedHtml;
             $pdfHtml = mpdf_normalize_font_weight_css($pdfHtml);
+
+            $debugDirectory = WRITEPATH . 'debug';
+            if (! is_dir($debugDirectory)) {
+                mkdir($debugDirectory, 0755, true);
+            }
+            $debugTemplateId = (int) ($templatePack['selected_template_id'] ?? 0);
+            file_put_contents($debugDirectory . DIRECTORY_SEPARATOR . 'discharge_mpdf_input_' . $ipdId . '_' . $debugTemplateId . '.html', $pdfHtml, LOCK_EX);
+
             $pdfBinary = $this->runMpdfWithTolerantWarnings(static function () use ($mpdf, $pdfHtml, $fileName): string {
                 $mpdf->WriteHTML($pdfHtml);
 

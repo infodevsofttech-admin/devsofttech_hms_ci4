@@ -157,6 +157,7 @@ $placeholders = [
                             <button type="button" class="btn btn-outline-primary btn-sm" id="btn_preview">Preview</button>
                             <button type="button" class="btn btn-outline-danger btn-sm" id="btn_pdf">PDF</button>
                             <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_debug_html" title="Show raw HTML sent to mPDF">Debug HTML</button>
+                            <button type="button" class="btn btn-outline-dark btn-sm" id="btn_mpdf_input" title="View exact HTML saved immediately before WriteHTML">mPDF Input</button>
                         </div>
                     </div>
                 </div>
@@ -265,6 +266,12 @@ $placeholders = [
         var ipdId = parseInt(val('preview_ipd_id'), 10);
         if (!ipdId) { alert('Enter IPD ID to see mPDF debug HTML.'); return; }
         window.open('<?= base_url('Ipd_discharge/show_discharge') ?>/' + ipdId + '/1?html=1' + (editId > 0 ? '&tpl=' + editId : ''), '_blank');
+    });
+
+    document.getElementById('btn_mpdf_input').addEventListener('click', function () {
+        var ipdId = parseInt(val('preview_ipd_id'), 10);
+        if (!ipdId || !editId) { alert('Save the template and enter IPD ID first.'); return; }
+        window.open('<?= base_url('Ipd_discharge/debug_mpdf_input') ?>/' + ipdId + '/' + editId, '_blank');
     });
 
     /* Placeholder click-to-copy */
