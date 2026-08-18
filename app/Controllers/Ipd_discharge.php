@@ -7389,6 +7389,15 @@ class Ipd_discharge extends BaseController
             $mpdf->SetTitle('Discharge Summary - ' . ($patientName !== '' ? $patientName : ('IPD ' . $ipdId)));
             $mpdf->SetAuthor('Atria HMS');
 
+            if ($withHeader && $headerHtml !== '') {
+                $mpdf->SetHTMLHeader($headerHtml, 'O', true);
+                $mpdf->SetHTMLHeader($headerHtml, 'E', true);
+            }
+            if ($footerHtml !== '') {
+                $mpdf->SetHTMLFooter($footerHtml, 'O', true);
+                $mpdf->SetHTMLFooter($footerHtml, 'E', true);
+            }
+
             // Replicate the exact OPD template rendering pattern: @page CSS + named blocks + body in one WriteHTML call.
             $marginTopCm    = (float) ($templateSettings['page_margin_top_cm']    ?? 0.8);
             $marginBottomCm = (float) ($templateSettings['page_margin_bottom_cm'] ?? 0.8);
