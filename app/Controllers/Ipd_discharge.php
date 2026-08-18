@@ -7282,8 +7282,9 @@ class Ipd_discharge extends BaseController
 
             $mpdf->SetHTMLFooter($footerHtml, 'O', true);
             $mpdf->SetHTMLFooter($footerHtml, 'E', true);
+            $headerMarginMm = max(0, ((float) ($templateSettings['margin_header_cm'] ?? 0.5)) * 10);
             $bodyHeaderHtml = $withHeader && $headerHtml !== ''
-                ? '<div class="discharge-print-header">' . $headerHtml . '</div>'
+                ? '<div class="discharge-print-header" style="margin-top:' . $headerMarginMm . 'mm;">' . $headerHtml . '</div>'
                 : '';
             $pdfHtml = $this->buildDischargePdfHtml(
                 $panelData,
