@@ -7321,14 +7321,12 @@ class Ipd_discharge extends BaseController
                 'format' => ($templateSettings['page_size'] ?? 'A4') === 'CUSTOM'
                     ? [max(20, (int) ($templateSettings['custom_width_mm'] ?? 210)), max(20, (int) ($templateSettings['custom_height_mm'] ?? 297))]
                     : (string) ($templateSettings['page_size'] ?? 'A4'),
-                'margin_left' => max(0, ((float) ($templateSettings['page_margin_left_cm'] ?? 0.8)) * 10),
-                'margin_right' => max(0, ((float) ($templateSettings['page_margin_right_cm'] ?? 0.8)) * 10),
-                'margin_top' => max(0, ((float) ($templateSettings['page_margin_top_cm'] ?? 0.8)) * 10),
+                'margin_left'   => max(0, ((float) ($templateSettings['page_margin_left_cm']   ?? 0.8)) * 10),
+                'margin_right'  => max(0, ((float) ($templateSettings['page_margin_right_cm']  ?? 0.8)) * 10),
+                'margin_top'    => max(0, ((float) ($templateSettings['page_margin_top_cm']    ?? 0.8)) * 10),
                 'margin_bottom' => max(0, ((float) ($templateSettings['page_margin_bottom_cm'] ?? 0.8)) * 10),
-                'margin_header' => max(0, ((float) ($templateSettings['margin_header_cm'] ?? 0.5)) * 10),
-                'margin_footer' => max(0, ((float) ($templateSettings['margin_footer_cm'] ?? 0.5)) * 10),
-                'autoTopMargin' => 'stretch',
-                'autoBottomMargin' => 'stretch',
+                'margin_header' => max(0, ((float) ($templateSettings['margin_header_cm']      ?? 0.5)) * 10),
+                'margin_footer' => max(0, ((float) ($templateSettings['margin_footer_cm']      ?? 0.5)) * 10),
                 'default_font' => 'freeserif',
                 'tempDir' => WRITEPATH . 'cache',
             ]);
@@ -7338,20 +7336,44 @@ class Ipd_discharge extends BaseController
             $mpdf->SetTitle('Discharge Summary - ' . ($patientName !== '' ? $patientName : ('IPD ' . $ipdId)));
             $mpdf->SetAuthor('Atria HMS');
 
-            $mpdf->SetHTMLFooter($footerHtml, 'O', true);
-            $mpdf->SetHTMLFooter($footerHtml, 'E', true);
-            $headerMarginMm = max(0, ((float) ($templateSettings['margin_header_cm'] ?? 0.5)) * 10);
-            $bodyHeaderHtml = $withHeader && $headerHtml !== ''
-                ? '<div class="discharge-print-header" style="margin-top:' . $headerMarginMm . 'mm;">' . $headerHtml . '</div>'
-                : '';
-            $pdfHtml = $this->buildDischargePdfHtml(
-                $panelData,
-                $bodyHeaderHtml . $renderedHtml,
-                $withHeader,
-                $templateName
-            );
+            // Build mPDF-style @page block + named header/footer wrappers (same as OPD template renderer).
+            $marginTopCm    = (float) ($templateSettings['page_margin_top_cm']    ?? 0.8);
+            $marginBottomCm = (float) ($templateSettings['page_margin_bottom_cm'] ?? 0.8);
+            $marginLeftCm   = (float) ($templateSettings['page_margin_left_cm']   ?? 0.8);
+            $marginRightCm  = (float) ($templateSettings['page_margin_right_cm']  ?? 0.8);
+            $marginHeaderCm = (float) ($templateSettings['margin_header_cm']      ?? 0.5);
+            $marginFooterCm = (float) ($templateSettings['margin_footer_cm']      ?? 0.5);
+
+            $useHeader = $withHeader && $headerHtml !== '';
+            $useFooter = $footerHtml !== '';
+
+            $pageBlock = '<style>@page {' . "\n"
+                . 'margin-top: ' . $marginTopCm . 'cm;' . "\n"
+                . 'margin-bottom: ' . $marginBottomCm . 'cm;' . "\n"
+                . 'margin-left: ' . $marginLeftCm . 'cm;' . "\n"
+                . 'margin-right: ' . $marginRightCm . 'cm;' . "\n"
+                . 'margin-header: ' . $marginHeaderCm . 'cm;' . "\n"
+                . 'margin-footer: ' . $marginFooterCm . 'cm;' . "\n"
+                . ($useHeader ? 'header: html_myHeader;' . "\n" : '')
+                . ($useFooter ? 'footer: html_myFooter;' . "\n" : '')
+                . '}</style>' . "\n";
+
+            $namedBlocks = '';
+            if ($useHeader) {
+                $namedBlocks .= '<htmlpageheader name="myHeader">' . "\n" . $headerHtml . "\n" . '</htmlpageheader>' . "\n";
+            }
+            if ($useFooter) {
+                $namedBlocks .= '<htmlpagefooter name="myFooter">' . "\n" . $footerHtml . "\n" . '</htmlpagefooter>' . "\n";
+            }
+
+            $prefixHtml = $pageBlock . $namedBlocks;
+
+            $pdfHtml = $this->buildDischargePdfHtml($panelData, $renderedHtml, $withHeader, $templateName);
             $pdfHtml = mpdf_normalize_font_weight_css($pdfHtml);
-            $pdfBinary = $this->runMpdfWithTolerantWarnings(static function () use ($mpdf, $pdfHtml, $fileName): string {
+            $pdfBinary = $this->runMpdfWithTolerantWarnings(static function () use ($mpdf, $prefixHtml, $pdfHtml, $fileName): string {
+                if ($prefixHtml !== '') {
+                    $mpdf->WriteHTML($prefixHtml, \Mpdf\HTMLParserMode::HTML_HEADER_BUFFER);
+                }
                 $mpdf->WriteHTML($pdfHtml);
 
                 return $mpdf->Output($fileName, Destination::STRING_RETURN);
