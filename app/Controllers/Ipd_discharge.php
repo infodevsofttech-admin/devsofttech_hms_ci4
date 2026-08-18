@@ -7369,36 +7369,39 @@ class Ipd_discharge extends BaseController
             $useHeader      = $withHeader && $headerHtml !== '';
             $useFooter      = $footerHtml !== '';
 
-            // Auto-inject header/footer name bindings into @page if CSS has one but misses the binding.
-            if ($templateCss !== '') {
+            // Build @page block from margin fields — always prepend it so the header/footer bindings work.
+            $marginTopCm    = (float) ($templateSettings['page_margin_top_cm']    ?? 0.8);
+            $marginBottomCm = (float) ($templateSettings['page_margin_bottom_cm'] ?? 0.8);
+            $marginHeaderCm = (float) ($templateSettings['margin_header_cm']      ?? 0.5);
+            $marginFooterCm = (float) ($templateSettings['margin_footer_cm']      ?? 0.5);
+            $pageBlock = '@page {'
+                . "\n    margin-top: {$marginTopCm}cm;"
+                . "\n    margin-bottom: {$marginBottomCm}cm;"
+                . "\n    margin-header: {$marginHeaderCm}cm;"
+                . "\n    margin-footer: {$marginFooterCm}cm;"
+                . ($useHeader ? "\n    header: html_myHeader;" : '')
+                . ($useFooter ? "\n    footer: html_myFooter;" : '')
+                . "\n}";
+
+            // If the user wrote their own @page in the CSS, merge by replacing ours (theirs takes precedence).
+            if ($templateCss !== '' && preg_match('/@page\s*\{/i', $templateCss)) {
+                // Inject header/footer bindings if missing in the user's @page block.
                 if ($useHeader && !preg_match('/header\s*:\s*html_myHeader/i', $templateCss)) {
-                    $templateCss = preg_replace_callback('/@page\s*\{/', function ($m) {
+                    $templateCss = (string) preg_replace_callback('/@page\s*\{/i', function ($m) {
                         return $m[0] . "\n    header: html_myHeader;";
-                    }, $templateCss, 1) ?? $templateCss;
+                    }, $templateCss, 1);
                 }
                 if ($useFooter && !preg_match('/footer\s*:\s*html_myFooter/i', $templateCss)) {
-                    $templateCss = preg_replace_callback('/@page\s*\{/', function ($m) {
+                    $templateCss = (string) preg_replace_callback('/@page\s*\{/i', function ($m) {
                         return $m[0] . "\n    footer: html_myFooter;";
-                    }, $templateCss, 1) ?? $templateCss;
+                    }, $templateCss, 1);
                 }
-            } else {
-                // No CSS: build a minimal @page block from the margin form fields.
-                $marginTopCm    = (float) ($templateSettings['page_margin_top_cm']    ?? 0.8);
-                $marginBottomCm = (float) ($templateSettings['page_margin_bottom_cm'] ?? 0.8);
-                $marginHeaderCm = (float) ($templateSettings['margin_header_cm']      ?? 0.5);
-                $marginFooterCm = (float) ($templateSettings['margin_footer_cm']      ?? 0.5);
-                $templateCss    = '@page {'
-                    . "\n    margin-top: {$marginTopCm}cm;"
-                    . "\n    margin-bottom: {$marginBottomCm}cm;"
-                    . "\n    margin-header: {$marginHeaderCm}cm;"
-                    . "\n    margin-footer: {$marginFooterCm}cm;"
-                    . ($useHeader ? "\n    header: html_myHeader;" : '')
-                    . ($useFooter ? "\n    footer: html_myFooter;" : '')
-                    . "\n}";
+                $pageBlock = '';  // user's CSS already has @page
             }
 
-            // Assemble exactly as shown in mPDF documentation: CSS → named blocks → content.
-            $pdfHtml = '<style>' . "\n" . $templateCss . "\n" . '</style>' . "\n";
+            // Assemble: @page block → template CSS → named header/footer blocks → content.
+            $pdfHtml  = '<style>' . "\n" . $pageBlock . "\n" . '</style>' . "\n";
+            $pdfHtml .= ($templateCss !== '' ? '<style>' . "\n" . $templateCss . "\n" . '</style>' . "\n" : '');
             if ($useHeader) {
                 $pdfHtml .= '<htmlpageheader name="myHeader">' . "\n" . $headerHtml . "\n" . '</htmlpageheader>' . "\n";
             }
