@@ -5409,6 +5409,27 @@ class Ipd_discharge extends BaseController
 
         $templatePack = $this->applyDischargeTemplate($content, $panelData);
         $renderedHtml = (string) ($templatePack['rendered_html'] ?? $content);
+        $templateSettings = is_array($templatePack['selected_template_settings'] ?? null)
+            ? $templatePack['selected_template_settings']
+            : $this->defaultDischargeTemplateSettings();
+        $templateTokenVars = $this->buildDischargeTemplateTokenVars($panelData, $content);
+        $templateCss = trim((string) ($templateSettings['template_css'] ?? ''));
+        $headerHtml = $this->applyDischargeTemplateTokens(
+            trim((string) ($templateSettings['header_html'] ?? '')),
+            $templateTokenVars
+        );
+        $footerHtml = $this->applyDischargeTemplateTokens(
+            trim((string) ($templateSettings['footer_html'] ?? '')),
+            $templateTokenVars
+        );
+        if ($templateCss !== '') {
+            $headerHtml = $headerHtml !== '' ? '<style>' . $templateCss . '</style>' . $headerHtml : '';
+            $footerHtml = $footerHtml !== '' ? '<style>' . $templateCss . '</style>' . $footerHtml : '';
+            $renderedHtml = '<style>' . $templateCss . '</style>' . $renderedHtml;
+        }
+        $headerHtml = $this->sanitizeDischargePdfHtml($headerHtml, false);
+        $footerHtml = $this->sanitizeDischargePdfHtml($footerHtml, false);
+        $renderedHtml = $this->sanitizeDischargePdfHtml($renderedHtml);
 
         // Show HTML with syntax highlighting
         return $this->response
@@ -5420,6 +5441,13 @@ class Ipd_discharge extends BaseController
                 'pre{background:#fff;padding:20px;border:1px solid #ddd;overflow:auto;white-space:pre-wrap;word-wrap:break-word;} ' .
                 '</style></head><body>' .
                 '<h1>Discharge Summary HTML Source (IPD ID: ' . $ipdId . ')</h1>' .
+                '<h2>Header Preview</h2>' .
+                '<div style="background:#fff;padding:20px;border:1px solid #ddd;">' . ($headerHtml !== '' ? $headerHtml : '<em>(empty header_html)</em>') . '</div>' .
+                '<h2>Footer Preview</h2>' .
+                '<div style="background:#fff;padding:20px;border:1px solid #ddd;">' . ($footerHtml !== '' ? $footerHtml : '<em>(empty footer_html)</em>') . '</div>' .
+                '<h2>Rendered Body Preview</h2>' .
+                '<div style="background:#fff;padding:20px;border:1px solid #ddd;">' . $renderedHtml . '</div>' .
+                '<h2>Rendered Body Source</h2>' .
                 '<pre>' . htmlspecialchars($renderedHtml, ENT_QUOTES, 'UTF-8') . '</pre>' .
                 '</body></html>'
             );
