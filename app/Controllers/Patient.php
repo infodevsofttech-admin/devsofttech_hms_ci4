@@ -1643,7 +1643,10 @@ class Patient extends BaseController
 			]);
 		}
 
-		$row['summary'] = json_decode((string) ($row['summary_json'] ?? ''), true) ?: [];
+		$document = (new \App\Libraries\Abdm\M3HiuDocumentRepository())->getDocument($docId);
+		$row['summary'] = is_array($document['summary'] ?? null)
+			? $document['summary']
+			: (json_decode((string) ($row['summary_json'] ?? ''), true) ?: []);
 
 		return $this->response->setJSON([
 			'ok' => 1,

@@ -29,10 +29,17 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             ->updateBundleMeta(['meta' => ['profile' => [
                 'https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle',
             ]]])
-            ->buildComposition($this->buildBaseComposition($source, 'IPD Discharge Summary', '18842-5', 'Discharge summary'))
-            ->updateComposition(['meta' => ['profile' => [
-                'https://nrces.in/ndhm/fhir/r4/StructureDefinition/DischargeSummaryRecord',
-            ]]])
+            ->buildComposition($this->buildBaseComposition($source, 'IPD Discharge Summary', '373942005', 'Discharge summary'))
+            ->updateComposition([
+                'meta' => ['profile' => [
+                    'https://nrces.in/ndhm/fhir/r4/StructureDefinition/DischargeSummaryRecord',
+                ]],
+                'type' => ['coding' => [[
+                    'system' => 'http://snomed.info/sct',
+                    'code' => '373942005',
+                    'display' => 'Discharge summary',
+                ]], 'text' => 'Discharge Summary'],
+            ])
             ->addPatient($this->buildBasePatient($source));
 
         $encounter = $this->buildEncounter($source);
@@ -96,6 +103,7 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             $builder->addCondition([
                 'resourceType' => 'Condition',
                 'id' => 'discharge-condition-' . $recordId . '-' . $idx,
+                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition']],
                 'clinicalStatus' => [
                     'coding' => [[
                         'system' => 'http://terminology.hl7.org/CodeSystem/condition-clinical',
@@ -138,6 +146,7 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             $builder->addProcedure([
                 'resourceType' => 'Procedure',
                 'id' => 'discharge-procedure-' . $recordId . '-' . $idx,
+                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Procedure']],
                 'status' => 'completed',
                 'code' => [
                     'coding' => $coding,
@@ -158,6 +167,7 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             $builder->addMedicationRequest([
                 'resourceType' => 'MedicationRequest',
                 'id' => 'discharge-medication-' . $recordId . '-' . $idx,
+                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/MedicationRequest']],
                 'status' => 'active',
                 'intent' => 'order',
                 'subject' => ['reference' => $patientRef],
@@ -194,6 +204,7 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             $builder->addObservation([
                 'resourceType' => 'Observation',
                 'id' => 'discharge-observation-' . $recordId . '-' . $idx,
+                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation']],
                 'status' => 'final',
                 'category' => [[
                     'text' => trim((string) ($obs['category'] ?? 'vital-signs')),
@@ -229,18 +240,45 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                 ];
             }
 
-            $builder->addServiceRequest([
-                'resourceType' => 'ServiceRequest',
-                'id' => 'discharge-investigation-' . $recordId . '-' . $idx,
-                'status' => 'active',
-                'intent' => 'order',
+            $observationId = 'discharge-investigation-observation-' . $recordId . '-' . $idx;
+            $resultValue = trim((string) ($inv['value'] ?? ''));
+            if ($resultValue === '' && preg_match('/^(.+?):\s*(.+)$/', $text, $parts) === 1) {
+                $text = trim($parts[1]);
+                $resultValue = trim($parts[2]);
+            }
+
+            $builder->addObservation([
+                'resourceType' => 'Observation',
+                'id' => $observationId,
+                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation']],
+                'status' => 'final',
                 'code' => [
                     'coding' => $coding,
                     'text' => $text,
                 ],
                 'subject' => ['reference' => $patientRef],
                 'encounter' => $encounterRef ? ['reference' => $encounterRef] : null,
-                'authoredOn' => (string) ($inv['authored_on'] ?? $timestamp),
+                'effectiveDateTime' => (string) ($inv['reported_at'] ?? $inv['authored_on'] ?? $timestamp),
+                'valueString' => $resultValue !== '' ? $resultValue : null,
+            ]);
+            $builder->addDiagnosticReport([
+                'resourceType' => 'DiagnosticReport',
+                'id' => 'discharge-investigation-' . $recordId . '-' . $idx,
+                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DiagnosticReportLab']],
+                'status' => 'final',
+                'category' => [['coding' => [[
+                    'system' => 'http://snomed.info/sct',
+                    'code' => '108252007',
+                    'display' => 'Laboratory procedure',
+                ]]]],
+                'code' => [
+                    'coding' => $coding,
+                    'text' => $text,
+                ],
+                'subject' => ['reference' => $patientRef],
+                'encounter' => $encounterRef ? ['reference' => $encounterRef] : null,
+                'issued' => (string) ($inv['reported_at'] ?? $inv['authored_on'] ?? $timestamp),
+                'result' => [['reference' => 'urn:uuid:' . $observationId]],
             ]);
         }
 
@@ -253,6 +291,7 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             $builder->addAllergyIntolerance([
                 'resourceType' => 'AllergyIntolerance',
                 'id' => 'discharge-allergy-' . $recordId . '-' . $idx,
+                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/AllergyIntolerance']],
                 'clinicalStatus' => [
                     'coding' => [[
                         'system' => 'http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical',
@@ -289,6 +328,7 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             $builder->addCarePlan([
                 'resourceType' => 'CarePlan',
                 'id' => 'discharge-careplan-' . $recordId . '-' . $idx,
+                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/CarePlan']],
                 'status' => 'active',
                 'intent' => 'plan',
                 'title' => $title,
@@ -308,12 +348,14 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             $builder->addDocumentReference([
                 'resourceType' => 'DocumentReference',
                 'id' => 'discharge-document-' . $recordId . '-' . $idx,
+                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentReference']],
                 'status' => 'current',
+                'docStatus' => 'final',
                 'type' => ['coding' => [[
-                    'system' => 'http://loinc.org',
-                    'code' => (string) ($document['loinc_code'] ?? '55107-7'),
-                    'display' => (string) ($document['title'] ?? 'Clinical document'),
-                ]]],
+                    'system' => 'http://snomed.info/sct',
+                    'code' => '373942005',
+                    'display' => 'Discharge summary',
+                ]], 'text' => 'Discharge Summary'],
                 'subject' => ['reference' => $patientRef],
                 'date' => (string) ($document['created_at'] ?? $timestamp),
                 'author' => is_array($practitioner) ? [[
@@ -336,14 +378,14 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
         }
 
         $sectionDefinitions = [
-            ['title' => 'Diagnosis', 'code' => '11450-4', 'prefix' => 'discharge-condition-', 'items' => (array) ($source['conditions'] ?? [])],
-            ['title' => 'Procedures', 'code' => '47519-4', 'prefix' => 'discharge-procedure-', 'items' => (array) ($source['procedures'] ?? [])],
-            ['title' => 'Discharge medications', 'code' => '10183-2', 'prefix' => 'discharge-medication-', 'items' => (array) ($source['medications'] ?? [])],
-            ['title' => 'Observations', 'code' => '8716-3', 'prefix' => 'discharge-observation-', 'items' => (array) ($source['observations'] ?? [])],
-            ['title' => 'Investigations', 'code' => '18776-5', 'prefix' => 'discharge-investigation-', 'items' => (array) ($source['investigations'] ?? [])],
-            ['title' => 'Allergies', 'code' => '48765-2', 'prefix' => 'discharge-allergy-', 'items' => (array) ($source['allergies'] ?? [])],
-            ['title' => 'Discharge advice', 'code' => '8653-8', 'prefix' => 'discharge-careplan-', 'items' => (array) ($source['care_plans'] ?? [])],
-            ['title' => 'Attached documents', 'code' => '55107-7', 'prefix' => 'discharge-document-', 'items' => (array) ($source['documents'] ?? [])],
+            ['title' => 'Medical history', 'code' => '1003642006', 'display' => 'Past medical history section', 'prefix' => 'discharge-condition-', 'items' => (array) ($source['conditions'] ?? [])],
+            ['title' => 'Procedures', 'code' => '1003640003', 'display' => 'History of past procedure section', 'prefix' => 'discharge-procedure-', 'items' => (array) ($source['procedures'] ?? [])],
+            ['title' => 'Medications', 'code' => '1003606003', 'display' => 'Medication history section', 'prefix' => 'discharge-medication-', 'items' => (array) ($source['medications'] ?? [])],
+            ['title' => 'Physical examination', 'code' => '425044008', 'display' => 'Physical exam section', 'prefix' => 'discharge-observation-', 'items' => (array) ($source['observations'] ?? [])],
+            ['title' => 'Investigations', 'code' => '721981007', 'display' => 'Diagnostic studies report', 'prefix' => 'discharge-investigation-', 'items' => (array) ($source['investigations'] ?? [])],
+            ['title' => 'Allergies', 'code' => '722446000', 'display' => 'Allergy record', 'prefix' => 'discharge-allergy-', 'items' => (array) ($source['allergies'] ?? [])],
+            ['title' => 'Care plan', 'code' => '734163000', 'display' => 'Care plan', 'prefix' => 'discharge-careplan-', 'items' => (array) ($source['care_plans'] ?? [])],
+            ['title' => 'Document reference', 'code' => '373942005', 'display' => 'Discharge summary', 'prefix' => 'discharge-document-', 'items' => (array) ($source['documents'] ?? [])],
         ];
         $sections = [];
         foreach ($sectionDefinitions as $definition) {
@@ -362,8 +404,9 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             $sections[] = [
                 'title' => $definition['title'],
                 'code' => ['coding' => [[
-                    'system' => 'http://loinc.org',
+                    'system' => 'http://snomed.info/sct',
                     'code' => $definition['code'],
+                    'display' => $definition['display'],
                 ]]],
                 'entry' => $references,
                 'text' => $narrativeParts !== [] ? [

@@ -308,6 +308,8 @@ class M3HiuDocumentRepository
                 $val = '';
                 if (isset($resource['valueQuantity']) && is_array($resource['valueQuantity'])) {
                     $val = trim((string) (($resource['valueQuantity']['value'] ?? '') . ' ' . ($resource['valueQuantity']['unit'] ?? '')));
+                } elseif (isset($resource['valueString'])) {
+                    $val = trim((string) $resource['valueString']);
                 }
                 if ($codeText !== '' || $val !== '') {
                     $vitals[] = ['name' => $codeText, 'value' => $val];

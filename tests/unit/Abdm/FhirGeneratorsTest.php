@@ -120,6 +120,7 @@ final class FhirGeneratorsTest extends CIUnitTestCase
             'conditions' => [['text' => 'Viral fever']],
             'procedures' => [['text' => 'Supportive care']],
             'medications' => [['name' => 'Paracetamol', 'dosage' => 'As directed']],
+            'investigations' => [['text' => 'Haemoglobin: 11', 'loinc_code' => '718-7']],
             'care_plans' => [['title' => 'Advice', 'description' => 'Review after three days']],
             'documents' => [[
                 'title' => 'Discharge Summary PDF',
@@ -135,6 +136,8 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $this->assertSame('IPD Discharge Summary', $composition['title'] ?? null);
         $this->assertContains('https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle', $bundle['meta']['profile'] ?? []);
         $this->assertContains('https://nrces.in/ndhm/fhir/r4/StructureDefinition/DischargeSummaryRecord', $composition['meta']['profile'] ?? []);
+        $this->assertSame('http://snomed.info/sct', $composition['type']['coding'][0]['system'] ?? null);
+        $this->assertSame('373942005', $composition['type']['coding'][0]['code'] ?? null);
         $this->assertNotEmpty($composition['author'] ?? []);
         $this->assertNotEmpty($composition['custodian'] ?? []);
         $this->assertNotEmpty($composition['section'] ?? []);
@@ -153,6 +156,14 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $documents = array_values(array_filter($bundle['entry'], static fn (array $entry): bool => ($entry['resource']['resourceType'] ?? '') === 'DocumentReference'));
         $this->assertCount(1, $documents);
         $this->assertSame('%PDF-test', base64_decode((string) ($documents[0]['resource']['content'][0]['attachment']['data'] ?? ''), true));
+        $this->assertSame('final', $documents[0]['resource']['docStatus'] ?? null);
+        $this->assertSame('373942005', $documents[0]['resource']['type']['coding'][0]['code'] ?? null);
+
+        $sectionCodes = array_column(array_map(static fn (array $section): array => (array) ($section['code']['coding'][0] ?? []), $composition['section']), 'code');
+        $this->assertSame(['1003642006', '1003640003', '1003606003', '721981007', '734163000', '373942005'], $sectionCodes);
+        $reports = array_values(array_filter($bundle['entry'], static fn (array $entry): bool => ($entry['resource']['resourceType'] ?? '') === 'DiagnosticReport'));
+        $this->assertCount(1, $reports);
+        $this->assertContains('https://nrces.in/ndhm/fhir/r4/StructureDefinition/DiagnosticReportLab', $reports[0]['resource']['meta']['profile'] ?? []);
 
         $encoded = json_encode($bundle, JSON_UNESCAPED_SLASHES);
         preg_match_all('/"reference":"(urn:uuid:[^"]+)"/', (string) $encoded, $matches);
