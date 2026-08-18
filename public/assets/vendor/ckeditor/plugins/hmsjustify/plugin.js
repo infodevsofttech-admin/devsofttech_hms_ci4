@@ -18,22 +18,26 @@ CKEDITOR.plugins.add('hmsjustify', {
         });
 
         editor.ui.addButton('HmsJustifyLeft', {
-            label: 'Align Left',
+            label: 'Align Left (L)',
+            icon: false,
             command: 'HmsJustifyLeft',
             toolbar: 'paragraph,40'
         });
         editor.ui.addButton('HmsJustifyCenter', {
-            label: 'Center',
+            label: 'Center (C)',
+            icon: false,
             command: 'HmsJustifyCenter',
             toolbar: 'paragraph,41'
         });
         editor.ui.addButton('HmsJustifyRight', {
-            label: 'Align Right',
+            label: 'Align Right (R)',
+            icon: false,
             command: 'HmsJustifyRight',
             toolbar: 'paragraph,42'
         });
         editor.ui.addButton('HmsJustifyBlock', {
-            label: 'Justify',
+            label: 'Justify (J)',
+            icon: false,
             command: 'HmsJustifyBlock',
             toolbar: 'paragraph,43'
         });
