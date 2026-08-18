@@ -5574,10 +5574,15 @@ class Ipd_discharge extends BaseController
             return $this->response->setStatusCode(404)->setBody('Generate the PDF first, then reopen this debug view with ?build=1.');
         }
 
+        $runtimeFile = WRITEPATH . 'debug' . DIRECTORY_SEPARATOR . 'discharge_mpdf_runtime_' . $ipdId . '_' . $templateId . '.json';
+        $runtime = is_file($runtimeFile) ? (json_decode((string) file_get_contents($runtimeFile), true) ?: []) : [];
+
         return view('ipd_discharge/mpdf_raw_html', [
             'ipd_id' => $ipdId,
             'template_id' => $templateId,
             'html' => (string) file_get_contents($file),
+            'runtime_header' => (string) ($runtime['header_html'] ?? ''),
+            'runtime_footer' => (string) ($runtime['footer_html'] ?? ''),
         ]);
     }
 
@@ -7398,6 +7403,16 @@ class Ipd_discharge extends BaseController
                 $mpdf->SetHTMLFooter($footerHtml, 'E');
             }
 
+            if ($withHeader || $footerHtml !== '') {
+                $mpdf->AddPage();
+                if ($withHeader && $headerHtml !== '') {
+                    $mpdf->SetHTMLHeader($headerHtml, 'O', true);
+                }
+                if ($footerHtml !== '') {
+                    $mpdf->SetHTMLFooter($footerHtml, 'O', true);
+                }
+            }
+
             $pdfHtml = '';
             $templateCss = trim((string) ($templateSettings['template_css'] ?? ''));
             if ($templateCss !== '') {
@@ -7414,6 +7429,10 @@ class Ipd_discharge extends BaseController
             }
             $debugTemplateId = (int) ($templatePack['selected_template_id'] ?? 0);
             file_put_contents($debugDirectory . DIRECTORY_SEPARATOR . 'discharge_mpdf_input_' . $ipdId . '_' . $debugTemplateId . '.html', $pdfHtml, LOCK_EX);
+            file_put_contents($debugDirectory . DIRECTORY_SEPARATOR . 'discharge_mpdf_runtime_' . $ipdId . '_' . $debugTemplateId . '.json', json_encode([
+                'header_html' => $headerHtml,
+                'footer_html' => $footerHtml,
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), LOCK_EX);
 
             $pdfBinary = $this->runMpdfWithTolerantWarnings(static function () use ($mpdf, $pdfHtml, $fileName): string {
                 $mpdf->WriteHTML($pdfHtml);
