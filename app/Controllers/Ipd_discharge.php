@@ -7404,9 +7404,12 @@ class Ipd_discharge extends BaseController
             $pdfHtml .= ($templateCss !== '' ? '<style>' . "\n" . $templateCss . "\n" . '</style>' . "\n" : '');
             if ($useHeader) {
                 $pdfHtml .= '<htmlpageheader name="myHeader">' . "\n" . $headerHtml . "\n" . '</htmlpageheader>' . "\n";
+                // show-this-page forces header on page 1 because mPDF adds the first page before @page CSS is processed
+                $pdfHtml .= '<sethtmlpageheader name="myHeader" value="on" show-this-page="1" />' . "\n";
             }
             if ($useFooter) {
                 $pdfHtml .= '<htmlpagefooter name="myFooter">' . "\n" . $footerHtml . "\n" . '</htmlpagefooter>' . "\n";
+                $pdfHtml .= '<sethtmlpagefooter name="myFooter" value="on" show-this-page="1" />' . "\n";
             }
             $pdfHtml .= $renderedHtml;
             $pdfHtml = mpdf_normalize_font_weight_css($pdfHtml);
