@@ -52,6 +52,7 @@ $feeTypes = $fee_types ?? [];
                 <button type="button" class="btn btn-primary" id="show_opd_total_report">Show</button>
                 <button type="button" class="btn btn-outline-primary" id="export_opd_total_report">Export</button>
                 <button type="button" class="btn btn-outline-danger" id="pdf_opd_total_report">PDF</button>
+                <button type="button" class="btn btn-outline-secondary" id="open_opd_patient_list">OPD Patient List</button>
             </div>
         </div>
     </div>
@@ -105,6 +106,10 @@ $feeTypes = $fee_types ?? [];
 
         document.getElementById('pdf_opd_total_report').addEventListener('click', function() {
             window.open(buildQuery() + '/2', '_blank');
+        });
+
+        document.getElementById('open_opd_patient_list').addEventListener('click', function() {
+            load_form('<?= base_url('Report/report_opd_patient_list') ?>', 'OPD Patient List');
         });
 
         $('.select2').select2({

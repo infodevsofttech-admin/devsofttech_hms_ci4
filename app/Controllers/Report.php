@@ -58,6 +58,98 @@ class Report extends BaseController
         ]);
     }
 
+    public function report_opd_patient_list()
+    {
+        $doctors = $this->db->table('doctor_master')
+            ->select('id, p_fname')
+            ->where('active', 1)
+            ->orderBy('p_fname', 'ASC')
+            ->get()
+            ->getResult();
+
+        $referBys = $this->db->table('patient_master')
+            ->select('referby')
+            ->where('referby IS NOT NULL', null, false)
+            ->where("TRIM(referby) != ''", null, false)
+            ->where("TRIM(referby) != '0'", null, false)
+            ->groupBy('referby')
+            ->orderBy('referby', 'ASC')
+            ->get()
+            ->getResult();
+
+        return view('report/opd_patient_list_report', [
+            'doctors' => $doctors,
+            'refer_bys' => $referBys,
+        ]);
+    }
+
+    public function opd_patient_list_data(
+        string $dateRange,
+        string $doctorId = '0',
+        string $referBy = '0',
+        int $output = 0
+    ) {
+        [$minRange, $maxRange] = $this->parseDateRangeDateOnly($dateRange);
+
+        $builder = $this->db->table('opd_master o')
+            ->select('o.opd_id, o.opd_code, o.P_name, p.p_code, o.apointment_date, o.doc_name, p.referby')
+            ->select('o.opd_fee_desc, o.opd_fee_amount, o.payment_mode, o.running_opd')
+            ->join('patient_master p', 'p.id = o.p_id', 'left')
+            ->where("DATE(o.apointment_date) BETWEEN '{$minRange}' AND '{$maxRange}'", null, false)
+            ->where('(o.payment_mode > 0 OR COALESCE(o.running_opd,0)=1)', null, false)
+            ->orderBy('o.apointment_date', 'ASC')
+            ->orderBy('o.opd_id', 'ASC');
+
+        $doctorIdValue = (int) $doctorId;
+        if ($doctorIdValue > 0) {
+            $builder->where('o.doc_id', $doctorIdValue);
+        }
+
+        $referByValue = trim((string) urldecode($referBy));
+        if ($referByValue !== '' && $referByValue !== '0' && strtolower($referByValue) !== 'all') {
+            $builder->where('p.referby', $referByValue);
+        }
+
+        $rows = $builder->get()->getResult();
+        $content = view('report/opd_patient_list_report_table', [
+            'rows' => $rows,
+            'min_range' => $minRange,
+            'max_range' => $maxRange,
+        ]);
+
+        if ($output === 1) {
+            ExportExcel($content, 'OPD_Patient_List_' . date('YmdHis'));
+            return $this->response->setBody('');
+        }
+
+        if ($output === 2) {
+            $mpdfTempDir = WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'mpdf';
+            if (! is_dir($mpdfTempDir)) {
+                mkdir($mpdfTempDir, 0755, true);
+            }
+
+            $mpdf = new Mpdf([
+                'tempDir' => $mpdfTempDir,
+                'format' => 'A4-L',
+                'margin_top' => 8,
+                'margin_bottom' => 8,
+                'margin_left' => 8,
+                'margin_right' => 8,
+            ]);
+            $pdfHtml = '<style>body{font-family:Arial,sans-serif;color:#111;font-size:11px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #9aa4ad;padding:5px 6px;}th{text-align:left;background:#f5f6f7;}</style>'
+                . '<h3 style="margin:0 0 10px 0;">OPD Patient List</h3>' . $content;
+            $mpdf->WriteHTML($pdfHtml);
+
+            $fileName = 'OPD_Patient_List_' . date('Ymd_His') . '.pdf';
+            return $this->response
+                ->setHeader('Content-Type', 'application/pdf')
+                ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
+                ->setBody($mpdf->Output($fileName, 'S'));
+        }
+
+        return $this->response->setBody($content);
+    }
+
     public function opd_total_data(
         string $dateRange,
         string $doctorId = '0',

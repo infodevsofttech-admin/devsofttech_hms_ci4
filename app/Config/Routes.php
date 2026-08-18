@@ -1045,6 +1045,9 @@ $routes->get('Report/collection_report', 'Report::collection_report', ['filter' 
 $routes->get('Report/report_opd_total', 'Report::report_opd_total', ['filter' => $reportsCollectionFilter]);
 $routes->get('Report/opd_total_data/(:segment)/(:segment)/(:segment)/(:segment)', 'Report::opd_total_data/$1/$2/$3/$4', ['filter' => $reportsCollectionFilter]);
 $routes->get('Report/opd_total_data/(:segment)/(:segment)/(:segment)/(:segment)/(:num)', 'Report::opd_total_data/$1/$2/$3/$4/$5', ['filter' => $reportsCollectionFilter]);
+$routes->get('Report/report_opd_patient_list', 'Report::report_opd_patient_list', ['filter' => $reportsCollectionFilter]);
+$routes->get('Report/opd_patient_list_data/(:segment)/(:segment)/(:segment)', 'Report::opd_patient_list_data/$1/$2/$3', ['filter' => $reportsCollectionFilter]);
+$routes->get('Report/opd_patient_list_data/(:segment)/(:segment)/(:segment)/(:num)', 'Report::opd_patient_list_data/$1/$2/$3/$4', ['filter' => $reportsCollectionFilter]);
 $routes->get('Report/report_total_payment_app_show/(:segment)/(:segment)/(:segment)', 'Report::report_total_payment_app_show/$1/$2/$3', ['filter' => $reportsCollectionFilter]);
 $routes->get('Report/report_total_payment_app_show/(:segment)/(:segment)/(:segment)/(:num)', 'Report::report_total_payment_app_show/$1/$2/$3/$4', ['filter' => $reportsCollectionFilter]);
 $routes->get('Report/report_total_payment_app_show/(:segment)/(:segment)/(:segment)/(:segment)', 'Report::report_total_payment_app_show/$1/$2/$3/$4', ['filter' => $reportsCollectionFilter]);
