@@ -20,6 +20,7 @@ $marginRight = (string) ($edit['page_margin_right_cm'] ?? '0.8');
 $marginHeader = (string) ($edit['margin_header_cm'] ?? '0.5');
 $marginFooter = (string) ($edit['margin_footer_cm'] ?? '0.5');
 $isDefault = (int) ($edit['is_default'] ?? 0);
+$isAuditOnly = (int) ($edit['is_audit_only'] ?? 0);
 $status = (int) ($edit['status'] ?? 1);
 ?>
 
@@ -95,6 +96,12 @@ $status = (int) ($edit['status'] ?? 1);
                         <div class="form-check mb-1">
                             <input class="form-check-input" type="checkbox" name="is_default" id="is_default" value="1" <?= $isDefault === 1 ? 'checked' : '' ?>>
                             <label class="form-check-label" for="is_default">Set as default</label>
+                        </div>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <div class="form-check mb-1">
+                            <input class="form-check-input" type="checkbox" name="is_audit_only" id="is_audit_only" value="1" <?= $isAuditOnly === 1 ? 'checked' : '' ?>>
+                            <label class="form-check-label" for="is_audit_only">Audit-only template</label>
                         </div>
                     </div>
 

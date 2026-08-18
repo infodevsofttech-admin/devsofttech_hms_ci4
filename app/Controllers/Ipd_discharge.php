@@ -86,6 +86,7 @@ class Ipd_discharge extends BaseController
             template_css LONGTEXT NULL,
             template_html LONGTEXT NOT NULL,
             is_default TINYINT(1) NOT NULL DEFAULT 0,
+            is_audit_only TINYINT(1) NOT NULL DEFAULT 0,
             status TINYINT(1) NOT NULL DEFAULT 1,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -115,6 +116,7 @@ class Ipd_discharge extends BaseController
             'header_html' => 'ALTER TABLE ipd_discharge_templates ADD COLUMN header_html LONGTEXT NULL AFTER margin_footer_cm',
             'footer_html' => 'ALTER TABLE ipd_discharge_templates ADD COLUMN footer_html LONGTEXT NULL AFTER header_html',
             'template_css' => 'ALTER TABLE ipd_discharge_templates ADD COLUMN template_css LONGTEXT NULL AFTER footer_html',
+            'is_audit_only' => 'ALTER TABLE ipd_discharge_templates ADD COLUMN is_audit_only TINYINT(1) NOT NULL DEFAULT 0 AFTER is_default',
         ];
 
         foreach ($columns as $column => $sql) {
@@ -125,6 +127,13 @@ class Ipd_discharge extends BaseController
                     // Ignore schema drift during runtime; existing columns are enough for save/render.
                 }
             }
+        }
+
+        if ($this->db->fieldExists('is_audit_only', 'ipd_discharge_templates')) {
+            $this->db->table('ipd_discharge_templates')
+                ->where('template_name', 'NABH Compliant Discharge Summary')
+                ->set('is_audit_only', 1)
+                ->update();
         }
     }
 
@@ -283,12 +292,45 @@ class Ipd_discharge extends BaseController
         }
 
         return $this->db->table('ipd_discharge_templates')
-            ->select('id,template_name,page_size,custom_width_mm,custom_height_mm,page_margin_top_cm,page_margin_bottom_cm,page_margin_left_cm,page_margin_right_cm,margin_header_cm,margin_footer_cm,header_html,footer_html,template_css,template_html,is_default,status')
+            ->select('id,template_name,page_size,custom_width_mm,custom_height_mm,page_margin_top_cm,page_margin_bottom_cm,page_margin_left_cm,page_margin_right_cm,margin_header_cm,margin_footer_cm,header_html,footer_html,template_css,template_html,is_default,is_audit_only,status')
             ->where('status', 1)
             ->orderBy('is_default', 'DESC')
             ->orderBy('id', 'ASC')
             ->get()
             ->getResultArray();
+    }
+
+    private function isDischargeAuditTemplate(array $template): bool
+    {
+        return (int) ($template['is_audit_only'] ?? 0) === 1
+            || strtolower(trim((string) ($template['template_name'] ?? ''))) === 'nabh compliant discharge summary';
+    }
+
+    private function getPrintableDischargeTemplateRows(): array
+    {
+        return array_values(array_filter(
+            $this->getDischargeTemplateRows(),
+            fn (array $template): bool => ! $this->isDischargeAuditTemplate($template)
+        ));
+    }
+
+    private function resolvePrintableDischargeTemplateId(int $requestedId, array $templates): int
+    {
+        if ($requestedId > 0) {
+            foreach ($templates as $template) {
+                if ((int) ($template['id'] ?? 0) === $requestedId) {
+                    return $requestedId;
+                }
+            }
+        }
+
+        foreach ($templates as $template) {
+            if ((int) ($template['is_default'] ?? 0) === 1) {
+                return (int) ($template['id'] ?? 0);
+            }
+        }
+
+        return (int) ($templates[0]['id'] ?? 0);
     }
 
     private function getHospitalSettingValue(string $key): string
@@ -1052,7 +1094,7 @@ class Ipd_discharge extends BaseController
 
         if ($selectedTemplate === null) {
             foreach ($templates as $row) {
-                if ((int) ($row['is_default'] ?? 0) === 1) {
+                if ((int) ($row['is_default'] ?? 0) === 1 && ! $this->isDischargeAuditTemplate($row)) {
                     $selectedTemplate = $row;
                     break;
                 }
@@ -5239,7 +5281,9 @@ class Ipd_discharge extends BaseController
             return $permission;
         }
 
-        return view('ipd_discharge/search_patient');
+        return view('ipd_discharge/search_patient', [
+            'discharge_templates' => $this->getPrintableDischargeTemplateRows(),
+        ]);
     }
 
     public function search_patient_ajax()
@@ -5652,6 +5696,11 @@ class Ipd_discharge extends BaseController
         $notice = '';
         $noticeType = 'success';
         $userLabel = substr($this->currentUserLabel(), 0, 50);
+        $dischargeTemplates = $this->getPrintableDischargeTemplateRows();
+        $selectedDischargeTemplateId = $this->resolvePrintableDischargeTemplateId(
+            (int) ($this->request->getGet('tpl') ?? 0),
+            $dischargeTemplates
+        );
 
         if (strtolower($this->request->getMethod()) === 'post') {
             $action = (string) ($this->request->getPost('action') ?? 'save_main');
@@ -7029,6 +7078,8 @@ class Ipd_discharge extends BaseController
             'other_exam_text' => (string) ($otherExamParsed['text'] ?? ''),
             'next_visit_options' => $this->getNextVisitOptions(date('Y-m-d')),
             'dose_master_maps' => $doseMasterMaps,
+            'discharge_templates' => $dischargeTemplates,
+            'selected_discharge_template_id' => $selectedDischargeTemplateId,
         ]);
     }
 
@@ -7177,10 +7228,6 @@ class Ipd_discharge extends BaseController
                     trim((string) ($templateSettings['header_html'] ?? '')),
                     $templateTokenVars
                 );
-                $templateCss = trim((string) ($templateSettings['template_css'] ?? ''));
-                if ($templateCss !== '' && $configuredHeader !== '') {
-                    $configuredHeader = '<style>' . $templateCss . '</style>' . $configuredHeader;
-                }
                 $headerHtml = $this->sanitizeDischargePdfHtml($configuredHeader, false);
                 $headerHtml = mpdf_normalize_font_weight_css($headerHtml);
             }
@@ -7189,10 +7236,6 @@ class Ipd_discharge extends BaseController
                 trim((string) ($templateSettings['footer_html'] ?? '')),
                 $templateTokenVars
             );
-            $templateCss = trim((string) ($templateSettings['template_css'] ?? ''));
-            if ($templateCss !== '' && $configuredFooter !== '') {
-                $configuredFooter = '<style>' . $templateCss . '</style>' . $configuredFooter;
-            }
             $footerHtml = $this->sanitizeDischargePdfHtml(
                 $configuredFooter,
                 false

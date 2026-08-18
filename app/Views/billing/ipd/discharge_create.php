@@ -7,6 +7,8 @@ $noticeType = (string) ($notice_type ?? 'success');
 $statusRows = $status_rows ?? [];
 $departmentRows = $department_rows ?? [];
 $master = $ipd_master_row ?? [];
+$dischargeTemplates = $discharge_templates ?? [];
+$selectedDischargeTemplateId = (int) ($selected_discharge_template_id ?? 0);
 
 $patientName = trim((string) ($person->p_fname ?? ''));
 
@@ -544,14 +546,32 @@ $historyFields = [
         / IPD ID : <strong><?= esc((string) ($ipd->ipd_code ?? '')) ?></strong>
     </div>
 
-    <div class="mb-3 text-end d-flex justify-content-end gap-2">
-        <button type="button" class="btn btn-outline-primary" id="btn_print_top" onclick="window.open('<?= site_url('Ipd_discharge/show_discharge/' . $ipdId . '/1') ?>', '_blank');">
+    <div class="mb-3 text-end d-flex justify-content-end gap-2 align-items-center">
+        <label for="discharge_template_select" class="small mb-0">Print Template</label>
+        <select class="form-select form-select-sm" id="discharge_template_select" style="width:220px;">
+            <?php foreach ($dischargeTemplates as $template): ?>
+                <option value="<?= (int) ($template['id'] ?? 0) ?>" <?= (int) ($template['id'] ?? 0) === $selectedDischargeTemplateId ? 'selected' : '' ?>><?= esc((string) ($template['template_name'] ?? '')) ?></option>
+            <?php endforeach; ?>
+        </select>
+        <button type="button" class="btn btn-outline-primary" id="btn_print_top" onclick="openSelectedDischargePrint();">
             <i class="fas fa-print me-1"></i> Print Discharge Summary
         </button>
         <button type="button" class="btn btn-primary" id="btn_preview_top" onclick="openDischargePreview('<?= site_url('Ipd_discharge/preview_discharge_report/' . $ipdId . '?regen=1') ?>', 'Discharge Preview');">
             <i class="fas fa-eye me-1"></i> Preview Discharge Summary
         </button>
     </div>
+
+    <script>
+        function openSelectedDischargePrint() {
+            var selector = document.getElementById('discharge_template_select');
+            var templateId = selector ? selector.value : '';
+            var url = '<?= site_url('Ipd_discharge/show_discharge/' . $ipdId . '/1') ?>';
+            if (templateId) {
+                url += '?tpl=' + encodeURIComponent(templateId);
+            }
+            window.open(url, '_blank');
+        }
+    </script>
 
     <div class="card discharge-main-card">
         <div class="card-body">

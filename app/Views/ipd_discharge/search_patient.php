@@ -42,6 +42,9 @@
     var searchForm = $('#ipdDischargeSearchForm');
     var resultsContainer = $('#searchResultsContainer');
     var dataTable = null;
+    var dischargeTemplates = <?= json_encode(array_map(static function (array $template): array {
+        return ['id' => (int) ($template['id'] ?? 0), 'name' => (string) ($template['template_name'] ?? '')];
+    }, $discharge_templates ?? []), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
 
     function performSearch() {
         var searchQuery = searchInput.val().trim();
@@ -167,6 +170,9 @@
             
             var ipdId = parseInt(row.id || 0);
             var admitDate = row.register_date ? formatDate(row.register_date) : '';
+            var templateOptions = dischargeTemplates.map(function(template) {
+                return '<option value="' + template.id + '">' + escapeHtml(template.name) + '</option>';
+            }).join('');
 
             html += '<tr>' +
                 '<td>' + escapeHtml(row.ipd_code || '') + '</td>' +
@@ -185,10 +191,13 @@
                 '<i class="bi bi-file-earmark-medical"></i> Create Discharge' +
                 '</button>' +
                 '<button type="button" class="btn btn-primary btn-sm" ' +
-                'onclick="openDischargePrintWindow(' + ipdId + ')" ' +
+                'onclick="openDischargePrintWindow(' + ipdId + ', this)" ' +
                 'title="Print Discharge Summary">' +
                 '<i class="bi bi-printer"></i> Print Discharge' +
                 '</button>' +
+                '<select class="form-select form-select-sm mt-1 discharge-template-select" style="width:190px;" aria-label="Print template">' +
+                templateOptions +
+                '</select>' +
                 '</td>' +
                 '</tr>';
         });
@@ -254,13 +263,17 @@
     });
 
     // Global function for print window
-    window.openDischargePrintWindow = function(ipdId) {
+    window.openDischargePrintWindow = function(ipdId, button) {
         if (!ipdId || ipdId <= 0) {
             alert('Invalid IPD ID');
             return;
         }
         
         var url = '<?= base_url('Ipd_discharge/show_discharge') ?>/' + ipdId + '/1';
+        var selector = button ? button.parentElement.querySelector('.discharge-template-select') : null;
+        if (selector && selector.value) {
+            url += '?tpl=' + encodeURIComponent(selector.value);
+        }
         var printWindow = window.open(url, 'DischargePrint', 'width=900,height=700,scrollbars=yes,resizable=yes');
         
         if (printWindow) {

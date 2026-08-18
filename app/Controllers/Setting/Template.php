@@ -2778,6 +2778,7 @@ HTML;
             template_css LONGTEXT NULL,
             template_html LONGTEXT NOT NULL,
             is_default TINYINT(1) NOT NULL DEFAULT 0,
+            is_audit_only TINYINT(1) NOT NULL DEFAULT 0,
             status TINYINT(1) NOT NULL DEFAULT 1,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -2807,6 +2808,7 @@ HTML;
             'header_html' => "ALTER TABLE ipd_discharge_templates ADD COLUMN header_html LONGTEXT NULL AFTER margin_footer_cm",
             'footer_html' => "ALTER TABLE ipd_discharge_templates ADD COLUMN footer_html LONGTEXT NULL AFTER header_html",
             'template_css' => "ALTER TABLE ipd_discharge_templates ADD COLUMN template_css LONGTEXT NULL AFTER footer_html",
+            'is_audit_only' => "ALTER TABLE ipd_discharge_templates ADD COLUMN is_audit_only TINYINT(1) NOT NULL DEFAULT 0 AFTER is_default",
         ];
 
         foreach ($columns as $col => $sql) {
@@ -2818,6 +2820,13 @@ HTML;
             } catch (\Throwable $e) {
                 // Keep template screen usable even if schema alter fails in restricted env.
             }
+        }
+
+        if ($this->db->fieldExists('is_audit_only', 'ipd_discharge_templates')) {
+            $this->db->table('ipd_discharge_templates')
+                ->where('template_name', 'NABH Compliant Discharge Summary')
+                ->set('is_audit_only', 1)
+                ->update();
         }
     }
 
@@ -2943,6 +2952,7 @@ HTML;
             $marginHeader = max(0, min(25, (float) ($this->request->getPost('margin_header_cm') ?? 0.5)));
             $marginFooter = max(0, min(25, (float) ($this->request->getPost('margin_footer_cm') ?? 0.5)));
             $isDefault = (int) ($this->request->getPost('is_default') ?? 0) === 1 ? 1 : 0;
+            $isAuditOnly = (int) ($this->request->getPost('is_audit_only') ?? 0) === 1 ? 1 : 0;
             $status = (int) ($this->request->getPost('status') ?? 1) === 1 ? 1 : 0;
 
             // In SPA/AJAX reload scenarios, CKEditor can occasionally post an empty
@@ -2993,6 +3003,7 @@ HTML;
                     'template_css' => $templateCss,
                     'template_html' => $templateHtml,
                     'is_default' => $isDefault,
+                    'is_audit_only' => $isAuditOnly,
                     'status' => $status,
                 ];
 
