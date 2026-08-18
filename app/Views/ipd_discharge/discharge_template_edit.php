@@ -17,6 +17,10 @@ $marginHeader= (string) ($edit['margin_header_cm']      ?? '1.00');
 $marginFooter= (string) ($edit['margin_footer_cm']      ?? '0.50');
 $isDefault   = (int) ($edit['is_default']   ?? 0);
 $isAuditOnly = (int) ($edit['is_audit_only'] ?? 0);
+$watermarkType = (string) ($edit['watermark_type'] ?? 'none');
+$watermarkText = (string) ($edit['watermark_text'] ?? '');
+$watermarkAlpha = (string) ($edit['watermark_alpha'] ?? '0.12');
+$watermarkImage = (string) ($edit['watermark_image'] ?? '');
 $status      = (int) ($edit['status'] ?? 1);
 
 $placeholders = [
@@ -122,19 +126,47 @@ $placeholders = [
 
                     <div class="mb-2">
                         <label class="form-label form-label-sm">Header HTML</label>
-                        <textarea id="tpl_header_html" class="form-control form-control-sm" rows="4" style="font-family:Consolas,monospace;"><?= esc($headerHtml) ?></textarea>
+                        <textarea id="tpl_header_html" class="form-control form-control-sm" rows="4"><?= esc($headerHtml) ?></textarea>
                     </div>
                     <div class="mb-2">
                         <label class="form-label form-label-sm">Footer HTML</label>
-                        <textarea id="tpl_footer_html" class="form-control form-control-sm" rows="3" style="font-family:Consolas,monospace;"><?= esc($footerHtml) ?></textarea>
+                        <textarea id="tpl_footer_html" class="form-control form-control-sm" rows="3"><?= esc($footerHtml) ?></textarea>
                     </div>
                     <div class="mb-2">
                         <label class="form-label form-label-sm">HTML Content <span class="text-muted small">(use <code>{{CONTENT}}</code> or section placeholders)</span></label>
-                        <textarea id="tpl_html" class="form-control form-control-sm" rows="10" style="font-family:Consolas,monospace;"><?= esc($templateHtml) ?></textarea>
+                        <textarea id="tpl_html" class="form-control form-control-sm" rows="10"><?= esc($templateHtml) ?></textarea>
                     </div>
                     <div class="mb-2">
                         <label class="form-label form-label-sm">CSS</label>
                         <textarea id="tpl_css" class="form-control form-control-sm" rows="5" style="font-family:Consolas,monospace;"><?= esc($templateCss) ?></textarea>
+                    </div>
+                    <div class="card border-secondary mb-2">
+                        <div class="card-header py-1"><strong class="small">Document Watermark</strong></div>
+                        <div class="card-body py-2">
+                            <div class="row g-2">
+                                <div class="col-md-4">
+                                    <label class="form-label form-label-sm">Type</label>
+                                    <select class="form-select form-select-sm" id="tpl_watermark_type">
+                                        <option value="none" <?= $watermarkType === 'none' ? 'selected' : '' ?>>None</option>
+                                        <option value="text" <?= $watermarkType === 'text' ? 'selected' : '' ?>>Text</option>
+                                        <option value="image" <?= $watermarkType === 'image' ? 'selected' : '' ?>>Image</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label form-label-sm">Opacity</label>
+                                    <input type="number" class="form-control form-control-sm" id="tpl_watermark_alpha" min="0.01" max="1" step="0.01" value="<?= esc($watermarkAlpha) ?>">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label form-label-sm">Image</label>
+                                    <input type="file" class="form-control form-control-sm" id="tpl_watermark_image" accept=".png,.jpg,.jpeg,.webp">
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label form-label-sm">Text</label>
+                                    <input type="text" class="form-control form-control-sm" id="tpl_watermark_text" value="<?= esc($watermarkText) ?>" placeholder="CONFIDENTIAL">
+                                    <?php if ($watermarkImage !== ''): ?><div class="small text-muted mt-1">Current image: <?= esc($watermarkImage) ?></div><?php endif; ?>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <div class="d-flex gap-2 mb-2">
                         <div class="form-check">
@@ -188,6 +220,15 @@ $placeholders = [
 (function () {
     var editId = parseInt(document.getElementById('tpl_edit_id').value || '0', 10);
     var msg = document.getElementById('tpl_edit_msg');
+    var editorIds = ['tpl_header_html', 'tpl_footer_html', 'tpl_html'];
+
+    if (typeof CKEDITOR !== 'undefined') {
+        editorIds.forEach(function (id) {
+            if (!CKEDITOR.instances[id]) {
+                CKEDITOR.replace(id, {height: id === 'tpl_html' ? 280 : 140});
+            }
+        });
+    }
 
     function getCsrf() {
         var el = document.querySelector('input[name^="csrf_"]');
@@ -205,7 +246,13 @@ $placeholders = [
         msg.innerHTML = '<div class="alert alert-' + (ok ? 'success' : 'danger') + ' py-2 mb-0">' + text + '</div>';
     }
 
-    function val(id) { var el = document.getElementById(id); return el ? el.value : ''; }
+    function val(id) {
+        if (typeof CKEDITOR !== 'undefined' && CKEDITOR.instances[id]) {
+            return CKEDITOR.instances[id].getData();
+        }
+        var el = document.getElementById(id);
+        return el ? el.value : '';
+    }
     function checked(id) { var el = document.getElementById(id); return el ? (el.checked ? 1 : 0) : 0; }
 
     document.getElementById('btn_save_tpl').addEventListener('click', function () {
@@ -232,6 +279,13 @@ $placeholders = [
         fd.append('status', val('tpl_status'));
         fd.append('is_default', String(checked('tpl_is_default')));
         fd.append('is_audit_only', String(checked('tpl_is_audit')));
+        fd.append('watermark_type', val('tpl_watermark_type'));
+        fd.append('watermark_text', val('tpl_watermark_text'));
+        fd.append('watermark_alpha', val('tpl_watermark_alpha'));
+        var watermarkImage = document.getElementById('tpl_watermark_image');
+        if (watermarkImage && watermarkImage.files.length) {
+            fd.append('watermark_image', watermarkImage.files[0]);
+        }
 
         fetch('<?= base_url('setting/template/discharge_templates') ?>', {
             method: 'POST',
@@ -278,6 +332,15 @@ $placeholders = [
     document.querySelectorAll('.ph-chip').forEach(function (chip) {
         chip.addEventListener('click', function () {
             var token = chip.getAttribute('data-token');
+            if (typeof CKEDITOR !== 'undefined') {
+                var focusedEditor = editorIds.map(function (id) { return CKEDITOR.instances[id]; }).find(function (editor) {
+                    return editor && editor.focusManager && editor.focusManager.hasFocus;
+                });
+                if (focusedEditor) {
+                    focusedEditor.insertHtml(token);
+                    return;
+                }
+            }
             var active = document.activeElement;
             var targets = ['tpl_header_html', 'tpl_footer_html', 'tpl_html', 'tpl_css'];
             var target = null;

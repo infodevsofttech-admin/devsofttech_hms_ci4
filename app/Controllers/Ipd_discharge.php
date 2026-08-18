@@ -87,6 +87,10 @@ class Ipd_discharge extends BaseController
             template_html LONGTEXT NOT NULL,
             is_default TINYINT(1) NOT NULL DEFAULT 0,
             is_audit_only TINYINT(1) NOT NULL DEFAULT 0,
+            watermark_type VARCHAR(10) NOT NULL DEFAULT 'none',
+            watermark_text VARCHAR(255) NULL,
+            watermark_image VARCHAR(255) NULL,
+            watermark_alpha DECIMAL(4,2) NOT NULL DEFAULT 0.12,
             status TINYINT(1) NOT NULL DEFAULT 1,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -117,6 +121,10 @@ class Ipd_discharge extends BaseController
             'footer_html' => 'ALTER TABLE ipd_discharge_templates ADD COLUMN footer_html LONGTEXT NULL AFTER header_html',
             'template_css' => 'ALTER TABLE ipd_discharge_templates ADD COLUMN template_css LONGTEXT NULL AFTER footer_html',
             'is_audit_only' => 'ALTER TABLE ipd_discharge_templates ADD COLUMN is_audit_only TINYINT(1) NOT NULL DEFAULT 0 AFTER is_default',
+            'watermark_type' => "ALTER TABLE ipd_discharge_templates ADD COLUMN watermark_type VARCHAR(10) NOT NULL DEFAULT 'none' AFTER is_audit_only",
+            'watermark_text' => 'ALTER TABLE ipd_discharge_templates ADD COLUMN watermark_text VARCHAR(255) NULL AFTER watermark_type',
+            'watermark_image' => 'ALTER TABLE ipd_discharge_templates ADD COLUMN watermark_image VARCHAR(255) NULL AFTER watermark_text',
+            'watermark_alpha' => 'ALTER TABLE ipd_discharge_templates ADD COLUMN watermark_alpha DECIMAL(4,2) NOT NULL DEFAULT 0.12 AFTER watermark_image',
         ];
 
         foreach ($columns as $column => $sql) {
@@ -191,6 +199,10 @@ class Ipd_discharge extends BaseController
             'header_html' => '',
             'footer_html' => '',
             'template_css' => '',
+            'watermark_type' => 'none',
+            'watermark_text' => '',
+            'watermark_image' => '',
+            'watermark_alpha' => 0.12,
         ];
     }
 
@@ -292,7 +304,7 @@ class Ipd_discharge extends BaseController
         }
 
         return $this->db->table('ipd_discharge_templates')
-            ->select('id,template_name,page_size,custom_width_mm,custom_height_mm,page_margin_top_cm,page_margin_bottom_cm,page_margin_left_cm,page_margin_right_cm,margin_header_cm,margin_footer_cm,header_html,footer_html,template_css,template_html,is_default,is_audit_only,status')
+            ->select('id,template_name,page_size,custom_width_mm,custom_height_mm,page_margin_top_cm,page_margin_bottom_cm,page_margin_left_cm,page_margin_right_cm,margin_header_cm,margin_footer_cm,header_html,footer_html,template_css,template_html,is_default,is_audit_only,watermark_type,watermark_text,watermark_image,watermark_alpha,status')
             ->where('status', 1)
             ->orderBy('is_default', 'DESC')
             ->orderBy('id', 'ASC')
@@ -1174,6 +1186,10 @@ class Ipd_discharge extends BaseController
             'header_html' => (string) ($selectedTemplate['header_html'] ?? ''),
             'footer_html' => (string) ($selectedTemplate['footer_html'] ?? ''),
             'template_css' => (string) ($selectedTemplate['template_css'] ?? ''),
+            'watermark_type' => (string) ($selectedTemplate['watermark_type'] ?? 'none'),
+            'watermark_text' => (string) ($selectedTemplate['watermark_text'] ?? ''),
+            'watermark_image' => (string) ($selectedTemplate['watermark_image'] ?? ''),
+            'watermark_alpha' => (float) ($selectedTemplate['watermark_alpha'] ?? 0.12),
         ]);
 
         $rendered = $this->applyDischargeTemplateTokens($templateHtml, $tokenVars);
@@ -7403,6 +7419,23 @@ class Ipd_discharge extends BaseController
             if ($footerHtml !== '') {
                 $mpdf->SetHTMLFooter($footerHtml, 'O');
                 $mpdf->SetHTMLFooter($footerHtml, 'E');
+            }
+
+            $watermarkType = (string) ($templateSettings['watermark_type'] ?? 'none');
+            $watermarkAlpha = max(0.01, min(1.00, (float) ($templateSettings['watermark_alpha'] ?? 0.12)));
+            if ($watermarkType === 'text') {
+                $watermarkText = trim((string) ($templateSettings['watermark_text'] ?? ''));
+                if ($watermarkText !== '') {
+                    $mpdf->SetWatermarkText($watermarkText, $watermarkAlpha);
+                    $mpdf->showWatermarkText = true;
+                }
+            } elseif ($watermarkType === 'image') {
+                $watermarkImage = trim((string) ($templateSettings['watermark_image'] ?? ''));
+                $watermarkPath = $watermarkImage !== '' ? FCPATH . ltrim(str_replace('\\', '/', $watermarkImage), '/') : '';
+                if ($watermarkPath !== '' && is_file($watermarkPath)) {
+                    $mpdf->SetWatermarkImage($watermarkPath, $watermarkAlpha);
+                    $mpdf->showWatermarkImage = true;
+                }
             }
 
             if ($withHeader || $footerHtml !== '') {

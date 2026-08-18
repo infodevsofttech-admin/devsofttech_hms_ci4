@@ -2779,6 +2779,10 @@ HTML;
             template_html LONGTEXT NOT NULL,
             is_default TINYINT(1) NOT NULL DEFAULT 0,
             is_audit_only TINYINT(1) NOT NULL DEFAULT 0,
+            watermark_type VARCHAR(10) NOT NULL DEFAULT 'none',
+            watermark_text VARCHAR(255) NULL,
+            watermark_image VARCHAR(255) NULL,
+            watermark_alpha DECIMAL(4,2) NOT NULL DEFAULT 0.12,
             status TINYINT(1) NOT NULL DEFAULT 1,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -2809,6 +2813,10 @@ HTML;
             'footer_html' => "ALTER TABLE ipd_discharge_templates ADD COLUMN footer_html LONGTEXT NULL AFTER header_html",
             'template_css' => "ALTER TABLE ipd_discharge_templates ADD COLUMN template_css LONGTEXT NULL AFTER footer_html",
             'is_audit_only' => "ALTER TABLE ipd_discharge_templates ADD COLUMN is_audit_only TINYINT(1) NOT NULL DEFAULT 0 AFTER is_default",
+            'watermark_type' => "ALTER TABLE ipd_discharge_templates ADD COLUMN watermark_type VARCHAR(10) NOT NULL DEFAULT 'none' AFTER is_audit_only",
+            'watermark_text' => "ALTER TABLE ipd_discharge_templates ADD COLUMN watermark_text VARCHAR(255) NULL AFTER watermark_type",
+            'watermark_image' => "ALTER TABLE ipd_discharge_templates ADD COLUMN watermark_image VARCHAR(255) NULL AFTER watermark_text",
+            'watermark_alpha' => "ALTER TABLE ipd_discharge_templates ADD COLUMN watermark_alpha DECIMAL(4,2) NOT NULL DEFAULT 0.12 AFTER watermark_image",
         ];
 
         foreach ($columns as $col => $sql) {
@@ -2954,6 +2962,31 @@ HTML;
             $isDefault = (int) ($this->request->getPost('is_default') ?? 0) === 1 ? 1 : 0;
             $isAuditOnly = (int) ($this->request->getPost('is_audit_only') ?? 0) === 1 ? 1 : 0;
             $status = (int) ($this->request->getPost('status') ?? 1) === 1 ? 1 : 0;
+            $watermarkType = (string) ($this->request->getPost('watermark_type') ?? 'none');
+            if (! in_array($watermarkType, ['none', 'text', 'image'], true)) {
+                $watermarkType = 'none';
+            }
+            $watermarkText = trim((string) ($this->request->getPost('watermark_text') ?? ''));
+            $watermarkAlpha = max(0.01, min(1.00, (float) ($this->request->getPost('watermark_alpha') ?? 0.12)));
+            $watermarkImage = '';
+            if ($id > 0) {
+                $watermarkImage = (string) (($this->db->table('ipd_discharge_templates')->select('watermark_image')->where('id', $id)->get(1)->getRowArray() ?? [])['watermark_image'] ?? '');
+            }
+            $watermarkUpload = $this->request->getFile('watermark_image');
+            if ($watermarkUpload && $watermarkUpload->isValid() && ! $watermarkUpload->hasMoved()) {
+                $extension = strtolower((string) $watermarkUpload->getExtension());
+                if (in_array($extension, ['png', 'jpg', 'jpeg', 'webp'], true)) {
+                    $directory = FCPATH . 'assets' . DIRECTORY_SEPARATOR . 'images' . DIRECTORY_SEPARATOR . 'discharge_watermarks';
+                    if (! is_dir($directory)) {
+                        mkdir($directory, 0755, true);
+                    }
+                    $fileName = 'discharge_wm_' . date('YmdHis') . '_' . bin2hex(random_bytes(4)) . '.' . $extension;
+                    $watermarkUpload->move($directory, $fileName);
+                    $watermarkImage = 'assets/images/discharge_watermarks/' . $fileName;
+                } else {
+                    $watermarkType = 'none';
+                }
+            }
 
             // In SPA/AJAX reload scenarios, CKEditor can occasionally post an empty
             // template field even when editing an existing row. Preserve existing
@@ -3004,6 +3037,10 @@ HTML;
                     'template_html' => $templateHtml,
                     'is_default' => $isDefault,
                     'is_audit_only' => $isAuditOnly,
+                    'watermark_type' => $watermarkType,
+                    'watermark_text' => $watermarkText,
+                    'watermark_image' => $watermarkImage,
+                    'watermark_alpha' => $watermarkAlpha,
                     'status' => $status,
                 ];
 
