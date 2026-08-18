@@ -7390,12 +7390,12 @@ class Ipd_discharge extends BaseController
             $mpdf->SetAuthor('Atria HMS');
 
             if ($withHeader && $headerHtml !== '') {
-                $mpdf->SetHTMLHeader($headerHtml, 'O', true);
-                $mpdf->SetHTMLHeader($headerHtml, 'E', true);
+                $mpdf->SetHTMLHeader($headerHtml, 'O');
+                $mpdf->SetHTMLHeader($headerHtml, 'E');
             }
             if ($footerHtml !== '') {
-                $mpdf->SetHTMLFooter($footerHtml, 'O', true);
-                $mpdf->SetHTMLFooter($footerHtml, 'E', true);
+                $mpdf->SetHTMLFooter($footerHtml, 'O');
+                $mpdf->SetHTMLFooter($footerHtml, 'E');
             }
 
             // Replicate the exact OPD template rendering pattern: @page CSS + named blocks + body in one WriteHTML call.
