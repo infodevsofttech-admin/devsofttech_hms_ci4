@@ -5430,6 +5430,9 @@ class Ipd_discharge extends BaseController
         $headerHtml = $this->sanitizeDischargePdfHtml($headerHtml, false);
         $footerHtml = $this->sanitizeDischargePdfHtml($footerHtml, false);
         $renderedHtml = $this->sanitizeDischargePdfHtml($renderedHtml);
+        $selectedTemplateId = (int) ($templatePack['selected_template_id'] ?? 0);
+        $printBaseUrl = site_url('Ipd_discharge/show_discharge/' . $ipdId);
+        $templateQuery = $selectedTemplateId > 0 ? '?tpl=' . $selectedTemplateId : '';
 
         // Show HTML with syntax highlighting
         return $this->response
@@ -5441,6 +5444,8 @@ class Ipd_discharge extends BaseController
                 'pre{background:#fff;padding:20px;border:1px solid #ddd;overflow:auto;white-space:pre-wrap;word-wrap:break-word;} ' .
                 '</style></head><body>' .
                 '<h1>Discharge Summary HTML Source (IPD ID: ' . $ipdId . ')</h1>' .
+                '<p><a href="' . esc($printBaseUrl . '/1' . $templateQuery) . '" target="_blank" style="display:inline-block;margin-right:8px;padding:8px 12px;background:#b91c1c;color:#fff;text-decoration:none;border-radius:4px;">Print With Header</a>' .
+                '<a href="' . esc($printBaseUrl . '/0' . $templateQuery) . '" target="_blank" style="display:inline-block;padding:8px 12px;background:#475569;color:#fff;text-decoration:none;border-radius:4px;">Print Without Header</a></p>' .
                 '<h2>Header Preview</h2>' .
                 '<div style="background:#fff;padding:20px;border:1px solid #ddd;">' . ($headerHtml !== '' ? $headerHtml : '<em>(empty header_html)</em>') . '</div>' .
                 '<h2>Footer Preview</h2>' .
