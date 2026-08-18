@@ -1134,6 +1134,15 @@ class Ipd_discharge extends BaseController
             'template_css' => (string) ($selectedTemplate['template_css'] ?? ''),
         ]);
 
+        if (trim((string) ($templateSettings['header_html'] ?? '')) === ''
+            && preg_match('/<htmlpageheader\b[^>]*>([\s\S]*?)<\/htmlpageheader>/i', $templateHtml, $headerMatch) === 1) {
+            $templateSettings['header_html'] = trim((string) ($headerMatch[1] ?? ''));
+        }
+        if (trim((string) ($templateSettings['footer_html'] ?? '')) === ''
+            && preg_match('/<htmlpagefooter\b[^>]*>([\s\S]*?)<\/htmlpagefooter>/i', $templateHtml, $footerMatch) === 1) {
+            $templateSettings['footer_html'] = trim((string) ($footerMatch[1] ?? ''));
+        }
+
         $templateCss = trim((string) $templateSettings['template_css']);
         if ($templateCss !== '') {
             $templateHtml = '<style>' . $templateCss . '</style>' . $templateHtml;
