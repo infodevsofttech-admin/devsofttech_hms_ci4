@@ -5562,7 +5562,9 @@ class Ipd_discharge extends BaseController
         }
 
         $file = WRITEPATH . 'debug' . DIRECTORY_SEPARATOR . 'discharge_mpdf_input_' . $ipdId . '_' . $templateId . '.html';
-        if (! is_file($file) && (int) ($this->request->getGet('build') ?? 0) === 1) {
+        if ((int) ($this->request->getGet('build') ?? 0) === 1) {
+            @unlink($file);
+            @unlink(WRITEPATH . 'debug' . DIRECTORY_SEPARATOR . 'discharge_mpdf_runtime_' . $ipdId . '_' . $templateId . '.json');
             $previousGet = $_GET;
             $_GET['tpl'] = $templateId;
             $_GET['refresh'] = 1;
