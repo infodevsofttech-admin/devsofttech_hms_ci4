@@ -226,6 +226,29 @@
         const el = document.getElementById('abdmOpdRegisterModal');
         return !!(el && el.classList.contains('show'));
     }
+    function executeInjectedScripts(containerId) {
+        const container = document.getElementById(containerId);
+        if (!container) {
+            return;
+        }
+
+        const scripts = container.querySelectorAll('script');
+        scripts.forEach(function(oldScript) {
+            const newScript = document.createElement('script');
+            for (let i = 0; i < oldScript.attributes.length; i++) {
+                const attr = oldScript.attributes[i];
+                newScript.setAttribute(attr.name, attr.value);
+            }
+            if (oldScript.src) {
+                newScript.src = oldScript.src;
+            } else {
+                newScript.textContent = oldScript.textContent || oldScript.innerText || '';
+            }
+            document.head.appendChild(newScript);
+            oldScript.remove();
+        });
+    }
+
     function loadOpdModalContent(url, method = 'GET', data = null) {
         const targetUrl = normalizeOpdUrl(url);
         opdModalCurrentUrl = targetUrl;
@@ -246,6 +269,7 @@
             }
         }).done(function (html) {
             $('#abdmOpdRegisterBody').html(html);
+            executeInjectedScripts('abdmOpdRegisterBody');
         }).fail(function (jqXHR) {
             const msg = jqXHR && jqXHR.status ? ('HTTP ' + jqXHR.status) : 'Failed to load OPD form';
             document.getElementById('abdmOpdRegisterBody').innerHTML = '<div class="alert alert-danger small mb-0">' + esc(msg) + '</div>';
@@ -291,7 +315,22 @@
 
         $(document).on('click', '#abdmOpdRegisterBody a[href]', function (e) {
             const href = $(this).attr('href') || '';
-            if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) {
+            if (!href || href.startsWith('#')) {
+                return;
+            }
+            if (href.startsWith('javascript:')) {
+                e.preventDefault();
+                try {
+                    const scriptBody = href.replace(/^javascript\s*:/i, '').trim();
+                    if (scriptBody) {
+                        new Function(scriptBody)();
+                    }
+                } catch (err) {
+                    console.warn('Unable to execute javascript href in modal', err);
+                }
+                return;
+            }
+            if (href.startsWith('mailto:') || href.startsWith('tel:')) {
                 return;
             }
             const normalizedHref = normalizeOpdUrl(href);
@@ -516,7 +555,7 @@
                             <div class="text-muted">DOB: ${esc(m.dob || '—')} | Gender: ${genderLabel(m.gender)} | Phone: ${esc(m.mphone1 || '—')}</div>
                             <div class="text-muted">ABHA: ${esc(m.patient_abha || '—')} | Aadhaar: ${esc(m.patient_aadhaar || '—')}</div>
                             <div class="text-muted fst-italic">Matched by: ${esc(reasons || 'Data match')}</div>
-                            <button class="btn btn-sm btn-outline-primary mt-2" onclick="abdmQResolveExisting(${Number(t.id) || 0}, ${Number(m.id) || 0}, '${payloadEncoded}')">Link to This Patient</button>
+                            <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="abdmQResolveExisting(${Number(t.id) || 0}, ${Number(m.id) || 0}, '${payloadEncoded}')">Link to This Patient</button>
                         </div>
                     </div>`;
                 }).join('');
@@ -525,7 +564,7 @@
                     <div class="card-body py-2 px-3 small">
                         <div class="fw-bold text-secondary"><i class="bi bi-person-plus me-1"></i>None of the above — Register as New Patient</div>
                         <div class="text-muted">This ABHA does not belong to any listed record. A new HMS patient will be created.</div>
-                        <button class="btn btn-sm btn-success mt-2" onclick="abdmQCreateNewPatient(${Number(t.id) || 0}, '${payloadEncoded}')">Create New Patient</button>
+                        <button type="button" class="btn btn-sm btn-success mt-2" onclick="abdmQCreateNewPatient(${Number(t.id) || 0}, '${payloadEncoded}')">Create New Patient</button>
                     </div>
                 </div>`;
 
@@ -534,8 +573,8 @@
                         Possible matching records found in HMS. Select the correct patient to link, or register as new.
                     </div>
                     ${cards}${createNewCard}
-                    <a href="${BASE}billing/patient" class="btn btn-sm btn-outline-secondary w-100 mt-1" target="_blank">Open Manual Patient Registration</a>
-                    <button class="btn btn-sm btn-outline-secondary w-100 mt-1" data-bs-dismiss="modal">Close</button>`;
+                    <button type="button" class="btn btn-sm btn-outline-secondary w-100 mt-1" onclick="window.open('${BASE}billing/patient', '_blank');">Open Manual Patient Registration</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary w-100 mt-1" data-bs-dismiss="modal">Close</button>`;
             } else {
                 abdmQCreateNewPatient(t.id, payloadEncoded, true);
             }
@@ -698,9 +737,9 @@
                 </div>
             </div>
             <div class="small text-muted mt-2">Profile picture upload is supported after creation from Edit Profile.</div>
-            <button class="btn btn-sm btn-success w-100 mt-3" onclick="abdmQSubmitCreateNewPatient(${Number(tokenId) || 0})">Create Patient Now</button>
-            <a href="${BASE}billing/patient" class="btn btn-sm btn-outline-secondary w-100 mt-2" target="_blank">Open Manual Patient Registration (/billing/patient)</a>
-            <button class="btn btn-sm btn-outline-secondary w-100 mt-2" data-bs-dismiss="modal">Close</button>`;
+            <button type="button" class="btn btn-sm btn-success w-100 mt-3" onclick="abdmQSubmitCreateNewPatient(${Number(tokenId) || 0})">Create Patient Now</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary w-100 mt-2" onclick="window.open('${BASE}billing/patient', '_blank');">Open Manual Patient Registration (/billing/patient)</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary w-100 mt-2" data-bs-dismiss="modal">Close</button>`;
     }
 
     function handleProcessResult(r) {
@@ -714,15 +753,15 @@
                     <div class="text-muted">HMS ID: <strong>${esc(r.p_code || '—')}</strong></div>
                     ${r.saved_data ? `<div class="mt-2 text-muted">Saved: ${esc([r.saved_data.relation, r.saved_data.email, r.saved_data.address].filter(Boolean).join(' | ') || 'Basic fields')}</div>` : ''}
                 </div></div>
-                <button class="btn btn-sm btn-primary w-100" onclick="abdmQOpenOpdInModal('${esc(r.redirect_url || '')}')">Open OPD Registration →</button>
-                <a href="${r.profile_url || ''}" class="btn btn-sm btn-outline-primary w-100 mt-2">Open Patient Profile</a>
-                <a href="${r.edit_url || ''}" class="btn btn-sm btn-outline-primary w-100 mt-2">Edit Person Profile (for photo/details)</a>
-                <button class="btn btn-sm btn-outline-secondary w-100 mt-2" data-bs-dismiss="modal" onclick="loadQueue()">Back to Queue</button>`;
+                <button type="button" class="btn btn-sm btn-primary w-100" onclick="abdmQOpenOpdInModal('${esc(r.redirect_url || '')}')">Open OPD Registration →</button>
+                <button type="button" class="btn btn-sm btn-outline-primary w-100 mt-2" onclick="if (typeof load_form === 'function') { load_form('${esc(r.profile_url || '')}', 'Patient Profile'); } else { window.location.href = '${esc(r.profile_url || '')}'; }">Open Patient Profile</button>
+                <button type="button" class="btn btn-sm btn-outline-primary w-100 mt-2" onclick="if (typeof load_form === 'function') { load_form('${esc(r.edit_url || '')}', 'Edit Patient Profile'); } else { window.location.href = '${esc(r.edit_url || '')}'; }">Edit Person Profile (for photo/details)</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary w-100 mt-2" data-bs-dismiss="modal" onclick="loadQueue()">Back to Queue</button>`;
             loadQueue();
             return;
         }
         body.innerHTML = `<div class="alert alert-danger small">${esc(r.error_text ?? r.message ?? 'Failed to process token')}</div>
-            <button class="btn btn-sm btn-secondary w-100" data-bs-dismiss="modal">Close</button>`;
+            <button type="button" class="btn btn-sm btn-secondary w-100" data-bs-dismiss="modal">Close</button>`;
     }
 
     document.getElementById('btnAddTokenSubmit').addEventListener('click', function () {
