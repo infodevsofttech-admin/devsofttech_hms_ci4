@@ -225,7 +225,19 @@ $placeholders = [
     if (typeof CKEDITOR !== 'undefined') {
         editorIds.forEach(function (id) {
             if (!CKEDITOR.instances[id]) {
-                CKEDITOR.replace(id, {height: id === 'tpl_html' ? 280 : 140});
+                CKEDITOR.replace(id, {
+                    height: id === 'tpl_html' ? 280 : 140,
+                    extraPlugins: 'justify',
+                    toolbar: [
+                        {name: 'clipboard', items: ['Cut', 'Copy', 'Paste', 'PasteText', 'Undo', 'Redo']},
+                        {name: 'basicstyles', items: ['Bold', 'Italic', 'Underline', 'Strike', 'RemoveFormat']},
+                        {name: 'paragraph', items: ['NumberedList', 'BulletedList', 'Outdent', 'Indent', 'JustifyLeft', 'JustifyCenter', 'JustifyRight', 'JustifyBlock']},
+                        {name: 'links', items: ['Link', 'Unlink']},
+                        {name: 'insert', items: ['Image', 'Table']},
+                        {name: 'styles', items: ['Styles', 'Format']},
+                        {name: 'tools', items: ['Source', 'Maximize']}
+                    ]
+                });
             }
         });
     }
