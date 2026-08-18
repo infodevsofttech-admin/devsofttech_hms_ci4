@@ -7363,43 +7363,49 @@ class Ipd_discharge extends BaseController
             $mpdf->SetTitle('Discharge Summary - ' . ($patientName !== '' ? $patientName : ('IPD ' . $ipdId)));
             $mpdf->SetAuthor('Atria HMS');
 
-            // Build mPDF-style @page block + named header/footer wrappers (same as OPD template renderer).
-            $marginTopCm    = (float) ($templateSettings['page_margin_top_cm']    ?? 0.8);
-            $marginBottomCm = (float) ($templateSettings['page_margin_bottom_cm'] ?? 0.8);
-            $marginLeftCm   = (float) ($templateSettings['page_margin_left_cm']   ?? 0.8);
-            $marginRightCm  = (float) ($templateSettings['page_margin_right_cm']  ?? 0.8);
-            $marginHeaderCm = (float) ($templateSettings['margin_header_cm']      ?? 0.5);
-            $marginFooterCm = (float) ($templateSettings['margin_footer_cm']      ?? 0.5);
+            // Build mPDF fragment following the exact structure from the mPDF docs:
+            // <style> (with @page if CSS contains it) → named header/footer → content.
+            $templateCss    = trim((string) ($templateSettings['template_css'] ?? ''));
+            $useHeader      = $withHeader && $headerHtml !== '';
+            $useFooter      = $footerHtml !== '';
 
-            $useHeader = $withHeader && $headerHtml !== '';
-            $useFooter = $footerHtml !== '';
+            // Auto-inject header/footer name bindings into @page if CSS has one but misses the binding.
+            if ($templateCss !== '') {
+                if ($useHeader && !preg_match('/header\s*:\s*html_myHeader/i', $templateCss)) {
+                    $templateCss = preg_replace_callback('/@page\s*\{/', function ($m) {
+                        return $m[0] . "\n    header: html_myHeader;";
+                    }, $templateCss, 1) ?? $templateCss;
+                }
+                if ($useFooter && !preg_match('/footer\s*:\s*html_myFooter/i', $templateCss)) {
+                    $templateCss = preg_replace_callback('/@page\s*\{/', function ($m) {
+                        return $m[0] . "\n    footer: html_myFooter;";
+                    }, $templateCss, 1) ?? $templateCss;
+                }
+            } else {
+                // No CSS: build a minimal @page block from the margin form fields.
+                $marginTopCm    = (float) ($templateSettings['page_margin_top_cm']    ?? 0.8);
+                $marginBottomCm = (float) ($templateSettings['page_margin_bottom_cm'] ?? 0.8);
+                $marginHeaderCm = (float) ($templateSettings['margin_header_cm']      ?? 0.5);
+                $marginFooterCm = (float) ($templateSettings['margin_footer_cm']      ?? 0.5);
+                $templateCss    = '@page {'
+                    . "\n    margin-top: {$marginTopCm}cm;"
+                    . "\n    margin-bottom: {$marginBottomCm}cm;"
+                    . "\n    margin-header: {$marginHeaderCm}cm;"
+                    . "\n    margin-footer: {$marginFooterCm}cm;"
+                    . ($useHeader ? "\n    header: html_myHeader;" : '')
+                    . ($useFooter ? "\n    footer: html_myFooter;" : '')
+                    . "\n}";
+            }
 
-            $pageBlock = '<style>@page {' . "\n"
-                . 'margin-top: ' . $marginTopCm . 'cm;' . "\n"
-                . 'margin-bottom: ' . $marginBottomCm . 'cm;' . "\n"
-                . 'margin-left: ' . $marginLeftCm . 'cm;' . "\n"
-                . 'margin-right: ' . $marginRightCm . 'cm;' . "\n"
-                . 'margin-header: ' . $marginHeaderCm . 'cm;' . "\n"
-                . 'margin-footer: ' . $marginFooterCm . 'cm;' . "\n"
-                . ($useHeader ? 'header: html_myHeader;' . "\n" : '')
-                . ($useFooter ? 'footer: html_myFooter;' . "\n" : '')
-                . '}</style>' . "\n";
-
-            $namedBlocks = '';
+            // Assemble exactly as shown in mPDF documentation: CSS → named blocks → content.
+            $pdfHtml = '<style>' . "\n" . $templateCss . "\n" . '</style>' . "\n";
             if ($useHeader) {
-                $namedBlocks .= '<htmlpageheader name="myHeader">' . "\n" . $headerHtml . "\n" . '</htmlpageheader>' . "\n";
+                $pdfHtml .= '<htmlpageheader name="myHeader">' . "\n" . $headerHtml . "\n" . '</htmlpageheader>' . "\n";
             }
             if ($useFooter) {
-                $namedBlocks .= '<htmlpagefooter name="myFooter">' . "\n" . $footerHtml . "\n" . '</htmlpagefooter>' . "\n";
+                $pdfHtml .= '<htmlpagefooter name="myFooter">' . "\n" . $footerHtml . "\n" . '</htmlpagefooter>' . "\n";
             }
-
-            // Single WriteHTML call: mPDF does not require full HTML document structure.
-            $templateCss = trim((string) ($templateSettings['template_css'] ?? ''));
-
-            $pdfHtml = $pageBlock
-                . $namedBlocks
-                . ($templateCss !== '' ? '<style>' . $templateCss . '</style>' . "\n" : '')
-                . $renderedHtml;
+            $pdfHtml .= $renderedHtml;
             $pdfHtml = mpdf_normalize_font_weight_css($pdfHtml);
             $pdfBinary = $this->runMpdfWithTolerantWarnings(static function () use ($mpdf, $pdfHtml, $fileName): string {
                 $mpdf->WriteHTML($pdfHtml);
