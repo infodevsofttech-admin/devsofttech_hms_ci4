@@ -5562,8 +5562,16 @@ class Ipd_discharge extends BaseController
         }
 
         $file = WRITEPATH . 'debug' . DIRECTORY_SEPARATOR . 'discharge_mpdf_input_' . $ipdId . '_' . $templateId . '.html';
+        if (! is_file($file) && (int) ($this->request->getGet('build') ?? 0) === 1) {
+            $previousGet = $_GET;
+            $_GET['tpl'] = $templateId;
+            $_GET['refresh'] = 1;
+            unset($_GET['build']);
+            $this->show_discharge($ipdId, 1);
+            $_GET = $previousGet;
+        }
         if (! is_file($file)) {
-            return $this->response->setStatusCode(404)->setBody('Generate the PDF first, then reopen this debug view.');
+            return $this->response->setStatusCode(404)->setBody('Generate the PDF first, then reopen this debug view with ?build=1.');
         }
 
         return view('ipd_discharge/mpdf_raw_html', [

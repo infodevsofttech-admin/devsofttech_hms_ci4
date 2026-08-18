@@ -271,7 +271,7 @@ $placeholders = [
     document.getElementById('btn_mpdf_input').addEventListener('click', function () {
         var ipdId = parseInt(val('preview_ipd_id'), 10);
         if (!ipdId || !editId) { alert('Save the template and enter IPD ID first.'); return; }
-        window.open('<?= base_url('Ipd_discharge/debug_mpdf_input') ?>/' + ipdId + '/' + editId, '_blank');
+        window.open('<?= base_url('Ipd_discharge/debug_mpdf_input') ?>/' + ipdId + '/' + editId + '?build=1', '_blank');
     });
 
     /* Placeholder click-to-copy */
