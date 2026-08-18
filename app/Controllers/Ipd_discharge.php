@@ -7250,44 +7250,60 @@ class Ipd_discharge extends BaseController
         $templateTokenVars = $this->buildDischargeTemplateTokenVars($panelData, $content);
         $templateTokenVars['TEMPLATE_NAME'] = esc($templateName);
 
-        // DEBUG MODE: Output HTML directly if requested via ?html=1
+        // DEBUG MODE: show the exact HTML string WriteHTML() receives.
         $htmlDebugMode = (int) ($this->request->getGet('html') ?? 0) === 1;
         if ($htmlDebugMode) {
             $dbgHeaderHtml = '';
             if ($withHeader) {
-                $dbgConfiguredHeader = $this->applyDischargeTemplateTokens(
-                    trim((string) ($templateSettings['header_html'] ?? '')),
-                    $templateTokenVars
+                $dbgHeader = $this->applyDischargeTemplateTokens(
+                    trim((string) ($templateSettings['header_html'] ?? '')), $templateTokenVars
                 );
-                $dbgHeaderHtml = $this->sanitizeDischargePdfHtml($dbgConfiguredHeader, false);
+                $dbgHeaderHtml = $this->sanitizeDischargePdfHtml($dbgHeader, false);
             }
             $dbgFooterHtml = $this->sanitizeDischargePdfHtml(
-                $this->applyDischargeTemplateTokens(trim((string) ($templateSettings['footer_html'] ?? '')), $templateTokenVars),
-                false
+                $this->applyDischargeTemplateTokens(
+                    trim((string) ($templateSettings['footer_html'] ?? '')), $templateTokenVars
+                ), false
             );
-            $dbgPrefixHtml = '';
-            if ($withHeader && $dbgHeaderHtml !== '') {
-                $dbgPrefixHtml .= '<htmlpageheader name="myHeader">' . "\n" . $dbgHeaderHtml . "\n" . '</htmlpageheader>' . "\n";
+            $dbgHeaderCm = (float) ($templateSettings['margin_header_cm'] ?? 0.5);
+            $dbgFooterCm = (float) ($templateSettings['margin_footer_cm'] ?? 0.5);
+            $dbgPageBlock = '<style>@page {' . "\n"
+                . 'margin-top: ' . (float) ($templateSettings['page_margin_top_cm'] ?? 0.8) . 'cm;' . "\n"
+                . 'margin-bottom: ' . (float) ($templateSettings['page_margin_bottom_cm'] ?? 0.8) . 'cm;' . "\n"
+                . 'margin-left: ' . (float) ($templateSettings['page_margin_left_cm'] ?? 0.8) . 'cm;' . "\n"
+                . 'margin-right: ' . (float) ($templateSettings['page_margin_right_cm'] ?? 0.8) . 'cm;' . "\n"
+                . 'margin-header: ' . $dbgHeaderCm . 'cm;' . "\n"
+                . 'margin-footer: ' . $dbgFooterCm . 'cm;' . "\n"
+                . ($dbgHeaderHtml !== '' ? 'header: html_myHeader;' . "\n" : '')
+                . ($dbgFooterHtml !== '' ? 'footer: html_myFooter;' . "\n" : '')
+                . '}</style>' . "\n";
+            $dbgNamedBlocks = '';
+            if ($dbgHeaderHtml !== '') {
+                $dbgNamedBlocks .= '<htmlpageheader name="myHeader">' . "\n" . $dbgHeaderHtml . "\n" . '</htmlpageheader>' . "\n";
             }
             if ($dbgFooterHtml !== '') {
-                $dbgPrefixHtml .= '<htmlpagefooter name="myFooter">' . "\n" . $dbgFooterHtml . "\n" . '</htmlpagefooter>' . "\n";
+                $dbgNamedBlocks .= '<htmlpagefooter name="myFooter">' . "\n" . $dbgFooterHtml . "\n" . '</htmlpagefooter>' . "\n";
             }
-            $pdfHtml = $this->buildDischargePdfHtml($panelData, $renderedHtml, $withHeader, $templateName);
-            $fullDebugSource = ($dbgPrefixHtml !== '' ? $dbgPrefixHtml . "\n" : '') . $pdfHtml;
-            
+            $dbgCss = trim((string) ($templateSettings['template_css'] ?? ''));
+            $dbgBody = $this->buildDischargePdfHtml($panelData, $renderedHtml, $withHeader, $templateName);
+            $fullHtml = $dbgPageBlock . $dbgNamedBlocks
+                . ($dbgCss !== '' ? '<style>' . $dbgCss . '</style>' . "\n" : '')
+                . $dbgBody;
+
             return $this->response
                 ->setContentType('text/html')
                 ->setBody(
                     '<!DOCTYPE html><html><head><meta charset="utf-8">' .
-                    '<title>Discharge HTML Debug - IPD ' . $ipdId . '</title>' .
-                    '<style>body{font-family:Arial,sans-serif;margin:20px;background:#f5f5f5;} ' .
-                    'pre{background:#fff;padding:15px;border:1px solid #ddd;white-space:pre-wrap;word-break:break-all;} ' .
-                    '.info{background:#fff;padding:15px;border:2px solid #16a34a;margin-bottom:16px;}</style>' .
-                    '</head><body>' .
-                    '<div class="info"><strong>IPD:</strong> ' . $ipdId . ' | <strong>Template:</strong> ' . esc($templateName) .
-                    ' | <strong>header_html raw:</strong> ' . esc((string) ($templateSettings['header_html'] ?? '(empty)')) .
-                    ' | <strong>sanitized header:</strong> ' . esc($dbgHeaderHtml) . '</div>' .
-                    '<pre>' . htmlspecialchars($fullDebugSource, ENT_QUOTES, 'UTF-8') . '</pre>' .
+                    '<title>mPDF Debug HTML – IPD ' . $ipdId . '</title>' .
+                    '<style>body{font-family:monospace;margin:20px;background:#f5f5f5;}' .
+                    'pre{background:#fff;padding:16px;border:1px solid #d1d5db;white-space:pre-wrap;word-break:break-word;}' .
+                    '.info{background:#fff;padding:12px;border:2px solid #2563eb;margin-bottom:12px;font-family:sans-serif;}' .
+                    '</style></head><body>' .
+                    '<div class="info"><strong>IPD:</strong> ' . $ipdId .
+                    ' | <strong>Template:</strong> ' . esc($templateName) .
+                    ' | <strong>header_html:</strong> ' . esc((string) ($templateSettings['header_html'] ?? '(empty)')) .
+                    ' | <strong>With Header:</strong> ' . ($withHeader ? 'Yes' : 'No') . '</div>' .
+                    '<pre>' . htmlspecialchars($fullHtml, ENT_QUOTES, 'UTF-8') . '</pre>' .
                     '</body></html>'
                 );
         }

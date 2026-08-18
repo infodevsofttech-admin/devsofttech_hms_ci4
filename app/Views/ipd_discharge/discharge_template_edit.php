@@ -156,6 +156,7 @@ $placeholders = [
                             <input type="number" min="1" class="form-control form-control-sm d-inline-block" id="preview_ipd_id" style="width:100px;" placeholder="IPD ID">
                             <button type="button" class="btn btn-outline-primary btn-sm" id="btn_preview">Preview</button>
                             <button type="button" class="btn btn-outline-danger btn-sm" id="btn_pdf">PDF</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_debug_html" title="Show raw HTML sent to mPDF">Debug HTML</button>
                         </div>
                     </div>
                 </div>
@@ -258,6 +259,12 @@ $placeholders = [
         var ipdId = parseInt(val('preview_ipd_id'), 10);
         if (!ipdId) { alert('Enter IPD ID for PDF.'); return; }
         window.open('<?= base_url('Ipd_discharge/show_discharge') ?>/' + ipdId + '/1' + (editId > 0 ? '?tpl=' + editId : ''), '_blank');
+    });
+
+    document.getElementById('btn_debug_html').addEventListener('click', function () {
+        var ipdId = parseInt(val('preview_ipd_id'), 10);
+        if (!ipdId) { alert('Enter IPD ID to see mPDF debug HTML.'); return; }
+        window.open('<?= base_url('Ipd_discharge/show_discharge') ?>/' + ipdId + '/1?html=1' + (editId > 0 ? '&tpl=' + editId : ''), '_blank');
     });
 
     /* Placeholder click-to-copy */
