@@ -92,47 +92,44 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
         $patientRef = 'urn:uuid:patient-' . $patientId;
         $encounterRef = is_array($encounter) ? 'urn:uuid:' . (string) ($encounter['id'] ?? '') : null;
 
-        foreach ((array) ($source['conditions'] ?? []) as $idx => $cond) {
-            $text = trim((string) ($cond['text'] ?? ''));
-            if ($text === '') {
-                continue;
-            }
+        $conditionGroups = [
+            ['items' => (array) ($source['chief_complaints'] ?? []), 'prefix' => 'discharge-chief-complaint-'],
+            ['items' => (array) ($source['diagnoses'] ?? $source['conditions'] ?? []), 'prefix' => 'discharge-diagnosis-'],
+        ];
+        foreach ($conditionGroups as $group) {
+            foreach ($group['items'] as $idx => $cond) {
+                $text = trim((string) ($cond['text'] ?? ''));
+                if ($text === '') {
+                    continue;
+                }
 
-            $resolved = $this->codingResolver->resolveSnomedForDiagnosisOrFinding((string) ($cond['code'] ?? ''), $text);
-            $coding = $this->withoutPlaceholderCoding((array) ($resolved['coding'] ?? []));
-            $builder->addCondition([
-                'resourceType' => 'Condition',
-                'id' => 'discharge-condition-' . $recordId . '-' . $idx,
-                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition']],
-                'clinicalStatus' => [
-                    'coding' => [[
+                $resolved = $this->codingResolver->resolveSnomedForDiagnosisOrFinding((string) ($cond['code'] ?? ''), $text);
+                $coding = $this->withoutPlaceholderCoding((array) ($resolved['coding'] ?? []));
+                $builder->addCondition([
+                    'resourceType' => 'Condition',
+                    'id' => $group['prefix'] . $recordId . '-' . $idx,
+                    'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition']],
+                    'clinicalStatus' => ['coding' => [[
                         'system' => 'http://terminology.hl7.org/CodeSystem/condition-clinical',
                         'code' => 'active',
                         'display' => 'Active',
-                    ]],
-                ],
-                'verificationStatus' => [
-                    'coding' => [[
+                    ]]],
+                    'verificationStatus' => ['coding' => [[
                         'system' => 'http://terminology.hl7.org/CodeSystem/condition-ver-status',
                         'code' => 'confirmed',
                         'display' => 'Confirmed',
-                    ]],
-                ],
-                'category' => [[
-                    'coding' => [[
+                    ]]],
+                    'category' => [['coding' => [[
                         'system' => 'http://terminology.hl7.org/CodeSystem/condition-category',
                         'code' => 'encounter-diagnosis',
                         'display' => 'Encounter Diagnosis',
-                    ]],
-                ]],
-                'code' => [
-                    'coding' => $coding,
-                    'text' => $text,
-                ],
-                'subject' => ['reference' => $patientRef],
-                'encounter' => $encounterRef ? ['reference' => $encounterRef] : null,
-                'recordedDate' => (string) ($cond['recorded_at'] ?? $timestamp),
-            ]);
+                    ]]]],
+                    'code' => ['coding' => $coding, 'text' => $text],
+                    'subject' => ['reference' => $patientRef],
+                    'encounter' => $encounterRef ? ['reference' => $encounterRef] : null,
+                    'recordedDate' => (string) ($cond['recorded_at'] ?? $timestamp),
+                ]);
+            }
         }
 
         foreach ((array) ($source['procedures'] ?? []) as $idx => $proc) {
@@ -378,7 +375,8 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
         }
 
         $sectionDefinitions = [
-            ['title' => 'Medical history', 'code' => '1003642006', 'display' => 'Past medical history section', 'prefix' => 'discharge-condition-', 'items' => (array) ($source['conditions'] ?? [])],
+            ['title' => 'Chief complaints', 'code' => '422843007', 'display' => 'Chief complaint section', 'prefix' => 'discharge-chief-complaint-', 'items' => (array) ($source['chief_complaints'] ?? []), 'narrative' => trim((string) ($source['chief_complaint_narrative'] ?? ''))],
+            ['title' => 'Problems and Diagnoses', 'code' => '1003642006', 'display' => 'Past medical history section', 'prefix' => 'discharge-diagnosis-', 'items' => (array) ($source['diagnoses'] ?? $source['conditions'] ?? []), 'narrative' => trim((string) ($source['diagnosis_narrative'] ?? ''))],
             ['title' => 'Procedures', 'code' => '1003640003', 'display' => 'History of past procedure section', 'prefix' => 'discharge-procedure-', 'items' => (array) ($source['procedures'] ?? [])],
             ['title' => 'Medications', 'code' => '1003606003', 'display' => 'Medication history section', 'prefix' => 'discharge-medication-', 'items' => (array) ($source['medications'] ?? [])],
             ['title' => 'Physical examination', 'code' => '425044008', 'display' => 'Physical exam section', 'prefix' => 'discharge-observation-', 'items' => (array) ($source['observations'] ?? [])],
@@ -398,8 +396,12 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                     $narrativeParts[] = $narrative;
                 }
             }
-            if ($references === []) {
+            $sectionNarrative = trim((string) ($definition['narrative'] ?? ''));
+            if ($references === [] && $sectionNarrative === '') {
                 continue;
+            }
+            if ($sectionNarrative !== '') {
+                array_unshift($narrativeParts, $sectionNarrative);
             }
             $sections[] = [
                 'title' => $definition['title'],

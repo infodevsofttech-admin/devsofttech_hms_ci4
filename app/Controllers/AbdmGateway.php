@@ -2662,25 +2662,28 @@ class AbdmGateway extends BaseController
             ? date('Y-m-d', strtotime($dischargeRaw))
             : ($admissionRaw !== '' ? date('Y-m-d', strtotime($admissionRaw)) : date('Y-m-d'));
 
-        $conditions = [];
+        $diagnoses = [];
         foreach ($this->ipdRows('ipd_discharge_diagnosis', ['comp_report'], $ipdId) as $row) {
             $text = trim((string) ($row['comp_report'] ?? ''));
             if ($text !== '') {
-                $conditions[] = ['text' => $text, 'code' => ''];
+                $diagnoses[] = ['text' => $text, 'code' => ''];
             }
         }
+        $chiefComplaints = [];
         foreach ($this->ipdRows('ipd_discharge_complaint', ['comp_report'], $ipdId) as $row) {
             $text = trim((string) ($row['comp_report'] ?? ''));
             if ($text !== '') {
-                $conditions[] = ['text' => $text, 'code' => ''];
+                $chiefComplaints[] = ['text' => $text, 'code' => ''];
             }
         }
-        if (empty($conditions)) {
+        if (empty($diagnoses)) {
             $problem = trim((string) ($ipdRow['problem'] ?? ''));
             if ($problem !== '') {
-                $conditions[] = ['text' => $problem, 'code' => ''];
+                $diagnoses[] = ['text' => $problem, 'code' => ''];
             }
         }
+        $chiefComplaintNarrative = trim((string) (($this->ipdRows('ipd_discharge_complaint_remark', ['comp_remark'], $ipdId)[0]['comp_remark'] ?? '')));
+        $diagnosisNarrative = trim((string) (($this->ipdRows('ipd_discharge_diagnosis_remark', ['comp_remark'], $ipdId)[0]['comp_remark'] ?? '')));
 
         $procedures = [];
         foreach ($this->ipdRows('ipd_discharge_surgery', ['surgery_name', 'surgery_date'], $ipdId) as $row) {
@@ -2809,11 +2812,11 @@ class AbdmGateway extends BaseController
                 ];
             }
 
-            $dietAdvice = trim((string) ($instructionRow['comp_remark'] ?? ''));
-            if ($dietAdvice !== '') {
+            $dischargeAdvice = trim((string) ($instructionRow['comp_remark'] ?? ''));
+            if ($dischargeAdvice !== '') {
                 $carePlans[] = [
-                    'title' => 'Dietary Advice',
-                    'description' => $dietAdvice,
+                    'title' => 'Discharge Advice',
+                    'description' => $dischargeAdvice,
                     'created_at' => $this->toIsoDateTimeOrNow($dischargeRaw),
                 ];
             }
@@ -2884,7 +2887,10 @@ class AbdmGateway extends BaseController
                 'start' => $this->toIsoDateTimeOrNow($admissionRaw),
                 'end' => $this->toIsoDateTimeOrNow($dischargeRaw),
             ],
-            'conditions' => $conditions,
+            'chief_complaints' => $chiefComplaints,
+            'chief_complaint_narrative' => $chiefComplaintNarrative,
+            'diagnoses' => $diagnoses,
+            'diagnosis_narrative' => $diagnosisNarrative,
             'procedures' => $procedures,
             'medications' => $medications,
             'observations' => $observations,

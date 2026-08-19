@@ -117,7 +117,8 @@ final class FhirGeneratorsTest extends CIUnitTestCase
             'encounter' => ['id' => 'A26080000004', 'class_code' => 'IMP', 'start' => '2026-08-14T09:00:00+05:30', 'end' => '2026-08-15T12:00:00+05:30'],
             'doctor' => ['id' => 9, 'name' => 'Test Doctor'],
             'organization' => ['id' => 'H1', 'name' => 'Test Hospital'],
-            'conditions' => [['text' => 'Viral fever']],
+            'chief_complaints' => [['text' => 'Fever and body ache']],
+            'diagnoses' => [['text' => 'Viral fever']],
             'procedures' => [['text' => 'Supportive care']],
             'medications' => [['name' => 'Paracetamol', 'dosage' => 'As directed']],
             'investigations' => [['text' => 'Haemoglobin: 11', 'loinc_code' => '718-7']],
@@ -160,7 +161,7 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $this->assertSame('373942005', $documents[0]['resource']['type']['coding'][0]['code'] ?? null);
 
         $sectionCodes = array_column(array_map(static fn (array $section): array => (array) ($section['code']['coding'][0] ?? []), $composition['section']), 'code');
-        $this->assertSame(['1003642006', '1003640003', '1003606003', '721981007', '734163000', '373942005'], $sectionCodes);
+        $this->assertSame(['422843007', '1003642006', '1003640003', '1003606003', '721981007', '734163000', '373942005'], $sectionCodes);
         $reports = array_values(array_filter($bundle['entry'], static fn (array $entry): bool => ($entry['resource']['resourceType'] ?? '') === 'DiagnosticReport'));
         $this->assertCount(1, $reports);
         $this->assertContains('https://nrces.in/ndhm/fhir/r4/StructureDefinition/DiagnosticReportLab', $reports[0]['resource']['meta']['profile'] ?? []);
