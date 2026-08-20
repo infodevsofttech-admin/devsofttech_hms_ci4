@@ -96,7 +96,6 @@ class Report extends BaseController
             ->select('o.opd_fee_desc, o.opd_fee_amount, o.payment_mode, o.running_opd')
             ->join('patient_master p', 'p.id = o.p_id', 'left')
             ->where("DATE(o.apointment_date) BETWEEN '{$minRange}' AND '{$maxRange}'", null, false)
-            ->where('(o.payment_mode > 0 OR COALESCE(o.running_opd,0)=1)', null, false)
             ->orderBy('o.apointment_date', 'ASC')
             ->orderBy('o.opd_id', 'ASC');
 
