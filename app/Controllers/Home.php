@@ -285,20 +285,13 @@ class Home extends BaseController
             ->from('opd_master o', true)
             ->groupBy('label')->orderBy('total', 'DESC')->get()->getResultArray();
 
-        $referralRows = $this->db->query(
-            "SELECT COALESCE(NULLIF(CONCAT_WS(' ', NULLIF(r.title, ''), NULLIF(r.f_name, '')), ''), NULLIF(x.refer_name, ''), 'Not recorded') label,
-                    COUNT(o.opd_id) total, COUNT(DISTINCT o.p_id) patients
-             FROM opd_master o
-             LEFT JOIN (
-                 SELECT opd_code, MAX(NULLIF(refer_by_id, 0)) refer_id,
-                        MAX(NULLIF(NULLIF(refer_by_other, ''), '0')) refer_name
-                 FROM invoice_master GROUP BY opd_code
-             ) x ON x.opd_code = o.opd_code
-             LEFT JOIN refer_master r ON r.id = x.refer_id
-             WHERE o.apointment_date >= ? AND o.apointment_date < ?
-             GROUP BY label ORDER BY total DESC",
-            [$fromDateTime, $toExclusive]
-        )->getResultArray();
+        $referralRows = $this->db->table('opd_master o')
+            ->select("COALESCE(NULLIF(TRIM(p.referby), ''), 'Not recorded') label", false)
+            ->select('COUNT(o.opd_id) total, COUNT(DISTINCT o.p_id) patients', false)
+            ->join('patient_master p', 'p.id = o.p_id', 'left')
+            ->where('o.apointment_date >=', $fromDateTime)
+            ->where('o.apointment_date <', $toExclusive)
+            ->groupBy('label')->orderBy('total', 'DESC')->get()->getResultArray();
 
         return view('dashboard/opd', compact('fromDate', 'toDate', 'totals', 'doctorRows', 'departmentRows', 'organizationRows', 'referralRows'));
     }
