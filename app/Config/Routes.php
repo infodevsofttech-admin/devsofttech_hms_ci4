@@ -1063,6 +1063,11 @@ $routes->get('Report/ipd_census_report', 'Report::ipd_census_report', ['filter' 
 $routes->get('Report/ipd_census_data/(:segment)/(:segment)/(:segment)/(:segment)', 'Report::ipd_census_data/$1/$2/$3/$4', ['filter' => $reportsIpdCensusFilter]);
 $routes->get('Report/ipd_census_data/(:segment)/(:segment)/(:segment)/(:segment)/(:num)', 'Report::ipd_census_data/$1/$2/$3/$4/$5', ['filter' => $reportsIpdCensusFilter]);
 
+$reportsIpdSurgeryFilter = 'permission:reports.ipd_surgery.view';
+$routes->get('Report/ipd_surgery_report', 'Report::ipd_surgery_report', ['filter' => $reportsIpdSurgeryFilter]);
+$routes->get('Report/ipd_surgery_data/(:segment)/(:segment)/(:segment)', 'Report::ipd_surgery_data/$1/$2/$3', ['filter' => $reportsIpdSurgeryFilter]);
+$routes->get('Report/ipd_surgery_data/(:segment)/(:segment)/(:segment)/(:num)', 'Report::ipd_surgery_data/$1/$2/$3/$4', ['filter' => $reportsIpdSurgeryFilter]);
+
 $routes->get('Report/billing_operations_report', 'Report::billing_operations_report', ['filter' => 'permission:reports.billing_operations.view']);
 $routes->get('Report/billing_operations_report_data/(:segment)/(:segment)', 'Report::billing_operations_report_data/$1/$2', ['filter' => 'permission:reports.billing_operations.view']);
 $routes->get('Report/billing_operations_report_data/(:segment)/(:segment)/(:num)', 'Report::billing_operations_report_data/$1/$2/$3', ['filter' => 'permission:reports.billing_operations.view']);

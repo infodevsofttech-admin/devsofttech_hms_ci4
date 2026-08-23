@@ -11,6 +11,7 @@ class Report extends BaseController
         'operations' => 'reports.billing_operations.view',
         'clinical' => 'diagnosis.report.view',
         'ipd' => 'reports.ipd_census.view',
+        'surgery' => 'reports.ipd_surgery.view',
         'insurance' => 'reports.insurance_credit.view',
         'quality' => 'reports.nabh_audit.view',
         'documents' => 'reports.document_issue.view',
@@ -168,6 +169,110 @@ class Report extends BaseController
 
         if ($output === 1) {
             ExportExcel($content, 'IPD_Census_' . date('YmdHis'));
+            return $this->response->setBody('');
+        }
+
+        return $this->response->setBody($content);
+    }
+
+    public function ipd_surgery_report()
+    {
+        if ($response = $this->requireReportPermission(self::PANEL_PERMISSIONS['surgery'])) {
+            return $response;
+        }
+
+        return view('report/ipd_surgery_report', [
+            'doctors' => $this->db->table('doctor_master')->select('id, p_fname')->where('active', 1)->orderBy('p_fname', 'ASC')->get()->getResult(),
+            'departments' => $this->db->table('hc_department')->select('iId, vName')->orderBy('vName', 'ASC')->get()->getResult(),
+        ]);
+    }
+
+    public function ipd_surgery_data(
+        string $dateRange,
+        string $doctorId = '0',
+        string $departmentId = '0',
+        int $output = 0
+    ) {
+        if ($response = $this->requireReportPermission(self::PANEL_PERMISSIONS['surgery'])) {
+            return $response;
+        }
+
+        [$minRange, $maxRange] = $this->parseDateRangeDateOnly($dateRange);
+        $diagnoses = $this->db->table('ipd_discharge_diagnosis')
+            ->select("ipd_id, GROUP_CONCAT(DISTINCT NULLIF(TRIM(COALESCE(snomed_term, comp_report, comp_remark)), '') ORDER BY id SEPARATOR '; ') AS final_diagnosis", false)
+            ->groupBy('ipd_id')
+            ->getCompiledSelect();
+        $billedProcedures = $this->db->table('invoice_master im')
+            ->select('CONVERT(LOWER(TRIM(ii.item_name)) USING utf8mb4) COLLATE utf8mb4_general_ci AS billed_name', false)
+            ->select('SUM(COALESCE(ii.item_amount, 0)) AS actual_surgery_cost', false)
+            ->join('invoice_item ii', 'ii.inv_master_id = im.id', 'inner')
+            ->where('im.ipd_id >', 0)
+            ->where('im.invoice_status', 1)
+            ->groupBy('im.ipd_id, CONVERT(LOWER(TRIM(ii.item_name)) USING utf8mb4) COLLATE utf8mb4_general_ci')
+            ->getCompiledSelect();
+
+        $builder = $this->db->table('ipd_master i')
+            ->select('i.id AS ipd_id, i.ipd_code, i.register_date, i.reg_time, i.discharge_date, i.discharge_time')
+            ->select('p.p_code AS mr_no, p.referby AS camp_code, p.p_fname AS patient_name, p.age, p.gender')
+            ->select("CONCAT_WS(', ', NULLIF(TRIM(COALESCE(p.add1, i.add1)), ''), NULLIF(TRIM(COALESCE(p.add2, i.add2)), ''), NULLIF(TRIM(COALESCE(p.city, i.city)), ''), NULLIF(TRIM(COALESCE(p.district, '')), ''), NULLIF(TRIM(COALESCE(p.state, i.state)), ''), NULLIF(TRIM(p.zip), '')) AS address", false)
+            ->select("CONCAT_WS(', ', NULLIF(IF(COALESCE(p.is_hypertesion, 0) = 1, 'Hypertension', ''), ''), NULLIF(IF(COALESCE(p.is_niddm, 0) = 1, 'Diabetes', ''), ''), NULLIF(IF(COALESCE(p.is_smoking, 0) = 1, 'Smoking', ''), ''), NULLIF(IF(COALESCE(p.is_alcohol, 0) = 1, 'Alcohol use', ''), ''), NULLIF(TRIM(p.Others), '')) AS systemic_history", false)
+            ->select("COALESCE(NULLIF(sds.surgery_date, '0000-00-00'), NULLIF(i.surgery_date, '0000-00-00')) AS surgery_date", false)
+            ->select("COALESCE(NULLIF(sds.surgery_name, ''), NULLIF(i.surgery_name, ''), NULLIF(smaster.term_name, '')) AS surgery_name", false)
+            ->select('smaster.term_code AS surgery_code')
+            ->select('sds.surgery_remark')
+            ->select("COALESCE(NULLIF(dept.vName, ''), 'Unassigned') AS specialty", false)
+            ->select("COALESCE(NULLIF(surgeon.p_fname, ''), NULLIF(i.r_doc_name, ''), 'Unassigned') AS doctor_name", false)
+            ->select('diagnosis.final_diagnosis')
+            ->select('sm.surg_amount AS estimated_surgery_cost, billed.actual_surgery_cost')
+            ->join('patient_master p', 'p.id = i.p_id', 'left')
+            ->join('ipd_discharge_surgery sds', 'sds.ipd_id = i.id', 'left')
+            ->join('ipd_discharge_surgery_master smaster', 'smaster.id = sds.surgery_id', 'left')
+            ->join('hc_surgery sm', 'sm.id = sds.surgery_id', 'left')
+            ->join('hc_department dept', 'dept.iId = i.dept_id', 'left')
+            ->join('doctor_master surgeon', 'surgeon.id = sds.surgery_by_doc_id', 'left')
+            ->join("({$diagnoses}) diagnosis", 'diagnosis.ipd_id = i.id', 'left', false)
+            ->join("({$billedProcedures}) billed", "billed.ipd_id = i.id AND billed.billed_name = CONVERT(LOWER(TRIM(COALESCE(sds.surgery_name, i.surgery_name, ''))) USING utf8mb4) COLLATE utf8mb4_general_ci", 'left', false)
+            ->where("COALESCE(NULLIF(sds.surgery_date, '0000-00-00'), NULLIF(i.surgery_date, '0000-00-00')) BETWEEN '{$minRange}' AND '{$maxRange}'", null, false)
+            ->where("(sds.id IS NOT NULL OR COALESCE(i.issurgery, 0) = 1)", null, false);
+
+        if ((int) $doctorId > 0) {
+            $builder->groupStart()->where('sds.surgery_by_doc_id', (int) $doctorId)->orWhere('i.r_doc_id', (int) $doctorId)->groupEnd();
+        }
+        if ((int) $departmentId > 0) {
+            $builder->where('i.dept_id', (int) $departmentId);
+        }
+
+        if ($this->db->tableExists('ipd_ot_cases')) {
+            $otCases = $this->db->table('ipd_ot_cases')
+                ->select('ipd_id')
+                ->select('MAX(scheduled_start_at) AS scheduled_start_at, MAX(actual_start_at) AS actual_start_at, MAX(actual_end_at) AS actual_end_at', false)
+                ->select("GROUP_CONCAT(DISTINCT NULLIF(anesthetist_name_snapshot, '') SEPARATOR '; ') AS anesthetist_name", false)
+                ->select("GROUP_CONCAT(DISTINCT NULLIF(procedure_side, '') SEPARATOR '; ') AS procedure_side", false)
+                ->groupBy('ipd_id')
+                ->getCompiledSelect();
+            $builder->select('ot.scheduled_start_at, ot.actual_start_at, ot.actual_end_at, ot.anesthetist_name, ot.procedure_side')
+                ->join("({$otCases}) ot", 'ot.ipd_id = i.id', 'left', false);
+        } else {
+            $builder->select("NULL AS scheduled_start_at, NULL AS actual_start_at, NULL AS actual_end_at, '' AS anesthetist_name, '' AS procedure_side", false);
+        }
+
+        $rows = $builder->orderBy('surgery_date', 'ASC')->orderBy('i.id', 'ASC')->get()->getResultArray();
+        foreach ($rows as &$row) {
+            $start = ! empty($row['actual_start_at']) ? strtotime((string) $row['actual_start_at']) : false;
+            $end = ! empty($row['actual_end_at']) ? strtotime((string) $row['actual_end_at']) : false;
+            $row['actual_duration_minutes'] = $start !== false && $end !== false && $end >= $start
+                ? (int) round(($end - $start) / 60)
+                : null;
+        }
+        unset($row);
+
+        $content = view('report/ipd_surgery_report_table', [
+            'rows' => $rows,
+            'min_range' => $minRange,
+            'max_range' => $maxRange,
+        ]);
+        if ($output === 1) {
+            ExportExcel($content, 'IPD_Surgery_Report_' . date('YmdHis'));
             return $this->response->setBody('');
         }
 

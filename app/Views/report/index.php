@@ -46,8 +46,8 @@ $can = static fn (string $panel): bool => (bool) ($panels[$panel] ?? false);
             </div>
         </div>
         <?php endif; ?>
-        <?php if ($can('ipd')) : ?>
-        <div class="col-xl-3 col-md-6"><div class="card report-card h-100"><div class="card-body"><div class="report-card-head"><span class="report-icon report-icon-green"><i class="bi bi-hospital"></i></span><h5 class="report-card-title mb-0">IPD Operations</h5></div><ul class="report-links"><li><a href="javascript:load_form('<?= base_url('Report/ipd_census_report') ?>','IPD Census &amp; Discharge Report');"><i class="bi bi-arrow-right-short"></i> IPD Census &amp; Discharge</a></li></ul></div></div></div>
+        <?php if ($can('ipd') || $can('surgery')) : ?>
+        <div class="col-xl-3 col-md-6"><div class="card report-card h-100"><div class="card-body"><div class="report-card-head"><span class="report-icon report-icon-green"><i class="bi bi-hospital"></i></span><h5 class="report-card-title mb-0">IPD Operations</h5></div><ul class="report-links"><?php if ($can('ipd')) : ?><li><a href="javascript:load_form('<?= base_url('Report/ipd_census_report') ?>','IPD Census &amp; Discharge Report');"><i class="bi bi-arrow-right-short"></i> IPD Census &amp; Discharge</a></li><?php endif; ?><?php if ($can('surgery')) : ?><li><a href="javascript:load_form('<?= base_url('Report/ipd_surgery_report') ?>','IPD Surgery Report');"><i class="bi bi-arrow-right-short"></i> IPD Surgery Report</a></li><?php endif; ?></ul></div></div></div>
         <?php endif; ?>
         <?php if ($can('clinical')) : ?>
         <div class="col-xl-3 col-md-6">

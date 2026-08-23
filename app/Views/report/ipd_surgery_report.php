@@ -1,0 +1,18 @@
+<?php
+$doctors = $doctors ?? [];
+$departments = $departments ?? [];
+$today = date('Y-m-d');
+?>
+<section class="content">
+    <div class="card"><div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2"><div><h5 class="mb-0"><i class="bi bi-scissors me-2"></i>IPD Surgery Report</h5><small class="text-muted">Surgery, discharge, consultant, OT, and matched billing details.</small></div><button type="button" class="btn btn-sm btn-outline-secondary" onclick="load_form('<?= base_url('Report/index') ?>', 'Report Panel')"><i class="bi bi-arrow-left me-1"></i>Report Panel</button></div>
+        <div class="card-body"><div class="row g-3 align-items-end"><div class="col-md-3"><label class="form-label" for="surgery_report_from">Surgery from</label><input type="date" class="form-control" id="surgery_report_from" value="<?= esc(date('Y-m-01')) ?>"></div><div class="col-md-3"><label class="form-label" for="surgery_report_to">Surgery to</label><input type="date" class="form-control" id="surgery_report_to" value="<?= esc($today) ?>"></div><div class="col-md-3"><label class="form-label" for="surgery_report_department">Specialty</label><select class="form-select" id="surgery_report_department"><option value="0">All specialties</option><?php foreach ($departments as $department) : ?><option value="<?= (int) ($department->iId ?? 0) ?>"><?= esc($department->vName ?? '') ?></option><?php endforeach; ?></select></div><div class="col-md-3"><label class="form-label" for="surgery_report_doctor">Surgeon / consultant</label><select class="form-select" id="surgery_report_doctor"><option value="0">All doctors</option><?php foreach ($doctors as $doctor) : ?><option value="<?= (int) ($doctor->id ?? 0) ?>"><?= esc($doctor->p_fname ?? '') ?></option><?php endforeach; ?></select></div></div><div class="d-flex gap-2 mt-3"><button type="button" class="btn btn-primary" id="surgery_report_show"><i class="bi bi-search me-1"></i>Show report</button><button type="button" class="btn btn-outline-success" id="surgery_report_excel"><i class="bi bi-file-earmark-excel me-1"></i>Excel</button></div></div></div>
+    <div class="card mt-3"><div class="card-body"><div id="surgery_report_result" class="table-responsive"><div class="text-center text-muted py-4"><i class="bi bi-scissors d-block mb-2" style="font-size:2rem"></i>Select the surgery date range and show the report.</div></div></div></div>
+</section>
+<script>
+(function () {
+    function buildUrl(output) { var from = $('#surgery_report_from').val(); var to = $('#surgery_report_to').val(); if (!from || !to) { alert('Select both surgery dates.'); return ''; } return '<?= base_url('Report/ipd_surgery_data') ?>/' + encodeURIComponent(from + 'S' + to) + '/' + encodeURIComponent($('#surgery_report_doctor').val() || '0') + '/' + encodeURIComponent($('#surgery_report_department').val() || '0') + (output ? '/' + output : ''); }
+    function show() { var url = buildUrl(0); if (!url) return; $('#surgery_report_result').html('<div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm me-2"></span>Loading report...</div>'); $.get(url).done(function (html) { $('#surgery_report_result').html(html); }).fail(function (xhr) { $('#surgery_report_result').html('<div class="alert alert-danger mb-0">' + (xhr.status === 403 ? 'You do not have permission to view this report.' : 'Unable to load the surgery report.') + '</div>'); }); }
+    $('#surgery_report_show').off('click.surgeryReport').on('click.surgeryReport', show);
+    $('#surgery_report_excel').off('click.surgeryReport').on('click.surgeryReport', function () { var url = buildUrl(1); if (url) window.open(url, '_blank'); });
+})();
+</script>
