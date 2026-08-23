@@ -1058,6 +1058,11 @@ $routes->get('Report/report_total_payment_app_show/(:segment)/(:segment)/(:segme
 $routes->get('Report/report_total_payment_total_amount_show/(:segment)/(:segment)/(:segment)', 'Report::report_total_payment_total_amount_show/$1/$2/$3', ['filter' => $reportsCollectionFilter]);
 $routes->get('Report/report_total_payment_total_amount_show/(:segment)/(:segment)/(:segment)/(:num)', 'Report::report_total_payment_total_amount_show/$1/$2/$3/$4', ['filter' => $reportsCollectionFilter]);
 
+$reportsIpdCensusFilter = 'permission:reports.ipd_census.view';
+$routes->get('Report/ipd_census_report', 'Report::ipd_census_report', ['filter' => $reportsIpdCensusFilter]);
+$routes->get('Report/ipd_census_data/(:segment)/(:segment)/(:segment)/(:segment)', 'Report::ipd_census_data/$1/$2/$3/$4', ['filter' => $reportsIpdCensusFilter]);
+$routes->get('Report/ipd_census_data/(:segment)/(:segment)/(:segment)/(:segment)/(:num)', 'Report::ipd_census_data/$1/$2/$3/$4/$5', ['filter' => $reportsIpdCensusFilter]);
+
 $routes->get('Report/billing_operations_report', 'Report::billing_operations_report', ['filter' => 'permission:reports.billing_operations.view']);
 $routes->get('Report/billing_operations_report_data/(:segment)/(:segment)', 'Report::billing_operations_report_data/$1/$2', ['filter' => 'permission:reports.billing_operations.view']);
 $routes->get('Report/billing_operations_report_data/(:segment)/(:segment)/(:num)', 'Report::billing_operations_report_data/$1/$2/$3', ['filter' => 'permission:reports.billing_operations.view']);

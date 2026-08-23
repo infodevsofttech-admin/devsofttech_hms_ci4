@@ -6,9 +6,44 @@ use Mpdf\Mpdf;
 
 class Report extends BaseController
 {
+    private const PANEL_PERMISSIONS = [
+        'billing' => 'reports.collection.view',
+        'operations' => 'reports.billing_operations.view',
+        'clinical' => 'diagnosis.report.view',
+        'ipd' => 'reports.ipd_census.view',
+        'insurance' => 'reports.insurance_credit.view',
+        'quality' => 'reports.nabh_audit.view',
+        'documents' => 'reports.document_issue.view',
+    ];
+
     public function index()
     {
-        return view('report/index');
+        $panels = [];
+        foreach (self::PANEL_PERMISSIONS as $panel => $permission) {
+            $panels[$panel] = $this->canViewReportPanel($permission);
+        }
+
+        return view('report/index', ['panels' => $panels]);
+    }
+
+    private function canViewReportPanel(string $permission): bool
+    {
+        if (! function_exists('auth')) {
+            return false;
+        }
+
+        $user = auth()->user();
+
+        return $user !== null && method_exists($user, 'can') && $user->can($permission);
+    }
+
+    private function requireReportPermission(string $permission)
+    {
+        if ($this->canViewReportPanel($permission)) {
+            return null;
+        }
+
+        return $this->response->setStatusCode(403)->setBody('Access denied');
     }
 
     public function collection_report()
@@ -29,6 +64,114 @@ class Report extends BaseController
             'employees' => $employees,
             'pay_modes' => $payModes,
         ]);
+    }
+
+    public function ipd_census_report()
+    {
+        if ($response = $this->requireReportPermission(self::PANEL_PERMISSIONS['ipd'])) {
+            return $response;
+        }
+
+        $doctors = $this->db->table('doctor_master')
+            ->select('id, p_fname')
+            ->where('active', 1)
+            ->orderBy('p_fname', 'ASC')
+            ->get()
+            ->getResult();
+        $departments = $this->db->table('hc_department')
+            ->select('iId, vName')
+            ->orderBy('vName', 'ASC')
+            ->get()
+            ->getResult();
+
+        return view('report/ipd_census_report', [
+            'doctors' => $doctors,
+            'departments' => $departments,
+        ]);
+    }
+
+    public function ipd_census_data(
+        string $dateRange,
+        string $doctorId = '0',
+        string $departmentId = '0',
+        string $status = 'all',
+        int $output = 0
+    ) {
+        if ($response = $this->requireReportPermission(self::PANEL_PERMISSIONS['ipd'])) {
+            return $response;
+        }
+
+        [$minRange, $maxRange] = $this->parseDateRangeDateOnly($dateRange);
+        $doctorList = $this->db->table('ipd_master_doc_list')
+            ->select('ipd_id, MIN(doc_id) AS doc_id', false)
+            ->groupBy('ipd_id')
+            ->getCompiledSelect();
+
+        $builder = $this->db->table('ipd_master i')
+            ->select('i.id, i.ipd_code, i.register_date, i.discharge_date, i.ipd_status')
+            ->select('p.p_code, p.p_fname')
+            ->select("COALESCE(NULLIF(d.vName, ''), 'Unassigned') AS department_name", false)
+            ->select("COALESCE(NULLIF(dm.p_fname, ''), NULLIF(i.r_doc_name, ''), 'Unassigned') AS doctor_name", false)
+            ->select("CASE WHEN i.ipd_status = 1 THEN DATEDIFF(i.discharge_date, i.register_date) + 1 ELSE DATEDIFF('{$maxRange}', i.register_date) + 1 END AS stay_days", false)
+            ->join('patient_master p', 'p.id = i.p_id', 'left')
+            ->join('hc_department d', 'd.iId = i.dept_id', 'left')
+            ->join("({$doctorList}) dl", 'dl.ipd_id = i.id', 'left', false)
+            ->join('doctor_master dm', 'dm.id = dl.doc_id', 'left')
+            ->where("(DATE(i.register_date) BETWEEN '{$minRange}' AND '{$maxRange}' OR DATE(i.discharge_date) BETWEEN '{$minRange}' AND '{$maxRange}')", null, false);
+
+        if ((int) $doctorId > 0) {
+            $builder->where('dl.doc_id', (int) $doctorId);
+        }
+        if ((int) $departmentId > 0) {
+            $builder->where('i.dept_id', (int) $departmentId);
+        }
+
+        if ($status === 'active') {
+            $builder->where('i.ipd_status', 0);
+        } elseif ($status === 'discharged') {
+            $builder->where('i.ipd_status', 1);
+        }
+
+        $rows = $builder->orderBy('i.register_date', 'DESC')->get()->getResult();
+        $summary = [
+            'admissions' => 0,
+            'discharges' => 0,
+            'active_cases' => 0,
+            'average_stay' => 0.0,
+        ];
+        $dischargedStayDays = 0;
+
+        foreach ($rows as $row) {
+            $registered = substr((string) ($row->register_date ?? ''), 0, 10);
+            $discharged = substr((string) ($row->discharge_date ?? ''), 0, 10);
+            if ($registered >= $minRange && $registered <= $maxRange) {
+                $summary['admissions']++;
+            }
+            if ((int) ($row->ipd_status ?? 0) === 1 && $discharged >= $minRange && $discharged <= $maxRange) {
+                $summary['discharges']++;
+                $dischargedStayDays += max(0, (int) ($row->stay_days ?? 0));
+            }
+            if ((int) ($row->ipd_status ?? 0) === 0) {
+                $summary['active_cases']++;
+            }
+        }
+        $summary['average_stay'] = $summary['discharges'] > 0
+            ? round($dischargedStayDays / $summary['discharges'], 1)
+            : 0.0;
+
+        $content = view('report/ipd_census_report_table', [
+            'rows' => $rows,
+            'summary' => $summary,
+            'min_range' => $minRange,
+            'max_range' => $maxRange,
+        ]);
+
+        if ($output === 1) {
+            ExportExcel($content, 'IPD_Census_' . date('YmdHis'));
+            return $this->response->setBody('');
+        }
+
+        return $this->response->setBody($content);
     }
 
     public function report_opd_total()
