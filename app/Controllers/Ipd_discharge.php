@@ -4169,10 +4169,17 @@ class Ipd_discharge extends BaseController
         if ($this->tableHasColumns('ipd_discharge_general_exam_col', ['id', 'col_description'])) {
             $generalBuilder = $this->db->table('ipd_discharge_general_exam_col')
                 ->select('id,col_description,col_name,col_pre_value,cat_group')
+                ->orderBy($this->db->fieldExists('display_order', 'ipd_discharge_general_exam_col') ? 'display_order' : 'id', 'ASC')
                 ->orderBy('id', 'ASC');
 
             if ($this->db->fieldExists('col_unit', 'ipd_discharge_general_exam_col')) {
                 $generalBuilder->select('col_unit');
+            }
+            if ($this->db->fieldExists('col_type', 'ipd_discharge_general_exam_col')) {
+                $generalBuilder->select('col_type');
+            }
+            if ($this->db->fieldExists('is_active', 'ipd_discharge_general_exam_col')) {
+                $generalBuilder->where('is_active', 1);
             }
 
             $generalCols = $generalBuilder->get()->getResultArray();
@@ -4199,6 +4206,8 @@ class Ipd_discharge extends BaseController
                     'label' => (string) ($row['col_description'] ?? $row['col_name'] ?? ('Exam ' . $colId)),
                     'value' => (string) ($rdataMap[$colId] ?? (string) ($row['col_pre_value'] ?? '')),
                     'unit' => trim((string) ($row['col_unit'] ?? '')),
+                    'type' => (int) ($row['col_type'] ?? 0),
+                    'options' => (string) ($row['col_pre_value'] ?? ''),
                 ];
 
                 $generalAll[] = $item;
@@ -6676,11 +6685,13 @@ class Ipd_discharge extends BaseController
                 // Examination on Admission (General Examination values).
                 if ($this->tableHasColumns('ipd_discharge_general_exam_col', ['id', 'col_name'])
                     && $this->tableHasColumns('ipd_discharge_1_b', ['ipd_d_id', 'col_id', 'short_head', 'rdata'])) {
-                    $generalCols = $this->db->table('ipd_discharge_general_exam_col')
+                    $generalBuilder = $this->db->table('ipd_discharge_general_exam_col')
                         ->select('id,col_name')
-                        ->orderBy('id', 'ASC')
-                        ->get()
-                        ->getResultArray();
+                        ->orderBy('id', 'ASC');
+                    if ($this->db->fieldExists('is_active', 'ipd_discharge_general_exam_col')) {
+                        $generalBuilder->where('is_active', 1);
+                    }
+                    $generalCols = $generalBuilder->get()->getResultArray();
 
                     foreach ($generalCols as $col) {
                         $colId = (int) ($col['id'] ?? 0);

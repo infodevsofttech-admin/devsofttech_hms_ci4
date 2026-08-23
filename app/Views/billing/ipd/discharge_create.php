@@ -819,7 +819,7 @@ $historyFields = [
                                     <?php foreach ($generalExamGroup1 as $row): ?>
                                         <div class="col-md-3">
                                             <label class="form-label small"><?= esc((string) ($row['label'] ?? '')) ?></label>
-                                            <input type="text" class="form-control form-control-sm" name="gen_exam_<?= (int) ($row['id'] ?? 0) ?>" value="<?= esc((string) ($row['value'] ?? '')) ?>">
+                                            <?php if ((int) ($row['type'] ?? 0) === 1): ?><textarea class="form-control form-control-sm" name="gen_exam_<?= (int) ($row['id'] ?? 0) ?>" rows="2"><?= esc((string) ($row['value'] ?? '')) ?></textarea><?php elseif ((int) ($row['type'] ?? 0) === 4): ?><select class="form-select form-select-sm" name="gen_exam_<?= (int) ($row['id'] ?? 0) ?>"><?php foreach (preg_split('/[|\r\n]+/', (string) ($row['options'] ?? '')) as $option): $option = trim($option); if ($option === '') continue; ?><option value="<?= esc($option) ?>" <?= (string) ($row['value'] ?? '') === $option ? 'selected' : '' ?>><?= esc($option) ?></option><?php endforeach; ?></select><?php else: ?><input type="<?= (int) ($row['type'] ?? 0) === 2 ? 'number' : 'text' ?>" class="form-control form-control-sm" name="gen_exam_<?= (int) ($row['id'] ?? 0) ?>" value="<?= esc((string) ($row['value'] ?? '')) ?>"><?php endif; ?>
                                         </div>
                                     <?php endforeach; ?>
                                     <?php if (empty($generalExamGroup1)): ?>
@@ -833,7 +833,7 @@ $historyFields = [
                                     <?php foreach ($generalExamGroup2 as $row): ?>
                                         <div class="col-md-3">
                                             <label class="form-label small"><?= esc((string) ($row['label'] ?? '')) ?></label>
-                                            <input type="text" class="form-control form-control-sm" name="gen_exam_<?= (int) ($row['id'] ?? 0) ?>" value="<?= esc((string) ($row['value'] ?? '')) ?>">
+                                            <?php if ((int) ($row['type'] ?? 0) === 1): ?><textarea class="form-control form-control-sm" name="gen_exam_<?= (int) ($row['id'] ?? 0) ?>" rows="2"><?= esc((string) ($row['value'] ?? '')) ?></textarea><?php elseif ((int) ($row['type'] ?? 0) === 4): ?><select class="form-select form-select-sm" name="gen_exam_<?= (int) ($row['id'] ?? 0) ?>"><?php foreach (preg_split('/[|\r\n]+/', (string) ($row['options'] ?? '')) as $option): $option = trim($option); if ($option === '') continue; ?><option value="<?= esc($option) ?>" <?= (string) ($row['value'] ?? '') === $option ? 'selected' : '' ?>><?= esc($option) ?></option><?php endforeach; ?></select><?php else: ?><input type="<?= (int) ($row['type'] ?? 0) === 2 ? 'number' : 'text' ?>" class="form-control form-control-sm" name="gen_exam_<?= (int) ($row['id'] ?? 0) ?>" value="<?= esc((string) ($row['value'] ?? '')) ?>"><?php endif; ?>
                                         </div>
                                     <?php endforeach; ?>
                                     <?php if (empty($generalExamGroup2)): ?>

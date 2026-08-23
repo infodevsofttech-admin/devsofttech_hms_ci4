@@ -1289,6 +1289,9 @@ $routes->group('setting', static function($routes) {
     $routes->post('admin/abdm-gateway/test', 'Setting\\AbdmGatewaySettings::testConnection', ['filter' => $settingsAdminFilter]);
     $routes->get('admin/abdm-report-doctors', 'Setting\\AbdmReportDoctorSettings::index', ['filter' => $settingsAdminFilter]);
     $routes->post('admin/abdm-report-doctors/save', 'Setting\\AbdmReportDoctorSettings::save', ['filter' => $settingsAdminFilter]);
+    $routes->get('admin/ipd-examination-fields', 'Setting\IpdExaminationFields::index', ['filter' => 'permission:ipd_discharge.master.manage']);
+    $routes->post('admin/ipd-examination-fields/save', 'Setting\IpdExaminationFields::save', ['filter' => ['permission:ipd_discharge.master.manage', 'csrf']]);
+    $routes->post('admin/ipd-examination-fields/toggle/(:num)', 'Setting\IpdExaminationFields::toggle/$1', ['filter' => ['permission:ipd_discharge.master.manage', 'csrf']]);
     $routes->get('admin/hospital-profile', 'Setting\\HospitalProfile::index');
     $routes->get('admin/system-ops', 'SystemOps::index', ['filter' => $settingsAdminFilter]);
     $routes->get('admin/system-ops/panel', 'SystemOps::panel', ['filter' => $settingsAdminFilter]);
