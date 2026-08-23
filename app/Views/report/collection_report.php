@@ -9,14 +9,14 @@ $payModes = $pay_modes ?? [];
         </div>
         <div class="card-body">
             <div class="row g-3 align-items-end">
-                <div class="col-md-4">
+                <div class="col-md-5">
                     <label class="form-label">Payment Date Range</label>
                     <div class="d-flex gap-2">
                         <input type="datetime-local" class="form-control" id="report_start">
                         <input type="datetime-local" class="form-control" id="report_end">
                     </div>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-5">
                     <label class="form-label">Employee Name</label>
                     <select class="form-control select2" id="emp_name_id" name="emp_name_id" multiple data-placeholder="Select Employees">
                         <option value="0">All Employees</option>
