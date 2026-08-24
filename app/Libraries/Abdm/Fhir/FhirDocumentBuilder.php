@@ -293,7 +293,7 @@ class FhirDocumentBuilder
     {
         $clean = [];
         foreach ($value as $k => $v) {
-            if ($v === null || $v === '') {
+            if ($v === null || $v === '' || $this->isPlaceholderValue($v)) {
                 continue;
             }
             if (is_array($v)) {
@@ -308,6 +308,16 @@ class FhirDocumentBuilder
         }
 
         return $clean === [] ? null : $clean;
+    }
+
+    /** @param mixed $value */
+    private function isPlaceholderValue($value): bool
+    {
+        if (! is_string($value)) {
+            return false;
+        }
+
+        return in_array(strtoupper(trim($value)), ['NA', 'N/A', 'NULL', 'NOT AVAILABLE'], true);
     }
 
     private function newId(string $prefix): string

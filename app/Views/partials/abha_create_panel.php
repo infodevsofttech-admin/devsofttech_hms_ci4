@@ -271,7 +271,7 @@ $_aadh = '';
                 </div>
             </div>
 
-            <!-- Mobile OTP Verify -->
+            <!-- Find ABHA via Mobile -->
             <div class="tab-pane fade" id="cvpv-mobile" role="tabpanel">
                 <div id="cvpv-m-step1">
                     <div class="col-sm-6 mb-3">
@@ -283,7 +283,7 @@ $_aadh = '';
                     </div>
                     <div id="cvpv_m_step1_msg"></div>
                     <button type="button" class="btn btn-primary" id="cvpv_btn_m_send_otp">
-                        <i class="bi bi-send me-1"></i>Send OTP
+                        <i class="bi bi-search me-1"></i>Find ABHA
                     </button>
                 </div>
                 <div id="cvpv-m-step2" style="display:none">

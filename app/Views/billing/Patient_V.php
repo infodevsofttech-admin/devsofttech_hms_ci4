@@ -441,7 +441,7 @@
                                             <div class="d-grid gap-2 mt-auto">
                                                 <button type="button" class="btn btn-success" onclick="abhaRegSelectMethod('number')"><i class="bi bi-person-vcard me-1"></i>By ABHA Number or ID</button>
                                                 <button type="button" class="btn btn-outline-primary" onclick="abhaRegSelectMethod('address')"><i class="bi bi-at me-1"></i>By ABHA Address</button>
-                                                <button type="button" class="btn btn-outline-secondary" onclick="abhaRegSelectMethod('mobile')"><i class="bi bi-phone me-1"></i>By Mobile OTP</button>
+                                                <button type="button" class="btn btn-outline-secondary" onclick="abhaRegSelectMethod('mobile')"><i class="bi bi-phone me-1"></i>Find ABHA via Mobile</button>
                                             </div>
                                         </div>
                                     </div>
@@ -759,12 +759,17 @@
                                                             <div class="small mb-1"><strong>Facility:</strong> <span id="abhareg_facility_name">—</span></div>
                                                             <div class="small"><strong>HFR ID:</strong> <span id="abhareg_facility_hfr">—</span></div>
                                                         </div>
-                                                        <div class="small text-muted">Source: ABDM Bridge <code>GET /api/v3/facility/qr-code</code>.</div>
+                                                            <div class="d-flex align-items-center gap-2 flex-wrap mt-3">
+                                                                <button type="button" class="btn btn-primary btn-sm" onclick="load_form('<?= base_url('AbdmOpdQueue') ?>', 'ABDM OPD Queue');">
+                                                                    <i class="bi bi-ticket-perforated me-1"></i>Open ABDM OPD Queue
+                                                                </button>
+                                                                <span class="small text-muted">After the patient scans, confirm the incoming token here.</span>
+                                                            </div>
                                                     </div>
                         </div>
                       </div>
 
-                      <!-- Panel: Method 4 - Mobile OTP (handled by AbhaMobileModal) -->
+                      <!-- Panel: Method 4 - Find ABHA by mobile (handled by AbhaMobileModal) -->
                       <div id="abhareg_panel_mobile" class="abhareg-panel d-none"></div>
 
                       <!-- Common result card (all methods) -->
@@ -1341,7 +1346,7 @@
                 address:  { icon: '@',   title: 'By ABHA Address',      sub: 'Secure modal verification' },
                 qr:       { icon: '📷', title: 'Scan Patient ABHA QR',   sub: 'Scan QR → patient details' },
                 facility: { icon: '🏥', title: 'Scan Facility QR',       sub: 'Patient scans via ABHA app' },
-                mobile:   { icon: '📱', title: 'By Mobile OTP',          sub: 'OTP to ABHA-linked mobile' }
+                mobile:   { icon: '📱', title: 'Find ABHA via Mobile',   sub: 'Find an ABHA linked to this mobile number' }
             };
 
             window.abhaRegSelectMethod = function(method) {

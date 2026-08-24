@@ -665,7 +665,7 @@ class FhirR4Builder
             ? 'OPD-' . ($encounter['id'] ?? $bundleUuid) . '-' . date('Y-m-d')
             : $bundleUuid;
 
-        return [
+        return $this->sanitizeBundle([
             'resourceType' => 'Bundle',
             'id'           => $bundleUuid,
             'meta'         => [
@@ -680,7 +680,7 @@ class FhirR4Builder
             'type'       => 'document',
             'timestamp'  => $issuedAt,
             'entry'      => $allEntries,
-        ];
+        ]);
     }
 
     /**
@@ -1110,7 +1110,7 @@ class FhirR4Builder
             ? 'LAB-' . (string) ($diagnosticReport['id'] ?? $bundleUuid)
             : $bundleUuid;
 
-        return [
+        return $this->sanitizeBundle([
             'resourceType' => 'Bundle',
             'id'           => $bundleUuid,
             'meta'         => [
@@ -1125,7 +1125,7 @@ class FhirR4Builder
                 $resourceEntries,
                 $observationEntries
             ),
-        ];
+        ]);
     }
 
     /**
@@ -1392,7 +1392,7 @@ class FhirR4Builder
             ? 'IPD-' . ($ipdCode !== '' ? $ipdCode : $bundleUuid)
             : $bundleUuid;
 
-        return [
+        return $this->sanitizeBundle([
             'resourceType' => 'Bundle',
             'id'           => $bundleUuid,
             'meta'         => [
@@ -1406,7 +1406,7 @@ class FhirR4Builder
                 [['fullUrl' => 'urn:uuid:' . $compositionUuid, 'resource' => $composition]],
                 $resourceEntries
             ),
-        ];
+        ]);
     }
 
     /**
@@ -1547,7 +1547,7 @@ class FhirR4Builder
             $composition['author'] = [['display' => $provider]];
         }
 
-        return [
+        return $this->sanitizeBundle([
             'resourceType' => 'Bundle',
             'type' => 'document',
             'timestamp' => $issuedAt,
@@ -1567,7 +1567,7 @@ class FhirR4Builder
             ], [
                 'resource' => $claimResource,
             ]],
-        ];
+        ]);
     }
 
     /**
@@ -1866,7 +1866,7 @@ class FhirR4Builder
         }
         $hfrId = trim((string) ($organization['hfr_id'] ?? $organization['id'] ?? ''));
 
-        return [
+        return $this->sanitizeBundle([
             'resourceType' => 'Bundle',
             'id' => $bundleUuid,
             'meta' => [
@@ -1884,7 +1884,7 @@ class FhirR4Builder
             'type' => 'document',
             'timestamp' => $issuedAt,
             'entry' => array_merge([['fullUrl' => 'urn:uuid:' . $compositionUuid, 'resource' => $composition]], $resourceEntries),
-        ];
+        ]);
     }
 
     private function normalizeImmunizationStatus(string $status): string
@@ -1975,6 +1975,38 @@ class FhirR4Builder
         $data[8] = chr(ord($data[8]) & 0x3f | 0x80);
 
         return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
+    }
+
+    /** @param array<string,mixed> $bundle
+     * @return array<string,mixed>
+     */
+    private function sanitizeBundle(array $bundle): array
+    {
+        return $this->sanitizeFhirValue($bundle);
+    }
+
+    /** @param mixed $value
+     * @return mixed
+     */
+    private function sanitizeFhirValue($value)
+    {
+        if (is_string($value)) {
+            return in_array(strtoupper(trim($value)), ['NA', 'N/A', 'NULL', 'NOT AVAILABLE'], true) ? null : $value;
+        }
+        if (! is_array($value)) {
+            return $value;
+        }
+
+        $clean = [];
+        foreach ($value as $key => $nested) {
+            $sanitized = $this->sanitizeFhirValue($nested);
+            if ($sanitized === null || $sanitized === '' || $sanitized === []) {
+                continue;
+            }
+            $clean[$key] = $sanitized;
+        }
+
+        return $clean;
     }
 
     /** ISO 8601 timestamp with India Standard Time offset (+05:30). */

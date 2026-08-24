@@ -1,6 +1,7 @@
 <?php
 
 use App\Libraries\Abdm\Fhir\FhirGeneratorFactory;
+use App\Libraries\Abdm\Fhir\FhirDocumentBuilder;
 use App\Controllers\AbdmGateway;
 use App\Controllers\Ipd_discharge;
 use App\Libraries\FhirR4Builder;
@@ -14,6 +15,38 @@ final class FhirGeneratorsTest extends CIUnitTestCase
     {
         parent::setUp();
         $this->factory = new FhirGeneratorFactory();
+    }
+
+    public function testDocumentBuilderRemovesExactPlaceholderValues(): void
+    {
+        $bundle = (new FhirDocumentBuilder())
+            ->buildBundleMeta('placeholder-test', '2026-08-24T10:00:00+05:30')
+            ->buildComposition([
+                'resourceType' => 'Composition',
+                'id' => 'placeholder-composition',
+                'status' => 'final',
+                'title' => 'NA',
+                'subject' => ['display' => 'N/A'],
+                'note' => 'Nasal congestion',
+            ])
+            ->toBundle();
+
+        $composition = $bundle['entry'][0]['resource'];
+        $this->assertArrayNotHasKey('title', $composition);
+        $this->assertArrayNotHasKey('subject', $composition);
+        $this->assertSame('Nasal congestion', $composition['note']);
+    }
+
+    public function testLegacyBuilderRemovesExactPlaceholderValues(): void
+    {
+        $bundle = (new FhirR4Builder())->buildClaimBundle(
+            ['id' => 'patient-1', 'name' => 'NA', 'gender' => 'female', 'birthDate' => '1990-01-01'],
+            ['id' => 'encounter-1'],
+            ['id' => 'claim-1', 'provider' => 'N/A']
+        );
+
+        $this->assertStringNotContainsString('"NA"', (string) json_encode($bundle));
+        $this->assertStringNotContainsString('"N/A"', (string) json_encode($bundle));
     }
 
     public function testImmunizationCareContextReferenceIsStableAcrossClinicalDateChanges(): void

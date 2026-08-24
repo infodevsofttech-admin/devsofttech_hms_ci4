@@ -1,6 +1,6 @@
 <?php
 /**
- * Partial: "Verify ABHA by Mobile OTP" modal.
+ * Partial: "Find ABHA via Mobile" modal.
  *
  * Mirrors partials/abha_verify_modal.php so both verification journeys look the
  * same; only the identifier differs (ABHA-linked mobile instead of ABHA number).
@@ -39,7 +39,7 @@
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-phone text-primary me-2"></i>Verify ABHA by Mobile OTP</h5>
+                <h5 class="modal-title"><i class="bi bi-phone text-primary me-2"></i>Find ABHA via Mobile</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
@@ -57,7 +57,7 @@
                         <input type="text" class="form-control" id="abhaMobileNumber" maxlength="10" inputmode="numeric" autocomplete="tel" placeholder="10-digit mobile">
                         <button type="button" class="btn btn-primary" id="abhaMobileSendOtpBtn"><i class="bi bi-send me-1"></i>Send OTP</button>
                     </div>
-                    <div class="form-text">Enter the mobile number registered with the patient's ABHA account.</div>
+                    <div class="form-text">Enter the mobile number registered with the patient's ABHA account to find and link it.</div>
                 </section>
 
                 <section id="abhaMobileStep2" class="d-none">
@@ -181,7 +181,7 @@ window.AbhaMobileModal = (function () {
 
         verifiedMobile = mobile;
         var button = $('#abhaMobileSendOtpBtn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>Sending');
-        $.post('<?= base_url('abha/create/communication') ?>', { mobile: mobile, '<?= csrf_token() ?>': csrf() }, function (response) {
+        $.post('<?= base_url('abha/find/mobile/request-otp') ?>', { mobile: mobile, find_abha: 1, '<?= csrf_token() ?>': csrf() }, function (response) {
             button.prop('disabled', false).html('<i class="bi bi-send me-1"></i>Send OTP');
             if (!response || response.ok != 1) { alertBox('danger', apiMessage(response, 'Unable to send OTP to this mobile number.')); return; }
             txnId = response.txn_id || '';
@@ -201,7 +201,7 @@ window.AbhaMobileModal = (function () {
         if (otp.length !== 6) { alertBox('warning', 'Enter the 6-digit OTP.'); return; }
 
         var button = $('#abhaMobileVerifyBtn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>Verifying');
-        $.post('<?= base_url('abha/create/verify_comm_otp') ?>', { otp: otp, txn_id: txnId, mobile: verifiedMobile, '<?= csrf_token() ?>': csrf() }, function (response) {
+        $.post('<?= base_url('abha/find/mobile/verify-otp') ?>', { otp: otp, txn_id: txnId, mobile: verifiedMobile, find_abha: 1, '<?= csrf_token() ?>': csrf() }, function (response) {
             button.prop('disabled', false).html('<i class="bi bi-patch-check me-1"></i>Verify OTP');
             if (!response || response.ok != 1) { alertBox('danger', apiMessage(response, 'OTP verification failed.')); return; }
             stopTimer();
