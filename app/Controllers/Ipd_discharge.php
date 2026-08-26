@@ -121,7 +121,8 @@ class Ipd_discharge extends BaseController
             'footer_html' => 'ALTER TABLE ipd_discharge_templates ADD COLUMN footer_html LONGTEXT NULL AFTER header_html',
             'template_css' => 'ALTER TABLE ipd_discharge_templates ADD COLUMN template_css LONGTEXT NULL AFTER footer_html',
             'is_audit_only' => 'ALTER TABLE ipd_discharge_templates ADD COLUMN is_audit_only TINYINT(1) NOT NULL DEFAULT 0 AFTER is_default',
-            'watermark_type' => "ALTER TABLE ipd_discharge_templates ADD COLUMN watermark_type VARCHAR(10) NOT NULL DEFAULT 'none' AFTER is_audit_only",
+            'is_abdm' => 'ALTER TABLE ipd_discharge_templates ADD COLUMN is_abdm TINYINT(1) NOT NULL DEFAULT 0 AFTER is_audit_only',
+            'watermark_type' => "ALTER TABLE ipd_discharge_templates ADD COLUMN watermark_type VARCHAR(10) NOT NULL DEFAULT 'none' AFTER is_abdm",
             'watermark_text' => 'ALTER TABLE ipd_discharge_templates ADD COLUMN watermark_text VARCHAR(255) NULL AFTER watermark_type',
             'watermark_image' => 'ALTER TABLE ipd_discharge_templates ADD COLUMN watermark_image VARCHAR(255) NULL AFTER watermark_text',
             'watermark_alpha' => 'ALTER TABLE ipd_discharge_templates ADD COLUMN watermark_alpha DECIMAL(4,2) NOT NULL DEFAULT 0.12 AFTER watermark_image',
@@ -304,12 +305,49 @@ class Ipd_discharge extends BaseController
         }
 
         return $this->db->table('ipd_discharge_templates')
-            ->select('id,template_name,page_size,custom_width_mm,custom_height_mm,page_margin_top_cm,page_margin_bottom_cm,page_margin_left_cm,page_margin_right_cm,margin_header_cm,margin_footer_cm,header_html,footer_html,template_css,template_html,is_default,is_audit_only,watermark_type,watermark_text,watermark_image,watermark_alpha,status')
+            ->select('id,template_name,page_size,custom_width_mm,custom_height_mm,page_margin_top_cm,page_margin_bottom_cm,page_margin_left_cm,page_margin_right_cm,margin_header_cm,margin_footer_cm,header_html,footer_html,template_css,template_html,is_default,is_audit_only,is_abdm,watermark_type,watermark_text,watermark_image,watermark_alpha,status')
             ->where('status', 1)
+            ->orderBy('is_abdm', 'DESC')
             ->orderBy('is_default', 'DESC')
             ->orderBy('id', 'ASC')
             ->get()
             ->getResultArray();
+    }
+
+    private function resolveAbdmDischargeTemplate(int $requestedId = 0): array
+    {
+        $templates = $this->getDischargeTemplateRows();
+        if (empty($templates)) {
+            return [];
+        }
+
+        if ($requestedId > 0) {
+            foreach ($templates as $tmpl) {
+                if ((int) ($tmpl['id'] ?? 0) === $requestedId) {
+                    return $tmpl;
+                }
+            }
+        }
+
+        foreach ($templates as $tmpl) {
+            if ((int) ($tmpl['is_abdm'] ?? 0) === 1) {
+                return $tmpl;
+            }
+        }
+
+        foreach ($templates as $tmpl) {
+            if ((int) ($tmpl['is_default'] ?? 0) === 1) {
+                return $tmpl;
+            }
+        }
+
+        foreach ($templates as $tmpl) {
+            if (! $this->isDischargeAuditTemplate($tmpl)) {
+                return $tmpl;
+            }
+        }
+
+        return $templates[0] ?? [];
     }
 
     private function isDischargeAuditTemplate(array $template): bool
@@ -8112,7 +8150,11 @@ class Ipd_discharge extends BaseController
             return;
         }
 
-        $patientName = trim(trim((string) ($patientRow['p_fname'] ?? '')) . ' ' . trim((string) ($patientRow['p_lname'] ?? '')));
+        $lastName = trim((string) ($patientRow['p_lname'] ?? ''));
+        if (! $this->isMeaningfulDischargeValue($lastName)) {
+            $lastName = '';
+        }
+        $patientName = trim(trim((string) ($patientRow['p_fname'] ?? '')) . ' ' . $lastName);
         if ($patientName === '') {
             $patientName = trim((string) ($ipdRow['P_name'] ?? ''));
         }
@@ -8182,30 +8224,51 @@ class Ipd_discharge extends BaseController
         }
         foreach ($legacyMeds as $row) {
             $name = trim((string) ($row['med_name'] ?? ''));
-            if ($name === '') {
+            if (! $this->isMeaningfulDischargeValue($name)) {
                 continue;
             }
-            $dose = trim(implode(' ', array_filter([
-                (string) ($row['dosage'] ?? ''),
-                (string) ($row['dosage_when'] ?? ''),
-                (string) ($row['dosage_freq'] ?? ''),
-                (string) ($row['no_of_days'] ?? ''),
-            ], static fn ($v) => trim((string) $v) !== '')));
+            $dosageDisplay = $this->buildDosageDisplay(
+                (int) ($row['dosage'] ?? 0),
+                (int) ($row['dosage_when'] ?? 0),
+                (int) ($row['dosage_freq'] ?? 0)
+            );
+            $days = trim((string) ($row['no_of_days'] ?? ''));
+            $doseParts = [];
+            if ($this->isMeaningfulDischargeValue($dosageDisplay)) {
+                $doseParts[] = $dosageDisplay;
+            }
+            if ($this->isMeaningfulDischargeValue($days)) {
+                $doseParts[] = 'for ' . $days . ' days';
+            }
+            $dose = implode(' ', $doseParts);
             $medicationRows[] = ['name' => $name, 'dosage' => $dose];
         }
         if (empty($medicationRows)) {
             foreach ($this->byIpdRows('ipd_discharge_drug', ['drug_name', 'drug_dose', 'drug_day'], 'id ASC', $ipdId) as $row) {
                 $name = trim((string) ($row['drug_name'] ?? ''));
-                if ($name === '') {
+                if (! $this->isMeaningfulDischargeValue($name)) {
                     continue;
                 }
                 $dose = trim(implode(' ', array_filter([
                     (string) ($row['drug_dose'] ?? ''),
                     (string) ($row['drug_day'] ?? ''),
-                ], static fn ($v) => trim((string) $v) !== '')));
+                ], fn ($v) => $this->isMeaningfulDischargeValue((string) $v))));
                 $medicationRows[] = ['name' => $name, 'dosage' => $dose];
             }
         }
+
+        $genderRaw = trim((string) ($patientRow['gender'] ?? ''));
+        if ($genderRaw === '') {
+            $genderRaw = trim((string) ($patientRow['xgender'] ?? ''));
+        }
+
+        $hospitalName = $this->getHospitalSettingValue('H_Name');
+        if ($hospitalName === '' && defined('H_Name')) {
+            $hospitalName = (string) constant('H_Name');
+        }
+
+        $uhidNo = trim((string) ($patientRow['uhid_no'] ?? $patientRow['uhid'] ?? $patientRow['patient_code'] ?? $patientRow['p_id'] ?? $patientId));
+        $ipdNo = trim((string) ($ipdRow['ipd_no'] ?? $ipdRow['ipd_code'] ?? ('IPD-' . $ipdId)));
 
         $source = [
             'record_id' => (string) $ipdId,
@@ -8214,22 +8277,30 @@ class Ipd_discharge extends BaseController
             'completed_at' => $dischargeIso,
             'department' => trim((string) ($ipdRow['dept_id'] ?? '')),
             'doctor_name' => trim((string) ($ipdRow['r_doc_name'] ?? '')),
+            'organization' => [
+                'id' => $hfrId,
+                'name' => $hospitalName,
+            ],
             'patient' => [
                 'id' => (string) $patientId,
+                'uhid' => $uhidNo,
                 'name' => $patientName,
-                'gender' => $this->normalizeFhirGender((string) ($patientRow['gender'] ?? $patientRow['xgender'] ?? '')),
+                'gender' => $this->normalizeFhirGender($genderRaw),
                 'dob' => ! empty($patientRow['dob']) ? date('Y-m-d', strtotime((string) $patientRow['dob'])) : '',
                 'abha_id' => $abhaDigits,
                 'abha_address' => $abhaAddress,
             ],
             'encounter' => [
                 'id' => (string) $ipdId,
+                'ipd_no' => $ipdNo,
+                'class_code' => 'IMP',
                 'start' => $admissionIso,
                 'end' => $dischargeIso,
             ],
             'conditions' => $conditionRows,
             'procedures' => $procedureRows,
             'medications' => $medicationRows,
+            'template' => $this->resolveAbdmDischargeTemplate(),
         ];
 
         $factory = new FhirGeneratorFactory();
@@ -8276,6 +8347,17 @@ class Ipd_discharge extends BaseController
             return 'other';
         }
         return 'unknown';
+    }
+
+    /** Excludes blank/placeholder legacy values ('0', 'NA', 'N/A') used as "no data" markers. */
+    private function isMeaningfulDischargeValue(string $value): bool
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return false;
+        }
+
+        return ! in_array(strtoupper($value), ['0', 'NA', 'N/A'], true);
     }
 
     private function toIsoDateTimeOrNow(string $value): string
@@ -8381,5 +8463,21 @@ class Ipd_discharge extends BaseController
         }
 
         return null;
+    }
+
+    public function isDischargeHeaderBlank(string $header): bool
+    {
+        $stripped = trim(strip_tags(str_replace('&nbsp;', ' ', $header)));
+        return $stripped === '';
+    }
+
+    public function buildDefaultDischargeHeader(array $hospital): string
+    {
+        $name = trim((string) ($hospital['H_Name'] ?? ''));
+        $address = trim((string) ($hospital['hospital_address'] ?? ''));
+        $phone = trim((string) ($hospital['H_phone_No'] ?? ''));
+        $email = trim((string) ($hospital['H_Email'] ?? ''));
+
+        return '<div class="hospital-header"><h2>' . htmlspecialchars($name) . '</h2><p>' . htmlspecialchars($address) . '</p><p>Phone: ' . htmlspecialchars($phone) . ' | Email: ' . htmlspecialchars($email) . '</p></div>';
     }
 }

@@ -2743,136 +2743,201 @@ class Opd extends BaseController
 
         $medicalHtml = '';
         if (!empty($rxMeds)) {
-            $medicalHtml .= '<table width="100%" style="border-collapse:collapse;font-size:12px;">';
-            $medicalHtml .= '<tr><th style="text-align:left;width:5%;">#</th><th style="text-align:left;width:43%;">Medicine</th><th style="text-align:left;width:32%;">Dose/Freq</th><th style="text-align:left;width:10%;">Qty</th><th style="text-align:left;width:10%;">Day</th></tr>';
+            $medicalHtml .= '<table width="100%" style="border-collapse:collapse;font-size:12px;border:1px solid #cce5ff;margin-top:5px;margin-bottom:5px;">';
+            $medicalHtml .= '<thead><tr style="background:#eef6fc;border-bottom:2px solid #b8daff;">'
+                . '<th style="padding:6px 8px;text-align:left;width:5%;font-weight:bold;color:#000;">#</th>'
+                . '<th style="padding:6px 8px;text-align:left;width:40%;font-weight:bold;color:#000;">Medicine</th>'
+                . '<th style="padding:6px 8px;text-align:left;width:55%;font-weight:bold;color:#000;">Directions</th>'
+                . '</tr></thead><tbody>';
+
+            $whenCodeDescMap = [
+                'BF'   => 'BF (BEFORE FOOD)',
+                'AF'   => 'AF (AFTER FOOD)',
+                'WF'   => 'WF (WITH FOOD)',
+                'ES'   => 'ES (EMPTY STOMACH)',
+                'BBF'  => 'BBF (BEFORE BREAKFAST)',
+                'ABF'  => 'ABF (AFTER BREAKFAST)',
+                'BL'   => 'BL (BEFORE LUNCH)',
+                'AL'   => 'AL (AFTER LUNCH)',
+                'BD'   => 'BD (BEFORE DINNER)',
+                'AD'   => 'AD (AFTER DINNER)',
+                'BT'   => 'BT (BED TIME)',
+            ];
+
+            $whenHindiMap = [
+                'BF'   => 'भोजन से पहले',
+                'BEFORE FOOD' => 'भोजन से पहले',
+                'AF'   => 'भोजन के बाद',
+                'AFTER FOOD' => 'भोजन के बाद',
+                'WF'   => 'भोजन के साथ',
+                'WITH FOOD' => 'भोजन के साथ',
+                'ES'   => 'सुबह खाली पेट',
+                'EMPTY STOMACH' => 'सुबह खाली पेट',
+                'BBF'  => 'नाश्ते से पहले',
+                'BEFORE BREAKFAST' => 'नाश्ते से पहले',
+                'ABF'  => 'नाश्ते के बाद',
+                'AFTER BREAKFAST' => 'नाश्ते के बाद',
+                'BL'   => 'दोपहर के भोजन से पहले',
+                'BEFORE LUNCH' => 'दोपहर के भोजन से पहले',
+                'AL'   => 'दोपहर के भोजन के बाद',
+                'AFTER LUNCH' => 'दोपहर के भोजन के बाद',
+                'BD'   => 'रात के भोजन से पहले',
+                'BEFORE DINNER' => 'रात के भोजन से पहले',
+                'AD'   => 'रात के भोजन के बाद',
+                'AFTER DINNER' => 'रात के भोजन के बाद',
+                'BT'   => 'रात को सोते समय',
+                'BED TIME' => 'रात को सोते समय',
+            ];
+
+            $freqHindiMap = [
+                'OD'   => 'दिन में एक बार (OD)',
+                'BD'   => 'दिन में दो बार (BD)',
+                'TDS'  => 'दिन में तीन बार (TDS)',
+                'TID'  => 'दिन में तीन बार (TID)',
+                'QID'  => 'दिन में चार बार (QID)',
+                'HS'   => 'रात को सोते समय (HS)',
+                'SOS'  => 'ज़रूरत पड़ने पर (SOS)',
+                'STAT' => 'तुरंत एक बार (STAT)',
+                'ALTERNATE DAY' => 'एक दिन छोड़कर',
+                'DAILY' => 'प्रतिदिन',
+                'WEEKLY' => 'हफ़्ते में एक बार',
+                'MONTHLY' => 'महीने में एक बार',
+            ];
+
+            $remarkHindiMap = [
+                'TAKE WITH MILK' => 'दूध के साथ लें',
+                'TAKE WITH WARM WATER' => 'गुनगुने पानी के साथ लें',
+                'AVOID SOUR FOOD AND DAIRY PRODUCTS' => 'खट्टा और डेयरी उत्पाद न लें',
+                'TAKE AFTER MEALS' => 'भोजन के बाद लें',
+                'TAKE ON AN EMPTY STOMACH EARLY MORNING' => 'सुबह खाली पेट लें',
+                'CHEW WELL BEFORE SWALLOWING' => 'चबाकर खाएं',
+                'DISSOLVE IN HALF GLASS OF WATER' => 'आधे गिलास पानी में घोलकर लें',
+                'APPLY LOCALLY TWICE DAILY' => 'दिन में दो बार लगाएं',
+                'STORE IN REFRIGERATOR (2-8°C)' => 'फ्रिज में रखें (2-8°C)',
+                'DO NOT CRUSH OR CHEW TABLET' => 'गोली को तोड़े या चबाएं नहीं',
+                'AVOID ALCOHOL WHILE TAKING THIS MEDICINE' => 'शराब का सेवन न करें',
+                'COMPLETE FULL COURSE OF ANTIBIOTICS' => 'एंटीबायोटिक का पूरा कोर्स लें',
+                'DRINK PLENTY OF FLUIDS / WATER' => 'प्रचुर मात्रा में पानी पिएं',
+            ];
+
+            $formulationPrefixMap = [
+                'tablet' => 'TAB', 'tab' => 'TAB',
+                'capsule' => 'CAP', 'cap' => 'CAP',
+                'syrup' => 'SYP', 'syp' => 'SYP', 'syr' => 'SYP',
+                'injection' => 'INJ', 'inj' => 'INJ',
+                'drop' => 'DROP', 'drops' => 'DROPS', 'eye drop' => 'EYE DROP', 'ear drop' => 'EAR DROP',
+                'cream' => 'CREAM', 'ointment' => 'OINT', 'gel' => 'GEL',
+                'lotion' => 'LOTION', 'powder' => 'POWDER', 'sachet' => 'SACHET', 'respules' => 'RESPULES',
+                'suppository' => 'SUPPOSITORY', 'patch' => 'PATCH', 'spray' => 'SPRAY',
+            ];
+
             $i = 0;
             foreach ($rxMeds as $med) {
                 $i++;
-                $name    = trim((string) ($med['med_name'] ?? $med['drug_name'] ?? $med['medicine_name'] ?? $med['item_name'] ?? ''));
-                $formulationRaw = trim((string) ($med['formulation'] ?? $med['dosage_form'] ?? $med['form'] ?? $med['medicine_form'] ?? ''));
-                $formulationPrefixMap = [
-                    'tablet' => 'TAB',
-                    'tab' => 'TAB',
-                    'capsule' => 'CAP',
-                    'cap' => 'CAP',
-                    'syrup' => 'SYP',
-                    'syp' => 'SYP',
-                    'injection' => 'INJ',
-                    'inj' => 'INJ',
-                    'drop' => 'DROP',
-                    'drops' => 'DROPS',
-                    'cream' => 'CREAM',
-                    'ointment' => 'OINT',
-                    'gel' => 'GEL',
-                    'lotion' => 'LOTION',
-                    'powder' => 'POWDER',
-                    'sachet' => 'SACHET',
-                ];
-                $formulationKey = strtolower($formulationRaw);
-                $formulationPrefix = $formulationPrefixMap[$formulationKey] ?? $formulationRaw;
-                $formulationPrefix = strtoupper(trim((string) $formulationPrefix));
-                if ($formulationPrefix !== '' && $name !== '' && preg_match('/^' . preg_quote($formulationPrefix, '/') . '\b/i', $name) !== 1) {
-                    $name = trim($formulationPrefix . ' ' . $name);
+                $rawName = trim((string) ($med['med_name'] ?? $med['drug_name'] ?? $med['medicine_name'] ?? $med['item_name'] ?? ''));
+                $formulationRaw = trim((string) ($med['med_type'] ?? $med['formulation'] ?? $med['dosage_form'] ?? $med['form'] ?? $med['medicine_form'] ?? ''));
+
+                $formKey = strtolower($formulationRaw);
+                $formType = $formulationPrefixMap[$formKey] ?? strtoupper($formulationRaw);
+                if ($formType === '') {
+                    if (preg_match('/^(TAB|CAP|SYP|INJ|CREAM|OINT|GEL|DROPS|SPRAY)\b/i', $rawName, $m)) {
+                        $formType = strtoupper($m[1]);
+                    } else {
+                        $formType = 'TAB';
+                    }
                 }
-                // salt_name is Substitute (other brand names), not Generic Name — do not use it as generic fallback
+
                 $generic = trim((string) ($med['genericname'] ?? $med['generic_name'] ?? ''));
                 $dose    = trim((string) ($med['dosage_label'] ?? $med['dosage'] ?? $med['drug_dose'] ?? $med['dose'] ?? ''));
                 $freq    = trim((string) ($med['dosage_freq_label'] ?? $med['dosage_freq'] ?? $med['drug_freq'] ?? $med['frequency'] ?? ''));
-                $doseLocalRaw = trim((string) ($med['dosage_local_label'] ?? $med['dosage_local'] ?? ''));
-                $freqLocalRaw = trim((string) ($med['dosage_freq_local_label'] ?? $med['dosage_freq_local'] ?? ''));
-                $qtyRaw  = trim((string) ($med['qty'] ?? $med['quantity'] ?? $med['drug_qty'] ?? ''));
-                $qty     = ($qtyRaw === '0') ? '' : $qtyRaw;
-                $days    = trim((string) ($med['no_of_days'] ?? $med['drug_day'] ?? $med['days'] ?? ''));
                 $when    = trim((string) ($med['dosage_when_label'] ?? $med['dosage_when'] ?? ''));
+                $where   = trim((string) ($med['dosage_where_label'] ?? $med['dosage_where'] ?? ''));
+                $days    = trim((string) ($med['no_of_days'] ?? $med['drug_day'] ?? $med['days'] ?? ''));
                 $remark  = trim((string) ($med['remark'] ?? ''));
-                $inst    = trim(($when !== '' ? $when : '') . ($remark !== '' ? ($when !== '' ? ' | ' : '') . $remark : ''));
-                $doseFreqText = trim($dose . ' ' . $freq);
 
-                // Hindi for dose + frequency:
-                // Prefer pre-resolved local labels from buildOpdLetterPrintData(), then resolve via maps.
-                $doseLocal = $doseLocalRaw;
-                if ($doseLocal === '' && $dose !== '') {
-                    $doseKey = strtolower(trim($dose));
-                    $doseLocal = $doseShedHindiMap[$doseKey] ?? '';
-                    if ($doseLocal === '' && preg_match('/^(.+?\))/u', $dose, $_m) === 1) {
-                        $doseSignKey = strtolower(trim($_m[1]));
-                        $doseLocal = $doseShedHindiMap[$doseSignKey] ?? '';
-                    }
-                    if ($doseLocal === '') {
-                        $doseFallback = $this->translateToLocalPatientText($dose);
-                        if (strtolower($doseFallback) !== strtolower($dose)) {
-                            $doseLocal = $doseFallback;
-                        }
-                    }
+                // 1) Medicine Column: Prepend Type e.g. "CAP ACILOC" or "TAB A TO Z"
+                $fullMedName = $rawName;
+                if ($formType !== '' && preg_match('/^' . preg_quote($formType, '/') . '\b/i', $fullMedName) !== 1) {
+                    $fullMedName = $formType . ' ' . $fullMedName;
                 }
 
-                $freqLocal = $freqLocalRaw;
-                if ($freqLocal === '' && $freq !== '') {
-                    $freqKey = strtolower(trim($freq));
-                    $freqLocal = $doseShedHindiMap[$freqKey] ?? $doseFreqHindiMap[$freqKey] ?? '';
-                    if ($freqLocal === '' && preg_match('/^(.+?\))/u', $freq, $_m) === 1) {
-                        $signKey = strtolower(trim($_m[1]));
-                        $freqLocal = $doseShedHindiMap[$signKey] ?? '';
-                    }
-                    if ($freqLocal === '') {
-                        $freqFallback = $this->translateToLocalPatientText($freq);
-                        if (strtolower($freqFallback) !== strtolower($freq)) {
-                            $freqLocal = $freqFallback;
-                        }
-                    }
-                }
-
-                $doseFreqLocal = trim($doseLocal . (($doseLocal !== '' && $freqLocal !== '') ? ' ' : '') . $freqLocal);
-                if ($doseFreqLocal === '' && $doseFreqText !== '') {
-                    $fallback = $this->translateToLocalPatientText($doseFreqText);
-                    if (strtolower($fallback) !== strtolower($doseFreqText)) {
-                        $doseFreqLocal = $fallback;
-                    }
-                }
-
-                // Hindi for when/timing (opd_dose_when → opd_dose_shed → fallback)
-                $whenKey  = strtolower(trim($when));
-                $instLocal = $doseWhenHindiMap[$whenKey] ?? $doseShedHindiMap[$whenKey] ?? '';
-                if ($instLocal === '' && preg_match('/^(.+?\))/u', $when, $_m) === 1) {
-                    $signKey = strtolower(trim($_m[1]));
-                    $instLocal = $doseWhenHindiMap[$signKey] ?? $doseShedHindiMap[$signKey] ?? '';
-                }
-                if ($instLocal === '' && $when !== '') {
-                    $fallback = $this->translateToLocalPatientText($when);
-                    if (strtolower($fallback) !== strtolower($when)) {
-                        $instLocal = $fallback;
-                    }
-                }
-
-                $nameHtml = esc($name);
+                $nameHtml = '<strong>' . esc($fullMedName) . '</strong>';
                 if ($generic !== '') {
-                    $nameHtml .= '<div style="font-size:11px;color:#444;">Salt/Generic: ' . esc($generic) . '</div>';
+                    // Show only generic data directly below medicine name (no "Salt/Generic:" heading label)
+                    $nameHtml .= '<div style="font-size:10px;color:#555;font-weight:normal;margin-top:2px;">' . esc($generic) . '</div>';
                 }
 
-                $hasInstruction = ($inst !== '' || $instLocal !== '');
-                $baseRowCellStyle = $hasInstruction ? ' style="border-bottom:none;"' : '';
+                // 2) English Directions & Local Language (Hindi) Directions
+                $dirParts = [];
+                $dirLocalParts = [];
 
-                $medicalHtml .= '<tr>'
-                    . '<td' . $baseRowCellStyle . '>' . $i . '</td>'
-                    . '<td' . $baseRowCellStyle . '>' . $nameHtml . '</td>'
-                    . '<td' . $baseRowCellStyle . '>' . esc($doseFreqText)
-                    . ($doseFreqLocal !== '' ? ('<div style="font-size:11px;color:#444;line-height:1.4;" lang="hi">' . esc($doseFreqLocal) . '</div>') : '')
+                if ($when !== '') {
+                    $upperWhen = strtoupper($when);
+                    if (isset($whenCodeDescMap[$upperWhen])) {
+                        $dirParts[] = $whenCodeDescMap[$upperWhen];
+                    } else {
+                        $dirParts[] = $when;
+                    }
+
+                    if (isset($whenHindiMap[$upperWhen])) {
+                        $dirLocalParts[] = $whenHindiMap[$upperWhen];
+                    } elseif (isset($doseWhenHindiMap[strtolower($when)])) {
+                        $dirLocalParts[] = $doseWhenHindiMap[strtolower($when)];
+                    }
+                }
+
+                if ($remark !== '') {
+                    $upperRemark = strtoupper($remark);
+                    $dirParts[] = $upperRemark;
+
+                    if (isset($remarkHindiMap[$upperRemark])) {
+                        $dirLocalParts[] = $remarkHindiMap[$upperRemark];
+                    }
+                }
+
+                $doseFreqCombined = trim($dose . ($dose !== '' && $freq !== '' ? ' ' : '') . $freq);
+                if ($doseFreqCombined !== '') {
+                    $dirParts[] = $doseFreqCombined;
+
+                    $upperFreq = strtoupper($freq);
+                    if (isset($freqHindiMap[$upperFreq])) {
+                        $dirLocalParts[] = $freqHindiMap[$upperFreq];
+                    } elseif (isset($doseFreqHindiMap[strtolower($freq)])) {
+                        $dirLocalParts[] = $doseFreqHindiMap[strtolower($freq)];
+                    }
+                }
+
+                if ($where !== '' && strcasecmp($where, 'Oral') !== 0 && strcasecmp($where, 'Oral (PO)') !== 0) {
+                    $dirParts[] = $where;
+                }
+
+                if ($days !== '') {
+                    $daysText = (is_numeric($days) ? $days . ' Days' : $days);
+                    $dirParts[] = $daysText;
+
+                    $daysNum = is_numeric($days) ? (int)$days : 0;
+                    if ($daysNum > 0) {
+                        $dirLocalParts[] = $daysNum . ' दिन';
+                    } elseif (stripos($days, 'week') !== false) {
+                        $dirLocalParts[] = '1 हफ़्ता';
+                    } elseif (stripos($days, 'month') !== false) {
+                        $dirLocalParts[] = '1 महीना';
+                    }
+                }
+
+                $directionsText = !empty($dirParts) ? implode(' | ', $dirParts) : '-';
+                $localDirectionsText = !empty($dirLocalParts) ? implode(' | ', array_values(array_unique($dirLocalParts))) : '';
+
+                $medicalHtml .= '<tr style="border-bottom:1px solid #e2e8f0;">'
+                    . '<td style="padding:6px 8px;vertical-align:middle;text-align:left;">' . $i . '</td>'
+                    . '<td style="padding:6px 8px;vertical-align:middle;text-align:left;">' . $nameHtml . '</td>'
+                    . '<td style="padding:6px 8px;vertical-align:middle;text-align:left;">'
+                    . '<div>' . esc($directionsText) . '</div>'
+                    . ($localDirectionsText !== '' ? ('<div style="font-size:11px;color:#444;line-height:1.4;margin-top:2px;" lang="hi">' . esc($localDirectionsText) . '</div>') : '')
                     . '</td>'
-                    . '<td' . $baseRowCellStyle . '>' . esc($qty) . '</td>'
-                    . '<td' . $baseRowCellStyle . '>' . esc($days) . '</td>'
                     . '</tr>';
-
-                if ($hasInstruction) {
-                    $medicalHtml .= '<tr>'
-                        . '<td></td>'
-                        . '<td colspan="4" style="padding-top:2px;padding-bottom:4px;">'
-                        . '<div>' . esc($inst !== '' ? $inst : '-') . '</div>'
-                        . ($instLocal !== '' ? ('<div style="font-size:11px;color:#444;line-height:1.4;" lang="hi">' . esc($instLocal) . '</div>') : '')
-                        . '</td>'
-                        . '</tr>';
-                }
             }
-            $medicalHtml .= '</table>';
+            $medicalHtml .= '</tbody></table>';
         }
 
         $rxRead = static function (array $row, array $keys): string {
@@ -6080,15 +6145,31 @@ class Opd extends BaseController
         $opdMaster = $query->getResult();
 
         if (empty($opdMaster)) {
-            return $this->response->setStatusCode(404)->setBody('OPD not found');
-        }
+            $patientSql = "select *,if(gender=1,'Male','Female') as xgender from patient_master where id=" . (int) $opdid;
+            $personInfo = $this->db->query($patientSql)->getResult();
+            if (empty($personInfo)) {
+                return $this->response->setStatusCode(404)->setBody('Patient or OPD record not found');
+            }
 
-        $opdRow = $opdMaster[0];
-        $sql = "select *,if(gender=1,'Male','Female') as xgender from patient_master where id='" . (int) $opdRow->p_id . "'";
-        $query = $this->db->query($sql);
-        $personInfo = $query->getResult();
-        if (!empty($personInfo)) {
-            $personInfo[0]->age = get_age_1($personInfo[0]->dob ?? null, $personInfo[0]->age ?? '', $personInfo[0]->age_in_month ?? '', $personInfo[0]->estimate_dob ?? '', $opdRow->apointment_date ?? null);
+            if (! empty($personInfo)) {
+                $personInfo[0]->age = get_age_1($personInfo[0]->dob ?? null, $personInfo[0]->age ?? '', $personInfo[0]->age_in_month ?? '', $personInfo[0]->estimate_dob ?? '', date('Y-m-d'));
+            }
+
+            $opdMaster = [(object) [
+                'opd_id' => 0,
+                'opd_code' => 'PT-' . $opdid,
+                'p_id' => $opdid,
+                'apointment_date' => date('Y-m-d'),
+                'Payment_type_str' => 'Self',
+            ]];
+        } else {
+            $opdRow = $opdMaster[0];
+            $sql = "select *,if(gender=1,'Male','Female') as xgender from patient_master where id='" . (int) $opdRow->p_id . "'";
+            $query = $this->db->query($sql);
+            $personInfo = $query->getResult();
+            if (!empty($personInfo)) {
+                $personInfo[0]->age = get_age_1($personInfo[0]->dob ?? null, $personInfo[0]->age ?? '', $personInfo[0]->age_in_month ?? '', $personInfo[0]->estimate_dob ?? '', $opdRow->apointment_date ?? null);
+            }
         }
 
         $hospitalEnabled = hospital_setting_value('ALLOW_IMAGE_PREUPLOAD_EDIT', '0') === '1';
@@ -6108,10 +6189,24 @@ class Opd extends BaseController
      */
     public function save_image(int $opdid)
     {
+        $patientId = 0;
         $opdRow = $this->db->table('opd_master')->where('opd_id', $opdid)->get(1)->getRowArray();
-        if (empty($opdRow)) {
-            log_message('warning', 'OPD scan upload failed: OPD not found (opd_id={opd_id})', ['opd_id' => $opdid]);
-            return $this->response->setStatusCode(404)->setJSON(['update' => 0, 'error_text' => 'OPD not found']);
+        if (! empty($opdRow)) {
+            $patientId = (int) ($opdRow['p_id'] ?? 0);
+        } else {
+            $patientRow = $this->db->table('patient_master')->where('id', $opdid)->get(1)->getRowArray();
+            if (! empty($patientRow)) {
+                $patientId = (int) $patientRow['id'];
+                $opdRow = [
+                    'opd_id' => 0,
+                    'p_id' => $patientId,
+                    'insurance_case_id' => 0,
+                    'opd_status' => 2,
+                ];
+            } else {
+                log_message('warning', 'OPD scan upload failed: Patient or OPD not found (id={id})', ['id' => $opdid]);
+                return $this->response->setStatusCode(404)->setJSON(['update' => 0, 'error_text' => 'Patient or OPD not found']);
+            }
         }
 
         $uploadsDir = rtrim(FCPATH, '/\\') . '/uploads/' . date('Ymd');
@@ -6289,6 +6384,16 @@ class Opd extends BaseController
             }
             if (!empty($update)) {
                 $this->db->table('file_upload_data')->where('id', $insertId)->update($update);
+            }
+
+            try {
+                $patientController = new \App\Controllers\Patient();
+                $patientController->enqueueHealthDocumentFhirForFileUpload($insertId);
+            } catch (\Throwable $e) {
+                log_message('warning', 'Unable to enqueue ABDM HealthDocumentRecord FHIR sync for OPD file {id}: {msg}', [
+                    'id' => $insertId,
+                    'msg' => $e->getMessage(),
+                ]);
             }
         }
 

@@ -4695,7 +4695,7 @@ class Opd_prescription extends BaseController
 
         $builder = $this->db->table('opd_fhir_documents')
             ->where('opd_id', (int) $opdId)
-            ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle']);
+            ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle', 'PrescriptionRecord']);
 
         if ($sessionId > 0) {
             $builder->where('opd_session_id', (int) $sessionId);
@@ -4724,7 +4724,7 @@ class Opd_prescription extends BaseController
 
         $builder = $this->db->table('opd_fhir_documents')
             ->where('opd_id', (int) $opdId)
-            ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle']);
+            ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle', 'PrescriptionRecord']);
 
         if ($sessionId > 0) {
             $builder->where('opd_session_id', (int) $sessionId);
@@ -4852,6 +4852,12 @@ class Opd_prescription extends BaseController
             $phoneField    = $this->resolveFirstField($patientFields, ['p_contact', 'phone', 'mobile', 'contact_no', 'mobile_no', 'p_phone']);
             $patPhone      = $phoneField !== null ? trim((string) ($patientRow[$phoneField] ?? '')) : '';
 
+            $patientCodeField = $this->resolveFirstField($patientFields, ['uhid_no', 'uhid', 'patient_code', 'p_code', 'mrn']);
+            $patUhid = $patientCodeField !== null ? trim((string) ($patientRow[$patientCodeField] ?? '')) : '';
+            if ($patUhid === '') {
+                $patUhid = trim((string) ($opdRow['p_code'] ?? $opdRow['patient_code'] ?? ''));
+            }
+
             $patient = [
                 'id'          => (string) $patientId,
                 'name'        => $patFullName,
@@ -4861,6 +4867,8 @@ class Opd_prescription extends BaseController
                 'birthDate'   => ! empty($patientRow['dob']) ? date('Y-m-d', strtotime((string) $patientRow['dob'])) : '',
                 'abhaAddress' => $abhaAddress,
                 'phone'       => $patPhone,
+                'uhid'        => $patUhid,
+                'patient_code'=> $patUhid,
             ];
 
             $encounter = [
@@ -4873,17 +4881,21 @@ class Opd_prescription extends BaseController
             $conditions      = $this->getPrescriptionConditions($sessionId);
             $clinicalContext = $sessionId > 0 ? $this->getPrescriptionClinicalContext($sessionId, $opdRow) : [];
             $clinicalContext['attachments'] = $this->collectOpdFhirAttachments($opdId);
+            $prescriptionPdf = $this->buildPrescriptionDigitalSharePdf($patientRow, $opdRow, $sessionId, $medications, $conditions, $clinicalContext);
+            if ($prescriptionPdf !== null) {
+                $clinicalContext['attachments'][] = $prescriptionPdf;
+            }
             $bundle          = $this->fhirR4Builder->buildPrescriptionBundle($patient, $encounter, $medications, $conditions, $clinicalContext);
             $bundleJson      = (string) json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
-            $user        = auth()->user();
-            $generatedBy = (string) ($user->id ?? 'system');
+            $user        = function_exists('auth') ? auth()->user() : null;
+            $generatedBy = (string) ($user->id ?? session('user_id') ?? 'system');
             $generatedAt = Time::now('Asia/Kolkata')->toDateTimeString();
 
             // Overwrite the latest stored bundle for this opd_id / session
             $existingBuilder = $this->db->table('opd_fhir_documents')
                 ->where('opd_id', $opdId)
-                ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle']);
+                ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle', 'PrescriptionRecord']);
             if ($sessionId > 0) {
                 $existingBuilder->where('opd_session_id', $sessionId);
             }
@@ -4893,7 +4905,7 @@ class Opd_prescription extends BaseController
                 $this->db->table('opd_fhir_documents')
                     ->where('id', (int) $existing['id'])
                     ->update([
-                        'bundle_type' => 'OPConsultRecord',
+                        'bundle_type' => 'PrescriptionRecord',
                         'bundle_json'  => $bundleJson,
                         'generated_by' => $generatedBy,
                         'generated_at' => $generatedAt,
@@ -4903,7 +4915,7 @@ class Opd_prescription extends BaseController
                 $this->db->table('opd_fhir_documents')->insert([
                     'opd_id'         => $opdId,
                     'opd_session_id' => $sessionId,
-                    'bundle_type'    => 'OPConsultRecord',
+                    'bundle_type'    => 'PrescriptionRecord',
                     'bundle_json'    => $bundleJson,
                     'generated_by'   => $generatedBy,
                     'generated_at'   => $generatedAt,
@@ -4935,7 +4947,7 @@ class Opd_prescription extends BaseController
 
         $builder = $this->db->table('opd_fhir_documents')
             ->where('opd_id', (int) $opdId)
-            ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle']);
+            ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle', 'PrescriptionRecord']);
 
         if ($sessionId > 0) {
             $builder->where('opd_session_id', (int) $sessionId);
@@ -5396,7 +5408,7 @@ class Opd_prescription extends BaseController
 
         $builder = $this->db->table('opd_fhir_documents')
             ->where('opd_id', $opdId)
-            ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle']);
+            ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle', 'PrescriptionRecord']);
         if ($sessionId > 0) {
             $builder->where('opd_session_id', $sessionId);
         }
@@ -8137,10 +8149,7 @@ class Opd_prescription extends BaseController
         $q = trim((string) $this->request->getGet('q'));
         $scope = strtolower(trim((string) $this->request->getGet('scope')));
         $limit = (int) ($this->request->getGet('limit') ?? 10);
-        if ($limit <= 0) {
-            $limit = 10;
-        }
-        $limit = min(10, $limit);
+        $limit = min(30, max(1, $limit));
         if (! in_array($scope, ['active', 'favorite', 'all'], true)) {
             $scope = 'active';
         }
@@ -8228,21 +8237,30 @@ class Opd_prescription extends BaseController
             if ($formField !== null) {
                 $builder->orLike($formField, $q, 'both');
             }
+            if ($saltField !== null) {
+                $builder->orLike($saltField, $q, 'both');
+            }
             if ($qFirstToken !== '' && mb_strlen($qFirstToken) >= 1) {
                 $builder->orLike($nameField, $qFirstToken, 'after');
-            }
-
-            // Phonetic candidates can differ by one letter (e.g. CETLAY/CETLEY),
-            // so include an alpha-prefix fallback to widen SQL fetch before PHP ranking.
-            if ($qAlpha !== '') {
-                if (mb_strlen($qAlpha) >= 3) {
-                    $builder->orLike($nameField, substr($qAlpha, 0, 3), 'after');
-                } elseif (mb_strlen($qAlpha) >= 2) {
-                    $builder->orLike($nameField, substr($qAlpha, 0, 2), 'after');
+                if ($saltField !== null) {
+                    $builder->orLike($saltField, $qFirstToken, 'after');
                 }
             }
 
-            // Normalize separators so variants like "utor", "u-tor", "u tor" match each other.
+            if ($qAlpha !== '') {
+                if (mb_strlen($qAlpha) >= 3) {
+                    $builder->orLike($nameField, substr($qAlpha, 0, 3), 'after');
+                    if ($saltField !== null) {
+                        $builder->orLike($saltField, substr($qAlpha, 0, 3), 'after');
+                    }
+                } elseif (mb_strlen($qAlpha) >= 2) {
+                    $builder->orLike($nameField, substr($qAlpha, 0, 2), 'after');
+                    if ($saltField !== null) {
+                        $builder->orLike($saltField, substr($qAlpha, 0, 2), 'after');
+                    }
+                }
+            }
+
             if ($qNormalized !== '') {
                 $qNormalizedSql = str_replace("'", "''", strtoupper($qNormalized));
                 $nameNormalizedSql = "REPLACE(REPLACE(UPPER(" . $nameField . "), '-', ''), ' ', '')";
@@ -8251,6 +8269,11 @@ class Opd_prescription extends BaseController
                 if ($formField !== null) {
                     $formNormalizedSql = "REPLACE(REPLACE(UPPER(" . $formField . "), '-', ''), ' ', '')";
                     $builder->orWhere($formNormalizedSql . " LIKE '%" . $qNormalizedSql . "%'", null, false);
+                }
+
+                if ($saltField !== null) {
+                    $saltNormalizedSql = "REPLACE(REPLACE(UPPER(" . $saltField . "), '-', ''), ' ', '')";
+                    $builder->orWhere($saltNormalizedSql . " LIKE '%" . $qNormalizedSql . "%'", null, false);
                 }
             }
             $builder->groupEnd();
@@ -8278,12 +8301,28 @@ class Opd_prescription extends BaseController
             $nameSoundex = $nameAlpha !== '' ? soundex($nameAlpha) : '';
             $nameMetaphone = $nameAlpha !== '' ? metaphone($nameAlpha) : '';
 
+            $saltName = trim((string) ($row['med_salt'] ?? ''));
+            $saltUpper = strtoupper($saltName);
+            $saltLoose = trim((string) (preg_replace('/[^A-Z0-9]+/', ' ', $saltUpper) ?? $saltUpper));
+            $saltNormalized = trim((string) (preg_replace('/[^A-Z0-9]+/', '', $saltUpper) ?? $saltUpper));
+
             $tokenMatch = false;
             if (! empty($qTokens)) {
                 $tokenMatch = true;
                 foreach ($qTokens as $token) {
                     if ($token === '' || ! str_contains($nameLoose, $token)) {
                         $tokenMatch = false;
+                        break;
+                    }
+                }
+            }
+
+            $saltTokenMatch = false;
+            if (! empty($qTokens) && $saltLoose !== '') {
+                $saltTokenMatch = true;
+                foreach ($qTokens as $token) {
+                    if ($token === '' || (! str_contains($nameLoose, $token) && ! str_contains($saltLoose, $token))) {
+                        $saltTokenMatch = false;
                         break;
                     }
                 }
@@ -8304,8 +8343,11 @@ class Opd_prescription extends BaseController
             $matchesSearch = false;
             if ($qUpper !== '') {
                 $matchesSearch = str_contains($nameUpper, $qUpper)
+                    || ($saltUpper !== '' && str_contains($saltUpper, $qUpper))
                     || ($qNormalized !== '' && str_contains($nameNormalized, $qNormalized))
+                    || ($qNormalized !== '' && $saltNormalized !== '' && str_contains($saltNormalized, $qNormalized))
                     || $tokenMatch
+                    || $saltTokenMatch
                     || $phoneticMatch
                     || $nearMatch;
             }
@@ -8343,6 +8385,14 @@ class Opd_prescription extends BaseController
                     $score += 200;
                 } elseif (str_contains($nameUpper, $qUpper)) {
                     $score += 100;
+                }
+
+                if ($saltUpper !== '') {
+                    if (str_starts_with($saltUpper, $qUpper)) {
+                        $score += 180;
+                    } elseif (str_contains($saltUpper, $qUpper)) {
+                        $score += 90;
+                    }
                 }
 
                 if ($qNormalized !== '' && str_starts_with($nameNormalized, $qNormalized)) {
@@ -11430,11 +11480,151 @@ class Opd_prescription extends BaseController
     /**
      * @param array<string, mixed> $patientRow
      * @param array<string, mixed> $opdRow
+     * @param array<int, array<string, mixed>> $medications
+     * @param array<string, mixed> $clinicalContext
+     * @return array<string, string>|null
+     */
+    private function buildPrescriptionDigitalSharePdf(array $patientRow, array $opdRow, int $sessionId, array $medications, array $conditions, array $clinicalContext): ?array
+    {
+        try {
+            $escape = static fn (string $value): string => htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $patientName = trim($this->sanitizePersonNamePart((string) ($patientRow['p_fname'] ?? '')) . ' ' . $this->sanitizePersonNamePart((string) ($patientRow['p_lname'] ?? '')));
+            $patientName = $patientName !== '' ? $patientName : 'Patient';
+            $hospital = $this->getHospitalProfileForFhir();
+            $hospitalName = trim((string) ($hospital['name'] ?? '')) ?: 'Healthcare Facility';
+            $hospitalAddress = trim((string) ($hospital['address'] ?? ''));
+            $hospitalContact = trim(implode(' | ', array_filter([
+                trim((string) ($hospital['phone'] ?? '')),
+                trim((string) ($hospital['email'] ?? '')),
+            ], static fn (string $value): bool => $value !== '')));
+            $logoHtml = '';
+            $logoName = trim((string) ($hospital['logo'] ?? ''));
+            foreach (array_filter([
+                $logoName !== '' ? FCPATH . 'assets/images/' . ltrim($logoName, '/\\') : '',
+                $logoName !== '' ? FCPATH . 'assets/img/' . ltrim($logoName, '/\\') : '',
+                FCPATH . 'assets/img/logo.png',
+            ]) as $logoPath) {
+                if (is_file($logoPath)) {
+                    $logoHtml = '<img src="' . $escape(str_replace('\\', '/', $logoPath)) . '" alt="Hospital logo" width="64" style="width:64px;height:auto">';
+                    break;
+                }
+            }
+            $visitDate = trim((string) ($opdRow['apointment_date'] ?? ''));
+            $visitDate = $visitDate !== '' ? date('d-m-Y', strtotime($visitDate)) : date('d-m-Y');
+            $rows = '';
+
+            $hasMedicines = false;
+            foreach ($medications as $index => $medication) {
+                $name = trim((string) ($medication['drug_name'] ?? ''));
+                if ($name === '') {
+                    continue;
+                }
+                $hasMedicines = true;
+                $instructions = trim(implode(' | ', array_filter([
+                    trim((string) ($medication['dosage'] ?? '')),
+                    trim((string) ($medication['route_text'] ?? '')),
+                    trim((string) ($medication['frequency_text'] ?? '')),
+                ], static fn (string $value): bool => $value !== '')));
+                $rows .= '<tr><td>' . ($index + 1) . '</td><td><strong>' . $escape($name) . '</strong>'
+                    . (trim((string) ($medication['generic_name'] ?? '')) !== '' ? '<br><small>' . $escape((string) $medication['generic_name']) . '</small>' : '')
+                    . '</td><td>' . $escape((string) ($medication['med_type'] ?? '')) . '</td><td>' . $escape($instructions) . '</td></tr>';
+            }
+
+            $practitioner = (array) ($clinicalContext['practitioner'] ?? []);
+            $organization = (array) ($clinicalContext['organization'] ?? []);
+            $section = static function (string $title, array $items) use ($escape): string {
+                $items = array_values(array_filter(array_map(static fn ($item): string => trim((string) $item), $items), static fn (string $item): bool => $item !== ''));
+                if (empty($items)) {
+                    return '';
+                }
+
+                return '<div class="section"><strong>' . $escape($title) . ':</strong> ' . $escape(implode(' | ', $items)) . '</div>';
+            };
+            $complaints = array_map(static fn (array $complaint): string => (string) ($complaint['text'] ?? ''), (array) ($clinicalContext['complaints'] ?? []));
+            $diagnoses = array_map(static fn (array $condition): string => (string) ($condition['text'] ?? ''), $conditions);
+            $allergies = array_map(static function (array $allergy): string {
+                $reaction = trim((string) ($allergy['reaction_text'] ?? ''));
+                $text = trim((string) ($allergy['code_text'] ?? ''));
+                return $reaction !== '' ? $text . ' (' . $reaction . ')' : $text;
+            }, (array) ($clinicalContext['allergies'] ?? []));
+            $vitals = array_map(static fn (array $vital): string => trim((string) ($vital['display'] ?? '') . ': ' . (string) ($vital['value'] ?? '') . ' ' . (string) ($vital['unit'] ?? '')), (array) ($clinicalContext['observations'] ?? []));
+            $investigations = array_map(static fn (array $request): string => (string) ($request['code_text'] ?? ''), (array) ($clinicalContext['service_requests'] ?? []));
+            $followUp = array_map(static fn (array $appointment): string => (string) ($appointment['description'] ?? ''), (array) ($clinicalContext['appointments'] ?? []));
+            $adviceText = trim((string) ($clinicalContext['advice'] ?? ''));
+
+            $hasOtherData = ! empty(array_filter($complaints))
+                || ! empty(array_filter($diagnoses))
+                || ! empty(array_filter($allergies))
+                || ! empty(array_filter($vitals))
+                || ! empty(array_filter($investigations))
+                || $adviceText !== ''
+                || ! empty(array_filter($followUp));
+
+            // Skip PDF generation if neither medicines nor any other clinical data was entered
+            if (! $hasMedicines && ! $hasOtherData) {
+                return null;
+            }
+
+            $medicineTableHtml = $hasMedicines
+                ? '<table class="medicine-table"><thead><tr><th>#</th><th>Medicine</th><th>Type</th><th>Directions</th></tr></thead><tbody>' . $rows . '</tbody></table>'
+                : '';
+
+            $html = '<table class="brand"><tr><td class="brand-logo" width="80">' . $logoHtml . '</td><td class="facility-details"><div class="facility">' . $escape($hospitalName) . '</div>'
+                . ($hospitalAddress !== '' ? '<div class="facility-meta">' . $escape($hospitalAddress) . '</div>' : '')
+                . ($hospitalContact !== '' ? '<div class="facility-meta">' . $escape($hospitalContact) . '</div>' : '')
+                . '</td><td class="document-title" width="120">Prescription Record</td></tr></table>'
+                . '<table class="meta"><tr><td><strong>Patient:</strong> ' . $escape($patientName) . '</td><td><strong>UHID:</strong> ' . $escape((string) ($patientRow['p_code'] ?? '')) . '</td></tr>'
+                . '<tr><td><strong>OPD:</strong> ' . $escape((string) ($opdRow['opd_code'] ?? $opdRow['opd_id'] ?? '')) . '</td><td><strong>Date:</strong> ' . $escape($visitDate) . '</td></tr>'
+                . '<tr><td colspan="2"><strong>Prescriber:</strong> ' . $escape((string) ($practitioner['name'] ?? $opdRow['doc_name'] ?? '')) . '</td></tr></table>'
+                . $section('Chief Complaints', $complaints)
+                . $section('Diagnosis', $diagnoses)
+                . $section('Allergy Alert', $allergies)
+                . $section('Vitals', $vitals)
+                . $medicineTableHtml
+                . $section('Investigations', $investigations)
+                . $section('Advice', [$adviceText])
+                . $section('Follow-up / Referral', $followUp);
+            $tempDir = WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'mpdf';
+            if (! is_dir($tempDir)) {
+                @mkdir($tempDir, 0755, true);
+            }
+            $pdf = new \Mpdf\Mpdf(['format' => 'A4', 'tempDir' => $tempDir, 'default_font' => 'dejavusans']);
+            $pdf->WriteHTML('body{font-family:DejaVu Sans,sans-serif;font-size:10px}.brand{width:100%;border-collapse:collapse;border-bottom:2px solid #176b87;margin:0 0 10px}.brand td{border:0;vertical-align:middle;padding:0 0 9px}.brand-logo{width:80px}.brand-logo img{width:64px;height:auto}.facility-details{padding-left:6px}.facility{font-size:18px;font-weight:bold;color:#123b4a}.facility-meta{font-size:9px;color:#52606d;margin-top:2px}.document-title{width:120px;font-size:13px;font-weight:bold;text-align:right;color:#176b87}.meta,.medicine-table{width:100%;border-collapse:collapse;margin:10px 0}.meta td{padding:5px;border:1px solid #d5dde2}.medicine-table th,.medicine-table td{padding:6px;border:1px solid #cbd5df;text-align:left}.medicine-table th{background:#eaf2f5}small{color:#52606d}.section{margin:7px 0;padding:6px;background:#f5f9fb;border-left:3px solid #176b87}', \Mpdf\HTMLParserMode::HEADER_CSS);
+            $pdf->WriteHTML($html, \Mpdf\HTMLParserMode::HTML_BODY);
+            $bytes = $pdf->Output('Prescription-' . $opdRow['opd_id'] . '-' . $sessionId . '.pdf', 'S');
+            if (! is_string($bytes) || ! str_starts_with($bytes, '%PDF-')) {
+                return null;
+            }
+
+            return [
+                'id' => 'prescription-' . (int) ($opdRow['opd_id'] ?? 0) . '-' . $sessionId,
+                'title' => 'OPD Consultation Summary Report.pdf',
+                'content_type' => 'application/pdf',
+                'data_base64' => base64_encode($bytes),
+                'date' => Time::now('Asia/Kolkata')->format(DATE_ATOM),
+            ];
+        } catch (\Throwable $exception) {
+            log_message('warning', 'Prescription digital-share PDF could not be generated: ' . $exception->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $patientRow
+     * @param array<string, mixed> $opdRow
+     * @param int $sessionId
      */
     private function storePrescriptionFhirBundle(int $opdId, int $sessionId, array $patientRow, array $opdRow): bool
     {
         if (! $this->db->tableExists('opd_fhir_documents')) {
             return false;
+        }
+
+        if ($sessionId <= 0 && $this->db->tableExists('opd_prescription')) {
+            $presRow = $this->db->table('opd_prescription')->select('id')->where('opd_id', $opdId)->orderBy('id', 'DESC')->get(1)->getRowArray();
+            if (! empty($presRow['id'])) {
+                $sessionId = (int) $presRow['id'];
+            }
         }
 
         $abhaField = $this->resolvePatientAbhaField();
@@ -11452,6 +11642,12 @@ class Opd_prescription extends BaseController
         $phoneField = $this->resolveFirstField($patientFields, ['p_contact', 'phone', 'mobile', 'contact_no', 'mobile_no', 'p_phone']);
         $patPhone = $phoneField !== null ? trim((string) ($patientRow[$phoneField] ?? '')) : '';
 
+        $patientCodeField = $this->resolveFirstField($patientFields, ['uhid_no', 'uhid', 'patient_code', 'p_code', 'mrn']);
+        $patUhid = $patientCodeField !== null ? trim((string) ($patientRow[$patientCodeField] ?? '')) : '';
+        if ($patUhid === '') {
+            $patUhid = trim((string) ($opdRow['p_code'] ?? $opdRow['patient_code'] ?? ''));
+        }
+
         $patient = [
             'id'          => (string) ($patientRow['id'] ?? ($opdRow['p_id'] ?? 0)),
             'name'        => $patFullName,
@@ -11461,6 +11657,8 @@ class Opd_prescription extends BaseController
             'birthDate'   => ! empty($patientRow['dob']) ? date('Y-m-d', strtotime((string) $patientRow['dob'])) : '',
             'abhaAddress' => $abhaAddress,
             'phone'       => $patPhone,
+            'uhid'        => $patUhid,
+            'patient_code'=> $patUhid,
         ];
 
         $encounter = [
@@ -11470,20 +11668,38 @@ class Opd_prescription extends BaseController
             'period_end' => Time::now('Asia/Kolkata')->toDateTimeString(),
         ];
 
+        if ($sessionId <= 0 && $this->db->tableExists('opd_prescription')) {
+            $presRow = $this->db->table('opd_prescription')->select('id')->where('opd_id', $opdId)->orderBy('id', 'DESC')->get(1)->getRowArray();
+            if (! empty($presRow['id'])) {
+                $sessionId = (int) $presRow['id'];
+            }
+        }
+
         $medications = $this->getPrescriptionMedicines($sessionId);
         $conditions = $this->getPrescriptionConditions($sessionId);
         $clinicalContext = $this->getPrescriptionClinicalContext($sessionId, $opdRow);
         $clinicalContext['attachments'] = $this->collectOpdFhirAttachments($opdId);
+        $prescriptionPdf = $this->buildPrescriptionDigitalSharePdf($patientRow, $opdRow, $sessionId, $medications, $conditions, $clinicalContext);
+        if ($prescriptionPdf !== null) {
+            $clinicalContext['attachments'][] = $prescriptionPdf;
+        }
         $bundle = $this->fhirR4Builder->buildPrescriptionBundle($patient, $encounter, $medications, $conditions, $clinicalContext);
         $bundleJson = (string) json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
-        $user = auth()->user();
-        $generatedBy = (string) ($user->id ?? 'system');
+        $userId = null;
+        try {
+            if (function_exists('auth')) {
+                $user = @auth()->user();
+                $userId = $user->id ?? null;
+            }
+        } catch (\Throwable $ignored) {
+        }
+        $generatedBy = (string) ($userId ?? session('user_id') ?? 'system');
 
         $inserted = (bool) $this->db->table('opd_fhir_documents')->insert([
             'opd_id' => $opdId,
             'opd_session_id' => $sessionId,
-            'bundle_type' => 'OPConsultRecord',
+            'bundle_type' => 'PrescriptionRecord',
             'bundle_json' => $bundleJson,
             'generated_by' => $generatedBy,
             'generated_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
@@ -11567,13 +11783,37 @@ class Opd_prescription extends BaseController
             }
         }
 
+        $doseMap = $this->getDoseMasterLabelMap('opd_dose_shed', ['dose_shed_id', 'id'], ['dose_show_sign', 'dose_sign', 'dose_sign_desc', 'name']);
+        $whenMap = $this->getDoseMasterLabelMap('opd_dose_when', ['dose_when_id', 'id'], ['dose_sign_desc', 'dose_sign', 'name']);
+        $frequencyMap = $this->getDoseMasterLabelMap('opd_dose_frequency', ['dose_freq_id', 'id'], ['dose_sign_desc', 'dose_sign', 'name']);
+        $routeMap = $this->getDoseMasterLabelMap('opd_dose_where', ['dose_where_id', 'id'], ['dose_sign_desc', 'dose_sign', 'name']);
+
         $medications = [];
         foreach ($rows as $row) {
+            $dose = $this->resolveDoseMasterLabel($row['dosage'] ?? '', $doseMap);
+            $when = $this->resolveDoseMasterLabel($row['dosage_when'] ?? '', $whenMap);
+            $frequency = $this->resolveDoseMasterLabel($row['dosage_freq'] ?? '', $frequencyMap);
+            $route = $this->resolveDoseMasterLabel($row['dosage_where'] ?? '', $routeMap);
+            $quantity = trim((string) ($row['qty'] ?? ''));
+            $duration = trim((string) ($row['no_of_days'] ?? ''));
+            if (stripos($when, 'week') !== false && stripos($frequency, 'week') !== false) {
+                $frequency = '';
+            }
+            if (strcasecmp($duration, 'STAT') === 0) {
+                $duration = 'STAT dose';
+            } elseif (preg_match('/^([0-9]+(?:\.[0-9]+)?)\s*days?$/i', $duration, $matches) === 1) {
+                $duration = 'for ' . $matches[1] . ' days';
+            } elseif ($duration !== '' && is_numeric($duration)) {
+                $duration = 'for ' . $duration . ' days';
+            } elseif ($duration !== '') {
+                $duration = 'On days: ' . $duration;
+            }
             $dosageParts = array_filter([
-                trim((string) ($row['dosage'] ?? '')),
-                trim((string) ($row['dosage_when'] ?? '')),
-                trim((string) ($row['dosage_freq'] ?? '')),
-                trim((string) ($row['no_of_days'] ?? '')) !== '' ? ('for ' . trim((string) $row['no_of_days']) . ' days') : '',
+                $dose,
+                $when,
+                $frequency,
+                $duration,
+                $quantity !== '' && $quantity !== '0' ? ('Qty: ' . $quantity) : '',
             ]);
 
             $mid = (int) ($row['med_id'] ?? 0);
@@ -11593,8 +11833,8 @@ class Opd_prescription extends BaseController
                 'drug_name' => $drugName,
                 'status' => 'active',
                 'dosage' => implode(' | ', $dosageParts),
-                'route_text' => trim((string) ($row['dosage_where'] ?? '')),
-                'frequency_text' => trim((string) ($row['dosage_freq'] ?? '')),
+                'route_text' => $route,
+                'frequency_text' => $frequency,
                 'med_id' => $mid,
                 'generic_name' => $genericName,
                 'med_type' => $medType,
@@ -11841,6 +12081,7 @@ class Opd_prescription extends BaseController
             'allergies' => $allergies,
             'service_requests' => $serviceRequests,
             'appointments' => $appointments,
+            'advice' => trim((string) ($row['advice'] ?? '')),
             'practitioner' => [
                 'id' => $practitionerId !== '' ? $practitionerId : 'doctor-unknown',
                 'name' => $practitionerName,
@@ -11855,7 +12096,7 @@ class Opd_prescription extends BaseController
     }
 
     /**
-     * @return array{name:string,hfr_id:string,doctor_registration:string}
+     * @return array{name:string,hfr_id:string,doctor_registration:string,address:string,phone:string,email:string,logo:string}
      */
     private function getHospitalProfileForFhir(): array
     {
@@ -11863,6 +12104,10 @@ class Opd_prescription extends BaseController
             'name' => '',
             'hfr_id' => '',
             'doctor_registration' => '',
+            'address' => '',
+            'phone' => '',
+            'email' => '',
+            'logo' => '',
         ];
 
         if (! $this->db->tableExists('hospital_setting')) {
@@ -11871,7 +12116,7 @@ class Opd_prescription extends BaseController
 
         $rows = $this->db->table('hospital_setting')
             ->select('s_name,s_value')
-            ->whereIn('s_name', ['ABDM_HMS_NAME', 'ABDM_HFR_ID', 'H_Name', 'H_HFR_ID', 'HPR_ID', 'DOCTOR_REG_NO'])
+            ->whereIn('s_name', ['ABDM_HMS_NAME', 'ABDM_HFR_ID', 'H_Name', 'H_HFR_ID', 'HPR_ID', 'DOCTOR_REG_NO', 'H_address_1', 'H_address_2', 'H_phone_No', 'H_Email', 'H_logo'])
             ->get()
             ->getResultArray();
 
@@ -11888,6 +12133,13 @@ class Opd_prescription extends BaseController
             'name'                => (string) ($map['ABDM_HMS_NAME'] ?? $map['H_Name'] ?? $map['H_name'] ?? ''),
             'hfr_id'              => (string) ($map['ABDM_HFR_ID']  ?? $map['H_HFR_ID'] ?? ''),
             'doctor_registration' => (string) (($map['HPR_ID'] ?? $map['DOCTOR_REG_NO'] ?? '')),
+            'address'             => trim(implode(', ', array_filter([
+                (string) ($map['H_address_1'] ?? ''),
+                (string) ($map['H_address_2'] ?? ''),
+            ], static fn (string $value): bool => trim($value) !== ''))),
+            'phone'               => (string) ($map['H_phone_No'] ?? ''),
+            'email'               => (string) ($map['H_Email'] ?? ''),
+            'logo'                => (string) ($map['H_logo'] ?? ''),
         ];
     }
 

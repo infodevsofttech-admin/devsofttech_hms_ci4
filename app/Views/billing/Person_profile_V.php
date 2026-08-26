@@ -63,6 +63,14 @@
                                     <button type="button" class="btn btn-danger btn-sm" id="btn_lab">Add Charge</button>
                                 <?php endif; ?>
                                 <button type="button" class="btn btn-warning btn-sm" id="btn_ipd">IPD</button>
+                                <div class="d-flex gap-2">
+                                    <button type="button" class="btn btn-outline-primary btn-sm flex-fill" id="btn_patient_profile_scan" title="Scan document using camera/scanner">
+                                        <i class="bi bi-camera me-1"></i>Scan
+                                    </button>
+                                    <button type="button" class="btn btn-outline-success btn-sm flex-fill" id="btn_patient_profile_upload" title="Upload PDF or Image file">
+                                        <i class="bi bi-upload me-1"></i>Upload
+                                    </button>
+                                </div>
                             </div>
                         </div>
                         <div class="mt-3 w-100">
@@ -112,6 +120,11 @@
                                 <button class="nav-link" data-bs-toggle="tab" data-bs-target="#profile-invoices" type="button" role="tab">Invoices</button>
                             </li>
                             <?php } ?>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="tab-patient-documents-btn" data-bs-toggle="tab" data-bs-target="#profile-documents" type="button" role="tab" onclick="loadPatientDocuments(<?= (int)$data[0]->id ?>)">
+                                    <i class="bi bi-file-earmark-medical me-1"></i>Documents
+                                </button>
+                            </li>
                         </ul>
 
                         <div class="tab-content pt-2">
@@ -421,6 +434,26 @@
                             </div>
                             <?php } ?>
 
+                            <div class="tab-pane fade pt-3" id="profile-documents" role="tabpanel">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <div>
+                                        <h5 class="card-title mb-0 py-0">Patient Documents</h5>
+                                        <div class="text-muted small">Scanned physical copies, uploaded PDFs, and medical reports.</div>
+                                    </div>
+                                    <div class="d-flex gap-2">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" id="btn_tab_scan_doc">
+                                            <i class="bi bi-camera me-1"></i>Scan Document
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-success" id="btn_tab_upload_doc">
+                                            <i class="bi bi-upload me-1"></i>Upload PDF / Image
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="patient_documents_container">
+                                    <div class="text-muted p-3"><div class="spinner-border spinner-border-sm me-2"></div>Loading patient documents...</div>
+                                </div>
+                            </div>
+
                             <?php if (!$isAbhaLinkedAndVerified) : ?>
                             <div class="tab-pane fade pt-3" id="profile-abha" role="tabpanel">
                                 <h5 class="card-title mb-1">ABHA Number Create and Verify</h5>
@@ -641,6 +674,171 @@ function delete_invoice(inv_id) {
         if (inp) inp.value = abhaId;
     };
 
+    /* ---- Patient Document Management Scripts ---- */
+    window.loadPatientDocuments = function (patientId) {
+        var pid = patientId || Number($('#p_id').val() || 0);
+        if (!pid) return;
+        $('#patient_documents_container').html('<div class="text-muted p-3"><div class="spinner-border spinner-border-sm me-2"></div>Loading patient documents...</div>');
+        $.get('<?= base_url('billing/patient/patient_file_list') ?>/' + pid, function(html) {
+            $('#patient_documents_container').html(html);
+        }).fail(function() {
+            $('#patient_documents_container').html('<div class="alert alert-danger py-2 mb-0">Unable to load patient documents.</div>');
+        });
+    };
+
+    window.openPatientUploadModal = function (patientId) {
+        var pid = patientId || Number($('#p_id').val() || 0);
+        if (!pid) return;
+        $('#patientUploadPid').val(pid);
+        $('#patientDocTitleInput').val('');
+        $('#patientDocFileInput').val('');
+        $('#patientUploadErrorMsg').addClass('d-none').text('');
+        var modalEl = document.getElementById('patientDocumentUploadModal');
+        if (modalEl) {
+            var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            modal.show();
+        }
+    };
+
+    window.openPatientScanModal = function (patientId) {
+        var pid = patientId || Number($('#p_id').val() || 0);
+        if (!pid) return;
+        var latestOpdId = <?= count($opd_List) > 0 ? (int)($opd_List[0]->opd_id ?? $opd_List[0]->id ?? 0) : 0 ?>;
+        var scanTargetId = latestOpdId > 0 ? latestOpdId : pid;
+        
+        var modalEl = document.getElementById('patientWebcamScanModal') || document.getElementById('testentry');
+        if (modalEl) {
+            var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            $('#patientWebcamScanModalLabel').html('<i class="bi bi-camera me-2 text-primary"></i>Webcam Document Scanner');
+            $('#testentry-bodyc').html('<div class="text-muted p-3"><div class="spinner-border spinner-border-sm me-2"></div>Initializing webcam scanner...</div>');
+            modal.show();
+            $.post('/Opd/opd_load_doc/' + scanTargetId, {}, function(html) {
+                $('#testentry-bodyc').html(html || '<div class="text-danger p-3">Unable to load webcam camera scanner.</div>');
+            }).fail(function() {
+                $('#testentry-bodyc').html('<div class="text-danger p-3">Unable to load webcam camera scanner.</div>');
+            });
+        }
+    };
+
+    window.deletePatientDoc = function (fileId, patientId) {
+        if (!fileId || !confirm('Are you sure you want to delete this document?')) return;
+        var csrfName = '<?= csrf_token() ?>';
+        var csrfValue = $('input[name="<?= csrf_token() ?>"]').first().val() || '<?= csrf_hash() ?>';
+        $.post('<?= base_url('billing/patient/delete_patient_doc') ?>/' + fileId, { [csrfName]: csrfValue }, function(resp) {
+            if (resp && resp.update === 1) {
+                loadPatientDocuments(patientId);
+            } else {
+                alert((resp && resp.error_text) ? resp.error_text : 'Unable to delete document.');
+            }
+        }, 'json').fail(function() {
+            alert('Unable to delete document.');
+        });
+    };
+
+    $(document).off('click', '#btn_patient_profile_scan, #btn_tab_scan_doc').on('click', '#btn_patient_profile_scan, #btn_tab_scan_doc', function() {
+        openPatientScanModal();
+    });
+
+    $(document).off('click', '#btn_patient_profile_upload, #btn_tab_upload_doc').on('click', '#btn_patient_profile_upload, #btn_tab_upload_doc', function() {
+        openPatientUploadModal();
+    });
+
+    $(document).off('submit', '#patientDocUploadForm').on('submit', '#patientDocUploadForm', function(e) {
+        e.preventDefault();
+        var formData = new FormData(this);
+        var $btn = $('#btnSubmitPatientDocUpload');
+        $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>Uploading...');
+        $('#patientUploadErrorMsg').addClass('d-none').text('');
+
+        $.ajax({
+            url: $(this).attr('action'),
+            type: 'POST',
+            data: formData,
+            contentType: false,
+            processData: false,
+            dataType: 'json',
+            success: function(resp) {
+                $btn.prop('disabled', false).html('<i class="bi bi-upload me-1"></i>Upload Document');
+                if (resp && resp.update === 1) {
+                    var modalEl = document.getElementById('patientDocumentUploadModal');
+                    if (modalEl) {
+                        var modal = bootstrap.Modal.getInstance(modalEl);
+                        if (modal) modal.hide();
+                    }
+                    var tabBtn = document.getElementById('tab-patient-documents-btn');
+                    if (tabBtn) {
+                        var tab = bootstrap.Tab.getOrCreateInstance(tabBtn);
+                        tab.show();
+                    }
+                    loadPatientDocuments(resp.pid || $('#p_id').val());
+                } else {
+                    var err = (resp && resp.error_text) ? resp.error_text : 'Upload failed.';
+                    $('#patientUploadErrorMsg').removeClass('d-none').text(err);
+                }
+            },
+            error: function() {
+                $btn.prop('disabled', false).html('<i class="bi bi-upload me-1"></i>Upload Document');
+                $('#patientUploadErrorMsg').removeClass('d-none').text('Upload request failed. Please check file size and try again.');
+            }
+        });
+    });
+
+    // Cleanup camera stream when webcam scan modal is closed
+    $(document).on('hidden.bs.modal', '#patientWebcamScanModal', function() {
+        var $stopBtn = $('#opd_scan_stop_btn');
+        if ($stopBtn.length) {
+            $stopBtn.trigger('click');
+        }
+        loadPatientDocuments($('#p_id').val());
+    });
+
 </script>
+
+<!-- Patient Webcam Camera Scanner Modal -->
+<div class="modal fade" id="patientWebcamScanModal" tabindex="-1" aria-labelledby="patientWebcamScanModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="patientWebcamScanModalLabel"><i class="bi bi-camera me-2 text-primary"></i>Webcam Document Scanner</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="testentry-bodyc">
+                <div class="text-muted p-3"><div class="spinner-border spinner-border-sm me-2"></div>Initializing webcam scanner...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Patient Document Upload Modal -->
+<div class="modal fade" id="patientDocumentUploadModal" tabindex="-1" aria-labelledby="patientDocumentUploadModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form id="patientDocUploadForm" action="<?= base_url('billing/patient/upload_patient_doc/' . (int)($data[0]->id ?? 0)) ?>" method="post" enctype="multipart/form-data">
+                <?= csrf_field() ?>
+                <input type="hidden" id="patientUploadPid" name="pid" value="<?= (int)($data[0]->id ?? 0) ?>">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="patientDocumentUploadModalLabel"><i class="bi bi-upload me-2 text-primary"></i>Upload Patient Document</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="patientUploadErrorMsg" class="alert alert-danger py-2 mb-3 d-none"></div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Document Title / Type</label>
+                        <input type="text" class="form-control" id="patientDocTitleInput" name="document_type" placeholder="e.g. Scanned Physical Prescription, Lab Report, ID Card" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Select File (PDF or Image)</label>
+                        <input type="file" class="form-control" id="patientDocFileInput" name="userfile" accept=".pdf,.jpg,.jpeg,.png,.webp" required>
+                        <div class="form-text">Allowed formats: PDF, JPG, PNG, WEBP (Max 8MB). Automatically enqueued for ABDM Health Document sharing.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm" id="btnSubmitPatientDocUpload"><i class="bi bi-upload me-1"></i>Upload Document</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
 <?= view('partials/abha_otp_modal') ?>

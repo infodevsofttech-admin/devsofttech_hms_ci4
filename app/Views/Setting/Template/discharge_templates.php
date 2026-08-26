@@ -21,6 +21,7 @@ $marginHeader = (string) ($edit['margin_header_cm'] ?? '0.5');
 $marginFooter = (string) ($edit['margin_footer_cm'] ?? '0.5');
 $isDefault = (int) ($edit['is_default'] ?? 0);
 $isAuditOnly = (int) ($edit['is_audit_only'] ?? 0);
+$isAbdm = (int) ($edit['is_abdm'] ?? 0);
 $status = (int) ($edit['status'] ?? 1);
 ?>
 
@@ -104,6 +105,12 @@ $status = (int) ($edit['status'] ?? 1);
                             <label class="form-check-label" for="is_audit_only">Audit-only template</label>
                         </div>
                     </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <div class="form-check mb-1">
+                            <input class="form-check-input" type="checkbox" name="is_abdm" id="is_abdm" value="1" <?= $isAbdm === 1 ? 'checked' : '' ?>>
+                            <label class="form-check-label" for="is_abdm">Online / ABDM Sharing</label>
+                        </div>
+                    </div>
 
                     <div class="col-md-3">
                         <label class="form-label small">Page Size</label>
@@ -183,6 +190,7 @@ $status = (int) ($edit['status'] ?? 1);
                             <th style="width:60px;">ID</th>
                             <th>Template Name</th>
                             <th style="width:90px;">Default</th>
+                            <th style="width:130px;">Online / ABDM</th>
                             <th style="width:90px;">Status</th>
                             <th style="width:180px;">Action</th>
                         </tr>
@@ -190,7 +198,7 @@ $status = (int) ($edit['status'] ?? 1);
                     <tbody>
                         <?php if (empty($rows)): ?>
                             <tr>
-                                <td colspan="5" class="text-center py-4">
+                                <td colspan="6" class="text-center py-4">
                                     <div class="text-muted mb-2">No templates found.</div>
                                     <button type="button" class="btn btn-sm btn-outline-primary" id="btn_create_defaults">
                                         <i class="fas fa-plus-circle"></i> Create Default Templates
@@ -204,6 +212,7 @@ $status = (int) ($edit['status'] ?? 1);
                                     <td><?= (int) ($row['id'] ?? 0) ?></td>
                                     <td><?= esc((string) ($row['template_name'] ?? '')) ?></td>
                                     <td><?= (int) ($row['is_default'] ?? 0) === 1 ? 'Yes' : 'No' ?></td>
+                                    <td><?= (int) ($row['is_abdm'] ?? 0) === 1 ? '<span class="badge bg-info text-dark">Online / ABDM</span>' : 'No' ?></td>
                                     <td><?= (int) ($row['status'] ?? 0) === 1 ? 'Active' : 'Inactive' ?></td>
                                     <td>
                                         <button type="button" class="btn btn-outline-primary btn-sm discharge-template-edit" data-id="<?= (int) ($row['id'] ?? 0) ?>">Edit</button>

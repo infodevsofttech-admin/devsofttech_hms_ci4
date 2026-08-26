@@ -62,6 +62,19 @@ abstract class AbstractModuleFhirGenerator
             ];
         }
 
+        $uhid = trim((string) ($source['patient']['uhid'] ?? $source['patient']['hospital_patient_id'] ?? $source['patient']['patient_code'] ?? ''));
+        if ($this->isMeaningfulValue($uhid)) {
+            $patient['identifier'][] = [
+                'type' => ['coding' => [[
+                    'system' => 'http://terminology.hl7.org/CodeSystem/v2-0203',
+                    'code' => 'MR',
+                    'display' => 'Medical record number',
+                ]], 'text' => 'UHID'],
+                'system' => 'https://hms.local/uhid',
+                'value' => $uhid,
+            ];
+        }
+
         $abhaAddress = trim((string) ($source['patient']['abha_address'] ?? ''));
         if ($abhaAddress !== '') {
             $patient['identifier'][] = [
@@ -119,8 +132,21 @@ abstract class AbstractModuleFhirGenerator
         if ($id === '') {
             return null;
         }
-        $classCode = strtoupper(trim((string) ($enc['class_code'] ?? 'AMB')));
+        $classCode = strtoupper(trim((string) ($enc['class_code'] ?? 'IMP')));
         $classDisplay = $classCode === 'IMP' ? 'inpatient encounter' : 'ambulatory';
+
+        $identifiers = [[
+            'system' => 'https://hms.local/encounter-id',
+            'value' => $id,
+        ]];
+
+        $ipdNo = trim((string) ($enc['ipd_no'] ?? $enc['ipd_number'] ?? $enc['ipd_code'] ?? $source['ipd_no'] ?? ''));
+        if ($this->isMeaningfulValue($ipdNo)) {
+            $identifiers[] = [
+                'system' => 'https://hms.local/ipd-number',
+                'value' => $ipdNo,
+            ];
+        }
 
         return [
             'resourceType' => 'Encounter',
@@ -141,10 +167,7 @@ abstract class AbstractModuleFhirGenerator
                 'start' => (string) ($enc['start'] ?? $source['completed_at'] ?? date(DATE_ATOM)),
                 'end' => (string) ($enc['end'] ?? $source['completed_at'] ?? date(DATE_ATOM)),
             ],
-            'identifier' => [[
-                'system' => 'https://hms.local/encounter-id',
-                'value' => $id,
-            ]],
+            'identifier' => $identifiers,
         ];
     }
 
@@ -204,5 +227,35 @@ abstract class AbstractModuleFhirGenerator
                 'value' => $id,
             ]] : null,
         ];
+    }
+
+    /** Excludes blank, 0, or NA placeholder values so they don't appear in FHIR bundle or PHR app. */
+    protected function isMeaningfulValue(string $value): bool
+    {
+        $v = strtoupper(trim(strip_tags($value)));
+        if ($v === '') {
+            return false;
+        }
+
+        return ! in_array($v, ['0', 'NA', 'N/A', 'N / A', 'N/ A', 'NONE', 'NIL', 'NULL', 'UNDEFINED', 'UNSPECIFIED'], true);
+    }
+
+    /** Cleans HTML tags, entities, and line breaks into clean plain text for FHIR text fields. */
+    protected function cleanPlainText(string $text): string
+    {
+        $text = trim($text);
+        if ($text === '') {
+            return '';
+        }
+
+        $text = preg_replace('/<\/(p|div|h[1-6]|li|tr)>/i', "\n", $text);
+        $text = preg_replace('/<br\s*\/?>/i', "\n", $text);
+        $text = strip_tags($text);
+        $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+        $lines = array_map('trim', explode("\n", $text));
+        $lines = array_filter($lines, static fn($l) => $l !== '');
+
+        return trim(implode("\n", $lines));
     }
 }

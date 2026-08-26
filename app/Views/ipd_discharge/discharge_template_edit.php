@@ -17,6 +17,7 @@ $marginHeader= (string) ($edit['margin_header_cm']      ?? '1.00');
 $marginFooter= (string) ($edit['margin_footer_cm']      ?? '0.50');
 $isDefault   = (int) ($edit['is_default']   ?? 0);
 $isAuditOnly = (int) ($edit['is_audit_only'] ?? 0);
+$isAbdm      = (int) ($edit['is_abdm']       ?? 0);
 $watermarkType = (string) ($edit['watermark_type'] ?? 'none');
 $watermarkText = (string) ($edit['watermark_text'] ?? '');
 $watermarkAlpha = (string) ($edit['watermark_alpha'] ?? '0.12');
@@ -172,7 +173,7 @@ $placeholders = [
                             </div>
                         </div>
                     </div>
-                    <div class="d-flex gap-2 mb-2">
+                    <div class="d-flex gap-3 mb-2 flex-wrap">
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" id="tpl_is_default" <?= $isDefault ? 'checked' : '' ?>>
                             <label class="form-check-label" for="tpl_is_default">Set as default</label>
@@ -180,6 +181,10 @@ $placeholders = [
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" id="tpl_is_audit" <?= $isAuditOnly ? 'checked' : '' ?>>
                             <label class="form-check-label" for="tpl_is_audit">Audit-only (NABH)</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="tpl_is_abdm" <?= $isAbdm ? 'checked' : '' ?>>
+                            <label class="form-check-label" for="tpl_is_abdm">Online / ABDM (WhatsApp, Email & ABDM)</label>
                         </div>
                     </div>
 
@@ -228,7 +233,7 @@ $placeholders = [
 
     if (typeof CKEDITOR !== 'undefined') {
         editorIds.forEach(function (id) {
-            if (!CKEDITOR.instances[id]) {
+            if (document.getElementById(id) && !CKEDITOR.instances[id]) {
                 CKEDITOR.replace(id, {
                     height: id === 'tpl_html' ? 280 : 140,
                     extraPlugins: 'hmsjustify',
@@ -296,6 +301,7 @@ $placeholders = [
         fd.append('status', val('tpl_status'));
         fd.append('is_default', String(checked('tpl_is_default')));
         fd.append('is_audit_only', String(checked('tpl_is_audit')));
+        fd.append('is_abdm', String(checked('tpl_is_abdm')));
         fd.append('watermark_type', val('tpl_watermark_type'));
         fd.append('watermark_text', val('tpl_watermark_text'));
         fd.append('watermark_alpha', val('tpl_watermark_alpha'));

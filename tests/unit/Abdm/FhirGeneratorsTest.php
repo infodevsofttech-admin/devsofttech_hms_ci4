@@ -246,10 +246,15 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $this->assertSame('Composition', $bundle['entry'][0]['resource']['resourceType'] ?? null);
 
         $resources = [];
+        $resourcesByType = [];
+        $fullUrlByResourceType = [];
         foreach ($bundle['entry'] as $entry) {
             $fullUrl = (string) ($entry['fullUrl'] ?? '');
             $this->assertMatchesRegularExpression('/^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-a[0-9a-f]{3}-[0-9a-f]{12}$/', $fullUrl);
-            $resources[(string) ($entry['resource']['resourceType'] ?? '')] = $entry['resource'];
+            $resourceType = (string) ($entry['resource']['resourceType'] ?? '');
+            $resources[$resourceType] = $entry['resource'];
+            $resourcesByType[$resourceType][] = $entry['resource'];
+            $fullUrlByResourceType[$resourceType][] = $fullUrl;
         }
 
         $composition = $resources['Composition'];
@@ -261,7 +266,9 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $documentReference = $resources['DocumentReference'];
         $this->assertContains('https://nrces.in/ndhm/fhir/r4/StructureDefinition/InvoiceRecord', $composition['meta']['profile'] ?? []);
         $this->assertSame('Invoice Record', $composition['type']['text'] ?? null);
-        $this->assertSame('69705-9', $composition['type']['coding'][0]['code'] ?? null);
+        $this->assertSame('34775-2', $composition['type']['coding'][0]['code'] ?? null);
+        $this->assertSame('Patient/patient-11', $composition['subject']['reference'] ?? null);
+        $this->assertSame('Organization/organization-invoice-issuer', $composition['author'][0]['reference'] ?? null);
         $this->assertSame(
             'Invoice',
             $composition['section'][0]['entry'][0]['type'] ?? null,
@@ -305,6 +312,7 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $pdfBytes = base64_decode((string) ($attachment['data'] ?? ''), true);
         $this->assertIsString($pdfBytes);
         $this->assertSame('application/pdf', $attachment['contentType'] ?? null);
+        $this->assertArrayNotHasKey('url', $attachment);
         $this->assertStringStartsWith('%PDF-', $pdfBytes);
         $this->assertStringNotContainsString('table.items{', $pdfBytes);
         $this->assertSame(strlen($pdfBytes), $attachment['size'] ?? null);
@@ -313,6 +321,21 @@ final class FhirGeneratorsTest extends CIUnitTestCase
             $composition['section'][0]['entry'][0]['reference'] ?? null,
             $documentReference['context']['related'][0]['reference'] ?? null
         );
+        $this->assertSame('DocumentReference', $composition['section'][1]['entry'][0]['type'] ?? null);
+        $this->assertSame($fullUrlByResourceType['DocumentReference'][0] ?? null, $composition['section'][1]['entry'][0]['reference'] ?? null, 'Document Reference section must point to the DocumentReference');
+        $this->assertSame('725458005', $documentReference['type']['coding'][0]['code'] ?? null);
+        $this->assertSame('Receipt', $documentReference['type']['coding'][0]['display'] ?? null);
+        $this->assertSame('725458005', $composition['section'][1]['code']['coding'][0]['code'] ?? null);
+        $this->assertSame('Receipt', $composition['section'][1]['code']['coding'][0]['display'] ?? null);
+        $binaries = array_values(array_filter(
+            $bundle['entry'],
+            static fn (array $entry): bool => ($entry['resource']['resourceType'] ?? '') === 'Binary'
+        ));
+        $this->assertCount(1, $binaries);
+        $this->assertSame('Binary', $composition['section'][2]['entry'][0]['type'] ?? null);
+        $this->assertSame('Binary/invoice-19-pdf-content', $composition['section'][2]['entry'][0]['reference'] ?? null);
+        $this->assertSame('application/pdf', $binaries[0]['resource']['contentType'] ?? null);
+        $this->assertSame($attachment['data'] ?? null, $binaries[0]['resource']['data'] ?? null);
 
         $fullUrls = array_column($bundle['entry'], 'fullUrl');
         $encoded = json_encode($bundle, JSON_UNESCAPED_SLASHES);
@@ -443,5 +466,40 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         ]);
         $this->assertStringContainsString('Test Hospital', $header);
         $this->assertStringContainsString('Hospital Road', $header);
+    }
+
+    public function testHealthDocumentGeneratorCreatesValidBundle(): void
+    {
+        $generator = $this->factory->healthDocument();
+        $output = $generator->generate([
+            'record_id' => '4',
+            'visit_date' => '2026-08-26',
+            'completed_at' => '2026-08-26T10:00:00+05:30',
+            'document_title' => 'Fitness Certificate',
+            'document_content_html' => '<p>Fit to resume work</p>',
+            'patient' => [
+                'id' => '11',
+                'uhid' => 'P26061000011',
+                'name' => 'Test Patient',
+                'gender' => 'male',
+                'dob' => '1990-01-01',
+                'abha_id' => '91510165305101',
+            ],
+            'organization' => [
+                'id' => 'IN0100000001',
+                'name' => 'Test Hospital',
+            ],
+        ]);
+
+        $this->assertSame('HealthDocumentRecord', $output['hi_type']);
+        $this->assertSame('DOC-4-2026-08-26', $output['care_context_reference']);
+        $this->assertTrue($output['validation']['valid']);
+        $this->assertSame(100, $output['validation']['score']);
+
+        $bundle = $output['fhir_bundle'];
+        $resourceTypes = array_column(array_column($bundle['entry'], 'resource'), 'resourceType');
+        $this->assertContains('Composition', $resourceTypes);
+        $this->assertContains('Patient', $resourceTypes);
+        $this->assertContains('DocumentReference', $resourceTypes);
     }
 }

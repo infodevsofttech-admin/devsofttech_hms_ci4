@@ -103,6 +103,11 @@ if ($patientPhotoPath === '') {
                         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#opd-abdm-tab" type="button" role="tab">ABDM Fetched Data</button>
                     </li>
                 <?php endif; ?>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#opd-documents-tab" type="button" role="tab">
+                        <i class="bi bi-file-earmark-medical me-1"></i>Documents (<?= count($patientDocuments ?? []) ?>)
+                    </button>
+                </li>
             </ul>
 
             <div class="tab-content pt-2">
@@ -382,6 +387,57 @@ if ($patientPhotoPath === '') {
 
                     </div>
                 <?php endif; ?>
+
+                <div class="tab-pane fade pt-3" id="opd-documents-tab" role="tabpanel">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <h5 class="card-title mb-0 py-0">Patient Scanned & Uploaded Documents</h5>
+                            <div class="text-muted small">All documents attached to this patient ordered by date (Latest First)</div>
+                        </div>
+                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">
+                            Total Documents: <?= count($patientDocuments ?? []) ?>
+                        </span>
+                    </div>
+
+                    <?php if (empty($patientDocuments)) : ?>
+                        <div class="alert alert-info py-3 mb-0">
+                            <i class="bi bi-info-circle me-1"></i> No scanned copies or uploaded documents found for this patient.
+                        </div>
+                    <?php else : ?>
+                        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
+                            <?php foreach ($patientDocuments as $doc) : ?>
+                                <div class="col">
+                                    <div class="card h-100 border shadow-sm">
+                                        <div class="card-header py-2 d-flex justify-content-between align-items-center bg-light">
+                                            <span class="fw-bold text-truncate" style="max-width: 180px;" title="<?= esc($doc['title']) ?>"><?= esc($doc['title']) ?></span>
+                                            <?php if ($doc['isPdf']) : ?>
+                                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle"><i class="bi bi-file-earmark-pdf me-1"></i>PDF</span>
+                                            <?php else : ?>
+                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle"><i class="bi bi-file-earmark-image me-1"></i><?= esc(strtoupper($doc['ext'] ?: 'IMAGE')) ?></span>
+                                            <?php endif; ?>
+                                        </div>
+                                        <div class="card-body p-2 text-center bg-light-subtle d-flex align-items-center justify-content-center" style="height: 180px;">
+                                            <?php if ($doc['isPdf']) : ?>
+                                                <a href="<?= base_url(ltrim($doc['path'], '/')) ?>" target="_blank" class="text-decoration-none text-center py-3">
+                                                    <i class="bi bi-file-earmark-pdf text-danger" style="font-size: 3.5rem;"></i>
+                                                    <div class="small text-muted mt-2 text-truncate" style="max-width: 200px;"><?= esc(basename($doc['path'])) ?></div>
+                                                </a>
+                                            <?php else : ?>
+                                                <img src="<?= base_url(ltrim($doc['path'], '/')) ?>" alt="<?= esc($doc['title']) ?>" class="img-fluid rounded" style="max-height: 160px; object-fit: contain; cursor: zoom-in;" data-bs-toggle="modal" data-bs-target="#opdScanModal" data-src="<?= base_url(ltrim($doc['path'], '/')) ?>">
+                                            <?php endif; ?>
+                                        </div>
+                                        <div class="card-footer py-2 d-flex justify-content-between align-items-center bg-white text-muted small">
+                                            <span><i class="bi bi-clock me-1"></i><?= esc($doc['insertDate'] ?: '-') ?></span>
+                                            <a href="<?= base_url(ltrim($doc['path'], '/')) ?>" target="_blank" class="btn btn-sm btn-outline-primary py-0" style="font-size: 12px;">
+                                                <i class="bi bi-box-arrow-up-right me-1"></i>Open
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
             </div>
         </div>
     </div>

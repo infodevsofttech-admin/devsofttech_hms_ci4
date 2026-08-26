@@ -3,10 +3,12 @@
 namespace App\Libraries\Abdm\Fhir;
 
 use App\Libraries\Abdm\Fhir\Generators\DischargeFhirGenerator;
+use App\Libraries\Abdm\Fhir\Generators\HealthDocumentFhirGenerator;
 use App\Libraries\Abdm\Fhir\Generators\InvoiceFhirGenerator;
 use App\Libraries\Abdm\Fhir\Generators\LabFhirGenerator;
 use App\Libraries\Abdm\Fhir\Generators\OpdFhirGenerator;
 use App\Libraries\Abdm\Fhir\Generators\RadiologyFhirGenerator;
+use App\Libraries\Abdm\Fhir\Generators\WellnessFhirGenerator;
 
 class FhirGeneratorFactory
 {
@@ -33,5 +35,15 @@ class FhirGeneratorFactory
     public function invoice(): InvoiceFhirGenerator
     {
         return new InvoiceFhirGenerator();
+    }
+
+    public function healthDocument(): HealthDocumentFhirGenerator
+    {
+        return new HealthDocumentFhirGenerator();
+    }
+
+    public function wellness(): WellnessFhirGenerator
+    {
+        return new WellnessFhirGenerator();
     }
 }

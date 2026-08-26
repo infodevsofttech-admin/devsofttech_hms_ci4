@@ -191,8 +191,9 @@ class FhirR4Builder
                     'code'    => $verificationCode,
                     'display' => ucfirst($verificationCode),
                 ]]],
-                'code'    => $code,
-                'subject' => ['reference' => $patientRef, 'display' => 'Patient'],
+                'code'         => $code,
+                'subject'      => ['reference' => $patientRef, 'display' => 'Patient'],
+                'recordedDate' => $issuedAt,
             ]];
         }
 
@@ -232,8 +233,9 @@ class FhirR4Builder
                     'code'    => 'active',
                     'display' => 'Active',
                 ]]],
-                'code'    => $code,
-                'subject' => ['reference' => $patientRef, 'display' => 'Patient'],
+                'code'         => $code,
+                'subject'      => ['reference' => $patientRef, 'display' => 'Patient'],
+                'recordedDate' => $issuedAt,
             ];
 
             // Severity (High/Moderate/Low → SNOMED coded)
@@ -359,43 +361,66 @@ class FhirR4Builder
 
             $snomedCode = trim((string) ($medication['snomed_code'] ?? ''));
             $atcCode    = strtoupper(trim((string) ($medication['atc_code'] ?? '')));
-            if ($snomedCode !== '') {
+            if ($this->isMeaningfulValue($snomedCode) && $snomedCode !== '371530004') {
                 $medicationCodeableConcept['coding'] = [[
                     'system'  => 'http://snomed.info/sct',
                     'code'    => $snomedCode,
                     'display' => $displayText !== '' ? $displayText : $drugName,
                 ]];
-            } elseif ($atcCode !== '') {
+            } elseif ($this->isMeaningfulValue($atcCode)) {
                 $medicationCodeableConcept['coding'] = [[
                     'system'  => 'http://www.whocc.no/atc',
                     'code'    => $atcCode,
+                    'display' => $displayText !== '' ? $displayText : $drugName,
+                ]];
+            } else {
+                $medicationCodeableConcept['coding'] = [[
+                    'system'  => 'http://snomed.info/sct',
+                    'code'    => '105904009',
                     'display' => $displayText !== '' ? $displayText : $drugName,
                 ]];
             }
 
             $dosageInstruction = ['text' => (string) ($medication['dosage'] ?? '')];
             $routeText = trim((string) ($medication['route_text'] ?? ''));
-            if ($routeText !== '') {
-                $routeEntry = ['text' => $routeText];
-                // Add SNOMED route code when we can resolve it from text or a pre-supplied code
-                $routeCode = trim((string) ($medication['route_code'] ?? ''));
-                if ($routeCode === '') {
-                    $routeCode = $this->resolveRouteSnomedCode($routeText);
+            $routeCode = trim((string) ($medication['route_code'] ?? ''));
+            if (! $this->isMeaningfulValue($routeText)) {
+                $medTypeUpper = strtoupper($medType);
+                if (in_array($medTypeUpper, ['INJ', 'INJECTION', 'IV', 'IM'], true)) {
+                    $routeText = 'Injection';
+                    $routeCode = '47625008';
+                } elseif (in_array($medTypeUpper, ['CREAM', 'OINT', 'OINTMENT', 'GEL', 'LOTION'], true)) {
+                    $routeText = 'Topical';
+                    $routeCode = '6064005';
+                } else {
+                    $routeText = 'Oral';
+                    $routeCode = '260548002';
                 }
-                if ($routeCode !== '') {
-                    $routeEntry['coding'] = [[
-                        'system'  => 'http://snomed.info/sct',
-                        'code'    => $routeCode,
-                        'display' => $routeText,
-                    ]];
-                }
-                $dosageInstruction['route'] = $routeEntry;
+            } elseif ($routeCode === '') {
+                $routeCode = $this->resolveRouteSnomedCode($routeText);
             }
+
+            $routeEntry = ['text' => $routeText];
+            if ($this->isMeaningfulValue($routeCode) && $routeCode !== '371530004') {
+                $routeEntry['coding'] = [[
+                    'system'  => 'http://snomed.info/sct',
+                    'code'    => $routeCode,
+                    'display' => $routeText,
+                ]];
+            } else {
+                $routeEntry['coding'] = [[
+                    'system'  => 'http://snomed.info/sct',
+                    'code'    => '260548002',
+                    'display' => $routeText,
+                ]];
+            }
+            $dosageInstruction['route'] = $routeEntry;
+
             $methodText = trim((string) ($medication['method_text'] ?? $medType));
             $methodCode = trim((string) ($medication['method_code'] ?? ''));
-            if ($methodText !== '') {
+            if ($this->isMeaningfulValue($methodText)) {
                 $methodEntry = ['text' => $methodText];
-                if ($methodCode !== '') {
+                if ($this->isMeaningfulValue($methodCode) && $methodCode !== '371530004') {
                     $methodEntry['coding'] = [[
                         'system'  => 'http://snomed.info/sct',
                         'code'    => $methodCode,
@@ -405,20 +430,37 @@ class FhirR4Builder
                 $dosageInstruction['method'] = $methodEntry;
             }
 
+            $freqText = trim((string) ($medication['frequency_text'] ?? ''));
+            $dosageText = (string) ($medication['dosage'] ?? '');
+            $timingResult = $this->buildFhirTimingStructure($freqText, $dosageText);
+            if ($timingResult['timing'] !== null) {
+                $dosageInstruction['timing'] = $timingResult['timing'];
+            }
+
             $medRes = [
                 'resourceType'              => 'MedicationRequest',
                 'id'                        => $medUuid,
                 'meta'                      => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/MedicationRequest']],
                 'status'                    => (string) ($medication['status'] ?? 'active'),
                 'intent'                    => 'order',
+                'category'                  => [[
+                    'coding' => [[
+                        'system'  => 'http://terminology.hl7.org/CodeSystem/medicationrequest-category',
+                        'code'    => 'outpatient',
+                        'display' => 'Outpatient',
+                    ]],
+                ]],
                 'medicationCodeableConcept' => $medicationCodeableConcept,
                 'subject'                   => ['reference' => $patientRef, 'display' => 'Patient'],
                 'encounter'                 => ['reference' => $encounterRef],
                 'authoredOn'                => $issuedAt,
                 'dosageInstruction'         => [$dosageInstruction],
             ];
+            if ($timingResult['asNeeded']) {
+                $medRes['asNeededBoolean'] = true;
+            }
             if ($practitionerRef !== '') {
-                $medRes['requester'] = ['reference' => $practitionerRef];
+                $medRes['requester'] = ['reference' => $practitionerRef, 'display' => $practRawName !== '' ? $practRawName : 'Practitioner'];
             }
             $resourceEntries[] = ['fullUrl' => 'urn:uuid:' . $medUuid, 'resource' => $medRes];
         }
@@ -458,12 +500,28 @@ class FhirR4Builder
 
             $apptUuid        = $this->generateUuid();
             $appointmentRefs[] = ['reference' => 'urn:uuid:' . $apptUuid, 'display' => 'Appointment'];
+
+            $apptStartIso = $issuedAt;
+            if (preg_match('/(\d{2}-\d{2}-\d{4})/', $description, $m) === 1) {
+                $parsed = \DateTimeImmutable::createFromFormat('d-m-Y', $m[1]);
+                if ($parsed !== false) {
+                    $apptStartIso = $parsed->setTime(10, 0, 0)->format(DATE_ATOM);
+                }
+            } elseif (preg_match('/(\d{4}-\d{2}-\d{2})/', $description, $m) === 1) {
+                $parsed = \DateTimeImmutable::createFromFormat('Y-m-d', $m[1]);
+                if ($parsed !== false) {
+                    $apptStartIso = $parsed->setTime(10, 0, 0)->format(DATE_ATOM);
+                }
+            }
+
             $apptRes = [
                 'resourceType' => 'Appointment',
                 'id'           => $apptUuid,
                 'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Appointment']],
                 'status'       => (string) ($appointment['status'] ?? 'proposed'),
                 'description'  => $description,
+                'start'        => (string) ($appointment['start'] ?? $apptStartIso),
+                'end'          => (string) ($appointment['end'] ?? $apptStartIso),
                 'participant'  => [[
                     'actor'  => ['reference' => $patientRef, 'display' => 'Patient'],
                     'status' => 'accepted',
@@ -471,7 +529,7 @@ class FhirR4Builder
             ];
             if ($practitionerRef !== '') {
                 $apptRes['participant'][] = [
-                    'actor'  => ['reference' => $practitionerRef],
+                    'actor'  => ['reference' => $practitionerRef, 'display' => $practRawName !== '' ? $practRawName : 'Practitioner'],
                     'status' => 'accepted',
                 ];
             }
@@ -497,7 +555,11 @@ class FhirR4Builder
                 $attachmentId = (string) ($index + 1);
             }
 
-            $docUuid = 'opd-scan-' . $attachmentId . '-' . $this->generateUuid();
+            if (str_starts_with($attachmentId, 'prescription-') || str_starts_with($attachmentId, 'doc-') || $contentType === 'application/pdf') {
+                $docUuid = str_starts_with($attachmentId, 'doc-') ? $attachmentId : 'doc-' . $attachmentId;
+            } else {
+                $docUuid = 'opd-scan-' . $attachmentId . '-' . $this->generateUuid();
+            }
             $binaryUuid = 'binary-' . $docUuid;
             $docRef = 'urn:uuid:' . $docUuid;
             $binaryRef = 'urn:uuid:' . $binaryUuid;
@@ -625,7 +687,7 @@ class FhirR4Builder
         $composition = [
             'resourceType' => 'Composition',
             'id'           => $compositionUuid,
-            'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/OPConsultRecord']],
+            'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/PrescriptionRecord']],
             'language'     => 'en-IN',
             'identifier'   => ['system' => 'https://ndhm.in/phr', 'value' => $compositionUuid],
             'status'       => 'final',
@@ -643,7 +705,7 @@ class FhirR4Builder
             'author'    => $practitionerRef !== ''
                 ? [['reference' => $practitionerRef, 'display' => 'Practitioner']]
                 : [['display' => 'Unknown']],
-            'title'     => 'Consultation Report',
+            'title'     => 'Prescription Record',
             'section'   => $compositionSections,
         ];
         if ($organizationRef !== '') {
@@ -662,7 +724,7 @@ class FhirR4Builder
             ? 'https://' . strtolower(preg_replace('/[^A-Za-z0-9]/', '', $hfrId)) . '.hfr.abdm.gov.in'
             : 'https://hfr.abdm.gov.in';
         $bundleIdValue  = $hfrId !== ''
-            ? 'OPD-' . ($encounter['id'] ?? $bundleUuid) . '-' . date('Y-m-d')
+            ? 'PRESCRIPTION-' . ($encounter['id'] ?? $bundleUuid) . '-' . date('Y-m-d')
             : $bundleUuid;
 
         return $this->sanitizeBundle([
@@ -2015,6 +2077,17 @@ class FhirR4Builder
         return (new \DateTime('now', new \DateTimeZone('Asia/Kolkata')))->format('Y-m-d\TH:i:sP');
     }
 
+    /** Excludes blank, 0, or NA placeholder values. */
+    public function isMeaningfulValue(string $value): bool
+    {
+        $v = strtoupper(trim(strip_tags($value)));
+        if ($v === '') {
+            return false;
+        }
+
+        return ! in_array($v, ['0', 'NA', 'N/A', 'N / A', 'N/ A', 'NONE', 'NIL', 'NULL', 'UNDEFINED', 'UNSPECIFIED'], true);
+    }
+
     /**
      * Normalize any datetime-like string into ISO 8601 with IST offset.
      */
@@ -2094,6 +2167,22 @@ class FhirR4Builder
                 'system' => 'https://healthid.ndhm.gov.in',
                 'value'  => $abhaAddress,
             ]];
+        }
+
+        $uhid = trim((string) ($patient['uhid'] ?? $patient['patient_code'] ?? $patient['p_code'] ?? $patient['hospital_patient_id'] ?? ''));
+        if ($this->isMeaningfulValue($uhid)) {
+            if (! isset($resource['identifier']) || ! is_array($resource['identifier'])) {
+                $resource['identifier'] = [];
+            }
+            $resource['identifier'][] = [
+                'type'   => ['coding' => [[
+                    'system'  => 'http://terminology.hl7.org/CodeSystem/v2-0203',
+                    'code'    => 'MR',
+                    'display' => 'Medical record number',
+                ]], 'text' => 'UHID'],
+                'system' => 'https://hms.local/uhid',
+                'value'  => $uhid,
+            ];
         }
 
         // Phone / mobile telecom
@@ -3045,5 +3134,95 @@ class FhirR4Builder
         $content = file_get_contents($filePath);
 
         return $content !== false ? base64_encode($content) : '';
+    }
+
+    /**
+     * Build FHIR Timing.repeat & timing code per ABDM specification
+     *
+     * @return array{timing: array<string, mixed>|null, asNeeded: bool}
+     */
+    private function buildFhirTimingStructure(string $freqText, string $dosageText): array
+    {
+        $text = strtoupper(trim($freqText !== '' ? $freqText : $dosageText));
+        if ($text === '') {
+            return ['timing' => null, 'asNeeded' => false];
+        }
+
+        if (str_contains($text, 'SOS') || str_contains($text, 'AS NEEDED') || str_contains($text, 'PRN')) {
+            return [
+                'timing' => [
+                    'code' => [
+                        'coding' => [[
+                            'system'  => 'http://terminology.hl7.org/CodeSystem/v3-GTSAbbreviation',
+                            'code'    => 'PRN',
+                            'display' => 'As needed',
+                        ]],
+                        'text' => 'SOS',
+                    ],
+                ],
+                'asNeeded' => true,
+            ];
+        }
+
+        $repeat = null;
+        $gtsCode = null;
+        $gtsDisplay = null;
+
+        if (preg_match('/\b(OD|ONCE\s*DAILY|DAILY)\b/', $text) === 1) {
+            $repeat = ['frequency' => 1, 'period' => 1, 'periodUnit' => 'd'];
+            $gtsCode = 'QD';
+            $gtsDisplay = 'Once daily';
+        } elseif (preg_match('/\b(BD|BID|TWICE)\b/', $text) === 1) {
+            $repeat = ['frequency' => 2, 'period' => 1, 'periodUnit' => 'd'];
+            $gtsCode = 'BID';
+            $gtsDisplay = 'Twice daily';
+        } elseif (preg_match('/\b(TDS|TID|THRICE|3\s*TIMES)\b/', $text) === 1) {
+            $repeat = ['frequency' => 3, 'period' => 1, 'periodUnit' => 'd'];
+            $gtsCode = 'TID';
+            $gtsDisplay = 'Thrice daily';
+        } elseif (preg_match('/\b(QID|4\s*TIMES)\b/', $text) === 1) {
+            $repeat = ['frequency' => 4, 'period' => 1, 'periodUnit' => 'd'];
+            $gtsCode = 'QID';
+            $gtsDisplay = 'Four times daily';
+        } elseif (preg_match('/\b(HS|BEDTIME|NIGHT)\b/', $text) === 1) {
+            $repeat = ['frequency' => 1, 'period' => 1, 'periodUnit' => 'd'];
+            $gtsCode = 'HS';
+            $gtsDisplay = 'At bedtime';
+        } elseif (preg_match('/Q(\d+)H/', $text, $m) === 1 || preg_match('/EVERY\s*(\d+)\s*HOUR/', $text, $m) === 1) {
+            $hours = (int) ($m[1] ?? 6);
+            $repeat = ['frequency' => 1, 'period' => $hours, 'periodUnit' => 'h'];
+        } elseif (str_contains($text, 'ALTERNATE') || str_contains($text, 'QOD')) {
+            $repeat = ['frequency' => 1, 'period' => 2, 'periodUnit' => 'd'];
+            $gtsCode = 'QOD';
+            $gtsDisplay = 'Every other day';
+        } elseif (str_contains($text, 'WEEKLY')) {
+            $repeat = ['frequency' => 1, 'period' => 1, 'periodUnit' => 'wk'];
+        } elseif (str_contains($text, 'MONTHLY')) {
+            $repeat = ['frequency' => 1, 'period' => 1, 'periodUnit' => 'mo'];
+        } elseif (str_contains($text, 'STAT')) {
+            $repeat = ['frequency' => 1, 'period' => 1, 'periodUnit' => 'd'];
+        }
+
+        $res = [];
+        if ($repeat !== null) {
+            $res['repeat'] = $repeat;
+        }
+        if ($gtsCode !== null) {
+            $res['code'] = [
+                'coding' => [[
+                    'system'  => 'http://terminology.hl7.org/CodeSystem/v3-GTSAbbreviation',
+                    'code'    => $gtsCode,
+                    'display' => $gtsDisplay,
+                ]],
+                'text' => trim($freqText !== '' ? $freqText : $text),
+            ];
+        } elseif ($freqText !== '') {
+            $res['code'] = ['text' => trim($freqText)];
+        }
+
+        return [
+            'timing' => ! empty($res) ? $res : null,
+            'asNeeded' => false,
+        ];
     }
 }

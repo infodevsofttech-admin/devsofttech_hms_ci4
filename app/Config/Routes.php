@@ -399,6 +399,28 @@ $routes->post('Storestock/add_remove_item', 'Storestock::add_remove_item');
 $routes->post('Storestock/remove_item_invoice/(:num)', 'Storestock::remove_item_invoice/$1');
 $routes->get('Storestock/print_purchase_return/(:num)', 'Storestock::print_purchase_return/$1');
 
+// Legacy compatibility: Lab_Admin & setting/template routes
+$routes->get('Lab_Admin/report_list', 'Setting\Template::report_list');
+$routes->get('setting/template/report_list', 'Setting\Template::report_list');
+$routes->get('Lab_Admin/reportedit_load', 'Setting\Template::reportedit_load');
+$routes->get('setting/template/reportedit_load', 'Setting\Template::reportedit_load');
+$routes->get('Lab_Admin/reportedit_load/(:num)', 'Setting\Template::reportedit_load/$1');
+$routes->get('setting/template/reportedit_load/(:num)', 'Setting\Template::reportedit_load/$1');
+$routes->post('Lab_Admin/report_update', 'Setting\Template::report_update');
+$routes->post('setting/template/report_update', 'Setting\Template::report_update');
+$routes->post('Lab_Admin/report_insert', 'Setting\Template::report_insert');
+$routes->post('setting/template/report_insert', 'Setting\Template::report_insert');
+$routes->get('Lab_Admin/report_ultrasound_list/(:num)', 'Setting\Template::report_ultrasound_list/$1');
+$routes->get('setting/template/report_ultrasound_list/(:num)', 'Setting\Template::report_ultrasound_list/$1');
+$routes->get('Lab_Admin/reportedit_ultrasound_load/(:num)', 'Setting\Template::reportedit_ultrasound_load/$1');
+$routes->get('setting/template/reportedit_ultrasound_load/(:num)', 'Setting\Template::reportedit_ultrasound_load/$1');
+$routes->get('Lab_Admin/reportedit_ultrasound_load/(:num)/(:num)', 'Setting\Template::reportedit_ultrasound_load/$1/$2');
+$routes->get('setting/template/reportedit_ultrasound_load/(:num)/(:num)', 'Setting\Template::reportedit_ultrasound_load/$1/$2');
+$routes->post('Lab_Admin/report_ultrasound_update/(:num)', 'Setting\Template::report_ultrasound_update/$1');
+$routes->post('setting/template/report_ultrasound_update/(:num)', 'Setting\Template::report_ultrasound_update/$1');
+$routes->post('Lab_Admin/report_ultrasound_insert/(:num)', 'Setting\Template::report_ultrasound_insert/$1');
+$routes->post('setting/template/report_ultrasound_insert/(:num)', 'Setting\Template::report_ultrasound_insert/$1');
+
 // Legacy compatibility: some IPD charge screens still refresh via old IpdNew URL.
 $routes->get('IpdNew/show_ipd_items/(:num)', 'Billing\\Ipd::panelTab/$1/ipd-charges');
 $routes->get('IpdNew/show_ipd_items/(:num)/(:num)', 'Billing\\Ipd::panelTab/$1/ipd-charges');
@@ -551,6 +573,9 @@ $routes->post('patient/abdm_content_request_custom/(:num)', 'Patient::abdm_conte
     $routes->get('patient/abdm_timeline/(:num)', 'Patient::abdm_timeline/$1');
     $routes->post('patient/save_profile_image/(:num)', 'Patient::save_profile_image/$1');
     $routes->match(['GET', 'POST'], 'patient/patient_file_upload/(:num)', 'Patient::patient_file_upload/$1');
+    $routes->get('patient/patient_file_list/(:num)', 'Patient::patient_file_list/$1');
+    $routes->match(['GET', 'POST'], 'patient/upload_patient_doc/(:num)', 'Patient::upload_patient_doc/$1');
+    $routes->match(['GET', 'POST'], 'patient/delete_patient_doc/(:num)', 'Patient::delete_patient_doc/$1');
     $routes->get('patient/city', 'Patient::city');
     $routes->get('patient/district_list', 'Patient::district_list');
     $routes->get('patient/get_name', 'Patient::get_name');
@@ -1511,3 +1536,14 @@ $routes->group('Item_IPD', ['filter' => 'permission:billing.items.view,billing.i
     $routes->post('AddInsuranceItemRecord', 'ItemIpd::addInsuranceItemRecord', ['filter' => 'permission:billing.items.manage,admin.settings']);
     $routes->post('remove_record_item', 'ItemIpd::removeInsuranceItem', ['filter' => 'permission:billing.items.manage,admin.settings']);
 });
+
+// Doctor Document & Patient Document routes
+$routes->get('DoctorDocument', 'DoctorDocument::index');
+$routes->get('DoctorDocument/index', 'DoctorDocument::index');
+$routes->get('DoctorDocument/workspace', 'DoctorDocument::workspace');
+$routes->get('DoctorDocument/health_document_fhir_preview/(:num)', 'DoctorDocument::health_document_fhir_preview/$1');
+$routes->get('Document_Patient', 'DoctorDocument::index');
+$routes->get('Document_Patient/index', 'DoctorDocument::index');
+$routes->get('Document_Patient/workspace', 'DoctorDocument::workspace');
+$routes->get('Document_Patient/health_document_fhir_preview/(:num)', 'DoctorDocument::health_document_fhir_preview/$1');
+

@@ -9,6 +9,9 @@ class CodingResolver
         'CBC' => ['code' => '58410-2', 'display' => 'CBC panel - Blood by Automated count'],
         'HB' => ['code' => '718-7', 'display' => 'Hemoglobin [Mass/volume] in Blood'],
         'GLUCOSE' => ['code' => '2345-7', 'display' => 'Glucose [Mass/volume] in Serum or Plasma'],
+        'RBS' => ['code' => '2345-7', 'display' => 'Glucose [Mass/volume] in Serum or Plasma'],
+        'FBS' => ['code' => '1558-6', 'display' => 'Fasting glucose [Mass/volume] in Serum or Plasma'],
+        'PPBS' => ['code' => '1521-4', 'display' => 'Glucose 2 hours post meal [Mass/volume] in Serum or Plasma'],
         'CREATININE' => ['code' => '2160-0', 'display' => 'Creatinine [Mass/volume] in Serum or Plasma'],
     ];
 

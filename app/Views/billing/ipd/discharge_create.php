@@ -1253,185 +1253,220 @@ $historyFields = [
                                 <input type="hidden" name="drug_remove_source" id="drug_remove_source" value="legacy">
                                 <button type="submit" class="d-none" id="btn_apply_rx_group" name="action" value="apply_rx_group" data-reload-section="section-medicine">Apply Rx Group</button>
 
-                                <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <div class="d-flex align-items-center gap-2">
-                                        <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_open_rx_group_modal">+ Rx-Group</button>
-                                        <span id="rx_group_selected_name" class="text-muted">No Rx-Group selected</span>
+                                <input type="hidden" id="discharge_med_item_id" value="0">
+                                <input type="hidden" id="discharge_med_item_source" value="legacy">
+                                <input type="hidden" id="discharge_med_id" value="0">
+                                <input type="hidden" id="discharge_med_salt" value="">
+                                <input type="hidden" id="discharge_qty" value="">
+
+                                <!-- Top Header Bar for Rx-Group -->
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-8 d-flex align-items-center gap-2">
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_open_rx_group_modal">Rx Group</button>
+                                        <button type="button" class="btn btn-outline-success btn-sm" id="btn_discharge_rx_group" title="Select from Rx-Group">+ Rx-Group</button>
+                                        <span class="small text-muted" id="rx_group_selected_name">No Rx-Group selected</span>
                                     </div>
-                                    <div class="small text-muted">Select group and preview medicines before add.</div>
+                                    <div class="col-md-4 text-md-end small text-muted">
+                                        Select group and preview medicines before add.
+                                    </div>
                                 </div>
 
-                                <div class="row g-3">
-                                    <!-- Medicine List Table -->
-                                    <div class="col-md-12">
-                                        <div class="table-responsive">
-                                            <table class="table table-sm table-bordered">
-                                                <thead>
-                                                    <tr>
-                                                        <th>Type</th>
-                                                        <th>Medicine</th>
-                                                        <th>Dose</th>
-                                                        <th>When</th>
-                                                        <th>Freq</th>
-                                                        <th>Days</th>
-                                                        <th>Qty</th>
-                                                        <th>Remark</th>
-                                                        <th style="width:90px;">Action</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody id="discharge_medicine_tbody">
-                                                    <?php if (empty($medicineRows)): ?>
-                                                        <tr>
-                                                            <td colspan="9" class="text-muted text-center">No medicine added</td>
-                                                        </tr>
-                                                        <?php else: foreach ($medicineRows as $row): ?>
-                                                            <tr data-row-id="<?= (int) ($row['id'] ?? 0) ?>" data-row-source="<?= esc((string) ($row['source'] ?? 'legacy')) ?>">
-                                                                <td><?= esc((string) ($row['med_type'] ?? '')) ?></td>
-                                                                <td><?= esc((string) ($row['med_name'] ?? '')) ?></td>
-                                                                <td><?= esc((string) ($row['dosage'] ?? '')) ?></td>
-                                                                <td><?= esc((string) ($row['dosage_when'] ?? '')) ?></td>
-                                                                <td><?= esc((string) ($row['dosage_freq'] ?? '')) ?></td>
-                                                                <td><?= esc((string) ($row['no_of_days'] ?? '')) ?></td>
-                                                                <td><?= esc((string) ($row['qty'] ?? '')) ?></td>
-                                                                <td><?= esc((string) ($row['remark'] ?? '')) ?></td>
-                                                                <td class="d-flex gap-1">
-                                                                    <button
-                                                                        type="button"
-                                                                        class="btn btn-outline-primary btn-sm btn-edit-discharge-med"
-                                                                        data-id="<?= (int) ($row['id'] ?? 0) ?>"
-                                                                        data-source="<?= esc((string) ($row['source'] ?? 'legacy')) ?>"
-                                                                        data-med-name="<?= esc((string) ($row['med_name'] ?? '')) ?>"
-                                                                        data-med-salt="<?= esc((string) ($row['med_salt'] ?? '')) ?>"
-                                                                        data-med-type="<?= esc((string) ($row['med_type'] ?? '')) ?>"
-                                                                        data-dose-id="<?= (int) ($row['dosage_id'] ?? 0) ?>"
-                                                                        data-dose-when-id="<?= (int) ($row['dosage_when_id'] ?? 0) ?>"
-                                                                        data-dose-freq-id="<?= (int) ($row['dosage_freq_id'] ?? 0) ?>"
-                                                                        data-dose-label="<?= esc((string) ($row['dosage'] ?? '')) ?>"
-                                                                        data-dose-when-label="<?= esc((string) ($row['dosage_when'] ?? '')) ?>"
-                                                                        data-dose-freq-label="<?= esc((string) ($row['dosage_freq'] ?? '')) ?>"
-                                                                        data-days="<?= esc((string) ($row['no_of_days'] ?? '')) ?>"
-                                                                        data-qty="<?= esc((string) ($row['qty'] ?? '')) ?>"
-                                                                        data-remark="<?= esc((string) ($row['remark'] ?? '')) ?>">Edit</button>
-                                                                    <button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_drug" data-reload-section="section-medicine" onclick="document.getElementById('drug_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';document.getElementById('drug_remove_source').value='<?= esc((string) ($row['source'] ?? 'legacy')) ?>';">Remove</button>
-                                                                </td>
-                                                            </tr>
-                                                    <?php endforeach;
-                                                    endif; ?>
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                        <input type="hidden" name="drug_remove_id" id="drug_remove_id" value="0">
-                                        <input type="hidden" name="discharge_medicine_json" id="discharge_medicine_json" value="">
+                                <!-- Form Card matching OPD Consult -->
+                                <div class="card border mb-3 shadow-sm">
+                                    <div class="card-header bg-primary bg-gradient text-white py-2 d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold"><i class="bi bi-capsule me-2"></i>Prescribed Medicines</span>
                                     </div>
-
-                                    <!-- Add Medicine Form -->
-                                    <div class="col-md-12">
-                                        <div class="card border">
-                                            <div class="card-header py-2 bg-light d-flex justify-content-between align-items-center">
-                                                <strong>Prescribed:</strong>
-                                                <div>
-                                                    <button type="button" class="btn btn-sm btn-outline-success" id="btn_discharge_rx_group" title="Select from Rx-Group">+ Rx-Group</button>
-                                                </div>
-                                            </div>
-                                            <div class="card-body">
-                                                <input type="hidden" id="discharge_med_item_id" value="0">
-                                                <input type="hidden" id="discharge_med_item_source" value="legacy">
-                                                <input type="hidden" id="discharge_med_id" value="0">
-                                                <input type="hidden" id="discharge_med_salt" value="">
-<div class="row g-2 mb-2">
-                                                <div class="col-8">
-                                                    <label class="form-label small">Medicine Name (Brand)</label>
-                                                    <input type="text" id="discharge_med_name" list="discharge_med_suggest" class="form-control form-control-sm" placeholder="Type medicine name" autocomplete="off">
-                                                    <datalist id="discharge_med_suggest"></datalist>
-                                                </div>
-
-                                                <div class="col-4">
-                                                    <label class="form-label small">Type</label>
-                                                    <input type="text" id="discharge_med_type" class="form-control form-control-sm" placeholder="TAB,CAP,SYR,INJ">
-                                                </div>
-
-                                                <!-- Substitute Medicines Box -->
-                                                <div class="col-12" id="discharge_substitute_box" style="display:none;margin-bottom:0.5rem;">
+                                    <div class="card-body p-3 bg-light-subtle">
+                                        <!-- Row 1: Medicine Name & Form / Type & Dose / Strength -->
+                                        <div class="row g-3 align-items-end mb-2">
+                                            <div class="col-md-7 position-relative">
+                                                <label class="form-label fw-semibold mb-1 text-dark">Medicine Name <span class="text-danger">*</span></label>
+                                                <input type="text" class="form-control form-control-lg shadow-sm" id="discharge_med_name" autocomplete="off" placeholder="Type medicine name (e.g. Paracetamol 500mg, Amoxicillin)...">
+                                                <div id="discharge_med_name_dd" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1080;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 6px 16px rgba(0,0,0,.15);max-height:280px;overflow-y:auto;"></div>
+                                                <!-- Substitute Box -->
+                                                <div class="col-12" id="discharge_substitute_box" style="display:none;margin-top:0.5rem;">
                                                     <div class="small text-muted" id="discharge_substitute_note"></div>
                                                     <div class="small text-muted" id="discharge_substitute_empty" style="display:none;">No substitute found.</div>
                                                     <div id="discharge_substitute_rows" style="max-height:200px;overflow-y:auto;"></div>
                                                 </div>
-</div>
-                                                <div class="row g-2 mb-2">
-                                                    <div class="col-4">
-                                                        <label class="form-label small">Dose:</label>
-                                                        <select id="discharge_dosage" class="form-select form-select-sm">
-                                                            <option value="">Dose</option>
-                                                        </select>
-                                                    </div>
-                                                    <div class="col-4">
-                                                        <label class="form-label small">When:</label>
-                                                        <select id="discharge_dosage_when" class="form-select form-select-sm">
-                                                            <option value="">When</option>
-                                                        </select>
-                                                    </div>
-                                                    <div class="col-4">
-                                                        <label class="form-label small">Frequency:</label>
-                                                        <select id="discharge_dosage_freq" class="form-select form-select-sm">
-                                                            <option value="">Frequency</option>
-                                                        </select>
-                                                    </div>
-                                                </div>
-
-                                                <div class="row g-2 mb-2">
-                                                    <div class="col-4">
-                                                        <label class="form-label small">Duration:</label>
-                                                        <input type="text" id="discharge_no_of_days" class="form-control form-control-sm" placeholder="e.g. 5 days / 1 month / 3 doses">
-                                                    </div>
-                                                    <div class="col-4">
-                                                        <label class="form-label small">Qty:</label>
-                                                        <input type="text" id="discharge_qty" class="form-control form-control-sm" placeholder="Qty">
-                                                    </div>
-                                                    <div class="col-4">
-                                                        <label class="form-label small">Route:</label>
-                                                        <select id="discharge_dose_where" class="form-select form-select-sm">
-                                                            <option value="">Route</option>
-                                                        </select>
-                                                    </div>
-                                                </div>
-
-                                                <div class="mb-3">
-                                                    <label class="form-label small">Medicine Advice:</label>
-                                                    <input type="text" id="discharge_remark" class="form-control form-control-sm" placeholder="Instruction / medicine advice">
-                                                </div>
-
-                                                <div class="d-flex gap-2 mb-3">
-                                                    <button type="button" class="btn btn-primary btn-sm flex-fill" id="btn_discharge_med_add">+ADD / Update</button>
-                                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_discharge_med_reset">Remove All</button>
-                                                </div>
-
-                                                <!-- Quick Buttons -->
-                                                <div class="mb-2">
-                                                    <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_dosage_when" data-fill-value="BF">Before Food</button>
-                                                    <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_dosage_when" data-fill-value="AF">After Food</button>
-                                                    <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_dosage_when" data-fill-value="WF">With Food</button>
-                                                &nbsp;
-                                                    <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_dosage_freq" data-fill-value="OD">OD</button>
-                                                    <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_dosage_freq" data-fill-value="BD">BD</button>
-                                                    <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_dosage_freq" data-fill-value="TDS">TDS</button>
-                                                    <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_dosage_freq" data-fill-value="HS">HS</button>
-                                                &nbsp;
-                                                    <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_no_of_days" data-fill-value="3 Days">3 Days</button>
-                                                    <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_no_of_days" data-fill-value="5 Days">5 Days</button>
-                                                    <button type="button" class="btn btn-outline-secondary btn-sm discharge-quick-btn" data-fill-target="discharge_no_of_days" data-fill-value="7 Days">7 Days</button>
-                                                </div>
-
-                                                <div class="small text-muted" id="discharge_medicine_status">Ready.</div>
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label class="form-label fw-semibold mb-1 text-dark">Form / Type</label>
+                                                <select class="form-select shadow-sm" id="discharge_med_type">
+                                                    <option value="">Select Type</option>
+                                                    <option value="TAB">TAB (Tablet)</option>
+                                                    <option value="CAP">CAP (Capsule)</option>
+                                                    <option value="SYP">SYP (Syrup)</option>
+                                                    <option value="INJ">INJ (Injection)</option>
+                                                    <option value="CREAM">CREAM (Cream)</option>
+                                                    <option value="OINT">OINT (Ointment)</option>
+                                                    <option value="GEL">GEL (Gel)</option>
+                                                    <option value="EYE DROP">EYE DROP</option>
+                                                    <option value="EAR DROP">EAR DROP</option>
+                                                    <option value="DROPS">DROPS</option>
+                                                    <option value="RESPULES">RESPULES</option>
+                                                    <option value="SACHET">SACHET</option>
+                                                    <option value="LOTION">LOTION</option>
+                                                    <option value="SPRAY">SPRAY</option>
+                                                    <option value="PATCH">PATCH</option>
+                                                    <option value="POWDER">POWDER</option>
+                                                    <option value="SUPPOSITORY">SUPPOSITORY</option>
+                                                    <option value="INFUSION">INFUSION</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label fw-semibold mb-1 text-dark">Dose / Strength</label>
+                                                <input type="text" class="form-control shadow-sm" id="discharge_dosage" autocomplete="off" placeholder="e.g. 1 Tab / 5ml / 500mg">
                                             </div>
                                         </div>
+
+                                        <!-- Row 2: Frequency & Relation to Food (When) & Route & Duration -->
+                                        <div class="row g-3 align-items-end mb-2">
+                                            <div class="col-md-3 position-relative">
+                                                <label class="form-label fw-semibold mb-1 text-dark">Frequency (Times/Day) <span class="text-danger">*</span></label>
+                                                <input type="text" class="form-control shadow-sm" id="discharge_dosage_freq" autocomplete="off" placeholder="OD, BD, TDS, QID, HS, SOS...">
+                                                <div id="discharge_dosage_freq_dd" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1080;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 6px 16px rgba(0,0,0,.15);max-height:220px;overflow-y:auto;"></div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label fw-semibold mb-1 text-dark">Relation to Food (When)</label>
+                                                <select class="form-select shadow-sm" id="discharge_dosage_when">
+                                                    <option value="">When</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label fw-semibold mb-1 text-dark">Route of Administration <span class="text-danger">*</span></label>
+                                                <select class="form-select shadow-sm" id="discharge_dose_where">
+                                                    <option value="">Route</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-3 position-relative">
+                                                <label class="form-label fw-semibold mb-1 text-dark">Duration</label>
+                                                <input type="text" class="form-control shadow-sm" id="discharge_no_of_days" autocomplete="off" placeholder="e.g. 5 Days / 1 Month">
+                                                <div id="discharge_no_of_days_dd" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1080;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:200px;overflow-y:auto;"></div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Row 3: Advice & Action Buttons -->
+                                        <div class="row g-3 align-items-end">
+                                            <div class="col-md-8 position-relative">
+                                                <label class="form-label fw-semibold mb-1 text-dark">Medicine Advice / Remarks</label>
+                                                <input type="text" class="form-control shadow-sm" id="discharge_remark" autocomplete="off" placeholder="Special instructions (e.g. Take with warm water, avoid dairy)">
+                                                <div id="discharge_remark_dd" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1080;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;"></div>
+                                            </div>
+                                            <div class="col-md-4 d-flex gap-2">
+                                                <style>
+                                                    #btn_discharge_med_add:focus, #btn_discharge_med_add:active {
+                                                        outline: 3px solid #ffc107 !important;
+                                                        outline-offset: 2px !important;
+                                                        box-shadow: 0 0 0 0.35rem rgba(13, 110, 253, 0.45), 0 0 12px rgba(255, 193, 7, 0.75) !important;
+                                                        background-color: #0b5ed7 !important;
+                                                        border-color: #0a58ca !important;
+                                                        filter: brightness(1.1);
+                                                    }
+                                                </style>
+                                                <button type="button" class="btn btn-primary flex-fill fw-bold shadow-sm" id="btn_discharge_med_add">
+                                                    +ADD / Update
+                                                </button>
+                                                <button type="button" class="btn btn-outline-secondary" id="btn_discharge_med_cancel" style="display:none;">Cancel</button>
+                                            </div>
+                                        </div>
+
+                                        <!-- Categorized Quick Select Chips Bar -->
+                                        <div class="d-flex flex-wrap align-items-center gap-1 mt-3 pt-2 border-top">
+                                            <span class="badge bg-secondary me-1"><i class="bi bi-lightning-fill me-1"></i>Quick Select:</span>
+                                            
+                                            <span class="text-muted small fw-semibold ms-1 me-1">Frequency:</span>
+                                            <button type="button" class="btn btn-outline-primary btn-sm discharge-quick-btn py-0 px-2" data-fill-target="discharge_dosage_freq" data-fill-value="OD">OD</button>
+                                            <button type="button" class="btn btn-outline-primary btn-sm discharge-quick-btn py-0 px-2" data-fill-target="discharge_dosage_freq" data-fill-value="BD">BD</button>
+                                            <button type="button" class="btn btn-outline-primary btn-sm discharge-quick-btn py-0 px-2" data-fill-target="discharge_dosage_freq" data-fill-value="TDS">TDS</button>
+                                            <button type="button" class="btn btn-outline-primary btn-sm discharge-quick-btn py-0 px-2" data-fill-target="discharge_dosage_freq" data-fill-value="QID">QID</button>
+                                            <button type="button" class="btn btn-outline-primary btn-sm discharge-quick-btn py-0 px-2" data-fill-target="discharge_dosage_freq" data-fill-value="HS">HS</button>
+                                            <button type="button" class="btn btn-outline-primary btn-sm discharge-quick-btn py-0 px-2" data-fill-target="discharge_dosage_freq" data-fill-value="SOS">SOS</button>
+
+                                            <span class="text-muted small fw-semibold ms-2 me-1">Timing:</span>
+                                            <button type="button" class="btn btn-outline-info btn-sm discharge-quick-btn py-0 px-2" data-fill-target="discharge_dosage_when" data-fill-value="AF">After Food (AF)</button>
+                                            <button type="button" class="btn btn-outline-info btn-sm discharge-quick-btn py-0 px-2" data-fill-target="discharge_dosage_when" data-fill-value="BF">Before Food (BF)</button>
+                                            <button type="button" class="btn btn-outline-info btn-sm discharge-quick-btn py-0 px-2" data-fill-target="discharge_dosage_when" data-fill-value="WF">With Food (WF)</button>
+                                            <button type="button" class="btn btn-outline-info btn-sm discharge-quick-btn py-0 px-2" data-fill-target="discharge_dosage_when" data-fill-value="ES">Empty Stomach (ES)</button>
+
+                                            <span class="text-muted small fw-semibold ms-2 me-1">Route:</span>
+                                            <button type="button" class="btn btn-outline-success btn-sm discharge-quick-btn py-0 px-2" data-fill-target="discharge_dose_where" data-fill-value="Oral">Oral</button>
+                                            <button type="button" class="btn btn-outline-success btn-sm discharge-quick-btn py-0 px-2" data-fill-target="discharge_dose_where" data-fill-value="IV / Inj">IV / Inj</button>
+                                            <button type="button" class="btn btn-outline-success btn-sm discharge-quick-btn py-0 px-2" data-fill-target="discharge_dose_where" data-fill-value="Topical">Topical</button>
+
+                                            <span class="text-muted small fw-semibold ms-2 me-1">Duration:</span>
+                                            <button type="button" class="btn btn-outline-dark btn-sm discharge-quick-btn py-0 px-2" data-fill-target="discharge_no_of_days" data-fill-value="3 Days">3 Days</button>
+                                            <button type="button" class="btn btn-outline-dark btn-sm discharge-quick-btn py-0 px-2" data-fill-target="discharge_no_of_days" data-fill-value="5 Days">5 Days</button>
+                                            <button type="button" class="btn btn-outline-dark btn-sm discharge-quick-btn py-0 px-2" data-fill-target="discharge_no_of_days" data-fill-value="7 Days">7 Days</button>
+                                            <button type="button" class="btn btn-outline-dark btn-sm discharge-quick-btn py-0 px-2" data-fill-target="discharge_no_of_days" data-fill-value="14 Days">14 Days</button>
+                                            <button type="button" class="btn btn-outline-dark btn-sm discharge-quick-btn py-0 px-2" data-fill-target="discharge_no_of_days" data-fill-value="1 Month">1 Month</button>
+                                        </div>
+                                        <div class="small text-muted mt-2" id="discharge_medicine_status">Ready.</div>
                                     </div>
                                 </div>
+
+                                <!-- Medicine List Table -->
+                                <div class="table-responsive">
+                                    <table class="table table-bordered table-sm rx-list-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Type</th>
+                                                <th>Medicine</th>
+                                                <th>Dose</th>
+                                                <th>When</th>
+                                                <th>Freq</th>
+                                                <th>Days</th>
+                                                <th>Remark</th>
+                                                <th style="width:90px;">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="discharge_medicine_tbody">
+                                            <?php if (empty($medicineRows)): ?>
+                                                <tr>
+                                                    <td colspan="8" class="text-muted text-center">No medicine added</td>
+                                                </tr>
+                                                <?php else: foreach ($medicineRows as $row): ?>
+                                                    <tr data-row-id="<?= (int) ($row['id'] ?? 0) ?>" data-row-source="<?= esc((string) ($row['source'] ?? 'legacy')) ?>">
+                                                        <td><?= esc((string) ($row['med_type'] ?? '')) ?></td>
+                                                        <td><?= esc((string) ($row['med_name'] ?? '')) ?></td>
+                                                        <td><?= esc((string) ($row['dosage'] ?? '')) ?></td>
+                                                        <td><?= esc((string) ($row['dosage_when'] ?? '')) ?></td>
+                                                        <td><?= esc((string) ($row['dosage_freq'] ?? '')) ?></td>
+                                                        <td><?= esc((string) ($row['no_of_days'] ?? '')) ?></td>
+                                                        <td><?= esc((string) ($row['remark'] ?? '')) ?></td>
+                                                        <td class="d-flex gap-1">
+                                                            <button
+                                                                type="button"
+                                                                class="btn btn-outline-primary btn-sm btn-edit-discharge-med"
+                                                                data-id="<?= (int) ($row['id'] ?? 0) ?>"
+                                                                data-source="<?= esc((string) ($row['source'] ?? 'legacy')) ?>"
+                                                                data-med-name="<?= esc((string) ($row['med_name'] ?? '')) ?>"
+                                                                data-med-salt="<?= esc((string) ($row['med_salt'] ?? '')) ?>"
+                                                                data-med-type="<?= esc((string) ($row['med_type'] ?? '')) ?>"
+                                                                data-dose-id="<?= (int) ($row['dosage_id'] ?? 0) ?>"
+                                                                data-dose-when-id="<?= (int) ($row['dosage_when_id'] ?? 0) ?>"
+                                                                data-dose-freq-id="<?= (int) ($row['dosage_freq_id'] ?? 0) ?>"
+                                                                data-dose-label="<?= esc((string) ($row['dosage'] ?? '')) ?>"
+                                                                data-dose-when-label="<?= esc((string) ($row['dosage_when'] ?? '')) ?>"
+                                                                data-dose-freq-label="<?= esc((string) ($row['dosage_freq'] ?? '')) ?>"
+                                                                data-days="<?= esc((string) ($row['no_of_days'] ?? '')) ?>"
+                                                                data-qty="<?= esc((string) ($row['qty'] ?? '')) ?>"
+                                                                data-remark="<?= esc((string) ($row['remark'] ?? '')) ?>">Edit</button>
+                                                            <button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_drug" data-reload-section="section-medicine" onclick="document.getElementById('drug_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';document.getElementById('drug_remove_source').value='<?= esc((string) ($row['source'] ?? 'legacy')) ?>';">Remove</button>
+                                                        </td>
+                                                    </tr>
+                                            <?php endforeach;
+                                            endif; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="d-flex justify-content-end align-items-center mt-2">
+                                    <button type="button" class="btn btn-sm btn-outline-danger" id="btn_discharge_med_reset" title="Remove all added medicines"><i class="bi bi-trash me-1"></i>Remove All</button>
+                                </div>
+                                <input type="hidden" name="drug_remove_id" id="drug_remove_id" value="0">
+                                <input type="hidden" name="discharge_medicine_json" id="discharge_medicine_json" value="">
                             </div>
                         </div>
-
-
-
-                        <div class="card border-secondary mt-3" id="section-instructions">
                             <div class="card-header py-2 d-flex justify-content-between align-items-center">
                                 <strong>Discharge Summary</strong>
                                 <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_discharge_manage_food_master">Dietary Master CRUD</button>
@@ -4515,7 +4550,35 @@ $historyFields = [
                     where: []
                 };
 
-                function renderSelectOptions($select, rows, placeholder) {
+                var dischargeFreqDescMap = {
+                    'OD': 'OD -> OD (Once Daily)',
+                    'BD': 'BD -> BD (Twice Daily)',
+                    'TDS': 'TDS -> TDS (Thrice Daily)',
+                    'TID': 'TID -> TID (Three Times a Day)',
+                    'QID': 'QID -> QID (Four Times a Day)',
+                    'HS': 'HS -> HS (At Bedtime)',
+                    'SOS': 'SOS -> SOS (As Needed)',
+                    'STAT': 'STAT -> STAT (Immediately)',
+                    'Q4H': 'Q4H -> Q4H (Every 4 Hours)',
+                    'Q6H': 'Q6H -> Q6H (Every 6 Hours)',
+                    'Q8H': 'Q8H -> Q8H (Every 8 Hours)'
+                };
+
+                var dischargeWhenDescMap = {
+                    'BF': 'BF -> Before Food',
+                    'AF': 'AF -> After Food',
+                    'WF': 'WF -> With Food',
+                    'ES': 'ES -> Empty Stomach',
+                    'BBF': 'BBF -> Before Breakfast',
+                    'ABF': 'ABF -> After Breakfast',
+                    'BL': 'BL -> Before Lunch',
+                    'AL': 'AL -> After Lunch',
+                    'BD': 'BD -> Before Dinner',
+                    'AD': 'AD -> After Dinner',
+                    'BT': 'BT -> Bed Time'
+                };
+
+                function renderSelectOptions($select, rows, placeholder, descMap) {
                     var html = '<option value="">' + $('<div>').text(placeholder || 'Select').html() + '</option>';
                     (rows || []).forEach(function(row) {
                         var id = (row && row.id !== undefined) ? String(row.id) : '';
@@ -4523,7 +4586,11 @@ $historyFields = [
                         if (!id || !label) {
                             return;
                         }
-                        html += '<option value="' + $('<div>').text(id).html() + '">' + $('<div>').text(label).html() + '</option>';
+                        var displayText = label;
+                        if (descMap && descMap[label.toUpperCase()]) {
+                            displayText = descMap[label.toUpperCase()];
+                        }
+                        html += '<option value="' + $('<div>').text(id).html() + '">' + $('<div>').text(displayText).html() + '</option>';
                     });
                     $select.html(html);
                 }
@@ -4537,14 +4604,377 @@ $historyFields = [
                             where: (data && data.where) ? data.where : []
                         };
 
-                        renderSelectOptions($('#discharge_dosage'), doseMasterCache.dose, 'Dose');
-                        renderSelectOptions($('#discharge_dosage_when'), doseMasterCache.when, 'When');
-                        renderSelectOptions($('#discharge_dosage_freq'), doseMasterCache.freq, 'Frequency');
+                        renderSelectOptions($('#discharge_dosage_when'), doseMasterCache.when, 'When', dischargeWhenDescMap);
                         renderSelectOptions($('#discharge_dose_where'), doseMasterCache.where, 'Route');
                     }, 'json').fail(function() {
                         setMedicineStatus('Unable to load dose masters.', 'error');
                     });
                 }
+
+                // ── Smart Frequency Autocomplete for #discharge_dosage_freq ─────────────────
+                (function() {
+                    var freqInput = document.getElementById('discharge_dosage_freq');
+                    var freqDropdown = document.getElementById('discharge_dosage_freq_dd');
+                    if (!freqInput || !freqDropdown) return;
+
+                    var _FREQ_PRESET_MAP = [
+                        { code: 'OD', desc: 'Once Daily (1 dose/day)' },
+                        { code: 'BD', desc: 'Twice Daily (2 doses/day)' },
+                        { code: 'TDS', desc: 'Thrice Daily (3 doses/day)' },
+                        { code: 'QID', desc: 'Four Times Daily (4 doses/day)' },
+                        { code: 'HS', desc: 'At Bedtime (Once at night)' },
+                        { code: 'SOS', desc: 'As Needed (Only when required)' },
+                        { code: 'Q4H', desc: 'Every 4 Hours' },
+                        { code: 'Q6H', desc: 'Every 6 Hours' },
+                        { code: 'Q8H', desc: 'Every 8 Hours' },
+                        { code: 'Alternate Day', desc: 'Once every 2 days' },
+                        { code: 'Weekly', desc: 'Long-interval (Once a week)' },
+                        { code: 'Monthly', desc: 'Long-interval (Once a month)' },
+                        { code: 'Continuous Infusion', desc: 'IV drip maintained continuously' },
+                        { code: 'Stat', desc: 'Immediate single dose' }
+                    ];
+
+                    var highlightIdx = -1;
+
+                    function getSuggestions(val) {
+                        var q = String(val || '').trim().toLowerCase();
+                        var numMap = { '1': 'OD', '2': 'BD', '3': 'TDS', '4': 'QID' };
+                        var res = [], seen = {};
+
+                        if (numMap[q]) {
+                            var targetCode = numMap[q];
+                            _FREQ_PRESET_MAP.forEach(function(item) {
+                                if (item.code === targetCode) {
+                                    seen[item.code] = true;
+                                    res.push(item);
+                                }
+                            });
+                        }
+
+                        _FREQ_PRESET_MAP.forEach(function(item) {
+                            if (!seen[item.code]) {
+                                if (!q || item.code.toLowerCase().indexOf(q) !== -1 || item.desc.toLowerCase().indexOf(q) !== -1) {
+                                    seen[item.code] = true;
+                                    res.push(item);
+                                }
+                            }
+                        });
+
+                        (doseMasterCache.freq || []).forEach(function(row) {
+                            var code = (row && row.label) ? String(row.label) : '';
+                            if (code && !seen[code]) {
+                                if (!q || code.toLowerCase().indexOf(q) !== -1) {
+                                    seen[code] = true;
+                                    res.push({ code: code, desc: '' });
+                                }
+                            }
+                        });
+
+                        return res.slice(0, 14);
+                    }
+
+                    function renderDropdown(items) {
+                        if (!items.length) {
+                            freqDropdown.style.display = 'none';
+                            freqDropdown.innerHTML = '';
+                            highlightIdx = -1;
+                            return;
+                        }
+
+                        var html = '';
+                        items.forEach(function(s, i) {
+                            var bgStyle = (i === highlightIdx) ? 'background:#e2ebff;' : '';
+                            var labelHtml = '<strong>' + $('<div>').text(s.code).html() + '</strong>';
+                            if (s.desc) {
+                                labelHtml += ' <span class="text-muted ms-2" style="font-size:12px;">(' + $('<div>').text(s.desc).html() + ')</span>';
+                            }
+                            html += '<div class="px-3 py-2 border-bottom d-flex justify-content-between align-items-center discharge-freq-opt" data-code="' + $('<div>').text(s.code).html() + '" style="cursor:pointer;font-size:13px;' + bgStyle + '">' + labelHtml + '</div>';
+                        });
+
+                        freqDropdown.innerHTML = html;
+                        freqDropdown.style.display = 'block';
+                    }
+
+                    freqInput.addEventListener('focus', function() {
+                        var sugs = getSuggestions(freqInput.value);
+                        highlightIdx = sugs.length ? 0 : -1;
+                        renderDropdown(sugs);
+                    });
+
+                    freqInput.addEventListener('input', function() {
+                        var sugs = getSuggestions(freqInput.value);
+                        highlightIdx = sugs.length ? 0 : -1;
+                        renderDropdown(sugs);
+                    });
+
+                    freqInput.addEventListener('keydown', function(e) {
+                        var sugs = getSuggestions(freqInput.value);
+                        if (!sugs.length || freqDropdown.style.display === 'none') {
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                var whenSelect = document.getElementById('discharge_dosage_when');
+                                if (whenSelect) whenSelect.focus();
+                            }
+                            return;
+                        }
+
+                        if (e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            highlightIdx = (highlightIdx + 1) % sugs.length;
+                            renderDropdown(sugs);
+                        } else if (e.key === 'ArrowUp') {
+                            e.preventDefault();
+                            highlightIdx = (highlightIdx - 1 + sugs.length) % sugs.length;
+                            renderDropdown(sugs);
+                        } else if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (highlightIdx >= 0 && sugs[highlightIdx]) {
+                                freqInput.value = sugs[highlightIdx].code;
+                            }
+                            freqDropdown.style.display = 'none';
+                            var whenSelect = document.getElementById('discharge_dosage_when');
+                            if (whenSelect) whenSelect.focus();
+                        } else if (e.key === 'Escape') {
+                            freqDropdown.style.display = 'none';
+                        }
+                    });
+
+                    $(document).on('click', '.discharge-freq-opt', function() {
+                        freqInput.value = $(this).data('code');
+                        freqDropdown.style.display = 'none';
+                        var whenSelect = document.getElementById('discharge_dosage_when');
+                        if (whenSelect) whenSelect.focus();
+                    });
+
+                    document.addEventListener('click', function(e) {
+                        if (!freqInput.contains(e.target) && !freqDropdown.contains(e.target)) {
+                            freqDropdown.style.display = 'none';
+                        }
+                    });
+                })();
+
+                // ── Smart Duration Autotext for #discharge_no_of_days ─────────────────────────
+                (function() {
+                    var daysInput = document.getElementById('discharge_no_of_days');
+                    var daysDropdown = document.getElementById('discharge_no_of_days_dd');
+                    if (!daysInput || !daysDropdown) return;
+
+                    var selectedIdx = -1;
+
+                    function buildOptions(val) {
+                        val = String(val || '').trim();
+                        var num = parseInt(val, 10);
+                        if (isNaN(num) || num <= 0) return [];
+                        var unitDays = num === 1 ? 'Day' : 'Days';
+                        var unitWeeks = num === 1 ? 'Week' : 'Weeks';
+                        var unitMonths = num === 1 ? 'Month' : 'Months';
+                        return [
+                            num + ' ' + unitDays,
+                            num + ' ' + unitWeeks,
+                            num + ' ' + unitMonths
+                        ];
+                    }
+
+                    function renderDropdown(items) {
+                        if (!items.length) {
+                            daysDropdown.style.display = 'none';
+                            daysDropdown.innerHTML = '';
+                            selectedIdx = -1;
+                            return;
+                        }
+                        var html = '';
+                        items.forEach(function(item, i) {
+                            html += '<a href="javascript:void(0)" class="dropdown-item discharge-days-opt ' + (i === selectedIdx ? 'active' : '') + '" data-val="' + $('<div>').text(item).html() + '" style="font-size:12px; padding:4px 12px;">' + $('<div>').text(item).html() + '</a>';
+                        });
+                        daysDropdown.innerHTML = html;
+                        daysDropdown.style.display = 'block';
+                    }
+
+                    daysInput.addEventListener('input', function() {
+                        var items = buildOptions(daysInput.value);
+                        selectedIdx = items.length ? 0 : -1;
+                        renderDropdown(items);
+                    });
+
+                    daysInput.addEventListener('keydown', function(e) {
+                        var items = daysDropdown.querySelectorAll('.discharge-days-opt');
+                        if (!items.length || daysDropdown.style.display === 'none') {
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                var remark = document.getElementById('discharge_remark');
+                                if (remark) remark.focus();
+                            }
+                            return;
+                        }
+                        if (e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            selectedIdx = (selectedIdx + 1) % items.length;
+                            renderDropdown(buildOptions(daysInput.value));
+                        } else if (e.key === 'ArrowUp') {
+                            e.preventDefault();
+                            selectedIdx = (selectedIdx - 1 + items.length) % items.length;
+                            renderDropdown(buildOptions(daysInput.value));
+                        } else if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (selectedIdx >= 0 && items[selectedIdx]) {
+                                daysInput.value = items[selectedIdx].getAttribute('data-val');
+                            }
+                            daysDropdown.style.display = 'none';
+                            var remark = document.getElementById('discharge_remark');
+                            if (remark) remark.focus();
+                        } else if (e.key === 'Escape') {
+                            daysDropdown.style.display = 'none';
+                        }
+                    });
+
+                    $(document).on('click', '.discharge-days-opt', function() {
+                        daysInput.value = $(this).data('val');
+                        daysDropdown.style.display = 'none';
+                        var remark = document.getElementById('discharge_remark');
+                        if (remark) remark.focus();
+                    });
+
+                    document.addEventListener('click', function(e) {
+                        if (!daysInput.contains(e.target) && !daysDropdown.contains(e.target)) {
+                            daysDropdown.style.display = 'none';
+                        }
+                    });
+                })();
+
+                // ── Smart Medicine Advice Autotext for #discharge_remark ─────────────────────
+                (function() {
+                    var _REMARK_PRESETS = [
+                        'Take with warm water',
+                        'Take with milk',
+                        'Avoid sour food and dairy products',
+                        'Take after meals',
+                        'Take on an empty stomach early morning',
+                        'Chew well before swallowing',
+                        'Dissolve in half glass of water',
+                        'Apply locally twice daily',
+                        'Instill 1-2 drops in affected eye',
+                        'Instill 1-2 drops in affected ear',
+                        'Use via nebulizer',
+                        'Store in refrigerator (2-8°C)',
+                        'Shake well before use',
+                        'Do not crush or chew tablet',
+                        'Avoid alcohol while taking this medicine',
+                        'Complete full course of antibiotics',
+                        'Avoid heavy and spicy food',
+                        'Drink plenty of fluids / water'
+                    ];
+
+                    var medRemarkHighlightIdx = -1;
+
+                    function highlightMedRemarkItem(idx) {
+                        var $items = $('#discharge_remark_dd .discharge-remark-dd-item');
+                        if (!$items.length) return;
+                        if (idx < 0) idx = 0;
+                        if (idx >= $items.length) idx = $items.length - 1;
+                        medRemarkHighlightIdx = idx;
+
+                        $items.css('background', '').removeClass('active-dd-item');
+                        var $target = $items.eq(medRemarkHighlightIdx);
+                        $target.css('background', '#e2ebff').addClass('active-dd-item');
+
+                        var container = document.getElementById('discharge_remark_dd');
+                        var elem = $target[0];
+                        if (container && elem) {
+                            var cTop = container.scrollTop;
+                            var cBottom = cTop + container.clientHeight;
+                            var eTop = elem.offsetTop;
+                            var eBottom = eTop + elem.offsetHeight;
+                            if (eTop < cTop) {
+                                container.scrollTop = eTop;
+                            } else if (eBottom > cBottom) {
+                                container.scrollTop = eBottom - container.clientHeight;
+                            }
+                        }
+                    }
+
+                    function getMedRemarkSuggestions(input) {
+                        var q = (input || '').toString().trim().toLowerCase();
+                        var suggestions = [];
+                        _REMARK_PRESETS.forEach(function(p) {
+                            if (!q || p.toLowerCase().indexOf(q) !== -1) {
+                                suggestions.push(p);
+                            }
+                        });
+                        return suggestions.slice(0, 10);
+                    }
+
+                    function renderMedRemarkDropdown(sugs) {
+                        var $dd = $('#discharge_remark_dd').empty();
+                        medRemarkHighlightIdx = -1;
+                        if (!sugs.length) { $dd.hide(); return; }
+
+                        sugs.forEach(function(s, idx) {
+                            var $row = $('<div class="px-3 py-2 border-bottom discharge-remark-dd-item" data-idx="' + idx + '" style="cursor:pointer;font-size:.875rem"></div>')
+                                .text(s);
+
+                            $row.on('mouseenter', function() { highlightMedRemarkItem(idx); })
+                                .on('mouseleave', function() { $(this).css('background',''); })
+                                .on('mousedown', function(e) { e.preventDefault(); })
+                                .on('click', function() {
+                                    $('#discharge_remark').val(s);
+                                    $dd.hide().empty();
+                                    medRemarkHighlightIdx = -1;
+                                    var btnAdd = document.getElementById('btn_discharge_med_add');
+                                    if (btnAdd) btnAdd.focus();
+                                });
+
+                            $dd.append($row);
+                        });
+
+                        $dd.show();
+                    }
+
+                    $('#discharge_remark').on('input focus', function() {
+                        var q = ($(this).val() || '').trim();
+                        var sugs = getMedRemarkSuggestions(q);
+                        renderMedRemarkDropdown(sugs);
+                    }).on('blur', function() {
+                        setTimeout(function() { $('#discharge_remark_dd').hide(); medRemarkHighlightIdx = -1; }, 200);
+                    }).on('keydown', function(e) {
+                        var $dd = $('#discharge_remark_dd');
+                        var isVisible = $dd.is(':visible');
+                        var $items = $('#discharge_remark_dd .discharge-remark-dd-item');
+
+                        if (e.key === 'ArrowDown') {
+                            if (!isVisible) {
+                                var sugs = getMedRemarkSuggestions(($(this).val() || '').trim());
+                                renderMedRemarkDropdown(sugs);
+                                highlightMedRemarkItem(0);
+                                return;
+                            }
+                            e.preventDefault();
+                            var nextIdx = medRemarkHighlightIdx + 1;
+                            if (nextIdx >= $items.length) nextIdx = 0;
+                            highlightMedRemarkItem(nextIdx);
+                        } else if (e.key === 'ArrowUp') {
+                            if (!isVisible) return;
+                            e.preventDefault();
+                            var prevIdx = medRemarkHighlightIdx - 1;
+                            if (prevIdx < 0) prevIdx = $items.length - 1;
+                            highlightMedRemarkItem(prevIdx);
+                        } else if (e.key === 'Enter') {
+                            if (isVisible && medRemarkHighlightIdx >= 0) {
+                                e.preventDefault();
+                                var $target = $items.eq(medRemarkHighlightIdx);
+                                if ($target.length) {
+                                    $target.trigger('click');
+                                }
+                            } else if (!isVisible && e.key === 'Enter') {
+                                e.preventDefault();
+                                var btnAdd = document.getElementById('btn_discharge_med_add');
+                                if (btnAdd) btnAdd.focus();
+                            }
+                        } else if (e.key === 'Escape') {
+                            $dd.hide().empty();
+                            medRemarkHighlightIdx = -1;
+                        }
+                    });
+                })();
 
                 // Load dose masters on init
                 loadDischargeDoseMasters();
@@ -4556,9 +4986,28 @@ $historyFields = [
                 var dischargeMedSuggestRows = [];
                 var dischargeMedInputTimer = null;
 
+                var isSelectingDischargeMed = false;
+
                 function applyDischargeMedicineMatch(matched) {
                     if (!matched || !dischargeMedInput) {
                         return;
+                    }
+
+                    isSelectingDischargeMed = true;
+
+                    var medName = String(matched.med_name || '').trim();
+                    var medType = String(matched.med_type || '').trim();
+
+                    if (medName !== '') {
+                        dischargeMedInput.value = medName;
+                    }
+
+                    // Hide search dropdown immediately
+                    $('#discharge_med_name_dd').hide().empty();
+                    dischargeMedHighlightIdx = -1;
+                    if (dischargeMedInputTimer) {
+                        clearTimeout(dischargeMedInputTimer);
+                        dischargeMedInputTimer = null;
                     }
 
                     $(dischargeMedInput).data('med-id', parseInt(matched.id || 0, 10));
@@ -4566,10 +5015,11 @@ $historyFields = [
                         section.querySelector('#discharge_med_id').value = String(matched.id || '0');
                     }
                     if (section.querySelector('#discharge_med_salt')) {
-                        section.querySelector('#discharge_med_salt').value = String(matched.med_salt || '').trim();
+                        section.querySelector('#discharge_med_salt').value = String(matched.med_salt || matched.genericname || '').trim();
                     }
-                    if (dischargeMedType && dischargeMedType.value.trim() === '') {
-                        dischargeMedType.value = String(matched.med_type || '').trim();
+
+                    if (dischargeMedType && medType !== '') {
+                        dischargeMedType.value = medType;
                     }
 
                     var fieldMap = [
@@ -4599,115 +5049,161 @@ $historyFields = [
                             target.value = String(value).trim();
                         }
                     });
+
+                    if (matched.id) {
+                        loadDischargeMedicineSubstitutes(matched.id, medName);
+                    }
+
+                    setTimeout(function() {
+                        isSelectingDischargeMed = false;
+                    }, 300);
+                }
+
+                var dischargeMedHighlightIdx = -1;
+
+                function highlightDischargeMedNameItem(idx) {
+                    var $items = $('#discharge_med_name_dd .discharge-med-name-dd-item');
+                    if (!$items.length) return;
+                    if (idx < 0) idx = 0;
+                    if (idx >= $items.length) idx = $items.length - 1;
+                    dischargeMedHighlightIdx = idx;
+
+                    $items.css('background', '').removeClass('active-dd-item');
+                    var $target = $items.eq(dischargeMedHighlightIdx);
+                    $target.css('background', '#e2ebff').addClass('active-dd-item');
+
+                    var container = document.getElementById('discharge_med_name_dd');
+                    var elem = $target[0];
+                    if (container && elem) {
+                        var cTop = container.scrollTop;
+                        var cBottom = cTop + container.clientHeight;
+                        var eTop = elem.offsetTop;
+                        var eBottom = eTop + elem.offsetHeight;
+                        if (eTop < cTop) {
+                            container.scrollTop = eTop;
+                        } else if (eBottom > cBottom) {
+                            container.scrollTop = eBottom - container.clientHeight;
+                        }
+                    }
+                }
+
+                function renderDischargeMedNameDropdown(rows) {
+                    var $dd = $('#discharge_med_name_dd').empty();
+                    dischargeMedSuggestRows = rows || [];
+                    dischargeMedHighlightIdx = -1;
+                    if (!dischargeMedSuggestRows.length) {
+                        $dd.hide();
+                        return;
+                    }
+
+                    dischargeMedSuggestRows.forEach(function(row, idx) {
+                        var medName = (row.med_name || '').toString().trim();
+                        var medType = (row.med_type || '').toString().trim();
+                        var genericName = (row.genericname || row.med_salt || '').toString().trim();
+                        var isFav = parseInt(row.is_favorite || 0, 10) === 1;
+
+                        var $item = $('<div class="px-3 py-2 border-bottom d-flex justify-content-between align-items-center discharge-med-name-dd-item" data-idx="' + idx + '" style="cursor:pointer;"></div>');
+                        var $left = $('<div></div>');
+                        $left.append('<strong class="text-primary fs-6">' + $('<div>').text(medName).html() + '</strong>');
+                        if (medType) {
+                            $left.append('<span class="badge bg-secondary ms-2">' + $('<div>').text(medType).html() + '</span>');
+                        }
+                        if (genericName) {
+                            $left.append('<small class="text-muted d-block">' + $('<div>').text(genericName).html() + '</small>');
+                        }
+                        $item.append($left);
+                        if (isFav) {
+                            $item.append('<span class="text-warning fw-bold">★</span>');
+                        }
+
+                        $item.on('mouseenter', function() {
+                            highlightDischargeMedNameItem(idx);
+                        });
+                        $item.on('mouseleave', function() {
+                            $(this).css('background', '');
+                        });
+                        $item.on('mousedown', function(e) { e.preventDefault(); });
+                        $item.on('click', function() {
+                            applyDischargeMedicineMatch(row);
+                            $dd.hide().empty();
+                            dischargeMedHighlightIdx = -1;
+                        });
+
+                        $dd.append($item);
+                    });
+
+                    $dd.show();
                 }
 
                 if (dischargeMedInput) {
-                    dischargeMedInput.addEventListener('keydown', function(event) {
-                        if (event.key !== 'Enter') {
+                    $('#discharge_med_name').on('input', function() {
+                        if (isSelectingDischargeMed) {
                             return;
                         }
-
-                        dischargeMedInput.dataset.suppressImplicitSubmit = '1';
-                        setTimeout(function() {
-                            delete dischargeMedInput.dataset.suppressImplicitSubmit;
-                        }, 0);
-                    });
-
-                    dischargeMedInput.addEventListener('input', function() {
-                        var q = String(dischargeMedInput.value || '').trim();
-
+                        var q = ($(this).val() || '').trim();
                         if (dischargeMedInputTimer) {
                             clearTimeout(dischargeMedInputTimer);
                             dischargeMedInputTimer = null;
                         }
-
-                        if (q.length < 2) {
+                        if (q.length < 1) {
                             dischargeMedSuggestRows = [];
-                            if (dischargeMedSuggest) {
-                                dischargeMedSuggest.innerHTML = '';
-                            }
+                            $('#discharge_med_name_dd').hide().empty();
+                            dischargeMedHighlightIdx = -1;
                             return;
                         }
-
                         dischargeMedInputTimer = setTimeout(function() {
-                            $.get('<?= base_url('Opd_prescription/medicine_search') ?>?q=' + encodeURIComponent(q) + '&scope=all&limit=10', function(data) {
+                            $.get('<?= base_url('Opd_prescription/medicine_search') ?>?q=' + encodeURIComponent(q) + '&scope=all&limit=15', function(data) {
                                 var rows = (data && data.rows) ? data.rows : [];
-                                dischargeMedSuggestRows = rows;
-                                var html = '';
-                                rows.forEach(function(row) {
-                                    var name = String(row.med_name || '').trim();
-                                    if (name === '') {
-                                        return;
-                                    }
-                                    html += '<option value="' + $('<div>').text(name).html() + '" ' +
-                                        'data-id="' + (row.id || 0) + '" ' +
-                                        'data-type="' + $('<div>').text(row.med_type || '').html() + '" ' +
-                                        'data-dosage="' + $('<div>').text(row.dosage || '').html() + '" ' +
-                                        'data-dosage-when="' + $('<div>').text(row.dosage_when || '').html() + '" ' +
-                                        'data-dosage-freq="' + $('<div>').text(row.dosage_freq || '').html() + '" ' +
-                                        'data-dosage-where="' + $('<div>').text(row.dosage_where || '').html() + '" ' +
-                                        'data-no-of-days="' + $('<div>').text(row.no_of_days || '').html() + '" ' +
-                                        'data-qty="' + $('<div>').text(row.qty || '').html() + '" ' +
-                                        'data-remark="' + $('<div>').text(row.remark || '').html() + '"></option>';
-                                });
-                                if (dischargeMedSuggest) {
-                                    dischargeMedSuggest.innerHTML = html;
-                                }
-
-                                // Auto-fill if exact match (Chrome fires input on datalist pick)
-                                var matched = null;
-                                dischargeMedSuggestRows.forEach(function(row) {
-                                    if (String(row.med_name || '').trim().toUpperCase() === q.toUpperCase()) {
-                                        matched = row;
-                                    }
-                                });
-                                if (matched) {
-                                    applyDischargeMedicineMatch(matched);
-                                }
+                                renderDischargeMedNameDropdown(rows);
                             }, 'json').fail(function() {
                                 dischargeMedSuggestRows = [];
-                                if (dischargeMedSuggest) {
-                                    dischargeMedSuggest.innerHTML = '';
-                                }
+                                $('#discharge_med_name_dd').hide().empty();
                             });
-                        }, 180);
-                    });
-
-                    dischargeMedInput.addEventListener('change', function() {
-                        var value = String(dischargeMedInput.value || '').trim();
-                        var valueUpper = value.toUpperCase();
-
-                        if (value === '') {
-                            // Clear stored med_id when input is cleared
-                            $(dischargeMedInput).data('med-id', 0);
-                            if (section.querySelector('#discharge_med_id')) {
-                                section.querySelector('#discharge_med_id').value = '0';
-                            }
-                            if (section.querySelector('#discharge_med_salt')) {
-                                section.querySelector('#discharge_med_salt').value = '';
-                            }
+                        }, 120);
+                    }).on('focus', function() {
+                        if (isSelectingDischargeMed) {
                             return;
                         }
+                    }).on('blur', function() {
+                        setTimeout(function() { $('#discharge_med_name_dd').hide(); dischargeMedHighlightIdx = -1; }, 200);
+                    }).on('keydown', function(e) {
+                        var $dd = $('#discharge_med_name_dd');
+                        var isVisible = $dd.is(':visible') && dischargeMedSuggestRows.length > 0;
+                        var $items = $('#discharge_med_name_dd .discharge-med-name-dd-item');
 
-                        // Find matching medicine and auto-fill all fields
-                        var matched = null;
-                        dischargeMedSuggestRows.forEach(function(row) {
-                            if (String(row.med_name || '').trim().toUpperCase() === valueUpper) {
-                                matched = row;
+                        if (e.key === 'ArrowDown') {
+                            if (!isVisible) {
+                                var q = ($(this).val() || '').trim();
+                                if (q.length >= 1) {
+                                    $.get('<?= base_url('Opd_prescription/medicine_search') ?>?q=' + encodeURIComponent(q) + '&scope=all&limit=15', function(data) {
+                                        var rows = (data && data.rows) ? data.rows : [];
+                                        renderDischargeMedNameDropdown(rows);
+                                        highlightDischargeMedNameItem(0);
+                                    }, 'json');
+                                }
+                                return;
                             }
-                        });
-
-                        if (matched) {
-                            applyDischargeMedicineMatch(matched);
-                        } else {
-                            // No match found - clear med_id
-                            $(dischargeMedInput).data('med-id', 0);
-                            if (section.querySelector('#discharge_med_id')) {
-                                section.querySelector('#discharge_med_id').value = '0';
+                            e.preventDefault();
+                            var nextIdx = dischargeMedHighlightIdx + 1;
+                            if (nextIdx >= $items.length) nextIdx = 0;
+                            highlightDischargeMedNameItem(nextIdx);
+                        } else if (e.key === 'ArrowUp') {
+                            if (!isVisible) return;
+                            e.preventDefault();
+                            var prevIdx = dischargeMedHighlightIdx - 1;
+                            if (prevIdx < 0) prevIdx = $items.length - 1;
+                            highlightDischargeMedNameItem(prevIdx);
+                        } else if (e.key === 'Enter') {
+                            if (isVisible && dischargeMedHighlightIdx >= 0 && dischargeMedSuggestRows[dischargeMedHighlightIdx]) {
+                                e.preventDefault();
+                                applyDischargeMedicineMatch(dischargeMedSuggestRows[dischargeMedHighlightIdx]);
+                                $dd.hide().empty();
+                                dischargeMedHighlightIdx = -1;
+                                var nextTarget = section.querySelector('#discharge_med_type') || section.querySelector('#discharge_dosage');
+                                if (nextTarget) nextTarget.focus();
                             }
-                            if (section.querySelector('#discharge_med_salt')) {
-                                section.querySelector('#discharge_med_salt').value = '';
-                            }
+                        } else if (e.key === 'Escape') {
+                            $dd.hide();
                         }
                     });
                 }
@@ -4726,26 +5222,28 @@ $historyFields = [
                         return;
                     }
 
-                    $note.text('loading...');
+                    $note.text('');
                     $empty.hide();
                     $rows.empty();
-                    $box.show();
+                    $box.hide();
 
                     var url = '<?= base_url('Opd_prescription/medicine_substitutes') ?>?med_id=' + encodeURIComponent(medId) +
                         '&med_name=' + encodeURIComponent(medName);
 
                     $.get(url, function(data) {
                         var rows = (data && data.rows) ? data.rows : [];
-                        $note.text(rows.length ? (rows.length + ' substitute(s)') : '');
 
                         if (!rows.length) {
-                            $empty.show();
+                            $box.hide();
+                            $empty.hide();
                             $rows.empty();
                             return;
                         }
 
+                        $note.text(rows.length + ' substitute(s)');
                         $empty.hide();
                         $rows.empty();
+                        $box.show();
 
                         rows.forEach(function(row) {
                             var medId = parseInt(row.id || 0, 10);
@@ -4995,12 +5493,7 @@ $historyFields = [
                     $('#discharge_med_salt').val(medSalt);
                     $('#discharge_med_type').val(medType);
 
-                    if (doseId !== '' && doseId !== '0') {
-                        $('#discharge_dosage').val(doseId);
-                    } else {
-                        ensureDoseOption('#discharge_dosage', doseLabel);
-                        $('#discharge_dosage').val(doseLabel);
-                    }
+                    $('#discharge_dosage').val(doseLabel || doseId || '');
 
                     if (whenId !== '' && whenId !== '0') {
                         $('#discharge_dosage_when').val(whenId);
@@ -5009,12 +5502,7 @@ $historyFields = [
                         $('#discharge_dosage_when').val(whenLabel);
                     }
 
-                    if (freqId !== '' && freqId !== '0') {
-                        $('#discharge_dosage_freq').val(freqId);
-                    } else {
-                        ensureDoseOption('#discharge_dosage_freq', freqLabel);
-                        $('#discharge_dosage_freq').val(freqLabel);
-                    }
+                    $('#discharge_dosage_freq').val(freqLabel || freqId || '');
 
                     $('#discharge_no_of_days').val(noOfDays);
                     $('#discharge_qty').val(qty);
@@ -5034,7 +5522,7 @@ $historyFields = [
 
                     row.remove();
                     if (!tbody.querySelector('tr')) {
-                        tbody.innerHTML = '<tr><td colspan="9" class="text-muted text-center">No medicine added</td></tr>';
+                        tbody.innerHTML = '<tr><td colspan="8" class="text-muted text-center">No medicine added</td></tr>';
                     }
                     setMedicineStatus('Medicine removed from current view.', 'info');
                 });
@@ -5162,7 +5650,7 @@ $historyFields = [
                                 }
 
                                 // Remove "No medicine added" row if present
-                                var emptyRow = tbody.querySelector('tr td[colspan="9"]');
+                                var emptyRow = tbody.querySelector('tr td[colspan="8"]');
                                 if (emptyRow) {
                                     emptyRow.closest('tr').remove();
                                 }
@@ -5177,7 +5665,6 @@ $historyFields = [
                                     '<td>' + $('<div>').text(whenLabel).html() + '</td>' +
                                     '<td>' + $('<div>').text(freqLabel).html() + '</td>' +
                                     '<td>' + $('<div>').text(formattedDuration).html() + '</td>' +
-                                    '<td>' + $('<div>').text(qty).html() + '</td>' +
                                     '<td>' + $('<div>').text(remark).html() + '</td>' +
                                     medicineActionButtonsHtml(rowIdToUse, responseRowSource);
 
@@ -5265,7 +5752,7 @@ $historyFields = [
                         if (confirm('Remove all medicines from the list?')) {
                             var tbody = section.querySelector('#discharge_medicine_tbody');
                             if (tbody) {
-                                tbody.innerHTML = '<tr><td colspan="9" class="text-muted text-center">No medicine added</td></tr>';
+                                tbody.innerHTML = '<tr><td colspan="8" class="text-muted text-center">No medicine added</td></tr>';
                             }
                             resetMedicineFormState();
                             setMedicineStatus('All medicines removed.', 'info');

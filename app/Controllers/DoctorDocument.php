@@ -256,6 +256,11 @@ class DoctorDocument extends BaseController
         return $out;
     }
 
+    public function index()
+    {
+        return $this->workspace();
+    }
+
     public function workspace()
     {
         if ($resp = $this->ensureAccess()) {
@@ -263,6 +268,24 @@ class DoctorDocument extends BaseController
         }
 
         return view('doctor_document/workspace');
+    }
+
+    public function health_document_fhir_preview(int $patientDocId = 0)
+    {
+        if ($patientDocId <= 0) {
+            $patientDocId = (int) ($this->request->getGet('patient_doc_id') ?? $this->request->getGet('doc_id') ?? 0);
+        }
+
+        if ($patientDocId <= 0) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'patient_doc_id is required']);
+        }
+
+        $factory = new \App\Libraries\Abdm\Fhir\FhirGeneratorFactory();
+        $res = $factory->healthDocument()->generate([
+            'patient_doc_id' => $patientDocId,
+        ]);
+
+        return $this->response->setJSON($res['bundle'] ?? $res);
     }
 
     public function patient_search()
@@ -1068,6 +1091,15 @@ class DoctorDocument extends BaseController
 
             $this->db->table('patient_doc')->where('id', $patientDocId)->update($updatePayload);
 
+            try {
+                $this->enqueueHealthDocumentFhirSync($patientDocId);
+            } catch (\Throwable $e) {
+                log_message('warning', 'Unable to enqueue ABDM HealthDocumentRecord FHIR sync for patient_doc {id}: {msg}', [
+                    'id' => $patientDocId,
+                    'msg' => $e->getMessage(),
+                ]);
+            }
+
             return $this->response->setJSON([
                 'update' => 1,
                 'error_text' => 'Compile done',
@@ -1357,12 +1389,15 @@ class DoctorDocument extends BaseController
 
         try {
             $pdfBytes = $mpdf->Output($fileName, 'S');
+            $this->enqueueHealthDocumentFhirSync($patientDocId);
         } catch (\Throwable $e) {
-            log_message('error', '[DoctorDocument::create_final] mPDF Output failed: {msg}', ['msg' => $e->getMessage()]);
-            return $this->response
-                ->setStatusCode(500)
-                ->setHeader('Content-Type', 'text/plain')
-                ->setBody('PDF output failed: ' . $e->getMessage());
+            log_message('error', '[DoctorDocument::create_final] Output or FHIR sync error: {msg}', ['msg' => $e->getMessage()]);
+            if (! isset($pdfBytes) || $pdfBytes === '') {
+                return $this->response
+                    ->setStatusCode(500)
+                    ->setHeader('Content-Type', 'text/plain')
+                    ->setBody('PDF output failed: ' . $e->getMessage());
+            }
         }
 
         return $this->response
@@ -1444,5 +1479,190 @@ class DoctorDocument extends BaseController
         ];
 
         return strtr($template, $replace);
+    }
+
+    private function getHospitalSettingValue(string $key): string
+    {
+        if ($this->db->tableExists('hospital_setting')) {
+            $row = $this->db->table('hospital_setting')
+                ->select('value')
+                ->where('title', $key)
+                ->get(1)
+                ->getRowArray();
+            if (isset($row['value']) && trim((string) $row['value']) !== '') {
+                return trim((string) $row['value']);
+            }
+        }
+
+        if (defined($key)) {
+            return (string) constant($key);
+        }
+
+        return '';
+    }
+
+    private function buildHealthDocumentSource(int $patientDocId): array
+    {
+        if ($patientDocId <= 0) {
+            return [];
+        }
+
+        $patientDoc = $this->db->table('patient_doc')->where('id', $patientDocId)->get(1)->getRowArray();
+        if (! is_array($patientDoc)) {
+            return [];
+        }
+
+        $patientId = (int) ($patientDoc['p_id'] ?? 0);
+        $patientRow = $patientId > 0 ? ($this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray() ?? []) : [];
+        $doctorRow = [];
+        $drId = (int) ($patientDoc['dr_id'] ?? 0);
+        if ($drId > 0 && $this->db->tableExists('doctor_master')) {
+            $doctorRow = $this->db->table('doctor_master')->where('id', $drId)->get(1)->getRowArray() ?? [];
+        }
+
+        $templateRow = [];
+        $docFormatId = (int) ($patientDoc['doc_format_id'] ?? 0);
+        if ($docFormatId > 0 && $this->db->tableExists('doc_format_master')) {
+            $templateRow = $this->db->table('doc_format_master')->where('df_id', $docFormatId)->get(1)->getRowArray() ?? [];
+        }
+
+        $docTitle = trim((string) ($templateRow['doc_name'] ?? 'Medical Certificate'));
+        if ($docTitle === '') {
+            $docTitle = 'Medical Certificate';
+        }
+
+        $patientName = trim(trim((string) ($patientRow['p_fname'] ?? '')) . ' ' . trim((string) ($patientRow['p_lname'] ?? '')));
+        $abhaIdRaw = '';
+        foreach (['abha_id', 'abha_no', 'abha'] as $field) {
+            $candidate = trim((string) ($patientRow[$field] ?? ''));
+            if ($candidate !== '') {
+                $abhaIdRaw = $candidate;
+                break;
+            }
+        }
+        $abhaDigits = preg_replace('/\D/', '', $abhaIdRaw);
+        $abhaDigits = is_string($abhaDigits) ? $abhaDigits : '';
+        $abhaAddress = trim((string) ($patientRow['abha_address'] ?? ''));
+
+        $issueDateRaw = trim((string) ($patientDoc['date_issue'] ?? $patientDoc['created_at'] ?? date('Y-m-d')));
+        $issueIso = date(DATE_ATOM, strtotime($issueDateRaw) ?: time());
+        $visitDate = date('Y-m-d', strtotime($issueDateRaw) ?: time());
+
+        $genderRaw = trim((string) ($patientRow['gender'] ?? $patientRow['xgender'] ?? ''));
+        $hfrId = trim($this->getHospitalSettingValue('ABDM_HFR_ID'));
+        if ($hfrId === '') {
+            $hfrId = 'HFR-IN-HMS';
+        }
+        $hospitalName = $this->getHospitalSettingValue('H_Name');
+        if ($hospitalName === '' && defined('H_Name')) {
+            $hospitalName = (string) constant('H_Name');
+        }
+
+        $doctorName = trim(trim((string) ($doctorRow['p_fname'] ?? '')) . ' ' . trim((string) ($doctorRow['p_lname'] ?? '')));
+        if ($doctorName === '') {
+            $doctorName = 'Doctor';
+        }
+
+        return [
+            'record_id' => (string) $patientDocId,
+            'session_id' => (string) $patientDocId,
+            'visit_date' => $visitDate,
+            'completed_at' => $issueIso,
+            'document_title' => $docTitle,
+            'document_content_html' => (string) ($patientDoc['raw_data'] ?? ''),
+            'doctor_name' => $doctorName,
+            'hfr_id' => $hfrId,
+            'organization' => [
+                'id' => $hfrId,
+                'name' => $hospitalName,
+            ],
+            'patient' => [
+                'id' => (string) $patientId,
+                'uhid' => (string) ($patientRow['uhid_no'] ?? $patientRow['uhid'] ?? $patientRow['patient_code'] ?? $patientId),
+                'name' => $patientName,
+                'gender' => strtolower($genderRaw) === 'm' ? 'male' : (strtolower($genderRaw) === 'f' ? 'female' : 'unknown'),
+                'dob' => ! empty($patientRow['dob']) ? date('Y-m-d', strtotime((string) $patientRow['dob'])) : '',
+                'abha_id' => $abhaDigits,
+                'abha_address' => $abhaAddress,
+                'mobile' => (string) ($patientRow['mphone1'] ?? ''),
+            ],
+            'practitioner' => [
+                'id' => (string) $drId,
+                'name' => $doctorName,
+            ],
+        ];
+    }
+
+    private function enqueueHealthDocumentFhirSync(int $patientDocId): void
+    {
+        if ($patientDocId <= 0) {
+            return;
+        }
+
+        $source = $this->buildHealthDocumentSource($patientDocId);
+        if (empty($source)) {
+            return;
+        }
+
+        $hfrId = (string) ($source['hfr_id'] ?? 'HFR-IN-HMS');
+        $patientId = (int) ($source['patient']['id'] ?? 0);
+        $patientName = (string) ($source['patient']['name'] ?? '');
+        $abhaDigits = (string) ($source['patient']['abha_id'] ?? '');
+        $abhaAddress = (string) ($source['patient']['abha_address'] ?? '');
+        $docTitle = (string) ($source['document_title'] ?? 'Medical Certificate');
+        $visitDate = (string) ($source['visit_date'] ?? date('Y-m-d'));
+        $doctorName = (string) ($source['doctor_name'] ?? '');
+
+        if ($patientId > 0 && preg_match('/^\d{14}$/', $abhaDigits) === 1 && class_exists('\App\Libraries\Abdm\Task\AbdmTaskService')) {
+            try {
+                $taskService = new \App\Libraries\Abdm\Task\AbdmTaskService();
+                $taskService->createOrRefreshTask(
+                    'health_document_publish',
+                    'patient_doc',
+                    'doctor_document',
+                    (string) $patientDocId,
+                    $patientId,
+                    $patientName,
+                    $abhaDigits,
+                    'submit',
+                    [
+                        'patient_doc_id' => $patientDocId,
+                        'trigger' => 'patient_doc.compiled',
+                    ]
+                );
+            } catch (\Throwable $e) {
+                log_message('warning', 'Unable to refresh task for patient_doc {id}: {msg}', ['id' => $patientDocId, 'msg' => $e->getMessage()]);
+            }
+        }
+
+        $factory = new \App\Libraries\Abdm\Fhir\FhirGeneratorFactory();
+        $generatorOutput = $factory->healthDocument()->generate($source);
+
+        $adapter = new \App\Libraries\Abdm\Sync\GatewayPayloadAdapter();
+        $gatewayPayload = $adapter->toGatewayPayload($generatorOutput, $source, $hfrId);
+
+        $syncPayload = [
+            'local_record_id' => 'patient-doc-' . $patientDocId,
+            'local_patient_id' => $patientId,
+            'hi_type' => 'HealthDocumentRecord',
+            'care_context_reference' => (string) ($gatewayPayload['care_context_reference'] ?? ('DOC-' . $patientDocId)),
+            'care_context_display' => (string) ($gatewayPayload['care_context_display'] ?? ($docTitle . ' ' . $visitDate)),
+            'visit_date' => $visitDate,
+            'department' => '',
+            'doctor_name' => $doctorName,
+            'consent_id' => '',
+            'hfr_id' => $hfrId,
+            'source_updated_at' => date('Y-m-d H:i:s'),
+            'patient_name' => $patientName,
+            'mobile' => (string) ($source['patient']['mobile'] ?? ''),
+            'gender' => (string) ($source['patient']['gender'] ?? ''),
+            'dob' => (string) ($source['patient']['dob'] ?? ''),
+            'abha_id' => $abhaDigits,
+            'abha_address' => $abhaAddress,
+            'fhir_bundle' => (array) ($gatewayPayload['fhir_bundle'] ?? []),
+        ];
+
+        $outbox = new \App\Libraries\Abdm\Sync\AbdmSyncOutboxService();
+        $outbox->enqueueRecordSync($syncPayload);
     }
 }

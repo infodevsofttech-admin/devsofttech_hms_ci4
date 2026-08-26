@@ -22,10 +22,12 @@ class AbdmGatewayPushClient
 
     /** @var string[] */
     private array $allowedRecordTypes = [
+        'OPConsultRecord',
         'PrescriptionRecord',
         'DiagnosticReportRecord',
         'DischargeSummaryRecord',
-        'OPConsultationRecord',
+        'ImmunizationRecord',
+        'InvoiceRecord',
         'WellnessRecord',
         'HealthDocumentRecord',
     ];

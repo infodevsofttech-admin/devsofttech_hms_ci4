@@ -345,88 +345,131 @@ $toLocalText = static function (string $input): string {
 
     <div class="rx-title">Rx :</div>
     <?php if (!empty($rx_medicines ?? [])) : ?>
-        <table class="rx-table" cellspacing="0" cellpadding="0">
+        <table class="rx-table" cellspacing="0" cellpadding="0" style="border:1px solid #cce5ff;">
             <thead>
-            <tr>
-                <th style="width:6%;">#</th>
-                <th style="width:43%;">Medicine Name</th>
-                <th style="width:24%;">Dose / Frequency</th>
-                <th style="width:11%;">Qty</th>
-                <th style="width:10%;">Day</th>
-                <th style="width:20%;">Instruction</th>
+            <tr style="background:#eef6fc;border-bottom:2px solid #b8daff;">
+                <th style="width:5%;padding:6px 8px;font-weight:bold;color:#000;">#</th>
+                <th style="width:40%;padding:6px 8px;font-weight:bold;color:#000;">Medicine</th>
+                <th style="width:55%;padding:6px 8px;font-weight:bold;color:#000;">Directions</th>
             </tr>
             </thead>
             <tbody>
             <?php foreach (($rx_medicines ?? []) as $idx => $med) : ?>
                 <?php
-                $dosage = trim((string) ($med['dosage'] ?? ''));
-                if ($dosage === '0') {
-                    $dosage = '';
-                }
-                $when = trim((string) ($med['dosage_when'] ?? ''));
-                if ($when === '0') {
-                    $when = '';
-                }
-                $freq = trim((string) ($med['dosage_freq'] ?? ''));
-                if ($freq === '0') {
-                    $freq = '';
-                }
-                $where = trim((string) ($med['dosage_where_label'] ?? ($med['dosage_where_str'] ?? ($med['dosage_where'] ?? ''))));
-                if ($where === '0') {
-                    $where = '';
-                }
-                $doseText = trim($dosage . ($freq !== '' ? ' / ' . $freq : ''));
-                $genericText = trim((string) ($med['genericname'] ?? ($med['generic_name'] ?? ($med['salt_name'] ?? ''))));
-                $instructionParts = [];
-                if ($when !== '') {
-                    $instructionParts[] = $when;
-                }
-                if ($where !== '') {
-                    $instructionParts[] = 'Where: ' . $where;
-                }
-                if (trim((string) ($med['remark'] ?? '')) !== '') {
-                    $instructionParts[] = trim((string) ($med['remark'] ?? ''));
-                }
-                $instruction = trim(implode(' | ', $instructionParts));
-                $doseLocalParts = array_filter([
-                    trim((string) ($med['dosage_local_label'] ?? '')),
-                    trim((string) ($med['dosage_when_local_label'] ?? '')),
-                    trim((string) ($med['dosage_freq_local_label'] ?? '')),
-                ]);
-                $instructionLocalParts = [];
-                $whereLocal = trim((string) ($med['dosage_where_local_label'] ?? ''));
-                if ($whereLocal !== '') {
-                    $instructionLocalParts[] = $whereLocal;
-                }
-                if ($instruction !== '') {
-                    $translatedInstruction = $toLocalText($instruction);
-                    if ($translatedInstruction !== '' && strtolower($translatedInstruction) !== strtolower($instruction)) {
-                        $instructionLocalParts[] = $translatedInstruction;
+                $rawName = trim((string) ($med['med_name'] ?? $med['drug_name'] ?? $med['medicine_name'] ?? $med['item_name'] ?? ''));
+                $formulationRaw = trim((string) ($med['med_type'] ?? $med['formulation'] ?? $med['dosage_form'] ?? $med['form'] ?? $med['medicine_form'] ?? ''));
+                $formulationPrefixMap = [
+                    'tablet' => 'TAB', 'tab' => 'TAB',
+                    'capsule' => 'CAP', 'cap' => 'CAP',
+                    'syrup' => 'SYP', 'syp' => 'SYP', 'syr' => 'SYP',
+                    'injection' => 'INJ', 'inj' => 'INJ',
+                    'drop' => 'DROP', 'drops' => 'DROPS', 'eye drop' => 'EYE DROP', 'ear drop' => 'EAR DROP',
+                    'cream' => 'CREAM', 'ointment' => 'OINT', 'gel' => 'GEL',
+                    'lotion' => 'LOTION', 'powder' => 'POWDER', 'sachet' => 'SACHET', 'respules' => 'RESPULES',
+                    'suppository' => 'SUPPOSITORY', 'patch' => 'PATCH', 'spray' => 'SPRAY',
+                ];
+                $formKey = strtolower($formulationRaw);
+                $formType = $formulationPrefixMap[$formKey] ?? strtoupper($formulationRaw);
+                if ($formType === '') {
+                    if (preg_match('/^(TAB|CAP|SYP|INJ|CREAM|OINT|GEL|DROPS|SPRAY)\b/i', $rawName, $m)) {
+                        $formType = strtoupper($m[1]);
+                    } else {
+                        $formType = 'TAB';
                     }
                 }
-                $doseLocal = !empty($doseLocalParts) ? implode(' ', $doseLocalParts) : $toLocalText(trim($doseText . ($when !== '' ? ' ' . $when : '')));
-                $instructionLocal = !empty($instructionLocalParts) ? implode(' | ', array_values(array_unique($instructionLocalParts))) : $toLocalText($instruction);
+
+                $generic = trim((string) ($med['genericname'] ?? $med['generic_name'] ?? ''));
+                $dose    = trim((string) ($med['dosage_label'] ?? $med['dosage'] ?? $med['drug_dose'] ?? $med['dose'] ?? ''));
+                $freq    = trim((string) ($med['dosage_freq_label'] ?? $med['dosage_freq'] ?? $med['drug_freq'] ?? $med['frequency'] ?? ''));
+                $when    = trim((string) ($med['dosage_when_label'] ?? $med['dosage_when'] ?? ''));
+                $where   = trim((string) ($med['dosage_where_label'] ?? $med['dosage_where'] ?? ''));
+                $days    = trim((string) ($med['no_of_days'] ?? $med['drug_day'] ?? $med['days'] ?? ''));
+                $remark  = trim((string) ($med['remark'] ?? ''));
+
+                $fullMedName = $rawName;
+                if ($formType !== '' && preg_match('/^' . preg_quote($formType, '/') . '\b/i', $fullMedName) !== 1) {
+                    $fullMedName = $formType . ' ' . $fullMedName;
+                }
+
+                $dirParts = [];
+                $dirLocalParts = [];
+
+                if ($when !== '') {
+                    $whenCodeDescMap = [
+                        'BF' => 'BF (BEFORE FOOD)', 'AF' => 'AF (AFTER FOOD)', 'WF' => 'WF (WITH FOOD)',
+                        'ES' => 'ES (EMPTY STOMACH)', 'BBF' => 'BBF (BEFORE BREAKFAST)', 'ABF' => 'ABF (AFTER BREAKFAST)',
+                        'BL' => 'BL (BEFORE LUNCH)', 'AL' => 'AL (AFTER LUNCH)', 'BD' => 'BD (BEFORE DINNER)',
+                        'AD' => 'AD (AFTER DINNER)', 'BT' => 'BT (BED TIME)',
+                    ];
+                    $whenHindiMap = [
+                        'BF' => 'भोजन से पहले', 'BEFORE FOOD' => 'भोजन से पहले',
+                        'AF' => 'भोजन के बाद', 'AFTER FOOD' => 'भोजन के बाद',
+                        'WF' => 'भोजन के साथ', 'WITH FOOD' => 'भोजन के साथ',
+                        'ES' => 'सुबह खाली पेट', 'EMPTY STOMACH' => 'सुबह खाली पेट',
+                        'BBF' => 'नाश्ते से पहले', 'BEFORE BREAKFAST' => 'नाश्ते से पहले',
+                        'ABF' => 'नाश्ते के बाद', 'AFTER BREAKFAST' => 'नाश्ते के बाद',
+                        'BT' => 'रात को सोते समय', 'BED TIME' => 'रात को सोते समय',
+                    ];
+                    $upperWhen = strtoupper($when);
+                    $dirParts[] = $whenCodeDescMap[$upperWhen] ?? $when;
+                    if (isset($whenHindiMap[$upperWhen])) {
+                        $dirLocalParts[] = $whenHindiMap[$upperWhen];
+                    }
+                }
+                if ($remark !== '') {
+                    $upperRemark = strtoupper($remark);
+                    $dirParts[] = $upperRemark;
+                    $remarkHindiMap = [
+                        'TAKE WITH MILK' => 'दूध के साथ लें',
+                        'TAKE WITH WARM WATER' => 'गुनगुने पानी के साथ लें',
+                        'AVOID SOUR FOOD AND DAIRY PRODUCTS' => 'खट्टा और डेयरी उत्पाद न लें',
+                        'TAKE AFTER MEALS' => 'भोजन के बाद लें',
+                        'TAKE ON AN EMPTY STOMACH EARLY MORNING' => 'सुबह खाली पेट लें',
+                        'CHEW WELL BEFORE SWALLOWING' => 'चबाकर खाएं',
+                    ];
+                    if (isset($remarkHindiMap[$upperRemark])) {
+                        $dirLocalParts[] = $remarkHindiMap[$upperRemark];
+                    }
+                }
+                $doseFreqCombined = trim($dose . ($dose !== '' && $freq !== '' ? ' ' : '') . $freq);
+                if ($doseFreqCombined !== '') {
+                    $dirParts[] = $doseFreqCombined;
+                    $freqHindiMap = [
+                        'OD' => 'दिन में एक बार (OD)', 'BD' => 'दिन में दो बार (BD)',
+                        'TDS' => 'दिन में तीन बार (TDS)', 'QID' => 'दिन में चार बार (QID)',
+                        'HS' => 'रात को सोते समय (HS)', 'SOS' => 'ज़रूरत पड़ने पर (SOS)',
+                        'ALTERNATE DAY' => 'एक दिन छोड़कर', 'DAILY' => 'प्रतिदिन',
+                    ];
+                    $upperFreq = strtoupper($freq);
+                    if (isset($freqHindiMap[$upperFreq])) {
+                        $dirLocalParts[] = $freqHindiMap[$upperFreq];
+                    }
+                }
+                if ($where !== '' && strcasecmp($where, 'Oral') !== 0 && strcasecmp($where, 'Oral (PO)') !== 0) {
+                    $dirParts[] = $where;
+                }
+                if ($days !== '') {
+                    $dirParts[] = (is_numeric($days) ? $days . ' Days' : $days);
+                    $daysNum = is_numeric($days) ? (int)$days : 0;
+                    if ($daysNum > 0) {
+                        $dirLocalParts[] = $daysNum . ' दिन';
+                    }
+                }
+                $directionsText = !empty($dirParts) ? implode(' | ', $dirParts) : '-';
+                $localDirectionsText = !empty($dirLocalParts) ? implode(' | ', array_values(array_unique($dirLocalParts))) : '';
                 ?>
-                <tr>
-                    <td><?= esc((string) ($idx + 1)) ?></td>
-                    <td>
-                        <div><?= esc((string) ($med['med_name'] ?? '')) ?></div>
-                        <?php if ($genericText !== '') : ?>
-                            <div class="sub-line">Salt/Generic: <?= esc($genericText) ?></div>
+                <tr style="border-bottom:1px solid #e2e8f0;">
+                    <td style="padding:6px 8px;vertical-align:middle;"><?= esc((string) ($idx + 1)) ?></td>
+                    <td style="padding:6px 8px;vertical-align:middle;">
+                        <strong><?= esc($fullMedName) ?></strong>
+                        <?php if ($generic !== '') : ?>
+                            <div style="font-size:9.5px;color:#555;font-weight:normal;margin-top:2px;"><?= esc($generic) ?></div>
                         <?php endif; ?>
                     </td>
-                    <td>
-                        <div><?= esc($doseText) ?></div>
-                        <?php if ($doseLocal !== '' && strtolower($doseLocal) !== strtolower(trim($doseText . ($when !== '' ? ' ' . $when : '')))) : ?>
-                            <div class="local-line" lang="hi"><?= esc($doseLocal) ?></div>
-                        <?php endif; ?>
-                    </td>
-                    <td><?= esc((string) ($med['qty'] ?? '')) ?></td>
-                    <td><?= esc((string) ($med['no_of_days'] ?? '')) ?></td>
-                    <td>
-                        <div><?= esc($instruction) ?></div>
-                        <?php if ($instructionLocal !== '' && strtolower($instructionLocal) !== strtolower($instruction)) : ?>
-                            <div class="local-line" lang="hi"><?= esc($instructionLocal) ?></div>
+                    <td style="padding:6px 8px;vertical-align:middle;">
+                        <div><?= esc($directionsText) ?></div>
+                        <?php if ($localDirectionsText !== '') : ?>
+                            <div style="font-size:9.5px;color:#444;line-height:1.4;margin-top:2px;" lang="hi"><?= esc($localDirectionsText) ?></div>
                         <?php endif; ?>
                     </td>
                 </tr>

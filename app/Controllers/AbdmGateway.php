@@ -1376,7 +1376,7 @@ class AbdmGateway extends BaseController
 
         $builder = $this->db->table('opd_fhir_documents')
             ->where('opd_id', $opdId)
-            ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle']);
+            ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle', 'PrescriptionRecord']);
         if ($sessionId > 0) {
             $builder->where('opd_session_id', $sessionId);
         }
@@ -1418,9 +1418,13 @@ class AbdmGateway extends BaseController
         $visitDate = $visitDateRaw !== '' ? date('Y-m-d', strtotime($visitDateRaw)) : date('Y-m-d');
         $careContextRef = trim((string) ($this->request->getPost('careContextId') ?? $this->request->getPost('care_context_reference') ?? ''));
         if ($careContextRef === '') {
-            $careContextRef = 'OPD-' . $opdId . '-S' . ($sessionForRef > 0 ? $sessionForRef : 0) . '-' . $visitDate;
+            $careContextRef = $hiType === 'PrescriptionRecord'
+                ? 'PRESCRIPTION-' . $opdId . '-S' . ($sessionForRef > 0 ? $sessionForRef : 0) . '-' . $visitDate
+                : 'OPD-' . $opdId . '-S' . ($sessionForRef > 0 ? $sessionForRef : 0) . '-' . $visitDate;
         }
-        $careContextDisplay = 'OPD Visit - ' . $visitDate;
+        $careContextDisplay = $hiType === 'PrescriptionRecord'
+            ? 'Prescription - ' . $visitDate
+            : 'OPD Visit - ' . $visitDate;
 
         $payload = [
             'opd_id' => $opdId,
@@ -1641,7 +1645,7 @@ class AbdmGateway extends BaseController
             'entity_id'   => (string) $opdId,
             'abha_id'     => $abhaId,
             'patient_id'  => $patientId,
-            'request'     => ['opd_id' => $opdId, 'hi_type' => 'OPConsultRecord', 'consent_handle' => $consentHandleResolved],
+                'request'     => ['opd_id' => $opdId, 'hi_type' => 'OPConsultRecord', 'consent_handle' => $consentHandleResolved],
             'response'    => ['queue_id' => $queueId],
             'outcome'     => $connectorError === null ? 'success' : 'failure',
             'error_message' => (string) ($connectorError ?? ''),
@@ -2717,12 +2721,13 @@ class AbdmGateway extends BaseController
             if ($name === '') {
                 continue;
             }
-            $dosage = trim(implode(' ', array_filter([
-                (string) ($row['dosage'] ?? ''),
-                (string) ($row['dosage_when'] ?? ''),
-                (string) ($row['dosage_freq'] ?? ''),
-                (string) ($row['no_of_days'] ?? ''),
-            ], static fn ($v) => trim((string) $v) !== '')));
+            $dosageText = $this->resolveDischargeMedDosageLabel(
+                (int) ($row['dosage'] ?? 0),
+                (int) ($row['dosage_when'] ?? 0),
+                (int) ($row['dosage_freq'] ?? 0)
+            );
+            $days = trim((string) ($row['no_of_days'] ?? ''));
+            $dosage = trim($dosageText . (($days !== '' && $days !== '0') ? ' for ' . $days . ' days' : ''));
             $medications[] = ['name' => $name, 'dosage' => $dosage];
         }
         if (empty($medications)) {
@@ -2876,7 +2881,9 @@ class AbdmGateway extends BaseController
             'patient' => [
                 'id' => (string) $patientId,
                 'name' => $patientName,
-                'gender' => $this->normalizeFhirGender((string) ($patientRow['gender'] ?? $patientRow['xgender'] ?? '')),
+                'gender' => $this->normalizeFhirGender(
+                    ($g = trim((string) ($patientRow['gender'] ?? ''))) !== '' ? $g : trim((string) ($patientRow['xgender'] ?? ''))
+                ),
                 'dob' => ! empty($patientRow['dob']) ? date('Y-m-d', strtotime((string) $patientRow['dob'])) : '',
                 'abha_id' => $abhaDigits,
                 'abha_address' => $abhaAddress,
@@ -3164,6 +3171,40 @@ class AbdmGateway extends BaseController
         }
 
         return ! in_array($normalized, ['-', '--', 'na', 'n/a', 'nil', 'none', 'not done'], true);
+    }
+
+    /** Resolve dose/when/freq IDs to a human-readable label for FHIR dosage text. */
+    private function resolveDischargeMedDosageLabel(int $doseId, int $whenId, int $freqId): string
+    {
+        static $doseCache = null;
+        static $whenCache = null;
+        static $freqCache = null;
+        $load = function (string $table) {
+            $map = [];
+            if (! $this->db->tableExists($table)) {
+                return $map;
+            }
+            $fields = $this->db->getFieldNames($table) ?? [];
+            $labelField = in_array('dose_desc', $fields, true) ? 'dose_desc'
+                : (in_array('freq_desc', $fields, true) ? 'freq_desc'
+                : (in_array('when_desc', $fields, true) ? 'when_desc' : null));
+            if ($labelField === null) {
+                return $map;
+            }
+            foreach ($this->db->table($table)->select('id,' . $labelField)->get()->getResultArray() as $r) {
+                $map[(int) $r['id']] = trim((string) $r[$labelField]);
+            }
+            return $map;
+        };
+        if ($doseCache === null) { $doseCache = $load('opd_dose_shed'); }
+        if ($whenCache === null) { $whenCache = $load('opd_dose_when'); }
+        if ($freqCache === null) { $freqCache = $load('opd_dose_frequency'); }
+        $parts = array_filter([
+            $doseId > 0 ? ($doseCache[$doseId] ?? '') : '',
+            $whenId > 0 ? ($whenCache[$whenId] ?? '') : '',
+            $freqId > 0 ? ($freqCache[$freqId] ?? '') : '',
+        ], fn ($v) => $v !== '');
+        return implode(' ', $parts);
     }
 
     private function normalizeFhirGender(string $gender): string
@@ -6805,13 +6846,25 @@ class AbdmGateway extends BaseController
     private function buildSimpleHealthDocumentBundle(array $patient, string $title, string $contentType, string $base64): array
     {
         $issuedAt = Time::now('Asia/Kolkata')->format(DATE_ATOM);
-        $patientRef = 'Patient/' . (string) ($patient['id'] ?? 'patient-unknown');
-        $binaryId = 'binary-health-doc-' . date('YmdHis');
-        $docId = 'doc-health-' . date('YmdHis');
-        $composition = ['resource' => ['resourceType' => 'Composition', 'id' => 'composition-health-doc-' . date('YmdHis'), 'status' => 'final', 'type' => ['text' => 'Health Document Record'], 'subject' => ['reference' => $patientRef], 'date' => $issuedAt, 'title' => $title, 'section' => [['title' => $title, 'entry' => [['reference' => 'DocumentReference/' . $docId]]]]]];
-        $binary = ['resource' => ['resourceType' => 'Binary', 'id' => $binaryId, 'contentType' => $contentType, 'data' => $base64]];
-        $docRef = ['resource' => ['resourceType' => 'DocumentReference', 'id' => $docId, 'status' => 'current', 'type' => ['text' => $title], 'subject' => ['reference' => $patientRef], 'date' => $issuedAt, 'content' => [['attachment' => ['contentType' => $contentType, 'url' => 'Binary/' . $binaryId, 'title' => $title]]]]];
-        return ['resourceType' => 'Bundle', 'type' => 'document', 'timestamp' => $issuedAt, 'entry' => [$composition, ['resource' => $patient], $binary, $docRef]];
+        $seed = $title . '|' . $issuedAt . '|' . $base64;
+        $uuid = static function (string $value): string {
+            $hash = md5($value);
+            return sprintf('%s-%s-4%s-a%s-%s', substr($hash, 0, 8), substr($hash, 8, 4), substr($hash, 13, 3), substr($hash, 17, 3), substr($hash, 20, 12));
+        };
+        $patientUrl = 'urn:uuid:' . $uuid($seed . '|patient');
+        $binaryUrl = 'urn:uuid:' . $uuid($seed . '|binary');
+        $organizationUrl = 'urn:uuid:' . $uuid($seed . '|organization');
+        $patient['meta']['profile'] = array_values(array_unique(array_merge((array) ($patient['meta']['profile'] ?? []), ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Patient'])));
+        $hospital = $this->getHospitalProfileForFhir();
+        $organization = ['resourceType' => 'Organization', 'id' => substr($organizationUrl, 9), 'name' => trim((string) ($hospital['name'] ?? '')) ?: 'Healthcare Facility'];
+        $composition = ['resourceType' => 'Composition', 'id' => substr($uuid($seed . '|composition'), 0), 'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/HealthDocumentRecord']], 'status' => 'final', 'type' => ['text' => 'Health Document Record'], 'subject' => ['reference' => $patientUrl], 'author' => [['reference' => $organizationUrl]], 'date' => $issuedAt, 'title' => $title, 'section' => [['title' => 'Invoice PDF', 'entry' => [['reference' => $binaryUrl, 'type' => 'Binary']]]]];
+        $entries = [
+            ['fullUrl' => 'urn:uuid:' . $uuid($seed . '|composition'), 'resource' => $composition],
+            ['fullUrl' => $patientUrl, 'resource' => $patient],
+            ['fullUrl' => $organizationUrl, 'resource' => $organization],
+        ];
+        $entries[] = ['fullUrl' => $binaryUrl, 'resource' => ['resourceType' => 'Binary', 'id' => substr($binaryUrl, 9), 'contentType' => $contentType, 'data' => $base64]];
+        return ['resourceType' => 'Bundle', 'type' => 'document', 'timestamp' => $issuedAt, 'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle']], 'entry' => $entries];
     }
 
     private function buildSimpleInvoiceBundle(array $patient, array $invoice, array $items): array
@@ -6850,6 +6903,8 @@ class AbdmGateway extends BaseController
         $practitionerRef = $practitionerId !== '' ? 'urn:uuid:' . $practitionerId : '';
         $escape = static fn (string $value): string => htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $documentReferenceId = $invoiceId . '-pdf';
+        $documentReferenceRef = 'urn:uuid:' . $documentReferenceId;
+        $pdfBinaryId = $invoiceId . '-pdf-content';
         $pdfFileStem = trim((string) preg_replace('/[^A-Za-z0-9._-]+/', '-', 'Invoice-' . $invoiceNumber), '-');
         $pdfFilename = ($pdfFileStem !== '' ? $pdfFileStem : 'Invoice') . '.pdf';
 
@@ -7042,9 +7097,16 @@ class AbdmGateway extends BaseController
             ]
         );
         $documentReference = null;
+        $pdfBinary = null;
         if ($invoicePdf !== null) {
             $invoicePdfBytes = base64_decode((string) $invoicePdf['data_base64'], true);
             if (is_string($invoicePdfBytes) && str_starts_with($invoicePdfBytes, '%PDF-')) {
+                $pdfBinary = [
+                    'resourceType' => 'Binary',
+                    'id' => $pdfBinaryId,
+                    'contentType' => 'application/pdf',
+                    'data' => (string) $invoicePdf['data_base64'],
+                ];
                 $documentReference = [
             'resourceType' => 'DocumentReference',
             'id' => $documentReferenceId,
@@ -7059,7 +7121,14 @@ class AbdmGateway extends BaseController
             ],
             'status' => 'current',
             'docStatus' => 'final',
-            'type' => ['text' => 'Invoice Record'],
+            'type' => [
+                'coding' => [[
+                    'system' => 'http://snomed.info/sct',
+                    'code' => '725458005',
+                    'display' => 'Receipt',
+                ]],
+                'text' => 'Invoice Record',
+            ],
             'subject' => ['reference' => $patientRef, 'display' => $patientName],
             'date' => $issuedAt,
             'author' => [[
@@ -7161,20 +7230,20 @@ class AbdmGateway extends BaseController
             'type' => [
                 'coding' => [[
                     'system' => 'http://loinc.org',
-                    'code' => '69705-9',
-                    'display' => 'Healthcare Invoice',
+                    'code' => '34775-2',
+                    'display' => 'Hospital Invoice',
                 ]],
                 'text' => 'Invoice Record',
             ],
-            'subject' => ['reference' => $patientRef],
+            'subject' => ['reference' => 'Patient/' . $patientId],
             'encounter' => ['reference' => $encounterRef],
             'date' => $issuedAt,
             'author' => [[
-                'reference' => $practitionerRef !== '' ? $practitionerRef : $organizationRef,
-                'display' => $practitionerRef !== '' ? $practitionerName : $hospitalName,
+                'reference' => 'Organization/' . $organizationId,
+                'display' => $hospitalName,
             ]],
             'title' => 'Invoice ' . $invoiceNumber,
-            'custodian' => ['reference' => $organizationRef],
+            'custodian' => ['reference' => 'Organization/' . $organizationId],
             'section' => [[
                 'title' => 'Invoice details',
                 'text' => [
@@ -7185,10 +7254,36 @@ class AbdmGateway extends BaseController
                 'entry' => [['reference' => $invoiceRef, 'type' => 'Invoice']],
             ]],
         ];
+        if ($documentReference !== null) {
+            $composition['section'][] = [
+                'title' => 'Document Reference',
+                'code' => ['coding' => [[
+                    'system' => 'http://snomed.info/sct',
+                    'code' => '725458005',
+                    'display' => 'Receipt',
+                ]]],
+                'entry' => [[
+                    'reference' => $documentReferenceRef,
+                    'type' => 'DocumentReference',
+                ]],
+            ];
+        }
+        if ($pdfBinary !== null) {
+            $composition['section'][] = [
+                'title' => 'Invoice PDF',
+                'entry' => [[
+                    'reference' => 'Binary/' . $pdfBinaryId,
+                    'type' => 'Binary',
+                ]],
+            ];
+        }
 
         $resources = [$composition, $patient, $organization, $encounter, $invoiceResource];
         if ($documentReference !== null) {
             $resources[] = $documentReference;
+        }
+        if ($pdfBinary !== null) {
+            $resources[] = $pdfBinary;
         }
         if ($practitioner !== null) {
             $resources[] = $practitioner;

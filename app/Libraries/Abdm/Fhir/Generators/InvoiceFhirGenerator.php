@@ -96,6 +96,39 @@ class InvoiceFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\AbstractM
             $builder->addPractitioner($practitioner);
         }
 
+        // Add DocumentReference + Binary if Invoice PDF / base64 is provided in $source
+        $docData = (string) ($source['invoice_pdf_base64'] ?? $source['document_data_base64'] ?? $source['pdf_base64'] ?? '');
+        if ($docData !== '') {
+            $docRefId = 'invoice-doc-' . $recordId;
+            $builder->addDocumentReference([
+                'resourceType' => 'DocumentReference',
+                'id' => $docRefId,
+                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentReference']],
+                'status' => 'current',
+                'docStatus' => 'final',
+                'type' => [
+                    'coding' => [[
+                        'system' => 'http://loinc.org',
+                        'code' => '56445-0',
+                        'display' => 'Medication summary document',
+                    ]],
+                    'text' => 'Invoice Receipt PDF',
+                ],
+                'subject' => ['reference' => 'urn:uuid:patient-' . $patientId],
+                'date' => $timestamp,
+                'description' => 'Billing Invoice PDF',
+                'content' => [[
+                    'attachment' => [
+                        'contentType' => 'application/pdf',
+                        'language' => 'en-IN',
+                        'data' => $docData,
+                        'title' => 'Billing Invoice.pdf',
+                        'creation' => $timestamp,
+                    ],
+                ]],
+            ]);
+        }
+
         $bundle = $builder->toBundle();
         $validation = $this->validator->validate($bundle, 'invoice', ['resolved' => 1, 'unresolved' => 0, 'fallback_used' => 0]);
 

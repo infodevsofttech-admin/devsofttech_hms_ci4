@@ -19,12 +19,13 @@
                             <th>Template Name</th>
                             <th style="width:80px;">Default</th>
                             <th style="width:80px;">Audit</th>
+                            <th style="width:130px;">Online / ABDM</th>
                             <th style="width:200px;">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (empty($rows)): ?>
-                            <tr><td colspan="5" class="text-center text-muted">No templates. Click Add New.</td></tr>
+                            <tr><td colspan="6" class="text-center text-muted">No templates. Click Add New.</td></tr>
                         <?php else: ?>
                             <?php foreach ($rows as $i => $row): ?>
                                 <tr>
@@ -32,6 +33,7 @@
                                     <td><?= esc((string) ($row['template_name'] ?? '')) ?></td>
                                     <td><?= (int) ($row['is_default'] ?? 0) ? '<span class="badge bg-success">Yes</span>' : '' ?></td>
                                     <td><?= (int) ($row['is_audit_only'] ?? 0) ? '<span class="badge bg-warning text-dark">Audit</span>' : '' ?></td>
+                                    <td><?= (int) ($row['is_abdm'] ?? 0) ? '<span class="badge bg-info text-dark">Online / ABDM</span>' : '' ?></td>
                                     <td>
                                         <a class="btn btn-primary btn-sm"
                                            href="javascript:load_form('<?= base_url('Ipd_discharge/print_template_builder') ?>?mode=edit&edit=<?= (int) ($row['id'] ?? 0) ?>','IPD Discharge Template Edit');">Edit</a>

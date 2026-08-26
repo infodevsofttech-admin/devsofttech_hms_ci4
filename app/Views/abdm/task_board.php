@@ -30,6 +30,7 @@
         <button type="button" class="btn btn-sm btn-outline-primary filter-btn" data-filter="radiology_report_publish">Radiology Reports</button>
         <button type="button" class="btn btn-sm btn-outline-primary filter-btn" data-filter="immunization_record_publish">Immunization Record</button>
         <button type="button" class="btn btn-sm btn-outline-primary filter-btn" data-filter="invoice">Invoice</button>
+        <button type="button" class="btn btn-sm btn-outline-primary filter-btn" data-filter="health_document_publish">Health Document</button>
         <button type="button" class="btn btn-sm btn-outline-primary filter-btn" data-filter="ipd_discharge_publish">IPD Discharge</button>
     </div>
 
@@ -123,7 +124,7 @@
                             $opdSessionId = (int) ($meta['opd_session_id'] ?? 0);
                             $showSandbox = ($type === 'opd_prescription_publish' && $opdId > 0);
                             $showPreview = ($type === 'opd_prescription_publish' && $opdId > 0)
-                                || in_array($type, ['lab_report_publish', 'radiology_report_publish', 'ipd_discharge_publish', 'immunization_record_publish'], true);
+                                || in_array($type, ['lab_report_publish', 'radiology_report_publish', 'ipd_discharge_publish', 'immunization_record_publish', 'health_document_publish'], true);
                             $bridgeSubmitted = (int) ($t['bridge_submitted'] ?? 0) === 1;
                             $bridgeCareContext = trim((string) ($t['bridge_care_context_reference'] ?? ''));
                         ?>
@@ -1109,6 +1110,17 @@
                 + '&patient_id=' + encodeURIComponent(immunizationPatientId)
                 + '&abha_id=' + encodeURIComponent(abhaId);
             title = 'ImmunizationRecord FHIR Preview — Record #' + immunizationRecordId;
+        } else if (taskType === 'health_document_publish') {
+            var healthDocId = parseInt(row.getAttribute('data-entity-id') || '0', 10) || 0;
+            var healthPatientId = parseInt(row.getAttribute('data-patient-id') || '0', 10) || 0;
+
+            if (healthDocId <= 0 || healthPatientId <= 0) {
+                setStatus('Task data missing for Health Document FHIR preview.', true);
+                return true;
+            }
+
+            previewUrl = '<?= base_url('DoctorDocument/health_document_fhir_preview') ?>/' + healthDocId;
+            title = 'HealthDocumentRecord FHIR Preview — Document #' + healthDocId;
         } else {
             return false;
         }
@@ -2455,6 +2467,59 @@
                 html += '</li>';
             });
             html += '</ul></div></div>';
+        }
+
+        // ── Attached Documents & Reports (PDFs, Images, Scanned Documents, Invoices)
+        if (documentRefs.length) {
+            html += '<div class="card mb-2"><div class="card-header py-1 bg-light d-flex justify-content-between align-items-center"><small class="fw-bold text-uppercase text-secondary">Attached Documents & Reports</small><span class="badge bg-secondary">' + documentRefs.length + '</span></div><div class="card-body py-2">';
+            html += '<div class="row g-2">';
+            documentRefs.forEach(function(docRef) {
+                var contentList = docRef.content || [];
+                contentList.forEach(function(c) {
+                    var attachment = c.attachment || {};
+                    var title = attachment.title || docRef.description || ((docRef.type || {}).text) || 'Attached Document';
+                    var contentType = attachment.contentType || 'application/octet-stream';
+
+                    var attachmentData = attachment.data;
+                    if (!attachmentData && attachment.url) {
+                        var binaryRes = resourcesByUrl[attachment.url] || resourcesByUrl['urn:uuid:' + attachment.url];
+                        if (!binaryRes) {
+                            var binCleanId = String(attachment.url).replace(/^urn:uuid:/, '');
+                            binaryRes = (byType('Binary') || []).find(function(b) { return b.id === binCleanId || 'urn:uuid:' + b.id === attachment.url; });
+                        }
+                        if (binaryRes) {
+                            attachmentData = binaryRes.data;
+                            if (binaryRes.contentType) {
+                                contentType = binaryRes.contentType;
+                            }
+                        }
+                    }
+
+                    var fileUrl = attachmentObjectUrl({ data: attachmentData, contentType: contentType });
+                    var isPdf = contentType === 'application/pdf';
+                    var isImage = contentType.indexOf('image/') === 0;
+
+                    html += '<div class="col-md-6">';
+                    html += '<div class="border rounded p-2 d-flex align-items-center gap-2 bg-light-subtle">';
+                    if (isPdf) {
+                        html += '<i class="bi bi-file-earmark-pdf fs-4 text-danger flex-shrink-0"></i>';
+                    } else if (isImage) {
+                        html += '<i class="bi bi-file-earmark-image fs-4 text-primary flex-shrink-0"></i>';
+                    } else {
+                        html += '<i class="bi bi-file-earmark-text fs-4 text-secondary flex-shrink-0"></i>';
+                    }
+                    html += '<div class="flex-grow-1 min-w-0"><div class="fw-semibold text-truncate small" title="' + hesc(title) + '">' + hesc(title) + '</div>';
+                    html += '<small class="text-muted d-block" style="font-size:.7rem;">' + hesc(contentType) + '</small></div>';
+                    if (fileUrl) {
+                        html += '<a class="btn btn-sm btn-outline-primary py-0 px-2 me-1" style="font-size:.75rem;" href="' + hesc(fileUrl) + '" target="_blank" rel="noopener">Open</a>';
+                        html += '<a class="btn btn-sm btn-primary py-0 px-2" style="font-size:.75rem;" href="' + hesc(fileUrl) + '" download="' + hesc(title) + '"><i class="bi bi-download"></i></a>';
+                    } else {
+                        html += '<span class="badge bg-secondary" style="font-size:.65rem;">No binary data</span>';
+                    }
+                    html += '</div></div>';
+                });
+            });
+            html += '</div></div></div>';
         }
 
         // ── Practitioner

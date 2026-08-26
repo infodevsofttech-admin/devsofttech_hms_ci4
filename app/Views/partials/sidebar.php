@@ -342,6 +342,12 @@ if (! $canChargesSettings && $user && method_exists($user, 'inGroup')) {
                 <span>IPD Patient List</span>
             </a>
         </li>
+        <li class="nav-item">
+            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('DoctorDocument/index') ?>','MRD & Patient Documents')">
+                <i class="bi bi-folder2-open"></i>
+                <span>MRD & Patient Documents</span>
+            </a>
+        </li>
         <?php } ?>
         <?php if ($canIpdOt) { ?>
         <li class="nav-item">

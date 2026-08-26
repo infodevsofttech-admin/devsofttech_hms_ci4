@@ -63,30 +63,80 @@ class OpdFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\AbstractModul
                     'system' => 'http://terminology.hl7.org/CodeSystem/condition-clinical',
                     'code' => 'active',
                 ]]],
+                'recordedDate' => $timestamp,
             ];
             $builder->addCondition($condition);
         }
 
         foreach ((array) ($source['medications'] ?? []) as $idx => $med) {
             $drugName = trim((string) ($med['name'] ?? ''));
-            if ($drugName === '') {
+            if (! $this->isMeaningfulValue($drugName)) {
                 continue;
             }
 
-            $builder->addMedicationRequest([
+            $dosageText = trim((string) ($med['dosage'] ?? ''));
+            $medType = trim((string) ($med['formulation'] ?? $med['med_type'] ?? ''));
+            $routeText = trim((string) ($med['route_text'] ?? ''));
+            if (! $this->isMeaningfulValue($routeText)) {
+                $medTypeUpper = strtoupper($medType);
+                if (in_array($medTypeUpper, ['INJ', 'INJECTION', 'IV', 'IM'], true)) {
+                    $routeText = 'Injection';
+                    $routeCode = '47625008';
+                } elseif (in_array($medTypeUpper, ['CREAM', 'OINT', 'OINTMENT', 'GEL', 'LOTION'], true)) {
+                    $routeText = 'Topical';
+                    $routeCode = '6064005';
+                } else {
+                    $routeText = 'Oral';
+                    $routeCode = '260548002';
+                }
+            } else {
+                $routeCode = '260548002';
+            }
+
+            $dosageInstruction = [[
+                'text' => $dosageText,
+                'route' => [
+                    'coding' => [[
+                        'system' => 'http://snomed.info/sct',
+                        'code' => $routeCode,
+                        'display' => $routeText,
+                    ]],
+                    'text' => $routeText,
+                ],
+            ]];
+
+            $code = trim((string) ($med['code'] ?? ''));
+            $coding = [];
+            if ($code !== '') {
+                $coding[] = [
+                    'system' => 'http://snomed.info/sct',
+                    'code' => $code,
+                    'display' => $drugName,
+                ];
+            } else {
+                $coding[] = [
+                    'system' => 'http://snomed.info/sct',
+                    'code' => '105904009',
+                    'display' => $drugName,
+                ];
+            }
+
+            $medResource = [
                 'resourceType' => 'MedicationRequest',
                 'id' => 'medication-' . $recordId . '-' . $idx,
+                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/MedicationRequest']],
                 'status' => 'active',
                 'intent' => 'order',
                 'subject' => ['reference' => $patientRef],
                 'encounter' => $encounterRef ? ['reference' => $encounterRef] : null,
                 'medicationCodeableConcept' => [
+                    'coding' => $coding,
                     'text' => $drugName,
                 ],
-                'dosageInstruction' => [[
-                    'text' => trim((string) ($med['dosage'] ?? '')),
-                ]],
-            ]);
+                'dosageInstruction' => $dosageInstruction,
+            ];
+
+            $builder->addMedicationRequest($medResource);
         }
 
         foreach ((array) ($source['vitals'] ?? []) as $idx => $vital) {

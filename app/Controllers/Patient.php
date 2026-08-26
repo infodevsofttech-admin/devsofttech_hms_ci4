@@ -1466,11 +1466,60 @@ class Patient extends BaseController
 			];
 		}
 
+		$patientDocuments = [];
+		if ($this->db->tableExists('file_upload_data')) {
+			$fields = $this->db->getFieldNames('file_upload_data') ?? [];
+			$builder = $this->db->table('file_upload_data');
+			if (in_array('pid', $fields, true) && $opdIds) {
+				$builder->groupStart()
+					->where('pid', $pno)
+					->orWhereIn('opd_id', $opdIds)
+					->groupEnd();
+			} elseif (in_array('pid', $fields, true)) {
+				$builder->where('pid', $pno);
+			} elseif ($opdIds && in_array('opd_id', $fields, true)) {
+				$builder->whereIn('opd_id', $opdIds);
+			}
+
+			if (in_array('show_type', $fields, true)) {
+				$builder->where('show_type', 0);
+			}
+
+			$docRows = $builder->orderBy('id', 'DESC')->get()->getResultArray();
+			foreach ($docRows as $row) {
+				$path = (string) ($row['full_path'] ?? $row['public_path'] ?? '');
+				if ($path !== '') {
+					$pos = strpos(str_replace('\\', '/', $path), '/uploads/');
+					if ($pos !== false) {
+						$path = substr(str_replace('\\', '/', $path), $pos);
+					}
+				}
+
+				$ext = strtolower(ltrim((string) ($row['file_ext'] ?? pathinfo($path, PATHINFO_EXTENSION)), '.'));
+				$isPdf = $ext === 'pdf';
+				$title = trim((string) ($row['document_type'] ?? $row['scan_type'] ?? $row['content_description'] ?? 'Scanned Document'));
+				if ($title === '' || strcasecmp($title, 'Queued for AI analysis') === 0) {
+					$title = 'Scanned Document';
+				}
+
+				$patientDocuments[] = [
+					'id' => (int) ($row['id'] ?? 0),
+					'title' => $title,
+					'path' => $path,
+					'isPdf' => $isPdf,
+					'ext' => $ext,
+					'insertDate' => ! empty($row['insert_date']) ? date('d-m-Y H:i', strtotime((string) $row['insert_date'])) : '',
+					'uploadedBy' => (string) ($row['upload_by'] ?? ''),
+				];
+			}
+		}
+
 		return view('billing/Patient_Profile_Opd_V', [
 			'patient' => $patient,
 			'profileFilePath' => $profileFilePath,
 			'allow_image_preupload_edit' => 1,
 			'opdGroups' => $opdGroups,
+			'patientDocuments' => $patientDocuments,
 			'totalOpdVisits' => $totalOpdVisits,
 			'lastVisitDate' => $lastVisitDate,
 			'lastVisitOpdNo' => $lastVisitOpdNo,
@@ -5053,5 +5102,348 @@ class Patient extends BaseController
 		return $out;
 	}
 
+	public function patient_file_list(int $pid)
+	{
+		if ($pid <= 0 || ! $this->db->tableExists('file_upload_data')) {
+			return $this->response->setJSON(['ok' => 0, 'files' => []]);
+		}
 
+		$fields = $this->db->getFieldNames('file_upload_data');
+		$safeSelect = ['id', 'full_path', 'public_path', 'file_ext', 'file_type', 'insert_date', 'document_type', 'scan_type', 'content_description', 'upload_by'];
+		$select = array_intersect($safeSelect, $fields);
+
+		$builder = $this->db->table('file_upload_data')
+			->select(implode(',', $select))
+			->where('pid', $pid);
+
+		if (in_array('show_type', $fields, true)) {
+			$builder->where('show_type', 0);
+		}
+
+		$rows = $builder->orderBy('id', 'DESC')->get()->getResultArray();
+		$files = [];
+
+		foreach ($rows as $row) {
+			$rawPath = str_replace('\\', '/', (string) ($row['full_path'] ?? ''));
+			$publicPath = trim((string) ($row['public_path'] ?? ''));
+			if ($publicPath === '') {
+				$publicPath = $rawPath;
+				$pos = strpos($rawPath, '/uploads/');
+				if ($pos !== false) {
+					$publicPath = substr($rawPath, $pos);
+				}
+			}
+			$publicPath = str_replace('\\', '/', $publicPath);
+			if (strpos($publicPath, '/uploads/') !== 0 && stripos($publicPath, 'uploads/') === 0) {
+				$publicPath = '/' . ltrim($publicPath, '/');
+			}
+
+			$ext = strtolower((string) ($row['file_ext'] ?? pathinfo($publicPath, PATHINFO_EXTENSION)));
+			$ext = ltrim($ext, '.');
+			$title = trim((string) ($row['document_type'] ?? $row['scan_type'] ?? $row['content_description'] ?? ''));
+			if ($title === '' || strcasecmp($title, 'Queued for AI analysis') === 0) {
+				$title = 'Scanned/Uploaded Document';
+			}
+
+			$files[] = [
+				'id' => (int) ($row['id'] ?? 0),
+				'title' => $title,
+				'path' => $publicPath,
+				'is_pdf' => $ext === 'pdf',
+				'ext' => $ext,
+				'uploaded_by' => (string) ($row['upload_by'] ?? ''),
+				'insert_date' => ! empty($row['insert_date']) ? date('d-m-Y H:i', strtotime((string) $row['insert_date'])) : '',
+			];
+		}
+
+		if ($this->request->isAJAX() || $this->request->getGet('json') === '1') {
+			return $this->response->setJSON(['ok' => 1, 'files' => $files]);
+		}
+
+		return view('billing/patient_file_list_partial', ['files' => $files, 'pid' => $pid]);
+	}
+
+	public function upload_patient_doc(int $pid)
+	{
+		if ($pid <= 0 || ! $this->db->tableExists('patient_master')) {
+			return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid patient ID']);
+		}
+
+		$patientRow = $this->db->table('patient_master')->where('id', $pid)->get(1)->getRowArray();
+		if (empty($patientRow)) {
+			return $this->response->setJSON(['update' => 0, 'error_text' => 'Patient not found']);
+		}
+
+		$uploadedFile = $this->request->getFile('userfile');
+		if (! $uploadedFile || ! $uploadedFile->isValid() || $uploadedFile->hasMoved()) {
+			return $this->response->setJSON(['update' => 0, 'error_text' => 'Please select a valid PDF or image file to upload.']);
+		}
+
+		$ext = strtolower((string) ($uploadedFile->getClientExtension() ?: $uploadedFile->guessExtension() ?: pathinfo((string) $uploadedFile->getName(), PATHINFO_EXTENSION)));
+		if (! in_array($ext, ['pdf', 'jpg', 'jpeg', 'png', 'webp'], true)) {
+			return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid file format. Upload PDF, JPG, PNG, or WEBP only.']);
+		}
+
+		$uploadsDir = rtrim(FCPATH, '/\\') . '/uploads/' . date('Ymd');
+		if (! is_dir($uploadsDir)) {
+			@mkdir($uploadsDir, 0777, true);
+		}
+
+		$baseFilename = 'PATIENT-' . $pid . '-' . time();
+		$filename = $baseFilename . '.' . $ext;
+		$fullPath = $uploadsDir . '/' . $filename;
+		$publicPath = '/uploads/' . date('Ymd') . '/' . $filename;
+
+		try {
+			$uploadedFile->move($uploadsDir, $filename);
+		} catch (\Throwable $e) {
+			return $this->response->setJSON(['update' => 0, 'error_text' => 'Failed to save file: ' . $e->getMessage()]);
+		}
+
+		$user = auth()->user();
+		$userId = (int) ($user->id ?? 0);
+		$userName = (string) ($user->username ?? $user->email ?? 'User');
+		$mimeType = (string) ($uploadedFile->getClientMimeType() ?: ($ext === 'pdf' ? 'application/pdf' : 'image/jpeg'));
+		$docType = trim((string) ($this->request->getPost('document_type') ?? $this->request->getPost('title') ?? 'Patient Document'));
+
+		$insert = [
+			'name' => $filename,
+			'file_name' => $filename,
+			'orig_name' => (string) $uploadedFile->getName(),
+			'client_name' => (string) $uploadedFile->getName(),
+			'file_ext' => '.' . $ext,
+			'file_type' => $mimeType,
+			'full_path' => str_replace('\\', '/', $fullPath),
+			'file_path' => str_replace('\\', '/', $uploadsDir) . '/',
+			'raw_name' => $baseFilename,
+			'file_size' => @filesize($fullPath) ? round((float) filesize($fullPath) / 1024, 2) : 0,
+			'is_image' => $ext === 'pdf' ? 0 : 1,
+			'insert_date' => date('Y-m-d H:i:s'),
+			'upload_by' => $userName,
+			'upload_by_id' => $userId,
+			'pid' => $pid,
+			'opd_id' => 0,
+			'ipd_id' => 0,
+			'case_id' => 0,
+			'show_type' => 0,
+			'public_path' => $publicPath,
+			'document_type' => $docType,
+			'content_description' => $docType,
+		];
+
+		$fields = $this->db->getFieldNames('file_upload_data');
+		$insert = array_intersect_key($insert, array_flip($fields));
+		$this->db->table('file_upload_data')->insert($insert);
+		$fileId = (int) $this->db->insertID();
+
+		$fhirQueued = false;
+		if ($fileId > 0) {
+			try {
+				$fhirQueued = $this->enqueueHealthDocumentFhirForFileUpload($fileId);
+			} catch (\Throwable $e) {
+				log_message('warning', 'Unable to enqueue ABDM HealthDocumentRecord FHIR for patient file {id}: {msg}', ['id' => $fileId, 'msg' => $e->getMessage()]);
+			}
+		}
+
+		return $this->response->setJSON([
+			'update' => 1,
+			'file_id' => $fileId,
+			'filename' => $filename,
+			'public_path' => $publicPath,
+			'fhir_queued' => $fhirQueued ? 1 : 0,
+			'message' => 'Document uploaded successfully' . ($fhirQueued ? ' and enqueued for ABDM Health Document sharing' : ''),
+			'csrfName' => csrf_token(),
+			'csrfHash' => csrf_hash(),
+		]);
+	}
+
+	public function delete_patient_doc(int $fileId)
+	{
+		if ($fileId <= 0 || ! $this->db->tableExists('file_upload_data')) {
+			return $this->response->setJSON(['update' => 0, 'error_text' => 'File not found']);
+		}
+
+		$row = $this->db->table('file_upload_data')->where('id', $fileId)->get(1)->getRowArray();
+		if (empty($row)) {
+			return $this->response->setJSON(['update' => 0, 'error_text' => 'File record not found']);
+		}
+
+		$fields = $this->db->getFieldNames('file_upload_data');
+		if (in_array('show_type', $fields, true)) {
+			$this->db->table('file_upload_data')->where('id', $fileId)->update(['show_type' => 1]);
+		} else {
+			$this->db->table('file_upload_data')->where('id', $fileId)->delete();
+		}
+
+		return $this->response->setJSON([
+			'update' => 1,
+			'pid' => (int) ($row['pid'] ?? 0),
+			'message' => 'Document deleted successfully',
+			'csrfName' => csrf_token(),
+			'csrfHash' => csrf_hash(),
+		]);
+	}
+
+	public function enqueueHealthDocumentFhirForFileUpload(int $fileUploadId): bool
+	{
+		if ($fileUploadId <= 0 || ! $this->db->tableExists('file_upload_data')) {
+			return false;
+		}
+
+		$fileRow = $this->db->table('file_upload_data')->where('id', $fileUploadId)->get(1)->getRowArray();
+		if (empty($fileRow)) {
+			return false;
+		}
+
+		$pid = (int) ($fileRow['pid'] ?? 0);
+		if ($pid <= 0 && ! empty($fileRow['opd_id']) && $this->db->tableExists('opd_master')) {
+			$opdRow = $this->db->table('opd_master')->where('opd_id', (int) $fileRow['opd_id'])->get(1)->getRowArray();
+			$pid = (int) ($opdRow['p_id'] ?? 0);
+		}
+		if ($pid <= 0) {
+			return false;
+		}
+
+		$patientRow = $this->db->table('patient_master')->where('id', $pid)->get(1)->getRowArray();
+		if (empty($patientRow)) {
+			return false;
+		}
+
+		$filePath = (string) ($fileRow['full_path'] ?? '');
+		if (! is_file($filePath) || ! is_readable($filePath)) {
+			$filePath = FCPATH . ltrim((string) ($fileRow['public_path'] ?? ''), '/\\');
+		}
+
+		if (! is_file($filePath) || ! is_readable($filePath)) {
+			return false;
+		}
+
+		$bytes = @file_get_contents($filePath);
+		if ($bytes === false || $bytes === '') {
+			return false;
+		}
+
+		$ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+		$mimeType = match ($ext) {
+			'pdf' => 'application/pdf',
+			'png' => 'image/png',
+			'webp' => 'image/webp',
+			'jpg', 'jpeg' => 'image/jpeg',
+			default => 'application/octet-stream',
+		};
+
+		$docTitle = trim((string) ($fileRow['document_type'] ?? $fileRow['scan_type'] ?? $fileRow['content_description'] ?? ''));
+		if ($docTitle === '' || strcasecmp($docTitle, 'Queued for AI analysis') === 0) {
+			$docTitle = 'Patient Scanned Document';
+		}
+
+		$patientName = trim(trim((string) ($patientRow['p_fname'] ?? '')) . ' ' . trim((string) ($patientRow['p_lname'] ?? '')));
+		$abhaIdRaw = '';
+		foreach (['abha_id', 'abha_no', 'abha'] as $field) {
+			$candidate = trim((string) ($patientRow[$field] ?? ''));
+			if ($candidate !== '') {
+				$abhaIdRaw = $candidate;
+				break;
+			}
+		}
+		$abhaDigits = preg_replace('/\D/', '', $abhaIdRaw);
+		$abhaDigits = is_string($abhaDigits) ? $abhaDigits : '';
+		$abhaAddress = trim((string) ($patientRow['abha_address'] ?? ''));
+
+		$hfrId = 'HFR-IN-HMS';
+		if ($this->db->tableExists('hospital_setting')) {
+			$hfrRow = $this->db->table('hospital_setting')->where('title', 'ABDM_HFR_ID')->get(1)->getRowArray();
+			if (! empty($hfrRow['value'])) {
+				$hfrId = trim((string) $hfrRow['value']);
+			}
+		}
+		$hospitalName = defined('H_Name') ? (string) constant('H_Name') : 'Hospital';
+
+		$visitDate = ! empty($fileRow['insert_date']) ? date('Y-m-d', strtotime((string) $fileRow['insert_date'])) : date('Y-m-d');
+		$completedAt = ! empty($fileRow['insert_date']) ? date(DATE_ATOM, strtotime((string) $fileRow['insert_date'])) : date(DATE_ATOM);
+
+		$source = [
+			'record_id' => 'file-' . $fileUploadId,
+			'session_id' => (string) ($fileRow['opd_id'] ?? $fileUploadId),
+			'visit_date' => $visitDate,
+			'completed_at' => $completedAt,
+			'document_title' => $docTitle,
+			'document_data_base64' => base64_encode($bytes),
+			'content_type' => $mimeType,
+			'hfr_id' => $hfrId,
+			'organization' => [
+				'id' => $hfrId,
+				'name' => $hospitalName,
+			],
+			'patient' => [
+				'id' => (string) $pid,
+				'uhid' => (string) ($patientRow['uhid_no'] ?? $patientRow['uhid'] ?? $patientRow['patient_code'] ?? $pid),
+				'name' => $patientName,
+				'gender' => strtolower((string) ($patientRow['gender'] ?? '')) === 'm' ? 'male' : (strtolower((string) ($patientRow['gender'] ?? '')) === 'f' ? 'female' : 'unknown'),
+				'dob' => ! empty($patientRow['dob']) ? date('Y-m-d', strtotime((string) $patientRow['dob'])) : '',
+				'abha_id' => $abhaDigits,
+				'abha_address' => $abhaAddress,
+				'mobile' => (string) ($patientRow['mphone1'] ?? ''),
+			],
+			'practitioner' => [
+				'id' => '1',
+				'name' => 'Doctor',
+			],
+		];
+
+		$factory = new \App\Libraries\Abdm\Fhir\FhirGeneratorFactory();
+		$generatorOutput = $factory->healthDocument()->generate($source);
+
+		$adapter = new \App\Libraries\Abdm\Sync\GatewayPayloadAdapter();
+		$gatewayPayload = $adapter->toGatewayPayload($generatorOutput, $source, $hfrId);
+
+		if ($pid > 0 && preg_match('/^\d{14}$/', $abhaDigits) === 1 && class_exists('\App\Libraries\Abdm\Task\AbdmTaskService')) {
+			try {
+				$taskService = new \App\Libraries\Abdm\Task\AbdmTaskService();
+				$taskService->createOrRefreshTask(
+					'health_document_publish',
+					'file_upload_data',
+					'patient_document',
+					(string) $fileUploadId,
+					$pid,
+					$patientName,
+					$abhaDigits,
+					'submit',
+					[
+						'file_upload_id' => $fileUploadId,
+						'trigger' => 'file_upload_data.created',
+					]
+				);
+			} catch (\Throwable $e) {
+				log_message('warning', 'Unable to refresh ABDM task for file {id}: {msg}', ['id' => $fileUploadId, 'msg' => $e->getMessage()]);
+			}
+		}
+
+		$syncPayload = [
+			'local_record_id' => 'file-upload-' . $fileUploadId,
+			'local_patient_id' => $pid,
+			'hi_type' => 'HealthDocumentRecord',
+			'care_context_reference' => (string) ($gatewayPayload['care_context_reference'] ?? ('DOC-FILE-' . $fileUploadId)),
+			'care_context_display' => (string) ($gatewayPayload['care_context_display'] ?? ($docTitle . ' ' . $visitDate)),
+			'visit_date' => $visitDate,
+			'department' => '',
+			'doctor_name' => 'Doctor',
+			'consent_id' => '',
+			'hfr_id' => $hfrId,
+			'source_updated_at' => date('Y-m-d H:i:s'),
+			'patient_name' => $patientName,
+			'mobile' => (string) ($patientRow['mphone1'] ?? ''),
+			'gender' => (string) ($patientRow['gender'] ?? ''),
+			'dob' => (string) ($patientRow['dob'] ?? ''),
+			'abha_id' => $abhaDigits,
+			'abha_address' => $abhaAddress,
+			'fhir_bundle' => (array) ($gatewayPayload['fhir_bundle'] ?? []),
+		];
+
+		$outbox = new \App\Libraries\Abdm\Sync\AbdmSyncOutboxService();
+		$outbox->enqueueRecordSync($syncPayload);
+
+		return true;
+	}
 }
+

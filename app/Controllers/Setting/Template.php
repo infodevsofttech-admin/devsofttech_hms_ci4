@@ -2813,7 +2813,8 @@ HTML;
             'footer_html' => "ALTER TABLE ipd_discharge_templates ADD COLUMN footer_html LONGTEXT NULL AFTER header_html",
             'template_css' => "ALTER TABLE ipd_discharge_templates ADD COLUMN template_css LONGTEXT NULL AFTER footer_html",
             'is_audit_only' => "ALTER TABLE ipd_discharge_templates ADD COLUMN is_audit_only TINYINT(1) NOT NULL DEFAULT 0 AFTER is_default",
-            'watermark_type' => "ALTER TABLE ipd_discharge_templates ADD COLUMN watermark_type VARCHAR(10) NOT NULL DEFAULT 'none' AFTER is_audit_only",
+            'is_abdm' => "ALTER TABLE ipd_discharge_templates ADD COLUMN is_abdm TINYINT(1) NOT NULL DEFAULT 0 AFTER is_audit_only",
+            'watermark_type' => "ALTER TABLE ipd_discharge_templates ADD COLUMN watermark_type VARCHAR(10) NOT NULL DEFAULT 'none' AFTER is_abdm",
             'watermark_text' => "ALTER TABLE ipd_discharge_templates ADD COLUMN watermark_text VARCHAR(255) NULL AFTER watermark_type",
             'watermark_image' => "ALTER TABLE ipd_discharge_templates ADD COLUMN watermark_image VARCHAR(255) NULL AFTER watermark_text",
             'watermark_alpha' => "ALTER TABLE ipd_discharge_templates ADD COLUMN watermark_alpha DECIMAL(4,2) NOT NULL DEFAULT 0.12 AFTER watermark_image",
@@ -2961,6 +2962,7 @@ HTML;
             $marginFooter = max(0, min(25, (float) ($this->request->getPost('margin_footer_cm') ?? 0.5)));
             $isDefault = (int) ($this->request->getPost('is_default') ?? 0) === 1 ? 1 : 0;
             $isAuditOnly = (int) ($this->request->getPost('is_audit_only') ?? 0) === 1 ? 1 : 0;
+            $isAbdm = (int) ($this->request->getPost('is_abdm') ?? $this->request->getPost('is_abdm_default') ?? 0) === 1 ? 1 : 0;
             $status = (int) ($this->request->getPost('status') ?? 1) === 1 ? 1 : 0;
             $watermarkType = (string) ($this->request->getPost('watermark_type') ?? 'none');
             if (! in_array($watermarkType, ['none', 'text', 'image'], true)) {
@@ -3037,6 +3039,7 @@ HTML;
                     'template_html' => $templateHtml,
                     'is_default' => $isDefault,
                     'is_audit_only' => $isAuditOnly,
+                    'is_abdm' => $isAbdm,
                     'watermark_type' => $watermarkType,
                     'watermark_text' => $watermarkText,
                     'watermark_image' => $watermarkImage,
@@ -3060,6 +3063,12 @@ HTML;
                     $this->db->table('ipd_discharge_templates')
                         ->where('id <>', $id)
                         ->update(['is_default' => 0]);
+                }
+
+                if ($isAbdm === 1 && $id > 0) {
+                    $this->db->table('ipd_discharge_templates')
+                        ->where('id <>', $id)
+                        ->update(['is_abdm' => 0]);
                 }
 
                 if ($this->request->isAJAX()) {

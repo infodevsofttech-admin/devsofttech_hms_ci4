@@ -153,7 +153,7 @@ $hasTemplateAccess = $canPathology || $canUltrasound || $canXray || $canCt || $c
     <div class="row g-3 admin-tiles">
         <?php if ($canPathology) { ?>
             <div class="col-6 col-md-2 col-lg-2">
-                <a class="admin-tile" href="javascript:load_form('<?= base_url('Lab_Admin/report_list') ?>','Pathology Template');">
+                <a class="admin-tile" href="javascript:load_form_div('<?= base_url('setting/template/report_list') ?>','maindiv','Pathology Template');">
                     <span class="tile-icon"><i class="bi bi-heart-pulse"></i></span>
                     <span>Pathology Template</span>
                 </a>
@@ -161,7 +161,7 @@ $hasTemplateAccess = $canPathology || $canUltrasound || $canXray || $canCt || $c
         <?php } ?>
         <?php if ($canUltrasound) { ?>
             <div class="col-6 col-md-2 col-lg-2">
-                <a class="admin-tile" href="javascript:load_form('<?= base_url('Lab_Admin/report_ultrasound_list/1') ?>','Ultra Sound Template');">
+                <a class="admin-tile" href="javascript:load_form_div('<?= base_url('setting/template/report_ultrasound_list/1') ?>','maindiv','Ultra Sound Template');">
                     <span class="tile-icon"><i class="bi bi-broadcast"></i></span>
                     <span>Ultra Sound Template</span>
                 </a>
@@ -169,7 +169,7 @@ $hasTemplateAccess = $canPathology || $canUltrasound || $canXray || $canCt || $c
         <?php } ?>
         <?php if ($canXray) { ?>
             <div class="col-6 col-md-2 col-lg-2">
-                <a class="admin-tile" href="javascript:load_form('<?= base_url('Lab_Admin/report_ultrasound_list/3') ?>','X-Ray Template');">
+                <a class="admin-tile" href="javascript:load_form_div('<?= base_url('setting/template/report_ultrasound_list/3') ?>','maindiv','X-Ray Template');">
                     <span class="tile-icon"><i class="bi bi-camera"></i></span>
                     <span>X-Ray Template</span>
                 </a>
@@ -177,7 +177,7 @@ $hasTemplateAccess = $canPathology || $canUltrasound || $canXray || $canCt || $c
         <?php } ?>
         <?php if ($canCt) { ?>
             <div class="col-6 col-md-2 col-lg-2">
-                <a class="admin-tile" href="javascript:load_form('<?= base_url('Lab_Admin/report_ultrasound_list/4') ?>','CT-Scan Template');">
+                <a class="admin-tile" href="javascript:load_form_div('<?= base_url('setting/template/report_ultrasound_list/4') ?>','maindiv','CT-Scan Template');">
                     <span class="tile-icon"><i class="bi bi-cpu"></i></span>
                     <span>CT-Scan Template</span>
                 </a>
@@ -185,7 +185,7 @@ $hasTemplateAccess = $canPathology || $canUltrasound || $canXray || $canCt || $c
         <?php } ?>
         <?php if ($canMri) { ?>
             <div class="col-6 col-md-2 col-lg-2">
-                <a class="admin-tile" href="javascript:load_form('<?= base_url('Lab_Admin/report_ultrasound_list/2') ?>','MRI Template');">
+                <a class="admin-tile" href="javascript:load_form_div('<?= base_url('setting/template/report_ultrasound_list/2') ?>','maindiv','MRI Template');">
                     <span class="tile-icon"><i class="bi bi-activity"></i></span>
                     <span>MRI Template</span>
                 </a>
@@ -193,7 +193,7 @@ $hasTemplateAccess = $canPathology || $canUltrasound || $canXray || $canCt || $c
         <?php } ?>
         <?php if ($canEcho) { ?>
             <div class="col-6 col-md-2 col-lg-2">
-                <a class="admin-tile" href="javascript:load_form('<?= base_url('Lab_Admin/report_ultrasound_list/6') ?>','ECHO Template');">
+                <a class="admin-tile" href="javascript:load_form_div('<?= base_url('setting/template/report_ultrasound_list/6') ?>','maindiv','ECHO Template');">
                     <span class="tile-icon"><i class="bi bi-soundwave"></i></span>
                     <span>ECHO Template</span>
                 </a>
@@ -211,7 +211,7 @@ $hasTemplateAccess = $canPathology || $canUltrasound || $canXray || $canCt || $c
 
         <?php if ($canDischarge) { ?>
             <div class="col-6 col-md-2 col-lg-2">
-                <a class="admin-tile" href="javascript:load_form('<?= base_url('Ipd_discharge/print_template_builder') ?>?mode=list','IPD Discharge Template');">
+                <a class="admin-tile" href="javascript:load_form_div('<?= base_url('Ipd_discharge/print_template_builder') ?>?mode=list','maindiv','IPD Discharge Template');">
                     <span class="tile-icon"><i class="bi bi-file-earmark-medical"></i></span>
                     <span>IPD Discharge Template</span>
                 </a>

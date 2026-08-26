@@ -19,6 +19,7 @@ class AbdmTaskBoard extends BaseController
         $this->backfillPatientAbhaTasks();
         $this->backfillLabRadiologyTasks();
         $this->backfillImmunizationTasks();
+        $this->backfillHealthDocumentTasks();
         $tasks = $this->enrichImmunizationPushState($this->taskService->getOpenTasks(300));
 
         $dateFrom = trim((string) ($this->request->getGet('date_from') ?? date('Y-m-d')));
@@ -50,6 +51,7 @@ class AbdmTaskBoard extends BaseController
         $this->backfillPatientAbhaTasks();
         $this->backfillLabRadiologyTasks();
         $this->backfillImmunizationTasks();
+        $this->backfillHealthDocumentTasks();
         return $this->response->setJSON([
             'ok' => 1,
             'tasks' => $this->enrichImmunizationPushState($this->taskService->getOpenTasks(300)),
@@ -216,6 +218,9 @@ class AbdmTaskBoard extends BaseController
             }
             if ($taskType === 'lab_report_publish' || $taskType === 'radiology_report_publish') {
                 return 'abdm.diagnosis.report.share.requested';
+            }
+            if ($taskType === 'health_document_publish') {
+                return 'abdm.health_document.share.requested';
             }
         }
 
@@ -525,7 +530,7 @@ class AbdmTaskBoard extends BaseController
             $docRows = $this->db->table('opd_fhir_documents')
                 ->select('id, opd_id, opd_session_id, generated_at')
                 ->whereIn('opd_id', $opdIds)
-                ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle'])
+                ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle', 'PrescriptionRecord'])
                 ->orderBy('id', 'DESC')
                 ->get()
                 ->getResultArray();
@@ -869,7 +874,7 @@ class AbdmTaskBoard extends BaseController
             $docRows = $this->db->table('opd_fhir_documents')
                 ->select('id, opd_id, opd_session_id, generated_at, created_at')
                 ->whereIn('opd_id', $opdIds)
-                ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle'])
+                ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle', 'PrescriptionRecord'])
                 ->orderBy('id', 'DESC')
                 ->get()
                 ->getResultArray();
@@ -1026,5 +1031,53 @@ class AbdmTaskBoard extends BaseController
         }
 
         return $out;
+    }
+
+    private function backfillHealthDocumentTasks(): void
+    {
+        if (! $this->db->tableExists('patient_doc') || ! $this->db->tableExists('patient_master')) {
+            return;
+        }
+
+        $patientFields = $this->db->getFieldNames('patient_master') ?? [];
+        $abhaCol = $this->resolveExistingColumn($patientFields, ['abha_id', 'abha_no', 'abha_address', 'abha']);
+        if ($abhaCol === null) {
+            return;
+        }
+
+        $rows = $this->db->table('patient_doc pd')
+            ->select('pd.id, pd.p_id, pd.date_issue, pd.created_at, p.p_fname, p.' . $abhaCol . ' as abha_id', false)
+            ->join('patient_master p', 'p.id = pd.p_id', 'inner')
+            ->where('p.' . $abhaCol . ' !=', '')
+            ->where('pd.created_at >=', date('Y-m-d H:i:s', strtotime('-30 days')))
+            ->orderBy('pd.id', 'DESC')
+            ->limit(200)
+            ->get()
+            ->getResultArray();
+
+        foreach ($rows as $row) {
+            $patientId = (int) ($row['p_id'] ?? 0);
+            $docId = (int) ($row['id'] ?? 0);
+            $abhaId = trim((string) ($row['abha_id'] ?? ''));
+            if ($patientId <= 0 || $docId <= 0 || preg_match('/^\d{14}$/', $abhaId) !== 1) {
+                continue;
+            }
+
+            $patientName = trim((string) ($row['p_fname'] ?? ''));
+            $this->taskService->createOrRefreshTask(
+                'health_document_publish',
+                'patient_doc',
+                'doctor_document',
+                (string) $docId,
+                $patientId,
+                $patientName,
+                $abhaId,
+                'submit',
+                [
+                    'patient_doc_id' => $docId,
+                    'trigger' => 'patient_doc.compiled',
+                ]
+            );
+        }
     }
 }

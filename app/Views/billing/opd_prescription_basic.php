@@ -1,4 +1,35 @@
-﻿<section class="content-header">
+<style>
+/* High-Visibility Focus & Hover Effect for +ADD / Update Button */
+#btn_add_medicine {
+    transition: all 0.15s ease-in-out;
+    position: relative;
+}
+#btn_add_medicine:focus,
+#btn_add_medicine:focus-visible {
+    outline: 3px solid #ffc107 !important;
+    outline-offset: 2px !important;
+    box-shadow: 0 0 0 0.35rem rgba(13, 110, 253, 0.45) !important;
+    background-color: #004085 !important;
+    border-color: #003366 !important;
+    color: #ffffff !important;
+    transform: scale(1.03);
+}
+#btn_add_medicine.btn-success:focus,
+#btn_add_medicine.btn-success:focus-visible {
+    outline: 3px solid #ffc107 !important;
+    outline-offset: 2px !important;
+    box-shadow: 0 0 0 0.35rem rgba(25, 135, 84, 0.45) !important;
+    background-color: #0f5132 !important;
+    border-color: #0b4128 !important;
+    color: #ffffff !important;
+    transform: scale(1.03);
+}
+#btn_add_medicine:hover {
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2) !important;
+    transform: translateY(-1px);
+}
+</style>
+<section class="content-header">
     <?php
         $opdDateRaw = (string) ($opd_master[0]->apointment_date ?? '');
         $opdDateOnly = $opdDateRaw !== '' ? date('Y-m-d', strtotime($opdDateRaw)) : '';
@@ -1257,94 +1288,134 @@
                                     Select group and preview medicines before add.
                                 </div>
                             </div>
-                            <div class="border rounded p-3 mb-3 bg-light-subtle">
-                                <div class="row g-3 align-items-end mb-2">
-                                    <div class="col-md-8">
-                                        <label class="form-label fw-semibold mb-1">Prescribed:</label>
-                                        <input type="text" class="form-control" id="med_name" list="medicine_suggest" autocomplete="off" placeholder="Search / enter medicine name">
-                                        <datalist id="medicine_suggest"></datalist>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label fw-semibold mb-1">Type</label>
-                                        <input type="text" class="form-control" id="med_type" placeholder="TAB,CAP,SYR,INJ">
-                                    </div>
+                            <div class="card border mb-3 shadow-sm">
+                                <div class="card-header bg-primary bg-gradient text-white py-2 d-flex justify-content-between align-items-center">
+                                    <span class="fw-bold"><i class="fa fa-prescription me-2"></i>Prescribed Medicines</span>
                                 </div>
-                                <div class="row g-3 align-items-end mb-2">
-                                    <div class="col-md-3">
-                                        <label class="form-label fw-semibold mb-1">Dose:</label>
-                                        <select class="form-select" id="med_dosage">
-                                            <option value="">Select dose</option>
-                                        </select>
+                                <div class="card-body p-3 bg-light-subtle">
+                                    <!-- Row 1: Medicine Name & Formulation Type & Dose -->
+                                    <div class="row g-3 align-items-end mb-2">
+                                        <div class="col-md-7 position-relative">
+                                            <label class="form-label fw-semibold mb-1 text-dark">Medicine Name <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control form-control-lg shadow-sm" id="med_name" autocomplete="off" placeholder="Type medicine name (e.g. Paracetamol 500mg, Amoxicillin)...">
+                                            <div id="med_name_dd" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1080;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 6px 16px rgba(0,0,0,.15);max-height:280px;overflow-y:auto;"></div>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label fw-semibold mb-1 text-dark">Form / Type</label>
+                                            <select class="form-select shadow-sm" id="med_type">
+                                                <option value="">Select Type</option>
+                                                <option value="TAB">TAB (Tablet)</option>
+                                                <option value="CAP">CAP (Capsule)</option>
+                                                <option value="SYR">SYR (Syrup)</option>
+                                                <option value="INJ">INJ (Injection)</option>
+                                                <option value="CREAM">CREAM (Cream)</option>
+                                                <option value="OINT">OINT (Ointment)</option>
+                                                <option value="GEL">GEL (Gel)</option>
+                                                <option value="EYE DROP">EYE DROP</option>
+                                                <option value="EAR DROP">EAR DROP</option>
+                                                <option value="DROPS">DROPS</option>
+                                                <option value="RESPULES">RESPULES</option>
+                                                <option value="SACHET">SACHET</option>
+                                                <option value="LOTION">LOTION</option>
+                                                <option value="SPRAY">SPRAY</option>
+                                                <option value="PATCH">PATCH</option>
+                                                <option value="POWDER">POWDER</option>
+                                                <option value="SUPPOSITORY">SUPPOSITORY</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label fw-semibold mb-1 text-dark">Dose / Strength</label>
+                                            <input type="text" class="form-control shadow-sm" id="med_dosage" placeholder="e.g. 1 Tab / 5ml / 500mg">
+                                        </div>
                                     </div>
-                                    <div class="col-md-2">
-                                        <label class="form-label fw-semibold mb-1">When:</label>
-                                        <select class="form-select" id="med_when">
-                                            <option value="">Select when</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3 position-relative">
-                                        <label class="form-label fw-semibold mb-1">Frequency:</label>
-                                        <input type="text" class="form-control" id="med_freq" autocomplete="off" placeholder="OD · BD · 2 times a day…">
-                                        <select id="med_freq_master" class="d-none"></select>
-                                        <div id="med_freq_dd" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1080;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:200px;overflow-y:auto;"></div>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label fw-semibold mb-1">Duration:</label>
-                                        <input type="text" class="form-control" id="med_days" placeholder="e.g. 5 days / 1 month / 3 doses">
-                                    </div>
-                                </div>
-                                <div class="row g-3 align-items-end">
-                                    <div class="col-md-3">
-                                        <label class="form-label fw-semibold mb-1">Route:</label>
-                                        <select class="form-select" id="med_where">
-                                            <option value="">Select route</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-2">
-                                        <label class="form-label fw-semibold mb-1">Qty:</label>
-                                        <input type="text" class="form-control" id="med_qty" placeholder="Qty">
-                                    </div>
-                                    <div class="col-md-5">
-                                        <label class="form-label fw-semibold mb-1">Medicine Advice:</label>
-                                        <input type="text" class="form-control" id="med_remark" placeholder="Instruction / medicine advice">
-                                    </div>
-                                    <div class="col-md-2 d-grid gap-2">
-                                        <button type="button" class="btn btn-primary" id="btn_add_medicine">+ADD / Update</button>
-                                        <button type="button" class="btn btn-outline-danger" id="btn_clear_medicine">Remove All</button>
-                                        <button type="button" class="btn btn-outline-secondary" id="btn_cancel_medicine_edit" style="display:none;">Cancel</button>
-                                    </div>
-                                </div>
-                            </div>
 
-                            <div class="border rounded p-2 mb-3" id="substitute_box" style="display:none;">
-                                <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <strong class="small">Substitute Medicines</strong>
-                                    <small class="text-muted" id="substitute_note"></small>
+                                    <!-- Row 2: ABDM Standard Clinical Prescribing Parameters -->
+                                    <div class="row g-3 align-items-end mb-2">
+                                        <div class="col-md-3 position-relative">
+                                            <label class="form-label fw-semibold mb-1 text-dark">Frequency (Times/Day) <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control shadow-sm" id="med_freq" autocomplete="off" placeholder="OD, BD, TDS, QID, HS, SOS...">
+                                            <select id="med_freq_master" class="d-none"></select>
+                                            <div id="med_freq_dd" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1080;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:200px;overflow-y:auto;"></div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label fw-semibold mb-1 text-dark">Relation to Food (When)</label>
+                                            <select class="form-select shadow-sm" id="med_when">
+                                                <option value="">Select Timing / Food Relation</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label fw-semibold mb-1 text-dark">Route of Administration <span class="text-danger">*</span></label>
+                                            <select class="form-select shadow-sm" id="med_where">
+                                                <option value="">Select Route</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3 position-relative">
+                                            <label class="form-label fw-semibold mb-1 text-dark">Duration</label>
+                                            <input type="text" class="form-control shadow-sm" id="med_days" autocomplete="off" placeholder="e.g. 5 Days / 1 Month">
+                                            <div id="med_days_dd" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1080;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:200px;overflow-y:auto;"></div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Row 3: Advice & Action Buttons -->
+                                    <div class="row g-3 align-items-end">
+                                        <input type="hidden" id="med_qty">
+                                        <div class="col-md-8 position-relative">
+                                            <label class="form-label fw-semibold mb-1 text-dark">Medicine Advice / Remarks</label>
+                                            <input type="text" class="form-control shadow-sm" id="med_remark" autocomplete="off" placeholder="Special instructions (e.g. Take with warm water, avoid dairy)">
+                                            <div id="med_remark_dd" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1080;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;"></div>
+                                        </div>
+                                        <div class="col-md-4 d-flex gap-2">
+                                            <button type="button" class="btn btn-primary flex-fill fw-bold shadow-sm" id="btn_add_medicine">
+                                                <i class="fa fa-plus-circle me-1"></i> +ADD / Update
+                                            </button>
+                                            <button type="button" class="btn btn-outline-secondary" id="btn_cancel_medicine_edit" style="display:none;">Cancel</button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Categorized Quick Chips Bar -->
+                                    <div class="d-flex flex-wrap align-items-center gap-1 mt-3 pt-2 border-top">
+                                        <span class="badge bg-secondary me-1"><i class="fa fa-bolt me-1"></i>Quick Select:</span>
+                                        
+                                        <span class="text-muted small fw-semibold ms-1 me-1">Frequency:</span>
+                                        <button type="button" class="btn btn-outline-primary btn-sm med-chip py-0 px-2" data-target="med_freq" data-value="OD">OD</button>
+                                        <button type="button" class="btn btn-outline-primary btn-sm med-chip py-0 px-2" data-target="med_freq" data-value="BD">BD</button>
+                                        <button type="button" class="btn btn-outline-primary btn-sm med-chip py-0 px-2" data-target="med_freq" data-value="TDS">TDS</button>
+                                        <button type="button" class="btn btn-outline-primary btn-sm med-chip py-0 px-2" data-target="med_freq" data-value="QID">QID</button>
+                                        <button type="button" class="btn btn-outline-primary btn-sm med-chip py-0 px-2" data-target="med_freq" data-value="HS">HS</button>
+                                        <button type="button" class="btn btn-outline-primary btn-sm med-chip py-0 px-2" data-target="med_freq" data-value="SOS">SOS</button>
+
+                                        <span class="text-muted small fw-semibold ms-2 me-1">Timing:</span>
+                                        <button type="button" class="btn btn-outline-info btn-sm med-chip py-0 px-2" data-target="med_when" data-value="AF">After Food (AF)</button>
+                                        <button type="button" class="btn btn-outline-info btn-sm med-chip py-0 px-2" data-target="med_when" data-value="BF">Before Food (BF)</button>
+                                        <button type="button" class="btn btn-outline-info btn-sm med-chip py-0 px-2" data-target="med_when" data-value="WF">With Food (WF)</button>
+                                        <button type="button" class="btn btn-outline-info btn-sm med-chip py-0 px-2" data-target="med_when" data-value="ES">Empty Stomach (ES)</button>
+
+                                        <span class="text-muted small fw-semibold ms-2 me-1">Route:</span>
+                                        <button type="button" class="btn btn-outline-success btn-sm med-chip py-0 px-2" data-target="med_where" data-value="Oral (PO)">Oral</button>
+                                        <button type="button" class="btn btn-outline-success btn-sm med-chip py-0 px-2" data-target="med_where" data-value="Intravenous (IV)">IV / Inj</button>
+                                        <button type="button" class="btn btn-outline-success btn-sm med-chip py-0 px-2" data-target="med_where" data-value="Topical">Topical</button>
+
+                                        <span class="text-muted small fw-semibold ms-2 me-1">Duration:</span>
+                                        <button type="button" class="btn btn-outline-dark btn-sm med-chip py-0 px-2" data-target="med_days" data-value="3 Days">3 Days</button>
+                                        <button type="button" class="btn btn-outline-dark btn-sm med-chip py-0 px-2" data-target="med_days" data-value="5 Days">5 Days</button>
+                                        <button type="button" class="btn btn-outline-dark btn-sm med-chip py-0 px-2" data-target="med_days" data-value="7 Days">7 Days</button>
+                                        <button type="button" class="btn btn-outline-dark btn-sm med-chip py-0 px-2" data-target="med_days" data-value="14 Days">14 Days</button>
+                                        <button type="button" class="btn btn-outline-dark btn-sm med-chip py-0 px-2" data-target="med_days" data-value="1 Month">1 Month</button>
+                                    </div>
                                 </div>
-                                <div class="small text-muted" id="substitute_empty">No substitute found.</div>
-                                <div class="d-flex flex-wrap gap-2" id="substitute_rows"></div>
-                            </div>
-                            <div class="d-flex flex-wrap gap-2 mb-3">
-                                <button type="button" class="btn btn-outline-secondary btn-sm med-chip" data-target="med_when" data-value="Before Food">Before Food</button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm med-chip" data-target="med_when" data-value="After Food">After Food</button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm med-chip" data-target="med_when" data-value="With Food">With Food</button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm med-chip" data-target="med_freq" data-value="OD">OD</button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm med-chip" data-target="med_freq" data-value="BD">BD</button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm med-chip" data-target="med_freq" data-value="TDS">TDS</button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm med-chip" data-target="med_freq" data-value="HS">HS</button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm med-chip" data-target="med_days" data-value="3">3 Days</button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm med-chip" data-target="med_days" data-value="5">5 Days</button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm med-chip" data-target="med_days" data-value="7">7 Days</button>
                             </div>
                             <div class="table-responsive">
                                 <table class="table table-bordered table-sm rx-list-table" id="tbl_medicine">
                                     <thead>
                                         <tr>
-                                            <th>Medicine</th><th>Type</th><th>Dose</th><th>When</th><th>Frequency</th><th>Route</th><th>Duration</th><th>Qty</th><th>Medicine Advice</th><th width="170">Action</th>
+                                            <th>Medicine</th><th>Type</th><th>Dose / Strength</th><th>Relation to Food (When)</th><th>Frequency</th><th>Route</th><th>Duration</th><th>Medicine Advice / Remarks</th><th width="170">Action</th>
                                         </tr>
                                     </thead>
-                                    <tbody><tr><td colspan="10" class="text-muted">No medicine added</td></tr></tbody>
+                                    <tbody><tr><td colspan="9" class="text-muted">No medicine added</td></tr></tbody>
                                 </table>
+                            </div>
+                            <div class="d-flex justify-content-end align-items-center mt-2">
+                                <button type="button" class="btn btn-sm btn-outline-danger" id="btn_clear_medicine" title="Remove all added medicines"><i class="fa fa-trash me-1"></i>Remove All Medicines</button>
                             </div>
                         </div>
                     </div>
@@ -2201,7 +2272,7 @@
             return;
         }
 
-        apiGet('<?= base_url('Opd_prescription/medicine_search') ?>?q=' + encodeURIComponent(q) + '&scope=' + encodeURIComponent(useScope) + '&limit=10', function(data) {
+        apiGet('<?= base_url('Opd_prescription/medicine_search') ?>?q=' + encodeURIComponent(q) + '&scope=' + encodeURIComponent(useScope) + '&limit=30', function(data) {
             var rows = (data && data.rows) ? data.rows : [];
             medicineSearchCache[cacheKey] = { ts: Date.now(), rows: rows };
             persistMedicineSearchCacheToLocalDb();
@@ -2214,16 +2285,29 @@
         (rows || []).forEach(function(row) {
             var id = (row && row.id !== undefined) ? String(row.id) : '';
             var label = (row && row.label !== undefined) ? String(row.label) : '';
+            var secLabel = (row && row.secondary_label !== undefined) ? String(row.secondary_label) : '';
             var localLabel = (row && row.local_label !== undefined) ? String(row.local_label) : '';
-            if (!id || !label) {
+            if (!label) {
                 return;
             }
-            html += '<option value="' + $('<div>').text(id).html() + '"' + (localLabel ? ' data-local-label="' + $('<div>').text(localLabel).html() + '"' : '') + '>' + $('<div>').text(label).html() + '</option>';
+            var val = label;
+            var displayText = label;
+            if (secLabel && secLabel.toLowerCase() !== label.toLowerCase()) {
+                displayText = label + ' - ' + secLabel;
+            }
+            html += '<option value="' + $('<div>').text(val).html() + '"' + (localLabel ? ' data-local-label="' + $('<div>').text(localLabel).html() + '"' : '') + '>' + $('<div>').text(displayText).html() + '</option>';
         });
         $select.html(html);
     }
 
     function ensureMedicineMasterOption($select, value) {
+        if (!$select.length) {
+            return;
+        }
+        if (!$select.is('select')) {
+            $select.val((value || '').toString().trim());
+            return;
+        }
         value = (value || '').toString().trim();
         if (!value || value === '0') {
             return;
@@ -6054,65 +6138,416 @@
     })();
 
     // ─── Medicine Frequency Smart Autocomplete ──────────────────────────────
-    var _FREQ_NUMERIC_TMPL = ['{n} times a day', '{n} times a week', '{n} times a month', '{n} times a night'];
-    var _FREQ_PRESETS = ['OD (once daily)', 'BD (twice daily)', 'TDS (thrice daily)', 'QID (four times)', 'HS (bedtime)', 'SOS (as needed)', 'Once a week', 'Twice a week', 'Once a month'];
+    var _FREQ_PRESET_MAP = [
+        { code: 'OD', desc: 'Once Daily (1 dose/day)' },
+        { code: 'BD', desc: 'Twice Daily (2 doses/day)' },
+        { code: 'TDS', desc: 'Thrice Daily (3 doses/day)' },
+        { code: 'QID', desc: 'Four Times Daily (4 doses/day)' },
+        { code: 'HS', desc: 'At Bedtime (Once at night)' },
+        { code: 'SOS', desc: 'As Needed (Only when required)' },
+        { code: 'Q4H', desc: 'Every 4 Hours' },
+        { code: 'Q6H', desc: 'Every 6 Hours' },
+        { code: 'Q8H', desc: 'Every 8 Hours' },
+        { code: 'Alternate Day', desc: 'Once every 2 days' },
+        { code: 'Weekly', desc: 'Long-interval (Once a week)' },
+        { code: 'Monthly', desc: 'Long-interval (Once a month)' },
+        { code: 'Continuous Infusion', desc: 'IV drip maintained continuously' },
+        { code: 'Stat', desc: 'Immediate single dose' }
+    ];
+
+    var medFreqHighlightIdx = -1;
+
+    function highlightMedFreqItem(idx) {
+        var $items = $('#med_freq_dd .med-freq-dd-item');
+        if (!$items.length) return;
+        if (idx < 0) idx = 0;
+        if (idx >= $items.length) idx = $items.length - 1;
+        medFreqHighlightIdx = idx;
+
+        $items.css('background', '').removeClass('active-dd-item');
+        var $target = $items.eq(medFreqHighlightIdx);
+        $target.css('background', '#e2ebff').addClass('active-dd-item');
+
+        var container = document.getElementById('med_freq_dd');
+        var elem = $target[0];
+        if (container && elem) {
+            var cTop = container.scrollTop;
+            var cBottom = cTop + container.clientHeight;
+            var eTop = elem.offsetTop;
+            var eBottom = eTop + elem.offsetHeight;
+            if (eTop < cTop) {
+                container.scrollTop = eTop;
+            } else if (eBottom > cBottom) {
+                container.scrollTop = eBottom - container.clientHeight;
+            }
+        }
+    }
 
     function getMedFreqSuggestions(input) {
         var q = (input || '').toString().trim().toLowerCase();
         var suggestions = [], seen = {};
-        var numMatch = q.match(/^(\d+)/);
-        if (numMatch) {
-            var n = numMatch[1];
-            _FREQ_NUMERIC_TMPL.forEach(function(tmpl) {
-                var s = tmpl.replace('{n}', n);
-                if (!seen[s]) { seen[s] = true; suggestions.push(s); }
+
+        var numMap = { '1': 'OD', '2': 'BD', '3': 'TDS', '4': 'QID' };
+        if (numMap[q]) {
+            var targetCode = numMap[q];
+            _FREQ_PRESET_MAP.forEach(function(item) {
+                if (item.code === targetCode) {
+                    seen[item.code] = true;
+                    suggestions.push(item);
+                }
             });
         }
+
+        _FREQ_PRESET_MAP.forEach(function(item) {
+            if (!seen[item.code]) {
+                if (!q || item.code.toLowerCase().indexOf(q) !== -1 || item.desc.toLowerCase().indexOf(q) !== -1) {
+                    seen[item.code] = true;
+                    suggestions.push(item);
+                }
+            }
+        });
+
         $('#med_freq_master option').each(function() {
             var val = ($(this).val() || '').toString();
+            var txt = ($(this).text() || '').toString();
             if (!val) return;
-            if (!q || val.toLowerCase().indexOf(q) !== -1) {
-                if (!seen[val]) { seen[val] = true; suggestions.push(val); }
+            if (!seen[val]) {
+                if (!q || val.toLowerCase().indexOf(q) !== -1 || txt.toLowerCase().indexOf(q) !== -1) {
+                    seen[val] = true;
+                    suggestions.push({ code: val, desc: txt.indexOf('-') !== -1 ? txt.split('-')[1].trim() : '' });
+                }
             }
         });
-        _FREQ_PRESETS.forEach(function(p) {
-            if (!q || p.toLowerCase().indexOf(q) !== -1) {
-                if (!seen[p]) { seen[p] = true; suggestions.push(p); }
+
+        return suggestions.slice(0, 14);
+    }
+
+    function renderMedFreqDropdown(sugs) {
+        var $dd = $('#med_freq_dd').empty();
+        medFreqHighlightIdx = -1;
+        if (!sugs.length) { $dd.hide(); return; }
+
+        sugs.forEach(function(s, idx) {
+            var code = s.code || s;
+            var desc = s.desc || '';
+            var $row = $('<div class="px-3 py-2 border-bottom d-flex justify-content-between align-items-center med-freq-dd-item" data-idx="' + idx + '" style="cursor:pointer;font-size:.875rem"></div>');
+            var labelHtml = '<strong>' + $('<div>').text(code).html() + '</strong>';
+            if (desc) {
+                labelHtml += ' <span class="text-muted ms-2">(' + $('<div>').text(desc).html() + ')</span>';
             }
+            $row.html(labelHtml);
+
+            $row.on('mouseenter', function() { highlightMedFreqItem(idx); })
+                .on('mouseleave', function() { $(this).css('background',''); })
+                .on('mousedown', function(e) { e.preventDefault(); })
+                .on('click', function() {
+                    $('#med_freq').val(code).trigger('change');
+                    $dd.hide().empty();
+                    medFreqHighlightIdx = -1;
+                });
+
+            $dd.append($row);
         });
-        return suggestions.slice(0, 12);
+
+        $dd.show();
     }
 
     $('#med_freq').on('input focus', function() {
         var q = ($(this).val() || '').trim();
         var sugs = getMedFreqSuggestions(q);
-        var $dd = $('#med_freq_dd').empty();
-        if (!sugs.length) { $dd.hide(); return; }
-        sugs.forEach(function(s) {
-            $dd.append(
-                $('<div class="px-3 py-2 border-bottom" style="cursor:pointer;font-size:.875rem"></div>')
-                    .text(s)
-                    .on('mouseenter', function() { $(this).css('background','#f0f4ff'); })
-                    .on('mouseleave', function() { $(this).css('background',''); })
-                    .on('mousedown', function(e) { e.preventDefault(); })
-                    .on('click', function() {
-                        $('#med_freq').val(s).trigger('change');
-                        $dd.hide().empty();
-                    })
-            );
-        });
-        $dd.show();
+        renderMedFreqDropdown(sugs);
     }).on('blur', function() {
-        setTimeout(function() { $('#med_freq_dd').hide(); }, 150);
+        setTimeout(function() { $('#med_freq_dd').hide(); medFreqHighlightIdx = -1; }, 200);
     }).on('keydown', function(e) {
-        if (e.key === 'Escape') { $('#med_freq_dd').hide(); }
-        if (e.key === 'Enter') {
-            var $first = $('#med_freq_dd div:first');
-            if ($first.length) { $first.trigger('click'); e.preventDefault(); }
-        }
+        var $dd = $('#med_freq_dd');
+        var isVisible = $dd.is(':visible');
+        var $items = $('#med_freq_dd .med-freq-dd-item');
+
         if (e.key === 'ArrowDown') {
+            if (!isVisible) {
+                var sugs = getMedFreqSuggestions(($(this).val() || '').trim());
+                renderMedFreqDropdown(sugs);
+                highlightMedFreqItem(0);
+                return;
+            }
             e.preventDefault();
-            $('#med_freq_dd div:first').css('background','#f0f4ff').trigger('focus');
+            var nextIdx = medFreqHighlightIdx + 1;
+            if (nextIdx >= $items.length) nextIdx = 0;
+            highlightMedFreqItem(nextIdx);
+        } else if (e.key === 'ArrowUp') {
+            if (!isVisible) return;
+            e.preventDefault();
+            var prevIdx = medFreqHighlightIdx - 1;
+            if (prevIdx < 0) prevIdx = $items.length - 1;
+            highlightMedFreqItem(prevIdx);
+        } else if (e.key === 'Enter') {
+            if (isVisible) {
+                e.preventDefault();
+                var targetIdx = medFreqHighlightIdx >= 0 ? medFreqHighlightIdx : 0;
+                var $target = $items.eq(targetIdx);
+                if ($target.length) {
+                    $target.trigger('click');
+                    setTimeout(function() { $('#med_when').focus(); }, 30);
+                }
+            }
+        } else if (e.key === 'Escape') {
+            $dd.hide().empty();
+            medFreqHighlightIdx = -1;
+        }
+    });
+
+    // ─── Duration Smart Autocomplete ──────────────────────────────
+    var _DURATION_PRESETS = [
+        '1 Day', '2 Days', '3 Days', '4 Days', '5 Days', '6 Days', '7 Days',
+        '10 Days', '14 Days', '15 Days', '21 Days', '1 Month', '2 Months', '3 Months'
+    ];
+    var medDaysHighlightIdx = -1;
+
+    function highlightMedDaysItem(idx) {
+        var $items = $('#med_days_dd .med-days-dd-item');
+        if (!$items.length) return;
+        if (idx < 0) idx = 0;
+        if (idx >= $items.length) idx = $items.length - 1;
+        medDaysHighlightIdx = idx;
+
+        $items.css('background', '').removeClass('active-dd-item');
+        var $target = $items.eq(medDaysHighlightIdx);
+        $target.css('background', '#e2ebff').addClass('active-dd-item');
+
+        var container = document.getElementById('med_days_dd');
+        var elem = $target[0];
+        if (container && elem) {
+            var cTop = container.scrollTop;
+            var cBottom = cTop + container.clientHeight;
+            var eTop = elem.offsetTop;
+            var eBottom = eTop + elem.offsetHeight;
+            if (eTop < cTop) {
+                container.scrollTop = eTop;
+            } else if (eBottom > cBottom) {
+                container.scrollTop = eBottom - container.clientHeight;
+            }
+        }
+    }
+
+    function getMedDaysSuggestions(input) {
+        var q = (input || '').toString().trim().toLowerCase();
+        var suggestions = [], seen = {};
+
+        var numMatch = q.match(/^(\d+)/);
+        if (numMatch) {
+            var n = parseInt(numMatch[1], 10);
+            var unitDays = n === 1 ? '1 Day' : (n + ' Days');
+            var unitWeeks = n === 1 ? '1 Week' : (n + ' Weeks');
+            var unitMonths = n === 1 ? '1 Month' : (n + ' Months');
+
+            [unitDays, unitWeeks, unitMonths].forEach(function(s) {
+                if (!seen[s]) { seen[s] = true; suggestions.push(s); }
+            });
+        }
+
+        _DURATION_PRESETS.forEach(function(p) {
+            if (!q || p.toLowerCase().indexOf(q) !== -1) {
+                if (!seen[p]) { seen[p] = true; suggestions.push(p); }
+            }
+        });
+
+        return suggestions.slice(0, 10);
+    }
+
+    function renderMedDaysDropdown(sugs) {
+        var $dd = $('#med_days_dd').empty();
+        medDaysHighlightIdx = -1;
+        if (!sugs.length) { $dd.hide(); return; }
+
+        sugs.forEach(function(s, idx) {
+            var $row = $('<div class="px-3 py-2 border-bottom med-days-dd-item" data-idx="' + idx + '" style="cursor:pointer;font-size:.875rem"></div>')
+                .text(s);
+
+            $row.on('mouseenter', function() { highlightMedDaysItem(idx); })
+                .on('mouseleave', function() { $(this).css('background',''); })
+                .on('mousedown', function(e) { e.preventDefault(); })
+                .on('click', function() {
+                    $('#med_days').val(s).trigger('change');
+                    $dd.hide().empty();
+                    medDaysHighlightIdx = -1;
+                });
+
+            $dd.append($row);
+        });
+
+        $dd.show();
+    }
+
+    $('#med_days').on('input focus', function() {
+        var q = ($(this).val() || '').trim();
+        var sugs = getMedDaysSuggestions(q);
+        renderMedDaysDropdown(sugs);
+    }).on('blur', function() {
+        setTimeout(function() { $('#med_days_dd').hide(); medDaysHighlightIdx = -1; }, 200);
+    }).on('keydown', function(e) {
+        var $dd = $('#med_days_dd');
+        var isVisible = $dd.is(':visible');
+        var $items = $('#med_days_dd .med-days-dd-item');
+
+        if (e.key === 'ArrowDown') {
+            if (!isVisible) {
+                var sugs = getMedDaysSuggestions(($(this).val() || '').trim());
+                renderMedDaysDropdown(sugs);
+                highlightMedDaysItem(0);
+                return;
+            }
+            e.preventDefault();
+            var nextIdx = medDaysHighlightIdx + 1;
+            if (nextIdx >= $items.length) nextIdx = 0;
+            highlightMedDaysItem(nextIdx);
+        } else if (e.key === 'ArrowUp') {
+            if (!isVisible) return;
+            e.preventDefault();
+            var prevIdx = medDaysHighlightIdx - 1;
+            if (prevIdx < 0) prevIdx = $items.length - 1;
+            highlightMedDaysItem(prevIdx);
+        } else if (e.key === 'Enter') {
+            if (isVisible) {
+                e.preventDefault();
+                var targetIdx = medDaysHighlightIdx >= 0 ? medDaysHighlightIdx : 0;
+                var $target = $items.eq(targetIdx);
+                if ($target.length) {
+                    $target.trigger('click');
+                    setTimeout(function() { $('#med_remark').focus(); }, 30);
+                }
+            }
+        } else if (e.key === 'Escape') {
+            $dd.hide().empty();
+            medDaysHighlightIdx = -1;
+        }
+    });
+
+    // ─── Medicine Advice / Remarks Smart Autocomplete ──────────────────────────────
+    var _REMARK_PRESETS = [
+        'Take with warm water',
+        'Take with milk',
+        'Avoid sour food and dairy products',
+        'Take after meals',
+        'Take on an empty stomach early morning',
+        'Chew well before swallowing',
+        'Dissolve in half glass of water',
+        'Apply locally twice daily',
+        'Instill 1-2 drops in affected eye',
+        'Instill 1-2 drops in affected ear',
+        'Use via nebulizer',
+        'Store in refrigerator (2-8°C)',
+        'Shake well before use',
+        'Do not crush or chew tablet',
+        'Avoid alcohol while taking this medicine',
+        'Complete full course of antibiotics',
+        'Avoid heavy and spicy food',
+        'Drink plenty of fluids / water'
+    ];
+    var medRemarkHighlightIdx = -1;
+
+    function highlightMedRemarkItem(idx) {
+        var $items = $('#med_remark_dd .med-remark-dd-item');
+        if (!$items.length) return;
+        if (idx < 0) idx = 0;
+        if (idx >= $items.length) idx = $items.length - 1;
+        medRemarkHighlightIdx = idx;
+
+        $items.css('background', '').removeClass('active-dd-item');
+        var $target = $items.eq(medRemarkHighlightIdx);
+        $target.css('background', '#e2ebff').addClass('active-dd-item');
+
+        var container = document.getElementById('med_remark_dd');
+        var elem = $target[0];
+        if (container && elem) {
+            var cTop = container.scrollTop;
+            var cBottom = cTop + container.clientHeight;
+            var eTop = elem.offsetTop;
+            var eBottom = eTop + elem.offsetHeight;
+            if (eTop < cTop) {
+                container.scrollTop = eTop;
+            } else if (eBottom > cBottom) {
+                container.scrollTop = eBottom - container.clientHeight;
+            }
+        }
+    }
+
+    function getMedRemarkSuggestions(input) {
+        var q = (input || '').toString().trim().toLowerCase();
+        var suggestions = [];
+
+        _REMARK_PRESETS.forEach(function(p) {
+            if (!q || p.toLowerCase().indexOf(q) !== -1) {
+                suggestions.push(p);
+            }
+        });
+
+        return suggestions.slice(0, 10);
+    }
+
+    function renderMedRemarkDropdown(sugs) {
+        var $dd = $('#med_remark_dd').empty();
+        medRemarkHighlightIdx = -1;
+        if (!sugs.length) { $dd.hide(); return; }
+
+        sugs.forEach(function(s, idx) {
+            var $row = $('<div class="px-3 py-2 border-bottom med-remark-dd-item" data-idx="' + idx + '" style="cursor:pointer;font-size:.875rem"></div>')
+                .text(s);
+
+            $row.on('mouseenter', function() { highlightMedRemarkItem(idx); })
+                .on('mouseleave', function() { $(this).css('background',''); })
+                .on('mousedown', function(e) { e.preventDefault(); })
+                .on('click', function() {
+                    $('#med_remark').val(s).trigger('change');
+                    $dd.hide().empty();
+                    medRemarkHighlightIdx = -1;
+                });
+
+            $dd.append($row);
+        });
+
+        $dd.show();
+    }
+
+    $('#med_remark').on('input focus', function() {
+        var q = ($(this).val() || '').trim();
+        var sugs = getMedRemarkSuggestions(q);
+        renderMedRemarkDropdown(sugs);
+    }).on('blur', function() {
+        setTimeout(function() { $('#med_remark_dd').hide(); medRemarkHighlightIdx = -1; }, 200);
+    }).on('keydown', function(e) {
+        var $dd = $('#med_remark_dd');
+        var isVisible = $dd.is(':visible');
+        var $items = $('#med_remark_dd .med-remark-dd-item');
+
+        if (e.key === 'ArrowDown') {
+            if (!isVisible) {
+                var sugs = getMedRemarkSuggestions(($(this).val() || '').trim());
+                renderMedRemarkDropdown(sugs);
+                highlightMedRemarkItem(0);
+                return;
+            }
+            e.preventDefault();
+            var nextIdx = medRemarkHighlightIdx + 1;
+            if (nextIdx >= $items.length) nextIdx = 0;
+            highlightMedRemarkItem(nextIdx);
+        } else if (e.key === 'ArrowUp') {
+            if (!isVisible) return;
+            e.preventDefault();
+            var prevIdx = medRemarkHighlightIdx - 1;
+            if (prevIdx < 0) prevIdx = $items.length - 1;
+            highlightMedRemarkItem(prevIdx);
+        } else if (e.key === 'Enter') {
+            if (isVisible && medRemarkHighlightIdx >= 0) {
+                e.preventDefault();
+                var $target = $items.eq(medRemarkHighlightIdx);
+                if ($target.length) {
+                    $target.trigger('click');
+                    setTimeout(function() { $('#btn_add_medicine').focus(); }, 30);
+                }
+            }
+        } else if (e.key === 'Escape') {
+            $dd.hide().empty();
+            medRemarkHighlightIdx = -1;
         }
     });
 
@@ -7693,7 +8128,6 @@
                 '<td>' + esc(freqText) + '</td>' +
                 '<td>' + esc(whereText) + '</td>' +
                 '<td>' + esc(row.no_of_days) + '</td>' +
-                '<td>' + esc(row.qty) + '</td>' +
                 '<td>' + esc(row.remark) + '</td>' +
                 '<td>' +
                     '<button type="button" class="btn btn-sm btn-outline-primary btn-edit-med me-1" data-id="' + rowId + '" data-name="' + esc(row.med_name) + '" data-type="' + esc(row.med_type) + '" data-dose="' + esc(row.dosage) + '" data-when="' + esc(row.dosage_when) + '" data-freq="' + esc(row.dosage_freq) + '" data-where="' + esc(row.dosage_where) + '" data-days="' + esc(row.no_of_days) + '" data-qty="' + esc(row.qty) + '" data-remark="' + esc(row.remark) + '">Edit</button>' +
@@ -8391,6 +8825,105 @@
         return null;
     }
 
+    function autoSelectDefaultRoute(medType, $select) {
+        if (!$select.length) return;
+        if ($select.val()) return;
+        var type = (medType || '').toString().trim().toUpperCase();
+        var targetText = 'ORAL';
+        if (['INJ', 'INJECTION', 'IV', 'IM', 'INFUSION'].indexOf(type) !== -1) {
+            targetText = 'INJ';
+        } else if (['CREAM', 'OINT', 'OINTMENT', 'GEL', 'LOTION', 'PATCH'].indexOf(type) !== -1) {
+            targetText = 'TOPICAL';
+        } else if (['EYE DROP', 'EAR DROP', 'NASAL DROP', 'DROPS'].indexOf(type) !== -1) {
+            targetText = 'DROP';
+        }
+
+        var matchedVal = '';
+        $select.find('option').each(function() {
+            var txt = ($(this).text() || '').toUpperCase();
+            var val = ($(this).val() || '').toUpperCase();
+            if (txt.indexOf(targetText) !== -1 || val.indexOf(targetText) !== -1) {
+                matchedVal = $(this).val();
+                return false;
+            }
+        });
+
+        if (!matchedVal && targetText === 'ORAL') {
+            $select.find('option').each(function() {
+                var txt = ($(this).text() || '').toUpperCase();
+                if (txt.indexOf('ORAL') !== -1 || txt.indexOf('MOUTH') !== -1 || txt.indexOf('PO') !== -1) {
+                    matchedVal = $(this).val();
+                    return false;
+                }
+            });
+        }
+
+        if (!matchedVal) {
+            var label = targetText === 'ORAL' ? 'Oral' : (targetText === 'INJ' ? 'Injection' : (targetText === 'TOPICAL' ? 'Topical' : 'Drop'));
+            ensureMedicineMasterOption($select, label);
+            matchedVal = label;
+        }
+
+        if (matchedVal) {
+            $select.val(matchedVal).trigger('change');
+        }
+    }
+
+    function autoCalculateMedQty() {
+        var freqStr = ($('#med_freq').val() || '').toString().trim().toUpperCase();
+        var daysStr = ($('#med_days').val() || '').toString().trim();
+        var days = parseInt(daysStr, 10) || 0;
+        if (days <= 0) return;
+
+        var multiplier = 1;
+        if (freqStr === 'OD' || freqStr === 'ONCE A DAY' || freqStr === 'HS' || freqStr === 'STAT') {
+            multiplier = 1;
+        } else if (freqStr === 'BD' || freqStr === 'BID' || freqStr === 'TWICE A DAY' || freqStr === '2 TIMES A DAY') {
+            multiplier = 2;
+        } else if (freqStr === 'TDS' || freqStr === 'TID' || freqStr === 'THRICE A DAY' || freqStr === '3 TIMES A DAY') {
+            multiplier = 3;
+        } else if (freqStr === 'QID' || freqStr === '4 TIMES A DAY') {
+            multiplier = 4;
+        } else if (freqStr.indexOf('ALTERNATE') !== -1 || freqStr.indexOf('QOD') !== -1) {
+            multiplier = 0.5;
+        } else {
+            var numMatch = freqStr.match(/(\d+)\s*(?:TIMES|X)/);
+            if (numMatch) {
+                multiplier = parseInt(numMatch[1], 10) || 1;
+            }
+        }
+
+        var totalQty = Math.ceil(multiplier * days);
+        if (totalQty > 0) {
+            $('#med_qty').val(totalQty);
+        }
+    }
+
+    $(document).on('click', '.med-chip', function(e) {
+        e.preventDefault();
+        var targetId = $(this).data('target');
+        var val = $(this).data('value');
+        if (!targetId || !val) return;
+        var $el = $('#' + targetId);
+        if ($el.is('select')) {
+            ensureMedicineMasterOption($el, val);
+            $el.val(val).trigger('change');
+        } else {
+            $el.val(val).trigger('input').trigger('change');
+        }
+        autoCalculateMedQty();
+    });
+
+    $('#med_freq, #med_days').on('input change', function() {
+        autoCalculateMedQty();
+    });
+
+    $('#med_type').on('input change', function() {
+        if (!$('#med_where').val()) {
+            autoSelectDefaultRoute($(this).val(), $('#med_where'));
+        }
+    });
+
     function applyMedicineSelection(rowData) {
         var medName = (rowData.med_name || '').toString().trim();
         if (medName) { $('#med_name').val(medName); }
@@ -8427,12 +8960,15 @@
             $('#med_where').val(whereValue).trigger('change');
         } else {
             $('#med_where').val('').trigger('change');
+            autoSelectDefaultRoute(rowData.med_type || $('#med_type').val(), $('#med_where'));
         }
         if (daysValue) {
             $('#med_days').val(daysValue);
         }
         if (qtyValue) {
             $('#med_qty').val(qtyValue);
+        } else {
+            autoCalculateMedQty();
         }
         if (remarkValue) {
             $('#med_remark').val(remarkValue);
@@ -8452,7 +8988,83 @@
         }
     }
 
-    $('#med_name').on('input', function() {
+    var medNameHighlightIdx = -1;
+
+    function highlightMedNameItem(idx) {
+        var $items = $('#med_name_dd .med-name-dd-item');
+        if (!$items.length) return;
+        if (idx < 0) idx = 0;
+        if (idx >= $items.length) idx = $items.length - 1;
+        medNameHighlightIdx = idx;
+
+        $items.css('background', '').removeClass('active-dd-item');
+        var $target = $items.eq(medNameHighlightIdx);
+        $target.css('background', '#e2ebff').addClass('active-dd-item');
+
+        var container = document.getElementById('med_name_dd');
+        var elem = $target[0];
+        if (container && elem) {
+            var cTop = container.scrollTop;
+            var cBottom = cTop + container.clientHeight;
+            var eTop = elem.offsetTop;
+            var eBottom = eTop + elem.offsetHeight;
+            if (eTop < cTop) {
+                container.scrollTop = eTop;
+            } else if (eBottom > cBottom) {
+                container.scrollTop = eBottom - container.clientHeight;
+            }
+        }
+    }
+
+    function renderMedNameDropdown(rows) {
+        var $dd = $('#med_name_dd').empty();
+        medicineSuggestRows = rows || [];
+        medNameHighlightIdx = -1;
+        if (!medicineSuggestRows.length) {
+            $dd.hide();
+            return;
+        }
+
+        medicineSuggestRows.forEach(function(row, idx) {
+            var medName = (row.med_name || '').toString().trim();
+            var medType = (row.med_type || '').toString().trim();
+            var genericName = (row.genericname || row.med_salt || '').toString().trim();
+            var isFav = parseInt(row.is_favorite || 0, 10) === 1;
+
+            var $item = $('<div class="px-3 py-2 border-bottom d-flex justify-content-between align-items-center med-name-dd-item" data-idx="' + idx + '" style="cursor:pointer;"></div>');
+            var $left = $('<div></div>');
+            $left.append('<strong class="text-primary fs-6">' + $('<div>').text(medName).html() + '</strong>');
+            if (medType) {
+                $left.append('<span class="badge bg-secondary ms-2">' + $('<div>').text(medType).html() + '</span>');
+            }
+            if (genericName) {
+                $left.append('<small class="text-muted d-block">' + $('<div>').text(genericName).html() + '</small>');
+            }
+            $item.append($left);
+            if (isFav) {
+                $item.append('<span class="text-warning fw-bold">★</span>');
+            }
+
+            $item.on('mouseenter', function() {
+                highlightMedNameItem(idx);
+            });
+            $item.on('mouseleave', function() {
+                $(this).css('background', '');
+            });
+            $item.on('mousedown', function(e) { e.preventDefault(); });
+            $item.on('click', function() {
+                applyMedicineSelection(row);
+                $dd.hide().empty();
+                medNameHighlightIdx = -1;
+            });
+
+            $dd.append($item);
+        });
+
+        $dd.show();
+    }
+
+    $('#med_name').on('input focus', function() {
         var q = ($(this).val() || '').trim();
         if (medInputTimer) {
             clearTimeout(medInputTimer);
@@ -8460,39 +9072,57 @@
         }
         if (q.length < 1) {
             medicineSuggestRows = [];
-            $('#medicine_suggest').html('');
+            $('#med_name_dd').hide().empty();
+            medNameHighlightIdx = -1;
             return;
         }
         medInputTimer = setTimeout(function() {
-        fetchMedicineSuggestions(q, activeMedicineScope, function(rows) {
-            var html = '';
-            medicineSuggestRows = rows || [];
-            medicineSuggestRows.forEach(function(row) {
-                var label = getMedicineSuggestionLabel(row);
-                html += '<option '
-                    + 'value="' + $('<div>').text(label).html() + '" '
-                    + 'data-name="' + $('<div>').text(row.med_name || '').html() + '" '
-                    + 'data-id="' + parseInt(row.id || 0, 10) + '" '
-                    + 'data-type="' + $('<div>').text(row.med_type || '').html() + '" '
-                    + 'data-dosage="' + $('<div>').text(row.dosage || '').html() + '" '
-                    + 'data-dosage-when="' + $('<div>').text(row.dosage_when || '').html() + '" '
-                    + 'data-dosage-freq="' + $('<div>').text(row.dosage_freq || '').html() + '" '
-                    + 'data-dosage-where="' + $('<div>').text(row.dosage_where || '').html() + '" '
-                    + 'data-no-of-days="' + $('<div>').text(row.no_of_days || '').html() + '" '
-                    + 'data-qty="' + $('<div>').text(row.qty || '').html() + '" '
-                    + 'data-remark="' + $('<div>').text(row.remark || '').html() + '" '
-                    + 'data-fav="' + parseInt(row.is_favorite || 0, 10) + '"></option>';
+            fetchMedicineSuggestions(q, activeMedicineScope, function(rows) {
+                renderMedNameDropdown(rows);
             });
-            $('#medicine_suggest').html(html);
+        }, 120);
+    }).on('blur', function() {
+        setTimeout(function() { $('#med_name_dd').hide(); medNameHighlightIdx = -1; }, 200);
+    }).on('keydown', function(e) {
+        var $dd = $('#med_name_dd');
+        var isVisible = $dd.is(':visible') && medicineSuggestRows.length > 0;
 
-            // Detect datalist selection: if current value exactly matches a row, fill type etc.
-            // (Chrome fires 'input' on datalist pick, not 'change')
-            var matched = findMedicineSuggestionRow(medicineSuggestRows, $('#med_name').val() || '');
-            if (matched) {
-                applyMedicineSelection(matched);
+        if (e.key === 'ArrowDown') {
+            if (!isVisible) {
+                var q = ($(this).val() || '').trim();
+                if (q.length >= 1) {
+                    fetchMedicineSuggestions(q, activeMedicineScope, function(rows) {
+                        renderMedNameDropdown(rows);
+                        highlightMedNameItem(0);
+                    });
+                }
+                return;
             }
-        });
-        }, 180);
+            e.preventDefault();
+            var nextIdx = medNameHighlightIdx + 1;
+            if (nextIdx >= medicineSuggestRows.length) nextIdx = 0;
+            highlightMedNameItem(nextIdx);
+        } else if (e.key === 'ArrowUp') {
+            if (!isVisible) return;
+            e.preventDefault();
+            var prevIdx = medNameHighlightIdx - 1;
+            if (prevIdx < 0) prevIdx = medicineSuggestRows.length - 1;
+            highlightMedNameItem(prevIdx);
+        } else if (e.key === 'Enter') {
+            if (isVisible) {
+                e.preventDefault();
+                var targetIdx = medNameHighlightIdx >= 0 ? medNameHighlightIdx : 0;
+                if (medicineSuggestRows[targetIdx]) {
+                    applyMedicineSelection(medicineSuggestRows[targetIdx]);
+                    $dd.hide().empty();
+                    medNameHighlightIdx = -1;
+                    setTimeout(function() { $('#med_freq').focus(); }, 30);
+                }
+            }
+        } else if (e.key === 'Escape') {
+            $dd.hide().empty();
+            medNameHighlightIdx = -1;
+        }
     });
 
     $('#med_name').on('change', function() {
@@ -8555,6 +9185,14 @@
         if (!medName) {
             return;
         }
+
+        if (!($('#med_where').val() || '').trim()) {
+            autoSelectDefaultRoute($('#med_type').val(), $('#med_where'));
+        }
+        if (!($('#med_qty').val() || '').trim()) {
+            autoCalculateMedQty();
+        }
+
         ensureSession(function(sid) {
             var payload = {
                 opd_id: $('#opd_id').val(),
@@ -8622,7 +9260,7 @@
         });
     });
 
-    $('#btn_clear_medicine').on('click', function() {
+    $(document).on('click', '#btn_clear_medicine', function() {
         var ids = [];
         $('#tbl_medicine tbody .btn-del-med').each(function() {
             var id = parseInt($(this).data('id') || '0', 10);
@@ -8632,6 +9270,10 @@
         });
 
         if (!ids.length) {
+            return;
+        }
+
+        if (!confirm('Are you sure you want to remove all prescribed medicines?')) {
             return;
         }
 
