@@ -251,6 +251,12 @@ $admNote = (string) ($latestAdmissionEntry['general_note'] ?? '');
                         <button type="button" class="nav-link" data-nursing-tab="nursing_tab_bed">
                             <i class="bi bi-door-open text-primary"></i> Bed Management
                         </button>
+                        <button type="button" class="nav-link" data-nursing-tab="nursing_tab_entries_history">
+                            <i class="bi bi-clock-history text-info"></i> Nursing Entries History
+                        </button>
+                        <button type="button" class="nav-link" data-nursing-tab="nursing_tab_scanned_audit">
+                            <i class="bi bi-shield-check text-secondary"></i> Scanned Audit Trail
+                        </button>
                     </div>
                 </div>
             </div>
@@ -898,84 +904,93 @@ $admNote = (string) ($latestAdmissionEntry['general_note'] ?? '');
             </div>
         </div>
 
-        <div class="card">
-            <div class="card-header"><strong>Nursing Entries History</strong></div>
-            <div class="card-body table-responsive">
-                <div class="row g-2 mb-3">
-                    <div class="col-md-3"><label class="form-label">Filter Nurse</label><select class="form-select" id="nursing_filter_nurse"><option value="">All</option><?php foreach ($nurseNames as $nurseName) : ?><option value="<?= esc($nurseName) ?>"><?= esc($nurseName) ?></option><?php endforeach; ?></select></div>
-                    <div class="col-md-3"><label class="form-label">Filter Type</label><select class="form-select" id="nursing_filter_type"><option value="">All</option><option value="admission">Admission Snapshot</option><option value="vitals">Vitals</option><option value="fluid">Fluid</option><option value="treatment">Treatment</option></select></div>
-                    <div class="col-md-2"><label class="form-label">Chart Date</label><input type="date" class="form-control" id="nursing_chart_date" value="<?= date('Y-m-d') ?>"></div>
-                    <div class="col-md-4 d-flex align-items-end gap-2"><button type="button" class="btn btn-outline-secondary" id="nursing_filter_reset">Clear Filters</button><button type="button" class="btn btn-outline-primary" id="nursing_print_chart">Print 24h Nursing Chart</button></div>
+                <div class="nursing-tab-pane d-none" id="nursing_tab_entries_history">
+                    <div class="card shadow-sm border-0 mt-0">
+                        <div class="card-header bg-light py-2">
+                            <strong class="text-dark"><i class="bi bi-clock-history me-1 text-info"></i> Nursing Entries History</strong>
+                        </div>
+                        <div class="card-body table-responsive">
+                            <div class="row g-2 mb-3">
+                                <div class="col-md-3"><label class="form-label">Filter Nurse</label><select class="form-select" id="nursing_filter_nurse"><option value="">All</option><?php foreach ($nurseNames as $nurseName) : ?><option value="<?= esc($nurseName) ?>"><?= esc($nurseName) ?></option><?php endforeach; ?></select></div>
+                                <div class="col-md-3"><label class="form-label">Filter Type</label><select class="form-select" id="nursing_filter_type"><option value="">All</option><option value="admission">Admission Snapshot</option><option value="vitals">Vitals</option><option value="fluid">Fluid</option><option value="treatment">Treatment</option></select></div>
+                                <div class="col-md-2"><label class="form-label">Chart Date</label><input type="date" class="form-control" id="nursing_chart_date" value="<?= date('Y-m-d') ?>"></div>
+                                <div class="col-md-4 d-flex align-items-end gap-2"><button type="button" class="btn btn-outline-secondary" id="nursing_filter_reset">Clear Filters</button><button type="button" class="btn btn-outline-primary" id="nursing_print_chart">Print 24h Nursing Chart</button></div>
+                            </div>
+
+                            <table class="table table-sm table-bordered align-middle">
+                                <thead><tr><th style="width: 150px;">Time</th><th style="width: 100px;">Type</th><th style="width: 180px;">Nursing Staff</th><th>Details</th></tr></thead>
+                                <tbody>
+                                <?php if (empty($entries)) : ?>
+                                    <tr><td colspan="4" class="text-center text-muted" id="nursing_no_data_row">No nursing entries yet.</td></tr>
+                                <?php else : ?>
+                                    <?php foreach ($entries as $entry) : ?>
+                                        <tr class="nursing-entry-row" data-nurse="<?= esc((string) ($entry['recorded_by'] ?? '')) ?>" data-type="<?= esc(strtolower((string) ($entry['entry_type'] ?? ''))) ?>">
+                                            <td><?= esc((string) ($entry['recorded_at'] ?? '')) ?></td>
+                                            <td><span class="badge bg-light text-dark border"><?= esc((string) ($entry['entry_type'] ?? '')) ?></span></td>
+                                            <td><strong class="text-primary"><?= esc((string) ($entry['recorded_by'] ?? 'Staff')) ?></strong></td>
+                                            <td>
+                                                <?php if (($entry['entry_type'] ?? '') === 'vitals') : ?>
+                                                    Temp: <?= esc($toFahrenheit($entry['temperature_c'] ?? null)) ?> °F, Pulse: <?= esc((string) ($entry['pulse_rate'] ?? '')) ?>, Resp: <?= esc((string) ($entry['resp_rate'] ?? '')) ?>, BP: <?= esc((string) ($entry['bp_systolic'] ?? '')) ?>/<?= esc((string) ($entry['bp_diastolic'] ?? '')) ?>, SpO2: <?= esc((string) ($entry['spo2'] ?? '')) ?>, Wt: <?= esc((string) ($entry['weight_kg'] ?? '')) ?>
+                                                <?php elseif (($entry['entry_type'] ?? '') === 'fluid') : ?>
+                                                    <?= esc((string) ($entry['fluid_direction'] ?? '')) ?>, Route: <?= esc((string) ($entry['fluid_route'] ?? '')) ?>, Amount: <?= esc((string) ($entry['fluid_amount_ml'] ?? '')) ?> ml
+                                                <?php else : ?>
+                                                    <?= esc((string) ($entry['treatment_text'] ?? '')) ?>
+                                                <?php endif; ?>
+                                                <?php if (! empty($entry['general_note'])) : ?><br><small><strong>Note:</strong> <?= esc((string) $entry['general_note']) ?></small><?php endif; ?>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
 
-                <table class="table table-sm table-bordered align-middle">
-                    <thead><tr><th style="width: 150px;">Time</th><th style="width: 100px;">Type</th><th style="width: 180px;">Nursing Staff</th><th>Details</th></tr></thead>
-                    <tbody>
-                    <?php if (empty($entries)) : ?>
-                        <tr><td colspan="4" class="text-center text-muted" id="nursing_no_data_row">No nursing entries yet.</td></tr>
-                    <?php else : ?>
-                        <?php foreach ($entries as $entry) : ?>
-                            <tr class="nursing-entry-row" data-nurse="<?= esc((string) ($entry['recorded_by'] ?? '')) ?>" data-type="<?= esc(strtolower((string) ($entry['entry_type'] ?? ''))) ?>">
-                                <td><?= esc((string) ($entry['recorded_at'] ?? '')) ?></td>
-                                <td><span class="badge bg-light text-dark border"><?= esc((string) ($entry['entry_type'] ?? '')) ?></span></td>
-                                <td><strong class="text-primary"><?= esc((string) ($entry['recorded_by'] ?? 'Staff')) ?></strong></td>
-                                <td>
-                                    <?php if (($entry['entry_type'] ?? '') === 'vitals') : ?>
-                                        Temp: <?= esc($toFahrenheit($entry['temperature_c'] ?? null)) ?> °F, Pulse: <?= esc((string) ($entry['pulse_rate'] ?? '')) ?>, Resp: <?= esc((string) ($entry['resp_rate'] ?? '')) ?>, BP: <?= esc((string) ($entry['bp_systolic'] ?? '')) ?>/<?= esc((string) ($entry['bp_diastolic'] ?? '')) ?>, SpO2: <?= esc((string) ($entry['spo2'] ?? '')) ?>, Wt: <?= esc((string) ($entry['weight_kg'] ?? '')) ?>
-                                    <?php elseif (($entry['entry_type'] ?? '') === 'fluid') : ?>
-                                        <?= esc((string) ($entry['fluid_direction'] ?? '')) ?>, Route: <?= esc((string) ($entry['fluid_route'] ?? '')) ?>, Amount: <?= esc((string) ($entry['fluid_amount_ml'] ?? '')) ?> ml
+                <div class="nursing-tab-pane d-none" id="nursing_tab_scanned_audit">
+                    <div class="card shadow-sm border-0 mt-0">
+                        <div class="card-header bg-light py-2">
+                            <strong class="text-dark"><i class="bi bi-shield-check me-1 text-secondary"></i> Scanned Entry Audit Trail</strong>
+                        </div>
+                        <div class="card-body table-responsive">
+                            <table class="table table-sm table-bordered align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 80px;">Entry ID</th>
+                                        <th style="width: 150px;">Recorded At</th>
+                                        <th style="width: 90px;">Type</th>
+                                        <th style="width: 180px;">Scan Ref</th>
+                                        <th style="width: 100px;">AI Confidence</th>
+                                        <th style="width: 90px;">Corrected</th>
+                                        <th style="width: 130px;">Reviewed By</th>
+                                        <th>Audit Note</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if (empty($scannedAuditRows)) : ?>
+                                        <tr><td colspan="8" class="text-center text-muted">No scanned-entry audit rows yet.</td></tr>
                                     <?php else : ?>
-                                        <?= esc((string) ($entry['treatment_text'] ?? '')) ?>
+                                        <?php foreach ($scannedAuditRows as $audit) : ?>
+                                            <tr>
+                                                <td><?= esc((string) ($audit['entry_id'] ?? '')) ?></td>
+                                                <td><?= esc((string) ($audit['recorded_at'] ?? '')) ?></td>
+                                                <td><?= esc((string) ($audit['entry_type'] ?? '')) ?></td>
+                                                <td><?= esc((string) ($audit['scan_ref'] ?? '')) ?></td>
+                                                <td><?= esc((string) ($audit['confidence'] ?? '')) ?></td>
+                                                <td><?= esc((string) ($audit['corrected'] ?? '')) ?></td>
+                                                <td><?= esc((string) ($audit['recorded_by'] ?? '')) ?></td>
+                                                <td><small><?= esc((string) ($audit['note'] ?? '')) ?></small></td>
+                                            </tr>
+                                        <?php endforeach; ?>
                                     <?php endif; ?>
-                                    <?php if (! empty($entry['general_note'])) : ?><br><small><strong>Note:</strong> <?= esc((string) $entry['general_note']) ?></small><?php endif; ?>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <div class="card mt-3">
-            <div class="card-header"><strong>Scanned Entry Audit Trail</strong></div>
-            <div class="card-body table-responsive">
-                <table class="table table-sm table-bordered align-middle mb-0">
-                    <thead>
-                        <tr>
-                            <th style="width: 80px;">Entry ID</th>
-                            <th style="width: 150px;">Recorded At</th>
-                            <th style="width: 90px;">Type</th>
-                            <th style="width: 180px;">Scan Ref</th>
-                            <th style="width: 100px;">AI Confidence</th>
-                            <th style="width: 90px;">Corrected</th>
-                            <th style="width: 130px;">Reviewed By</th>
-                            <th>Audit Note</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php if (empty($scannedAuditRows)) : ?>
-                            <tr><td colspan="8" class="text-center text-muted">No scanned-entry audit rows yet.</td></tr>
-                        <?php else : ?>
-                            <?php foreach ($scannedAuditRows as $audit) : ?>
-                                <tr>
-                                    <td><?= esc((string) ($audit['entry_id'] ?? '')) ?></td>
-                                    <td><?= esc((string) ($audit['recorded_at'] ?? '')) ?></td>
-                                    <td><?= esc((string) ($audit['entry_type'] ?? '')) ?></td>
-                                    <td><?= esc((string) ($audit['scan_ref'] ?? '')) ?></td>
-                                    <td><?= esc((string) ($audit['confidence'] ?? '')) ?></td>
-                                    <td><?= esc((string) ($audit['corrected'] ?? '')) ?></td>
-                                    <td><?= esc((string) ($audit['recorded_by'] ?? '')) ?></td>
-                                    <td><small><?= esc((string) ($audit['note'] ?? '')) ?></small></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
-</div>
 </div>
 </section>
 
