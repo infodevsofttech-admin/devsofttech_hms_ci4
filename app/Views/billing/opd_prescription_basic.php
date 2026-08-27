@@ -1047,9 +1047,12 @@
                             <div class="mb-3" id="rx_sec_diagnosis">
                                 <div class="d-flex align-items-center justify-content-between mb-2">
                                     <h6 class="mb-0">Diagnosis</h6>
+                                    <div class="d-flex gap-1">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" id="btn_opd_manage_diagnosis_master">Master CRUD</button>
                                         <button type="button" class="btn btn-sm btn-outline-secondary btn-save-autotype-keyword"
                                             data-section="diagnosis" data-target="diagnosis"
                                             title="Save as custom keyword">+keyword</button>
+                                    </div>
                                 </div>
 
                                 <!-- Healthplix-style inline diagnosis table -->
@@ -9707,10 +9710,6 @@
         return (row && row.finding_examinations) ? row.finding_examinations : '';
     });
 
-    if (localStorage.getItem(draftKey)) {
-        setStatus('dirty', 'Draft available');
-    }
-
     loadAdviceList();
     loadRecentEntryChips();
     loadInvestigationList();
@@ -9718,5 +9717,263 @@
     loadOldPrescribedPanel();
     loadRxGroupCatalog();
     updateScanBanner();
+
+    /* ══ OPD Final Diagnosis Master CRUD Modal Handler ══════════════════ */
+    var opdDiagMasterRows = [];
+    var _opdDiagMasterNameTimer = null;
+    var _opdDiagMasterNameXhr = null;
+    var _opdDiagMasterNameCache = {};
+    var _opdDiagMasterNameDdIdx = -1;
+
+    function closeOpdDiagMasterNameDd() {
+        if (_opdDiagMasterNameTimer) { clearTimeout(_opdDiagMasterNameTimer); _opdDiagMasterNameTimer = null; }
+        if (_opdDiagMasterNameXhr) { try { _opdDiagMasterNameXhr.abort(); } catch(e){} _opdDiagMasterNameXhr = null; }
+        $('#opd_diagnosis_master_name_dropdown').hide().empty();
+        _opdDiagMasterNameDdIdx = -1;
+    }
+
+    function openOpdDiagMasterNameDd(rows) {
+        var $dd = $('#opd_diagnosis_master_name_dropdown');
+        if (!rows || !rows.length) { $dd.hide().empty(); return; }
+
+        var html = '';
+        rows.forEach(function(item, idx) {
+            var name = item.name || item.term || '';
+            var snomedId = item.snomed_concept_id || item.concept_id || '';
+            var source = item.source || 'snomed';
+            var badgeClass = (source === 'disease_master' || source === 'local') ? 'bg-primary' : 'bg-info text-dark';
+            var badgeText = snomedId ? ('SNOMED: ' + snomedId) : (source === 'disease_master' ? 'Master' : 'Local');
+
+            html += '<div class="dropdown-item py-1 px-2 opd-diag-master-dd-item" data-idx="' + idx + '" style="cursor:pointer; font-size:13px;">'
+                + '<div class="d-flex justify-content-between align-items-center">'
+                + '<span>' + $('<div>').text(name).html() + '</span>'
+                + '<span class="badge ' + badgeClass + ' ms-2" style="font-size:10px;">' + $('<div>').text(badgeText).html() + '</span>'
+                + '</div>'
+                + '</div>';
+        });
+
+        $dd.html(html).show();
+        _opdDiagMasterNameDdIdx = -1;
+
+        $dd.find('.opd-diag-master-dd-item').on('click', function() {
+            var idx = parseInt($(this).data('idx'), 10);
+            if (rows[idx]) {
+                var sel = rows[idx];
+                var selName = sel.name || sel.term || '';
+                var selSnomedId = sel.snomed_concept_id || sel.concept_id || '';
+                var selSnomedTerm = sel.snomed_term || sel.fsn || selName;
+
+                $('#opd_diagnosis_master_name').val(selName);
+                $('#opd_diagnosis_master_snomed_id').val(selSnomedId);
+                $('#opd_diagnosis_master_snomed_term').val(selSnomedTerm);
+                $('#opd_diagnosis_master_status').text(selSnomedId ? ('SNOMED concept ' + selSnomedId + ' selected.') : 'Diagnosis selected.').css('color', '#0f5132');
+            }
+            closeOpdDiagMasterNameDd();
+        });
+    }
+
+    function clearOpdDiagMasterForm() {
+        closeOpdDiagMasterNameDd();
+        $('#opd_diagnosis_master_code').val('0');
+        $('#opd_diagnosis_master_name').val('');
+        $('#opd_diagnosis_master_snomed_id').val('');
+        $('#opd_diagnosis_master_snomed_term').val('');
+        $('#opd_diagnosis_master_active').val('1');
+    }
+
+    function renderOpdDiagMasterRows() {
+        var $tbody = $('#opd_diagnosis_master_rows');
+        if (!opdDiagMasterRows.length) {
+            $tbody.html('<tr><td colspan="4" class="text-center text-muted">No records.</td></tr>');
+            return;
+        }
+
+        var html = '';
+        opdDiagMasterRows.forEach(function(row) {
+            var code = parseInt(row.Code || '0', 10);
+            var active = typeof row.is_active === 'undefined' || parseInt(row.is_active || '0', 10) === 1;
+            html += '<tr>'
+                + '<td>' + $('<div>').text(row.Name || '').html() + '</td>'
+                + '<td>' + $('<div>').text(row.snomed_concept_id || '').html() + '</td>'
+                + '<td>' + (active ? 'Active' : 'Inactive') + '</td>'
+                + '<td><button type="button" class="btn btn-outline-primary btn-sm py-0 px-1 btn-opd-diag-master-edit" data-code="' + code + '">Edit</button> '
+                + (active ? '<button type="button" class="btn btn-outline-danger btn-sm py-0 px-1 btn-opd-diag-master-remove" data-code="' + code + '">Deactivate</button>' : '')
+                + '</td></tr>';
+        });
+        $tbody.html(html);
+    }
+
+    function fetchOpdDiagMasterRows() {
+        var filterVal = ($('#opd_diagnosis_master_search').val() || '').toString().trim();
+        $.get('<?= base_url('Opd_prescription/disease_master_data') ?>', { start: 0, length: 100, filter: filterVal }, function(data) {
+            opdDiagMasterRows = (data && data.data) ? data.data : [];
+            renderOpdDiagMasterRows();
+        }, 'json');
+    }
+
+    $(document).on('click', '#btn_opd_manage_diagnosis_master', function() {
+        clearOpdDiagMasterForm();
+        $('#opd_diagnosis_master_search').val('');
+        $('#opd_diagnosis_master_status').text('');
+        fetchOpdDiagMasterRows();
+        var modalEl = document.getElementById('opdDiagnosisMasterModal');
+        if (modalEl) {
+            var modalObj = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+            modalObj.show();
+        }
+    });
+
+    $(document).on('click', '.btn-opd-diag-master-edit', function() {
+        var code = parseInt($(this).data('code') || '0', 10);
+        var row = opdDiagMasterRows.find(function(item) { return parseInt(item.Code || '0', 10) === code; });
+        if (!row) return;
+        $('#opd_diagnosis_master_code').val(String(code));
+        $('#opd_diagnosis_master_name').val(row.Name || '');
+        $('#opd_diagnosis_master_snomed_id').val(row.snomed_concept_id || '');
+        $('#opd_diagnosis_master_snomed_term').val(row.snomed_term || '');
+        $('#opd_diagnosis_master_active').val(typeof row.is_active === 'undefined' || parseInt(row.is_active || '0', 10) === 1 ? '1' : '0');
+    });
+
+    $(document).on('click', '.btn-opd-diag-master-remove', function() {
+        var code = parseInt($(this).data('code') || '0', 10);
+        if (code <= 0 || !window.confirm('Deactivate this diagnosis?')) return;
+        var csrfName = '<?= csrf_token() ?>';
+        var csrfHash = '<?= csrf_hash() ?>';
+        var payload = {};
+        payload[csrfName] = csrfHash;
+        $.post('<?= base_url('Opd_prescription/disease_master_remove') ?>/' + code, payload, function(data) {
+            $('#opd_diagnosis_master_status').text((data && data.error_text) ? data.error_text : 'Diagnosis deactivated.').css('color', '#0f5132');
+            fetchOpdDiagMasterRows();
+        }, 'json');
+    });
+
+    $('#btn_opd_diagnosis_master_refresh').on('click', fetchOpdDiagMasterRows);
+    $('#opd_diagnosis_master_search').on('input', fetchOpdDiagMasterRows);
+    $('#btn_opd_diagnosis_master_clear').on('click', clearOpdDiagMasterForm);
+    $('#btn_opd_diagnosis_master_save').on('click', function() {
+        var name = ($('#opd_diagnosis_master_name').val() || '').toString().trim();
+        if (name === '') {
+            $('#opd_diagnosis_master_status').text('Name is required.').css('color', '#842029');
+            return;
+        }
+        var csrfName = '<?= csrf_token() ?>';
+        var csrfHash = '<?= csrf_hash() ?>';
+        var payload = {
+            Code: parseInt($('#opd_diagnosis_master_code').val() || '0', 10),
+            Name: name,
+            snomed_concept_id: ($('#opd_diagnosis_master_snomed_id').val() || '').toString().trim(),
+            snomed_term: ($('#opd_diagnosis_master_snomed_term').val() || '').toString().trim(),
+            is_active: parseInt($('#opd_diagnosis_master_active').val() || '1', 10)
+        };
+        payload[csrfName] = csrfHash;
+        $.post('<?= base_url('Opd_prescription/disease_master_save') ?>', payload, function(data) {
+            if (!data || parseInt(data.update || '0', 10) !== 1) {
+                $('#opd_diagnosis_master_status').text((data && data.error_text) ? data.error_text : 'Unable to save diagnosis.').css('color', '#842029');
+                return;
+            }
+            $('#opd_diagnosis_master_status').text(data.error_text || 'Diagnosis saved.').css('color', '#0f5132');
+            clearOpdDiagMasterForm();
+            fetchOpdDiagMasterRows();
+        }, 'json').fail(function() {
+            $('#opd_diagnosis_master_status').text('Unable to save diagnosis.').css('color', '#842029');
+        });
+    });
+
+    $('#opd_diagnosis_master_name').on('input.opdDiagSrch', function() {
+        var q = (this.value || '').trim();
+        if (_opdDiagMasterNameTimer) clearTimeout(_opdDiagMasterNameTimer);
+        if (_opdDiagMasterNameXhr) { try { _opdDiagMasterNameXhr.abort(); } catch(e){} _opdDiagMasterNameXhr = null; }
+        if (q.length < 1) { closeOpdDiagMasterNameDd(); return; }
+        var cacheKey = q.toUpperCase();
+        if (_opdDiagMasterNameCache[cacheKey]) { openOpdDiagMasterNameDd(_opdDiagMasterNameCache[cacheKey]); return; }
+        _opdDiagMasterNameTimer = setTimeout(function() {
+            _opdDiagMasterNameXhr = $.ajax({
+                url: '<?= base_url('Opd_prescription/provisional_diagnosis_search') ?>',
+                data: { q: q },
+                dataType: 'json',
+                success: function(data) {
+                    _opdDiagMasterNameXhr = null;
+                    var rows = (data && data.rows) ? data.rows : [];
+                    _opdDiagMasterNameCache[cacheKey] = rows;
+                    openOpdDiagMasterNameDd(rows);
+                },
+                error: function() { _opdDiagMasterNameXhr = null; }
+            });
+        }, 250);
+    }).on('keydown.opdDiagSrch', function(e) {
+        var $dd = $('#opd_diagnosis_master_name_dropdown');
+        var $items = $dd.find('.opd-diag-master-dd-item');
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            if (!$dd.is(':visible') || !$items.length) return;
+            e.preventDefault();
+            _opdDiagMasterNameDdIdx = e.key === 'ArrowDown'
+                ? Math.min(_opdDiagMasterNameDdIdx + 1, $items.length - 1)
+                : Math.max(_opdDiagMasterNameDdIdx - 1, 0);
+            $items.css('background', '').eq(_opdDiagMasterNameDdIdx).css('background', '#f0f4ff');
+        } else if (e.key === 'Enter') {
+            if ($dd.is(':visible') && _opdDiagMasterNameDdIdx >= 0 && _opdDiagMasterNameDdIdx < $items.length) {
+                e.preventDefault();
+                $items.eq(_opdDiagMasterNameDdIdx).trigger('click');
+            }
+        } else if (e.key === 'Escape') {
+            closeOpdDiagMasterNameDd();
+        }
+    }).on('blur.opdDiagSrch', function() {
+        setTimeout(function() { closeOpdDiagMasterNameDd(); }, 200);
+    });
 })();
 </script>
+
+<!-- Final Diagnosis Master Modal for OPD Consult -->
+<div class="modal fade" id="opdDiagnosisMasterModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h5 class="modal-title fs-6 fw-bold">Final Diagnosis Master</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-2 mb-2">
+                    <div class="col-md-9">
+                        <input type="text" class="form-control form-control-sm" id="opd_diagnosis_master_search" placeholder="Search diagnosis or SNOMED term">
+                    </div>
+                    <div class="col-md-3 d-grid">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_opd_diagnosis_master_refresh">Refresh List</button>
+                    </div>
+                </div>
+                <div class="table-responsive" style="max-height:240px;overflow-y:auto;">
+                    <table class="table table-sm table-bordered align-middle mb-0">
+                        <thead class="table-light"><tr><th>Name</th><th>SNOMED ID</th><th>Status</th><th style="width:140px;">Action</th></tr></thead>
+                        <tbody id="opd_diagnosis_master_rows"><tr><td colspan="4" class="text-center text-muted">No records.</td></tr></tbody>
+                    </table>
+                </div>
+                <hr class="my-2">
+                <input type="hidden" id="opd_diagnosis_master_code" value="0">
+                <div class="row g-2">
+                    <div class="col-md-6 position-relative">
+                        <label class="form-label mb-1 small fw-semibold">Name <small class="text-muted">(Type to search SNOMED)</small></label>
+                        <input type="text" class="form-control form-control-sm" id="opd_diagnosis_master_name" autocomplete="off" placeholder="Search diagnosis or SNOMED term">
+                        <div id="opd_diagnosis_master_name_dropdown" class="dropdown-menu shadow-sm w-100" style="display:none; position:absolute; top:100%; left:0; z-index:1060; max-height:200px; overflow-y:auto;"></div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label mb-1 small fw-semibold">SNOMED ID</label>
+                        <input type="text" class="form-control form-control-sm" id="opd_diagnosis_master_snomed_id">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label mb-1 small fw-semibold">Status</label>
+                        <select class="form-select form-select-sm" id="opd_diagnosis_master_active"><option value="1">Active</option><option value="0">Inactive</option></select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label mb-1 small fw-semibold">SNOMED Term</label>
+                        <input type="text" class="form-control form-control-sm" id="opd_diagnosis_master_snomed_term">
+                    </div>
+                </div>
+                <div class="mt-2 d-flex gap-2">
+                    <button type="button" class="btn btn-primary btn-sm" id="btn_opd_diagnosis_master_save">Save</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_opd_diagnosis_master_clear">New</button>
+                </div>
+                <div id="opd_diagnosis_master_status" class="small text-muted mt-2"></div>
+            </div>
+        </div>
+    </div>
+</div>

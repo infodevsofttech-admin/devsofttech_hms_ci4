@@ -74,14 +74,24 @@ class BedManagement extends BaseController
             $departments = array_merge($departments, $departmentRows);
         }
 
+        $nursingStationModel = new \App\Models\NursingStationModel();
+        $nursingStations = $nursingStationModel->getActiveStations();
+
         $wardBuilder = $this->db->table('ward_master w')
             ->orderBy('w.ward_name', 'ASC');
 
+        if ($this->db->tableExists('nursing_station_master')) {
+            $wardBuilder->select('w.*, ns.station_name, ns.station_code')
+                ->join('nursing_station_master ns', 'ns.id = w.nursing_station_id', 'left');
+        } else {
+            $wardBuilder->select('w.*, NULL as station_name, NULL as station_code');
+        }
+
         if ($this->db->tableExists('hc_department')) {
-            $wardBuilder->select('w.*, COALESCE(d.vName, "All Department") AS department_name', false)
+            $wardBuilder->select('COALESCE(d.vName, "All Department") AS department_name', false)
                 ->join('hc_department d', 'd.iId = w.department_id', 'left');
         } else {
-            $wardBuilder->select('w.*, "All Department" AS department_name', false);
+            $wardBuilder->select('"All Department" AS department_name', false);
         }
 
         $wardRows = $wardBuilder->get()->getResult();
@@ -89,6 +99,7 @@ class BedManagement extends BaseController
         return view('Setting/Bed/ward_list', [
             'wards' => $wardRows,
             'departments' => $departments,
+            'nursingStations' => $nursingStations,
         ]);
     }
 
@@ -103,6 +114,7 @@ class BedManagement extends BaseController
         $wardName = trim((string) $this->request->getPost('ward_name'));
         $departmentIdRaw = $this->request->getPost('department_id');
         $departmentId = $departmentIdRaw === null || $departmentIdRaw === '' ? 0 : (int) $departmentIdRaw;
+        $nursingStationId = (int) ($this->request->getPost('nursing_station_id') ?? 0);
 
         if ($wardCode === '' || $wardName === '') {
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Ward code and ward name are required.']);
@@ -127,6 +139,7 @@ class BedManagement extends BaseController
             'ward_code' => $wardCode,
             'ward_name' => $wardName,
             'department_id' => $departmentId,
+            'nursing_station_id' => $nursingStationId > 0 ? $nursingStationId : null,
             'building_id' => $this->request->getPost('building_id') ?: null,
             'floor_number' => $this->request->getPost('floor_number') ?: null,
             'ward_type' => $this->request->getPost('ward_type') ?: 'General',

@@ -583,8 +583,8 @@ $historyFields = [
                 <div class="col-md-3 discharge-left-col">
                     <div class="discharge-side-panel">
                         <ul class="nav flex-column nav-pills" id="discharge_section_nav" role="tablist" aria-orientation="vertical">
+                            <li class="nav-item"><a href="#section-complaints" class="nav-link discharge-nav-link active" data-target="section-complaints">Complaints with Duration and Reason for Admission</a></li>
                             <li class="nav-item"><a href="#section-history-risk" class="nav-link discharge-nav-link" data-target="section-history-risk">Clinical History and Risk Profile</a></li>
-                            <li class="nav-item"><a href="#section-complaints" class="nav-link discharge-nav-link active" data-target="section-complaints">Presenting Complaints with Duration and Reason for Admission</a></li>
                             <li class="nav-item"><a href="#section-physical" class="nav-link discharge-nav-link" data-target="section-physical">Physical Examinations</a></li>
                             <li class="nav-item"><a href="#section-investigation" class="nav-link discharge-nav-link" data-target="section-investigation">Clinical Investigation Reports</a></li>
                             <li class="nav-item"><a href="#section-admission" class="nav-link discharge-nav-link" data-target="section-admission">Admission / Discharge Information</a></li>
@@ -604,7 +604,99 @@ $historyFields = [
                     <form id="discharge_main_form" method="post" action="<?= site_url('Ipd_discharge/ipd_select/' . $ipdId) ?>" class="row g-3">
                         <?= csrf_field() ?>
 
-                        <div class="card border-primary" id="section-history-risk">
+                        <!-- Start Panel: Complaints with Duration and Reason for Admission (First Panel) -->
+                        <div class="card border-primary" id="section-complaints">
+                            <div class="card-header py-2 d-flex justify-content-between align-items-center bg-primary text-white">
+                                <strong>Complaints with Duration and Reason for Admission</strong>
+                                <span class="badge bg-light text-primary">First Panel</span>
+                            </div>
+                            <div class="card-body">
+                                <input type="hidden" name="complaint_remove_id" id="complaint_remove_id" value="0">
+
+                                <!-- Healthplix-style inline complaint table (OPD-like Autotext) -->
+                                <table class="table table-sm table-bordered align-middle mb-1" id="discharge_complaint_table">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th style="width:28px">#</th>
+                                            <th>Complaint (Autotext Search)</th>
+                                            <th style="width:130px">Frequency</th>
+                                            <th style="width:120px">Severity</th>
+                                            <th style="width:140px">Duration</th>
+                                            <th style="width:28px"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="discharge_complaint_tbody">
+                                        <!-- Rows will be dynamically populated by JavaScript -->
+                                    </tbody>
+                                    <tfoot>
+                                        <tr>
+                                            <td></td>
+                                            <td colspan="4" class="p-1 position-relative">
+                                                <input type="text" class="form-control form-control-sm" id="discharge_complaint_lookup"
+                                                    autocomplete="off" placeholder="Type complaint to search autotext (e.g. Fever, Cough, Chest pain)...">
+                                                <div id="discharge_complaint_dropdown" class="border rounded bg-white shadow-sm"
+                                                    style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1060;max-height:260px;overflow-y:auto;"></div>
+                                            </td>
+                                            <td class="text-center">
+                                                <button type="button" class="btn btn-sm btn-outline-primary p-0" id="btn_discharge_add_complaint" title="Add Complaint" style="width:24px;height:24px;line-height:1">+</button>
+                                            </td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+
+                                <!-- Recent / Common Complaint Autotext Chips -->
+                                <div class="my-2">
+                                    <span class="text-muted small fw-bold me-2"><i class="fas fa-history me-1"></i> Quick Autotext Chips:</span>
+                                    <div id="discharge_recent_complaint_chips" class="d-inline-flex flex-wrap gap-1 align-items-center">
+                                        <!-- Autotext chips loaded via JS -->
+                                    </div>
+                                </div>
+
+                                <!-- Hidden fields to store data for form submission -->
+                                <?php
+                                $complaintSeedRows = [];
+                                if (isset($complaint_rows) && is_array($complaint_rows)) {
+                                    foreach ($complaint_rows as $row) {
+                                        $complaintSeedRows[] = [
+                                            'id' => (int) ($row['id'] ?? 0),
+                                            'term' => (string) ($row['comp_report'] ?? ''),
+                                            'frequency' => '',
+                                            'severity' => '',
+                                            'duration' => (string) ($row['comp_remark'] ?? ''),
+                                            'date' => '',
+                                        ];
+                                    }
+                                }
+                                ?>
+                                <input type="hidden" id="discharge_complaint_seed_json" value="<?= esc((string) json_encode($complaintSeedRows), 'attr') ?>">
+                                <input type="hidden" name="discharge_complaints_json" id="discharge_complaints_json" value="">
+
+                                <!-- Fixed dropdowns for table cell inputs -->
+                                <div id="discharge_freq_dd" style="display:none;position:fixed;z-index:1090;min-width:160px;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:180px;overflow-y:auto;"></div>
+                                <div id="discharge_sev_dd" style="display:none;position:fixed;z-index:1090;min-width:140px;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:180px;overflow-y:auto;"></div>
+                                <div id="discharge_dur_dd" style="display:none;position:fixed;z-index:1090;min-width:160px;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:180px;overflow-y:auto;"></div>
+
+                                <div id="discharge_complaint_status" class="small text-muted mb-2"></div>
+
+                                <div class="mt-3">
+                                    <div class="d-flex align-items-center justify-content-between mb-1">
+                                        <label class="form-label fw-bold mb-0">Reason for Admission / Detailed Complaints History</label>
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_complaint_mic" title="Voice Dictation (Med Mic)"><i class="fas fa-microphone text-danger me-1"></i> Med Mic</button>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_complaint_past_data" title="Copy Nursing H&P Note">Past Data</button>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_complaint_clear" title="Clear Textarea">Clear</button>
+                                        </div>
+                                    </div>
+                                    <textarea id="complaint_remark_editor" class="form-control form-control-sm" name="complaint_remark" rows="5" placeholder="Reason for admission and detailed history of present illness..."><?= esc((string) ($complaint_remark ?? '')) ?></textarea>
+                                </div>
+
+                                <div class="mt-3 d-flex justify-content-end">
+                                    <button type="submit" class="btn btn-outline-success btn-sm" name="action" value="save_main" data-reload-section="section-complaints">Save Complaints Section</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card border-primary mt-3" id="section-history-risk">
                             <div class="card-header py-2"><strong>Clinical History and Risk Profile</strong></div>
                             <div class="card-body">
                                 <h6 class="mb-2">Lifestyle and Personal History</h6>
@@ -670,7 +762,7 @@ $historyFields = [
                             </div>
                         </div>
 
-                        <div class="card border-primary" id="section-pain-measurement">
+                        <div class="card border-primary mt-3" id="section-pain-measurement">
                             <div class="card-header py-2"><strong>Pain Measurement</strong></div>
                             <div class="card-body">
                                 <h6 class="mb-2">Pain Measurement Scale</h6>
@@ -729,84 +821,6 @@ $historyFields = [
                                 </div>
                                 <div class="mt-3 d-flex justify-content-end">
                                     <button type="submit" class="btn btn-outline-success btn-sm" name="action" value="save_main" data-reload-section="section-nursing-history">Save Nursing H&amp;P Section</button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="card border-primary mt-3" id="section-complaints">
-                            <div class="card-header py-2"><strong>Complaints with Duration and Reason for Admission</strong></div>
-                            <div class="card-body">
-                                <input type="hidden" name="complaint_remove_id" id="complaint_remove_id" value="0">
-
-                                <!-- Healthplix-style inline complaint table (OPD-like) -->
-                                <table class="table table-sm table-bordered align-middle mb-1" id="discharge_complaint_table">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th style="width:28px">#</th>
-                                            <th>Complaint</th>
-                                            <th style="width:110px">Frequency</th>
-                                            <th style="width:100px">Severity</th>
-                                            <th style="width:120px">Duration</th>
-                                            <th style="width:24px"></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="discharge_complaint_tbody">
-                                        <!-- Rows will be dynamically populated by JavaScript -->
-                                    </tbody>
-                                    <tfoot>
-                                        <tr>
-                                            <td></td>
-                                            <td colspan="4" class="p-1 position-relative">
-                                                <input type="text" class="form-control form-control-sm" id="discharge_complaint_lookup"
-                                                    autocomplete="off" placeholder="fever , cough , headache...">
-                                                <div id="discharge_complaint_dropdown" class="border rounded bg-white shadow-sm"
-                                                    style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1060;max-height:260px;overflow-y:auto;"></div>
-                                            </td>
-                                            <td class="text-center">
-                                                <button type="button" class="btn btn-sm btn-outline-primary p-0" id="btn_discharge_add_complaint" title="Add Complaint" style="width:24px;height:24px;line-height:1">+</button>
-                                            </td>
-                                        </tr>
-                                    </tfoot>
-                                </table>
-
-                                <!-- Hidden fields to store data for form submission -->
-                                <?php
-                                $complaintSeedRows = [];
-                                if (isset($complaint_rows) && is_array($complaint_rows)) {
-                                    foreach ($complaint_rows as $row) {
-                                        $complaintSeedRows[] = [
-                                            'id' => (int) ($row['id'] ?? 0),
-                                            'term' => (string) ($row['comp_report'] ?? ''),
-                                            'frequency' => '',
-                                            'severity' => '',
-                                            'duration' => (string) ($row['comp_remark'] ?? ''),
-                                            'date' => '',
-                                        ];
-                                    }
-                                }
-                                ?>
-                                <input type="hidden" id="discharge_complaint_seed_json" value="<?= esc((string) json_encode($complaintSeedRows), 'attr') ?>">
-                                <input type="hidden" name="discharge_complaints_json" id="discharge_complaints_json" value="">
-
-                                <!-- Fixed dropdowns for table cell inputs -->
-                                <div id="discharge_freq_dd" style="display:none;position:fixed;z-index:1090;min-width:160px;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:180px;overflow-y:auto;"></div>
-                                <div id="discharge_sev_dd" style="display:none;position:fixed;z-index:1090;min-width:140px;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:180px;overflow-y:auto;"></div>
-                                <div id="discharge_dur_dd" style="display:none;position:fixed;z-index:1090;min-width:160px;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:180px;overflow-y:auto;"></div>
-
-                                <div id="discharge_complaint_status" class="small text-muted mb-2"></div>
-
-                                
-
-
-
-
-                                <div class="mt-3">
-                                    <label class="form-label">Other Complaints / Detailed History</label>
-                                    <textarea id="complaint_remark_editor" class="form-control" name="complaint_remark" rows="6"><?= esc((string) ($complaint_remark ?? '')) ?></textarea>
-                                </div>
-
-                                <div class="mt-3 d-flex justify-content-end">
-                                    <button type="submit" class="btn btn-outline-success btn-sm" name="action" value="save_main" data-reload-section="section-complaints">Save Complaints Section</button>
                                 </div>
                             </div>
                         </div>
@@ -1012,7 +1026,7 @@ $historyFields = [
                                             <th style="width:90px;">Action</th>
                                         </tr>
                                     </thead>
-                                    <tbody>
+                                    <tbody id="discharge_surgery_tbody">
                                         <?php if (empty($surgeryRows)): ?>
                                             <tr>
                                                 <td colspan="4" class="text-muted text-center">No surgery rows.</td>
@@ -1022,7 +1036,7 @@ $historyFields = [
                                                     <td><?= esc((string) ($row['surgery_name'] ?? '')) ?></td>
                                                     <td><?= esc((string) ($row['surgery_date'] ?? '')) ?></td>
                                                     <td><?= esc((string) ($row['surgery_remark'] ?? '')) ?></td>
-                                                    <td><button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_surgery" onclick="document.getElementById('surgery_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';">Remove</button></td>
+                                                    <td><button type="button" class="btn btn-outline-danger btn-sm btn-remove-surgery-row" data-id="<?= (int) ($row['id'] ?? 0) ?>">Remove</button></td>
                                                 </tr>
                                         <?php endforeach;
                                         endif; ?>
@@ -1040,9 +1054,9 @@ $historyFields = [
                                         </div>
                                         <div id="discharge_surgery_dropdown" class="dropdown-menu" style="display:none;position:absolute;z-index:1050;max-height:250px;overflow-y:auto;width:100%;"></div>
                                     </div>
-                                    <div class="col-md-3"><input type="date" class="form-control" name="new_surgery_date"></div>
-                                    <div class="col-md-2"><input type="text" class="form-control" name="new_surgery_remark" placeholder="Remark"></div>
-                                    <div class="col-md-2"><button type="submit" class="btn btn-primary btn-sm w-100" name="action" value="add_surgery">+ADD Row</button></div>
+                                    <div class="col-md-3"><input type="date" class="form-control" name="new_surgery_date" id="new_surgery_date"></div>
+                                    <div class="col-md-2"><input type="text" class="form-control" name="new_surgery_remark" id="new_surgery_remark" placeholder="Remark"></div>
+                                    <div class="col-md-2"><button type="button" class="btn btn-primary btn-sm w-100" id="btn_add_surgery_row">+ADD Row</button></div>
                                 </div>
 
                                 <h6>Procedure</h6>
@@ -1055,7 +1069,7 @@ $historyFields = [
                                             <th style="width:90px;">Action</th>
                                         </tr>
                                     </thead>
-                                    <tbody>
+                                    <tbody id="discharge_procedure_tbody">
                                         <?php if (empty($procedureRows)): ?>
                                             <tr>
                                                 <td colspan="4" class="text-muted text-center">No procedure rows.</td>
@@ -1109,33 +1123,35 @@ $historyFields = [
                                             <th style="width:90px;">Action</th>
                                         </tr>
                                     </thead>
-                                    <tbody>
-                                        <?php if (empty($diagnosisRows)): ?>
-                                            <tr>
-                                                <td colspan="3" class="text-muted text-center">No diagnosis rows.</td>
-                                            </tr>
-                                            <?php else: foreach ($diagnosisRows as $row): ?>
-                                                <tr>
-                                                    <td><?= esc((string) ($row['comp_report'] ?? '')) ?></td>
-                                                    <td><?= esc((string) ($row['comp_remark'] ?? '')) ?></td>
-                                                    <td><button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_diagnosis" onclick="document.getElementById('diagnosis_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';">Remove</button></td>
-                                                </tr>
-                                        <?php endforeach;
-                                        endif; ?>
-                                    </tbody>
-                                </table>
-                                <input type="hidden" name="diagnosis_remove_id" id="diagnosis_remove_id" value="0">
-                                <input type="hidden" name="new_diagnosis_master_code" id="new_diagnosis_master_code" value="0">
-                                <input type="hidden" name="new_diagnosis_snomed_concept_id" id="new_diagnosis_snomed_concept_id" value="">
-                                <input type="hidden" name="new_diagnosis_snomed_term" id="new_diagnosis_snomed_term" value="">
-                                <div class="row g-2">
-                                    <div class="col-md-6"><input type="text" class="form-control" name="new_diagnosis_name" id="new_diagnosis_name" list="discharge_diagnosis_suggest" autocomplete="off" placeholder="Diagnosis"></div>
-                                    <div class="col-md-5"><input type="text" class="form-control" name="new_diagnosis_remark" placeholder="Remark"></div>
-                                    <div class="col-md-1"><button type="submit" class="btn btn-primary btn-sm" name="action" value="add_diagnosis">+ADD</button></div>
-                                </div>
-                                <datalist id="discharge_diagnosis_suggest"></datalist>
-                                <small class="text-muted">Type a diagnosis name, SNOMED term, or ICD code to search master data.</small>
-                                <div id="discharge_diagnosis_status" class="complaint-status text-muted"></div>
+                                     <tbody id="discharge_final_diagnosis_tbody">
+                                         <?php if (empty($diagnosisRows)): ?>
+                                             <tr>
+                                                 <td colspan="3" class="text-muted text-center">No diagnosis rows.</td>
+                                             </tr>
+                                             <?php else: foreach ($diagnosisRows as $row): ?>
+                                                 <tr>
+                                                     <td><?= esc((string) ($row['comp_report'] ?? '')) ?></td>
+                                                     <td><?= esc((string) ($row['comp_remark'] ?? '')) ?></td>
+                                                     <td><button type="button" class="btn btn-outline-danger btn-sm btn-remove-final-diagnosis-row" data-id="<?= (int) ($row['id'] ?? 0) ?>">Remove</button></td>
+                                                 </tr>
+                                         <?php endforeach;
+                                         endif; ?>
+                                     </tbody>
+                                 </table>
+                                 <input type="hidden" name="diagnosis_remove_id" id="diagnosis_remove_id" value="0">
+                                 <input type="hidden" name="new_diagnosis_master_code" id="new_diagnosis_master_code" value="0">
+                                 <input type="hidden" name="new_diagnosis_snomed_concept_id" id="new_diagnosis_snomed_concept_id" value="">
+                                 <input type="hidden" name="new_diagnosis_snomed_term" id="new_diagnosis_snomed_term" value="">
+                                 <div class="row g-2">
+                                     <div class="col-md-6 position-relative">
+                                         <input type="text" class="form-control" name="new_diagnosis_name" id="new_diagnosis_name" autocomplete="off" placeholder="Diagnosis">
+                                         <div id="discharge_diagnosis_dropdown" class="dropdown-menu shadow-sm w-100" style="display:none; position:absolute; top:100%; left:0; z-index:1060; max-height:220px; overflow-y:auto;"></div>
+                                     </div>
+                                     <div class="col-md-5"><input type="text" class="form-control" name="new_diagnosis_remark" id="new_diagnosis_remark" placeholder="Remark"></div>
+                                     <div class="col-md-1"><button type="button" class="btn btn-primary btn-sm w-100" id="btn_add_final_diagnosis_row">+ADD</button></div>
+                                 </div>
+                                 <small class="text-muted">Type a diagnosis name, SNOMED term, or ICD code to search master data.</small>
+                                 <div id="discharge_diagnosis_status" class="complaint-status text-muted"></div>
 
                                 <div class="mt-3">
                                     <label class="form-label">Final Diagnosis (Narrative)
@@ -1169,7 +1185,10 @@ $historyFields = [
                         </div>
 
                         <div class="card border-secondary mt-3" id="section-course">
-                            <div class="card-header py-2"><strong>Course / Treatment in the hospital</strong></div>
+                            <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                                <strong>Course / Treatment in the hospital</strong>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_discharge_manage_course_master">Master CRUD</button>
+                            </div>
                             <div class="card-body">
                                 <table class="table table-sm table-bordered">
                                     <thead>
@@ -1179,7 +1198,7 @@ $historyFields = [
                                             <th style="width:90px;">Action</th>
                                         </tr>
                                     </thead>
-                                    <tbody>
+                                    <tbody id="discharge_course_tbody">
                                         <?php if (empty($courseRows)): ?>
                                             <tr>
                                                 <td colspan="3" class="text-muted text-center">No course rows.</td>
@@ -1188,7 +1207,7 @@ $historyFields = [
                                                 <tr>
                                                     <td><?= esc((string) ($row['comp_report'] ?? '')) ?></td>
                                                     <td><?= esc((string) ($row['comp_remark'] ?? '')) ?></td>
-                                                    <td><button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_course" onclick="document.getElementById('course_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';">Remove</button></td>
+                                                    <td><button type="button" class="btn btn-outline-danger btn-sm btn-remove-course-row" data-id="<?= (int) ($row['id'] ?? 0) ?>">Remove</button></td>
                                                 </tr>
                                         <?php endforeach;
                                         endif; ?>
@@ -1206,8 +1225,8 @@ $historyFields = [
                                         </div>
                                         <div id="discharge_course_dropdown" class="dropdown-menu" style="display:none;position:absolute;z-index:1050;max-height:250px;overflow-y:auto;width:100%;"></div>
                                     </div>
-                                    <div class="col-md-4"><input type="text" class="form-control" name="new_course_remark" placeholder="Remark"></div>
-                                    <div class="col-md-2"><button type="submit" class="btn btn-primary btn-sm w-100" name="action" value="add_course">+ADD Row</button></div>
+                                    <div class="col-md-4"><input type="text" class="form-control" name="new_course_remark" id="new_course_remark" placeholder="Remark"></div>
+                                    <div class="col-md-2"><button type="button" class="btn btn-primary btn-sm w-100" id="btn_add_course_row">+ADD Row</button></div>
                                 </div>
                                 <datalist id="discharge_course_suggest"></datalist>
                                 <div id="discharge_course_status" class="complaint-status text-muted"></div>
@@ -1792,13 +1811,14 @@ $historyFields = [
                     <hr>
                     <input type="hidden" id="surgery_master_id" value="0">
                     <div class="row g-2">
-                        <div class="col-md-5">
-                            <label class="form-label">Name</label>
-                            <input type="text" class="form-control form-control-sm" id="surgery_master_name" maxlength="255">
+                        <div class="col-md-5 position-relative">
+                            <label class="form-label">Name <small class="text-muted">(Type to search SNOMED)</small></label>
+                            <input type="text" class="form-control form-control-sm" id="surgery_master_name" maxlength="255" autocomplete="off" placeholder="Search surgery or SNOMED procedure">
+                            <div id="surgery_master_name_dropdown" class="discharge-complaint-dd dropdown-menu shadow-sm w-100" style="display:none; position:absolute; top:100%; left:0; z-index:1060; max-height:220px; overflow-y:auto;"></div>
                         </div>
                         <div class="col-md-3">
-                            <label class="form-label">Code</label>
-                            <input type="text" class="form-control form-control-sm" id="surgery_master_code" maxlength="60">
+                            <label class="form-label">Code / SNOMED ID</label>
+                            <input type="text" class="form-control form-control-sm" id="surgery_master_code" maxlength="60" placeholder="Code or SNOMED ID">
                         </div>
                         <div class="col-md-2">
                             <label class="form-label">ICD</label>
@@ -1847,9 +1867,10 @@ $historyFields = [
                     <hr>
                     <input type="hidden" id="diagnosis_master_code" value="0">
                     <div class="row g-2">
-                        <div class="col-md-6">
-                            <label class="form-label">Name</label>
-                            <input type="text" class="form-control form-control-sm" id="diagnosis_master_name">
+                        <div class="col-md-6 position-relative">
+                            <label class="form-label">Name <small class="text-muted">(Type to search SNOMED)</small></label>
+                            <input type="text" class="form-control form-control-sm" id="diagnosis_master_name" autocomplete="off" placeholder="Search diagnosis or SNOMED term">
+                            <div id="diagnosis_master_name_dropdown" class="discharge-complaint-dd dropdown-menu shadow-sm w-100" style="display:none; position:absolute; top:100%; left:0; z-index:1060; max-height:220px; overflow-y:auto;"></div>
                         </div>
                         <div class="col-md-3">
                             <label class="form-label">SNOMED ID</label>
@@ -1869,6 +1890,62 @@ $historyFields = [
                         <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_diagnosis_master_clear">New</button>
                     </div>
                     <div id="diagnosis_master_status" class="complaint-status text-muted mt-2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="ipdCourseMasterModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Course / Treatment Master</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-9">
+                            <input type="text" class="form-control form-control-sm" id="course_master_search" placeholder="Search course/treatment master">
+                        </div>
+                        <div class="col-md-3 d-grid">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_course_master_refresh">Refresh List</button>
+                        </div>
+                    </div>
+                    <div class="table-responsive" style="max-height:260px;overflow:auto;">
+                        <table class="table table-sm table-bordered align-middle">
+                            <thead><tr><th>Name</th><th>Code / SNOMED ID</th><th>ICD</th><th>Status</th><th>Action</th></tr></thead>
+                            <tbody id="course_master_rows"><tr><td colspan="5" class="text-center text-muted">No records.</td></tr></tbody>
+                        </table>
+                    </div>
+                    <hr>
+                    <input type="hidden" id="course_master_id" value="0">
+                    <div class="row g-2">
+                        <div class="col-md-5 position-relative">
+                            <label class="form-label">Name <small class="text-muted">(Type to search SNOMED)</small></label>
+                            <input type="text" class="form-control form-control-sm" id="course_master_name" maxlength="255" autocomplete="off" placeholder="Search course or SNOMED procedure">
+                            <div id="course_master_name_dropdown" class="discharge-complaint-dd dropdown-menu shadow-sm w-100" style="display:none; position:absolute; top:100%; left:0; z-index:1060; max-height:220px; overflow-y:auto;"></div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Code / SNOMED ID</label>
+                            <input type="text" class="form-control form-control-sm" id="course_master_code" maxlength="60" placeholder="Code or SNOMED ID">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">ICD</label>
+                            <input type="text" class="form-control form-control-sm" id="course_master_icd" maxlength="60">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Status</label>
+                            <select class="form-select form-select-sm" id="course_master_active">
+                                <option value="1">Active</option>
+                                <option value="0">Inactive</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mt-2 d-flex gap-2">
+                        <button type="button" class="btn btn-primary btn-sm" id="btn_course_master_save">Save</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_course_master_clear">New</button>
+                    </div>
+                    <div id="course_master_status" class="complaint-status text-muted mt-2"></div>
                 </div>
             </div>
         </div>
@@ -2106,8 +2183,12 @@ $historyFields = [
                 statusEl.textContent = text || '';
             }
 
-            // Client-side complaint management (OPD-style) - MUST BE DECLARED BEFORE initComplaintTools
+            // Client-side complaint management (OPD-style Autotext) - MUST BE DECLARED BEFORE initComplaintTools
             var selectedDischargeComplaints = [];
+            var _dischargeComplaintSearchTimer = null;
+            var _dischargeComplaintSearchCache = {};
+            var _dischargeComplaintDdIdx = -1;
+            var _dischargeComplaintXhr = null;
 
             function initDischargeComplaintsTable() {
                 // Always reset from server-rendered state to avoid stale rows after section reload.
@@ -2136,6 +2217,7 @@ $historyFields = [
                 }
 
                 renderDischargeComplaintTable();
+                renderDischargeRecentChips();
             }
 
             function renderDischargeComplaintTable() {
@@ -2145,7 +2227,7 @@ $historyFields = [
                 tbody.innerHTML = '';
 
                 if (selectedDischargeComplaints.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" class="text-muted text-center">No complaints yet. Add using the input below.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-muted text-center py-2">No complaints added yet. Type in the autotext box below or click quick chips.</td></tr>';
                     syncDischargeComplaintJsonField();
                     return;
                 }
@@ -2166,7 +2248,7 @@ $historyFields = [
                     var nameInput = document.createElement('input');
                     nameInput.type = 'text';
                     nameInput.name = 'complaint_term[]';
-                    nameInput.className = 'form-control form-control-sm';
+                    nameInput.className = 'form-control form-control-sm complaint-name-input';
                     nameInput.value = item.term || '';
                     nameInput.placeholder = 'Complaint…';
                     nameInput.style.fontSize = '.82rem';
@@ -2184,10 +2266,11 @@ $historyFields = [
                     var freqInput = document.createElement('input');
                     freqInput.type = 'text';
                     freqInput.name = 'complaint_frequency[]';
-                    freqInput.className = 'form-control form-control-sm';
+                    freqInput.className = 'form-control form-control-sm complaint-freq-input';
                     freqInput.value = item.frequency || '';
                     freqInput.placeholder = 'daily…';
                     freqInput.style.fontSize = '.82rem';
+                    freqInput.setAttribute('data-idx', idx);
                     freqInput.addEventListener('input', function() {
                         selectedDischargeComplaints[idx].frequency = this.value;
                         syncDischargeComplaintJsonField();
@@ -2201,10 +2284,11 @@ $historyFields = [
                     var sevInput = document.createElement('input');
                     sevInput.type = 'text';
                     sevInput.name = 'complaint_severity[]';
-                    sevInput.className = 'form-control form-control-sm';
+                    sevInput.className = 'form-control form-control-sm complaint-sev-input';
                     sevInput.value = item.severity || '';
                     sevInput.placeholder = 'mild…';
                     sevInput.style.fontSize = '.82rem';
+                    sevInput.setAttribute('data-idx', idx);
                     sevInput.addEventListener('input', function() {
                         selectedDischargeComplaints[idx].severity = this.value;
                         syncDischargeComplaintJsonField();
@@ -2218,10 +2302,11 @@ $historyFields = [
                     var durInput = document.createElement('input');
                     durInput.type = 'text';
                     durInput.name = 'complaint_duration[]';
-                    durInput.className = 'form-control form-control-sm';
+                    durInput.className = 'form-control form-control-sm complaint-dur-input';
                     durInput.value = item.duration || '';
                     durInput.placeholder = '2 days…';
                     durInput.style.fontSize = '.82rem';
+                    durInput.setAttribute('data-idx', idx);
                     durInput.addEventListener('input', function() {
                         selectedDischargeComplaints[idx].duration = this.value;
                         syncDischargeComplaintJsonField();
@@ -2244,26 +2329,9 @@ $historyFields = [
                     removeBtn.style.lineHeight = '1';
                     removeBtn.innerHTML = '×';
                     removeBtn.addEventListener('click', function() {
-                        var rowId = parseInt((item && item.id) || 0, 10) || 0;
-                        if (rowId > 0) {
-                            var painValue = '';
-                            var painHidden = document.getElementById('pain_value');
-                            if (painHidden) {
-                                painValue = String(painHidden.value || '').trim();
-                            }
-
-                            saveComplaintRowAjax({
-                                action: 'remove_complaint',
-                                complaint_remove_id: rowId,
-                                complaint_remark: getComplaintEditorText(),
-                                pain_value: painValue
-                            }, 'Complaint removed.');
-                            return;
-                        }
-
                         selectedDischargeComplaints.splice(idx, 1);
                         renderDischargeComplaintTable();
-                        syncDischargeComplaintJsonField();
+                        setComplaintStatus('Complaint removed.', 'success');
                     });
                     td6.appendChild(removeBtn);
                     tr.appendChild(td6);
@@ -2273,6 +2341,165 @@ $historyFields = [
 
                 syncDischargeComplaintJsonField();
             }
+
+            // Quick Autotext Chips
+            function renderDischargeRecentChips() {
+                var $box = $('#discharge_recent_complaint_chips');
+                if (!$box.length) return;
+                var commonComplaints = [
+                    'Fever', 'Cough', 'Abdominal Pain', 'Chest Pain', 'Breathlessness',
+                    'Headache', 'Vomiting', 'Loose Stools', 'Giddiness', 'Weakness'
+                ];
+                $box.empty();
+                commonComplaints.forEach(function(item) {
+                    var $chip = $('<button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 rounded-pill me-1 mb-1" style="font-size:.78rem;"></button>')
+                        .text('+ ' + item)
+                        .on('click', function() {
+                            var exists = selectedDischargeComplaints.some(function(c) {
+                                return c.term.toUpperCase() === item.toUpperCase();
+                            });
+                            if (exists) {
+                                setComplaintStatus('"' + item + '" already added.', 'muted');
+                                return;
+                            }
+                            selectedDischargeComplaints.push({
+                                id: 0,
+                                term: item,
+                                frequency: '',
+                                severity: '',
+                                duration: '',
+                                date: ''
+                            });
+                            renderDischargeComplaintTable();
+                            setComplaintStatus('Added ' + item, 'success');
+                            var $lastTr = $('#discharge_complaint_tbody tr:last');
+                            $lastTr.find('.complaint-freq-input').trigger('focus');
+                        });
+                    $box.append($chip);
+                });
+            }
+
+            // ─── Inline Autotext Dropdowns (Frequency, Severity, Duration) ─────────
+            var _DISCHARGE_FREQ_OPTIONS = ['daily', 'twice daily', 'weekly', 'intermittent', 'continuous', 'occasional'];
+            var _DISCHARGE_SEV_OPTIONS = ['mild', 'moderate', 'severe', 'profound'];
+            var _DISCHARGE_DUR_UNITS = ['hours', 'days', 'weeks', 'months', 'years'];
+
+            function _positionDischargeDd($dd, $input) {
+                if (!$input || !$input.length) return;
+                var r = $input[0].getBoundingClientRect();
+                $dd.css({ top: (r.bottom + 2) + 'px', left: r.left + 'px', width: Math.max(r.width, 160) + 'px' });
+            }
+
+            function getDischargeDurationSuggestions(input) {
+                input = (input || '').toString().trim();
+                var numMatch = input.match(/^(\d+\.?\d*)\s*(.*)/);
+                if (numMatch) {
+                    var n = numMatch[1], unitHint = (numMatch[2] || '').trim().toLowerCase();
+                    return _DISCHARGE_DUR_UNITS
+                        .filter(function(u) { return !unitHint || u.startsWith(unitHint); })
+                        .map(function(u) { return n + ' ' + u; });
+                }
+                if (!input) {
+                    return ['1 day', '2 days', '3 days', '1 week', '2 weeks', '1 month', '3 months'];
+                }
+                return ['1 day','2 days','3 days','5 days','1 week','2 weeks','3 weeks','1 month','2 months','3 months','6 months','1 year']
+                    .filter(function(s) { return s.indexOf(input.toLowerCase()) !== -1; });
+            }
+
+            function buildDischargeDdItem(text, onSelect) {
+                return $('<div class="px-3 py-2 border-bottom" style="cursor:pointer;font-size:.85rem;color:#333;"></div>')
+                    .text(text)
+                    .on('mouseenter', function() { $(this).css('background','#f0f4ff'); })
+                    .on('mouseleave', function() { $(this).css('background',''); })
+                    .on('mousedown', function(e) { e.preventDefault(); })
+                    .on('click', function() { onSelect(text); });
+            }
+
+            $(document).on('input focus', '.complaint-freq-input', function() {
+                var $inp = $(this);
+                var q = ($inp.val() || '').trim().toLowerCase();
+                var sugs = q ? _DISCHARGE_FREQ_OPTIONS.filter(function(s) { return s.indexOf(q) !== -1; }) : _DISCHARGE_FREQ_OPTIONS;
+                var idx = parseInt($inp.attr('data-idx'), 10);
+                var $dd = $('#discharge_freq_dd').empty();
+                if (!sugs.length) { $dd.hide(); return; }
+                sugs.forEach(function(s) {
+                    $dd.append(buildDischargeDdItem(s, function(val) {
+                        $inp.val(val);
+                        if (idx >= 0 && idx < selectedDischargeComplaints.length) {
+                            selectedDischargeComplaints[idx].frequency = val;
+                            syncDischargeComplaintJsonField();
+                        }
+                        $dd.hide().empty();
+                        $inp.closest('tr').find('.complaint-sev-input').trigger('focus');
+                    }));
+                });
+                _positionDischargeDd($dd, $inp);
+                $dd.show();
+            });
+
+            $(document).on('input focus', '.complaint-sev-input', function() {
+                var $inp = $(this);
+                var q = ($inp.val() || '').trim().toLowerCase();
+                var sugs = q ? _DISCHARGE_SEV_OPTIONS.filter(function(s) { return s.startsWith(q); }) : _DISCHARGE_SEV_OPTIONS;
+                var idx = parseInt($inp.attr('data-idx'), 10);
+                var $dd = $('#discharge_sev_dd').empty();
+                if (!sugs.length) { $dd.hide(); return; }
+                sugs.forEach(function(s) {
+                    $dd.append(buildDischargeDdItem(s, function(val) {
+                        $inp.val(val);
+                        if (idx >= 0 && idx < selectedDischargeComplaints.length) {
+                            selectedDischargeComplaints[idx].severity = val;
+                            syncDischargeComplaintJsonField();
+                        }
+                        $dd.hide().empty();
+                        $inp.closest('tr').find('.complaint-dur-input').trigger('focus');
+                    }));
+                });
+                _positionDischargeDd($dd, $inp);
+                $dd.show();
+            });
+
+            $(document).on('input focus', '.complaint-dur-input', function() {
+                var $inp = $(this);
+                var sugs = getDischargeDurationSuggestions($inp.val());
+                var idx = parseInt($inp.attr('data-idx'), 10);
+                var $dd = $('#discharge_dur_dd').empty();
+                if (!sugs.length) { $dd.hide(); return; }
+                sugs.forEach(function(s) {
+                    $dd.append(buildDischargeDdItem(s, function(val) {
+                        $inp.val(val);
+                        if (idx >= 0 && idx < selectedDischargeComplaints.length) {
+                            selectedDischargeComplaints[idx].duration = val;
+                            syncDischargeComplaintJsonField();
+                        }
+                        $dd.hide().empty();
+                        $('#discharge_complaint_lookup').val('').trigger('focus');
+                    }));
+                });
+                _positionDischargeDd($dd, $inp);
+                $dd.show();
+            });
+
+            $(document).on('blur', '.complaint-freq-input, .complaint-sev-input, .complaint-dur-input', function() {
+                setTimeout(function() {
+                    $('#discharge_freq_dd, #discharge_sev_dd, #discharge_dur_dd').hide();
+                }, 150);
+            });
+
+            $(document).on('click', function(e) {
+                if (!$(e.target).closest('#discharge_complaint_lookup, #discharge_complaint_dropdown').length) {
+                    closeDischargeComplaintDropdown();
+                }
+                if (!$(e.target).closest('.complaint-freq-input, #discharge_freq_dd').length) {
+                    $('#discharge_freq_dd').hide();
+                }
+                if (!$(e.target).closest('.complaint-sev-input, #discharge_sev_dd').length) {
+                    $('#discharge_sev_dd').hide();
+                }
+                if (!$(e.target).closest('.complaint-dur-input, #discharge_dur_dd').length) {
+                    $('#discharge_dur_dd').hide();
+                }
+            });
 
             function syncDischargeComplaintJsonField() {
                 var hidden = document.getElementById('discharge_complaints_json');
@@ -2293,63 +2520,66 @@ $historyFields = [
                         frequency: String((item && item.frequency) || '').trim(),
                         severity: String((item && item.severity) || '').trim(),
                         duration: String((item && item.duration) || '').trim(),
-                        date: String((item && item.date) || '').trim()
+                        date: String((item && item.date) || '')
                     });
                 });
 
                 hidden.value = JSON.stringify(rows);
             }
 
-            function refreshComplaintSectionFromServerHtml(html, form, statusText, statusLevel) {
-                var holder = document.createElement('div');
-                holder.innerHTML = String(html || '');
+            function buildDischargeComplaintDropdownItem(row, lookup, btnAdd) {
+                var term = ((row.name || row.term) || '').toString();
+                var source = (row.source || '').toString();
+                var hierarchy = (row.hierarchy || '').toString();
+                var isSnomed = source === 'snomed';
+                var nameColor = isSnomed ? '#0d6efd' : '#495057';
 
-                if (!patchSectionFromHtml(holder, 'section-complaints')) {
-                    setComplaintStatus('Unable to refresh complaint section.', 'error');
-                    return;
+                var $item = $('<div class="px-3 py-2 border-bottom discharge-complaint-dd-item" style="cursor:pointer;font-size:.88rem;transition:background .1s"></div>');
+                $item.append($('<div class="fw-semibold text-truncate" style="color:' + nameColor + '">').text(term));
+                if (isSnomed && hierarchy) {
+                    $item.append($('<span class="text-muted" style="font-size:.72rem">').text(hierarchy));
                 }
+                $item.data('row', row);
 
-                updateCsrfFromHtml(holder, form);
-                patchNoticeFromHtml(holder);
-                notifyFromHtml(holder);
+                $item.on('mouseenter', function() {
+                    $(this).css('background', '#f0f4ff');
+                }).on('mouseleave', function() {
+                    $(this).css('background', '');
+                }).on('mousedown', function(e) {
+                    e.preventDefault();
+                }).on('click', function() {
+                    var rowData = $(this).data('row');
+                    var termVal = rowData ? (rowData.name || rowData.term || '') : '';
+                    if (termVal && lookup) {
+                        lookup.value = termVal;
+                        if (btnAdd) btnAdd.click();
+                    }
+                    closeDischargeComplaintDropdown();
+                });
 
-                initComplaintEditor();
-                initComplaintTools();
-                bindDischargeAjaxSubmit();
-                initNabhHistorySection(document.querySelector('form[action*="Ipd_discharge/ipd_select/"]'));
-                syncNavOnScroll();
-
-                if (statusText) {
-                    window.setTimeout(function() {
-                        setComplaintStatus(statusText, statusLevel || 'success');
-                    }, 0);
-                }
+                return $item;
             }
 
-            function saveComplaintRowAjax(payload, successText) {
-                var form = getDischargeForm();
-                if (!form || !window.jQuery) {
-                    setComplaintStatus('Unable to reach server right now.', 'error');
+            function openDischargeComplaintDropdown(rows, lookup, btnAdd) {
+                var $dd = $('#discharge_complaint_dropdown');
+                $dd.empty();
+                _dischargeComplaintDdIdx = -1;
+                if (!rows || !rows.length) {
+                    $dd.append('<div class="px-3 py-2 text-muted small">No matching complaints found</div>').show();
                     return;
                 }
-
-                var csrf = getCsrfPair(form);
-                payload = payload || {};
-                payload[csrf.name] = csrf.value;
-
-                setComplaintStatus('Saving complaint...', 'muted');
-
-                window.jQuery.ajax({
-                    url: form.getAttribute('action') || window.location.href,
-                    type: 'POST',
-                    data: payload,
-                    dataType: 'html',
-                    timeout: 30000
-                }).done(function(html) {
-                    refreshComplaintSectionFromServerHtml(html, form, successText || 'Complaint saved.', 'success');
-                }).fail(function(xhr, status, error) {
-                    setComplaintStatus('Save failed: ' + (error || status), 'error');
+                rows.forEach(function(row) {
+                    $dd.append(buildDischargeComplaintDropdownItem(row, lookup, btnAdd));
                 });
+                $dd.show();
+            }
+
+            function closeDischargeComplaintDropdown() {
+                if (_dischargeComplaintSearchTimer) { clearTimeout(_dischargeComplaintSearchTimer); _dischargeComplaintSearchTimer = null; }
+                if (_dischargeComplaintXhr) { try { _dischargeComplaintXhr.abort(); } catch(e){} _dischargeComplaintXhr = null; }
+                var $dd = $('#discharge_complaint_dropdown');
+                $dd.hide().empty();
+                _dischargeComplaintDdIdx = -1;
             }
 
             function initComplaintTools() {
@@ -2366,39 +2596,16 @@ $historyFields = [
 
                 var lookup = document.getElementById('discharge_complaint_lookup');
                 var dropdown = document.getElementById('discharge_complaint_dropdown');
-                var nameInput = document.getElementById('new_complaint_name');
-                var remarkInput = document.getElementById('new_complaint_remark');
-                var addRowBtn = document.getElementById('btn_add_complaint_row');
                 var btnAdd = document.getElementById('btn_discharge_add_complaint');
                 var painHidden = document.getElementById('pain_value');
                 var painOptions = section.querySelectorAll('.pain-option');
 
-                var selectedComplaints = [];
-                var highlightedIndex = -1;
-
-                section.querySelectorAll('table tbody tr').forEach(function(row) {
-                    var firstCell = row.querySelector('.discharge-complaint-name-input');
-                    if (!firstCell) {
-                        return;
-                    }
-                    var value = (firstCell.value || '').trim();
-                    if (value !== '' && value.toLowerCase() !== 'no complaint rows yet.') {
-                        selectedComplaints.push(value);
-                    }
-                });
-
                 function syncPainHidden() {
-                    if (!painHidden) {
-                        return;
-                    }
-
+                    if (!painHidden) return;
                     var selected = '';
                     painOptions.forEach(function(option) {
-                        if (option.checked) {
-                            selected = option.value || '';
-                        }
+                        if (option.checked) selected = option.value || '';
                     });
-
                     painHidden.value = selected;
                 }
 
@@ -2409,28 +2616,71 @@ $historyFields = [
                     syncPainHidden();
                 }
 
+                // Autocomplete Search on Complaint Lookup
                 if (lookup) {
+                    lookup.addEventListener('input', function() {
+                        var q = (this.value || '').trim();
+                        if (_dischargeComplaintSearchTimer) clearTimeout(_dischargeComplaintSearchTimer);
+                        if (_dischargeComplaintXhr) {
+                            try { _dischargeComplaintXhr.abort(); } catch(e){}
+                            _dischargeComplaintXhr = null;
+                        }
+                        if (q.length < 1) {
+                            closeDischargeComplaintDropdown();
+                            return;
+                        }
+                        var cacheKey = q.toUpperCase();
+                        if (_dischargeComplaintSearchCache[cacheKey]) {
+                            openDischargeComplaintDropdown(_dischargeComplaintSearchCache[cacheKey], lookup, btnAdd);
+                            return;
+                        }
+                        _dischargeComplaintSearchTimer = setTimeout(function() {
+                            if (document.activeElement !== lookup) return;
+                            _dischargeComplaintXhr = $.ajax({
+                                url: '<?= base_url('Opd_prescription/complaints_search') ?>',
+                                data: { q: q },
+                                dataType: 'json',
+                                success: function(data) {
+                                    _dischargeComplaintXhr = null;
+                                    if (document.activeElement !== lookup) return;
+                                    var rows = (data && data.rows) ? data.rows : [];
+                                    _dischargeComplaintSearchCache[cacheKey] = rows;
+                                    openDischargeComplaintDropdown(rows, lookup, btnAdd);
+                                },
+                                error: function() {
+                                    _dischargeComplaintXhr = null;
+                                }
+                            });
+                        }, 250);
+                    });
+
                     lookup.addEventListener('keydown', function(e) {
-                        if (e.key === 'Enter') {
+                        var $dd = $('#discharge_complaint_dropdown');
+                        var $items = $dd.find('.discharge-complaint-dd-item');
+                        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                            if (!$dd.is(':visible') || !$items.length) return;
                             e.preventDefault();
-                            if (dropdown) {
-                                dropdown.style.display = 'none';
-                            }
-                            if (btnAdd) {
+                            _dischargeComplaintDdIdx = e.key === 'ArrowDown'
+                                ? Math.min(_dischargeComplaintDdIdx + 1, $items.length - 1)
+                                : Math.max(_dischargeComplaintDdIdx - 1, 0);
+                            $items.css('background', '').eq(_dischargeComplaintDdIdx).css('background', '#f0f4ff');
+                        } else if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if ($dd.is(':visible') && _dischargeComplaintDdIdx >= 0 && _dischargeComplaintDdIdx < $items.length) {
+                                $items.eq(_dischargeComplaintDdIdx).trigger('click');
+                            } else if (btnAdd) {
                                 btnAdd.click();
                             }
-                        } else if (e.key === 'Escape' && dropdown) {
-                            dropdown.style.display = 'none';
-                            highlightedIndex = -1;
+                            closeDischargeComplaintDropdown();
+                        } else if (e.key === 'Escape') {
+                            closeDischargeComplaintDropdown();
                         }
                     });
 
                     lookup.addEventListener('blur', function() {
-                        if (dropdown) {
-                            setTimeout(function() {
-                                dropdown.style.display = 'none';
-                            }, 200);
-                        }
+                        setTimeout(function() {
+                            closeDischargeComplaintDropdown();
+                        }, 200);
                     });
                 }
 
@@ -2449,30 +2699,88 @@ $historyFields = [
 
                         if (exists) {
                             setComplaintStatus('Complaint already added.', 'error');
-                            if (lookup) {
-                                lookup.value = '';
-                            }
+                            if (lookup) lookup.value = '';
                             return;
                         }
 
-                        var painValue = '';
-                        if (painHidden) {
-                            painValue = String(painHidden.value || '').trim();
-                        }
+                        selectedDischargeComplaints.push({
+                            id: 0,
+                            term: inputVal,
+                            frequency: '',
+                            severity: '',
+                            duration: '',
+                            date: ''
+                        });
 
-                        saveComplaintRowAjax({
-                            action: 'add_complaint',
-                            new_complaint_name: inputVal,
-                            new_complaint_remark: '',
-                            complaint_remark: getComplaintEditorText(),
-                            pain_value: painValue
-                        }, 'Complaint added.');
+                        if (lookup) lookup.value = '';
+                        renderDischargeComplaintTable();
+                        setComplaintStatus('Complaint added.', 'success');
+
+                        var $lastTr = $('#discharge_complaint_tbody tr:last');
+                        $lastTr.find('.complaint-freq-input').trigger('focus');
                     });
                 }
 
-                // Attach event handlers to editable complaint fields (name and remark)
-                // DISABLED: Database save on blur - will implement OPD-style client-side editing
-                // attachComplaintFieldHandlers(section, form);
+                // Helper Action Buttons for Reason for Admission / Other Complaints
+                $('#btn_complaint_mic').off('click').on('click', function() {
+                    var $btn = $(this);
+                    var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                    if (!SpeechRecognition) {
+                        alert('Voice dictation is not supported in this browser. Please use Chrome or Edge.');
+                        return;
+                    }
+                    if ($btn.hasClass('listening')) {
+                        if (window._dischargeSpeechRec) window._dischargeSpeechRec.stop();
+                        $btn.removeClass('listening btn-danger').addClass('btn-outline-secondary').html('<i class="fas fa-microphone text-danger me-1"></i> Med Mic');
+                        return;
+                    }
+                    var rec = new SpeechRecognition();
+                    rec.continuous = true;
+                    rec.interimResults = true;
+                    rec.lang = 'en-US';
+                    window._dischargeSpeechRec = rec;
+
+                    $btn.addClass('listening btn-danger').removeClass('btn-outline-secondary').html('<i class="fas fa-microphone me-1"></i> Listening...');
+
+                    rec.onresult = function(e) {
+                        var transcript = '';
+                        for (var i = e.resultIndex; i < e.results.length; i++) {
+                            transcript += e.results[i][0].transcript;
+                        }
+                        var $ed = $('#complaint_remark_editor');
+                        var curr = $ed.val() || '';
+                        $ed.val((curr ? curr + ' ' : '') + transcript);
+                    };
+                    rec.onerror = function() {
+                        $btn.removeClass('listening btn-danger').addClass('btn-outline-secondary').html('<i class="fas fa-microphone text-danger me-1"></i> Med Mic');
+                    };
+                    rec.onend = function() {
+                        $btn.removeClass('listening btn-danger').addClass('btn-outline-secondary').html('<i class="fas fa-microphone text-danger me-1"></i> Med Mic');
+                    };
+                    rec.start();
+                });
+
+                $('#btn_complaint_past_data').off('click').on('click', function() {
+                    var hpiNote = $('textarea[name="hpi_note"]').val() || '';
+                    if (!hpiNote.trim()) {
+                        setComplaintStatus('No past H&P note available in Nursing History.', 'muted');
+                        return;
+                    }
+                    var $ed = $('#complaint_remark_editor');
+                    var curr = ($ed.val() || '').trim();
+                    if (curr !== '') {
+                        if (confirm('Append Nursing H&P Note to Reason for Admission text?')) {
+                            $ed.val(curr + '\n' + hpiNote.trim());
+                        }
+                    } else {
+                        $ed.val(hpiNote.trim());
+                    }
+                    setComplaintStatus('Copied Nursing H&P note.', 'success');
+                });
+
+                $('#btn_complaint_clear').off('click').on('click', function() {
+                    $('#complaint_remark_editor').val('');
+                });
 
                 // Initialize table with existing data
                 initDischargeComplaintsTable();
@@ -3517,11 +3825,165 @@ $historyFields = [
                 lookup.addEventListener('blur', applySelection);
             }
 
-            function bindSurgeryTermLookup(form, type, lookupId, suggestId, targetMasterId, statusId) {
+            function renderSurgeryRows(rows) {
+                var $tbody = $('#discharge_surgery_tbody');
+                if (!rows || !rows.length) {
+                    $tbody.html('<tr><td colspan="4" class="text-muted text-center">No surgery rows.</td></tr>');
+                    return;
+                }
+                var html = '';
+                rows.forEach(function(row) {
+                    var id = parseInt(row.id || '0', 10);
+                    var name = $('<div>').text(row.surgery_name || '').html();
+                    var date = $('<div>').text(row.surgery_date || '').html();
+                    var remark = $('<div>').text(row.surgery_remark || '').html();
+                    html += '<tr>'
+                        + '<td>' + name + '</td>'
+                        + '<td>' + date + '</td>'
+                        + '<td>' + remark + '</td>'
+                        + '<td><button type="button" class="btn btn-outline-danger btn-sm btn-remove-surgery-row" data-id="' + id + '">Remove</button></td>'
+                        + '</tr>';
+                });
+                $tbody.html(html);
+            }
+
+            function renderProcedureRows(rows) {
+                var $tbody = $('#discharge_procedure_tbody');
+                if (!rows || !rows.length) {
+                    $tbody.html('<tr><td colspan="4" class="text-muted text-center">No procedure rows.</td></tr>');
+                    return;
+                }
+                var html = '';
+                rows.forEach(function(row) {
+                    var id = parseInt(row.id || '0', 10);
+                    var name = $('<div>').text(row.procedure_name || '').html();
+                    var date = $('<div>').text(row.procedure_date || '').html();
+                    var remark = $('<div>').text(row.procedure_remark || '').html();
+                    html += '<tr>'
+                        + '<td>' + name + '</td>'
+                        + '<td>' + date + '</td>'
+                        + '<td>' + remark + '</td>'
+                        + '<td><button type="button" class="btn btn-outline-danger btn-sm btn-remove-procedure-row" data-id="' + id + '">Remove</button></td>'
+                        + '</tr>';
+                });
+                $tbody.html(html);
+            }
+
+            $(document).on('click', '#btn_add_surgery_row', function() {
+                var form = getDischargeForm();
+                var name = ($('#new_surgery_name').val() || '').toString().trim();
+                if (!name) {
+                    setSectionStatus('discharge_surgery_status', 'Enter surgery name before adding.', 'error');
+                    return;
+                }
+                var date = ($('#new_surgery_date').val() || '').toString().trim();
+                var remark = ($('#new_surgery_remark').val() || '').toString().trim();
+                var masterId = parseInt($('#new_surgery_master_id').val() || '0', 10);
+                var csrf = getCsrfPair(form);
+                var payload = {
+                    action: 'add_surgery',
+                    new_surgery_name: name,
+                    new_surgery_date: date,
+                    new_surgery_remark: remark,
+                    new_surgery_master_id: masterId
+                };
+                payload[csrf.name] = csrf.value;
+
+                $.post($(form).attr('action') || window.location.href, payload, function(data) {
+                    updateFormCsrf(form, data);
+                    if (data && data.surgeryRows) {
+                        renderSurgeryRows(data.surgeryRows);
+                    }
+                    $('#new_surgery_name').val('');
+                    $('#new_surgery_date').val('');
+                    $('#new_surgery_remark').val('');
+                    $('#new_surgery_master_id').val('0');
+                    setSectionStatus('discharge_surgery_status', (data && data.notice) ? data.notice : 'Surgery row added.', 'success');
+                }, 'json').fail(function() {
+                    setSectionStatus('discharge_surgery_status', 'Unable to add surgery row.', 'error');
+                });
+            });
+
+            $(document).on('click', '.btn-remove-surgery-row', function() {
+                var form = getDischargeForm();
+                var id = parseInt($(this).data('id') || '0', 10);
+                if (id <= 0) return;
+                var csrf = getCsrfPair(form);
+                var payload = {
+                    action: 'remove_surgery',
+                    surgery_remove_id: id
+                };
+                payload[csrf.name] = csrf.value;
+
+                $.post($(form).attr('action') || window.location.href, payload, function(data) {
+                    updateFormCsrf(form, data);
+                    if (data && data.surgeryRows) {
+                        renderSurgeryRows(data.surgeryRows);
+                    }
+                    setSectionStatus('discharge_surgery_status', (data && data.notice) ? data.notice : 'Surgery row removed.', 'success');
+                }, 'json');
+            });
+
+            $(document).on('click', '#btn_add_procedure_row', function() {
+                var form = getDischargeForm();
+                var name = ($('#new_procedure_name').val() || '').toString().trim();
+                if (!name) {
+                    setSectionStatus('discharge_surgery_status', 'Enter procedure name before adding.', 'error');
+                    return;
+                }
+                var date = ($('#new_procedure_date').val() || '').toString().trim();
+                var remark = ($('#new_procedure_remark').val() || '').toString().trim();
+                var masterId = parseInt($('#new_procedure_master_id').val() || '0', 10);
+                var csrf = getCsrfPair(form);
+                var payload = {
+                    action: 'add_procedure',
+                    new_procedure_name: name,
+                    new_procedure_date: date,
+                    new_procedure_remark: remark,
+                    new_procedure_master_id: masterId
+                };
+                payload[csrf.name] = csrf.value;
+
+                $.post($(form).attr('action') || window.location.href, payload, function(data) {
+                    updateFormCsrf(form, data);
+                    if (data && data.procedureRows) {
+                        renderProcedureRows(data.procedureRows);
+                    }
+                    $('#new_procedure_name').val('');
+                    $('#new_procedure_date').val('');
+                    $('#new_procedure_remark').val('');
+                    $('#new_procedure_master_id').val('0');
+                    setSectionStatus('discharge_surgery_status', (data && data.notice) ? data.notice : 'Procedure row added.', 'success');
+                }, 'json').fail(function() {
+                    setSectionStatus('discharge_surgery_status', 'Unable to add procedure row.', 'error');
+                });
+            });
+
+            $(document).on('click', '.btn-remove-procedure-row', function() {
+                var form = getDischargeForm();
+                var id = parseInt($(this).data('id') || '0', 10);
+                if (id <= 0) return;
+                var csrf = getCsrfPair(form);
+                var payload = {
+                    action: 'remove_procedure',
+                    procedure_remove_id: id
+                };
+                payload[csrf.name] = csrf.value;
+
+                $.post($(form).attr('action') || window.location.href, payload, function(data) {
+                    updateFormCsrf(form, data);
+                    if (data && data.procedureRows) {
+                        renderProcedureRows(data.procedureRows);
+                    }
+                    setSectionStatus('discharge_surgery_status', (data && data.notice) ? data.notice : 'Procedure row removed.', 'success');
+                }, 'json');
+            });
+
+            function bindSurgeryTermLookup(form, type, lookupId, ddId, targetMasterId, statusId) {
                 var lookup = document.getElementById(lookupId);
-                var suggest = document.getElementById(suggestId);
+                var $dd = $('#' + ddId);
                 var targetMaster = document.getElementById(targetMasterId);
-                if (!lookup || !targetMaster || !window.jQuery) {
+                if (!lookup || !$dd.length || !targetMaster || !window.jQuery) {
                     return;
                 }
 
@@ -3530,70 +3992,92 @@ $historyFields = [
                 }
                 lookup.dataset.lookupBound = '1';
 
-                function optionLabel(row) {
-                    var label = (row.term_name || '').toString();
-                    var code = (row.term_code || '').toString().trim();
-                    var icd = (row.icd_code || '').toString().trim();
-                    if (code !== '') {
-                        label += ' [' + code + ']';
-                    }
-                    if (icd !== '') {
-                        label += ' (ICD ' + icd + ')';
-                    }
-                    return label.trim();
+                var timer = null;
+                var xhr = null;
+                var ddIdx = -1;
+
+                function closeDd() {
+                    if (timer) { clearTimeout(timer); timer = null; }
+                    if (xhr) { try { xhr.abort(); } catch(e){} xhr = null; }
+                    $dd.hide().empty();
+                    ddIdx = -1;
                 }
 
-                function applySelectionFromInput() {
-                    var inputVal = (lookup.value || '').trim();
-                    if (inputVal === '') {
-                        targetMaster.value = '0';
+                function openDd(rows) {
+                    if (!rows || !rows.length) {
+                        closeDd();
                         return;
                     }
+                    var html = '';
+                    rows.forEach(function(row, idx) {
+                        var name = (row.term_name || row.name || row.term || '').toString();
+                        var code = (row.term_code || row.concept_id || '').toString().trim();
+                        var icd = (row.icd_code || '').toString().trim();
+                        var sub = '';
+                        if (code) sub += 'Code: ' + code;
+                        if (icd) sub += (sub ? ' | ' : '') + 'ICD: ' + icd;
 
-                    var chosen = null;
-                    (surgeryMasterState[type] || []).forEach(function(row) {
-                        var label = optionLabel(row);
-                        var name = (row.term_name || '').toString();
-                        if (label.toUpperCase() === inputVal.toUpperCase() || name.toUpperCase() === inputVal.toUpperCase()) {
-                            chosen = row;
-                        }
+                        html += '<div class="dropdown-item py-1 px-2 surg-term-dd-item" data-idx="' + idx + '" style="cursor:pointer; font-size:13px;">'
+                            + '<div class="d-flex justify-content-between align-items-center">'
+                            + '<span>' + $('<div>').text(name).html() + '</span>'
+                            + (sub ? '<small class="text-muted ms-2">' + $('<div>').text(sub).html() + '</small>' : '')
+                            + '</div>'
+                            + '</div>';
                     });
+                    $dd.html(html).show();
+                    ddIdx = -1;
 
-                    if (chosen) {
-                        lookup.value = (chosen.term_name || '').toString();
-                        targetMaster.value = String(chosen.id || 0);
-                        setSectionStatus(statusId, 'Master term selected. Click +ADD to save row.', 'success');
-                        return;
-                    }
-
-                    targetMaster.value = '0';
+                    $dd.find('.surg-term-dd-item').on('click', function() {
+                        var idx = parseInt($(this).data('idx'), 10);
+                        if (rows[idx]) {
+                            var sel = rows[idx];
+                            lookup.value = (sel.term_name || sel.name || sel.term || '').toString();
+                            targetMaster.value = String(sel.id || 0);
+                            setSectionStatus(statusId, 'Master term selected.', 'success');
+                        }
+                        closeDd();
+                    });
                 }
 
-                lookup.addEventListener('input', function() {
+                $(lookup).on('input.surgTermLkp', function() {
                     targetMaster.value = '0';
-                    var q = (lookup.value || '').trim();
-                    if (q.length < 2) {
-                        return;
-                    }
+                    var q = (this.value || '').trim();
+                    if (timer) clearTimeout(timer);
+                    if (xhr) { try { xhr.abort(); } catch(e){} xhr = null; }
+                    if (q.length < 1) { closeDd(); return; }
 
-                    $.get('<?= base_url('Ipd_discharge/surgery_master_lookup') ?>?type=' + encodeURIComponent(type) + '&q=' + encodeURIComponent(q), function(data) {
-                        var rows = (data && data.rows) ? data.rows : [];
-                        surgeryMasterState[type] = rows;
-
-                        if (!suggest) {
-                            return;
-                        }
-
-                        var html = '';
-                        rows.forEach(function(row) {
-                            html += '<option value="' + $('<div>').text(optionLabel(row)).html() + '"></option>';
+                    timer = setTimeout(function() {
+                        xhr = $.ajax({
+                            url: '<?= base_url('Ipd_discharge/surgery_master_lookup') ?>',
+                            data: { type: type, q: q, master_only: 1 },
+                            dataType: 'json',
+                            success: function(data) {
+                                xhr = null;
+                                openDd((data && data.rows) ? data.rows : []);
+                            },
+                            error: function() { xhr = null; }
                         });
-                        suggest.innerHTML = html;
-                    }, 'json');
+                    }, 200);
+                }).on('keydown.surgTermLkp', function(e) {
+                    var $items = $dd.find('.surg-term-dd-item');
+                    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                        if (!$dd.is(':visible') || !$items.length) return;
+                        e.preventDefault();
+                        ddIdx = e.key === 'ArrowDown'
+                            ? Math.min(ddIdx + 1, $items.length - 1)
+                            : Math.max(ddIdx - 1, 0);
+                        $items.css('background', '').eq(ddIdx).css('background', '#f0f4ff');
+                    } else if (e.key === 'Enter') {
+                        if ($dd.is(':visible') && ddIdx >= 0 && ddIdx < $items.length) {
+                            e.preventDefault();
+                            $items.eq(ddIdx).trigger('click');
+                        }
+                    } else if (e.key === 'Escape') {
+                        closeDd();
+                    }
+                }).on('blur.surgTermLkp', function() {
+                    setTimeout(function() { closeDd(); }, 200);
                 });
-
-                lookup.addEventListener('change', applySelectionFromInput);
-                lookup.addEventListener('blur', applySelectionFromInput);
             }
 
             function initSurgeryMasterCrud(form) {
@@ -3629,7 +4113,120 @@ $historyFields = [
                         '</tr>';
                 }
 
+                var _surgMasterNameTimer = null;
+                var _surgMasterNameXhr = null;
+                var _surgMasterNameCache = {};
+                var _surgMasterNameDdIdx = -1;
+
+                function closeSurgMasterNameDropdown() {
+                    if (_surgMasterNameTimer) { clearTimeout(_surgMasterNameTimer); _surgMasterNameTimer = null; }
+                    if (_surgMasterNameXhr) { try { _surgMasterNameXhr.abort(); } catch(e){} _surgMasterNameXhr = null; }
+                    $('#surgery_master_name_dropdown').hide().empty();
+                    _surgMasterNameDdIdx = -1;
+                }
+
+                function openSurgMasterNameDropdown(rows) {
+                    var $dd = $('#surgery_master_name_dropdown');
+                    if (!rows || !rows.length) {
+                        $dd.hide().empty();
+                        return;
+                    }
+
+                    var html = '';
+                    rows.forEach(function(item, idx) {
+                        var name = item.term_name || item.name || item.term || '';
+                        var code = item.term_code || item.concept_id || '';
+                        var source = item.source || 'snomed_local';
+                        var badgeClass = (source === 'master') ? 'bg-primary' : 'bg-info text-dark';
+                        var badgeText = code ? ('SNOMED: ' + code) : (source === 'master' ? 'Master' : 'SNOMED');
+
+                        html += '<div class="dropdown-item py-1 px-2 surg-master-name-dd-item" data-idx="' + idx + '" style="cursor:pointer; font-size:13px;">'
+                            + '<div class="d-flex justify-content-between align-items-center">'
+                            + '<span>' + $('<div>').text(name).html() + '</span>'
+                            + '<span class="badge ' + badgeClass + ' ms-2" style="font-size:10px;">' + $('<div>').text(badgeText).html() + '</span>'
+                            + '</div>'
+                            + '</div>';
+                    });
+
+                    $dd.html(html).show();
+                    _surgMasterNameDdIdx = -1;
+
+                    $dd.find('.surg-master-name-dd-item').on('click', function() {
+                        var idx = parseInt($(this).data('idx'), 10);
+                        if (rows[idx]) {
+                            var sel = rows[idx];
+                            var selName = sel.term_name || sel.name || sel.term || '';
+                            var selCode = sel.term_code || sel.concept_id || '';
+                            var selIcd = sel.icd_code || '';
+
+                            $('#surgery_master_name').val(selName);
+                            if (selCode) { $('#surgery_master_code').val(selCode); }
+                            if (selIcd) { $('#surgery_master_icd').val(selIcd); }
+                            setMasterStatus(selCode ? ('SNOMED procedure concept ' + selCode + ' selected.') : 'Surgery selected.', 'success');
+                        }
+                        closeSurgMasterNameDropdown();
+                    });
+                }
+
+                $('#surgery_master_name').off('.surgNameSrch').on('input.surgNameSrch', function() {
+                    var q = (this.value || '').trim();
+                    var type = ($type.val() || 'surgery').toString();
+                    if (_surgMasterNameTimer) clearTimeout(_surgMasterNameTimer);
+                    if (_surgMasterNameXhr) {
+                        try { _surgMasterNameXhr.abort(); } catch(e){}
+                        _surgMasterNameXhr = null;
+                    }
+                    if (q.length < 1) {
+                        closeSurgMasterNameDropdown();
+                        return;
+                    }
+                    var cacheKey = type + '_' + q.toUpperCase();
+                    if (_surgMasterNameCache[cacheKey]) {
+                        openSurgMasterNameDropdown(_surgMasterNameCache[cacheKey]);
+                        return;
+                    }
+                    _surgMasterNameTimer = setTimeout(function() {
+                        _surgMasterNameXhr = $.ajax({
+                            url: '<?= base_url('Ipd_discharge/surgery_master_lookup') ?>',
+                            data: { type: type, q: q },
+                            dataType: 'json',
+                            success: function(data) {
+                                _surgMasterNameXhr = null;
+                                var rows = (data && data.rows) ? data.rows : [];
+                                _surgMasterNameCache[cacheKey] = rows;
+                                openSurgMasterNameDropdown(rows);
+                            },
+                            error: function() {
+                                _surgMasterNameXhr = null;
+                            }
+                        });
+                    }, 250);
+                }).on('keydown.surgNameSrch', function(e) {
+                    var $dd = $('#surgery_master_name_dropdown');
+                    var $items = $dd.find('.surg-master-name-dd-item');
+                    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                        if (!$dd.is(':visible') || !$items.length) return;
+                        e.preventDefault();
+                        _surgMasterNameDdIdx = e.key === 'ArrowDown'
+                            ? Math.min(_surgMasterNameDdIdx + 1, $items.length - 1)
+                            : Math.max(_surgMasterNameDdIdx - 1, 0);
+                        $items.css('background', '').eq(_surgMasterNameDdIdx).css('background', '#f0f4ff');
+                    } else if (e.key === 'Enter') {
+                        if ($dd.is(':visible') && _surgMasterNameDdIdx >= 0 && _surgMasterNameDdIdx < $items.length) {
+                            e.preventDefault();
+                            $items.eq(_surgMasterNameDdIdx).trigger('click');
+                        }
+                    } else if (e.key === 'Escape') {
+                        closeSurgMasterNameDropdown();
+                    }
+                }).on('blur.surgNameSrch', function() {
+                    setTimeout(function() {
+                        closeSurgMasterNameDropdown();
+                    }, 200);
+                });
+
                 function clearMasterForm() {
+                    closeSurgMasterNameDropdown();
                     $('#surgery_master_id').val('0');
                     $('#surgery_master_name').val('');
                     $('#surgery_master_code').val('');
@@ -3771,11 +4368,94 @@ $historyFields = [
                 initSurgeryMasterCrud(form);
             }
 
+            function renderFinalDiagnosisRows(rows) {
+                var $tbody = $('#discharge_final_diagnosis_tbody');
+                if (!rows || !rows.length) {
+                    $tbody.html('<tr><td colspan="3" class="text-muted text-center">No diagnosis rows.</td></tr>');
+                    return;
+                }
+                var html = '';
+                rows.forEach(function(row) {
+                    var id = parseInt(row.id || '0', 10);
+                    var name = $('<div>').text(row.comp_report || '').html();
+                    var remark = $('<div>').text(row.comp_remark || '').html();
+                    html += '<tr>'
+                        + '<td>' + name + '</td>'
+                        + '<td>' + remark + '</td>'
+                        + '<td><button type="button" class="btn btn-outline-danger btn-sm btn-remove-final-diagnosis-row" data-id="' + id + '">Remove</button></td>'
+                        + '</tr>';
+                });
+                $tbody.html(html);
+            }
+
+            $(document).on('click', '#btn_add_final_diagnosis_row', function() {
+                var form = getDischargeForm();
+                var name = ($('#new_diagnosis_name').val() || '').toString().trim();
+                if (!name) {
+                    setSectionStatus('discharge_diagnosis_status', 'Enter diagnosis before adding.', 'error');
+                    return;
+                }
+                var remark = ($('#new_diagnosis_remark').val() || '').toString().trim();
+                var masterCode = parseInt($('#new_diagnosis_master_code').val() || '0', 10);
+                var snomedConceptId = ($('#new_diagnosis_snomed_concept_id').val() || '').toString().trim();
+                var snomedTerm = ($('#new_diagnosis_snomed_term').val() || '').toString().trim();
+                var diagnosisRemarkText = ($('#diagnosis_remark').val() || '').toString().trim();
+
+                var csrf = getCsrfPair(form);
+                var payload = {
+                    action: 'add_diagnosis',
+                    new_diagnosis_name: name,
+                    new_diagnosis_remark: remark,
+                    new_diagnosis_master_code: masterCode,
+                    new_diagnosis_snomed_concept_id: snomedConceptId,
+                    new_diagnosis_snomed_term: snomedTerm,
+                    diagnosis_remark: diagnosisRemarkText
+                };
+                payload[csrf.name] = csrf.value;
+
+                $.post($(form).attr('action') || window.location.href, payload, function(data) {
+                    updateFormCsrf(form, data);
+                    if (data && data.diagnosisRows) {
+                        renderFinalDiagnosisRows(data.diagnosisRows);
+                    }
+                    $('#new_diagnosis_name').val('');
+                    $('#new_diagnosis_remark').val('');
+                    $('#new_diagnosis_master_code').val('0');
+                    $('#new_diagnosis_snomed_concept_id').val('');
+                    $('#new_diagnosis_snomed_term').val('');
+                    setSectionStatus('discharge_diagnosis_status', (data && data.notice) ? data.notice : 'Diagnosis row added.', 'success');
+                }, 'json').fail(function() {
+                    setSectionStatus('discharge_diagnosis_status', 'Unable to add diagnosis row.', 'error');
+                });
+            });
+
+            $(document).on('click', '.btn-remove-final-diagnosis-row', function() {
+                var form = getDischargeForm();
+                var id = parseInt($(this).data('id') || '0', 10);
+                if (id <= 0) return;
+                var diagnosisRemarkText = ($('#diagnosis_remark').val() || '').toString().trim();
+                var csrf = getCsrfPair(form);
+                var payload = {
+                    action: 'remove_diagnosis',
+                    diagnosis_remove_id: id,
+                    diagnosis_remark: diagnosisRemarkText
+                };
+                payload[csrf.name] = csrf.value;
+
+                $.post($(form).attr('action') || window.location.href, payload, function(data) {
+                    updateFormCsrf(form, data);
+                    if (data && data.diagnosisRows) {
+                        renderFinalDiagnosisRows(data.diagnosisRows);
+                    }
+                    setSectionStatus('discharge_diagnosis_status', (data && data.notice) ? data.notice : 'Diagnosis row removed.', 'success');
+                }, 'json');
+            });
+
             function bindDiagnosisIcdLookup(form) {
                 var lookup = document.getElementById('new_diagnosis_name');
-                var suggest = document.getElementById('discharge_diagnosis_suggest');
+                var $dd = $('#discharge_diagnosis_dropdown');
                 var seedBtn = document.getElementById('btn_discharge_seed_icd');
-                if (!lookup || !suggest || !window.jQuery) {
+                if (!lookup || !window.jQuery) {
                     return;
                 }
 
@@ -3784,68 +4464,96 @@ $historyFields = [
                 }
                 lookup.dataset.lookupBound = '1';
 
-                var suggestions = [];
+                var timer = null;
+                var xhr = null;
+                var ddIdx = -1;
 
-                function diagnosisLabel(row) {
-                    var name = (row.name || '').toString();
-                    var code = (row.icd_code || '').toString().trim();
-                    if (code !== '') {
-                        return name + ' (ICD ' + code + ')';
-                    }
-                    return name;
+                function closeDd() {
+                    if (timer) { clearTimeout(timer); timer = null; }
+                    if (xhr) { try { xhr.abort(); } catch(e){} xhr = null; }
+                    $dd.hide().empty();
+                    ddIdx = -1;
                 }
 
-                lookup.addEventListener('input', function() {
-                    var q = (lookup.value || '').trim();
-                    if (q.length < 2) {
-                        return;
-                    }
+                function openDd(rows) {
+                    if (!rows || !rows.length) { closeDd(); return; }
+                    var html = '';
+                    rows.forEach(function(item, idx) {
+                        var name = (item.name || item.term || '').toString();
+                        var code = (item.icd_code || item.snomed_concept_id || '').toString().trim();
+                        var source = item.source || '';
+                        var badgeText = code ? (item.icd_code ? ('ICD: ' + code) : ('SNOMED: ' + code)) : '';
 
-                    $.get('<?= base_url('Ipd_discharge/diagnosis_icd_lookup') ?>?q=' + encodeURIComponent(q), function(data) {
-                        suggestions = (data && data.rows) ? data.rows : [];
-                        var html = '';
-                        suggestions.forEach(function(row) {
-                            html += '<option value="' + $('<div>').text(diagnosisLabel(row)).html() + '"></option>';
-                        });
-                        suggest.innerHTML = html;
-                    }, 'json');
-                });
-
-                function applyDiagnosisSelection() {
-                    var inputVal = (lookup.value || '').trim();
-                    if (inputVal === '') {
-                        setSectionStatus('discharge_diagnosis_status', '', 'muted');
-                        return;
-                    }
-
-                    var chosen = null;
-                    suggestions.forEach(function(row) {
-                        var label = diagnosisLabel(row);
-                        var name = (row.name || '').toString();
-                        if (label.toUpperCase() === inputVal.toUpperCase() || name.toUpperCase() === inputVal.toUpperCase()) {
-                            chosen = row;
-                        }
+                        html += '<div class="dropdown-item py-1 px-2 diag-panel-dd-item" data-idx="' + idx + '" style="cursor:pointer; font-size:13px;">'
+                            + '<div class="d-flex justify-content-between align-items-center">'
+                            + '<span>' + $('<div>').text(name).html() + '</span>'
+                            + (badgeText ? '<span class="badge bg-secondary ms-2" style="font-size:10px;">' + $('<div>').text(badgeText).html() + '</span>' : '')
+                            + '</div>'
+                            + '</div>';
                     });
+                    $dd.html(html).show();
+                    ddIdx = -1;
 
-                    if (chosen) {
-                        var diagnosisText = (chosen.name || '').toString().trim();
-                        var code = (chosen.icd_code || '').toString().trim();
-                        if (code !== '') {
-                            diagnosisText += ' [ICD: ' + code + ']';
+                    $dd.find('.diag-panel-dd-item').on('click', function() {
+                        var idx = parseInt($(this).data('idx'), 10);
+                        if (rows[idx]) {
+                            var chosen = rows[idx];
+                            var name = (chosen.name || chosen.term || '').toString().trim();
+                            var code = (chosen.icd_code || '').toString().trim();
+                            if (code !== '' && name.indexOf('[ICD:') === -1) {
+                                name += ' [ICD: ' + code + ']';
+                            }
+                            lookup.value = name;
+                            $('#new_diagnosis_master_code').val(String(chosen.master_code || '0'));
+                            $('#new_diagnosis_snomed_concept_id').val(String(chosen.snomed_concept_id || ''));
+                            $('#new_diagnosis_snomed_term').val(String(chosen.snomed_term || chosen.name || ''));
+                            setSectionStatus('discharge_diagnosis_status', 'Diagnosis selected.', 'success');
                         }
-                        lookup.value = diagnosisText;
-                        $('#new_diagnosis_master_code').val(String(chosen.master_code || '0'));
-                        $('#new_diagnosis_snomed_concept_id').val(String(chosen.snomed_concept_id || ''));
-                        $('#new_diagnosis_snomed_term').val(String(chosen.snomed_term || ''));
-                        setSectionStatus('discharge_diagnosis_status', code !== '' ? 'Diagnosis with ICD selected. Click +ADD to save row.' : 'Diagnosis selected. Click +ADD to save row.', 'success');
-                        return;
-                    }
-
-                    setSectionStatus('discharge_diagnosis_status', 'Custom diagnosis ready. Click +ADD to save row.', 'success');
+                        closeDd();
+                    });
                 }
 
-                lookup.addEventListener('change', applyDiagnosisSelection);
-                lookup.addEventListener('blur', applyDiagnosisSelection);
+                $(lookup).on('input.diagPanelLkp', function() {
+                    $('#new_diagnosis_master_code').val('0');
+                    $('#new_diagnosis_snomed_concept_id').val('');
+                    $('#new_diagnosis_snomed_term').val('');
+                    var q = (this.value || '').trim();
+                    if (timer) clearTimeout(timer);
+                    if (xhr) { try { xhr.abort(); } catch(e){} xhr = null; }
+                    if (q.length < 1) { closeDd(); return; }
+
+                    timer = setTimeout(function() {
+                        xhr = $.ajax({
+                            url: '<?= base_url('Ipd_discharge/diagnosis_icd_lookup') ?>',
+                            data: { q: q },
+                            dataType: 'json',
+                            success: function(data) {
+                                xhr = null;
+                                openDd((data && data.rows) ? data.rows : []);
+                            },
+                            error: function() { xhr = null; }
+                        });
+                    }, 200);
+                }).on('keydown.diagPanelLkp', function(e) {
+                    var $items = $dd.find('.diag-panel-dd-item');
+                    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                        if (!$dd.is(':visible') || !$items.length) return;
+                        e.preventDefault();
+                        ddIdx = e.key === 'ArrowDown'
+                            ? Math.min(ddIdx + 1, $items.length - 1)
+                            : Math.max(ddIdx - 1, 0);
+                        $items.css('background', '').eq(ddIdx).css('background', '#f0f4ff');
+                    } else if (e.key === 'Enter') {
+                        if ($dd.is(':visible') && ddIdx >= 0 && ddIdx < $items.length) {
+                            e.preventDefault();
+                            $items.eq(ddIdx).trigger('click');
+                        }
+                    } else if (e.key === 'Escape') {
+                        closeDd();
+                    }
+                }).on('blur.diagPanelLkp', function() {
+                    setTimeout(function() { closeDd(); }, 200);
+                });
 
                 if (seedBtn) {
                     if (seedBtn.dataset.seedBound === '1') {
@@ -3882,11 +4590,123 @@ $historyFields = [
                 var $search = $('#diagnosis_master_search');
                 var $rows = $('#diagnosis_master_rows');
 
+                var _diagMasterNameTimer = null;
+                var _diagMasterNameXhr = null;
+                var _diagMasterNameCache = {};
+                var _diagMasterNameDdIdx = -1;
+
+                function closeDiagMasterNameDropdown() {
+                    if (_diagMasterNameTimer) { clearTimeout(_diagMasterNameTimer); _diagMasterNameTimer = null; }
+                    if (_diagMasterNameXhr) { try { _diagMasterNameXhr.abort(); } catch(e){} _diagMasterNameXhr = null; }
+                    $('#diagnosis_master_name_dropdown').hide().empty();
+                    _diagMasterNameDdIdx = -1;
+                }
+
+                function openDiagMasterNameDropdown(rows) {
+                    var $dd = $('#diagnosis_master_name_dropdown');
+                    if (!rows || !rows.length) {
+                        $dd.hide().empty();
+                        return;
+                    }
+
+                    var html = '';
+                    rows.forEach(function(item, idx) {
+                        var name = item.name || item.term || '';
+                        var snomedId = item.snomed_concept_id || item.concept_id || '';
+                        var source = item.source || 'snomed';
+                        var badgeClass = (source === 'disease_master' || source === 'local') ? 'bg-primary' : 'bg-info text-dark';
+                        var badgeText = snomedId ? ('SNOMED: ' + snomedId) : (source === 'disease_master' ? 'Master' : 'Local');
+
+                        html += '<div class="dropdown-item py-1 px-2 diag-master-name-dd-item" data-idx="' + idx + '" style="cursor:pointer; font-size:13px;">'
+                            + '<div class="d-flex justify-content-between align-items-center">'
+                            + '<span>' + $('<div>').text(name).html() + '</span>'
+                            + '<span class="badge ' + badgeClass + ' ms-2" style="font-size:10px;">' + $('<div>').text(badgeText).html() + '</span>'
+                            + '</div>'
+                            + '</div>';
+                    });
+
+                    $dd.html(html).show();
+                    _diagMasterNameDdIdx = -1;
+
+                    $dd.find('.diag-master-name-dd-item').on('click', function() {
+                        var idx = parseInt($(this).data('idx'), 10);
+                        if (rows[idx]) {
+                            var sel = rows[idx];
+                            var selName = sel.name || sel.term || '';
+                            var selSnomedId = sel.snomed_concept_id || sel.concept_id || '';
+                            var selSnomedTerm = sel.snomed_term || sel.fsn || selName;
+
+                            $('#diagnosis_master_name').val(selName);
+                            $('#diagnosis_master_snomed_id').val(selSnomedId);
+                            $('#diagnosis_master_snomed_term').val(selSnomedTerm);
+                            setStatus(selSnomedId ? ('SNOMED concept ' + selSnomedId + ' selected.') : 'Diagnosis selected.', 'success');
+                        }
+                        closeDiagMasterNameDropdown();
+                    });
+                }
+
+                $('#diagnosis_master_name').off('.diagNameSrch').on('input.diagNameSrch', function() {
+                    var q = (this.value || '').trim();
+                    if (_diagMasterNameTimer) clearTimeout(_diagMasterNameTimer);
+                    if (_diagMasterNameXhr) {
+                        try { _diagMasterNameXhr.abort(); } catch(e){}
+                        _diagMasterNameXhr = null;
+                    }
+                    if (q.length < 1) {
+                        closeDiagMasterNameDropdown();
+                        return;
+                    }
+                    var cacheKey = q.toUpperCase();
+                    if (_diagMasterNameCache[cacheKey]) {
+                        openDiagMasterNameDropdown(_diagMasterNameCache[cacheKey]);
+                        return;
+                    }
+                    _diagMasterNameTimer = setTimeout(function() {
+                        _diagMasterNameXhr = $.ajax({
+                            url: '<?= base_url('Opd_prescription/provisional_diagnosis_search') ?>',
+                            data: { q: q },
+                            dataType: 'json',
+                            success: function(data) {
+                                _diagMasterNameXhr = null;
+                                var rows = (data && data.rows) ? data.rows : [];
+                                _diagMasterNameCache[cacheKey] = rows;
+                                openDiagMasterNameDropdown(rows);
+                            },
+                            error: function() {
+                                _diagMasterNameXhr = null;
+                            }
+                        });
+                    }, 250);
+                }).on('keydown.diagNameSrch', function(e) {
+                    var $dd = $('#diagnosis_master_name_dropdown');
+                    var $items = $dd.find('.diag-master-name-dd-item');
+                    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                        if (!$dd.is(':visible') || !$items.length) return;
+                        e.preventDefault();
+                        _diagMasterNameDdIdx = e.key === 'ArrowDown'
+                            ? Math.min(_diagMasterNameDdIdx + 1, $items.length - 1)
+                            : Math.max(_diagMasterNameDdIdx - 1, 0);
+                        $items.css('background', '').eq(_diagMasterNameDdIdx).css('background', '#f0f4ff');
+                    } else if (e.key === 'Enter') {
+                        if ($dd.is(':visible') && _diagMasterNameDdIdx >= 0 && _diagMasterNameDdIdx < $items.length) {
+                            e.preventDefault();
+                            $items.eq(_diagMasterNameDdIdx).trigger('click');
+                        }
+                    } else if (e.key === 'Escape') {
+                        closeDiagMasterNameDropdown();
+                    }
+                }).on('blur.diagNameSrch', function() {
+                    setTimeout(function() {
+                        closeDiagMasterNameDropdown();
+                    }, 200);
+                });
+
                 function setStatus(text, level) {
                     setSectionStatus('diagnosis_master_status', text, level || 'muted');
                 }
 
                 function clearForm() {
+                    closeDiagMasterNameDropdown();
                     $('#diagnosis_master_code').val('0');
                     $('#diagnosis_master_name').val('');
                     $('#diagnosis_master_snomed_id').val('');
@@ -3997,6 +4817,320 @@ $historyFields = [
                 });
             }
 
+            function renderCourseRows(rows) {
+                var $tbody = $('#discharge_course_tbody');
+                if (!rows || !rows.length) {
+                    $tbody.html('<tr><td colspan="3" class="text-muted text-center">No course rows.</td></tr>');
+                    return;
+                }
+                var html = '';
+                rows.forEach(function(row) {
+                    var id = parseInt(row.id || '0', 10);
+                    var name = $('<div>').text(row.comp_report || '').html();
+                    var remark = $('<div>').text(row.comp_remark || '').html();
+                    html += '<tr>'
+                        + '<td>' + name + '</td>'
+                        + '<td>' + remark + '</td>'
+                        + '<td><button type="button" class="btn btn-outline-danger btn-sm btn-remove-course-row" data-id="' + id + '">Remove</button></td>'
+                        + '</tr>';
+                });
+                $tbody.html(html);
+            }
+
+            $(document).on('click', '#btn_add_course_row', function() {
+                var form = getDischargeForm();
+                var name = ($('#new_course_name').val() || '').toString().trim();
+                if (!name) {
+                    setSectionStatus('discharge_course_status', 'Enter course/treatment before adding.', 'error');
+                    return;
+                }
+                var remark = ($('#new_course_remark').val() || '').toString().trim();
+                var masterId = parseInt($('#new_course_master_id').val() || '0', 10);
+                var courseRemarkText = ($('#course_remark').val() || '').toString().trim();
+
+                var csrf = getCsrfPair(form);
+                var payload = {
+                    action: 'add_course',
+                    new_course_name: name,
+                    new_course_remark: remark,
+                    new_course_master_id: masterId,
+                    course_remark: courseRemarkText
+                };
+                payload[csrf.name] = csrf.value;
+
+                $.post($(form).attr('action') || window.location.href, payload, function(data) {
+                    updateFormCsrf(form, data);
+                    if (data && data.courseRows) {
+                        renderCourseRows(data.courseRows);
+                    }
+                    $('#new_course_name').val('');
+                    $('#new_course_remark').val('');
+                    $('#new_course_master_id').val('0');
+                    setSectionStatus('discharge_course_status', (data && data.notice) ? data.notice : 'Course row added.', 'success');
+                }, 'json').fail(function() {
+                    setSectionStatus('discharge_course_status', 'Unable to add course row.', 'error');
+                });
+            });
+
+            $(document).on('click', '.btn-remove-course-row', function() {
+                var form = getDischargeForm();
+                var id = parseInt($(this).data('id') || '0', 10);
+                if (id <= 0) return;
+                var courseRemarkText = ($('#course_remark').val() || '').toString().trim();
+                var csrf = getCsrfPair(form);
+                var payload = {
+                    action: 'remove_course',
+                    course_remove_id: id,
+                    course_remark: courseRemarkText
+                };
+                payload[csrf.name] = csrf.value;
+
+                $.post($(form).attr('action') || window.location.href, payload, function(data) {
+                    updateFormCsrf(form, data);
+                    if (data && data.courseRows) {
+                        renderCourseRows(data.courseRows);
+                    }
+                    setSectionStatus('discharge_course_status', (data && data.notice) ? data.notice : 'Course row removed.', 'success');
+                }, 'json');
+            });
+
+            function initCourseMasterCrud(form) {
+                if (!window.jQuery) return;
+
+                var $search = $('#course_master_search');
+                var $rows = $('#course_master_rows');
+                var $modal = $('#ipdCourseMasterModal');
+                if (!form || !$modal.length || !$rows.length) return;
+
+                function setMasterStatus(text, level) {
+                    setSectionStatus('course_master_status', text, level || 'muted');
+                }
+
+                function rowHtml(row) {
+                    var status = parseInt(row.is_active || '0', 10) === 1 ? 'Active' : 'Inactive';
+                    var safeName = $('<div>').text(row.term_name || '').html();
+                    var safeCode = $('<div>').text(row.term_code || '').html();
+                    var safeIcd = $('<div>').text(row.icd_code || '').html();
+                    return '<tr>' +
+                        '<td>' + safeName + '</td>' +
+                        '<td>' + safeCode + '</td>' +
+                        '<td>' + safeIcd + '</td>' +
+                        '<td>' + status + '</td>' +
+                        '<td>' +
+                        '<button type="button" class="btn btn-outline-primary btn-sm btn-course-master-edit" data-id="' + (row.id || 0) + '">Edit</button> ' +
+                        '<button type="button" class="btn btn-outline-danger btn-sm btn-course-master-delete" data-id="' + (row.id || 0) + '">Del</button>' +
+                        '</td>' +
+                        '</tr>';
+                }
+
+                var _crsMasterTimer = null;
+                var _crsMasterXhr = null;
+                var _crsMasterDdIdx = -1;
+
+                function closeCrsMasterDropdown() {
+                    if (_crsMasterTimer) { clearTimeout(_crsMasterTimer); _crsMasterTimer = null; }
+                    if (_crsMasterXhr) { try { _crsMasterXhr.abort(); } catch(e){} _crsMasterXhr = null; }
+                    $('#course_master_name_dropdown').hide().empty();
+                    _crsMasterDdIdx = -1;
+                }
+
+                function openCrsMasterDropdown(rows) {
+                    var $dd = $('#course_master_name_dropdown');
+                    if (!rows || !rows.length) {
+                        $dd.hide().empty();
+                        return;
+                    }
+
+                    var html = '';
+                    rows.forEach(function(item, idx) {
+                        var name = item.term_name || item.name || item.term || '';
+                        var code = item.term_code || item.concept_id || '';
+                        var source = item.source || 'snomed';
+                        var badgeClass = (source === 'master') ? 'bg-primary' : 'bg-info text-dark';
+                        var badgeText = code ? ('SNOMED: ' + code) : (source === 'master' ? 'Master' : 'SNOMED');
+
+                        html += '<div class="dropdown-item py-1 px-2 crs-master-name-dd-item" data-idx="' + idx + '" style="cursor:pointer; font-size:13px;">'
+                            + '<div class="d-flex justify-content-between align-items-center">'
+                            + '<span>' + $('<div>').text(name).html() + '</span>'
+                            + '<span class="badge ' + badgeClass + ' ms-2" style="font-size:10px;">' + $('<div>').text(badgeText).html() + '</span>'
+                            + '</div>'
+                            + '</div>';
+                    });
+
+                    $dd.html(html).show();
+                    _crsMasterDdIdx = -1;
+
+                    $dd.find('.crs-master-name-dd-item').on('click', function() {
+                        var idx = parseInt($(this).data('idx'), 10);
+                        if (rows[idx]) {
+                            var sel = rows[idx];
+                            $('#course_master_name').val(sel.term_name || sel.name || sel.term || '');
+                            $('#course_master_code').val(sel.term_code || sel.concept_id || '');
+                            $('#course_master_icd').val(sel.icd_code || '');
+                        }
+                        closeCrsMasterDropdown();
+                    });
+                }
+
+                $('#course_master_name').on('input.crsMasterName', function() {
+                    var q = (this.value || '').trim();
+                    if (_crsMasterTimer) clearTimeout(_crsMasterTimer);
+                    if (_crsMasterXhr) { try { _crsMasterXhr.abort(); } catch(e){} _crsMasterXhr = null; }
+                    if (q.length < 2) { closeCrsMasterDropdown(); return; }
+
+                    _crsMasterTimer = setTimeout(function() {
+                        _crsMasterXhr = $.ajax({
+                            url: '<?= base_url('Ipd_discharge/course_master_lookup') ?>',
+                            data: { q: q, master_only: 0 },
+                            dataType: 'json',
+                            success: function(data) {
+                                _crsMasterXhr = null;
+                                openCrsMasterDropdown((data && data.rows) ? data.rows : []);
+                            },
+                            error: function() { _crsMasterXhr = null; }
+                        });
+                    }, 200);
+                }).on('keydown.crsMasterName', function(e) {
+                    var $dd = $('#course_master_name_dropdown');
+                    var $items = $dd.find('.crs-master-name-dd-item');
+                    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                        if (!$dd.is(':visible') || !$items.length) return;
+                        e.preventDefault();
+                        _crsMasterDdIdx = e.key === 'ArrowDown'
+                            ? Math.min(_crsMasterDdIdx + 1, $items.length - 1)
+                            : Math.max(_crsMasterDdIdx - 1, 0);
+                        $items.css('background', '').eq(_crsMasterDdIdx).css('background', '#f0f4ff');
+                    } else if (e.key === 'Enter') {
+                        if ($dd.is(':visible') && _crsMasterDdIdx >= 0 && _crsMasterDdIdx < $items.length) {
+                            e.preventDefault();
+                            $items.eq(_crsMasterDdIdx).trigger('click');
+                        }
+                    } else if (e.key === 'Escape') {
+                        closeCrsMasterDropdown();
+                    }
+                }).on('blur.crsMasterName', function() {
+                    setTimeout(function() { closeCrsMasterDropdown(); }, 200);
+                });
+
+                function resetMasterForm() {
+                    $('#course_master_id').val('0');
+                    $('#course_master_name').val('');
+                    $('#course_master_code').val('');
+                    $('#course_master_icd').val('');
+                    $('#course_master_active').val('1');
+                    setMasterStatus('');
+                    closeCrsMasterDropdown();
+                }
+
+                function fetchMasterRows() {
+                    var q = ($search.val() || '').toString().trim();
+                    setMasterStatus('Loading...');
+                    $.get('<?= base_url('Ipd_discharge/course_master_list') ?>?q=' + encodeURIComponent(q), function(data) {
+                        var rows = (data && data.rows) ? data.rows : [];
+                        if (!rows.length) {
+                            $rows.html('<tr><td colspan="5" class="text-center text-muted">No records found.</td></tr>');
+                            setMasterStatus('');
+                            return;
+                        }
+
+                        var html = '';
+                        rows.forEach(function(r) {
+                            html += rowHtml(r);
+                        });
+                        $rows.html(html);
+
+                        $rows.find('.btn-course-master-edit').on('click', function() {
+                            var id = parseInt($(this).data('id') || '0', 10);
+                            var match = rows.find(function(r) { return r.id === id; });
+                            if (match) {
+                                $('#course_master_id').val(match.id || 0);
+                                $('#course_master_name').val(match.term_name || '');
+                                $('#course_master_code').val(match.term_code || '');
+                                $('#course_master_icd').val(match.icd_code || '');
+                                $('#course_master_active').val(String(match.is_active || 1));
+                                setMasterStatus('Editing ID #' + id);
+                            }
+                        });
+
+                        $rows.find('.btn-course-master-delete').on('click', function() {
+                            var id = parseInt($(this).data('id') || '0', 10);
+                            if (id <= 0 || !confirm('Delete master term #' + id + '?')) {
+                                return;
+                            }
+                            var csrf = getCsrfPair(form);
+                            var payload = { id: id };
+                            payload[csrf.name] = csrf.value;
+
+                            setMasterStatus('Deleting...');
+                            $.post('<?= base_url('Ipd_discharge/course_master_delete') ?>', payload, function(res) {
+                                updateFormCsrf(form, res);
+                                fetchMasterRows();
+                                resetMasterForm();
+                            }, 'json').fail(function() {
+                                setMasterStatus('Delete failed.', 'error');
+                            });
+                        });
+
+                        setMasterStatus('');
+                    }, 'json').fail(function() {
+                        setMasterStatus('Failed to load master records.', 'error');
+                    });
+                }
+
+                $(document).off('click.ipdCourseCrud', '#btn_discharge_manage_course_master')
+                    .on('click.ipdCourseCrud', '#btn_discharge_manage_course_master', function() {
+                        resetMasterForm();
+                        fetchMasterRows();
+                        showModalById('ipdCourseMasterModal');
+                    });
+
+                $('#btn_course_master_refresh').on('click', fetchMasterRows);
+                $search.on('keyup', function(e) {
+                    if (e.key === 'Enter') {
+                        fetchMasterRows();
+                    }
+                });
+
+                $('#btn_course_master_clear').on('click', resetMasterForm);
+
+                $('#btn_course_master_save').on('click', function() {
+                    var id = parseInt($('#course_master_id').val() || '0', 10);
+                    var name = ($('#course_master_name').val() || '').toString().trim();
+                    var code = ($('#course_master_code').val() || '').toString().trim();
+                    var icdCode = ($('#course_master_icd').val() || '').toString().trim();
+                    var isActive = parseInt($('#course_master_active').val() || '1', 10);
+
+                    if (!name) {
+                        setMasterStatus('Name is required', 'error');
+                        return;
+                    }
+
+                    var csrf = getCsrfPair(form);
+                    var payload = {
+                        id: id,
+                        name: name,
+                        code: code,
+                        icd_code: icdCode,
+                        is_active: isActive
+                    };
+                    payload[csrf.name] = csrf.value;
+
+                    setMasterStatus('Saving...');
+                    $.post('<?= base_url('Ipd_discharge/course_master_save') ?>', payload, function(res) {
+                        updateFormCsrf(form, res);
+                        if (!res || parseInt(res.update || '0', 10) !== 1) {
+                            setMasterStatus((res && res.error_text) ? res.error_text : 'Save failed', 'error');
+                            return;
+                        }
+                        setMasterStatus('Saved successfully.', 'success');
+                        resetMasterForm();
+                        fetchMasterRows();
+                    }, 'json').fail(function() {
+                        setMasterStatus('Save failed.', 'error');
+                    });
+                });
+            }
+
             function initDiagnosisTools() {
                 var section = document.getElementById('section-diagnosis');
                 if (!section || section.dataset.toolsBound === '1') {
@@ -4025,13 +5159,8 @@ $historyFields = [
                     return;
                 }
 
-                bindSmartTermInputLookup(
-                    form,
-                    'new_course_name',
-                    'discharge_course_suggest',
-                    'discharge_course_status',
-                    'Custom term ready. Click +ADD to save row.'
-                );
+                initCourseAutocomplete();
+                initCourseMasterCrud(form);
             }
 
             function initInstructionTools() {

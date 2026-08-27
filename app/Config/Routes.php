@@ -1378,6 +1378,15 @@ $routes->group('setting', static function($routes) {
     $routes->post('admin/reffer/types/create', 'Setting\\Reffer::storeType');
     $routes->post('admin/reffer/types/update', 'Setting\\Reffer::updateType');
     $routes->post('admin/reffer/types/delete', 'Setting\\Reffer::deleteType');
+    $routes->get('admin/nurse', 'Setting\\Nurse::index');
+    $routes->post('admin/nurse/save', 'Setting\\Nurse::save');
+    $routes->post('admin/nurse/delete', 'Setting\\Nurse::delete');
+    $routes->post('admin/nurse/delete/(:num)', 'Setting\\Nurse::delete/$1');
+    $routes->get('admin/nurse/list_json', 'Setting\\Nurse::list_json');
+    $routes->get('admin/nursing-station', 'Setting\\NursingStation::index');
+    $routes->post('admin/nursing-station/save', 'Setting\\NursingStation::save');
+    $routes->post('admin/nursing-station/delete', 'Setting\\NursingStation::delete');
+    $routes->get('admin/nursing-station/list_json', 'Setting\\NursingStation::list_json');
     $routes->get('admin/bed-management', 'Setting\\BedManagement::index', ['filter' => $settingsBedFilter]);
     $routes->get('admin/departments', 'Setting\\BedManagement::departments', ['filter' => $settingsBedFilter]);
     $routes->post('admin/departments/save', 'Setting\\BedManagement::saveDepartment', ['filter' => $settingsBedFilter]);

@@ -35,6 +35,15 @@
                     <label class="form-label">Floor</label>
                     <input class="form-control" id="floor_number" name="floor_number" type="number">
                 </div>
+                <div class="col-md-3">
+                    <label class="form-label">Nursing Station</label>
+                    <select class="form-select" id="nursing_station_id" name="nursing_station_id">
+                        <option value="0">-- Select Nursing Station --</option>
+                        <?php foreach (($nursingStations ?? []) as $st) { ?>
+                            <option value="<?= (int)$st['id'] ?>"><?= esc($st['station_name']) ?> (<?= esc($st['floor_number'] ?: 'Ground Floor') ?>)</option>
+                        <?php } ?>
+                    </select>
+                </div>
                 <div class="col-md-2">
                     <label class="form-label">Capacity</label>
                     <input class="form-control" id="total_capacity" name="total_capacity" type="number" min="0" value="0">
@@ -129,6 +138,7 @@
                         <th>Code</th>
                         <th>Name</th>
                         <th>Department</th>
+                        <th>Nursing Station</th>
                         <th>Type</th>
                         <th>Capacity</th>
                         <th>Status</th>
@@ -143,6 +153,13 @@
                             <td><?= esc($row->ward_code ?? '') ?></td>
                             <td><?= esc($row->ward_name ?? '') ?></td>
                             <td><?= esc($row->department_name ?? 'All Department') ?></td>
+                            <td>
+                                <?php if (!empty($row->station_name)): ?>
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle"><i class="bi bi-hospital me-1"></i><?= esc($row->station_name) ?></span>
+                                <?php else: ?>
+                                    <span class="text-muted small">-</span>
+                                <?php endif; ?>
+                            </td>
                             <td><?= esc($row->ward_type ?? '') ?></td>
                             <td><?= esc($row->total_capacity ?? 0) ?></td>
                             <td><?= esc($row->status ?? '') ?></td>
@@ -180,6 +197,7 @@
         function clearForm() {
             form.reset();
             $('#ward_id').val(0);
+            $('#nursing_station_id').val(0);
             $('#total_capacity').val(0);
             clearAlert();
         }
@@ -213,6 +231,7 @@
             $('#ward_code').val(item.ward_code || '');
             $('#ward_name').val(item.ward_name || '');
             $('#department_id').val(item.department_id !== undefined ? item.department_id : 0);
+            $('#nursing_station_id').val(item.nursing_station_id !== undefined && item.nursing_station_id !== null ? item.nursing_station_id : 0);
             $('#floor_number').val(item.floor_number || '');
             $('#total_capacity').val(item.total_capacity || 0);
             $('#ward_type').val(item.ward_type || 'General');

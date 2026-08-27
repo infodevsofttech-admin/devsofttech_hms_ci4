@@ -44,8 +44,131 @@ class IpdPatient extends BaseController
             return $permission;
         }
 
+        $records = $this->ipdBillingModel->getCurrentAdmissions();
+
+        $stats = [
+            'total_beds'       => 0,
+            'available'        => 0,
+            'occupied'         => 0,
+            'reserved'         => 0,
+            'maintenance'      => 0,
+            'cleaning'         => 0,
+            'total_admitted'   => count($records),
+            'nursing_stations' => 0,
+        ];
+        $floors = [];
+        $wards = [];
+
+        $stationModel = new \App\Models\NursingStationModel();
+        $nursingStations = $stationModel->getActiveStations();
+        $stats['nursing_stations'] = count($nursingStations);
+
+        if ($this->db->tableExists('bed_master') && $this->db->tableExists('ward_master')) {
+            $builder = $this->db->table('bed_master b')
+                ->select('b.id as bed_id, b.bed_number, b.bed_code, b.bed_status, b.current_ipd_id')
+                ->select('b.has_oxygen, b.has_monitor, b.has_ventilator, b.is_isolation_bed')
+                ->select('w.id as ward_id, w.ward_name, w.floor_number, w.ward_type, w.nursing_station_id')
+                ->join('ward_master w', 'w.id = b.ward_id', 'left')
+                ->where('b.status', 'active')
+                ->orderBy('w.floor_number', 'ASC')
+                ->orderBy('w.ward_name', 'ASC')
+                ->orderBy('b.bed_number', 'ASC');
+
+            if ($this->db->tableExists('nursing_station_master')) {
+                $builder->select('ns.station_name, ns.station_code')
+                    ->join('nursing_station_master ns', 'ns.id = w.nursing_station_id', 'left');
+            } else {
+                $builder->select('NULL as station_name, NULL as station_code');
+            }
+
+            if ($this->db->tableExists('ipd_master')) {
+                $builder
+                    ->select('i.id as ipd_id, i.ipd_code, i.register_date, i.r_doc_name')
+                    ->join('ipd_master i', 'i.id = b.current_ipd_id AND i.ipd_status = 0', 'left', false);
+
+                if ($this->db->tableExists('patient_master')) {
+                    $builder
+                        ->select('p.p_code, p.p_fname, p.p_lname')
+                        ->join('patient_master p', 'p.id = i.p_id', 'left');
+                }
+            }
+
+            $today = new \DateTime();
+
+            foreach ($builder->get()->getResult() as $row) {
+                $floorNo = (string) ($row->floor_number !== null && $row->floor_number !== '' ? $row->floor_number : 'Ground Floor');
+                $wardId  = (int) ($row->ward_id ?? 0);
+                $status  = (string) ($row->bed_status ?? 'available');
+
+                $stats['total_beds']++;
+                if (array_key_exists($status, $stats)) {
+                    $stats[$status]++;
+                } elseif (strpos($status, 'maintenance') !== false) {
+                    $stats['maintenance']++;
+                }
+
+                $daysAdmitted = null;
+                if (! empty($row->register_date)) {
+                    try {
+                        $admitDate    = new \DateTime((string) $row->register_date);
+                        $daysAdmitted = (int) $today->diff($admitDate)->days;
+                    } catch (\Throwable $e) {
+                        $daysAdmitted = null;
+                    }
+                }
+
+                $patientName = trim(((string) ($row->p_fname ?? '')) . ' ' . ((string) ($row->p_lname ?? '')));
+
+                if (! isset($floors[$floorNo])) {
+                    $floors[$floorNo] = [];
+                }
+                if (! isset($floors[$floorNo][$wardId])) {
+                    $floors[$floorNo][$wardId] = [
+                        'ward_name'    => (string) ($row->ward_name ?? 'Unknown Ward'),
+                        'ward_type'    => (string) ($row->ward_type ?? ''),
+                        'station_name' => (string) ($row->station_name ?? 'Unassigned Station'),
+                        'station_code' => (string) ($row->station_code ?? ''),
+                        'beds'         => [],
+                        'count'        => ['total' => 0, 'available' => 0, 'occupied' => 0],
+                    ];
+                    $wards[$wardId] = (string) ($row->ward_name ?? 'Unknown Ward');
+                }
+
+                $floors[$floorNo][$wardId]['beds'][] = [
+                    'bed_id'         => (int) ($row->bed_id ?? 0),
+                    'bed_number'     => (string) ($row->bed_number !== '' && $row->bed_number !== null
+                                            ? $row->bed_number : ($row->bed_code ?? '-')),
+                    'bed_code'       => (string) ($row->bed_code ?? ''),
+                    'bed_status'     => $status,
+                    'patient_name'   => $patientName,
+                    'patient_code'   => (string) ($row->p_code ?? ''),
+                    'doctor_name'    => trim((string) ($row->r_doc_name ?? '')),
+                    'ipd_code'       => (string) ($row->ipd_code ?? ''),
+                    'ipd_id'         => (int) ($row->ipd_id ?? 0),
+                    'admit_date'     => (string) ($row->register_date ?? ''),
+                    'days_admitted'  => $daysAdmitted,
+                    'has_oxygen'     => (bool) ($row->has_oxygen ?? false),
+                    'has_monitor'    => (bool) ($row->has_monitor ?? false),
+                    'has_ventilator' => (bool) ($row->has_ventilator ?? false),
+                    'is_isolation'   => (bool) ($row->is_isolation_bed ?? false),
+                    'station_name'   => (string) ($row->station_name ?? ''),
+                ];
+
+                $floors[$floorNo][$wardId]['count']['total']++;
+                if ($status === 'available') {
+                    $floors[$floorNo][$wardId]['count']['available']++;
+                } elseif ($status === 'occupied') {
+                    $floors[$floorNo][$wardId]['count']['occupied']++;
+                }
+            }
+        }
+
         return view('ipd_nursing/patient_list', [
-            'records' => $this->ipdBillingModel->getCurrentAdmissions(),
+            'records'         => $records,
+            'stats'           => $stats,
+            'floors'          => $floors,
+            'wards'           => $wards,
+            'nursingStations' => $nursingStations,
         ]);
     }
 
@@ -108,6 +231,9 @@ class IpdPatient extends BaseController
         // Get bed assignment history
         $bedHistory = $this->bedAssignmentModel->getByIpd($ipdId);
 
+        $nurseModel = new \App\Models\NurseModel();
+        $nurseList = $nurseModel->getActiveNurses();
+
         return view('ipd_nursing/workspace', [
             'ipd_info' => $panelData['ipd_info'] ?? null,
             'person_info' => $person,
@@ -117,6 +243,7 @@ class IpdPatient extends BaseController
             'doctor_visit_fee_types' => $this->ipdBillingModel->getDoctorVisitFeeTypes(),
             'doctor_visit_fee_map' => $this->ipdBillingModel->getDoctorVisitFeeMap($doctorIds),
             'doc_list' => $docList,
+            'nurse_list' => $nurseList,
             'history_fields' => $historyFields,
             'patient_history_row' => $patientHistoryRow,
             'opd_history_snapshot' => $opdHistorySnapshot,
@@ -268,11 +395,21 @@ class IpdPatient extends BaseController
         $recordedBy = $user->username ?? $user->email ?? 'User';
         $recordedById = $user->id ?? null;
 
+        $nurseIdPost = (int) ($this->request->getPost('recorded_by_nurse_id') ?? 0);
+        if ($nurseIdPost > 0) {
+            $nurseModel = new \App\Models\NurseModel();
+            $nurseRow = $nurseModel->getNurseById($nurseIdPost);
+            if ($nurseRow) {
+                $recordedBy = ($nurseRow['nurse_code'] ? '[' . $nurseRow['nurse_code'] . '] ' : '') . $nurseRow['name'];
+                $recordedById = $nurseRow['id'];
+            }
+        }
+
         $data = [
             'ipd_id' => $ipdId,
             'entry_type' => $entryType,
             'recorded_at' => $recordedAt,
-            'shift_name' => $this->resolveShiftName($recordedAt),
+            'shift_name' => '',
             'temperature_c' => $this->resolveTemperatureCFromPost(),
             'pulse_rate' => $this->request->getPost('pulse_rate') !== null && $this->request->getPost('pulse_rate') !== '' ? (int) $this->request->getPost('pulse_rate') : null,
             'resp_rate' => $this->request->getPost('resp_rate') !== null && $this->request->getPost('resp_rate') !== '' ? (int) $this->request->getPost('resp_rate') : null,

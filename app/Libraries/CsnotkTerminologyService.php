@@ -28,10 +28,10 @@ class CsnotkTerminologyService
             $baseUrl = trim((string) env('CSNOTK_BASE_URL', 'https://csnotk.e-atria.in'));
         }
         $this->baseUrl    = rtrim($baseUrl, '/');
-        $this->timeoutSec = max(1, (int) env('snomed.csnotk.timeoutSec', 5));
+        $this->timeoutSec = 1;
 
-        $enabledRaw      = strtolower(trim((string) env('snomed.csnotk.enabled', env('CSNOTK_ENABLED', ''))));
-        $this->apiEnabled = in_array($enabledRaw, ['1', 'true', 'yes', 'on'], true) || $this->baseUrl !== '';
+        // Force 100% Local DB mode (No external HTTP calls)
+        $this->apiEnabled = false;
 
         try {
             $db = db_connect();
@@ -41,63 +41,83 @@ class CsnotkTerminologyService
                 $this->hasFtIndex     = $this->checkFtIndex($db);
             }
         } catch (\Throwable $e) {
-            // Local DB not available â€” will fall through to API
+            // Local DB not available
         }
     }
 
     public function isEnabled(): bool
     {
-        return $this->localAvailable || ($this->apiEnabled && $this->baseUrl !== '');
+        return $this->localAvailable;
     }
 
-    // â”€â”€â”€ Public search API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ─── Public search API ───────────────────────────────────────────────────
 
     /**
      * General diagnosis search (findings + disorders).
      * @return array<int, array{concept_id:string,term:string,source:string}>
      */
-    public function searchDiagnosis(string $query, int $limit = 20): array
+    public function searchDiagnosis(string $query, int $limit = 12): array
     {
         $q = trim($query);
         if ($q === '') {
             return [];
         }
-        $limit = max(1, min(50, $limit));
+        $limit = max(1, min(12, $limit));
 
-        // Local DB is primary — ~17ms vs ~330ms for external API from server
+        $cacheKey = 'snomed_diag_loc_' . md5(mb_strtolower($q) . '_' . $limit);
+        try {
+            if ($cached = cache($cacheKey)) {
+                if (is_array($cached)) {
+                    return $cached;
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        // Local DB is 100% primary (<20ms)
         $rows = $this->localSearch($q, $limit, ['finding', 'disorder', 'morphologic abnormality', 'disease']);
-
-        if (count($rows) < $limit && mb_strlen($q) >= 3 && $this->apiEnabled && $this->baseUrl !== '') {
-            $rows = $this->mergeFallback($rows, $this->apiSearchDiagnosis($q, $limit), $limit);
-        }
-
-        return array_map(fn ($r) => [
+        $res  = array_map(fn ($r) => [
             'concept_id' => (string) ($r['concept_id'] ?? ''),
             'term'       => (string) ($r['term'] ?? ''),
-            'source'     => (string) ($r['source'] ?? 'local'),
+            'source'     => 'snomed_local',
         ], array_slice($rows, 0, $limit));
+
+        try {
+            cache()->save($cacheKey, $res, 86400 * 30); // Cache for 30 days
+        } catch (\Throwable $e) {}
+
+        return $res;
     }
 
     /**
      * Search for clinical findings / symptoms / disorders (for chief complaints autocomplete).
      * @return array<int, array{concept_id:string,term:string,fsn:string,hierarchy:string,source:string}>
      */
-    public function searchFinding(string $query, int $limit = 20): array
+    public function searchFinding(string $query, int $limit = 12): array
     {
         $q = trim($query);
         if ($q === '') {
             return [];
         }
-        $limit = max(1, min(50, $limit));
+        $limit = max(1, min(12, $limit));
 
-        // Local DB is primary — ~17ms vs ~330ms for external API from server
+        $cacheKey = 'snomed_find_loc_' . md5(mb_strtolower($q) . '_' . $limit);
+        try {
+            if ($cached = cache($cacheKey)) {
+                if (is_array($cached)) {
+                    return $cached;
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        // Local DB is 100% primary (<20ms)
         $rows = $this->localSearch($q, $limit, ['finding', 'disorder']);
+        $res  = array_slice($rows, 0, $limit);
 
-        if (count($rows) < $limit && mb_strlen($q) >= 3 && $this->apiEnabled && $this->baseUrl !== '') {
-            $rows = $this->mergeFallback($rows, $this->apiSearchBySemTag($q, $limit, ['finding', 'disorder']), $limit);
-        }
+        try {
+            cache()->save($cacheKey, $res, 86400 * 30); // Cache for 30 days
+        } catch (\Throwable $e) {}
 
-        return array_slice($rows, 0, $limit);
+        return $res;
     }
 
     /**
@@ -201,16 +221,15 @@ class CsnotkTerminologyService
     }
 
     /**
-     * FULLTEXT MATCH ... AGAINST (Boolean Mode) search.
+     * FULLTEXT MATCH ... AGAINST (Boolean Mode) search on local 1.7M snomed_description table.
      * @return array<int, array<string, string>>
      */
     private function localFtSearch(string $q, int $limit): array
     {
         $words   = preg_split('/\s+/', mb_strtolower(trim($q))) ?: [$q];
-        $ftWords = array_filter($words, fn ($w) => mb_strlen($w) >= 3);
+        $ftWords = array_filter($words, fn ($w) => mb_strlen($w) >= 2);
 
         if (empty($ftWords)) {
-            // FT cannot handle words shorter than innodb_ft_min_token_size (default 3)
             return $this->localPrefixSearch($q, $limit);
         }
 
@@ -218,19 +237,19 @@ class CsnotkTerminologyService
 
         try {
             return (array) $this->db->query(
-                "SELECT d.concept_id, d.term
+                "SELECT d.concept_id, d.term,
+                        (SELECT d2.term FROM snomed_description d2 WHERE d2.concept_id = d.concept_id AND d2.type_id = ? AND d2.active = 1 LIMIT 1) AS fsn
                  FROM snomed_description d
                  INNER JOIN snomed_concept c ON c.concept_id = d.concept_id AND c.active = 1
                  WHERE d.active = 1
                    AND d.language_code = 'en'
-                   AND d.type_id = ?
                    AND MATCH(d.term) AGAINST(? IN BOOLEAN MODE)
-                 ORDER BY d.term ASC
+                 ORDER BY LENGTH(d.term) ASC
                  LIMIT ?",
                 [self::FSN_TYPE_ID, $ftQuery, $limit]
             )->getResultArray();
         } catch (\Throwable $e) {
-            $this->hasFtIndex = false; // Index may not exist yet â€” disable for this request
+            $this->hasFtIndex = false;
             return $this->localPrefixSearch($q, $limit);
         }
     }
@@ -244,14 +263,14 @@ class CsnotkTerminologyService
         $norm = mb_strtolower(trim($q));
         try {
             return (array) $this->db->query(
-                "SELECT d.concept_id, d.term
+                "SELECT d.concept_id, d.term,
+                        (SELECT d2.term FROM snomed_description d2 WHERE d2.concept_id = d.concept_id AND d2.type_id = ? AND d2.active = 1 LIMIT 1) AS fsn
                  FROM snomed_description d
                  INNER JOIN snomed_concept c ON c.concept_id = d.concept_id AND c.active = 1
                  WHERE d.active = 1
                    AND d.language_code = 'en'
-                   AND d.type_id = ?
                    AND d.term_normalized LIKE ?
-                 ORDER BY d.term ASC
+                 ORDER BY LENGTH(d.term) ASC
                  LIMIT ?",
                 [self::FSN_TYPE_ID, $norm . '%', $limit]
             )->getResultArray();
@@ -261,7 +280,7 @@ class CsnotkTerminologyService
     }
 
     /**
-     * Substring search: term_normalized LIKE '%query%' (full scan â€” slower).
+     * Substring search: term_normalized LIKE '%query%'.
      * @return array<int, array<string, string>>
      */
     private function localSubstringSearch(string $q, int $limit): array
@@ -269,14 +288,14 @@ class CsnotkTerminologyService
         $norm = mb_strtolower(trim($q));
         try {
             return (array) $this->db->query(
-                "SELECT d.concept_id, d.term
+                "SELECT d.concept_id, d.term,
+                        (SELECT d2.term FROM snomed_description d2 WHERE d2.concept_id = d.concept_id AND d2.type_id = ? AND d2.active = 1 LIMIT 1) AS fsn
                  FROM snomed_description d
                  INNER JOIN snomed_concept c ON c.concept_id = d.concept_id AND c.active = 1
                  WHERE d.active = 1
                    AND d.language_code = 'en'
-                   AND d.type_id = ?
                    AND d.term_normalized LIKE ?
-                 ORDER BY d.term ASC
+                 ORDER BY LENGTH(d.term) ASC
                  LIMIT ?",
                 [self::FSN_TYPE_ID, '%' . $norm . '%', $limit]
             )->getResultArray();
@@ -304,8 +323,9 @@ class CsnotkTerminologyService
             }
 
             $conceptId = trim((string) ($row['concept_id'] ?? ''));
-            $fsn       = trim((string) ($row['term'] ?? ''));
-            if ($conceptId === '' || $fsn === '') {
+            $term      = trim((string) ($row['term'] ?? ''));
+            $fsn       = trim((string) ($row['fsn'] ?? ''));
+            if ($conceptId === '' || $term === '') {
                 continue;
             }
 
@@ -313,16 +333,17 @@ class CsnotkTerminologyService
                 continue;
             }
 
-            // Extract semantic tag from FSN suffix: "Fever (finding)" â†’ "finding"
-            $hierarchy   = '';
-            $displayTerm = $fsn;
-            if (preg_match('/^(.*)\(([^)]+)\)$/', $fsn, $m)) {
-                $hierarchy   = trim($m[2]);
-                $displayTerm = trim($m[1]);
+            // Extract semantic tag from FSN or term suffix
+            $hierarchy = '';
+            if ($fsn !== '' && preg_match('/^(.*)\(([^)]+)\)$/', $fsn, $m)) {
+                $hierarchy = trim($m[2]);
+            } elseif (preg_match('/^(.*)\(([^)]+)\)$/', $term, $m)) {
+                $hierarchy = trim($m[2]);
+                $term = trim($m[1]);
             }
 
-            // Apply semantic tag filter
-            if (! empty($tagsLower)) {
+            // Apply semantic tag filter if tags specified and hierarchy identified
+            if (! empty($tagsLower) && $hierarchy !== '') {
                 if (! in_array(mb_strtolower($hierarchy), $tagsLower, true)) {
                     continue;
                 }
@@ -331,17 +352,17 @@ class CsnotkTerminologyService
             $seen[$conceptId] = true;
             $out[] = [
                 'concept_id' => $conceptId,
-                'term'       => $displayTerm !== '' ? $displayTerm : $fsn,
-                'fsn'        => $fsn,
+                'term'       => $term,
+                'fsn'        => $fsn !== '' ? $fsn : $term,
                 'hierarchy'  => $hierarchy,
-                'source'     => 'local',
+                'source'     => 'snomed_local',
             ];
         }
 
         return $out;
     }
 
-    // â”€â”€â”€ External API fallbacks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ─── External API fallbacks ───────────────────────────────────────────────
 
     /**
      * @return array<int, array{concept_id:string,term:string,fsn:string,hierarchy:string,source:string}>

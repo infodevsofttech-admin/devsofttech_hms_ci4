@@ -2709,16 +2709,27 @@ class Opd_prescription extends BaseController
      */
     public function opd_medicince_snomed_lookup()
     {
+        session_write_close();
+
         if (! $this->request->isAJAX()) {
             return $this->response->setStatusCode(400)->setJSON(['update' => 0, 'rows' => []]);
         }
 
         $term  = trim((string) $this->request->getGet('term'));
-        $limit = max(1, min(20, (int) ($this->request->getGet('limit') ?: 10)));
+        $limit = max(1, min(12, (int) ($this->request->getGet('limit') ?: 10)));
 
         if ($term === '') {
             return $this->response->setJSON(['update' => 1, 'rows' => [], 'message' => 'No term provided']);
         }
+
+        $cacheKey = 'med_snomed_loc_' . md5(mb_strtolower($term) . '_' . $limit);
+        try {
+            if ($cached = cache($cacheKey)) {
+                if (is_array($cached)) {
+                    return $this->response->setJSON($cached);
+                }
+            }
+        } catch (\Throwable $e) {}
 
         try {
             $svc  = new \App\Libraries\CsnotkTerminologyService();
@@ -2754,12 +2765,17 @@ class Opd_prescription extends BaseController
             ];
         }
 
-        return $this->response->setJSON([
+        $payload = [
             'update'  => 1,
             'rows'    => $out,
             'count'   => count($out),
             'message' => count($out) === 0 ? 'No SNOMED CT substance concepts found for "' . $term . '"' : '',
-        ]);
+        ];
+        try {
+            cache()->save($cacheKey, $payload, 86400 * 30);
+        } catch (\Throwable $e) {}
+
+        return $this->response->setJSON($payload);
     }
 
     public function opd_medicince_save()
@@ -3928,12 +3944,29 @@ class Opd_prescription extends BaseController
 
     public function opd_invest_snomed_search()
     {
+        session_write_close();
+
         $q = trim((string) $this->request->getGet('q'));
         if ($q === '' || strlen($q) < 2) {
             return $this->response->setJSON(['rows' => []]);
         }
+
+        $cacheKey = 'opd_invest_snomed_v3_' . md5(mb_strtolower($q));
+        try {
+            if ($cached = cache($cacheKey)) {
+                if (is_array($cached)) {
+                    return $this->response->setJSON(['rows' => $cached]);
+                }
+            }
+        } catch (\Throwable $e) {}
+
         $svc  = new \App\Libraries\CsnotkTerminologyService();
-        $rows = $svc->searchProcedure($q, 20);
+        $rows = $svc->searchProcedure($q, 12);
+
+        try {
+            cache()->save($cacheKey, $rows, 86400 * 30);
+        } catch (\Throwable $e) {}
+
         return $this->response->setJSON(['rows' => $rows]);
     }
 
@@ -6029,41 +6062,28 @@ class Opd_prescription extends BaseController
 
     public function complaints_search()
     {
+        session_write_close();
+
         $q = trim((string) $this->request->getGet('q'));
         if ($q === '') {
             return $this->response->setJSON(['rows' => []]);
         }
 
+        $needle = mb_strtolower($this->normalizeAutocompleteSuggestionText($q));
+        $cacheKey = 'complaint_search_v3_' . md5($needle);
+        try {
+            if ($cached = cache($cacheKey)) {
+                if (is_array($cached)) {
+                    return $this->response->setJSON(['rows' => $cached]);
+                }
+            }
+        } catch (\Throwable $e) {}
+
         $out  = [];
         $seen = [];
-        $needle = mb_strtolower($this->normalizeAutocompleteSuggestionText($q));
+        $maxLimit = 12;
 
-        // 1. SNOMED CT via CSNOtk (finding / disorder semantic tags)
-        $csnotkRows = (new CsnotkTerminologyService())->searchFinding($q, 20);
-        foreach ($csnotkRows as $row) {
-            $name = $this->normalizeAutocompleteSuggestionText((string) ($row['term'] ?? ''));
-            if ($name === '') {
-                continue;
-            }
-            $conceptId = trim((string) ($row['concept_id'] ?? ''));
-            $hierarchy = trim((string) ($row['hierarchy'] ?? ''));
-            $k = mb_strtoupper($name) . '|' . $conceptId;
-            if (isset($seen[$k])) {
-                continue;
-            }
-            $seen[$k] = true;
-            $out[] = [
-                'name'       => $name,
-                'concept_id' => $conceptId,
-                'hierarchy'  => $hierarchy,
-                'source'     => 'snomed',
-            ];
-            if (count($out) >= 20) {
-                return $this->response->setJSON(['rows' => array_slice($out, 0, 20)]);
-            }
-        }
-
-        // 2. Local complaints_master fallback
+        // 1. Local complaints_master (Primary hospital master list - ~1ms response)
         if ($this->db->tableExists('complaints_master')) {
             $localRows = $this->db->table('complaints_master')
                 ->select('Code as code, Name as name, name_hinglish, show_in_short, ai_hint')
@@ -6075,7 +6095,7 @@ class Opd_prescription extends BaseController
                 ->groupEnd()
                 ->orderBy('show_in_short', 'DESC')
                 ->orderBy('Name', 'ASC')
-                ->limit(20)
+                ->limit($maxLimit)
                 ->get()
                 ->getResultArray();
 
@@ -6096,41 +6116,72 @@ class Opd_prescription extends BaseController
                     'source'        => 'local',
                     'name_hinglish' => (string) ($row['name_hinglish'] ?? ''),
                 ];
-                if (count($out) >= 20) {
-                    return $this->response->setJSON(['rows' => array_slice($out, 0, 20)]);
+            }
+        }
+
+        // 2. Hospital frequent autotype keywords
+        if (count($out) < $maxLimit) {
+            $keywordRows = $this->fetchAutotypeKeywords(
+                'complaints',
+                $q,
+                max(0, (int) ($this->getCurrentUserId() ?? 0)),
+                8
+            );
+            foreach ($keywordRows as $keyword) {
+                $name = $this->normalizeAutocompleteSuggestionText((string) $keyword);
+                if ($name === '' || ($needle !== '' && mb_stripos($name, $needle) === false)) {
+                    continue;
+                }
+                $k = mb_strtoupper($name) . '|';
+                if (isset($seen[$k])) {
+                    continue;
+                }
+                $seen[$k] = true;
+                $out[] = [
+                    'name'       => $name,
+                    'concept_id' => '',
+                    'hierarchy'  => '',
+                    'source'     => 'keyword',
+                ];
+                if (count($out) >= $maxLimit) {
+                    break;
                 }
             }
         }
 
-        // 3. User autotype keywords
-        $keywordRows = $this->fetchAutotypeKeywords(
-            'complaints',
-            $q,
-            max(0, (int) ($this->getCurrentUserId() ?? 0)),
-            10
-        );
-        foreach ($keywordRows as $keyword) {
-            $name = $this->normalizeAutocompleteSuggestionText((string) $keyword);
-            if ($name === '' || ($needle !== '' && mb_stripos($name, $needle) === false)) {
-                continue;
-            }
-            $k = mb_strtoupper($name) . '|';
-            if (isset($seen[$k])) {
-                continue;
-            }
-            $seen[$k] = true;
-            $out[] = [
-                'name'       => $name,
-                'concept_id' => '',
-                'hierarchy'  => '',
-                'source'     => 'keyword',
-            ];
-            if (count($out) >= 20) {
-                break;
+        // 3. Local 1.7M SNOMED CT database (100% offline local DB query)
+        if (count($out) < $maxLimit) {
+            $csnotkRows = (new CsnotkTerminologyService())->searchFinding($q, $maxLimit);
+            foreach ($csnotkRows as $row) {
+                $name = $this->normalizeAutocompleteSuggestionText((string) ($row['term'] ?? ''));
+                if ($name === '') {
+                    continue;
+                }
+                $conceptId = trim((string) ($row['concept_id'] ?? ''));
+                $hierarchy = trim((string) ($row['hierarchy'] ?? ''));
+                $k = mb_strtoupper($name) . '|' . $conceptId;
+                if (isset($seen[$k])) {
+                    continue;
+                }
+                $seen[$k] = true;
+                $out[] = [
+                    'name'       => $name,
+                    'concept_id' => $conceptId,
+                    'hierarchy'  => $hierarchy,
+                    'source'     => 'snomed_local',
+                ];
+                if (count($out) >= $maxLimit) {
+                    break;
+                }
             }
         }
 
-        return $this->response->setJSON(['rows' => array_slice($out, 0, 20)]);
+        $res = array_slice($out, 0, $maxLimit);
+        try {
+            cache()->save($cacheKey, $res, 86400 * 30); // 30-day server cache for repeat queries
+        } catch (\Throwable $e) {}
+
+        return $this->response->setJSON(['rows' => $res]);
     }
 
     /**
@@ -6241,142 +6292,153 @@ class Opd_prescription extends BaseController
 
     public function provisional_diagnosis_search()
     {
+        session_write_close();
+
         $q = trim((string) $this->request->getGet('q'));
         if ($q === '') {
             return $this->response->setJSON(['rows' => []]);
         }
 
+        $needle = mb_strtolower($this->normalizeAutocompleteSuggestionText($q));
+        $cacheKey = 'prov_diag_v3_' . md5($needle);
+        try {
+            if ($cached = cache($cacheKey)) {
+                if (is_array($cached)) {
+                    return $this->response->setJSON(['rows' => $cached]);
+                }
+            }
+        } catch (\Throwable $e) {}
+
         $out = [];
         $seen = [];
-        $needle = mb_strtolower($this->normalizeAutocompleteSuggestionText($q));
-        $hasLocalSnomedRows = false;
+        $maxLimit = 12;
 
-        $csnotkRows = (new CsnotkTerminologyService())->searchDiagnosis($q, 20);
-        foreach ($csnotkRows as $row) {
-            $name = $this->normalizeAutocompleteSuggestionText((string) ($row['term'] ?? ''));
-            if ($name === '') {
-                continue;
-            }
-            if ($needle !== '' && mb_stripos($name, $needle) === false) {
-                continue;
-            }
+        // 1. Local disease_master hospital master list (Primary ~1ms)
+        if ($this->db->tableExists('disease_master')) {
+            $fields = $this->db->getFieldNames('disease_master') ?? [];
+            $nameField = in_array('Name', $fields, true) ? 'Name' : (in_array('name', $fields, true) ? 'name' : null);
+            if ($nameField !== null) {
+                $diseaseRows = $this->db->table('disease_master')
+                    ->select($nameField . ' as name')
+                    ->like($nameField, $q)
+                    ->orderBy($nameField, 'ASC')
+                    ->limit($maxLimit)
+                    ->get()
+                    ->getResultArray();
 
-            $conceptId = trim((string) ($row['concept_id'] ?? ''));
-            $source = trim((string) ($row['source'] ?? 'csnotk'));
-            if (in_array($source, ['local', 'snomed'], true)) {
-                $hasLocalSnomedRows = true;
-            }
-            $k = mb_strtoupper($name) . '|' . $conceptId;
-            if (isset($seen[$k])) {
-                continue;
-            }
-            $seen[$k] = true;
-
-            $out[] = [
-                'name' => $name,
-                'snomed_concept_id' => $conceptId,
-                'snomed_term' => $name,
-                'source' => $source,
-            ];
-
-            if (count($out) >= 20) {
-                return $this->response->setJSON(['rows' => array_slice($out, 0, 20)]);
+                foreach ($diseaseRows as $row) {
+                    $name = $this->normalizeAutocompleteSuggestionText((string) ($row['name'] ?? ''));
+                    if ($name === '' || ($needle !== '' && mb_stripos($name, $needle) === false)) {
+                        continue;
+                    }
+                    $k = mb_strtoupper($name);
+                    if (isset($seen[$k])) {
+                        continue;
+                    }
+                    $seen[$k] = true;
+                    $out[] = [
+                        'name' => $name,
+                        'snomed_concept_id' => '',
+                        'snomed_term' => '',
+                        'source' => 'disease_master',
+                    ];
+                }
             }
         }
 
-        $snomedRows = ($hasLocalSnomedRows || mb_strlen($needle) < 3) ? [] : $this->fetchSnomedDiagnosisRows($q, 20);
-        foreach ($snomedRows as $row) {
-            $name = $this->normalizeAutocompleteSuggestionText((string) ($row['term'] ?? ''));
-            if ($name === '') {
-                continue;
-            }
-            if ($needle !== '' && mb_stripos($name, $needle) === false) {
-                continue;
-            }
-
-            $k = mb_strtoupper($name);
-            if (isset($seen[$k])) {
-                continue;
-            }
-            $seen[$k] = true;
-            $out[] = [
-                'name' => $name,
-                'snomed_concept_id' => (string) ($row['concept_id'] ?? ''),
-                'snomed_term' => $name,
-                'source' => 'snomed',
-            ];
-
-            if (count($out) >= 20) {
-                return $this->response->setJSON(['rows' => array_slice($out, 0, 20)]);
+        // 2. Hospital frequent autotype keywords
+        if (count($out) < $maxLimit) {
+            $keywordRows = $this->fetchAutotypeKeywords(
+                'provisional_diagnosis',
+                $q,
+                max(0, (int) ($this->getCurrentUserId() ?? 0)),
+                8
+            );
+            foreach ($keywordRows as $keyword) {
+                $name = $this->normalizeAutocompleteSuggestionText((string) $keyword);
+                if ($name === '' || ($needle !== '' && mb_stripos($name, $needle) === false)) {
+                    continue;
+                }
+                $k = mb_strtoupper($name);
+                if (isset($seen[$k])) {
+                    continue;
+                }
+                $seen[$k] = true;
+                $out[] = [
+                    'name' => $name,
+                    'snomed_concept_id' => '',
+                    'snomed_term' => '',
+                    'source' => 'keyword',
+                ];
+                if (count($out) >= $maxLimit) {
+                    break;
+                }
             }
         }
 
-        if (! $this->db->tableExists('disease_master')) {
-            return $this->response->setJSON(['rows' => array_slice($out, 0, 20)]);
+        // 3. Local 1.7M SNOMED CT Database (100% offline local DB query)
+        if (count($out) < $maxLimit) {
+            $csnotkRows = (new CsnotkTerminologyService())->searchDiagnosis($q, $maxLimit);
+            foreach ($csnotkRows as $row) {
+                $name = $this->normalizeAutocompleteSuggestionText((string) ($row['term'] ?? ''));
+                if ($name === '' || ($needle !== '' && mb_stripos($name, $needle) === false)) {
+                    continue;
+                }
+
+                $conceptId = trim((string) ($row['concept_id'] ?? ''));
+                $source = trim((string) ($row['source'] ?? 'snomed_local'));
+                $k = mb_strtoupper($name) . '|' . $conceptId;
+                if (isset($seen[$k])) {
+                    continue;
+                }
+                $seen[$k] = true;
+
+                $out[] = [
+                    'name' => $name,
+                    'snomed_concept_id' => $conceptId,
+                    'snomed_term' => $name,
+                    'source' => $source,
+                ];
+
+                if (count($out) >= $maxLimit) {
+                    break;
+                }
+            }
         }
 
-        $fields = $this->db->getFieldNames('disease_master') ?? [];
-        $nameField = in_array('Name', $fields, true) ? 'Name' : (in_array('name', $fields, true) ? 'name' : null);
-        if ($nameField === null) {
-            return $this->response->setJSON(['rows' => array_slice($out, 0, 20)]);
+        // 4. Secondary local SNOMED fallback if still below limit
+        if (count($out) < $maxLimit) {
+            $snomedRows = $this->fetchSnomedDiagnosisRows($q, $maxLimit);
+            foreach ($snomedRows as $row) {
+                $name = $this->normalizeAutocompleteSuggestionText((string) ($row['term'] ?? ''));
+                if ($name === '' || ($needle !== '' && mb_stripos($name, $needle) === false)) {
+                    continue;
+                }
+
+                $k = mb_strtoupper($name);
+                if (isset($seen[$k])) {
+                    continue;
+                }
+                $seen[$k] = true;
+                $out[] = [
+                    'name' => $name,
+                    'snomed_concept_id' => (string) ($row['concept_id'] ?? ''),
+                    'snomed_term' => $name,
+                    'source' => 'snomed_local',
+                ];
+
+                if (count($out) >= $maxLimit) {
+                    break;
+                }
+            }
         }
 
-        $rows = $this->db->table('disease_master')
-            ->select($nameField . ' as name')
-            ->like($nameField, $q)
-            ->orderBy($nameField, 'ASC')
-            ->limit(20)
-            ->get()
-            ->getResultArray();
+        $res = array_slice($out, 0, $maxLimit);
+        try {
+            cache()->save($cacheKey, $res, 86400 * 30); // 30-day server cache
+        } catch (\Throwable $e) {}
 
-        $keywordRows = $this->fetchAutotypeKeywords(
-            'provisional_diagnosis',
-            $q,
-            max(0, (int) ($this->getCurrentUserId() ?? 0)),
-            20
-        );
-        foreach ($rows as $row) {
-            $name = $this->normalizeAutocompleteSuggestionText((string) ($row['name'] ?? ''));
-            if ($name === '') {
-                continue;
-            }
-            if ($needle !== '' && mb_stripos($name, $needle) === false) {
-                continue;
-            }
-            $k = mb_strtoupper($name);
-            if (isset($seen[$k])) {
-                continue;
-            }
-            $seen[$k] = true;
-            $out[] = [
-                'name' => $name,
-                'snomed_concept_id' => '',
-                'snomed_term' => '',
-                'source' => 'disease_master',
-            ];
-        }
-        foreach ($keywordRows as $keyword) {
-            $name = $this->normalizeAutocompleteSuggestionText((string) $keyword);
-            if ($name === '') {
-                continue;
-            }
-            if ($needle !== '' && mb_stripos($name, $needle) === false) {
-                continue;
-            }
-            $k = mb_strtoupper($name);
-            if (isset($seen[$k])) {
-                continue;
-            }
-            $seen[$k] = true;
-            $out[] = [
-                'name' => $name,
-                'snomed_concept_id' => '',
-                'snomed_term' => '',
-                'source' => 'keyword',
-            ];
-        }
-
-        return $this->response->setJSON(['rows' => array_slice($out, 0, 20)]);
+        return $this->response->setJSON(['rows' => $res]);
     }
 
     private function fetchSnomedDiagnosisRows(string $query, int $limit = 20): array

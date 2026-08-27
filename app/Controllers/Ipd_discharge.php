@@ -3525,33 +3525,89 @@ class Ipd_discharge extends BaseController
 
     public function surgery_master_lookup()
     {
+        session_write_close();
+
         $type = $this->normalizeSurgeryTermType((string) $this->request->getGet('type'));
         $q = trim((string) $this->request->getGet('q'));
+        $masterOnly = (int) $this->request->getGet('master_only') === 1;
 
-        if (! $this->ensureDischargeSurgeryMasterTable()) {
+        if ($q === '') {
             return $this->response->setJSON(['rows' => []]);
         }
 
-        $builder = $this->db->table('ipd_discharge_surgery_master')
-            ->select('id,term_type,term_name,term_code,icd_code')
-            ->where('is_active', 1)
-            ->where('term_type', $type);
+        $cacheKey = 'surg_lkp_v4_' . md5($type . '_' . ($masterOnly ? 'm_' : 'all_') . mb_strtolower($q));
+        try {
+            if ($cached = cache($cacheKey)) {
+                if (is_array($cached)) {
+                    return $this->response->setJSON(['rows' => $cached]);
+                }
+            }
+        } catch (\Throwable $e) {}
 
-        if ($q !== '') {
-            $builder->groupStart()
-                ->like('term_name', $q)
-                ->orLike('term_code', $q)
-                ->orLike('icd_code', $q)
-                ->groupEnd();
+        $rows = [];
+        $seen = [];
+        $maxLimit = 12;
+
+        if ($this->ensureDischargeSurgeryMasterTable()) {
+            $masterRows = $this->db->table('ipd_discharge_surgery_master')
+                ->select('id,term_type,term_name,term_code,icd_code')
+                ->where('is_active', 1)
+                ->where('term_type', $type)
+                ->groupStart()
+                    ->like('term_name', $q)
+                    ->orLike('term_code', $q)
+                    ->orLike('icd_code', $q)
+                ->groupEnd()
+                ->orderBy('term_name', 'ASC')
+                ->limit($maxLimit)
+                ->get()
+                ->getResultArray();
+
+            foreach ($masterRows as $row) {
+                $name = (string) ($row['term_name'] ?? '');
+                if ($name === '') continue;
+                $k = mb_strtoupper($name);
+                if (isset($seen[$k])) continue;
+                $seen[$k] = true;
+                $rows[] = [
+                    'id' => (int) ($row['id'] ?? 0),
+                    'term_type' => (string) ($row['term_type'] ?? $type),
+                    'term_name' => $name,
+                    'term_code' => (string) ($row['term_code'] ?? ''),
+                    'icd_code' => (string) ($row['icd_code'] ?? ''),
+                    'source' => 'master',
+                ];
+            }
         }
 
-        $rows = $builder
-            ->orderBy('term_name', 'ASC')
-            ->limit(25)
-            ->get()
-            ->getResultArray();
+        // SNOMED CT Procedure / Surgery Fallback (only if not master_only)
+        if (! $masterOnly && count($rows) < $maxLimit) {
+            $snomedRows = (new \App\Libraries\CsnotkTerminologyService())->searchProcedure($q, $maxLimit);
+            foreach ($snomedRows as $row) {
+                $name = (string) ($row['term'] ?? $row['fsn'] ?? '');
+                if ($name === '') continue;
+                $conceptId = (string) ($row['concept_id'] ?? '');
+                $k = mb_strtoupper($name);
+                if (isset($seen[$k])) continue;
+                $seen[$k] = true;
+                $rows[] = [
+                    'id' => 0,
+                    'term_type' => $type,
+                    'term_name' => $name,
+                    'term_code' => $conceptId,
+                    'icd_code' => '',
+                    'source' => 'snomed_local',
+                ];
+                if (count($rows) >= $maxLimit) break;
+            }
+        }
 
-        return $this->response->setJSON(['rows' => $rows]);
+        $res = array_slice($rows, 0, $maxLimit);
+        try {
+            cache()->save($cacheKey, $res, 86400 * 30);
+        } catch (\Throwable $e) {}
+
+        return $this->response->setJSON(['rows' => $res]);
     }
 
     public function surgery_master_list()
@@ -3730,6 +3786,7 @@ class Ipd_discharge extends BaseController
     public function course_master_lookup()
     {
         $q = trim((string) $this->request->getGet('q'));
+        $masterOnly = (int) ($this->request->getGet('master_only') ?? 0);
         $rows = [];
 
         if ($q !== '') {
@@ -3753,6 +3810,20 @@ class Ipd_discharge extends BaseController
                         'term_name' => (string) ($row['term_name'] ?? ''),
                         'term_code' => (string) ($row['term_code'] ?? ''),
                         'icd_code' => (string) ($row['icd_code'] ?? ''),
+                        'source' => 'master',
+                    ];
+                }
+            }
+
+            if ($masterOnly === 0 && count($rows) < 10 && method_exists($this, 'searchSnomedTerms')) {
+                $snomedRows = $this->searchSnomedTerms($q, 10 - count($rows));
+                foreach ($snomedRows as $s) {
+                    $rows[] = [
+                        'id' => 0,
+                        'term_name' => (string) ($s['term'] ?? ''),
+                        'term_code' => (string) ($s['concept_id'] ?? ''),
+                        'icd_code' => '',
+                        'source' => 'snomed',
                     ];
                 }
             }
@@ -6131,6 +6202,24 @@ class Ipd_discharge extends BaseController
                     $notice = 'Select a valid diagnosis row to remove.';
                     $noticeType = 'warning';
                 }
+            }
+
+            if ($this->request->isAJAX() && in_array($action, ['add_surgery', 'remove_surgery', 'add_procedure', 'remove_procedure', 'add_diagnosis', 'remove_diagnosis', 'add_course', 'remove_course'], true)) {
+                $surgeryRows = $this->byIpdRows('ipd_discharge_surgery', ['id', 'surgery_name', 'surgery_date', 'surgery_remark'], 'id ASC', $ipdId);
+                $procedureRows = $this->byIpdRows('ipd_discharge_procedure', ['id', 'procedure_name', 'procedure_date', 'procedure_remark'], 'id ASC', $ipdId);
+                $diagnosisRows = $this->byIpdRows('ipd_discharge_diagnosis', ['id', 'comp_report', 'comp_remark'], 'id ASC', $ipdId);
+                $courseRows = $this->byIpdRows('ipd_discharge_course', ['id', 'comp_report', 'comp_remark'], 'id ASC', $ipdId);
+                return $this->response->setJSON([
+                    'update' => ($savedAny ?? false) ? 1 : 0,
+                    'notice' => $notice ?? '',
+                    'noticeType' => $noticeType ?? 'info',
+                    'surgeryRows' => $surgeryRows,
+                    'procedureRows' => $procedureRows,
+                    'diagnosisRows' => $diagnosisRows,
+                    'courseRows' => $courseRows,
+                    'csrfName' => csrf_token(),
+                    'csrfHash' => csrf_hash(),
+                ]);
             } elseif ($action === 'add_course') {
                 $name = trim((string) ($this->request->getPost('new_course_name') ?? ''));
                 $remark = trim((string) ($this->request->getPost('new_course_remark') ?? ''));
@@ -8195,6 +8284,29 @@ class Ipd_discharge extends BaseController
             }
         }
 
+        $chiefComplaintsList = [];
+        if ($this->tableHasColumns('ipd_discharge_complaint', ['ipd_id', 'comp_report'])) {
+            $complaintRows = $this->byIpdRows('ipd_discharge_complaint', ['comp_report', 'comp_remark'], 'id ASC', $ipdId);
+            foreach ($complaintRows as $row) {
+                $term = trim((string) ($row['comp_report'] ?? ''));
+                $duration = trim((string) ($row['comp_remark'] ?? ''));
+                if ($term !== '') {
+                    $text = $term . ($duration !== '' ? (' - ' . $duration) : '');
+                    $chiefComplaintsList[] = ['text' => $text, 'code' => ''];
+                }
+            }
+        }
+
+        $complaintRemarkText = '';
+        if ($this->tableHasColumns('ipd_discharge_complaint_remark', ['ipd_id', 'comp_remark'])) {
+            $complaintRemarkRow = $this->firstRowByIpd('ipd_discharge_complaint_remark', $ipdId);
+            $complaintRemarkText = trim((string) ($complaintRemarkRow['comp_remark'] ?? ''));
+        }
+
+        if (empty($chiefComplaintsList) && $complaintRemarkText !== '') {
+            $chiefComplaintsList[] = ['text' => $complaintRemarkText, 'code' => ''];
+        }
+
         $procedureRows = [];
         foreach ($this->byIpdRows('ipd_discharge_surgery', ['surgery_name', 'surgery_date'], 'id ASC', $ipdId) as $row) {
             $text = trim((string) ($row['surgery_name'] ?? ''));
@@ -8297,6 +8409,8 @@ class Ipd_discharge extends BaseController
                 'start' => $admissionIso,
                 'end' => $dischargeIso,
             ],
+            'chief_complaints' => $chiefComplaintsList,
+            'chief_complaint_narrative' => $complaintRemarkText,
             'conditions' => $conditionRows,
             'procedures' => $procedureRows,
             'medications' => $medicationRows,

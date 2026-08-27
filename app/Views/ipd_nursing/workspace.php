@@ -86,39 +86,60 @@ ksort($nurseNames);
 
     .nursing-workspace-page .card {
         border: 1px solid #e6edf5;
-        box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+        box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04);
+        border-radius: 0.5rem;
     }
 
     .nursing-workspace-page #nursing_entry_tabs {
-        gap: 0.35rem;
-        border-bottom: 1px solid #e6edf5;
-        padding: 0.65rem 0.85rem 0 !important;
-        background: #f8f9fc;
+        display: flex;
+        flex-direction: column;
+        gap: 0.3rem;
+        padding: 0;
+        background: transparent;
+        border: none;
     }
 
     .nursing-workspace-page #nursing_entry_tabs .nav-link {
-        border: 1px solid transparent;
-        border-radius: 0.45rem 0.45rem 0 0;
-        color: #4154f1;
+        border-radius: 0.45rem;
+        color: #334155;
         font-weight: 500;
-        padding: 0.5rem 0.85rem;
-        margin-bottom: -1px;
+        font-size: 0.88rem;
+        padding: 0.65rem 0.85rem;
+        text-align: left;
+        display: flex;
+        align-items: center;
+        width: 100%;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        transition: all 0.15s ease-in-out;
+    }
+
+    .nursing-workspace-page #nursing_entry_tabs .nav-link i {
+        font-size: 1.05rem;
+        margin-right: 0.65rem;
+        flex-shrink: 0;
     }
 
     .nursing-workspace-page #nursing_entry_tabs .nav-link:hover {
         background: #eef2ff;
-        border-color: #dbe2f3;
+        border-color: #cbd5e1;
+        color: #1e40af;
     }
 
     .nursing-workspace-page #nursing_entry_tabs .nav-link.active {
-        background: #fff;
-        border-color: #e6edf5 #e6edf5 #fff;
-        color: #012970;
+        background: #0d6efd;
+        border-color: #0d6efd;
+        color: #ffffff !important;
+        box-shadow: 0 2px 6px rgba(13, 110, 253, 0.3);
+        font-weight: 600;
+    }
+
+    .nursing-workspace-page #nursing_entry_tabs .nav-link.active i {
+        color: #ffffff !important;
     }
 
     .nursing-workspace-page .nursing-tab-pane {
-        margin-top: 0.85rem;
-        padding: 0.25rem 0.45rem 0.75rem;
+        padding: 0.1rem;
     }
 
     .nursing-workspace-page .nursing-tab-pane .card,
@@ -133,23 +154,11 @@ ksort($nurseNames);
     .nursing-workspace-page .table-responsive {
         margin-top: 0.35rem;
     }
-
-    @media (max-width: 991.98px) {
-        .nursing-workspace-page #nursing_entry_tabs {
-            overflow-x: auto;
-            flex-wrap: nowrap;
-            white-space: nowrap;
-        }
-
-        .nursing-workspace-page #nursing_entry_tabs .nav-item {
-            flex: 0 0 auto;
-        }
-    }
 </style>
 
 <section class="content nursing-workspace-page">
     <div class="card mb-3">
-        <div class="card-header d-flex justify-content-between align-items-center">
+        <div class="card-header d-flex justify-content-between align-items-center py-2">
             <h5 class="mb-0">Nursing Workspace</h5>
             <div class="d-flex gap-2">
                 <button
@@ -169,8 +178,8 @@ ksort($nurseNames);
                 <button type="button" class="btn btn-outline-secondary btn-sm" onclick="load_form('<?= base_url('ipd/patient') ?>','IPD Patient List');">Back to IPD Patient List</button>
             </div>
         </div>
-        <div class="card-body">
-            <p class="mb-1">
+        <div class="card-body py-2">
+            <p class="mb-0">
                 <strong>IPD:</strong> <?= esc((string) ($ipd->ipd_code ?? '')) ?> |
                 <strong>Patient:</strong> <?= esc((string) ($person->p_fname ?? '')) ?> |
                 <strong>UHID:</strong> <?= esc((string) ($person->p_code ?? '')) ?>
@@ -179,41 +188,53 @@ ksort($nurseNames);
     </div>
 
     <div id="nursing_panel_content">
-        <div class="card mb-3">
-            <div class="card-header p-0">
-                <ul class="nav nav-tabs card-header-tabs px-2 pt-2" id="nursing_entry_tabs" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button type="button" class="nav-link" data-nursing-tab="nursing_tab_admission">Admission Snapshot</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button type="button" class="nav-link" data-nursing-tab="nursing_tab_history">History &amp; Physical Assessment</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button type="button" class="nav-link active" data-nursing-tab="nursing_tab_vitals">Vitals</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button type="button" class="nav-link" data-nursing-tab="nursing_tab_fluid">Fluid Intake / Output</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button type="button" class="nav-link" data-nursing-tab="nursing_tab_treatment">Treatment / Procedure Note</button>
-                    </li>
-                    <?php if ($canViewIpdOt) : ?>
-                        <li class="nav-item" role="presentation">
-                            <button type="button" class="nav-link" data-nursing-tab="nursing_tab_ot" data-url="<?= esc($otPanelUrl, 'attr') ?>">Surgery / OT</button>
-                        </li>
-                    <?php endif ?>
-                    <li class="nav-item" role="presentation">
-                        <button type="button" class="nav-link" data-nursing-tab="nursing_tab_scan">Scan Paper -> Auto Fill</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button type="button" class="nav-link" data-nursing-tab="nursing_tab_charge">Charge Entry</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button type="button" class="nav-link" data-nursing-tab="nursing_tab_bed">Bed Management</button>
-                    </li>
-                </ul>
+        <div class="row g-3">
+            <!-- Left Navigation Menu -->
+            <div class="col-md-4 col-lg-3">
+                <div class="card shadow-sm border-0 sticky-top" style="top: 15px; z-index: 10;">
+                    <div class="card-header bg-light py-2 border-bottom">
+                        <strong class="text-dark" style="font-size: 0.88rem;">
+                            <i class="bi bi-layout-sidebar-inset me-1 text-primary"></i> Workspace Menu
+                        </strong>
+                    </div>
+                    <div class="p-2" id="nursing_entry_tabs" role="tablist">
+                        <button type="button" class="nav-link" data-nursing-tab="nursing_tab_admission">
+                            <i class="bi bi-person-vcard text-primary"></i> Admission Snapshot
+                        </button>
+                        <button type="button" class="nav-link" data-nursing-tab="nursing_tab_history">
+                            <i class="bi bi-file-earmark-medical text-info"></i> History &amp; Physical
+                        </button>
+                        <button type="button" class="nav-link active" data-nursing-tab="nursing_tab_vitals">
+                            <i class="bi bi-heart-pulse text-danger"></i> Vitals
+                        </button>
+                        <button type="button" class="nav-link" data-nursing-tab="nursing_tab_fluid">
+                            <i class="bi bi-droplet text-primary"></i> Fluid Intake / Output
+                        </button>
+                        <button type="button" class="nav-link" data-nursing-tab="nursing_tab_treatment">
+                            <i class="bi bi-prescription2 text-warning"></i> Treatment / Procedure Note
+                        </button>
+                        <?php if ($canViewIpdOt) : ?>
+                            <button type="button" class="nav-link" data-nursing-tab="nursing_tab_ot" data-url="<?= esc($otPanelUrl, 'attr') ?>">
+                                <i class="bi bi-hospital text-secondary"></i> Surgery / OT
+                            </button>
+                        <?php endif ?>
+                        <button type="button" class="nav-link" data-nursing-tab="nursing_tab_scan">
+                            <i class="bi bi-qr-code-scan text-success"></i> Scan Paper -&gt; Auto Fill
+                        </button>
+                        <button type="button" class="nav-link" data-nursing-tab="nursing_tab_charge">
+                            <i class="bi bi-currency-dollar text-success"></i> Charge Entry
+                        </button>
+                        <button type="button" class="nav-link" data-nursing-tab="nursing_tab_bed">
+                            <i class="bi bi-door-open text-primary"></i> Bed Management
+                        </button>
+                    </div>
+                </div>
             </div>
-            <div class="card-body">
+
+            <!-- Right Content Area -->
+            <div class="col-md-8 col-lg-9">
+                <div class="card shadow-sm border-0 mb-3">
+                    <div class="card-body p-3">
 
                 <!-- Bed Management Tab -->
                 <div class="nursing-tab-pane d-none" id="nursing_tab_bed">
@@ -382,7 +403,17 @@ ksort($nurseNames);
                         <?= csrf_field() ?>
                         <input type="hidden" name="entry_type" value="admission">
                         <div class="col-md-3"><label class="form-label">Recorded At</label><input type="datetime-local" class="form-control" name="recorded_at" value="<?= date('Y-m-d\\TH:i') ?>"></div>
-                        <div class="col-md-2"><label class="form-label">Shift</label><input type="text" class="form-control nursing-shift-display" value="Morning" readonly></div>
+                        <div class="col-md-4">
+                            <label class="form-label">Nursing Staff (ID / Name)</label>
+                            <select name="recorded_by_nurse_id" class="form-select">
+                                <option value="0">-- Select Nursing Staff --</option>
+                                <?php foreach (($nurse_list ?? []) as $nRow): ?>
+                                    <option value="<?= (int) $nRow['id'] ?>">
+                                        <?= esc(($nRow['nurse_code'] ? '[' . $nRow['nurse_code'] . '] ' : '') . $nRow['name']) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
                         <div class="col-md-12"><label class="form-label">Admission Complaints / Reason</label><textarea class="form-control" name="treatment_text" rows="3" placeholder="Chief complaints and reason for admission"></textarea></div>
                         <div class="col-md-1"><label class="form-label">Temp °F</label><input type="number" step="0.1" class="form-control" name="temperature_f"></div>
                         <div class="col-md-1"><label class="form-label">Pulse</label><input type="number" class="form-control" name="pulse_rate"></div>
@@ -489,7 +520,17 @@ ksort($nurseNames);
                         <?= csrf_field() ?>
                         <input type="hidden" name="entry_type" value="vitals">
                         <div class="col-md-3"><label class="form-label">Recorded At</label><input type="datetime-local" class="form-control" name="recorded_at" value="<?= date('Y-m-d\\TH:i') ?>"></div>
-                        <div class="col-md-2"><label class="form-label">Shift</label><input type="text" class="form-control nursing-shift-display" value="Morning" readonly></div>
+                        <div class="col-md-4">
+                            <label class="form-label">Nursing Staff (ID / Name)</label>
+                            <select name="recorded_by_nurse_id" class="form-select">
+                                <option value="0">-- Select Nursing Staff --</option>
+                                <?php foreach (($nurse_list ?? []) as $nRow): ?>
+                                    <option value="<?= (int) $nRow['id'] ?>">
+                                        <?= esc(($nRow['nurse_code'] ? '[' . $nRow['nurse_code'] . '] ' : '') . $nRow['name']) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
                         <div class="col-md-1"><label class="form-label">Temp °F</label><input type="number" step="0.1" class="form-control" name="temperature_f"></div>
                         <div class="col-md-1"><label class="form-label">Pulse</label><input type="number" class="form-control" name="pulse_rate"></div>
                         <div class="col-md-1"><label class="form-label">Resp</label><input type="number" class="form-control" name="resp_rate"></div>
@@ -507,7 +548,17 @@ ksort($nurseNames);
                         <?= csrf_field() ?>
                         <input type="hidden" name="entry_type" value="fluid">
                         <div class="col-md-3"><label class="form-label">Recorded At</label><input type="datetime-local" class="form-control" name="recorded_at" value="<?= date('Y-m-d\\TH:i') ?>"></div>
-                        <div class="col-md-2"><label class="form-label">Shift</label><input type="text" class="form-control nursing-shift-display" value="Morning" readonly></div>
+                        <div class="col-md-4">
+                            <label class="form-label">Nursing Staff (ID / Name)</label>
+                            <select name="recorded_by_nurse_id" class="form-select">
+                                <option value="0">-- Select Nursing Staff --</option>
+                                <?php foreach (($nurse_list ?? []) as $nRow): ?>
+                                    <option value="<?= (int) $nRow['id'] ?>">
+                                        <?= esc(($nRow['nurse_code'] ? '[' . $nRow['nurse_code'] . '] ' : '') . $nRow['name']) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
                         <div class="col-md-2"><label class="form-label">Direction</label><select class="form-select" name="fluid_direction"><option value="intake">Intake</option><option value="output">Output</option></select></div>
                         <div class="col-md-2"><label class="form-label">Route</label><input type="text" class="form-control" name="fluid_route"></div>
                         <div class="col-md-2"><label class="form-label">Amount (ml)</label><input type="number" class="form-control" name="fluid_amount_ml" required></div>
@@ -521,7 +572,17 @@ ksort($nurseNames);
                         <?= csrf_field() ?>
                         <input type="hidden" name="entry_type" value="treatment">
                         <div class="col-md-3"><label class="form-label">Recorded At</label><input type="datetime-local" class="form-control" name="recorded_at" value="<?= date('Y-m-d\\TH:i') ?>"></div>
-                        <div class="col-md-2"><label class="form-label">Shift</label><input type="text" class="form-control nursing-shift-display" value="Morning" readonly></div>
+                        <div class="col-md-4">
+                            <label class="form-label">Nursing Staff (ID / Name)</label>
+                            <select name="recorded_by_nurse_id" class="form-select">
+                                <option value="0">-- Select Nursing Staff --</option>
+                                <?php foreach (($nurse_list ?? []) as $nRow): ?>
+                                    <option value="<?= (int) $nRow['id'] ?>">
+                                        <?= esc(($nRow['nurse_code'] ? '[' . $nRow['nurse_code'] . '] ' : '') . $nRow['name']) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
                         <div class="col-md-12"><label class="form-label">Treatment Given</label><textarea class="form-control" name="treatment_text" rows="3" required></textarea></div>
                         <div class="col-md-12"><label class="form-label">Additional Note</label><textarea class="form-control" name="general_note" rows="2"></textarea></div>
                         <div class="col-md-12"><button type="submit" class="btn btn-primary btn-sm">Save Treatment Note</button></div>
@@ -804,16 +865,16 @@ ksort($nurseNames);
                 </div>
 
                 <table class="table table-sm table-bordered align-middle">
-                    <thead><tr><th style="width: 150px;">Time</th><th style="width: 90px;">Type</th><th style="width: 90px;">Shift</th><th>Details</th><th style="width: 130px;">By</th></tr></thead>
+                    <thead><tr><th style="width: 150px;">Time</th><th style="width: 100px;">Type</th><th style="width: 180px;">Nursing Staff</th><th>Details</th></tr></thead>
                     <tbody>
                     <?php if (empty($entries)) : ?>
-                        <tr><td colspan="5" class="text-center text-muted" id="nursing_no_data_row">No nursing entries yet.</td></tr>
+                        <tr><td colspan="4" class="text-center text-muted" id="nursing_no_data_row">No nursing entries yet.</td></tr>
                     <?php else : ?>
                         <?php foreach ($entries as $entry) : ?>
                             <tr class="nursing-entry-row" data-nurse="<?= esc((string) ($entry['recorded_by'] ?? '')) ?>" data-type="<?= esc(strtolower((string) ($entry['entry_type'] ?? ''))) ?>">
                                 <td><?= esc((string) ($entry['recorded_at'] ?? '')) ?></td>
-                                <td><?= esc((string) ($entry['entry_type'] ?? '')) ?></td>
-                                <td><?= esc((string) ($entry['shift_name'] ?? '')) ?></td>
+                                <td><span class="badge bg-light text-dark border"><?= esc((string) ($entry['entry_type'] ?? '')) ?></span></td>
+                                <td><strong class="text-primary"><?= esc((string) ($entry['recorded_by'] ?? 'Staff')) ?></strong></td>
                                 <td>
                                     <?php if (($entry['entry_type'] ?? '') === 'vitals') : ?>
                                         Temp: <?= esc($toFahrenheit($entry['temperature_c'] ?? null)) ?> °F, Pulse: <?= esc((string) ($entry['pulse_rate'] ?? '')) ?>, Resp: <?= esc((string) ($entry['resp_rate'] ?? '')) ?>, BP: <?= esc((string) ($entry['bp_systolic'] ?? '')) ?>/<?= esc((string) ($entry['bp_diastolic'] ?? '')) ?>, SpO2: <?= esc((string) ($entry['spo2'] ?? '')) ?>, Wt: <?= esc((string) ($entry['weight_kg'] ?? '')) ?>
@@ -824,7 +885,6 @@ ksort($nurseNames);
                                     <?php endif; ?>
                                     <?php if (! empty($entry['general_note'])) : ?><br><small><strong>Note:</strong> <?= esc((string) $entry['general_note']) ?></small><?php endif; ?>
                                 </td>
-                                <td><?= esc((string) ($entry['recorded_by'] ?? '')) ?></td>
                             </tr>
                         <?php endforeach; ?>
                     <?php endif; ?>
@@ -871,6 +931,8 @@ ksort($nurseNames);
             </div>
         </div>
     </div>
+</div>
+</div>
 </section>
 
 <script>
