@@ -467,11 +467,19 @@ class IpdPatient extends BaseController
             }
         }
 
-        $this->ipdNursingEntryModel->insert($data);
+        $entryId = (int) ($this->request->getPost('entry_id') ?? 0);
+        if ($entryId > 0) {
+            unset($data['created_at']);
+            $this->ipdNursingEntryModel->update($entryId, $data);
+            $msg = 'Nursing entry updated';
+        } else {
+            $this->ipdNursingEntryModel->insert($data);
+            $msg = 'Nursing entry saved';
+        }
 
         return $this->response->setJSON([
             'status' => 1,
-            'message' => 'Nursing entry saved',
+            'message' => $msg,
         ]);
     }
 

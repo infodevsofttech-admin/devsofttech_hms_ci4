@@ -102,6 +102,10 @@ $admDbp = (string) ($latestAdmissionEntry['bp_diastolic'] ?? '');
 $admSpo2 = (string) ($latestAdmissionEntry['spo2'] ?? '');
 $admWeight = (string) ($latestAdmissionEntry['weight_kg'] ?? '');
 $admNote = (string) ($latestAdmissionEntry['general_note'] ?? '');
+
+$vitalsEntries = array_values(array_filter($entries, static fn ($r) => ($r['entry_type'] ?? '') === 'vitals'));
+$fluidEntries = array_values(array_filter($entries, static fn ($r) => ($r['entry_type'] ?? '') === 'fluid'));
+$treatmentEntries = array_values(array_filter($entries, static fn ($r) => ($r['entry_type'] ?? '') === 'treatment'));
 ?>
 <style>
     .nursing-workspace-page #nursing_panel_content {
@@ -549,7 +553,8 @@ $admNote = (string) ($latestAdmissionEntry['general_note'] ?? '');
                     <form class="row g-2 nursing-form" data-save-url="<?= esc($saveUrl) ?>">
                         <?= csrf_field() ?>
                         <input type="hidden" name="entry_type" value="vitals">
-                        <div class="col-md-3"><label class="form-label">Recorded At</label><input type="datetime-local" class="form-control" name="recorded_at" value="<?= date('Y-m-d\\TH:i') ?>"></div>
+                        <input type="hidden" name="entry_id" value="0">
+                        <div class="col-md-3"><label class="form-label">Recorded At</label><input type="datetime-local" class="form-control" name="recorded_at" value="<?= date('Y-m-d\TH:i') ?>"></div>
                         <div class="col-md-4">
                             <label class="form-label">Nursing Staff (ID / Name)</label>
                             <select name="recorded_by_nurse_id" class="form-select">
@@ -569,13 +574,79 @@ $admNote = (string) ($latestAdmissionEntry['general_note'] ?? '');
                         <div class="col-md-1"><label class="form-label">SpO2 %</label><input type="number" class="form-control" name="spo2"></div>
                         <div class="col-md-1"><label class="form-label">Weight</label><input type="number" step="0.1" class="form-control" name="weight_kg"></div>
                         <div class="col-md-12"><label class="form-label">Nursing Note</label><textarea class="form-control" name="general_note" rows="2"></textarea></div>
-                        <div class="col-md-12"><button type="submit" class="btn btn-primary btn-sm">Save Vitals</button></div>
+                        <div class="col-md-12 d-flex align-items-center">
+                            <button type="submit" class="btn btn-primary btn-sm">Save Vitals</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm ms-2 d-none btn-cancel-edit">Cancel Edit</button>
+                        </div>
                     </form>
+
+                    <div class="card mt-3 shadow-none border">
+                        <div class="card-header py-2 bg-light d-flex justify-content-between align-items-center">
+                            <strong class="text-dark"><i class="bi bi-heart-pulse me-1 text-danger"></i> Vitals History Records</strong>
+                            <span class="badge bg-secondary"><?= count($vitalsEntries) ?> Entries</span>
+                        </div>
+                        <div class="card-body p-0 table-responsive">
+                            <table class="table table-sm table-striped table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width: 130px;">Recorded At</th>
+                                        <th style="width: 140px;">Staff</th>
+                                        <th>Temp (°F)</th>
+                                        <th>Pulse</th>
+                                        <th>Resp</th>
+                                        <th>BP (mmHg)</th>
+                                        <th>SpO2 (%)</th>
+                                        <th>Weight</th>
+                                        <th>Note</th>
+                                        <th style="width: 70px;" class="text-center">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if (empty($vitalsEntries)): ?>
+                                        <tr><td colspan="10" class="text-center text-muted py-3">No vitals entries recorded yet.</td></tr>
+                                    <?php else: ?>
+                                        <?php foreach ($vitalsEntries as $vRow): ?>
+                                            <tr>
+                                                <td><small><?= esc($vRow['recorded_at']) ?></small></td>
+                                                <td><small><?= esc($vRow['recorded_by'] ?? 'Staff') ?></small></td>
+                                                <td><?= esc($toFahrenheit($vRow['temperature_c'] ?? null)) ?></td>
+                                                <td><?= esc((string)($vRow['pulse_rate'] ?? '-')) ?></td>
+                                                <td><?= esc((string)($vRow['resp_rate'] ?? '-')) ?></td>
+                                                <td><?= esc($vRow['bp_systolic'] ? $vRow['bp_systolic'] . '/' . $vRow['bp_diastolic'] : '-') ?></td>
+                                                <td><?= esc((string)($vRow['spo2'] ?? '-')) ?></td>
+                                                <td><?= esc((string)($vRow['weight_kg'] ?? '-')) ?></td>
+                                                <td><small><?= esc((string)($vRow['general_note'] ?? '')) ?></small></td>
+                                                <td class="text-center">
+                                                    <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 btn-edit-vitals"
+                                                        data-id="<?= esc($vRow['id']) ?>"
+                                                        data-recorded-at="<?= esc(!empty($vRow['recorded_at']) ? date('Y-m-d\TH:i', strtotime($vRow['recorded_at'])) : '') ?>"
+                                                        data-nurse-id="<?= (int)($vRow['recorded_by_id'] ?? 0) ?>"
+                                                        data-temp-f="<?= esc($toFahrenheit($vRow['temperature_c'] ?? null)) ?>"
+                                                        data-pulse="<?= esc((string)($vRow['pulse_rate'] ?? '')) ?>"
+                                                        data-resp="<?= esc((string)($vRow['resp_rate'] ?? '')) ?>"
+                                                        data-sbp="<?= esc((string)($vRow['bp_systolic'] ?? '')) ?>"
+                                                        data-dbp="<?= esc((string)($vRow['bp_diastolic'] ?? '')) ?>"
+                                                        data-spo2="<?= esc((string)($vRow['spo2'] ?? '')) ?>"
+                                                        data-weight="<?= esc((string)($vRow['weight_kg'] ?? '')) ?>"
+                                                        data-note="<?= esc((string)($vRow['general_note'] ?? '')) ?>"
+                                                    >
+                                                        <i class="bi bi-pencil-square"></i> Edit
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
+
                 <div class="nursing-tab-pane d-none" id="nursing_tab_fluid">
                     <form class="row g-2 nursing-form" data-save-url="<?= esc($saveUrl) ?>">
                         <?= csrf_field() ?>
                         <input type="hidden" name="entry_type" value="fluid">
+                        <input type="hidden" name="entry_id" value="0">
                         <div class="col-md-3"><label class="form-label">Recorded At</label><input type="datetime-local" class="form-control" name="recorded_at" value="<?= date('Y-m-d\TH:i') ?>"></div>
                         <div class="col-md-3">
                             <label class="form-label">Nursing Staff (ID / Name)</label>
@@ -613,15 +684,74 @@ $admNote = (string) ($latestAdmissionEntry['general_note'] ?? '');
                             <label class="form-label">Nursing Note / Observations</label>
                             <textarea class="form-control" name="general_note" rows="2" placeholder="e.g. Clear urine, fluid color, IV site condition"></textarea>
                         </div>
-                        <div class="col-md-12"><button type="submit" class="btn btn-primary btn-sm">Save Fluid Entry</button></div>
+                        <div class="col-md-12 d-flex align-items-center">
+                            <button type="submit" class="btn btn-primary btn-sm">Save Fluid Entry</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm ms-2 d-none btn-cancel-edit">Cancel Edit</button>
+                        </div>
                     </form>
+
+                    <div class="card mt-3 shadow-none border">
+                        <div class="card-header py-2 bg-light d-flex justify-content-between align-items-center">
+                            <strong class="text-dark"><i class="bi bi-droplet me-1 text-primary"></i> Fluid Intake &amp; Output Records</strong>
+                            <span class="badge bg-secondary"><?= count($fluidEntries) ?> Entries</span>
+                        </div>
+                        <div class="card-body p-0 table-responsive">
+                            <table class="table table-sm table-striped table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width: 130px;">Recorded At</th>
+                                        <th style="width: 140px;">Staff</th>
+                                        <th style="width: 90px;">Direction</th>
+                                        <th>Route</th>
+                                        <th style="width: 100px;">Amount (ml)</th>
+                                        <th>Observations / Note</th>
+                                        <th style="width: 70px;" class="text-center">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if (empty($fluidEntries)): ?>
+                                        <tr><td colspan="7" class="text-center text-muted py-3">No fluid entries recorded yet.</td></tr>
+                                    <?php else: ?>
+                                        <?php foreach ($fluidEntries as $flRow): ?>
+                                            <tr>
+                                                <td><small><?= esc($flRow['recorded_at']) ?></small></td>
+                                                <td><small><?= esc($flRow['recorded_by'] ?? 'Staff') ?></small></td>
+                                                <td>
+                                                    <span class="badge <?= ($flRow['fluid_direction'] ?? '') === 'intake' ? 'bg-success' : 'bg-warning text-dark' ?>">
+                                                        <?= esc(strtoupper((string)($flRow['fluid_direction'] ?? ''))) ?>
+                                                    </span>
+                                                </td>
+                                                <td><strong><?= esc((string)($flRow['fluid_route'] ?? '-')) ?></strong></td>
+                                                <td><strong><?= esc((string)($flRow['fluid_amount_ml'] ?? '0')) ?> ml</strong></td>
+                                                <td><small><?= esc((string)($flRow['general_note'] ?? '')) ?></small></td>
+                                                <td class="text-center">
+                                                    <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 btn-edit-fluid"
+                                                        data-id="<?= esc($flRow['id']) ?>"
+                                                        data-recorded-at="<?= esc(!empty($flRow['recorded_at']) ? date('Y-m-d\TH:i', strtotime($flRow['recorded_at'])) : '') ?>"
+                                                        data-nurse-id="<?= (int)($flRow['recorded_by_id'] ?? 0) ?>"
+                                                        data-direction="<?= esc((string)($flRow['fluid_direction'] ?? 'intake')) ?>"
+                                                        data-route="<?= esc((string)($flRow['fluid_route'] ?? '')) ?>"
+                                                        data-amount="<?= esc((string)($flRow['fluid_amount_ml'] ?? '')) ?>"
+                                                        data-note="<?= esc((string)($flRow['general_note'] ?? '')) ?>"
+                                                    >
+                                                        <i class="bi bi-pencil-square"></i> Edit
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="nursing-tab-pane d-none" id="nursing_tab_treatment">
                     <form class="row g-2 nursing-form" data-save-url="<?= esc($saveUrl) ?>">
                         <?= csrf_field() ?>
                         <input type="hidden" name="entry_type" value="treatment">
-                        <div class="col-md-3"><label class="form-label">Recorded At</label><input type="datetime-local" class="form-control" name="recorded_at" value="<?= date('Y-m-d\\TH:i') ?>"></div>
+                        <input type="hidden" name="entry_id" value="0">
+                        <div class="col-md-3"><label class="form-label">Recorded At</label><input type="datetime-local" class="form-control" name="recorded_at" value="<?= date('Y-m-d\TH:i') ?>"></div>
                         <div class="col-md-4">
                             <label class="form-label">Nursing Staff (ID / Name)</label>
                             <select name="recorded_by_nurse_id" class="form-select">
@@ -635,8 +765,56 @@ $admNote = (string) ($latestAdmissionEntry['general_note'] ?? '');
                         </div>
                         <div class="col-md-12"><label class="form-label">Treatment Given</label><textarea class="form-control" name="treatment_text" rows="3" required></textarea></div>
                         <div class="col-md-12"><label class="form-label">Additional Note</label><textarea class="form-control" name="general_note" rows="2"></textarea></div>
-                        <div class="col-md-12"><button type="submit" class="btn btn-primary btn-sm">Save Treatment Note</button></div>
+                        <div class="col-md-12 d-flex align-items-center">
+                            <button type="submit" class="btn btn-primary btn-sm">Save Treatment Note</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm ms-2 d-none btn-cancel-edit">Cancel Edit</button>
+                        </div>
                     </form>
+
+                    <div class="card mt-3 shadow-none border">
+                        <div class="card-header py-2 bg-light d-flex justify-content-between align-items-center">
+                            <strong class="text-dark"><i class="bi bi-prescription2 me-1 text-warning"></i> Treatment &amp; Procedure Notes</strong>
+                            <span class="badge bg-secondary"><?= count($treatmentEntries) ?> Entries</span>
+                        </div>
+                        <div class="card-body p-0 table-responsive">
+                            <table class="table table-sm table-striped table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width: 130px;">Recorded At</th>
+                                        <th style="width: 140px;">Staff</th>
+                                        <th>Treatment / Procedure Given</th>
+                                        <th>Additional Note</th>
+                                        <th style="width: 70px;" class="text-center">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if (empty($treatmentEntries)): ?>
+                                        <tr><td colspan="5" class="text-center text-muted py-3">No treatment notes recorded yet.</td></tr>
+                                    <?php else: ?>
+                                        <?php foreach ($treatmentEntries as $trRow): ?>
+                                            <tr>
+                                                <td><small><?= esc($trRow['recorded_at']) ?></small></td>
+                                                <td><small><?= esc($trRow['recorded_by'] ?? 'Staff') ?></small></td>
+                                                <td><?= esc((string)($trRow['treatment_text'] ?? '')) ?></td>
+                                                <td><small><?= esc((string)($trRow['general_note'] ?? '')) ?></small></td>
+                                                <td class="text-center">
+                                                    <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 btn-edit-treatment"
+                                                        data-id="<?= esc($trRow['id']) ?>"
+                                                        data-recorded-at="<?= esc(!empty($trRow['recorded_at']) ? date('Y-m-d\TH:i', strtotime($trRow['recorded_at'])) : '') ?>"
+                                                        data-nurse-id="<?= (int)($trRow['recorded_by_id'] ?? 0) ?>"
+                                                        data-treatment="<?= esc((string)($trRow['treatment_text'] ?? '')) ?>"
+                                                        data-note="<?= esc((string)($trRow['general_note'] ?? '')) ?>"
+                                                    >
+                                                        <i class="bi bi-pencil-square"></i> Edit
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
 
                 <?php if ($canViewIpdOt) : ?>
@@ -1575,6 +1753,84 @@ $admNote = (string) ($latestAdmissionEntry['general_note'] ?? '');
     }
 
     syncFluidRoutes();
+
+    $(document).on('click', '.btn-edit-vitals', function () {
+        var btn = $(this);
+        var form = $('#nursing_tab_vitals form');
+        form.find('input[name="entry_id"]').val(btn.attr('data-id'));
+        form.find('input[name="recorded_at"]').val(btn.attr('data-recorded-at'));
+        form.find('select[name="recorded_by_nurse_id"]').val(btn.attr('data-nurse-id') || 0);
+        form.find('input[name="temperature_f"]').val(btn.attr('data-temp-f'));
+        form.find('input[name="pulse_rate"]').val(btn.attr('data-pulse'));
+        form.find('input[name="resp_rate"]').val(btn.attr('data-resp'));
+        form.find('input[name="bp_systolic"]').val(btn.attr('data-sbp'));
+        form.find('input[name="bp_diastolic"]').val(btn.attr('data-dbp'));
+        form.find('input[name="spo2"]').val(btn.attr('data-spo2'));
+        form.find('input[name="weight_kg"]').val(btn.attr('data-weight'));
+        form.find('textarea[name="general_note"]').val(btn.attr('data-note'));
+
+        form.find('button[type="submit"]').html('<i class="bi bi-check-circle"></i> Update Vitals').removeClass('btn-primary').addClass('btn-warning');
+        form.find('.btn-cancel-edit').removeClass('d-none');
+        form[0].scrollIntoView({ behavior: 'smooth' });
+    });
+
+    $(document).on('click', '.btn-edit-fluid', function () {
+        var btn = $(this);
+        var form = $('#nursing_tab_fluid form');
+        form.find('input[name="entry_id"]').val(btn.attr('data-id'));
+        form.find('input[name="recorded_at"]').val(btn.attr('data-recorded-at'));
+        form.find('select[name="recorded_by_nurse_id"]').val(btn.attr('data-nurse-id') || 0);
+        form.find('#nursing_fluid_direction').val(btn.attr('data-direction') || 'intake');
+
+        syncFluidRoutes();
+
+        var routeVal = btn.attr('data-route') || '';
+        form.find('#nursing_fluid_route_input').val(routeVal);
+        var routeSelect = form.find('#nursing_fluid_route_select');
+        if (routeSelect.find('option[value="' + routeVal + '"]').length > 0) {
+            routeSelect.val(routeVal);
+        } else {
+            routeSelect.val('Other / Custom');
+        }
+
+        form.find('input[name="fluid_amount_ml"]').val(btn.attr('data-amount'));
+        form.find('textarea[name="general_note"]').val(btn.attr('data-note'));
+
+        form.find('button[type="submit"]').html('<i class="bi bi-check-circle"></i> Update Fluid Entry').removeClass('btn-primary').addClass('btn-warning');
+        form.find('.btn-cancel-edit').removeClass('d-none');
+        form[0].scrollIntoView({ behavior: 'smooth' });
+    });
+
+    $(document).on('click', '.btn-edit-treatment', function () {
+        var btn = $(this);
+        var form = $('#nursing_tab_treatment form');
+        form.find('input[name="entry_id"]').val(btn.attr('data-id'));
+        form.find('input[name="recorded_at"]').val(btn.attr('data-recorded-at'));
+        form.find('select[name="recorded_by_nurse_id"]').val(btn.attr('data-nurse-id') || 0);
+        form.find('textarea[name="treatment_text"]').val(btn.attr('data-treatment'));
+        form.find('textarea[name="general_note"]').val(btn.attr('data-note'));
+
+        form.find('button[type="submit"]').html('<i class="bi bi-check-circle"></i> Update Treatment Note').removeClass('btn-primary').addClass('btn-warning');
+        form.find('.btn-cancel-edit').removeClass('d-none');
+        form[0].scrollIntoView({ behavior: 'smooth' });
+    });
+
+    $(document).on('click', '.btn-cancel-edit', function () {
+        var form = $(this).closest('form');
+        form[0].reset();
+        form.find('input[name="entry_id"]').val('0');
+        var defaultBtnText = 'Save Entry';
+        var entryType = form.find('input[name="entry_type"]').val();
+        if (entryType === 'vitals') defaultBtnText = 'Save Vitals';
+        if (entryType === 'fluid') defaultBtnText = 'Save Fluid Entry';
+        if (entryType === 'treatment') defaultBtnText = 'Save Treatment Note';
+
+        form.find('button[type="submit"]').text(defaultBtnText).removeClass('btn-warning').addClass('btn-primary');
+        $(this).addClass('d-none');
+        if (entryType === 'fluid') {
+            syncFluidRoutes();
+        }
+    });
 
     forms.forEach(function (form) {
         var recordedAtInput = form.querySelector('input[name="recorded_at"]');
