@@ -27,11 +27,13 @@ class App extends BaseConfig
             $this->allowedHostnames = $envAllowedHostnames;
         }
 
-        if ($this->baseURL === '') {
-            $isHttps = ! empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+        $envBaseUrl = (string) env('app.baseURL', '');
+        if ($envBaseUrl !== '') {
+            $this->baseURL = rtrim($envBaseUrl, '/') . '/';
+        } elseif (! empty($_SERVER['HTTP_HOST'])) {
+            $isHttps = (! empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
             $scheme  = $isHttps ? 'https' : 'http';
-            $host    = $_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? 'localhost';
-
+            $host    = $_SERVER['HTTP_HOST'];
             $this->baseURL = $scheme . '://' . $host . '/';
         }
     }
