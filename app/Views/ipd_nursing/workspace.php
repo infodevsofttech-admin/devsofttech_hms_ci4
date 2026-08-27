@@ -78,6 +78,30 @@ foreach ($entries as $entryRow) {
     }
 }
 ksort($nurseNames);
+
+$latestAdmissionEntry = null;
+foreach ($entries as $entryRow) {
+    if (($entryRow['entry_type'] ?? '') === 'admission') {
+        $latestAdmissionEntry = $entryRow;
+        break;
+    }
+}
+
+$admRecordedAt = !empty($latestAdmissionEntry['recorded_at']) 
+    ? date('Y-m-d\TH:i', strtotime($latestAdmissionEntry['recorded_at'])) 
+    : date('Y-m-d\TH:i');
+$admNurseId = (int) ($latestAdmissionEntry['recorded_by_id'] ?? 0);
+$admComplaints = (string) ($latestAdmissionEntry['treatment_text'] ?? '');
+$admTempF = (isset($latestAdmissionEntry['temperature_c']) && $latestAdmissionEntry['temperature_c'] !== null && $latestAdmissionEntry['temperature_c'] !== '') 
+    ? $toFahrenheit($latestAdmissionEntry['temperature_c']) 
+    : '';
+$admPulse = (string) ($latestAdmissionEntry['pulse_rate'] ?? '');
+$admResp = (string) ($latestAdmissionEntry['resp_rate'] ?? '');
+$admSbp = (string) ($latestAdmissionEntry['bp_systolic'] ?? '');
+$admDbp = (string) ($latestAdmissionEntry['bp_diastolic'] ?? '');
+$admSpo2 = (string) ($latestAdmissionEntry['spo2'] ?? '');
+$admWeight = (string) ($latestAdmissionEntry['weight_kg'] ?? '');
+$admNote = (string) ($latestAdmissionEntry['general_note'] ?? '');
 ?>
 <style>
     .nursing-workspace-page #nursing_panel_content {
@@ -198,13 +222,13 @@ ksort($nurseNames);
                         </strong>
                     </div>
                     <div class="p-2" id="nursing_entry_tabs" role="tablist">
-                        <button type="button" class="nav-link" data-nursing-tab="nursing_tab_admission">
+                        <button type="button" class="nav-link active" data-nursing-tab="nursing_tab_admission">
                             <i class="bi bi-person-vcard text-primary"></i> Admission Snapshot
                         </button>
                         <button type="button" class="nav-link" data-nursing-tab="nursing_tab_history">
                             <i class="bi bi-file-earmark-medical text-info"></i> History &amp; Physical
                         </button>
-                        <button type="button" class="nav-link active" data-nursing-tab="nursing_tab_vitals">
+                        <button type="button" class="nav-link" data-nursing-tab="nursing_tab_vitals">
                             <i class="bi bi-heart-pulse text-danger"></i> Vitals
                         </button>
                         <button type="button" class="nav-link" data-nursing-tab="nursing_tab_fluid">
@@ -398,31 +422,31 @@ ksort($nurseNames);
                     </div>
                 </div>
 
-                <div class="nursing-tab-pane d-none" id="nursing_tab_admission">
+                <div class="nursing-tab-pane" id="nursing_tab_admission">
                     <form class="row g-2 nursing-form" data-save-url="<?= esc($saveUrl) ?>">
                         <?= csrf_field() ?>
                         <input type="hidden" name="entry_type" value="admission">
-                        <div class="col-md-3"><label class="form-label">Recorded At</label><input type="datetime-local" class="form-control" name="recorded_at" value="<?= date('Y-m-d\\TH:i') ?>"></div>
+                        <div class="col-md-3"><label class="form-label">Recorded At</label><input type="datetime-local" class="form-control" name="recorded_at" value="<?= esc($admRecordedAt) ?>"></div>
                         <div class="col-md-4">
                             <label class="form-label">Nursing Staff (ID / Name)</label>
                             <select name="recorded_by_nurse_id" class="form-select">
                                 <option value="0">-- Select Nursing Staff --</option>
                                 <?php foreach (($nurse_list ?? []) as $nRow): ?>
-                                    <option value="<?= (int) $nRow['id'] ?>">
+                                    <option value="<?= (int) $nRow['id'] ?>" <?= $admNurseId === (int)$nRow['id'] ? 'selected' : '' ?>>
                                         <?= esc(($nRow['nurse_code'] ? '[' . $nRow['nurse_code'] . '] ' : '') . $nRow['name']) ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
-                        <div class="col-md-12"><label class="form-label">Admission Complaints / Reason</label><textarea class="form-control" name="treatment_text" rows="3" placeholder="Chief complaints and reason for admission"></textarea></div>
-                        <div class="col-md-1"><label class="form-label">Temp °F</label><input type="number" step="0.1" class="form-control" name="temperature_f"></div>
-                        <div class="col-md-1"><label class="form-label">Pulse</label><input type="number" class="form-control" name="pulse_rate"></div>
-                        <div class="col-md-1"><label class="form-label">Resp</label><input type="number" class="form-control" name="resp_rate"></div>
-                        <div class="col-md-1"><label class="form-label">SBP</label><input type="number" class="form-control" name="bp_systolic"></div>
-                        <div class="col-md-1"><label class="form-label">DBP</label><input type="number" class="form-control" name="bp_diastolic"></div>
-                        <div class="col-md-1"><label class="form-label">SpO2 %</label><input type="number" class="form-control" name="spo2"></div>
-                        <div class="col-md-1"><label class="form-label">Weight</label><input type="number" step="0.1" class="form-control" name="weight_kg"></div>
-                        <div class="col-md-12"><label class="form-label">Additional Admission Note</label><textarea class="form-control" name="general_note" rows="2"></textarea></div>
+                        <div class="col-md-12"><label class="form-label">Admission Complaints / Reason</label><textarea class="form-control" name="treatment_text" rows="3" placeholder="Chief complaints and reason for admission"><?= esc($admComplaints) ?></textarea></div>
+                        <div class="col-md-1"><label class="form-label">Temp °F</label><input type="number" step="0.1" class="form-control" name="temperature_f" value="<?= esc($admTempF) ?>"></div>
+                        <div class="col-md-1"><label class="form-label">Pulse</label><input type="number" class="form-control" name="pulse_rate" value="<?= esc($admPulse) ?>"></div>
+                        <div class="col-md-1"><label class="form-label">Resp</label><input type="number" class="form-control" name="resp_rate" value="<?= esc($admResp) ?>"></div>
+                        <div class="col-md-1"><label class="form-label">SBP</label><input type="number" class="form-control" name="bp_systolic" value="<?= esc($admSbp) ?>"></div>
+                        <div class="col-md-1"><label class="form-label">DBP</label><input type="number" class="form-control" name="bp_diastolic" value="<?= esc($admDbp) ?>"></div>
+                        <div class="col-md-1"><label class="form-label">SpO2 %</label><input type="number" class="form-control" name="spo2" value="<?= esc($admSpo2) ?>"></div>
+                        <div class="col-md-1"><label class="form-label">Weight</label><input type="number" step="0.1" class="form-control" name="weight_kg" value="<?= esc($admWeight) ?>"></div>
+                        <div class="col-md-12"><label class="form-label">Additional Admission Note</label><textarea class="form-control" name="general_note" rows="2"><?= esc($admNote) ?></textarea></div>
                         <div class="col-md-12"><button type="submit" class="btn btn-primary btn-sm">Save Admission Snapshot</button></div>
                     </form>
                 </div>
@@ -1412,12 +1436,26 @@ ksort($nurseNames);
                 targetPane.classList.remove('d-none');
             }
 
+            if (window.sessionStorage && targetId) {
+                sessionStorage.setItem('nursing_active_tab_<?= $ipdId ?>', targetId);
+            }
+
             var contentUrl = button.getAttribute('data-url');
             if (contentUrl && targetId === 'nursing_tab_ot') {
                 load_form_div(contentUrl, 'tab_ot_content');
             }
         });
     });
+
+    if (window.sessionStorage) {
+        var savedTab = sessionStorage.getItem('nursing_active_tab_<?= $ipdId ?>');
+        if (savedTab) {
+            var savedBtn = document.querySelector('#nursing_entry_tabs [data-nursing-tab="' + savedTab + '"]');
+            if (savedBtn) {
+                savedBtn.click();
+            }
+        }
+    }
 
     forms.forEach(function (form) {
         var recordedAtInput = form.querySelector('input[name="recorded_at"]');
